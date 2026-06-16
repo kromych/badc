@@ -105,6 +105,14 @@ const NT_BADC_TLS_SYM: u32 = 8;
 // variable. The linker overwrites that descriptor's offset with the
 // variable's offset in the merged TLS block.
 const NT_BADC_MACHO_TLV_DESC_SYM: u32 = 9;
+// Linux/x86_64 TLS access fixups. desc is a sequence of entries, each:
+//   u64 imm_offset (byte offset of the `sub` imm32 in `.text`)
+//   u8  kind (0 = same-unit local, 1 = cross-unit extern)
+//   kind 0: u64 local_offset (byte offset in this unit's TLS block)
+//   kind 1: NUL name (the referenced `extern _Thread_local` symbol)
+// The linker patches each imm32 with the variable's TPOFF once the
+// units' TLS blocks are merged.
+const NT_BADC_ELF_TPOFF: u32 = 10;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -1194,6 +1202,7 @@ pub(super) fn write_relocatable(
         &build.macho_tlv_descriptors,
         &build.macho_tlv_fixups,
         &defined_tls_globals,
+        &build.elf_tpoff_fixups,
     );
     let note_off = round_up(out.len() as u64, 4);
     out.resize(note_off as usize, 0);
@@ -1384,6 +1393,7 @@ fn build_badc_note(
     macho_tlv_descriptors: &[super::MachoTlvDescriptor],
     macho_tlv_fixups: &[super::MachoTlvFixup],
     tls_symbols: &[(&str, i64, u64)],
+    elf_tpoff_fixups: &[super::ElfTpoffFixup],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
@@ -1525,6 +1535,33 @@ fn build_badc_note(
         out.extend_from_slice(&(name.len() as u32).to_le_bytes());
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_MACHO_TLV_DESC_SYM.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 10: Linux/x86_64 TLS access fixups -- (imm_offset, kind,
+    // local_offset | NUL name) per `Inst::TlsAddr` site.
+    if !elf_tpoff_fixups.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for f in elf_tpoff_fixups {
+            desc.extend_from_slice(&(f.imm_offset as u64).to_le_bytes());
+            match &f.target {
+                super::ElfTpoffTarget::Local(off) => {
+                    desc.push(0);
+                    desc.extend_from_slice(&off.to_le_bytes());
+                }
+                super::ElfTpoffTarget::Extern(sym_name) => {
+                    desc.push(1);
+                    desc.extend_from_slice(sym_name.as_bytes());
+                    desc.push(0);
+                }
+            }
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_ELF_TPOFF.to_le_bytes());
         out.extend_from_slice(name);
         pad_to_4(&mut out);
         out.extend_from_slice(&desc);
@@ -1727,6 +1764,7 @@ mod tests {
             tls_data: Vec::new(),
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
+            elf_tpoff_fixups: Vec::new(),
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),

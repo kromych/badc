@@ -117,6 +117,9 @@ pub(crate) fn compile_function_to_bytes(
                 alloc::collections::BTreeMap::new();
             let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
+            // Single-unit in-memory emit: TLS accesses keep the baked
+            // offset, so the recorded fixups are unused here.
+            let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
             let ok = super::ssa_emit_x86_64::emit_function(
                 func,
                 &alloc,
@@ -133,6 +136,7 @@ pub(crate) fn compile_function_to_bytes(
                 &imports,
                 &variadic_targets,
                 &mut tls_index_fixups,
+                &mut elf_tpoff_fixups,
                 0,
                 &mut pc_to_native,
                 &mut prologue_native,

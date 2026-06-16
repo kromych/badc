@@ -1335,6 +1335,15 @@ pub(crate) struct Build {
     /// offset_in_block ]`. Empty unless the target is macOS arm64
     /// and the program declares `_Thread_local` globals.
     pub macho_tlv_descriptors: Vec<MachoTlvDescriptor>,
+    /// Linux/x86_64 TLS access fixups -- one entry per `Inst::TlsAddr`
+    /// site. The codegen emits `mov rd, fs:[0]; sub rd, imm32` with
+    /// `imm32` left 0; the linker patches it with the variable's
+    /// negative offset from the thread pointer once the units' TLS
+    /// blocks are merged. Carries the access target (a cross-unit
+    /// extern symbol, or this unit's own TLS at a byte offset) because
+    /// the per-variable offset is only known after the merge. Empty for
+    /// non-Linux/x86_64 targets and for programs with no TLS access.
+    pub elf_tpoff_fixups: Vec<ElfTpoffFixup>,
     /// Address-of-global initializers (`int *p = &x;`). Each
     /// entry pairs a 8-byte slot in `data` with the data-
     /// segment offset of the variable being pointed at. Mirror
@@ -1553,6 +1562,36 @@ pub(crate) struct MachoTlvFixup {
     /// Index into [`Build::macho_tlv_descriptors`]. The writer
     /// resolves this to the descriptor's vmaddr at patch time.
     pub descriptor_index: usize,
+}
+
+/// Linux/x86_64 TLS access relocation. The codegen emits
+/// `mov rd, fs:[0]; sub rd, imm32` with `imm32` left 0; the linker
+/// patches `imm32` with the variable's TPOFF -- the thread pointer
+/// minus the variable's byte offset in the merged TLS block -- once
+/// every unit's `.tdata` / `.tbss` is concatenated. The variant-2
+/// layout places the block below the thread pointer, so the access
+/// computes `address = TP - imm32` and `imm32 = merged_size -
+/// merged_offset`. `target` selects how the linker finds
+/// `merged_offset`.
+#[derive(Debug, Clone)]
+pub(crate) struct ElfTpoffFixup {
+    /// Byte offset within `Build::text` of the `sub` instruction's
+    /// 4-byte immediate field.
+    pub imm_offset: usize,
+    pub target: ElfTpoffTarget,
+}
+
+/// How the linker resolves an [`ElfTpoffFixup`] to a byte offset in
+/// the merged TLS block.
+#[derive(Debug, Clone)]
+pub(crate) enum ElfTpoffTarget {
+    /// Cross-unit `extern _Thread_local`: the merged offset is the
+    /// named symbol's entry in the merged TLS symbol table.
+    Extern(String),
+    /// Same-unit `_Thread_local`: the merged offset is this unit's
+    /// base in the merged TLS block plus this byte offset within the
+    /// unit's own block.
+    Local(u64),
 }
 
 /// Relocatable-object call site: the byte offset of the BL / B

@@ -80,6 +80,10 @@ const PT_INTERP: u32 = 3;
 const PT_PHDR: u32 = 6;
 const PT_TLS: u32 = 7;
 const PT_GNU_STACK: u32 = 0x6474_E551;
+// PT_TLS alignment. The thread-pointer-relative offsets the codegen
+// bakes / the linker patches assume an 8-byte-aligned TLS block, which
+// also satisfies the ELF gABI `p_vaddr % p_align == 0` rule.
+const TLS_SEGMENT_ALIGN: u64 = 8;
 
 const PF_X: u32 = 1;
 const PF_W: u32 = 2;
@@ -1369,7 +1373,18 @@ pub(super) fn write(
     let got_size = (n_imports as u64) * 8;
     let data_off = got_off + got_size;
     let data_size = build.data.len() as u64;
-    let tdata_off = data_off + data_size;
+    // PT_TLS requires `p_vaddr % p_align == 0` (ELF gABI), and glibc
+    // computes a `_Thread_local`'s address as `tp - roundup(p_memsz,
+    // p_align) + var_offset`. A misaligned TLS image makes the loader
+    // place the block at an offset the linker's TPOFFs don't account
+    // for, so reads land off the variable. `tdata_vmaddr` tracks
+    // `tdata_off` (the base is page-aligned), so aligning the file
+    // offset aligns the vaddr.
+    let tdata_off = if has_tls {
+        round_up(data_off + data_size, TLS_SEGMENT_ALIGN)
+    } else {
+        data_off + data_size
+    };
     let tdata_size = build.tls_init_size as u64;
     let tbss_size = build.tls_data.len() as u64 - tdata_size;
     let segment2_filesize = tdata_off + tdata_size - segment2_off;
@@ -1728,7 +1743,7 @@ pub(super) fn write(
             tdata_vmaddr,
             tdata_size,
             tdata_size + tbss_size,
-            8,
+            TLS_SEGMENT_ALIGN,
         );
     }
 
@@ -1940,7 +1955,11 @@ pub(super) fn write(
     // thread's TLS region at thread creation. .tbss has no file
     // backing -- it lives only in PT_TLS's `p_memsz - p_filesz`
     // and gets zero-filled by the loader, so we emit nothing for
-    // it here.
+    // it here. Pad to the aligned `tdata_off` first (see the layout).
+    while (out.len() as u64) < tdata_off {
+        out.push(0);
+    }
+    debug_assert_eq!(out.len() as u64, tdata_off);
     out.extend_from_slice(&build.tls_data[..build.tls_init_size]);
 
     // Pad to end of segment 2 (page-aligned).
@@ -2543,6 +2562,7 @@ mod tests {
             tls_data: Vec::new(),
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
+            elf_tpoff_fixups: Vec::new(),
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),

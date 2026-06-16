@@ -285,6 +285,9 @@ fn synth_program_and_build(
                 symbol: None,
             })
             .collect(),
+        // The linker patches each TLS access's TPOFF immediate directly
+        // in the merged `.text`, so the final-image build carries none.
+        elf_tpoff_fixups: alloc::vec![],
         data_relocs,
         extern_data_relocs: Vec::new(),
         code_relocs,

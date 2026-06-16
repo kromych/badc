@@ -1592,6 +1592,7 @@ pub(super) fn emit_function(
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
     tls_total_size: usize,
     pc_to_native: &mut [usize],
     prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
@@ -1603,14 +1604,10 @@ pub(super) fn emit_function(
     let data_fixups_snapshot = data_fixups.len();
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
     // A cross-unit `extern _Thread_local` access (`extern_tls_names` maps
-    // the access value-id to the referenced symbol) resolves by symbol
-    // at link time through the Mach-O TLV descriptor table, which only
-    // the macOS arm64 path emits. The x86_64 TLS sequences bake a fixed
-    // offset, so reject the cross-unit case rather than emit a wrong one.
-    if !extern_tls_names.is_empty() {
-        bail_msg("cross-unit `extern _Thread_local` access is not yet supported on x86_64");
-        return false;
-    }
+    // the access value-id to the referenced symbol) and a same-unit one
+    // both record an `ElfTpoffFixup` the linker resolves against the
+    // merged TLS layout; see `emit_tls_addr`.
+    let elf_tpoff_snapshot = elf_tpoff_fixups.len();
     let pending_func_fixups_snapshot = pending_func_fixups.len();
     let abi = target.abi();
     let frame = Frame::for_function(func, alloc, abi);
@@ -1759,6 +1756,7 @@ pub(super) fn emit_function(
     let body_uext = user_extern_data_refs.len();
     let body_pending = pending_func_fixups.len();
     let body_tls = tls_index_fixups.len();
+    let body_elf_tpoff = elf_tpoff_fixups.len();
     let body_line_rows = ssa_line_rows.len();
 
     'emit: loop {
@@ -1819,6 +1817,7 @@ pub(super) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                         return false;
                     };
                     let lea_start = code.len();
@@ -1845,6 +1844,8 @@ pub(super) fn emit_function(
                     imports,
                     variadic_targets,
                     tls_index_fixups,
+                    elf_tpoff_fixups,
+                    extern_tls_names,
                     tls_total_size,
                     &mut current_alloca_top,
                     &param_from_home,
@@ -1863,6 +1864,7 @@ pub(super) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     return false;
                 }
                 // Convert the just-emitted ImmData's local `.data`
@@ -2146,6 +2148,7 @@ pub(super) fn emit_function(
                 user_extern_data_refs.truncate(body_uext);
                 pending_func_fixups.truncate(body_pending);
                 tls_index_fixups.truncate(body_tls);
+                elf_tpoff_fixups.truncate(body_elf_tpoff);
                 ssa_line_rows.truncate(body_line_rows);
                 for b in block_offsets.iter_mut() {
                     *b = 0;
@@ -2197,6 +2200,7 @@ pub(super) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     return false;
                 }
             };
@@ -2213,6 +2217,7 @@ pub(super) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     return false;
                 }
             };
@@ -2735,6 +2740,8 @@ fn emit_inst(
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     tls_total_size: usize,
     current_alloca_top: &mut u32,
     param_from_home: &[bool],
@@ -3091,8 +3098,11 @@ fn emit_inst(
             code,
             dst,
             *offset,
+            v,
             target,
             tls_index_fixups,
+            elf_tpoff_fixups,
+            extern_tls_names,
             tls_total_size,
             frame,
         ),
@@ -3160,8 +3170,11 @@ fn emit_tls_addr(
     code: &mut Vec<u8>,
     dst: Place,
     offset: i64,
+    v: super::super::ir::ValueId,
     target: Target,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     tls_total_size: usize,
     frame: Frame,
 ) -> bool {
@@ -3171,11 +3184,25 @@ fn emit_tls_addr(
     };
     match target {
         Target::LinuxX64 => {
-            let tpoff = (tls_total_size as i64) - offset;
-            if !(0..=i32::MAX as i64).contains(&tpoff) {
-                bail_msg("TlsAddr: tpoff out of i32 range");
-                return false;
-            }
+            // A cross-unit `extern _Thread_local` carries the referenced
+            // symbol in `extern_tls_names`; its TPOFF is unknown until
+            // the link merges the TLS blocks, so emit a 0 placeholder and
+            // record an extern fixup. A same-unit access bakes the
+            // single-unit TPOFF (`tls_total_size - offset`, correct for an
+            // in-memory or single-object emit) and also records a fixup so
+            // the linker re-patches it against the merged layout when more
+            // than one unit contributes TLS storage.
+            let extern_sym = extern_tls_names.get(&v).cloned();
+            let tpoff = if extern_sym.is_some() {
+                0
+            } else {
+                let t = (tls_total_size as i64) - offset;
+                if !(0..=i32::MAX as i64).contains(&t) {
+                    bail_msg("TlsAddr: tpoff out of i32 range");
+                    return false;
+                }
+                t
+            };
             // mov rd, qword ptr fs:[0]
             //   FS prefix 64; REX.W=1, REX.R = (rd >= 8);
             //   opcode 8B; ModR/M mod=00 reg=rd.lo rm=100 (SIB);
@@ -3192,12 +3219,20 @@ fn emit_tls_addr(
             //   REX.W=1, REX.B = (rd >= 8);
             //   opcode 81 /5;
             //   ModR/M mod=11 reg=5 rm=rd.lo;
-            //   imm32 = tpoff.
+            //   imm32 = tpoff (patched by the linker per the fixup).
             let rex_sub = 0x48 | ((rd.0 >> 3) & 1);
             code.push(rex_sub);
             code.push(0x81);
             code.push(0xE8 | (rd.0 & 7));
+            let imm_offset = code.len();
             code.extend_from_slice(&(tpoff as i32).to_le_bytes());
+            elf_tpoff_fixups.push(super::ElfTpoffFixup {
+                imm_offset,
+                target: match extern_sym {
+                    Some(name) => super::ElfTpoffTarget::Extern(name),
+                    None => super::ElfTpoffTarget::Local(offset as u64),
+                },
+            });
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }

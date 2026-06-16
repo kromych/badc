@@ -187,6 +187,83 @@ pub fn link_executable_with_runtime(
     .map_err(|e| format!("write image: {e}"))
 }
 
+/// Like [`link_executable_with_runtime`] but links several user
+/// translation units into one image, mirroring a multi-`.o` CLI link.
+/// `programs[0]` carries the entry point and subsystem. Used to exercise
+/// cross-unit references the single-program helper can't, e.g. an
+/// `extern _Thread_local` defined in one unit and read from another.
+#[cfg(feature = "full")]
+#[allow(dead_code)] // only the Linux/x86_64 native lane links multiple user units
+pub fn link_executable_with_runtime_multi(
+    programs: &[&Program],
+    target: crate::Target,
+    opts: crate::NativeOptions,
+) -> Result<Vec<u8>, String> {
+    use crate::{
+        CompileOptions, NativeMachine, OutputKind, embedded_runtime, emit_aarch64_plt,
+        emit_native_with_options, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    let entry = programs[0];
+    let mut reloc = opts;
+    reloc.output_kind = OutputKind::Relocatable;
+
+    // Match the CLI's object order (the runtime precedes user inputs); the
+    // PLT pass numbers trampolines in object order, so the order must be
+    // stable across linkers.
+    let mut objs = Vec::new();
+    let mut rt_defines: Vec<(String, String)> =
+        vec![("__BADC_C5_START__".to_string(), "1".to_string())];
+    rt_defines.push((
+        "__BADC_ENTRY__".to_string(),
+        entry
+            .entry_name
+            .clone()
+            .unwrap_or_else(|| "main".to_string()),
+    ));
+    if entry.subsystem == Some(crate::Subsystem::Windows) {
+        rt_defines.push(("__BADC_WIN_GUI__".to_string(), "1".to_string()));
+    }
+    if entry.entry_name.as_deref() == Some("wmain") {
+        rt_defines.push(("__BADC_WIN_WIDE__".to_string(), "1".to_string()));
+    }
+    for (name, body) in embedded_runtime().iter() {
+        let copts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_defines(rt_defines.clone());
+        let rt_program = Compiler::with_options(body.to_string(), target, copts)
+            .compile()
+            .map_err(|e| format!("compile runtime {name}: {e}"))?;
+        let rt_bytes = emit_native_with_options(&rt_program, target, reloc)
+            .map_err(|e| format!("emit runtime {name}: {e}"))?;
+        objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
+    }
+
+    for (i, program) in programs.iter().enumerate() {
+        let bytes = emit_native_with_options(program, target, reloc)
+            .map_err(|e| format!("emit user object {i}: {e}"))?;
+        objs.push(parse_native_elf(&bytes).map_err(|e| format!("parse user object {i}: {e}"))?);
+    }
+
+    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let plt = match merged.machine {
+        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+    }
+    .map_err(|e| format!("plt: {e}"))?;
+    let entry_name = entry.entry_name.as_deref().unwrap_or("main");
+    write_native_image_from_merged(
+        &merged,
+        &plt,
+        entry_name,
+        entry.subsystem,
+        OutputKind::Executable,
+        target,
+        None,
+    )
+    .map_err(|e| format!("write image: {e}"))
+}
+
 /// Link a program that supplies its own `__c5_entry` into a
 /// freestanding executable: the embedded runtime is not linked and the
 /// image entry is `__c5_entry`. Mirrors the CLI path when an input

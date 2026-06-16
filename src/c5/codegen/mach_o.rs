@@ -2612,6 +2612,7 @@ mod tests {
             tls_data: Vec::new(),
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
+            elf_tpoff_fixups: Vec::new(),
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),

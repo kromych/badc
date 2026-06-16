@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
-use super::object::{NativeMachine, NativeObject, NativeReloc, NativeSymSection};
+use super::object::{ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection};
 
 /// AArch64 reloc-type constants. Kept in step with the writer
 /// and the reader; a future common module lifts them out of
@@ -292,20 +292,23 @@ pub fn link_native_objects_with_options(
     // contributes [init bytes ++ zero-fill] to one merged block, and a
     // descriptor's offset is rebased by the unit's base (a unit-local
     // access) or set from the merged TLS symbol table (a cross-unit
-    // `extern _Thread_local`). The ELF variant-2 / Windows TEB paths bake
-    // `tpoff = tls_total_size - offset` into `.text` with no link-time
-    // symbol resolution, so for those a second TLS contributor would
-    // need per-unit TPOFF relocations that aren't wired; reject it.
+    // `extern _Thread_local`). The Linux/x86_64 path achieves the same
+    // through `NT_BADC_ELF_TPOFF` fixups resolved in Pass 4.1 below. The
+    // aarch64 ELF / Windows TEB paths still bake `tpoff = tls_total_size
+    // - offset` into `.text` with no link-time resolution, so for those a
+    // second TLS contributor would need per-unit TPOFF relocations that
+    // aren't wired; reject it.
     let uses_tlv = objs.iter().any(|o| {
         !o.macho_tlv_descriptors.is_empty()
             || !o.macho_tlv_fixups.is_empty()
             || !o.macho_tlv_descriptor_syms.is_empty()
     });
+    let elf_tpoff_resolved = machine == NativeMachine::X86_64;
     let tls_objs: Vec<&NativeObject> = objs
         .iter()
         .filter(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0)
         .collect();
-    if !uses_tlv && tls_objs.len() > 1 {
+    if !uses_tlv && !elf_tpoff_resolved && tls_objs.len() > 1 {
         return Err(link_err(
             "link_native_objects: more than one input object carries \
              `_Thread_local` storage -- merging multiple TLS blocks needs \
@@ -327,14 +330,16 @@ pub fn link_native_objects_with_options(
         tls_data.extend_from_slice(&obj.tls_data);
         tls_data.resize(tls_data.len() + obj.tls_bss_size, 0);
     }
-    // The init boundary. The Mach-O TLV merge concatenates several units'
-    // [init ++ zero-fill] blocks, so it has no single split point; the
-    // whole block is emitted as `__thread_data` (uninit bytes are already
-    // zero) when any unit carries an init template, else `__thread_bss`.
-    // The ELF / Windows path has at most one TLS unit (a second is
-    // rejected above), so its init boundary is that unit's init length,
-    // preserving the `.tdata` / `.tbss` split the writer expects.
-    let tls_init_size = if uses_tlv {
+    // The init boundary. Concatenating several units' [init ++ zero-fill]
+    // blocks has no single `.tdata` / `.tbss` split point, so when more
+    // than one unit contributes -- the Mach-O TLV path, or the multi-unit
+    // x86_64 ELF path resolved through `NT_BADC_ELF_TPOFF` -- the whole
+    // merged block is emitted as initialised data (the zero-fill regions
+    // are already zero bytes) when any unit carries an init template. A
+    // single TLS unit keeps the `.tdata` / `.tbss` split the writer
+    // expects, so its zero-fill stays out of the file image.
+    let multi_tls = tls_objs.len() > 1;
+    let tls_init_size = if uses_tlv || (elf_tpoff_resolved && multi_tls) {
         if any_tls_init { tls_data.len() } else { 0 }
     } else {
         tls_objs.first().map(|o| o.tls_data.len()).unwrap_or(0)
@@ -747,6 +752,47 @@ pub fn link_native_objects_with_options(
                     )));
                 }
             }
+        }
+    }
+
+    // Pass 4.1 -- Linux/x86_64 TLS access fixups. Each unit's
+    // `elf_tpoff_fixups` marks a `sub` imm32 in its `.text` that holds a
+    // TLS variable's TPOFF: the variant-2 layout places the merged TLS
+    // block below the thread pointer, so an access computes
+    // `address = TP - imm32` and `imm32 = merged_size - merged_offset`.
+    // The per-unit emit baked a single-unit default (or 0 for an extern
+    // access); re-resolve each against the merged layout. glibc places
+    // the static TLS block at `tp - roundup(memsz, align)`, so the TPOFF
+    // is measured from the alignment-rounded block size, matching the
+    // writer's PT_TLS `p_align`.
+    let merged_tls_total = align_usize(tls_data.len(), 8) as u64;
+    for (i, obj) in objs.iter().enumerate() {
+        for (text_off, target) in &obj.elf_tpoff_fixups {
+            let merged_offset = match target {
+                ElfTpoffTarget::Local(off) => tls_bases[i] as u64 + off,
+                ElfTpoffTarget::Extern(name) => match tls_symbol_offsets.get(name) {
+                    Some(o) => *o,
+                    None => {
+                        return Err(err(&format!(
+                            "link_native_objects: TLS access references undefined \
+                             `_Thread_local` symbol `{name}`",
+                        )));
+                    }
+                },
+            };
+            let tpoff = merged_tls_total - merged_offset;
+            if tpoff > i32::MAX as u64 {
+                return Err(err(&format!(
+                    "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the i32 `sub` immediate",
+                )));
+            }
+            let patch = text_bases[i] + *text_off as usize;
+            if patch + 4 > text.len() {
+                return Err(err(&format!(
+                    "link_native_objects: TLS fixup offset 0x{text_off:x} out of range in object {i}",
+                )));
+            }
+            text[patch..patch + 4].copy_from_slice(&(tpoff as i32).to_le_bytes());
         }
     }
 
@@ -1986,6 +2032,7 @@ mod tests {
             macho_tlv_fixups: alloc::vec::Vec::new(),
             tls_symbols: alloc::vec::Vec::new(),
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
@@ -2054,6 +2101,7 @@ mod tests {
             macho_tlv_fixups: alloc::vec::Vec::new(),
             tls_symbols: alloc::vec::Vec::new(),
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
@@ -2097,6 +2145,7 @@ mod tests {
             macho_tlv_fixups: alloc::vec::Vec::new(),
             tls_symbols: alloc::vec::Vec::new(),
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),

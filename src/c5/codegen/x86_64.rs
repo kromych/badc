@@ -1789,6 +1789,10 @@ pub(super) fn lower(
     // the `_tls_index` DWORD slot and patches each fixup with the
     // displacement to it.
     let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
+    // TLS access fixups (Linux/x86_64). Each `Inst::TlsAddr` site
+    // records a `sub` immediate the linker patches with the variable's
+    // TPOFF once the units' TLS blocks are merged.
+    let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
     // Lift the program into SSA once and run the linear-scan
     // allocator per function. Each function lowers through
     // `ssa_emit_x86_64::emit_function`; a per-function emit bail
@@ -1938,6 +1942,7 @@ pub(super) fn lower(
             imports,
             &variadic_targets,
             &mut tls_index_fixups,
+            &mut elf_tpoff_fixups,
             program.tls_data.len(),
             &mut pc_to_native,
             &mut func_prologue_native,
@@ -2153,6 +2158,7 @@ pub(super) fn lower(
         tls_data: program.tls_data.clone(),
         tls_init_size: program.tls_init_size,
         tls_index_fixups,
+        elf_tpoff_fixups,
         data_relocs: Vec::new(),
         extern_data_relocs: Vec::new(),
         code_relocs: Vec::new(),

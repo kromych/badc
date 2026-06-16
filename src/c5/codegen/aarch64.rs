@@ -1775,6 +1775,9 @@ pub(super) fn lower(
         dllmain_pc: None,
         macho_tlv_fixups,
         macho_tlv_descriptors,
+        // x86_64-only; the aarch64 path resolves TLS through Mach-O TLV
+        // descriptors (macOS) or, on Linux, has its own pending path.
+        elf_tpoff_fixups: Vec::new(),
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
         merged_dwarf: None,

@@ -187,18 +187,30 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
     return py
 
 
-def smoke_run(py: Path, log) -> None:
+def module_search_path() -> str:
     # The standard library lives under the source tree's `Lib/`; the
     # interpreter needs it on the path to import `encodings` (required
-    # for stdio). The reference build needs the same.
-    env = dict(os.environ, PYTHONHOME=str(SRC), PYTHONPATH=str(SRC / "Lib"))
+    # for stdio). The C extension modules (math, _random, ...) are built
+    # as shared objects under the directory named in `pybuilddir.txt`;
+    # the reference `python` finds them via that build landmark because it
+    # runs from the source tree, but the badc-built interpreter runs from
+    # a separate output directory, so the extension directory is added
+    # explicitly. The test harness (libregrtest) imports `math` at start.
+    parts = [str(SRC / "Lib")]
+    builddir = SRC / "pybuilddir.txt"
+    if builddir.is_file():
+        parts.append(str(SRC / builddir.read_text().strip()))
+    return os.pathsep.join(parts)
+
+
+def smoke_run(py: Path, log) -> None:
+    env = dict(os.environ, PYTHONHOME=str(SRC), PYTHONPATH=module_search_path())
     r = run([str(py), "-c", "print(2 + 2)"], env=env, timeout=120)
     if r.returncode != 0 or r.stdout.strip() != "4":
         sys.stderr.write(r.stdout + r.stderr)
         sys.exit("smoke: interpreter failed the `print(2 + 2)` check")
     log("interpreter runs `print(2 + 2)`")
 
-    env = dict(env, PYTHONPATH=str(SRC / "Lib"))
     cmd = [str(py), "-m", "test", "-q", *TEST_SLICE]
     r = run(cmd, cwd=SRC, env=env, timeout=1800)
     out = r.stdout + r.stderr

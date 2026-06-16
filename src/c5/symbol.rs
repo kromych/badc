@@ -274,6 +274,13 @@ pub(crate) struct Symbol {
     /// translation unit, and the header is the wrong place to
     /// flag them.
     pub decl_in_main_source: bool,
+
+    /// True when the declaration carried a `maybe_unused` /
+    /// `unused` attribute (C23 6.7.12.4 `[[maybe_unused]]` or GNU
+    /// `__attribute__((unused))`). Suppresses the unused-variable
+    /// and dead-store diagnostics for this symbol, matching the
+    /// documented effect of the attribute.
+    pub maybe_unused: bool,
 }
 
 /// C99 6.2.2 linkage class. `None` is the default for block-scope

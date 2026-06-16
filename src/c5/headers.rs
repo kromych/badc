@@ -47,6 +47,10 @@ pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
 /// `memory.h` is omitted: it's a legacy alias for `string.h` and
 /// would just produce duplicate hits in the diagnostic.
 pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
+    (
+        "stdalign.h",
+        include_str!("../../headers/include/stdalign.h"),
+    ),
     ("stddef.h", include_str!("../../headers/include/stddef.h")),
     ("stdint.h", include_str!("../../headers/include/stdint.h")),
     (

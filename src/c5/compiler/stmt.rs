@@ -544,6 +544,20 @@ impl Compiler {
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
+            // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
+            // lead either a declaration or a statement at block scope.
+            // Consume it, then dispatch on the following token.
+            let mut leading_maybe_unused = false;
+            if self.lex.tk == Token::Attribute
+                || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+            {
+                self.pending.attr_maybe_unused = false;
+                self.skip_attribute_specifiers()?;
+                leading_maybe_unused = self.pending.attr_maybe_unused;
+                if self.lex.tk == '}' {
+                    break;
+                }
+            }
             if self.lex.tk == Token::Typedef {
                 self.parse_block_typedef(Some(&mut block_symbols))?;
             } else if self.lex.tk == Token::StaticAssert {
@@ -552,7 +566,16 @@ impl Compiler {
                 self.parse_static_assert()?;
             } else if self.lex_is_type_start() {
                 let item_before = self.ast_stmts_snapshot();
+                let sym_before = block_symbols.len();
                 self.parse_block_local_decl(&mut block_symbols)?;
+                if leading_maybe_unused {
+                    // C23 6.7.13.5: `[[maybe_unused]]` on a declaration
+                    // suppresses the unused diagnostics for the names it
+                    // introduces.
+                    for &(idx, _, _, _) in &block_symbols[sym_before..] {
+                        self.symbols[idx].maybe_unused = true;
+                    }
+                }
                 let item_after = self.ast.stmts.len();
                 // A local decl pushes one stmt-id-wrapping Decl
                 // per declarator; capture every one as a top-
@@ -601,6 +624,7 @@ impl Compiler {
                 || !sym.decl_in_main_source
                 || sym.address_escaped
                 || sym.was_read
+                || sym.maybe_unused
                 || sym.name.starts_with('_')
             {
                 continue;

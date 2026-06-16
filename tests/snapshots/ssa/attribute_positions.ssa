@@ -1,4 +1,3 @@
-attribute_positions.c:26: warning: unused parameter `a`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=inl
 fn ent_pc=0 n_params=1 variadic=false locals=0

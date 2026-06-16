@@ -554,6 +554,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("attribute_packed.c", 0),
     ("attribute_positions.c", 0),
     ("attribute_declspec.c", 0),
+    ("attribute_c23.c", 0),
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),

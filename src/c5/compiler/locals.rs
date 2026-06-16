@@ -34,7 +34,10 @@ use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
-    pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
+    pub(super) fn parse_function_body_local_decl(
+        &mut self,
+        maybe_unused: bool,
+    ) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
         let mut saw_specifier = false;
@@ -135,6 +138,12 @@ impl Compiler {
         self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            // C23 6.7.13.5 `[[maybe_unused]]` / GNU
+            // `__attribute__((unused))` on the declaration suppresses
+            // the unused-variable diagnostic for the names it declares.
+            if maybe_unused && loc_idx != usize::MAX {
+                self.symbols[loc_idx].maybe_unused = true;
+            }
             // Function-pointer lineage carries through to local
             // bindings -- pick up the side-channel parse_declarator
             // (or the typedef base type) populated. Used by the

@@ -717,6 +717,12 @@ impl Compiler {
         // clamping above already prevents struct_align from
         // exceeding pack, but cap here too so an empty struct
         // under `pack(1)` still ends up with align=1.
+        // TODO: honor `_Alignas(N)` / `__attribute__((aligned(N)))`
+        // for N > 8. The attribute specifiers are parsed and consumed
+        // (`skip_attribute_specifiers`) but the requested alignment is
+        // dropped here; supporting it requires over-aligned stack
+        // slots and global placement, which the 8-wide slot model does
+        // not yet represent.
         let struct_align =
             struct_align
                 .min(8)

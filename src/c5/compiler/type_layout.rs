@@ -139,7 +139,11 @@ impl Compiler {
     /// `typedef struct X X; X *p;` would otherwise misparse as
     /// `Int p;`.
     pub(super) fn lex_is_type_start(&self) -> bool {
-        is_type_start_token(self.lex.tk) || self.is_lex_typedef_name()
+        is_type_start_token(self.lex.tk)
+            || self.is_lex_typedef_name()
+            // A leading C23 `[[ ... ]]` attribute introduces a
+            // declaration (`[[noreturn]] void f(void);`).
+            || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
     }
 
     /// True when the current lexer token is an identifier bound to a

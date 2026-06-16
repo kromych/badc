@@ -71,6 +71,13 @@ impl Compiler {
             while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
                 self.next()?;
             }
+            // A `maybe_unused` / `unused` attribute may lead the
+            // parameter (`__attribute__((unused)) int a`) or trail its
+            // declarator (`int a __attribute__((unused))`). Clear the
+            // side channel here so a previous parameter's attribute
+            // cannot leak; the base-type parse below sets it for the
+            // leading form, the post-declarator skip for the trailing.
+            self.pending.attr_maybe_unused = false;
             let base = if self.lex_is_type_start() {
                 self.parse_decl_base_type()?
             } else {
@@ -150,6 +157,9 @@ impl Compiler {
             // A parameter may carry a trailing attribute
             // (`PyObject *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;
+            if self.pending.attr_maybe_unused && param_idx != usize::MAX {
+                self.symbols[param_idx].maybe_unused = true;
+            }
             if array_size != 0 {
                 full_ty += Ty::Ptr as i64;
             }

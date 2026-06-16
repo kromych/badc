@@ -539,6 +539,14 @@ pub(in crate::c5::compiler) struct Pending {
     /// this many closing `)` after the literal's brace list. 0 when the
     /// literal carried no surrounding parentheses.
     pub compound_lit_close_parens: i64,
+
+    /// Side channel from `skip_attribute_specifiers`: set true when a
+    /// consumed attribute named `unused` / `maybe_unused` (C23
+    /// 6.7.12.4 `[[maybe_unused]]` or GNU `__attribute__((unused))`).
+    /// Read by `parse_block_stmt` right after the leading-attribute
+    /// skip to mark the declared locals so their unused-variable
+    /// diagnostics are suppressed.
+    pub attr_maybe_unused: bool,
 }
 
 impl Default for Pending {
@@ -575,6 +583,7 @@ impl Default for Pending {
             last_emit_was_indirect_call: false,
             last_imm_was_zero: false,
             compound_lit_close_parens: 0,
+            attr_maybe_unused: false,
         }
     }
 }

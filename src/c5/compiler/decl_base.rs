@@ -280,44 +280,98 @@ impl Compiler {
         Ok(ty)
     }
 
+    /// Set `*packed` / `*maybe_unused` if the current token is the
+    /// corresponding attribute name (`packed` / `__packed__`,
+    /// `unused` / `maybe_unused` / `__unused__`). Other names are
+    /// ignored.
+    fn note_attribute_name(&self, packed: &mut bool, maybe_unused: &mut bool) {
+        if self.lex.tk == Token::Id {
+            let n = self.symbols[self.lex.curr_id_idx].name.as_str();
+            if n == "packed" || n == "__packed__" {
+                *packed = true;
+            } else if n == "unused" || n == "maybe_unused" || n == "__unused__" {
+                *maybe_unused = true;
+            }
+        }
+    }
+
     /// Consume a run of declaration decorators -- GCC
-    /// `__attribute__ (( ... ))` and MSVC `__declspec ( ... )` -- if any.
-    /// Returns true when one names the `packed` attribute, which sets an
-    /// aggregate's layout; every other decorator is an advisory hint the
-    /// dialect does not act on and is discarded. The parenthesised
-    /// payload is matched by balance, so either parenthesis depth and
-    /// any content -- nested calls, string literals, comma lists -- is
-    /// consumed.
+    /// `__attribute__ (( ... ))` / `__declspec ( ... )` / `_Alignas
+    /// ( ... )` and C23 `[[ ... ]]` -- if any. Returns true when one
+    /// names the `packed` attribute, which sets an aggregate's layout;
+    /// `maybe_unused` / `unused` is recorded on `pending.attr_maybe_unused`.
+    /// Every other decorator is an advisory hint the dialect does not act
+    /// on and is discarded. The payload is matched by balance, so any
+    /// parenthesis depth and content -- nested calls, string literals,
+    /// comma lists -- is consumed.
     pub(super) fn skip_attribute_specifiers(&mut self) -> Result<bool, C5Error> {
         let mut packed = false;
-        while self.lex.tk == Token::Attribute {
-            self.next()?; // __attribute__ / __declspec
-            if self.lex.tk != '(' {
-                return Err(self.compile_err("`(` expected after attribute specifier"));
-            }
-            let mut depth = 0i32;
-            loop {
-                if self.lex.tk == '(' {
-                    depth += 1;
-                    self.next()?;
-                } else if self.lex.tk == ')' {
-                    depth -= 1;
-                    self.next()?;
-                    if depth == 0 {
-                        break;
-                    }
-                } else if self.lex.tk == 0 {
-                    return Err(self.compile_err("unterminated `__attribute__`"));
-                } else {
-                    if self.lex.tk == Token::Id {
-                        let n = self.symbols[self.lex.curr_id_idx].name.as_str();
-                        if n == "packed" || n == "__packed__" {
-                            packed = true;
-                        }
-                    }
-                    self.next()?;
+        let mut maybe_unused = false;
+        loop {
+            if self.lex.tk == Token::Attribute {
+                // `__attribute__((...))`, `__declspec(...)`,
+                // `_Alignas(...)`. Consume the balanced parenthesised
+                // payload, recording the `packed` attribute.
+                self.next()?;
+                if self.lex.tk != '(' {
+                    return Err(self.compile_err("`(` expected after attribute specifier"));
                 }
+                let mut depth = 0i32;
+                loop {
+                    if self.lex.tk == '(' {
+                        depth += 1;
+                        self.next()?;
+                    } else if self.lex.tk == ')' {
+                        depth -= 1;
+                        self.next()?;
+                        if depth == 0 {
+                            break;
+                        }
+                    } else if self.lex.tk == 0 {
+                        return Err(self.compile_err("unterminated attribute specifier"));
+                    } else {
+                        self.note_attribute_name(&mut packed, &mut maybe_unused);
+                        self.next()?;
+                    }
+                }
+            } else if self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'[') {
+                // C23 6.7.13 `[[ ... ]]` attribute. The opening `[[` and
+                // closing `]]` are each two bracket tokens; argument
+                // lists use balanced parentheses, so a `]` closes only at
+                // paren depth zero. The `gnu::` / `clang::` namespace
+                // prefixes lex as separate tokens and need no special
+                // handling -- the `packed` name is detected wherever it
+                // appears.
+                self.next()?; // first `[`
+                self.next()?; // second `[`
+                let mut depth = 0i32;
+                loop {
+                    if self.lex.tk == '(' {
+                        depth += 1;
+                        self.next()?;
+                    } else if self.lex.tk == ')' {
+                        depth -= 1;
+                        self.next()?;
+                    } else if self.lex.tk == ']' && depth == 0 {
+                        self.next()?; // first `]`
+                        if self.lex.tk != ']' {
+                            return Err(self.compile_err("`]]` expected to close attribute"));
+                        }
+                        self.next()?; // second `]`
+                        break;
+                    } else if self.lex.tk == 0 {
+                        return Err(self.compile_err("unterminated `[[` attribute"));
+                    } else {
+                        self.note_attribute_name(&mut packed, &mut maybe_unused);
+                        self.next()?;
+                    }
+                }
+            } else {
+                break;
             }
+        }
+        if maybe_unused {
+            self.pending.attr_maybe_unused = true;
         }
         Ok(packed)
     }
@@ -347,10 +401,17 @@ impl Compiler {
         // collect everything we see, then look at the next token
         // for the type keyword.
         let mut m = IntModifiers::default();
-        while is_decl_modifier(self.lex.tk) {
-            if self.lex.tk == Token::Attribute {
+        loop {
+            // C23 6.7.13 `[[...]]` and GNU `__attribute__`/`__declspec`
+            // may lead the declaration specifiers.
+            if self.lex.tk == Token::Attribute
+                || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+            {
                 self.skip_attribute_specifiers()?;
                 continue;
+            }
+            if !is_decl_modifier(self.lex.tk) {
+                break;
             }
             // C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`.
             // Distinct from the `_Atomic` qualifier handled below: here

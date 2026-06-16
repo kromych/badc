@@ -1684,6 +1684,13 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__attribute__", Token::Attribute),
     ("__attribute", Token::Attribute),
     ("__declspec", Token::Attribute),
+    // C11 6.7.5 alignment specifier. badc caps aggregate alignment at 8
+    // (the IR's slot width), so an over-alignment is advisory and the
+    // specifier is parsed and discarded like the equivalent
+    // `__attribute__((aligned(N)))`. The `alignas` spelling reaches this
+    // through `<stdalign.h>`; it is not lexed as a keyword so a C11
+    // program may still use it as an identifier.
+    ("_Alignas", Token::Attribute),
     ("while", Token::While),
     ("do", Token::Do),
     ("break", Token::Break),

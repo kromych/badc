@@ -104,7 +104,9 @@ impl Compiler {
                     // the inner type-name names the base type (distinct from
                     // the `_Atomic` qualifier consumed as a no-op below).
                     atomic_base = self.try_parse_atomic_type_specifier()?;
-                } else if self.lex.tk == Token::Attribute {
+                } else if self.lex.tk == Token::Attribute
+                    || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+                {
                     self.skip_attribute_specifiers()?;
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline {
@@ -980,6 +982,22 @@ impl Compiler {
                     // through parse_block_stmt.
                     self.tag_scopes.push(alloc::vec::Vec::new());
                     while self.lex.tk != '}' {
+                        // C23 6.7.13 / 6.8: an attribute-specifier-
+                        // sequence may lead either a declaration or a
+                        // statement at the function-body top level.
+                        // Consume it, then dispatch on the following
+                        // token.
+                        let mut leading_maybe_unused = false;
+                        if self.lex.tk == Token::Attribute
+                            || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+                        {
+                            self.pending.attr_maybe_unused = false;
+                            self.skip_attribute_specifiers()?;
+                            leading_maybe_unused = self.pending.attr_maybe_unused;
+                            if self.lex.tk == '}' {
+                                break;
+                            }
+                        }
                         if self.lex.tk == Token::StaticAssert {
                             // C11 6.7.10 lets static_assert sit
                             // anywhere a declaration may appear,
@@ -997,7 +1015,7 @@ impl Compiler {
                             self.parse_block_typedef(None)?;
                         } else if self.lex_is_type_start() {
                             let item_before = self.ast_stmts_snapshot();
-                            self.parse_function_body_local_decl()?;
+                            self.parse_function_body_local_decl(leading_maybe_unused)?;
                             let item_after = self.ast.stmts.len();
                             for id in item_before..item_after {
                                 top_level_ids.push(id as super::super::ast::StmtId);
@@ -1180,6 +1198,7 @@ impl Compiler {
                             || !sym.decl_in_main_source
                             || sym.address_escaped
                             || sym.was_read
+                            || sym.maybe_unused
                             || sym.name.is_empty()
                             || sym.name.starts_with('_')
                         {

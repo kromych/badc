@@ -1035,10 +1035,12 @@ impl Compiler {
                 // `imm_code_extern` / `imm_code` emit resolves the
                 // function-pointer literal on the SSA side.
                 self.emit_imm(CODE_BASE as i64 + self.symbols[id_idx].val);
-                // Type as `int*` rather than `char*`: matches the
-                // conventional `int *fp = some_function;` idiom and
-                // keeps the type-check loose-but-not-wrong.
-                self.ty = Ty::Int as i64 + Ty::Ptr as i64;
+                // Encode the function-pointer type as the callee's return
+                // type plus one pointer level, so an inline call through
+                // the value (`(cond ? f : g)(x)`) recovers the real
+                // result type instead of defaulting to `int` and
+                // narrowing a wider return.
+                self.ty = self.symbols[id_idx].type_ + Ty::Ptr as i64;
                 // Dual-emit: an Ident node so the wrapping shape
                 // (call-arg, assignment, cast) sees the function
                 // reference on `ast_acc`. The walker's
@@ -1059,7 +1061,7 @@ impl Compiler {
                 // on aarch64), the same stub a call to the import
                 // reaches. The Sys symbol's `val` is the binding index.
                 self.emit_imm(CODE_BASE as i64);
-                self.ty = Ty::Int as i64 + Ty::Ptr as i64;
+                self.ty = self.symbols[id_idx].type_ + Ty::Ptr as i64;
                 // Dual-emit: push the Sys Ident so wrapping shapes
                 // (static-init, assign, call-arg) see the address
                 // producer on `ast_acc`. The walker's

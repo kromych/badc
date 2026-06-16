@@ -1265,6 +1265,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("static_assert_in_struct.c", 0),
     ("gnu_extension_keyword.c", 0),
     ("variadic_struct_by_value_arg.c", 0),
+    ("fn_ptr_ternary_call_return.c", 0),
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),

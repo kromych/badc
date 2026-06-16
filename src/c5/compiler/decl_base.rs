@@ -280,18 +280,20 @@ impl Compiler {
         Ok(ty)
     }
 
-    /// Consume a run of GCC `__attribute__ (( ... ))` specifiers, if any.
+    /// Consume a run of declaration decorators -- GCC
+    /// `__attribute__ (( ... ))` and MSVC `__declspec ( ... )` -- if any.
     /// Returns true when one names the `packed` attribute, which sets an
-    /// aggregate's layout; every other attribute is an advisory hint the
-    /// dialect does not act on and is discarded. The doubled parentheses
-    /// are matched by balance, so any payload -- nested calls, string
-    /// literals, comma-separated lists -- is consumed.
+    /// aggregate's layout; every other decorator is an advisory hint the
+    /// dialect does not act on and is discarded. The parenthesised
+    /// payload is matched by balance, so either parenthesis depth and
+    /// any content -- nested calls, string literals, comma lists -- is
+    /// consumed.
     pub(super) fn skip_attribute_specifiers(&mut self) -> Result<bool, C5Error> {
         let mut packed = false;
         while self.lex.tk == Token::Attribute {
-            self.next()?; // __attribute__
+            self.next()?; // __attribute__ / __declspec
             if self.lex.tk != '(' {
-                return Err(self.compile_err("`((` expected after `__attribute__`"));
+                return Err(self.compile_err("`(` expected after attribute specifier"));
             }
             let mut depth = 0i32;
             loop {

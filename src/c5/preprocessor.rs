@@ -411,24 +411,12 @@ impl Preprocessor {
         intrinsics.insert("__builtin_clzl".to_string(), clzl as i64);
         intrinsics.insert("__builtin_ctzl".to_string(), ctzl as i64);
         intrinsics.insert("__builtin_popcountl".to_string(), popcountl as i64);
-        // MSVC `__declspec(...)` carries hints the dialect does not act
-        // on (alignment, calling convention, dll linkage). Absorbing it
-        // as an empty function-like macro drops the payload without
-        // losing the surrounding declaration. C99 6.10.3p11 keeps the
-        // inner `(...)` as one macro argument because commas inside
-        // balanced parens are not separators. GCC `__attribute__` is a
-        // lexer token instead, parsed by `skip_attribute_specifiers`,
-        // because the `packed` attribute changes aggregate layout and
-        // so must reach the parser rather than being preprocessed away.
-        fn_macros.insert(
-            "__declspec".to_string(),
-            FnMacro {
-                params: alloc::vec!["x".to_string()],
-                body: String::new(),
-                is_variadic: false,
-                va_name: None,
-            },
-        );
+        // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
+        // declaration decorators carrying hints the dialect does not act
+        // on, except for the `packed` attribute, which changes aggregate
+        // layout. Both are lexer tokens parsed by
+        // `skip_attribute_specifiers` rather than preprocessed away, so
+        // `packed` reaches the parser and the rest is consumed in place.
         // GCC `__builtin_expect(exp, c)` is a branch-prediction hint that
         // evaluates to its first operand. The dialect does not consume the
         // hint, so it expands to the operand. Defined here (not via a

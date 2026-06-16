@@ -1683,6 +1683,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__typeof", Token::Typeof),
     ("__attribute__", Token::Attribute),
     ("__attribute", Token::Attribute),
+    ("__declspec", Token::Attribute),
     ("while", Token::While),
     ("do", Token::Do),
     ("break", Token::Break),

@@ -360,10 +360,11 @@ pub(crate) enum Token {
     /// the enum so the operator variants keep their precedence-ordinal
     /// values.
     Typeof,
-    /// GCC `__attribute__` / `__attribute`. Consumed by
-    /// `skip_attribute_specifiers`, which parses the `(( ... ))` payload,
-    /// acts on the `packed` attribute (aggregate layout), and ignores
-    /// the rest. Added at the end so the operator ordinals are unchanged.
+    /// A declaration decorator -- GCC `__attribute__` / `__attribute` or
+    /// MSVC `__declspec`. Consumed by `skip_attribute_specifiers`, which
+    /// parses the parenthesised payload, acts on the `packed` attribute
+    /// (aggregate layout), and ignores the rest. Added at the end so the
+    /// operator ordinals are unchanged.
     Attribute,
 }
 

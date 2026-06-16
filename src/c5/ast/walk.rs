@@ -1971,6 +1971,18 @@ impl<'a> Walker<'a> {
                                 let Some(ty_tag) = agg_ty else {
                                     continue;
                                 };
+                                // A variadic callee's named aggregate parameter
+                                // rides the c5 by-address convention: the callee
+                                // reads it from the passed address (its prologue
+                                // does not scatter an incoming aggregate
+                                // register pair into the parameter local). Host-
+                                // ABI by-value placement for a named aggregate
+                                // of a variadic callee is not yet lowered on the
+                                // register-save variadic ABIs, so keep both ends
+                                // on the by-address shape.
+                                if callee_variadic && i < self.symbols[*sym as usize].params.len() {
+                                    continue;
+                                }
                                 if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
                                     self.structs,
                                     self.target,

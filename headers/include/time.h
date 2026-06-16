@@ -130,6 +130,11 @@ typedef long clock_t;
 #pragma binding(libc::ctime_r,       "_ctime_r")
 #pragma binding(libc::strftime,      "_strftime")
 #pragma binding(libc::tzset,         "_tzset")
+// `tzset` outputs, bound as data imports to libSystem (the underscored
+// symbols), mirroring the `environ` GOT-import treatment.
+#pragma binding(data libc::tzname,   "_tzname")
+#pragma binding(data libc::timezone, "_timezone")
+#pragma binding(data libc::daylight, "_daylight")
 #endif
 
 #ifdef __linux__
@@ -150,6 +155,12 @@ typedef long clock_t;
 #pragma binding(libc::ctime_r,       "ctime_r")
 #pragma binding(libc::strftime,      "strftime")
 #pragma binding(libc::tzset,         "tzset")
+// `tzset` writes the zone names / offset / DST flag into these C library
+// data symbols; bind them as data imports so a read after `tzset()` sees
+// the library's values (the COPY-relocation analogue of `environ`).
+#pragma binding(data libc::tzname,   "tzname")
+#pragma binding(data libc::timezone, "timezone")
+#pragma binding(data libc::daylight, "daylight")
 #endif
 
 #ifdef _WIN32

@@ -158,6 +158,20 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
     objs, fails = [], []
     for obj in link_objs:
         if obj not in compiles:
+            # CPython's perf trampoline ships as a hand-written `.S` the
+            # host assembles, so the trace has no C compile command for it.
+            # Substitute a position-independent C trampoline badc compiles.
+            if obj.endswith("asm_trampoline.o"):
+                dst = out / (obj.replace("/", "_"))
+                r = run(
+                    [badc, "-c", str(PY_DIR / "asm_trampoline.c"), "-o", str(dst)],
+                    timeout=120,
+                )
+                if r.returncode != 0:
+                    fails.append((obj, ((r.stderr or r.stdout).strip() or "rc")[:160]))
+                else:
+                    objs.append(str(dst))
+                continue
             fails.append((obj, "no compile command in trace"))
             continue
         src, flags = compiles[obj]

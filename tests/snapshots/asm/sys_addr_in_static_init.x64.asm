@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
-               	movl	$0x3b0, %esi            # imm = 0x3B0
+               	movl	$0x470, %esi            # imm = 0x470
                	callq	<addr>
                	ud2
 

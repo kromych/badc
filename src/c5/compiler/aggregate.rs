@@ -45,6 +45,7 @@ impl Compiler {
         &mut self,
         name: &str,
         is_union: bool,
+        packed: bool,
     ) -> Result<usize, C5Error> {
         // Pre-register or recycle a forward declaration so
         // self-referential pointer fields can find this aggregate
@@ -240,6 +241,11 @@ impl Compiler {
             } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
                 let nested_is_union = self.lex.tk == Token::Union;
                 self.next()?;
+                let mut nested_packed = false;
+                if self.lex.tk == Token::Packed {
+                    nested_packed = true;
+                    self.next()?;
+                }
                 // Three shapes:
                 //   * `struct Foo { ... }` -- named definition.
                 //   * `struct Foo`         -- type use.
@@ -272,7 +278,13 @@ impl Compiler {
                     return Err(self.compile_err("aggregate name or `{{` expected in field type"));
                 };
                 let inner_id = if self.lex.tk == '{' {
-                    self.parse_aggregate_body(&inner_name, nested_is_union)?
+                    let id =
+                        self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
+                    if self.lex.tk == Token::Packed {
+                        self.next()?;
+                        self.repack_struct(id);
+                    }
+                    id
                 } else {
                     self.find_or_forward_declare_struct(&inner_name)
                 };
@@ -380,7 +392,7 @@ impl Compiler {
                     bf_active = false;
 
                     let inner_size = self.structs[inner_id].size;
-                    let pack = self.lex.current_pack();
+                    let pack = if packed { 1 } else { self.lex.current_pack() };
                     let inner_align = self.structs[inner_id].align.min(pack);
                     if inner_align > struct_align {
                         struct_align = inner_align;
@@ -628,7 +640,7 @@ impl Compiler {
                     // value via [`Lexer::current_pack`]; default is
                     // 8 (no-op) so unpacked structs lay out exactly
                     // as before.
-                    let pack = self.lex.current_pack();
+                    let pack = if packed { 1 } else { self.lex.current_pack() };
                     let elem_size = self.size_of_type(field_ty);
                     let field_storage = if field_array_size > 0 {
                         elem_size * field_array_size as usize
@@ -699,7 +711,10 @@ impl Compiler {
         // clamping above already prevents struct_align from
         // exceeding pack, but cap here too so an empty struct
         // under `pack(1)` still ends up with align=1.
-        let struct_align = struct_align.min(8).min(self.lex.current_pack());
+        let struct_align =
+            struct_align
+                .min(8)
+                .min(if packed { 1 } else { self.lex.current_pack() });
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural
         // alignment. Empty structs floor at 1 byte (so a `struct
@@ -716,6 +731,41 @@ impl Compiler {
         self.structs[struct_id].size = if saw_field { total } else { total.max(1) };
         self.structs[struct_id].align = struct_align;
         Ok(struct_id)
+    }
+
+    /// Re-lay a struct's fields with `__attribute__((packed))`
+    /// semantics: no inter-member padding and an alignment of 1. Used
+    /// when the attribute marker follows the body, after the fields were
+    /// placed at their natural alignment. A union only loses its tail
+    /// padding (members already sit at offset 0). Bitfield members are
+    /// left at their computed offsets; the packed bit-layout rules are
+    /// not modeled here.
+    pub(super) fn repack_struct(&mut self, struct_id: usize) {
+        self.structs[struct_id].align = 1;
+        if self.structs[struct_id].is_union {
+            return;
+        }
+        let n = self.structs[struct_id].fields.len();
+        let mut offset = 0usize;
+        for i in 0..n {
+            let (ty, array_size, bit_width) = {
+                let f = &self.structs[struct_id].fields[i];
+                (f.ty, f.array_size, f.bit_width)
+            };
+            if bit_width > 0 {
+                continue;
+            }
+            self.structs[struct_id].fields[i].offset = offset;
+            let storage = if array_size > 0 {
+                self.size_of_type(ty) * array_size as usize
+            } else if array_size < 0 {
+                0
+            } else {
+                self.size_of_type(ty)
+            };
+            offset += storage;
+        }
+        self.structs[struct_id].size = offset.max(1);
     }
 }
 

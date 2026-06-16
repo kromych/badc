@@ -1438,7 +1438,17 @@ impl Preprocessor {
                                 self.substitute_with_blocklist(a, filename, line_no, blocklist)
                             })
                             .collect();
-                        let expanded = expand_fn_macro(macro_def, &expanded_args, &args);
+                        // `__attribute__((packed))` (and the `__packed__`
+                        // spelling) rewrites to a reserved marker the
+                        // aggregate parser acts on; every other attribute
+                        // payload still expands to nothing.
+                        let expanded = if (ident == "__attribute__" || ident == "__attribute")
+                            && args.iter().any(|a| attribute_arg_names_packed(a))
+                        {
+                            " __c5_attr_packed ".to_string()
+                        } else {
+                            expand_fn_macro(macro_def, &expanded_args, &args)
+                        };
                         // C99 6.10.3.4 "blue paint": any macro that
                         // fired during arg pre-expansion stays on
                         // the blocklist for the body rescan, so a
@@ -4135,6 +4145,15 @@ fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
 /// reaches the tail through `rest`).
 fn is_va_token(def: &FnMacro, word: &str) -> bool {
     word == "__VA_ARGS__" || def.va_name.as_deref() == Some(word)
+}
+
+/// True when an `__attribute__` argument names the `packed` attribute
+/// (`packed` or the `__packed__` spelling). The whole-token comparison
+/// rejects substrings, so `aligned(8)` or `section("packed_data")` do
+/// not match.
+fn attribute_arg_names_packed(arg: &str) -> bool {
+    arg.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .any(|tok| tok == "packed" || tok == "__packed__")
 }
 
 fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> String {

@@ -360,6 +360,13 @@ pub(crate) enum Token {
     /// the enum so the operator variants keep their precedence-ordinal
     /// values.
     Typeof,
+    /// Marker for `__attribute__((packed))` (and `__packed__`). The
+    /// preprocessor rewrites a `packed` attribute to a reserved
+    /// identifier the aggregate parser consumes to lay the struct out
+    /// without inter-member padding; every other `__attribute__` payload
+    /// is still dropped. Added at the end so the operator ordinals are
+    /// unchanged.
+    Packed,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a

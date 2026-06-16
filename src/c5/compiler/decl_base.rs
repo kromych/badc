@@ -156,6 +156,14 @@ impl Compiler {
         let is_union = self.lex.tk == Token::Union;
         let kind = if is_union { "union" } else { "struct" };
         self.next()?;
+        // `__attribute__((packed))` may sit between the keyword and the
+        // tag (`struct __attribute__((packed)) name`). The preprocessor
+        // rewrote it to a single marker token.
+        let mut packed = false;
+        if self.lex.tk == Token::Packed {
+            packed = true;
+            self.next()?;
+        }
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
@@ -169,7 +177,14 @@ impl Compiler {
             return Err(self.compile_err(format!("{kind} name or `{{` expected")));
         };
         let id = if self.lex.tk == '{' {
-            self.parse_aggregate_body(&name, is_union)?
+            let id = self.parse_aggregate_body(&name, is_union, packed)?;
+            // `struct name { ... } __attribute__((packed))`: the marker
+            // follows the body. Re-pack the already-laid-out fields.
+            if self.lex.tk == Token::Packed {
+                self.next()?;
+                self.repack_struct(id);
+            }
+            id
         } else {
             self.find_or_forward_declare_struct(&name)
         };

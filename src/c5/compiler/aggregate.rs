@@ -114,6 +114,13 @@ impl Compiler {
         // mis-pads any enclosing aggregate.
         let mut saw_field = false;
         while self.lex.tk != '}' {
+            // C11 6.7.2.1: a static_assert-declaration may appear in the
+            // struct-declaration-list. It declares no member, so handle
+            // it before the field-type parse and continue.
+            if self.lex.tk == Token::StaticAssert {
+                self.parse_static_assert()?;
+                continue;
+            }
             // Reset the typedef-array carrier between field groups
             // (`jmp_buf env;` then `int code;`). The aggregate
             // parser has its own inline base-type reader and does

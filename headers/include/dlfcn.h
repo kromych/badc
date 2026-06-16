@@ -24,6 +24,9 @@
 #define RTLD_NOLOAD   0x04
 #define RTLD_DEEPBIND 0x08
 #define RTLD_NODELETE 0x1000
+// Linux `dladdr1` request type: yield the matching object's link_map.
+#define RTLD_DL_LINKMAP 2
+#define RTLD_DL_SYMENT  1
 #else
 #define RTLD_LOCAL   0
 #define RTLD_GLOBAL  256
@@ -32,7 +35,7 @@
 // `RTLD_DEFAULT` / `RTLD_NEXT` are pseudo-handles whose numeric
 // values differ across platforms:
 //
-//   * Linux glibc:    DEFAULT = NULL,         NEXT = (void*)-1
+//   * Linux:          DEFAULT = NULL,         NEXT = (void*)-1
 //   * macOS dyld:     DEFAULT = (void*)-2,    NEXT = (void*)-1
 //   * Windows:        not meaningful (LoadLibraryA wants a real path)
 //
@@ -70,6 +73,9 @@
 #pragma binding(libdl::dlclose, "dlclose")
 #pragma binding(libdl::dlerror, "dlerror")
 #pragma binding(libdl::dladdr,  "dladdr")
+// GNU extension: dladdr plus an extra out-parameter selected by
+// `flags` (RTLD_DL_LINKMAP / RTLD_DL_SYMENT).
+#pragma binding(libdl::dladdr1, "dladdr1")
 #endif
 
 #ifdef _WIN32
@@ -94,4 +100,7 @@ typedef struct {
     void *dli_saddr;
 } Dl_info;
 int dladdr(const void *addr, Dl_info *info);
+#ifdef __linux__
+int dladdr1(const void *addr, Dl_info *info, void **extra_info, int flags);
+#endif
 #endif

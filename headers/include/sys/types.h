@@ -13,8 +13,7 @@
 // and offset types have to switch to `long long` to keep the
 // 8-byte width that the Windows ABI / UCRT expects (e.g.
 // `_off64_t`, `__time64_t`, `size_t`).
-#ifndef _C5_SYS_TYPES_H
-#define _C5_SYS_TYPES_H
+#pragma once
 
 /* POSIX-2017 requires `<sys/types.h>` to make `size_t` visible.
 ** In c5 the canonical declaration lives in `<stddef.h>`; pulling
@@ -83,7 +82,7 @@ typedef long fsfilcnt_t;
 typedef int socklen_t;
 typedef int key_t;
 
-/* glibc's <sys/types.h> makes `fd_set` and the `FD_*` macros visible
+/* The Linux <sys/types.h> makes `fd_set` and the `FD_*` macros visible
 ** (under __USE_MISC, on by default), so POSIX code that reaches select()
 ** through <sys/types.h> alone -- without <sys/select.h> and without a
 ** configure-detected HAVE_SYS_SELECT_H -- still sees the type. The
@@ -92,6 +91,4 @@ typedef int key_t;
 ** `#pragma once`, so a direct include elsewhere stays a no-op. */
 #ifndef __BADC_WINDOWS__
 #include <sys/select.h>
-#endif
-
 #endif

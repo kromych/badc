@@ -17,7 +17,7 @@ typedef int sig_atomic_t;
 // `signal()`. Provided as a common extension; matches the host's
 // `void (*)(int)`.
 typedef void (*sig_t)(int);
-// glibc spells the same handler type `sighandler_t` under _GNU_SOURCE.
+// GNU spells the same handler type `sighandler_t` under _GNU_SOURCE.
 #ifdef __linux__
 typedef void (*sighandler_t)(int);
 #endif
@@ -85,7 +85,7 @@ typedef void (*sighandler_t)(int);
 // `NSIG` is one past the highest signal number the platform reserves;
 // libc headers expose it and code sizes per-signal tables by it. The
 // value is the host's so a table laid out here matches the system
-// toolchain's: Darwin counts through SIGUSR2 (32), glibc reserves the
+// toolchain's: Darwin counts through SIGUSR2 (32), Linux reserves the
 // realtime range (`_NSIG` == 65), the Windows CRT stops at SIGABRT
 // (23). A wrong value shifts any `T table[NSIG]` and every field after
 // it, so a badc object and a system-compiled object disagree on the
@@ -138,8 +138,8 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::sigsuspend,  "sigsuspend")
 #pragma binding(libc::sigwait,     "sigwait")
 #pragma binding(libc::siginterrupt,"siginterrupt")
-// sigwaitinfo / sigtimedwait are glibc-only; Darwin lacks them, so
-// CPython's configure leaves HAVE_* unset there and never calls them.
+// sigwaitinfo / sigtimedwait are Linux-only; Darwin lacks them, so
+// configure leaves HAVE_* unset there and never calls them.
 #pragma binding(libc::sigwaitinfo, "sigwaitinfo")
 #pragma binding(libc::sigtimedwait,"sigtimedwait")
 #pragma binding(libc::sigaltstack, "sigaltstack")
@@ -159,13 +159,13 @@ int killpg(int pgrp, int sig);
 #if defined(__APPLE__) || defined(__linux__)
 // POSIX `sigset_t` is an opaque bag of bits; size differs per
 // libc. Reserve 128 bytes -- enough for every supported host
-// (Linux glibc 128 B, musl 128 B, macOS 4 B). Oversizing is
+// (Linux 128 B, musl 128 B, macOS 4 B). Oversizing is
 // harmless: the kernel reads only the bits it knows.
 typedef struct { unsigned char __opaque[128]; } sigset_t;
 
 // `struct sigaction` layout differs per libc. The fields here are
 // the POSIX-required set in the order every supported host uses;
-// padding to 256 bytes covers Linux glibc (152 B) and macOS (32 B)
+// padding to 256 bytes covers Linux (152 B) and macOS (32 B)
 // plus arch-specific slack.
 struct sigaction {
     void (*sa_handler)(int);
@@ -201,7 +201,7 @@ int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
 // siginfo_t carries a signal's details (POSIX 7.14; also filled by
 // waitid). The kernel writes it, so the leading fields sit at the host's
 // offsets and the trailing padding covers the platform's full size
-// (macOS 104 B, Linux glibc 128 B). On 64-bit Linux a pad word aligns
+// (macOS 104 B, Linux 128 B). On 64-bit Linux a pad word aligns
 // the id fields to offset 16.
 #ifdef __APPLE__
 typedef struct {
@@ -219,15 +219,26 @@ typedef struct {
     int          si_errno;
     int          si_code;
     int          __pad0;
-    int          si_pid;
-    unsigned int si_uid;
-    int          si_status;
-    unsigned char __pad[128 - 28];
+    // The signal-specific payload is a union at offset 16: SIGCHLD fills
+    // the pid/uid/status triple, SIGPOLL the band/fd pair. An anonymous
+    // union exposes both spellings at their kernel offsets.
+    union {
+        struct {
+            int          si_pid;
+            unsigned int si_uid;
+            int          si_status;
+        };
+        struct {
+            long         si_band;
+            int          si_fd;
+        };
+        unsigned char __pad[128 - 16];
+    };
 } siginfo_t;
 #endif
 
 // Pending-signal query, blocking waits, and the BSD interrupt toggle
-// (POSIX). sigwaitinfo / sigtimedwait are glibc-only (see bindings).
+// (POSIX). sigwaitinfo / sigtimedwait are Linux-only (see bindings).
 int sigpending(sigset_t *set);
 int sigsuspend(const sigset_t *mask);
 int sigwait(const sigset_t *set, int *sig);

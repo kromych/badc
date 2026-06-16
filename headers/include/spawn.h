@@ -6,9 +6,9 @@
 #include <signal.h>
 
 // The attribute and file-action objects are opaque. macOS implements
-// each as a single pointer (8 bytes) the init call fills; glibc stores
+// each as a single pointer (8 bytes) the init call fills; Linux stores
 // the state inline (attr ~336 B, file actions ~80 B). An oversized
-// buffer covers both: macOS uses only the leading pointer, glibc uses
+// buffer covers both: macOS uses only the leading pointer, Linux uses
 // the whole region.
 typedef struct { unsigned char __opaque[512]; } posix_spawnattr_t;
 typedef struct { unsigned char __opaque[128]; } posix_spawn_file_actions_t;
@@ -61,6 +61,9 @@ typedef struct { unsigned char __opaque[128]; } posix_spawn_file_actions_t;
 #pragma binding(libc::posix_spawn_file_actions_addopen, "posix_spawn_file_actions_addopen")
 #pragma binding(libc::posix_spawn_file_actions_addclose,"posix_spawn_file_actions_addclose")
 #pragma binding(libc::posix_spawn_file_actions_adddup2, "posix_spawn_file_actions_adddup2")
+// Linux (recent C libraries): schedule closing every descriptor at or above `from` in
+// the spawned child. No macOS export.
+#pragma binding(libc::posix_spawn_file_actions_addclosefrom_np, "posix_spawn_file_actions_addclosefrom_np")
 #endif
 
 int posix_spawn(int *pid, char *path, const posix_spawn_file_actions_t *fa,
@@ -87,4 +90,8 @@ int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *fa, int fd,
 int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fa, int fd);
 int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fa, int fd,
                                      int newfd);
+#ifdef __linux__
+int posix_spawn_file_actions_addclosefrom_np(posix_spawn_file_actions_t *fa,
+                                             int from);
+#endif
 #endif

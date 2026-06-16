@@ -55,7 +55,7 @@
 #ifndef L_tmpnam
 #define L_tmpnam     20
 #endif
-// Buffer size for ctermid() (POSIX). macOS uses 1024; glibc uses 9, but
+// Buffer size for ctermid() (POSIX). macOS uses 1024; Linux uses 9, but
 // the larger value is safe everywhere since ctermid writes a short path.
 #ifndef L_ctermid
 #define L_ctermid    1024
@@ -74,7 +74,7 @@ typedef struct __c5_FILE FILE;
 // C99 7.19.1: `fpos_t` records a stream position for `fgetpos` /
 // `fsetpos`. Like `FILE` it is opaque -- programs pass `fpos_t *`
 // through the bound libc routines and never inspect the bytes. The
-// buffer is sized for the widest host layout (glibc's `fpos_t` is 16
+// buffer is sized for the widest host layout (the Linux `fpos_t` is 16
 // bytes; macOS and Windows use 8) and the union member forces the
 // 8-byte alignment the libc fields expect.
 struct __c5_fpos_t { union { char __opaque[16]; long long __align; } __u; };
@@ -146,7 +146,7 @@ typedef struct __c5_fpos_t fpos_t;
 // through it. The caller passes (char **buf, size_t *sz)
 // addresses that get updated to the current buffer + length
 // on every `fflush` / `fclose`. Available on macOS 10.13+
-// and every modern glibc / musl; absent from msvcrt.
+// and every recent Linux C library / musl; absent from msvcrt.
 #pragma binding(libc::open_memstream, "_open_memstream")
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on macOS / BSD. A source that opens its own
@@ -216,10 +216,10 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma dylib(libdl_for_stdio, "libdl.so.2")
 #pragma binding(libdl_for_stdio::dlsym, "dlsym")
 // POSIX `open_memstream` -- same shape as on macOS, exported
-// directly by glibc / musl.
+// directly by the Linux C library / musl.
 #pragma binding(libc::open_memstream, "open_memstream")
 // POSIX `popen` / `pclose` -- not in C89 but universally
-// available on glibc / musl. A source that opens its own
+// available on Linux / musl. A source that opens its own
 // `extern FILE *popen(const char *, const char *);` prototype
 // binds through this entry instead of leaving the call as an
 // unresolved Token::Fun.

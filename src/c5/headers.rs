@@ -163,6 +163,17 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/sys/mman.h"),
     ),
     (
+        "sys/random.h",
+        include_str!("../../headers/include/sys/random.h"),
+    ),
+    (
+        "sys/syscall.h",
+        include_str!("../../headers/include/sys/syscall.h"),
+    ),
+    ("libintl.h", include_str!("../../headers/include/libintl.h")),
+    ("elf.h", include_str!("../../headers/include/elf.h")),
+    ("link.h", include_str!("../../headers/include/link.h")),
+    (
         "sys/mount.h",
         include_str!("../../headers/include/sys/mount.h"),
     ),
@@ -210,6 +221,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("util.h", include_str!("../../headers/include/util.h")),
     ("glob.h", include_str!("../../headers/include/glob.h")),
     ("pthread.h", include_str!("../../headers/include/pthread.h")),
+    (
+        "semaphore.h",
+        include_str!("../../headers/include/semaphore.h"),
+    ),
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
     ("windows.h", include_str!("../../headers/include/windows.h")),
     (

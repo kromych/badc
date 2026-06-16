@@ -103,14 +103,14 @@
 #pragma binding(libc::bsearch, "bsearch")
 #pragma binding(libc::rand,    "rand")
 #pragma binding(libc::srand,   "srand")
-// glibc doesn't export `atexit` as a regular dynamic symbol --
+// The Linux C library doesn't export `atexit` as a regular dynamic symbol --
 // it's an inline that calls per-DSO `__cxa_atexit(handler, NULL,
 // dso_handle)`, so `dlsym(libc.so.6, "atexit")` returns NULL and
 // any c5 binary that calls atexit fails at exec with
 // "undefined symbol: atexit". Bind the underlying entrypoint
 // directly and route atexit() through a header-side macro
 // (declared further down), filling in NULL for both the closure
-// arg and the dso handle. NULL as dso_handle is glibc's spelling
+// arg and the dso handle. NULL as dso_handle is the Linux C library's spelling
 // for "register on the main program's exit chain."
 #pragma binding(libc::__cxa_atexit, "__cxa_atexit")
 #pragma binding(libc::strtoul, "strtoul")
@@ -168,7 +168,7 @@
 #pragma binding(msvcrt::srand,     "srand")
 #pragma binding(msvcrt::exit,      "exit")
 // msvcrt's atexit() takes a `void (*)(void)` and registers it on
-// the CRT's exit chain. On Linux glibc doesn't export atexit as
+// the CRT's exit chain. On Linux the C library doesn't export atexit as
 // a regular dynamic symbol so the `#ifdef __linux__` branch
 // below routes through `__cxa_atexit(handler, NULL, NULL)`;
 // msvcrt exports the bare `atexit` directly so we bind it as
@@ -332,7 +332,7 @@ int getloadavg(double *loadavg, int nelem);
 ** so the call is effectively a no-op. Each platform exposes
 ** the flush through a different libc surface, so the wrappers
 ** below bridge the (begin, end) signature to the native
-** (start, len) shape. Linux glibc exports __clear_cache
+** (start, len) shape. The Linux C library exports __clear_cache
 ** directly. */
 #ifdef __APPLE__
 #pragma binding(libc::sys_icache_invalidate, "_sys_icache_invalidate")
@@ -343,7 +343,7 @@ static inline void __clear_cache(void *begin, void *end) {
 #endif
 
 #ifdef __linux__
-/* Linux glibc does not export `__clear_cache`; the GCC / clang
+/* The Linux C library does not export `__clear_cache`; the GCC / clang
 ** documented surface places the helper in libgcc_s.so.1. ARM
 ** ARM B2.4.4 requires explicit instruction-cache maintenance
 ** after a writer publishes new code -- AArch64 callers reach
@@ -357,7 +357,7 @@ static inline void __clear_cache(void *begin, void *end) {
 void __clear_cache(void *begin, void *end);
 /* AAPCS64 returns `long double` (IEEE binary128) in v0 as a
 ** single 128-bit Q register. c5 stores `long double` in an
-** 8-byte FP64 slot, so callers of glibc functions that return
+** 8-byte FP64 slot, so callers of Linux C library functions that return
 ** `long double` (strtold, ldexpl, ...) need an explicit
 ** truncation pass after the call -- otherwise the c5 accumulator
 ** reads the low 64 bits of v0, which are zero for every power-

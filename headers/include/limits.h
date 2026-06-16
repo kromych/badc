@@ -12,8 +12,7 @@
 //
 // Programs that want a target-independent 64-bit limit should
 // reach for `INT64_MAX` (in stdint.h) or `LLONG_MAX`.
-#ifndef _C5_LIMITS_H
-#define _C5_LIMITS_H
+#pragma once
 
 #define CHAR_BIT      8
 #define MB_LEN_MAX    1
@@ -58,5 +57,3 @@
 // `ssize_t` is 64-bit on every supported target (see <sys/types.h>), so
 // its maximum is the signed 64-bit limit.
 #define SSIZE_MAX   9223372036854775807
-
-#endif

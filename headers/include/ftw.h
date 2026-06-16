@@ -3,8 +3,7 @@
 // type flag. The legacy `ftw` (vs `nftw`) is enough for callers that only
 // need the path.
 
-#ifndef _C5_FTW_H
-#define _C5_FTW_H
+#pragma once
 
 #include <sys/stat.h>
 
@@ -25,5 +24,3 @@
 int ftw(const char *path,
         int (*fn)(const char *fpath, const struct stat *sb, int typeflag),
         int nopenfd);
-
-#endif

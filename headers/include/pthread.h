@@ -1,7 +1,7 @@
 // pthread.h -- POSIX threads on Linux + macOS.
 //
-// On Linux glibc >= 2.34 pthread_create / pthread_join have been
-// folded into libc; older glibcs still ship a separate libpthread
+// On recent Linux C libraries pthread_create / pthread_join have been
+// folded into libc; older ones still ship a separate libpthread
 // but the dynamic loader auto-pulls it in for any process linking
 // libc, so dlopen(NULL, RTLD_NOW) finds the symbols either way.
 // macOS keeps everything in libSystem (which is what `dlopen(NULL)`
@@ -82,6 +82,11 @@
 #pragma binding(libc::pthread_self,             "pthread_self")
 #pragma binding(libc::pthread_equal,            "pthread_equal")
 #pragma binding(libc::pthread_setname_np,       "pthread_setname_np")
+#pragma binding(libc::pthread_getname_np,       "pthread_getname_np")
+#pragma binding(libc::pthread_getcpuclockid,    "pthread_getcpuclockid")
+#pragma binding(libc::pthread_condattr_init,    "pthread_condattr_init")
+#pragma binding(libc::pthread_condattr_destroy, "pthread_condattr_destroy")
+#pragma binding(libc::pthread_condattr_setclock,"pthread_condattr_setclock")
 #pragma binding(libc::pthread_kill,             "pthread_kill")
 #pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
 #pragma binding(libc::pthread_mutex_lock,       "pthread_mutex_lock")
@@ -102,7 +107,7 @@
 #pragma binding(libc::pthread_attr_setdetachstate, "pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "pthread_attr_setstacksize")
 #pragma binding(libc::pthread_attr_setscope,    "pthread_attr_setscope")
-// glibc's pthread_atfork lives in libc_nonshared.a (a static stub),
+// The Linux C library's pthread_atfork lives in libc_nonshared.a (a static stub),
 // not as a dynamic export of libc.so.6 -- x86_64 keeps a weak legacy
 // alias but aarch64 does not, so a dynamic import resolves on one and
 // not the other. Bind the underlying dynamic symbol the stub forwards
@@ -114,11 +119,11 @@
 #pragma binding(libc::pthread_getspecific,      "pthread_getspecific")
 #pragma binding(libc::pthread_once,             "pthread_once")
 
-// glibc pthread_mutex_t is 40 bytes on x86_64, 48 on aarch64;
+// On Linux pthread_mutex_t is 40 bytes on x86_64, 48 on aarch64;
 // 64 covers both with room.
 #define PTHREAD_MUTEX_SIZE 64
 #define PTHREAD_T_SIZE     8
-// glibc detach-state value passed to pthread_attr_setdetachstate.
+// Linux detach-state value passed to pthread_attr_setdetachstate.
 #define PTHREAD_CREATE_DETACHED 1
 #define PTHREAD_CREATE_JOINABLE 0
 #define PTHREAD_SCOPE_SYSTEM  0
@@ -155,7 +160,7 @@ typedef struct __c5_pthread_cond pthread_cond_t;
 // rejects a zero-signature object from pthread_mutex_lock /
 // pthread_cond_wait (EINVAL), so the macro must seed the magic the
 // system <pthread/pthread_impl.h> uses for a statically initialised
-// object. glibc and Windows take an all-zero object, so the signature
+// object. Linux and Windows take an all-zero object, so the signature
 // word stays zero there.
 #if defined(__APPLE__)
 #define PTHREAD_MUTEX_INITIALIZER { 0x32AAABA7, {0} }
@@ -173,8 +178,8 @@ struct __c5_pthread_attr { char __opaque[64]; };
 typedef struct __c5_pthread_attr pthread_attr_t;
 
 // `pthread_t` is pointer-sized on every supported POSIX target
-// (an opaque struct pointer on macOS, `unsigned long` on Linux
-// glibc); we need 8 bytes of storage per handle so the libc
+// (an opaque struct pointer on macOS, `unsigned long` on
+// Linux); we need 8 bytes of storage per handle so the libc
 // can write a real ID and the c5-side join can pass it back
 // unbroken. Plain `int` was 8 bytes pre-M31 but has been 4 since
 // real i32 storage landed -- the gap is what made
@@ -182,10 +187,10 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 // 8 bytes into a 4-byte slot, smashing the next handle).
 //
 // `pthread_once_t` is `long` (8 bytes) on macOS and `int` (4)
-// on Linux glibc; we use `long long` to cover both. The libc
+// on Linux; we use `long long` to cover both. The libc
 // reads only the low 4 bytes on Linux, so the wider slot is
 // harmless. `pthread_key_t` is `unsigned long` on macOS and
-// `unsigned int` on Linux glibc -- same shape, same fix.
+// `unsigned int` on Linux -- same shape, same fix.
 typedef long long pthread_t;
 typedef long long pthread_key_t;
 typedef long long pthread_once_t;
@@ -213,6 +218,19 @@ int pthread_cond_timedwait_relative_np(pthread_cond_t *cond,
                                        pthread_mutex_t *mutex,
                                        const struct timespec *reltime);
 #endif
+
+#ifdef __linux__
+// Linux takes the target thread as the first parameter (Darwin names
+// only the calling thread). `pthread_getcpuclockid` yields a clock for
+// thread CPU-time queries; the condattr setters select the clock a
+// condition variable's absolute timed waits run against.
+int pthread_setname_np(pthread_t thread, const char *name);
+int pthread_getname_np(pthread_t thread, char *name, unsigned long len);
+int pthread_getcpuclockid(pthread_t thread, int *clock_id);
+int pthread_condattr_init(pthread_condattr_t *attr);
+int pthread_condattr_destroy(pthread_condattr_t *attr);
+int pthread_condattr_setclock(pthread_condattr_t *attr, int clock_id);
+#endif
 int pthread_mutex_init(char *mutex, char *attr);
 int pthread_mutex_lock(char *mutex);
 int pthread_mutex_trylock(char *mutex);
@@ -233,9 +251,9 @@ int pthread_attr_setdetachstate(char *attr, int detachstate);
 int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
 int pthread_attr_setscope(char *attr, int scope);
 #ifdef __linux__
-// glibc names the calling-convention pair (pthread_t, name).
+// Linux names the calling-convention pair (pthread_t, name).
 int pthread_setname_np(pthread_t thread, const char *name);
-// pthread_atfork is not a libc.so.6 dynamic symbol on every glibc port;
+// pthread_atfork is not a libc.so.6 dynamic symbol on every Linux port;
 // forward to __register_atfork, which is, passing a null DSO handle (the
 // process-global registration libc_nonshared.a's stub uses).
 extern int __register_atfork(void (*prepare)(void), void (*parent)(void),

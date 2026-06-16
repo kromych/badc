@@ -1,4 +1,4 @@
-// <execinfo.h> -- call-stack backtrace support. A glibc / BSD / Darwin
+// <execinfo.h> -- call-stack backtrace support. A Linux / BSD / Darwin
 // extension, not ISO C; provided here for sources that probe for it.
 
 #pragma once

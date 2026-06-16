@@ -3,15 +3,14 @@
 // bits.
 //
 // `struct stat` has different layouts on different libcs (BSD vs
-// glibc vs Win32), but for c5's purposes we just need a struct
+// Linux vs Win32), but for c5's purposes we just need a struct
 // large enough that `stat(path, &buf)` writes into a buffer
 // without overrunning. Programs read individual fields by name;
-// the offsets here mirror the macOS / glibc-x86_64 layout (which
+// the offsets here mirror the macOS / Linux-x86_64 layout (which
 // happen to align). Real-world cross-platform code that wants
 // pixel-perfect parsing should call libc's `fstatat` and unpack
 // manually.
-#ifndef _C5_SYS_STAT_H
-#define _C5_SYS_STAT_H
+#pragma once
 
 // `struct timespec` for the nanosecond timestamp fields below.
 #include <time.h>
@@ -53,7 +52,7 @@
 //
 // 144 bytes total.
 //
-// Linux glibc's `struct stat` matches the same field names but
+// Linux's `struct stat` matches the same field names but
 // uses smaller types for some IDs and skips birthtime; programs
 // that only read `st_mode` / `st_size` / `st_mtime` see the same
 // values either way because those fields land at compatible
@@ -108,7 +107,7 @@ struct stat {
     long            st_qspare1;        /* offset 136, 8 bytes */
 };
 #elif defined(__linux__) && defined(__x86_64__)
-// Linux glibc x86_64 layout. See bits/struct_stat.h:
+// Linux x86_64 layout. See bits/struct_stat.h:
 // dev, ino, nlink each 8 bytes; mode/uid/gid 4 bytes; rdev,
 // size, blksize, blocks each 8 bytes; three timespec slots;
 // trailing __unused[3] longs. 144 bytes total.
@@ -141,7 +140,7 @@ struct stat {
     long __unused2;          /* offset 136, struct ends at 144 */
 };
 #elif defined(__linux__) && defined(__aarch64__)
-// Linux glibc aarch64 layout. mode/nlink/uid/gid all 4 bytes
+// Linux aarch64 layout. mode/nlink/uid/gid all 4 bytes
 // after a pair of 8-byte dev/ino. blksize is 4 bytes here. 128
 // bytes total.
 struct stat {
@@ -327,5 +326,3 @@ struct statvfs {
 
 int statfs(char *path, struct statfs *buf);
 int fstatfs(int fd, struct statfs *buf);
-
-#endif

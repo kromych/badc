@@ -2,7 +2,7 @@
 //
 // IEEE Std 1003.1 specifies `glob` / `globfree` plus the
 // `glob_t` result struct and the `GLOB_*` flag macros. Layout
-// pinned to the glibc / Darwin shape so the libc-side writes
+// pinned to the Linux / Darwin shape so the libc-side writes
 // land at the offsets c5 reads.
 
 #pragma once
@@ -23,7 +23,7 @@
 
 // `gl_pathc` / `gl_offs` are `size_t` per POSIX. The trailing
 // pad keeps every platform's private state inside the struct
-// when the libc writes through the returned pointer: glibc's
+// when the libc writes through the returned pointer: the Linux
 // `glob_t` carries seven extra pointers, Darwin's eight; 96
 // bytes covers both.
 typedef struct {

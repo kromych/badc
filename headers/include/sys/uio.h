@@ -1,7 +1,6 @@
 // Vectored I/O (POSIX.1). `struct iovec` plus readv / writev.
 
-#ifndef _SYS_UIO_H
-#define _SYS_UIO_H
+#pragma once
 
 #include <stddef.h>
 #include <sys/types.h>
@@ -32,5 +31,3 @@ ssize_t writev(int fd, const struct iovec *iov, int iovcnt);
 // Positioned vectored I/O (POSIX): like readv/writev at `offset`.
 ssize_t preadv(int fd, const struct iovec *iov, int iovcnt, long offset);
 ssize_t pwritev(int fd, const struct iovec *iov, int iovcnt, long offset);
-
-#endif

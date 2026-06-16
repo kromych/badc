@@ -4,8 +4,7 @@
 // through bound libc routines. The struct is sized to comfortably
 // hold whatever shape the platform libc uses internally.
 
-#ifndef _C5_DIRENT_H
-#define _C5_DIRENT_H
+#pragma once
 
 // On Windows, sqlite's bundled shell.c rolls its own DIR / dirent
 // implementation on top of FindFirstFile / FindNextFile. The
@@ -29,7 +28,7 @@ typedef struct __c5_DIR DIR;
 // field layout up to d_name must match the platform libc byte-for-byte,
 // since libc writes into the buffer it returns and programs read d_name
 // at its real offset. macOS (64-bit inode) places d_name at offset 21;
-// glibc at offset 19.
+// Linux at offset 19.
 #ifdef __APPLE__
 struct dirent {
     unsigned long  d_ino;     /* offset  0 */
@@ -84,5 +83,3 @@ int closedir(DIR *dir);
 int rewinddir(DIR *dir);
 
 #endif /* !_WIN32 */
-
-#endif

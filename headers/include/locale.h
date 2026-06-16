@@ -12,7 +12,7 @@
 //   * macOS Darwin / Windows msvcrt:
 //       LC_ALL=0, LC_COLLATE=1, LC_CTYPE=2, LC_MONETARY=3,
 //       LC_NUMERIC=4, LC_TIME=5.
-//   * Linux glibc (sysdeps/generic/bits/locale.h):
+//   * Linux (bits/locale.h):
 //       LC_CTYPE=0, LC_NUMERIC=1, LC_TIME=2, LC_COLLATE=3,
 //       LC_MONETARY=4, LC_MESSAGES=5, LC_ALL=6.
 //

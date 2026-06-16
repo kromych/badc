@@ -9,8 +9,7 @@
 // strings (no codegen impact). c5's `int64_t` / `intmax_t` alias
 // `long long` regardless of LP64 vs LLP64, so `PRId64` / `PRIdMAX`
 // are uniformly "lld" -- no per-target fork.
-#ifndef _C5_INTTYPES_H
-#define _C5_INTTYPES_H
+#pragma once
 
 #include <stdint.h>
 // 7.8.2.3 / 7.8.2.4 route through the `long long` conversions in
@@ -213,5 +212,3 @@ static inline intmax_t strtoimax(const char *nptr, char **endptr, int base) {
 static inline uintmax_t strtoumax(const char *nptr, char **endptr, int base) {
     return strtoull((char *)nptr, endptr, base);
 }
-
-#endif /* _C5_INTTYPES_H */

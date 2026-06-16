@@ -14,7 +14,7 @@
 
 // C99 7.21: `<string.h>` exposes `size_t`. Pull `<stddef.h>`
 // so `size_t` reaches every TU that includes `<string.h>`,
-// matching glibc / clang / MSVC.
+// matching the Linux C library / clang / MSVC.
 #include <stddef.h>
 
 #ifndef NULL
@@ -48,6 +48,7 @@
 #pragma binding(libc::strcspn,  "_strcspn")
 #pragma binding(libc::strpbrk,  "_strpbrk")
 #pragma binding(libc::strtok,   "_strtok")
+#pragma binding(libc::strtok_r, "_strtok_r")
 #endif
 
 #ifdef __linux__
@@ -77,9 +78,13 @@
 #pragma binding(libc::strcspn,  "strcspn")
 #pragma binding(libc::strpbrk,  "strpbrk")
 #pragma binding(libc::strtok,   "strtok")
-// glibc extension: returns a pointer to the first occurrence of `c`,
+#pragma binding(libc::strtok_r, "strtok_r")
+// GNU extension: returns a pointer to the first occurrence of `c`,
 // or the terminating NUL if `c` is not found. No macOS / msvcrt export.
 #pragma binding(libc::strchrnul, "strchrnul")
+// GNU extension: like memchr but scans backward from the end of the
+// `n`-byte region. No macOS / msvcrt export.
+#pragma binding(libc::memrchr, "memrchr")
 #endif
 
 #ifdef _WIN32
@@ -163,9 +168,12 @@ int strspn(char *s, char *accept);
 int strcspn(char *s, char *reject);
 char *strpbrk(char *s, char *accept);
 char *strtok(char *s, char *delim);
+// POSIX.1-2001 reentrant strtok; `saveptr` holds the scan state.
+char *strtok_r(char *s, char *delim, char **saveptr);
 #ifdef __linux__
-// glibc extension, declared only where it is bound.
+// GNU extensions, declared only where they are bound.
 char *strchrnul(const char *s, int c);
+char *memrchr(char *s, int c, int n);
 #endif
 #ifdef _WIN32
 // Case-insensitive compares -- msvcrt-only, no POSIX equivalent

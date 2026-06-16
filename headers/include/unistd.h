@@ -161,7 +161,7 @@
 // the data symbol through the GOT: a reference to `environ` loads
 // `_environ`'s address from the dyld-filled slot, keeping every read in
 // sync with libSystem's current array (the analog of the ELF COPY
-// relocation glibc's `__environ` uses).
+// relocation the Linux C library's `__environ` uses).
 #pragma binding(data libc::environ, "_environ")
 extern char **environ;
 #endif
@@ -173,6 +173,10 @@ extern char **environ;
 #pragma binding(libc::pread,     "pread")
 #pragma binding(libc::pread64,   "pread64")
 #pragma binding(libc::close,     "close")
+// Linux (recent C libraries): close every descriptor in [first, last]. No macOS export.
+#pragma binding(libc::close_range, "close_range")
+// Linux (recent C libraries): close every descriptor at or above `lowfd`.
+#pragma binding(libc::closefrom,   "closefrom")
 #pragma binding(libc::write,     "write")
 #pragma binding(libc::pwrite,    "pwrite")
 #pragma binding(libc::pwrite64,  "pwrite64")
@@ -286,11 +290,11 @@ extern char **environ;
 #pragma binding(libc::getopt,    "getopt")
 #pragma binding(libc::sync,      "sync")
 #pragma binding(libc::confstr,   "confstr")
-// POSIX `environ` is exposed by glibc as the data symbol `__environ`
+// POSIX `environ` is exposed on Linux as the data symbol `__environ`
 // (with `environ` as its alias). The `extern` slot lives in
 // `lib/runtime.c`; the data binding makes the linker emit a COPY
-// relocation so that slot and glibc's `__environ` share one cell.
-// Without it, glibc's getenv / setenv / tzset read a different cell
+// relocation so that slot and the Linux C library's `__environ` share one cell.
+// Without it, the Linux C library's getenv / setenv / tzset read a different cell
 // than a direct `environ = ...` assignment writes.
 #pragma binding(data libc::environ, "__environ")
 extern char **environ;
@@ -318,17 +322,21 @@ int read(int fd, char *buf, int n);
 // signatures below.
 long pread(int fd, char *buf, unsigned long n, long offset);
 int close(int fd);
+#ifdef __linux__
+int close_range(unsigned int first, unsigned int last, int flags);
+void closefrom(int lowfd);
+#endif
 int write(int fd, char *buf, int n);
 long pwrite(int fd, char *buf, unsigned long n, long offset);
 #ifdef __linux__
-// glibc large-file variants (`_LARGEFILE64_SOURCE`). The offset and
+// Linux large-file variants (`_LARGEFILE64_SOURCE`). The offset and
 // result are 64-bit; programs configured with `USE_PREAD64` (e.g.
 // sqlite) reach for these names directly.
 long pread64(int fd, void *buf, unsigned long n, long offset);
 long pwrite64(int fd, const void *buf, unsigned long n, long offset);
 #endif
 int access(char *path, int mode);
-// Fill a buffer with random bytes (BSD / glibc 2.25+). `size_t` is in
+// Fill a buffer with random bytes (BSD / Linux). `size_t` is in
 // <stddef.h>, pulled in transitively.
 int getentropy(void *buf, unsigned long buflen);
 // POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
@@ -450,7 +458,7 @@ int lockf(int fd, int cmd, long len);
 int execv(char *path, char **argv);
 int fexecve(int fd, char **argv, char **envp);
 #ifdef __linux__
-// glibc-only: flush a file's data without its metadata.
+// Linux-only: flush a file's data without its metadata.
 int fdatasync(int fd);
 #endif
 // POSIX: pathconf / sysconf return long; some limits exceed 32 bits.

@@ -4,7 +4,7 @@
 // fts_open with an option mask, fts_read returning one FTSENT per
 // visited node, and fts_close. `FTS` is opaque (used only through a
 // pointer). `FTSENT` is laid out per target because the BSD (macOS)
-// and glibc layouts differ -- the four fields callers read
+// and Linux layouts differ -- the four fields callers read
 // (fts_info, fts_path, fts_pathlen, fts_statp) are placed at the
 // offsets the platform header uses, verified with offsetof; the
 // surrounding members are reserved as padding. The FTS_* option and
@@ -44,7 +44,7 @@ typedef struct _ftsent {
     char _r4[8];
 } FTSENT;
 #elif defined(__aarch64__)
-// glibc aarch64 layout: sizeof 120, fts_path@48, fts_pathlen@64,
+// Linux aarch64 layout: sizeof 120, fts_path@48, fts_pathlen@64,
 // fts_info@94, fts_statp@104.
 typedef struct _ftsent {
     char _r0[48];
@@ -58,7 +58,7 @@ typedef struct _ftsent {
     char _r4[8];
 } FTSENT;
 #else
-// glibc x86_64 layout: sizeof 120, fts_path@48, fts_pathlen@64,
+// Linux x86_64 layout: sizeof 120, fts_path@48, fts_pathlen@64,
 // fts_info@98, fts_statp@104.
 typedef struct _ftsent {
     char _r0[48];

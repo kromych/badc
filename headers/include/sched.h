@@ -1,7 +1,6 @@
 // Process scheduling (POSIX.1).
 
-#ifndef _SCHED_H
-#define _SCHED_H
+#pragma once
 
 #if defined(__APPLE__) || defined(__linux__)
 // Scheduling parameters. POSIX requires only `sched_priority`; macOS
@@ -61,9 +60,7 @@ int sched_getparam(int pid, struct sched_param *param);
 int sched_rr_get_interval(int pid, char *interval);
 #endif
 #ifdef __linux__
-// CPU affinity (glibc; `cpu_set_t` is opaque to c5, passed by address).
+// CPU affinity (Linux; `cpu_set_t` is opaque to c5, passed by address).
 int sched_setaffinity(int pid, unsigned long cpusetsize, char *mask);
 int sched_getaffinity(int pid, unsigned long cpusetsize, char *mask);
-#endif
-
 #endif

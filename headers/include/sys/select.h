@@ -10,7 +10,7 @@
 // `FD_SET_BYTES` and pass it through to select; the macros below
 // flip / test bits without caring about the platform's actual
 // `struct fd_set` layout, which varies (macOS uses `__int32_t`
-// words, glibc uses `long int` words). Windows wraps an array of
+// words, Linux uses `long int` words). Windows wraps an array of
 // socket handles instead of a bitmap, so these macros are
 // POSIX-only -- a Windows user would need a different shape.
 

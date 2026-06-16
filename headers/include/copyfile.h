@@ -5,8 +5,7 @@
 // symbol. Callers in this codebase pass a NULL state, so the opaque
 // state type is forward-declared without its accessors.
 
-#ifndef _C5_COPYFILE_H
-#define _C5_COPYFILE_H
+#pragma once
 
 #ifdef __APPLE__
 
@@ -39,5 +38,3 @@ int fcopyfile(int from, int to, copyfile_state_t state,
               copyfile_flags_t flags);
 
 #endif /* __APPLE__ */
-
-#endif /* _C5_COPYFILE_H */

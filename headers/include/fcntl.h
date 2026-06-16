@@ -50,10 +50,10 @@
 #define O_NOFOLLOW   0
 #endif
 
-// Most fcntl command numbers are stable across Linux glibc and
+// Most fcntl command numbers are stable across Linux and
 // macOS Darwin. The advisory-lock trio (`F_GETLK` / `F_SETLK` /
 // `F_SETLKW`) is the one that diverges:
-//   * Linux glibc:  F_GETLK=5,  F_SETLK=6,  F_SETLKW=7
+//   * Linux:        F_GETLK=5,  F_SETLK=6,  F_SETLKW=7
 //   * macOS Darwin: F_GETLK=7,  F_SETLK=8,  F_SETLKW=9
 // sqlite's unix VFS calls `fcntl(fd, F_SETLK, &flock)` to grab
 // shared/exclusive byte-range locks; using the Linux numbers on
@@ -78,7 +78,7 @@
 // `F_RDLCK` / `F_WRLCK` / `F_UNLCK` are the lock-type values
 // stored in `struct flock::l_type`. Their numeric values also
 // differ across platforms:
-//   * Linux glibc:  F_RDLCK=0, F_WRLCK=1, F_UNLCK=2
+//   * Linux:        F_RDLCK=0, F_WRLCK=1, F_UNLCK=2
 //   * macOS Darwin: F_RDLCK=1, F_WRLCK=3, F_UNLCK=2
 // (Darwin matches BSD; Linux follows historical SysV.)
 #ifdef __APPLE__
@@ -98,7 +98,7 @@
 //   macOS Darwin : off_t l_start, off_t l_len, pid_t l_pid,
 //                  short l_type, short l_whence;
 //                  -> l_type at offset 20.
-//   Linux glibc  : short l_type, short l_whence, off_t l_start,
+//   Linux        : short l_type, short l_whence, off_t l_start,
 //                  off_t l_len, pid_t l_pid;
 //                  -> l_type at offset 0.
 //
@@ -120,7 +120,7 @@ struct flock {
 struct flock {
     short l_type;      /* offset  0 */
     short l_whence;    /* offset  2 */
-    /* glibc inserts 4 bytes of padding so off_t l_start is 8-aligned. */
+    /* Linux inserts 4 bytes of padding so off_t l_start is 8-aligned. */
     int   __pad0;      /* offset  4 */
     long  l_start;     /* offset  8 */
     long  l_len;       /* offset 16 */

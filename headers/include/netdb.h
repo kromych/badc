@@ -1,7 +1,7 @@
 // netdb.h -- network database operations (POSIX 7.39): address and service
 // resolution. Layouts and constants are verified against the system headers
 // on each target; struct addrinfo's member order and several flag values
-// differ between Linux/glibc and macOS/BSD.
+// differ between Linux and macOS/BSD.
 
 #pragma once
 
@@ -10,7 +10,7 @@
 
 // `struct addrinfo` is filled by getaddrinfo and walked by the caller
 // (ai_family / ai_socktype / ai_protocol / ai_addr / ai_addrlen / ai_next).
-// macOS/BSD order ai_canonname before ai_addr; Linux/glibc the reverse. Both
+// macOS/BSD order ai_canonname before ai_addr; Linux the reverse. Both
 // are 48 bytes on a 64-bit target.
 #if defined(__APPLE__) || defined(_WIN32)
 struct addrinfo {
@@ -99,9 +99,9 @@ struct hostent {
 #pragma binding(libc::getservbyname,"getservbyname")
 #pragma binding(libc::gethostbyname,"gethostbyname")
 #pragma binding(libc::gethostbyaddr,"gethostbyaddr")
-// glibc's reentrant resolver variants (GNU extensions). configure
+// Linux reentrant resolver variants (GNU extensions). configure
 // selects these over the non-reentrant forms when present, so a
-// program built against glibc references them by name. macOS resolves
+// program built against the Linux C library references them by name. macOS resolves
 // the MT-safe non-_r forms instead and never names these.
 #pragma binding(libc::gethostbyname_r,"gethostbyname_r")
 #pragma binding(libc::gethostbyaddr_r,"gethostbyaddr_r")
@@ -126,7 +126,7 @@ struct servent *getservbyname(const char *name, const char *proto);
 struct hostent *gethostbyname(const char *name);
 struct hostent *gethostbyaddr(const void *addr, unsigned int len, int type);
 #ifdef __linux__
-// glibc 6-argument / 8-argument reentrant resolver forms: fill the
+// Linux 6-argument / 8-argument reentrant resolver forms: fill the
 // caller's `struct hostent` + scratch buffer, set `*result` and return
 // 0 on success or an error code, writing the resolver error to
 // `*h_errnop`.

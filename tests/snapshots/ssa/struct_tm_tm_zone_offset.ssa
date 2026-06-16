@@ -29,7 +29,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v11  StoreLocal { off=-1, value=v10, kind=I64 }       -> -
     v12  LocalAddr(-1)                                    -> x7
     v13  LocalAddr(-8)                                    -> x6
-    v14  CallExt { binding_idx=9, args=[v12, v13], fp_arg_mask=0x0 } -> x0
+    v14  CallExt { binding_idx=10, args=[v12, v13], fp_arg_mask=0x0 } -> x0
     v15  BinopI { op=eq, lhs=v14, rhs_imm=0 }             -> x0
     terminator Bz { cond=v15, target=b8, fall=b7 }   (exit_acc=v15)
   block 7  start_pc=0
@@ -48,7 +48,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v22  LocalAddr(-8)                                    -> x0
     v23  BinopI { op=add, lhs=v22, rhs_imm=48 }           -> x1
     v24  Load { addr=v22, disp=48, kind=I64 }             -> x7
-    v25  CallExt { binding_idx=20, args=[v24], fp_arg_mask=0x0 } -> x0
+    v25  CallExt { binding_idx=21, args=[v24], fp_arg_mask=0x0 } -> x0
     v26  BinopI { op=gt, lhs=v25, rhs_imm=64 }            -> x0
     terminator Bz { cond=v26, target=b12, fall=b11 }   (exit_acc=v26)
   block 11  start_pc=0

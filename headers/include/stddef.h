@@ -17,8 +17,7 @@
 // shape `&((T*)0)->m` is recognised by the constant-expression
 // evaluator (see parse_const_offsetof in the compiler); the
 // macro form below is the customary expansion.
-#ifndef _C5_STDDEF_H
-#define _C5_STDDEF_H
+#pragma once
 
 #ifdef __BADC_WINDOWS__
 typedef unsigned long long size_t;
@@ -38,6 +37,4 @@ typedef int wchar_t;
 
 #ifndef offsetof
 #define offsetof(t, m) ((size_t)((char*)&((t*)0)->m - (char*)0))
-#endif
-
 #endif

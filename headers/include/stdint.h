@@ -19,8 +19,7 @@
 // The constant macros (`INT8_C(c)` ... `UINTMAX_C(c)`) are
 // identity wrappers; c5's lexer ignores integer-literal
 // suffixes, and the receiving slot's typedef pins the width.
-#ifndef _C5_STDINT_H
-#define _C5_STDINT_H
+#pragma once
 
 typedef signed char         int8_t;
 typedef short               int16_t;
@@ -122,5 +121,3 @@ typedef uint64_t            uint_fast64_t;
 #define UINT_FAST16_MAX  UINT16_MAX
 #define UINT_FAST32_MAX  UINT32_MAX
 #define UINT_FAST64_MAX  UINT64_MAX
-
-#endif

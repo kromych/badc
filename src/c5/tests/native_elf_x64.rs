@@ -576,6 +576,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_tm_tm_zone_offset.c", 0),
     ("for_init_multiple_declarators.c", 0),
     ("compound_literal_member_operand.c", 0),
+    ("signal_nsig.c", 0),
     // See native_elf.rs for the prelude / TLS layout interaction
     // that disables thread_local_initializer on Linux ELF.
     // ("thread_local_initializer.c", 0),

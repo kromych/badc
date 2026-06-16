@@ -82,6 +82,23 @@ typedef void (*sighandler_t)(int);
 #endif
 #endif /* POSIX */
 
+// `NSIG` is one past the highest signal number the platform reserves;
+// libc headers expose it and code sizes per-signal tables by it. The
+// value is the host's so a table laid out here matches the system
+// toolchain's: Darwin counts through SIGUSR2 (32), glibc reserves the
+// realtime range (`_NSIG` == 65), the Windows CRT stops at SIGABRT
+// (23). A wrong value shifts any `T table[NSIG]` and every field after
+// it, so a badc object and a system-compiled object disagree on the
+// layout of a struct that embeds one.
+#ifdef __APPLE__
+#define NSIG 32
+#elif defined(__linux__)
+#define _NSIG 65
+#define NSIG 65
+#elif defined(_WIN32)
+#define NSIG 23
+#endif
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::signal,      "_signal")

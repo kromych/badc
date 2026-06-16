@@ -674,6 +674,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("struct_tm_tm_zone_offset.c", 0),
     ("for_init_multiple_declarators.c", 0),
     ("compound_literal_member_operand.c", 0),
+    ("signal_nsig.c", 0),
     ("thread_local_initializer.c", 0),
     // Per-thread isolation -- spawns a pthread, has the child
     // mutate a TLS variable, joins, and verifies the main

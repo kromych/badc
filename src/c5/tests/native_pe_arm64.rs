@@ -398,6 +398,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("macro_multiline_comment_body.c", 0),
     ("compound_literal_paren_init.c", 0),
     ("alignof_operator.c", 0),
+    ("return_void_expression.c", 0),
     ("macro_operators.c", 0),
     ("typedef_basic.c", 0),
     ("local_init_and_block_scope.c", 0),

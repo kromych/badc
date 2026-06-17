@@ -1011,16 +1011,13 @@ impl Compiler {
             let mut return_value: Option<super::super::ast::ExprId> = None;
             if self.lex.tk != ';' {
                 if returns_void {
-                    // C99 6.8.6.4p1: `return <expr>;` in a function
-                    // returning `void` is a constraint violation.
-                    // Reject here rather than silently dropping
-                    // the value -- gcc and clang both diagnose this
-                    // at the strict level.
-                    return Err(
-                        self.compile_err("`return` with a value in a function returning `void`")
-                    );
-                }
-                if returns_struct {
+                    // `return <expr>;` in a void function: C allows a
+                    // void-typed expression (gcc/clang accept it); c5 has
+                    // no void type tag, so evaluate it for side effects
+                    // and return no value.
+                    self.parse_full_expr()?;
+                    return_value = self.ast_acc;
+                } else if returns_struct {
                     // Push the hidden out-pointer (loaded from
                     // val=2 -- the slot the caller pushed before
                     // the declared args) and emit Mcpy to copy

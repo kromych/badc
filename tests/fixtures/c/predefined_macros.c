@@ -59,6 +59,10 @@ int main() {
 #ifdef __STDC_NO_ATOMICS__
     return 13;
 #endif
+    // gcc/clang define __AARCH64EL__ on little-endian AArch64.
+#if defined(__aarch64__) && !defined(__AARCH64EL__)
+    return 14;
+#endif
 
     return 0;
 }

@@ -477,6 +477,9 @@ impl Preprocessor {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
                 macros.insert("__aarch64__".to_string(), "1".to_string());
                 macros.insert("__arm64__".to_string(), "1".to_string());
+                // Little-endian AArch64; gcc/clang define this and
+                // arch-dispatch code keys its aarch64 branch on it.
+                macros.insert("__AARCH64EL__".to_string(), "1".to_string());
             }
             Target::LinuxX64 | Target::WindowsX64 => {
                 macros.insert("__x86_64__".to_string(), "1".to_string());

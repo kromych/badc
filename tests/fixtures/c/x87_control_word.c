@@ -3,8 +3,15 @@
 // to a 16-bit memory operand and `fldcw %0` loads it. The reserved high
 // bits of the word are runtime-defined, so the test only requires that
 // the store/load round-trips and that the default word is read.
+//
+// The x87 control word is an x86 register; the asm has no meaning on
+// other ISAs, so it is gated to x86 and the fixture is a trivial success
+// elsewhere (the standalone-compile suite builds every fixture for each
+// linux target, including aarch64).
 
 #include <stdio.h>
+
+#if defined(__x86_64__) || defined(__i386__)
 
 static unsigned short get_cw(void) {
     unsigned short cw;
@@ -33,3 +40,11 @@ int main(void) {
     printf("ok cw=0x%x\n", cw);
     return 0;
 }
+
+#else
+
+int main(void) {
+    return 0;
+}
+
+#endif

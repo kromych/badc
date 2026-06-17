@@ -37,7 +37,15 @@ typedef int pid_t;
 typedef int uid_t;
 typedef int gid_t;
 typedef int mode_t;
+// `dev_t` is the device number. Its width is platform-defined and
+// matters in struct layout (it sits in stat and in libc runtime state):
+// 4 bytes on macOS (`int32_t`) and Windows (`unsigned int`), 8 on Linux
+// (glibc `__dev_t` is `unsigned long`).
+#if defined(__APPLE__) || defined(__BADC_WINDOWS__)
 typedef int dev_t;
+#else
+typedef unsigned long dev_t;
+#endif
 #ifdef __APPLE__
 // Darwin device-number split: major in the high 8 bits, minor in the
 // low 24 (sys/types.h). Linux uses a wider split via <sys/sysmacros.h>.

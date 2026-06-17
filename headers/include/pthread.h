@@ -186,14 +186,22 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 // `demos/threads.c` print all zeroes (each pthread_create wrote
 // 8 bytes into a 4-byte slot, smashing the next handle).
 //
-// `pthread_once_t` is `long` (8 bytes) on macOS and `int` (4)
-// on Linux; we use `long long` to cover both. The libc
-// reads only the low 4 bytes on Linux, so the wider slot is
-// harmless. `pthread_key_t` is `unsigned long` on macOS and
-// `unsigned int` on Linux -- same shape, same fix.
+// `pthread_key_t` and `pthread_once_t` must match the platform
+// width exactly, not a wider catch-all: they appear inside
+// structs whose layout a program reads back (CPython's `Py_tss_t`
+// wraps `pthread_key_t` in `_PyRuntime`, and a dlopen'd extension
+// computes field offsets against the host's struct). macOS uses
+// `unsigned long` / `long` (8 bytes); Linux uses `unsigned int` /
+// `int` (4). An over-wide slot shifts every later field and
+// breaks the shared layout.
 typedef long long pthread_t;
-typedef long long pthread_key_t;
-typedef long long pthread_once_t;
+#ifdef __APPLE__
+typedef unsigned long pthread_key_t;
+typedef long pthread_once_t;
+#else
+typedef unsigned int pthread_key_t;
+typedef int pthread_once_t;
+#endif
 
 int pthread_create(pthread_t *thread, char *attr, int *start, char *arg);
 int pthread_join(pthread_t thread, int **retval);

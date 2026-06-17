@@ -66,6 +66,12 @@ needed but also takes time to get through without any benefit to the reader. Sav
 your time and the reader's time - be concise and precise. Make sure the same style
 applies throughout.
 
+Maintain the ratio of comment lines to line of code under 1:10. Requiring more means
+that the architecture has to be audited. For one-line changes use no more than
+3 lines of comments iff the change cannot be expressed in the self-explanatory way.
+
+Keep the tool output terse to slow context growth.
+
 ## Planning
 
 * File issues

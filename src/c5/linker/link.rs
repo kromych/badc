@@ -293,17 +293,18 @@ pub fn link_native_objects_with_options(
     // descriptor's offset is rebased by the unit's base (a unit-local
     // access) or set from the merged TLS symbol table (a cross-unit
     // `extern _Thread_local`). The Linux/x86_64 path achieves the same
-    // through `NT_BADC_ELF_TPOFF` fixups resolved in Pass 4.1 below. The
-    // aarch64 ELF / Windows TEB paths still bake `tpoff = tls_total_size
-    // - offset` into `.text` with no link-time resolution, so for those a
-    // second TLS contributor would need per-unit TPOFF relocations that
-    // aren't wired; reject it.
+    // through `NT_BADC_ELF_TPOFF` fixups resolved in Pass 4.1 below. Both
+    // ELF ISAs record those fixups now (x86_64 variant-2 `sub imm32`,
+    // aarch64 variant-1 `add imm12`), so a multi-unit ELF link rebases
+    // each access against the merged layout. The Windows TEB path bakes a
+    // fixed offset with no link-time resolution; it carries no
+    // `elf_tpoff_fixups`, so the resolve loop is a no-op there.
     let uses_tlv = objs.iter().any(|o| {
         !o.macho_tlv_descriptors.is_empty()
             || !o.macho_tlv_fixups.is_empty()
             || !o.macho_tlv_descriptor_syms.is_empty()
     });
-    let elf_tpoff_resolved = machine == NativeMachine::X86_64;
+    let elf_tpoff_resolved = matches!(machine, NativeMachine::X86_64 | NativeMachine::Aarch64);
     let tls_objs: Vec<&NativeObject> = objs
         .iter()
         .filter(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0)
@@ -755,16 +756,18 @@ pub fn link_native_objects_with_options(
         }
     }
 
-    // Pass 4.1 -- Linux/x86_64 TLS access fixups. Each unit's
-    // `elf_tpoff_fixups` marks a `sub` imm32 in its `.text` that holds a
-    // TLS variable's TPOFF: the variant-2 layout places the merged TLS
-    // block below the thread pointer, so an access computes
-    // `address = TP - imm32` and `imm32 = merged_size - merged_offset`.
-    // The per-unit emit baked a single-unit default (or 0 for an extern
-    // access); re-resolve each against the merged layout. glibc places
-    // the static TLS block at `tp - roundup(memsz, align)`, so the TPOFF
-    // is measured from the alignment-rounded block size, matching the
-    // writer's PT_TLS `p_align`.
+    // Pass 4.1 -- Linux ELF TLS access fixups. Each unit's
+    // `elf_tpoff_fixups` marks the instruction holding a TLS variable's
+    // TPOFF; the per-unit emit baked a single-unit default (or a
+    // placeholder for an extern access), so re-resolve each against the
+    // merged layout. The two ISAs use opposite static-TLS variants:
+    // x86_64 (variant-2) places the block below the thread pointer, so an
+    // access computes `TP - imm32` with `imm32 = merged_size -
+    // merged_offset` (glibc puts the block at `tp - roundup(memsz,
+    // align)`, matching the writer's PT_TLS `p_align`); aarch64
+    // (variant-1) places it above the thread pointer after a 16-byte TCB
+    // reserve, so an access computes `TP + 16 + merged_offset` baked into
+    // an `add` imm12.
     let merged_tls_total = align_usize(tls_data.len(), 8) as u64;
     for (i, obj) in objs.iter().enumerate() {
         for (text_off, target) in &obj.elf_tpoff_fixups {
@@ -780,19 +783,42 @@ pub fn link_native_objects_with_options(
                     }
                 },
             };
-            let tpoff = merged_tls_total - merged_offset;
-            if tpoff > i32::MAX as u64 {
-                return Err(err(&format!(
-                    "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the i32 `sub` immediate",
-                )));
-            }
             let patch = text_bases[i] + *text_off as usize;
             if patch + 4 > text.len() {
                 return Err(err(&format!(
                     "link_native_objects: TLS fixup offset 0x{text_off:x} out of range in object {i}",
                 )));
             }
-            text[patch..patch + 4].copy_from_slice(&(tpoff as i32).to_le_bytes());
+            match machine {
+                NativeMachine::X86_64 => {
+                    let tpoff = merged_tls_total - merged_offset;
+                    if tpoff > i32::MAX as u64 {
+                        return Err(err(&format!(
+                            "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the i32 `sub` immediate",
+                        )));
+                    }
+                    text[patch..patch + 4].copy_from_slice(&(tpoff as i32).to_le_bytes());
+                }
+                NativeMachine::Aarch64 => {
+                    let tpoff = merged_offset + 16;
+                    if tpoff >= 4096 {
+                        return Err(err(&format!(
+                            "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the 12-bit `add` \
+                             immediate; a TLS block past 4080 bytes needs the two-add \
+                             tprel_hi12 / lo12 sequence (TODO)",
+                        )));
+                    }
+                    // Rewrite bits 10-21 (the imm12) of the `add rd, rd, #imm`.
+                    let mut insn = u32::from_le_bytes([
+                        text[patch],
+                        text[patch + 1],
+                        text[patch + 2],
+                        text[patch + 3],
+                    ]);
+                    insn = (insn & !(0xFFF << 10)) | ((tpoff as u32 & 0xFFF) << 10);
+                    text[patch..patch + 4].copy_from_slice(&insn.to_le_bytes());
+                }
+            }
         }
     }
 

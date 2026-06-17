@@ -839,3 +839,72 @@ fn original_c4_compiles_and_runs_hello_natively() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+/// Cross-unit `extern _Thread_local` on Linux/aarch64. Two translation
+/// units each define TLS storage; `main` reads its own and the other
+/// unit's thread-locals both directly (extern) and through the defining
+/// unit's accessors (local), then mutates one and re-reads it. Exercises
+/// the merged-TLS layout, the `NT_BADC_ELF_TPOFF` note round-trip, and
+/// the linker's variant-1 `add` imm12 resolution (`TP + 16 +
+/// merged_offset`). `main` returns a bitmask of failures, so exit 0
+/// means every access resolved correctly.
+#[test]
+fn cross_unit_thread_local() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "\
+_Thread_local int g_a = 11;\n\
+_Thread_local int g_b = 22;\n\
+int read_a(void) { return g_a; }\n\
+int read_b(void) { return g_b; }\n\
+void set_a(int v) { g_a = v; }\n";
+
+    const UNIT_B: &str = "\
+extern _Thread_local int g_a;\n\
+extern _Thread_local int g_b;\n\
+_Thread_local int g_c = 33;\n\
+int read_a(void); int read_b(void); void set_a(int);\n\
+int main(void) {\n\
+    int f = 0;\n\
+    if (g_a != 11) f |= 1;\n\
+    if (g_b != 22) f |= 2;\n\
+    if (g_c != 33) f |= 4;\n\
+    if (read_a() != 11) f |= 8;\n\
+    if (read_b() != 22) f |= 16;\n\
+    set_a(99);\n\
+    if (g_a != 99) f |= 32;\n\
+    if (read_a() != 99) f |= 64;\n\
+    return f;\n\
+}\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf-aarch64-tls2", "cross_unit_tls");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "cross-unit thread-local mismatch (failure bitmask in exit code)"
+    );
+}

@@ -1386,6 +1386,11 @@ pub(super) fn lower(
     // the `_tls_index` DWORD slot and patches each fixup with the
     // displacement to it.
     let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
+    // Linux/aarch64 TLS access fixups: each `Inst::TlsAddr` records its
+    // add-immediate site so the linker resolves the variant-1 TPOFF
+    // against the merged TLS layout (extern symbols and multi-unit
+    // local accesses).
+    let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
     // macOS arm64 TLV: each unique TLS variable's offset gets a
     // descriptor index; the writer emits a 24-byte
     // `__thread_vars` descriptor per index. Each `Inst::TlsAddr`
@@ -1557,6 +1562,7 @@ pub(super) fn lower(
             &mut tls_index_fixups,
             &mut macho_tlv_fixups,
             &mut macho_tlv_descriptors,
+            &mut elf_tpoff_fixups,
             &mut pc_to_native,
             &mut func_prologue_native,
             &mut ssa_line_rows,
@@ -1775,9 +1781,9 @@ pub(super) fn lower(
         dllmain_pc: None,
         macho_tlv_fixups,
         macho_tlv_descriptors,
-        // x86_64-only; the aarch64 path resolves TLS through Mach-O TLV
-        // descriptors (macOS) or, on Linux, has its own pending path.
-        elf_tpoff_fixups: Vec::new(),
+        // macOS resolves TLS through Mach-O TLV descriptors; Linux/aarch64
+        // records add-immediate sites here for the linker to resolve.
+        elf_tpoff_fixups,
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
         merged_dwarf: None,

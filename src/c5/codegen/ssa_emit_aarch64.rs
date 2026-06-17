@@ -671,6 +671,7 @@ pub(super) fn emit_function(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
     pc_to_native: &mut [usize],
     prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
@@ -692,6 +693,7 @@ pub(super) fn emit_function(
     let tls_index_fixups_snapshot = tls_index_fixups.len();
     let macho_tlv_fixups_snapshot = macho_tlv_fixups.len();
     let macho_tlv_descriptors_snapshot = macho_tlv_descriptors.len();
+    let elf_tpoff_snapshot = elf_tpoff_fixups.len();
 
     emit_prologue(code, func, alloc, frame, abi);
     super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
@@ -846,6 +848,7 @@ pub(super) fn emit_function(
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                         macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                         macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                         return false;
@@ -881,6 +884,7 @@ pub(super) fn emit_function(
                 tls_index_fixups,
                 macho_tlv_fixups,
                 macho_tlv_descriptors,
+                elf_tpoff_fixups,
                 extern_tls_names,
                 &mut current_alloca_top,
                 &emit_param_plan,
@@ -899,6 +903,7 @@ pub(super) fn emit_function(
                 user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                 macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                 macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                 return false;
@@ -941,6 +946,7 @@ pub(super) fn emit_function(
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
             return false;
@@ -1008,6 +1014,7 @@ pub(super) fn emit_function(
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                             return false;
@@ -1078,6 +1085,7 @@ pub(super) fn emit_function(
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                             return false;
@@ -1129,6 +1137,7 @@ pub(super) fn emit_function(
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                         macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                         macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                         return false;
@@ -1152,6 +1161,7 @@ pub(super) fn emit_function(
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                         macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                         macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                         return false;
@@ -1175,6 +1185,7 @@ pub(super) fn emit_function(
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
             return false;
@@ -1195,6 +1206,7 @@ pub(super) fn emit_function(
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
             return false;
@@ -1210,6 +1222,7 @@ pub(super) fn emit_function(
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                     macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
@@ -1226,6 +1239,7 @@ pub(super) fn emit_function(
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                     macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
@@ -1242,6 +1256,7 @@ pub(super) fn emit_function(
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                     macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
@@ -1258,6 +1273,7 @@ pub(super) fn emit_function(
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                     macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
@@ -1727,6 +1743,7 @@ fn emit_inst(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     current_alloca_top: &mut u32,
     param_plan: &[super::ArgPlacement],
@@ -2259,6 +2276,7 @@ fn emit_inst(
             tls_index_fixups,
             macho_tlv_fixups,
             macho_tlv_descriptors,
+            elf_tpoff_fixups,
             extern_tls_names.get(&v).map(|s| s.as_str()),
         ),
         Inst::Phi { .. } => {
@@ -2290,19 +2308,22 @@ fn emit_tls_addr(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
     // Set for a cross-unit `extern _Thread_local` access: the variable's
     // name. The descriptor is keyed by symbol (the linker resolves the
     // offset) rather than by the placeholder `offset`.
     tls_extern_sym: Option<&str>,
 ) -> bool {
     use super::aarch64::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
-    // A cross-unit `extern _Thread_local` access resolves by symbol
-    // through the Mach-O TLV descriptor table. The Linux variant-1 and
-    // Windows TEB paths bake a fixed offset and have no link-time symbol
-    // resolution, so reject the cross-unit case there rather than emit a
-    // wrong offset.
-    if tls_extern_sym.is_some() && !matches!(target, Target::MacOSAarch64) {
-        bail_msg("cross-unit `extern _Thread_local` access is not yet supported on this target");
+    // A cross-unit `extern _Thread_local` access resolves by symbol: MacOS
+    // through the TLV descriptor table, Linux through an `elf_tpoff_fixups`
+    // entry the linker re-patches against the merged TLS layout. The
+    // Windows TEB path bakes a fixed offset with no link-time symbol
+    // resolution, so reject the cross-unit case there.
+    if tls_extern_sym.is_some() && matches!(target, Target::WindowsAarch64) {
+        bail_msg(
+            "cross-unit `extern _Thread_local` access is not yet supported on Windows/aarch64",
+        );
         return false;
     }
     let Some(rd) = int_reg(dst) else {
@@ -2311,13 +2332,35 @@ fn emit_tls_addr(
     };
     match target {
         Target::LinuxAarch64 => {
-            let imm = (offset + 16) as u32;
+            // AAPCS64 variant-1: the static TLS block sits above the thread
+            // pointer after a 16-byte TCB reserve, so a variable at
+            // `offset` in its unit's block reads `tp + 16 + offset`. A
+            // unit-local access bakes that immediate; a cross-unit extern
+            // emits the 16-byte reserve as a placeholder. Both record an
+            // `elf_tpoff_fixups` entry so the linker rebases the immediate
+            // when more than one unit contributes TLS storage (Local) or
+            // resolves it by symbol (Extern). The 12-bit add immediate caps
+            // a single unit's TLS at 4080 bytes; a wider block would need
+            // the two-add tprel_hi12 / lo12 sequence (TODO).
+            let imm = if tls_extern_sym.is_some() {
+                16u32
+            } else {
+                (offset + 16) as u32
+            };
             if imm >= 4096 {
-                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
+                bail_msg("TlsAddr: tpoff exceeds 12-bit add immediate");
                 return false;
             }
             emit(code, enc_mrs_tpidr_el0(rd));
+            let add_off = code.len();
             emit(code, enc_add_imm(rd, rd, imm));
+            elf_tpoff_fixups.push(super::ElfTpoffFixup {
+                imm_offset: add_off,
+                target: match tls_extern_sym {
+                    Some(name) => super::ElfTpoffTarget::Extern(name.into()),
+                    None => super::ElfTpoffTarget::Local(offset as u64),
+                },
+            });
             true
         }
         Target::WindowsAarch64 => {
@@ -6257,6 +6300,7 @@ mod tests {
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
+            &mut Vec::new(),
             &mut pc_to_native,
             &mut prologue_native,
             &mut ssa_line_rows,
@@ -6417,6 +6461,7 @@ mod tests {
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
+            &mut Vec::new(),
             &mut pc_to_native,
             &mut prologue_native,
             &mut ssa_line_rows,
@@ -6476,6 +6521,7 @@ mod tests {
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
+            &mut Vec::new(),
             &mut pc_to_native,
             &mut prologue_native,
             &mut ssa_line_rows,

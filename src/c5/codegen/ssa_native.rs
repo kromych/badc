@@ -65,6 +65,9 @@ pub(crate) fn compile_function_to_bytes(
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
             let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
             let mut macho_tlv_descriptors: Vec<super::MachoTlvDescriptor> = Vec::new();
+            // Single-unit in-memory emit: TLS accesses keep the baked
+            // offset, so the recorded fixups are unused here.
+            let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
             let ok = super::ssa_emit_aarch64::emit_function(
                 func,
                 &alloc,
@@ -82,6 +85,7 @@ pub(crate) fn compile_function_to_bytes(
                 &mut tls_index_fixups,
                 &mut macho_tlv_fixups,
                 &mut macho_tlv_descriptors,
+                &mut elf_tpoff_fixups,
                 &mut pc_to_native,
                 &mut prologue_native,
                 &mut ssa_line_rows,

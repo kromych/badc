@@ -1016,6 +1016,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("variadic_struct_arg.c", 18),
     ("variadic_struct_arg_16b.c", 51),
     ("libc_div.c", 0),
+    ("wide_string_literal_alignment.c", 0),
     ("libc_int_arith.c", 0),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),

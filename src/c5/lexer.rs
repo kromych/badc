@@ -498,6 +498,14 @@ impl Lexer {
     fn lex_wide_literal(&mut self, data: &mut Vec<u8>) -> Result<(), C5Error> {
         let quote = self.src[self.pos];
         self.pos += 1;
+        // A `wchar_t` array requires `wchar_t` alignment (4 bytes on the
+        // Unix targets, 2 on Windows). The host's vectorized wide-string
+        // routines (glibc's `wcschr` / `wcslen`) read elements with
+        // aligned loads and return wrong results on a misaligned literal,
+        // so pad `.data` to a `wchar_t` boundary before interning.
+        while !data.len().is_multiple_of(self.wchar_bytes) {
+            data.push(0);
+        }
         let start_data = data.len() as i64;
         let mut char_value: i64 = 0;
         loop {

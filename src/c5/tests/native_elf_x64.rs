@@ -895,8 +895,10 @@ fn foreign_caller_r13_preserved() {
     )
     .compile()
     .unwrap_or_else(|e| panic!("compile callee: {e}"));
-    let mut reloc = NativeOptions::default();
-    reloc.output_kind = OutputKind::Relocatable;
+    let reloc = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
     let obj = emit_native_with_options(&prog, Target::LinuxX64, reloc)
         .unwrap_or_else(|e| panic!("emit callee object: {e}"));
 

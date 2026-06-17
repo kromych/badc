@@ -140,28 +140,44 @@
 #define PTHREAD_CREATE_JOINABLE 0
 #endif
 
-// Opaque-buffer typedefs for the POSIX thread types. Each wraps a
-// leading signature word plus a fixed-size buffer big enough for the
-// underlying libc layout on every supported target. c5 code passes
-// pointers to these into the bindings; the libc side reads the actual
-// platform layout. The signature word is exposed (rather than folded
-// into the buffer) so the static initialisers below can set it.
-struct __c5_pthread_mutex { long __sig; char __opaque[56]; };
+// Opaque storage for the POSIX thread types. The libc reads the real
+// platform layout through a passed pointer; c5 only needs each object to
+// occupy the exact platform size and alignment, because these types are
+// embedded in larger structs (CPython's `_PyRuntime`) whose field
+// offsets a separately-compiled module reads back. An over-wide object
+// shifts every later field. The leading word carries 8-byte alignment;
+// macOS additionally uses it for the signature the static initialisers
+// seed (its libpthread rejects a zero-signature statically-allocated
+// object from pthread_mutex_lock / pthread_cond_wait with EINVAL). Sizes
+// per `bits/pthreadtypes-arch.h` (Linux) and `<sys/_pthread/*>` (macOS).
+#if defined(__APPLE__)
+struct __c5_pthread_mutex { long __sig; char __opaque[56]; };     // 64
+struct __c5_pthread_cond { long __sig; char __opaque[56]; };      // 64
+struct __c5_pthread_mutexattr { char __opaque[16]; };             // 16
+struct __c5_pthread_condattr { char __opaque[16]; };              // 16
+struct __c5_pthread_attr { char __opaque[64]; };                  // 64
+#elif defined(__aarch64__) && defined(__linux__)
+struct __c5_pthread_mutex { long __align; char __size[40]; };     // 48
+struct __c5_pthread_cond { long __align; char __size[40]; };      // 48
+struct __c5_pthread_mutexattr { long __size; };                   // 8
+struct __c5_pthread_condattr { long __size; };                    // 8
+struct __c5_pthread_attr { long __align; char __size[56]; };      // 64
+#else // Linux x86_64
+struct __c5_pthread_mutex { long __align; char __size[32]; };     // 40
+struct __c5_pthread_cond { long __align; char __size[40]; };      // 48
+struct __c5_pthread_mutexattr { int __size; };                    // 4
+struct __c5_pthread_condattr { int __size; };                     // 4
+struct __c5_pthread_attr { long __align; char __size[48]; };      // 56
+#endif
 typedef struct __c5_pthread_mutex pthread_mutex_t;
-
-struct __c5_pthread_mutexattr { char __opaque[16]; };
-typedef struct __c5_pthread_mutexattr pthread_mutexattr_t;
-
-struct __c5_pthread_cond { long __sig; char __opaque[56]; };
 typedef struct __c5_pthread_cond pthread_cond_t;
+typedef struct __c5_pthread_mutexattr pthread_mutexattr_t;
+typedef struct __c5_pthread_condattr pthread_condattr_t;
+typedef struct __c5_pthread_attr pthread_attr_t;
 
-// Static-storage initialisers for the mutex / condition variable
-// types. Darwin's libpthread checks a signature word at offset 0 and
-// rejects a zero-signature object from pthread_mutex_lock /
-// pthread_cond_wait (EINVAL), so the macro must seed the magic the
-// system <pthread/pthread_impl.h> uses for a statically initialised
-// object. Linux and Windows take an all-zero object, so the signature
-// word stays zero there.
+// Static-storage initialisers. macOS seeds the signature word; Linux
+// takes an all-zero object. Both forms match the leading-word + buffer
+// shape above.
 #if defined(__APPLE__)
 #define PTHREAD_MUTEX_INITIALIZER { 0x32AAABA7, {0} }
 #define PTHREAD_COND_INITIALIZER  { 0x3CB0B1BB, {0} }
@@ -170,12 +186,6 @@ typedef struct __c5_pthread_cond pthread_cond_t;
 #define PTHREAD_COND_INITIALIZER  { 0, {0} }
 #endif
 #define PTHREAD_ONCE_INIT          0
-
-struct __c5_pthread_condattr { char __opaque[16]; };
-typedef struct __c5_pthread_condattr pthread_condattr_t;
-
-struct __c5_pthread_attr { char __opaque[64]; };
-typedef struct __c5_pthread_attr pthread_attr_t;
 
 // `pthread_t` is pointer-sized on every supported POSIX target
 // (an opaque struct pointer on macOS, `unsigned long` on

@@ -31,6 +31,22 @@ int main(void) {
     if (sizeof(struct tss) != 8) {
         return 2;
     }
+    // glibc opaque sizes (bits/pthreadtypes-arch.h). cond / rwlock are
+    // the same on both 64-bit ISAs; mutex and the attr types differ.
+    if (sizeof(pthread_cond_t) != 48) {
+        return 3;
+    }
+#if defined(__aarch64__)
+    if (sizeof(pthread_mutex_t) != 48 || sizeof(pthread_mutexattr_t) != 8 ||
+        sizeof(pthread_condattr_t) != 8 || sizeof(pthread_attr_t) != 64) {
+        return 4;
+    }
+#else
+    if (sizeof(pthread_mutex_t) != 40 || sizeof(pthread_mutexattr_t) != 4 ||
+        sizeof(pthread_condattr_t) != 4 || sizeof(pthread_attr_t) != 56) {
+        return 4;
+    }
+#endif
 #endif
     return 0;
 }

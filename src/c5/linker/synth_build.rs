@@ -60,6 +60,35 @@ pub fn write_native_image_from_merged(
     target: Target,
     shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
+    write_native_image_from_merged_ex(
+        merged,
+        plt,
+        entry_name,
+        subsystem,
+        output_kind,
+        target,
+        shared_lib_name,
+        false,
+        false,
+    )
+}
+
+/// As [`write_native_image_from_merged`], plus `--export-all` /
+/// `--export-data`: for an ELF executable, add every defined non-static
+/// function (`export_all`) and/or data global (`export_data`) to
+/// `.dynsym` for `dlopen` resolution.
+#[allow(clippy::too_many_arguments)]
+pub fn write_native_image_from_merged_ex(
+    merged: &MergedNative,
+    plt: &[PltTrampoline],
+    entry_name: &str,
+    subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    output_kind: OutputKind,
+    target: Target,
+    shared_lib_name: Option<&str>,
+    export_all: bool,
+    export_data: bool,
+) -> Result<Vec<u8>, C5Error> {
     let (program, build) = synth_program_and_build(
         merged,
         plt,
@@ -68,10 +97,13 @@ pub fn write_native_image_from_merged(
         output_kind,
         target,
         shared_lib_name,
+        export_all,
+        export_data,
     )?;
     write_native_image(&program, &build, target)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn synth_program_and_build(
     merged: &MergedNative,
     plt: &[PltTrampoline],
@@ -80,6 +112,8 @@ fn synth_program_and_build(
     output_kind: OutputKind,
     target: Target,
     shared_lib_name: Option<&str>,
+    export_all: bool,
+    export_data: bool,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -205,38 +239,44 @@ fn synth_program_and_build(
         });
     }
 
-    // macOS links an executable so its default-visibility global
-    // symbols are exported, which lets a dynamically loaded module
-    // resolve them (a Python C extension binding `PyBool_Type` and the
-    // rest of the C-API against the interpreter executable). Carry
-    // every defined global as a dynamic export; the Mach-O writer emits
-    // them as external-defined symbols. Only executable Mach-O output
-    // needs this -- shared libraries use `exports`, and the ELF / PE
-    // writers ignore the field.
-    let dynamic_exports: Vec<DynamicExport> =
-        if target == Target::MacOSAarch64 && output_kind == OutputKind::Executable {
-            merged
-                .defined
-                .iter()
-                .filter_map(|(name, sym)| {
-                    if name.is_empty() {
-                        return None;
-                    }
-                    let section = match sym.section {
-                        NativeSymSection::Text => DynamicExportSection::Text,
-                        NativeSymSection::Data => DynamicExportSection::Data,
-                        _ => return None,
-                    };
-                    Some(DynamicExport {
-                        name: name.clone(),
-                        section,
-                        offset: sym.value,
-                    })
+    // Export an executable's default-visibility global symbols so a
+    // dynamically loaded module resolves them (a Python C extension
+    // binding `PyFloat_Type` and the rest of the C-API against the
+    // interpreter executable). macOS publishes every global of every
+    // executable through the Mach-O symtab. ELF splits the same coverage
+    // across two flags matching the system toolchain's `-rdynamic`:
+    // `--export-all` adds functions (STT_FUNC), `--export-data` adds data
+    // globals (STT_OBJECT). Both gate the export because it widens the
+    // global symbol scope. Resolved from `merged.defined` at link time;
+    // shared libraries use `exports`, and the PE writer ignores the field.
+    let is_exec = output_kind == OutputKind::Executable;
+    let macos_exec = target == Target::MacOSAarch64 && is_exec;
+    let elf_exec = matches!(target, Target::LinuxX64 | Target::LinuxAarch64) && is_exec;
+    let export_funcs = macos_exec || (elf_exec && export_all);
+    let export_data_globals = macos_exec || (elf_exec && export_data);
+    let dynamic_exports: Vec<DynamicExport> = if export_funcs || export_data_globals {
+        merged
+            .defined
+            .iter()
+            .filter_map(|(name, sym)| {
+                if name.is_empty() {
+                    return None;
+                }
+                let section = match sym.section {
+                    NativeSymSection::Text if export_funcs => DynamicExportSection::Text,
+                    NativeSymSection::Data if export_data_globals => DynamicExportSection::Data,
+                    _ => return None,
+                };
+                Some(DynamicExport {
+                    name: name.clone(),
+                    section,
+                    offset: sym.value,
                 })
-                .collect()
-        } else {
-            Vec::new()
-        };
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     let build = Build {
         copy_relocs,

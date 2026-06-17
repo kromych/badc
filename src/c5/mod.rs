@@ -50,7 +50,7 @@ pub use linker::{
     MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
     NativeSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt, emit_x86_64_plt,
     is_elf_object, link_native_objects, link_native_objects_with_options, parse_native_elf,
-    write_executable_elf64, write_native_image_from_merged,
+    write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};

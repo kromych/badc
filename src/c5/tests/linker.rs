@@ -794,6 +794,63 @@ fn export_all_executable_exposes_dynamic_symbols() {
 }
 
 #[test]
+fn export_data_exposes_data_globals_in_dynsym() {
+    // `--export-data` adds an executable's defined data globals to
+    // `.dynsym` (as STT_OBJECT) so a `dlopen`'d module resolves them --
+    // the data half of `-rdynamic`, which `--export-all` (functions
+    // only) cannot reach. A `PyTypeObject`-style global is the motivating
+    // case. An executable without the flag exports no data symbol.
+    use crate::c5::linker::object::read_dynamic_symbol_names;
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged_ex,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let build_exe = |export_data: bool| -> alloc::vec::Vec<u8> {
+        let program = Compiler::new(alloc::format!(
+            "{TEST_PRELUDE}\
+             int host_data = 7;\n\
+             int main(void) {{ return host_data; }}\n"
+        ))
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let mut merged = link_native_objects(&[obj]).expect("link");
+        let plt = emit_x86_64_plt(&mut merged).expect("plt");
+        write_native_image_from_merged_ex(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            Target::LinuxX64,
+            None,
+            false,
+            export_data,
+        )
+        .expect("write executable")
+    };
+    assert!(
+        read_dynamic_symbol_names(&build_exe(true))
+            .expect("parse .dynsym")
+            .iter()
+            .any(|n| n == "host_data"),
+        "an --export-data executable must export host_data in .dynsym"
+    );
+    assert!(
+        !read_dynamic_symbol_names(&build_exe(false))
+            .expect("parse .dynsym")
+            .iter()
+            .any(|n| n == "host_data"),
+        "an executable without --export-data must not export host_data"
+    );
+}
+
+#[test]
 fn shared_object_relocates_internal_data_pointers() {
     // A function / data pointer baked into a shared object's static data
     // must carry an R_*_RELATIVE relocation so it tracks the runtime load

@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x3
     v2   Imm(0)                                           -> x0
-    v3   ImmData(10)                                      -> x12
+    v3   ImmData(12)                                      -> x12
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=-2, kind=I64 }                   -> x0
     v6   Imm(4)                                           -> x0

@@ -96,6 +96,11 @@ Compile knobs:
                            dlopen consumer can dlsym it without a
                            #pragma export. Applies to --shared and
                            executable output.
+  --export-data            Export every non-static data global from an
+                           ELF executable into .dynsym (STT_OBJECT) so a
+                           dlopen'd module resolves it, the data half of
+                           the toolchain's -rdynamic. Pair with
+                           --export-all for full coverage.
   --gnu                    Define the GCC identity macros (__GNUC__,
                            __VERSION__, __extension__, ...). Off by
                            default: badc implements most but not all of
@@ -224,6 +229,13 @@ fn main() {
     // native target (Mach-O / ELF / PE); a host executable that loads
     // plugin modules sets it so the modules resolve the host's symbols.
     let mut export_all = false;
+    // `--export-data` -- add every defined non-static global (function
+    // and data) to the dynamic symbol table of a native executable, so a
+    // `dlopen`'d module resolves the host's symbols (a Python C extension
+    // binding the interpreter's `Py*` API, including the `PyTypeObject`
+    // data globals). ELF only; macOS already exports executable globals,
+    // Windows has no analogue.
+    let mut export_data = false;
     // `--gnu` -- define the GCC identity macros (`__GNUC__` etc.).
     let mut gnu = false;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
@@ -388,6 +400,10 @@ fn main() {
             "-q" | "--quiet" => quiet = true,
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
+            // Export every defined non-static global (function and data)
+            // into the executable's dynamic symbol table for `dlopen`
+            // resolution.
+            "--export-data" => export_data = true,
             // Define the GCC identity macros (`__GNUC__`, `__VERSION__`,
             // `__extension__`, ...). Off by default: badc implements
             // most but not all of the GNU C surface, so code that gates
@@ -1066,7 +1082,7 @@ fn main() {
         } else {
             None
         };
-        let write_result = badc::write_native_image_from_merged(
+        let write_result = badc::write_native_image_from_merged_ex(
             &merged,
             &plt,
             entry_name,
@@ -1074,6 +1090,8 @@ fn main() {
             native_output_kind,
             target,
             shared_lib_name,
+            export_all,
+            export_data,
         );
         let bytes = match write_result {
             Ok(b) => b,

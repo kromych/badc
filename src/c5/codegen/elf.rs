@@ -587,7 +587,7 @@ type DynstrTables = (Vec<u8>, Vec<u32>, Vec<u32>, Vec<u32>, Vec<u32>);
 
 fn build_dynstr(
     imports: &super::ResolvedImports,
-    exports: &[crate::c5::program::ExportedFunction],
+    export_names: &[&str],
     copy_relocs: &[super::CopyRelocReq],
 ) -> DynstrTables {
     let mut bytes = Vec::new();
@@ -607,10 +607,10 @@ fn build_dynstr(
         bytes.push(0);
     }
 
-    let mut export_offsets = Vec::with_capacity(exports.len());
-    for e in exports {
+    let mut export_offsets = Vec::with_capacity(export_names.len());
+    for name in export_names {
         export_offsets.push(bytes.len() as u32);
-        bytes.extend_from_slice(e.name.as_bytes());
+        bytes.extend_from_slice(name.as_bytes());
         bytes.push(0);
     }
 
@@ -760,15 +760,18 @@ fn build_plt_symtab(
 ///   `dlsym` only checks `SHN_UNDEF` to gate a name as
 ///   resolvable). `st_value` is the runtime VA of the
 ///   function.
+#[allow(clippy::too_many_arguments)]
 fn build_dynsym(
     import_name_offsets: &[u32],
     export_name_offsets: &[u32],
     export_addrs: &[u64],
+    export_is_data: &[bool],
     copy_name_offsets: &[u32],
     copy_addrs: &[u64],
     copy_sizes: &[u64],
 ) -> Vec<u8> {
     debug_assert_eq!(export_name_offsets.len(), export_addrs.len());
+    debug_assert_eq!(export_name_offsets.len(), export_is_data.len());
     debug_assert_eq!(copy_name_offsets.len(), copy_addrs.len());
     debug_assert_eq!(copy_name_offsets.len(), copy_sizes.len());
     let n_total =
@@ -817,12 +820,21 @@ fn build_dynsym(
         );
     }
 
-    for (&name_off, &addr) in export_name_offsets.iter().zip(export_addrs.iter()) {
+    for ((&name_off, &addr), &is_data) in export_name_offsets
+        .iter()
+        .zip(export_addrs.iter())
+        .zip(export_is_data.iter())
+    {
+        // A code export is STT_FUNC; a data global (`--export-data`,
+        // e.g. a `PyTypeObject`) is STT_OBJECT so `nm` / a debugger
+        // classify it correctly. The dynamic linker resolves by name
+        // and ignores the type, so a `dlsym` lookup works either way.
+        let st_type = if is_data { STT_OBJECT } else { STT_FUNC };
         write_struct(
             &mut out,
             &Elf64Sym {
                 st_name: name_off,
-                st_info: (STB_GLOBAL << 4) | STT_FUNC,
+                st_info: (STB_GLOBAL << 4) | st_type,
                 st_other: 0,
                 // Non-zero placeholder section index -- we
                 // don't emit section headers, but dlsym
@@ -996,6 +1008,16 @@ struct DynamicInfo {
     rela_size: u64,
     strtab_size: u64,
     versions: Option<VersionInfo>,
+}
+
+/// A defined dynamic-symbol export for the ELF writer. `offset` is a
+/// byte offset within `build.text` (`section == Text`) or `build.data`
+/// (`section == Data`); the writer adds the matching runtime base and
+/// picks STT_FUNC or STT_OBJECT.
+struct ElfExport {
+    name: String,
+    section: super::DynamicExportSection,
+    offset: u64,
 }
 
 /// One `.gnu.version_r` Vernaux: `(version dynstr offset, elf_hash,
@@ -1311,30 +1333,56 @@ pub(super) fn write(
     } else {
         start_stub_len(machine, use_libc_exit)
     };
-    // A `.dynsym` export entry per `Build::exports` -- a defined
-    // `STB_GLOBAL | STT_FUNC` symbol whose `st_value` is the function's
-    // runtime VA. Shared libraries always export; an executable exports
-    // only under `--export-all` (which populates `build.exports`), the
-    // `-rdynamic` behavior that lets a `dlopen`'d module resolve the
-    // host's symbols from the global scope. An ordinary executable has
-    // no exports, so the tables are unchanged.
-    let exports = &build.exports[..];
+    // Defined `.dynsym` export entries. A shared library always exports;
+    // an executable exports under `--export-all` (functions, via
+    // `Build::exports`) and `--export-data` (every global, function and
+    // data, via `Build::dynamic_exports`) -- the `-rdynamic` behaviour
+    // that lets a `dlopen`'d module resolve the host's symbols from the
+    // global scope. Each entry carries the section it lives in so the
+    // dynsym picks STT_FUNC (`.text`) or STT_OBJECT (`.data`); the offset
+    // is a byte offset within `build.text` / `build.data`. An ordinary
+    // executable has no exports, so the tables are unchanged.
+    let mut elf_exports: Vec<ElfExport> = Vec::new();
+    for exp in &build.exports {
+        if let Some(&native_off) = build.pc_to_native.get(exp.ent_pc) {
+            elf_exports.push(ElfExport {
+                name: exp.name.clone(),
+                section: super::DynamicExportSection::Text,
+                offset: native_off as u64,
+            });
+        }
+    }
+    for d in &build.dynamic_exports {
+        if !elf_exports.iter().any(|e| e.name == d.name) {
+            elf_exports.push(ElfExport {
+                name: d.name.clone(),
+                section: d.section,
+                offset: d.offset,
+            });
+        }
+    }
+    let export_names: Vec<&str> = elf_exports.iter().map(|e| e.name.as_str()).collect();
+    let export_is_data: Vec<bool> = elf_exports
+        .iter()
+        .map(|e| e.section == super::DynamicExportSection::Data)
+        .collect();
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
     let (mut dynstr, name_offsets, lib_strtab_offsets, export_name_offsets, copy_name_offsets) =
-        build_dynstr(&build.imports, exports, &build.copy_relocs);
+        build_dynstr(&build.imports, &export_names, &build.copy_relocs);
     let copy_sizes: Vec<u64> = build.copy_relocs.iter().map(|cr| cr.size).collect();
     let n_copy = build.copy_relocs.len();
     // Compute each export's and copy target's runtime VA. We fill in the
     // real values after layout is fixed and `code_vmaddr` is known; here
     // we just reserve the slots.
-    let export_addrs_placeholder: Vec<u64> = vec![0; exports.len()];
+    let export_addrs_placeholder: Vec<u64> = vec![0; elf_exports.len()];
     let copy_addrs_placeholder: Vec<u64> = vec![0; n_copy];
     let dynsym = build_dynsym(
         &name_offsets,
         &export_name_offsets,
         &export_addrs_placeholder,
+        &export_is_data,
         &copy_name_offsets,
         &copy_addrs_placeholder,
         &copy_sizes,
@@ -1941,21 +1989,14 @@ pub(super) fn write(
     // placeholder we built up front (with `st_value = 0`)
     // had the right byte count for layout; the real values
     // go in here.
-    let export_addrs: Vec<u64> = exports
+    let export_addrs: Vec<u64> = elf_exports
         .iter()
-        .map(|exp| {
-            let native_off = build
-                .pc_to_native
-                .get(exp.ent_pc)
-                .copied()
-                .unwrap_or(usize::MAX);
-            if native_off == usize::MAX {
-                return 0;
-            }
+        .map(|e| match e.section {
             // Code blob layout is `[stub_len bytes of _start][build.text]`;
-            // shared-library output has stub_len=0 so the
-            // shift is a no-op there.
-            code_vmaddr + (stub_len + native_off as u64)
+            // shared-library output has stub_len=0 so the shift is a
+            // no-op there. A data export's offset is within `build.data`.
+            super::DynamicExportSection::Text => code_vmaddr + stub_len + e.offset,
+            super::DynamicExportSection::Data => data_vmaddr + e.offset,
         })
         .collect();
     // Copy-relocation targets sit in the static data segment: a `.data`
@@ -1970,6 +2011,7 @@ pub(super) fn write(
         &name_offsets,
         &export_name_offsets,
         &export_addrs,
+        &export_is_data,
         &copy_name_offsets,
         &copy_addrs,
         &copy_sizes,
@@ -2043,7 +2085,7 @@ pub(super) fn write(
         Machine::Aarch64 => R_AARCH64_COPY,
         Machine::X86_64 => R_X86_64_COPY,
     };
-    let copy_dynsym_base = (1 + n_imports + exports.len()) as u64;
+    let copy_dynsym_base = (1 + n_imports + elf_exports.len()) as u64;
     for (i, &addr) in copy_addrs.iter().enumerate() {
         let sym_idx = copy_dynsym_base + i as u64;
         write_struct(

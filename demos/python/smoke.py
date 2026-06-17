@@ -201,7 +201,13 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
     py = out / "python"
     log(f"link -> {py}")
     dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
-    r = run([badc, *dbg, *objs, "-o", str(py)], timeout=900)
+    # `--export-all` (functions) + `--export-data` (data globals) make
+    # the interpreter's C-API resolvable from a dlopen'd extension
+    # module, reproducing the reference build's `-Xlinker -export-dynamic`.
+    r = run(
+        [badc, "--export-all", "--export-data", *dbg, *objs, "-o", str(py)],
+        timeout=900,
+    )
     if r.returncode != 0:
         sys.stderr.write((r.stderr or r.stdout)[-3000:])
         sys.exit("smoke: link failed")

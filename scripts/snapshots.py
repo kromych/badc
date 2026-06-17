@@ -98,6 +98,18 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         ),
         r"\1<lo12>",
     ),
+    # The x86_64 runtime entry stub passes the image-base-relative offset
+    # of `__c5_entry` to the startup helper through `movl $off, %esi`,
+    # right after `movq %rsp, %rdi`. That offset is a whole-image layout
+    # value: it shifts whenever anything ahead of .text changes size,
+    # including the host-dependent `.gnu.version_r` (a macOS cross-build
+    # omits the glibc Verneed a native Linux build reads from the host
+    # libc and emits). Anchored on the stub's `rdi`/`esi` pair so it never
+    # matches an ordinary `%esi` load, it carries no codegen signal.
+    (
+        re.compile(r"(movq\s+%rsp,\s+%rdi\n\s+movl\s+)\$0x[0-9a-fA-F]+(,\s+%esi).*"),
+        r"\1$<entry_off>\2",
+    ),
 )
 
 

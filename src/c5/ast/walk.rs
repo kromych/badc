@@ -2856,10 +2856,38 @@ impl<'a> Walker<'a> {
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
             Expr::Intrinsic { kind, args, .. } => {
                 let intr_kind = *kind;
+                // The va_* intrinsics receive the ADDRESS of the va_list
+                // storage. The `__va_list_self(ap)` macro spells this as
+                // `(ap)` on System V / AAPCS64 (the array decays to its
+                // address) and `&(ap)` on the cursor targets. When `ap`
+                // is `*pva` (a va_list reached through a pointer) the
+                // System V form is a bare deref whose rvalue would load
+                // the list's first eightbyte; the address wanted is the
+                // pointer itself, so take the deref's lvalue. Operand
+                // positions: arg 0 for va_start / va_arg / va_end, args 0
+                // and 1 for va_copy.
+                use super::super::op::Intrinsic as VaI;
+                let va_addr_operand = |i: usize| match VaI::from_i64(intr_kind) {
+                    Some(VaI::VaStart) | Some(VaI::VaArg) | Some(VaI::VaEnd) => i == 0,
+                    Some(VaI::VaCopy) => i == 0 || i == 1,
+                    _ => false,
+                };
                 let mut arg_vals: alloc::vec::Vec<super::super::ir::ValueId> =
                     alloc::vec::Vec::with_capacity(args.len());
-                for a in args.clone() {
-                    arg_vals.push(self.walk_expr_rvalue(b, a)?);
+                for (i, a) in args.clone().into_iter().enumerate() {
+                    let v = if va_addr_operand(i)
+                        && matches!(
+                            self.ast.expr(a),
+                            Expr::Unary {
+                                op: UnOp::Deref,
+                                ..
+                            }
+                        ) {
+                        self.walk_expr_lvalue(b, a)?
+                    } else {
+                        self.walk_expr_rvalue(b, a)?
+                    };
+                    arg_vals.push(v);
                 }
                 // fma / fmaf (C99 7.12.13.1) lower to the fused node so
                 // the three operands round once. The parser has already

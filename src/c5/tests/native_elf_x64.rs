@@ -854,3 +854,88 @@ int main(void) {\n\
         "cross-unit thread-local mismatch (failure bitmask in exit code)"
     );
 }
+
+/// A foreign (system-cc) caller that keeps a live value in r13 across a
+/// call into a badc-compiled callee must find it intact on return. r13
+/// is callee-saved under System V AMD64; badc borrows it as its reserved
+/// secondary scratch (`SCRATCH_R13`), so a callee that clobbers it must
+/// save and restore the caller's value. The badc callee here computes
+/// `x + <large immediate>`, which materialises the immediate through r13
+/// (`emit_binop_imm`), so without the prologue/epilogue save it would
+/// overwrite the caller's r13. The cc caller pins a sentinel in r13
+/// across the call via inline asm and checks it survives. Links a badc
+/// relocatable object with a cc-compiled `main` through the system
+/// driver, so it exercises the real ABI boundary the c5-to-c5 lanes
+/// cannot.
+#[test]
+fn foreign_caller_r13_preserved() {
+    use crate::{CompileOptions, OutputKind};
+
+    // Locate a system C driver; without one the ABI boundary can't be
+    // built, so skip rather than fail (the demos / CPython lane cover it
+    // where a compiler is present).
+    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
+        Command::new(c)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    });
+    let Some(cc) = cc else {
+        eprintln!("skipping foreign_caller_r13_preserved: no system C driver (cc/gcc/clang)");
+        return;
+    };
+
+    const CALLEE: &str = "long badc_cb(long x) { return x + 0x1234567890ABL; }\n";
+    let prog = Compiler::with_options(
+        CALLEE.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile callee: {e}"));
+    let mut reloc = NativeOptions::default();
+    reloc.output_kind = OutputKind::Relocatable;
+    let obj = emit_native_with_options(&prog, Target::LinuxX64, reloc)
+        .unwrap_or_else(|e| panic!("emit callee object: {e}"));
+
+    let obj_path = unique_temp_path("badc-elf64-r13", "callee_obj");
+    let main_path = unique_temp_path("badc-elf64-r13", "caller_main").with_extension("c");
+    let exe_path = unique_temp_path("badc-elf64-r13", "r13_exe");
+    std::fs::write(&obj_path, &obj).expect("write callee object");
+    std::fs::write(
+        &main_path,
+        "extern long badc_cb(long);\n\
+         int main(void) {\n\
+         \tlong out;\n\
+         \t__asm__ volatile(\"movq $0x1122334455667788, %%r13\" ::: \"r13\");\n\
+         \tlong r = badc_cb(5);\n\
+         \t__asm__ volatile(\"movq %%r13, %0\" : \"=r\"(out));\n\
+         \treturn (out == 0x1122334455667788L && r == 5 + 0x1234567890ABL) ? 0 : 1;\n\
+         }\n",
+    )
+    .expect("write caller main");
+
+    let status = Command::new(cc)
+        .arg(&main_path)
+        .arg(&obj_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .status()
+        .expect("invoke system C driver");
+    assert!(
+        status.success(),
+        "system C driver failed to link badc object"
+    );
+
+    set_executable(&exe_path);
+    let output = exec_with_retry(&exe_path).expect("run linked binary");
+    let _ = std::fs::remove_file(&obj_path);
+    let _ = std::fs::remove_file(&main_path);
+    let _ = std::fs::remove_file(&exe_path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "foreign caller's r13 was clobbered by the badc callee (callee-save violation)"
+    );
+}

@@ -606,6 +606,12 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // round-trip in -- regressions surface as `strtold` landing
     // on stale xmm0 garbage instead of the parsed value.
     ("strtold_aapcs_return.c", 0),
+    // A dynamic import binds its library's default symbol version
+    // (`.gnu.version_r`), not the oldest definition of the name. The
+    // pthread_cond_init + CLOCK_MONOTONIC sequence returns EINVAL under
+    // glibc's old @GLIBC_2.2.5 stub and 0 under the @@GLIBC_2.3.2
+    // default.
+    ("elf_symbol_version_default.c", 0),
 ];
 
 #[test]

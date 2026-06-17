@@ -102,8 +102,16 @@ const DT_STRSZ: u64 = 10;
 const DT_SYMENT: u64 = 11;
 const DT_BIND_NOW: u64 = 24;
 const DT_FLAGS: u64 = 30;
+const DT_VERSYM: u64 = 0x6fff_fff0;
+const DT_VERNEED: u64 = 0x6fff_fffe;
+const DT_VERNEEDNUM: u64 = 0x6fff_ffff;
 
 const DF_BIND_NOW: u64 = 0x8;
+
+// `.gnu.version` index for a global, unversioned symbol (0 = local).
+// Real version requirements emitted into `.gnu.version_r` start at 2.
+const VER_NDX_GLOBAL: u16 = 1;
+const VER_NDX_FIRST: u16 = 2;
 
 // nlist / Elf64_Sym fields.
 /// `STB_LOCAL` -- file-local binding. Used by the
@@ -950,7 +958,7 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
             },
         );
     }
-    let entries: &[(u64, u64)] = &[
+    let mut entries: Vec<(u64, u64)> = alloc::vec![
         (DT_HASH, info.hash_vmaddr),
         (DT_STRTAB, info.strtab_vmaddr),
         (DT_SYMTAB, info.symtab_vmaddr),
@@ -961,9 +969,16 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
         (DT_RELAENT, ELF64_RELA_SIZE),
         (DT_BIND_NOW, 0),
         (DT_FLAGS, DF_BIND_NOW),
-        (DT_NULL, 0),
     ];
-    for &(d_tag, d_val) in entries {
+    // Version tags precede DT_NULL. The dynamic linker reads DT_VERSYM /
+    // DT_VERNEED to bind each import to its required symbol version.
+    if let Some(v) = info.versions {
+        entries.push((DT_VERSYM, v.versym_vmaddr));
+        entries.push((DT_VERNEED, v.verneed_vmaddr));
+        entries.push((DT_VERNEEDNUM, v.verneed_num));
+    }
+    entries.push((DT_NULL, 0));
+    for (d_tag, d_val) in entries {
         write_struct(&mut out, &Elf64Dyn { d_tag, d_val });
     }
     out
@@ -980,6 +995,22 @@ struct DynamicInfo {
     rela_vmaddr: u64,
     rela_size: u64,
     strtab_size: u64,
+    versions: Option<VersionInfo>,
+}
+
+/// One `.gnu.version_r` Vernaux: `(version dynstr offset, elf_hash,
+/// assigned version index)`.
+type Vernaux = (u32, u32, u16);
+/// One `.gnu.version_r` Verneed: `(soname dynstr offset, its Vernaux
+/// list)`.
+type VerneedGroup = (u32, Vec<Vernaux>);
+
+/// `.gnu.version` / `.gnu.version_r` placement for [`build_dynamic`].
+#[derive(Debug, Clone, Copy)]
+struct VersionInfo {
+    versym_vmaddr: u64,
+    verneed_vmaddr: u64,
+    verneed_num: u64,
 }
 
 // ------------------------------------------------------------------
@@ -1208,6 +1239,44 @@ fn patch_adrp_add(
 // Top-level writer.
 // ------------------------------------------------------------------
 
+/// Resolve each import's default library version from the host
+/// libraries, parallel to `imports.imports`. Flat-namespace imports
+/// (host symbols a shared library resolves at load) are left
+/// unversioned. Empty under `no_std`, which emits no native images.
+#[cfg(feature = "std")]
+fn resolve_import_version_reqs(
+    imports: &super::ResolvedImports,
+    machine: super::Machine,
+) -> Vec<Option<(String, String)>> {
+    use alloc::collections::BTreeMap;
+    let names: Vec<String> = imports
+        .imports
+        .iter()
+        .map(|i| i.real_symbol.clone())
+        .collect();
+    let dylibs: Vec<String> = imports.dylibs.iter().map(|d| d.path.clone()).collect();
+    let mut map: BTreeMap<String, u32> = BTreeMap::new();
+    for imp in &imports.imports {
+        map.entry(imp.real_symbol.clone())
+            .or_insert(imp.dylib_index as u32);
+    }
+    let mut reqs = super::so_versions::resolve_import_versions(&names, &dylibs, &map, machine);
+    for (req, imp) in reqs.iter_mut().zip(imports.imports.iter()) {
+        if imp.flat_lookup {
+            *req = None;
+        }
+    }
+    reqs
+}
+
+#[cfg(not(feature = "std"))]
+fn resolve_import_version_reqs(
+    imports: &super::ResolvedImports,
+    _machine: super::Machine,
+) -> Vec<Option<(String, String)>> {
+    alloc::vec![None; imports.imports.len()]
+}
+
 pub(super) fn write(
     program: &Program,
     build: &Build,
@@ -1253,7 +1322,7 @@ pub(super) fn write(
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
-    let (dynstr, name_offsets, lib_strtab_offsets, export_name_offsets, copy_name_offsets) =
+    let (mut dynstr, name_offsets, lib_strtab_offsets, export_name_offsets, copy_name_offsets) =
         build_dynstr(&build.imports, exports, &build.copy_relocs);
     let copy_sizes: Vec<u64> = build.copy_relocs.iter().map(|cr| cr.size).collect();
     let n_copy = build.copy_relocs.len();
@@ -1286,6 +1355,100 @@ pub(super) fn write(
     let hash = build_hash(&hash_name_offsets, &dynstr);
     // .rela.dyn is built later -- it needs got_vmaddr.
 
+    // GNU symbol-version requirements. Each import the driver bound to
+    // a default library version gets a `.gnu.version` index referencing
+    // a `.gnu.version_r` Vernaux; the rest stay VER_NDX_GLOBAL. The
+    // version-name strings are appended to `.dynstr` (after the symbol
+    // and library names, which keeps their offsets fixed); the Verneed
+    // records group versions by providing library. `.gnu.version` holds
+    // one entry per `.dynsym` symbol, so its length tracks the import +
+    // export + copy-relocation symbol count.
+    let total_dynsym = 1 + name_offsets.len() + export_name_offsets.len() + copy_name_offsets.len();
+    // Resolve each import's default library version from the host
+    // libraries. Done at this single convergence point (every native
+    // ELF link reaches `elf::write`); no requirement is recorded when a
+    // library can't be read (cross-links), leaving the import
+    // unversioned. Empty under `no_std`, which emits no native images.
+    let import_version_reqs = resolve_import_version_reqs(&build.imports, machine);
+    let mut import_versym: Vec<u16> = alloc::vec![VER_NDX_GLOBAL; n_imports];
+    let mut verneed_groups: Vec<VerneedGroup> = Vec::new();
+    let mut version_str_off: alloc::collections::BTreeMap<String, u32> =
+        alloc::collections::BTreeMap::new();
+    let mut next_ver_index: u16 = VER_NDX_FIRST;
+    for (i, req) in import_version_reqs.iter().enumerate() {
+        let Some((soname, version)) = req else {
+            continue;
+        };
+        // Group the requirement under the library that exports the
+        // default version, which the resolver recorded. It may differ
+        // from the import's nominal dylib.
+        let Some(dyl_idx) = build.imports.dylibs.iter().position(|d| &d.path == soname) else {
+            continue;
+        };
+        let Some(&soname_off) = lib_strtab_offsets.get(dyl_idx) else {
+            continue;
+        };
+        let ver_off = *version_str_off.entry(version.clone()).or_insert_with(|| {
+            let off = dynstr.len() as u32;
+            dynstr.extend_from_slice(version.as_bytes());
+            dynstr.push(0);
+            off
+        });
+        let group = match verneed_groups.iter_mut().find(|(s, _)| *s == soname_off) {
+            Some(g) => g,
+            None => {
+                verneed_groups.push((soname_off, Vec::new()));
+                verneed_groups.last_mut().unwrap()
+            }
+        };
+        let idx = match group.1.iter().find(|(o, _, _)| *o == ver_off) {
+            Some((_, _, idx)) => *idx,
+            None => {
+                let idx = next_ver_index;
+                next_ver_index += 1;
+                group.1.push((ver_off, elf_hash(version.as_bytes()), idx));
+                idx
+            }
+        };
+        import_versym[i] = idx;
+    }
+    let has_versions = !verneed_groups.is_empty();
+    let (gnu_version, gnu_version_r): (Vec<u8>, Vec<u8>) = if has_versions {
+        let mut versym: Vec<u8> = Vec::with_capacity(total_dynsym * 2);
+        versym.extend_from_slice(&0u16.to_le_bytes()); // null symbol
+        for v in &import_versym {
+            versym.extend_from_slice(&v.to_le_bytes());
+        }
+        // Exports and copy targets are defined and unversioned.
+        for _ in 0..(total_dynsym - 1 - n_imports) {
+            versym.extend_from_slice(&VER_NDX_GLOBAL.to_le_bytes());
+        }
+        let mut verneed: Vec<u8> = Vec::new();
+        for (gi, (soname_off, auxes)) in verneed_groups.iter().enumerate() {
+            let vn_next: u32 = if gi + 1 == verneed_groups.len() {
+                0
+            } else {
+                (16 + auxes.len() * 16) as u32
+            };
+            verneed.extend_from_slice(&1u16.to_le_bytes()); // vn_version
+            verneed.extend_from_slice(&(auxes.len() as u16).to_le_bytes()); // vn_cnt
+            verneed.extend_from_slice(&soname_off.to_le_bytes()); // vn_file
+            verneed.extend_from_slice(&16u32.to_le_bytes()); // vn_aux
+            verneed.extend_from_slice(&vn_next.to_le_bytes()); // vn_next
+            for (ai, (ver_off, hash, ver_index)) in auxes.iter().enumerate() {
+                let vna_next: u32 = if ai + 1 == auxes.len() { 0 } else { 16 };
+                verneed.extend_from_slice(&hash.to_le_bytes()); // vna_hash
+                verneed.extend_from_slice(&0u16.to_le_bytes()); // vna_flags
+                verneed.extend_from_slice(&ver_index.to_le_bytes()); // vna_other
+                verneed.extend_from_slice(&ver_off.to_le_bytes()); // vna_name
+                verneed.extend_from_slice(&vna_next.to_le_bytes()); // vna_next
+            }
+        }
+        (versym, verneed)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
     let interp_path_str = interp_path(machine);
 
     // .interp string (NUL-terminated). Round up to 8 so the next
@@ -1316,7 +1479,21 @@ pub(super) fn write(
     let dynsym_off = interp_off + interp.len() as u64;
     let dynstr_off = dynsym_off + dynsym.len() as u64;
     let hash_off = dynstr_off + dynstr.len() as u64;
-    let rela_off = hash_off + hash.len() as u64;
+    // `.gnu.version` / `.gnu.version_r` sit between `.hash` and
+    // `.rela.dyn` when any import carries a version requirement. With
+    // none, both are empty and the layout is byte-identical.
+    let after_hash = hash_off + hash.len() as u64;
+    let gnu_version_off = after_hash;
+    let gnu_version_r_off = if has_versions {
+        round_up(gnu_version_off + gnu_version.len() as u64, 8)
+    } else {
+        after_hash
+    };
+    let rela_off = if has_versions {
+        round_up(gnu_version_r_off + gnu_version_r.len() as u64, 8)
+    } else {
+        after_hash
+    };
     // A shared object turns each internal absolute pointer in static data
     // (a function / data pointer initializer) into an R_*_RELATIVE
     // relocation so it tracks the runtime load base; an executable maps at
@@ -1368,7 +1545,8 @@ pub(super) fn write(
     let dynamic_off = segment2_off;
     // `build_dynamic` emits one DT_NEEDED per resolved dylib plus
     // 11 fixed tags (DT_HASH, DT_STRTAB, ..., DT_NULL terminator).
-    let dynamic_size = (build.imports.dylibs.len() as u64 + 11) * ELF64_DYN_SIZE;
+    let version_dyn_tags: u64 = if has_versions { 3 } else { 0 };
+    let dynamic_size = (build.imports.dylibs.len() as u64 + 11 + version_dyn_tags) * ELF64_DYN_SIZE;
     let got_off = dynamic_off + dynamic_size;
     let got_size = (n_imports as u64) * 8;
     let data_off = got_off + got_size;
@@ -1398,6 +1576,8 @@ pub(super) fn write(
     let dynsym_vmaddr = TEXT_VMADDR_BASE + dynsym_off;
     let dynstr_vmaddr = TEXT_VMADDR_BASE + dynstr_off;
     let hash_vmaddr = TEXT_VMADDR_BASE + hash_off;
+    let gnu_version_vmaddr = TEXT_VMADDR_BASE + gnu_version_off;
+    let gnu_version_r_vmaddr = TEXT_VMADDR_BASE + gnu_version_r_off;
     let rela_vmaddr = TEXT_VMADDR_BASE + rela_off;
     let code_vmaddr = TEXT_VMADDR_BASE + code_off;
     let dynamic_vmaddr = TEXT_VMADDR_BASE + dynamic_off;
@@ -1804,6 +1984,20 @@ pub(super) fn write(
 
     // .hash
     out.extend_from_slice(&hash);
+
+    // .gnu.version / .gnu.version_r (present only when an import carries
+    // a version requirement).
+    if has_versions {
+        debug_assert_eq!(out.len() as u64, gnu_version_off);
+        out.extend_from_slice(&gnu_version);
+        while (out.len() as u64) < gnu_version_r_off {
+            out.push(0);
+        }
+        out.extend_from_slice(&gnu_version_r);
+        while (out.len() as u64) < rela_off {
+            out.push(0);
+        }
+    }
     debug_assert_eq!(out.len() as u64, rela_off);
 
     // .rela.dyn -- GLOB_DAT for imports, then (shared object only) one
@@ -1890,6 +2084,15 @@ pub(super) fn write(
             rela_vmaddr,
             rela_size,
             strtab_size: dynstr.len() as u64,
+            versions: if has_versions {
+                Some(VersionInfo {
+                    versym_vmaddr: gnu_version_vmaddr,
+                    verneed_vmaddr: gnu_version_r_vmaddr,
+                    verneed_num: verneed_groups.len() as u64,
+                })
+            } else {
+                None
+            },
         },
     );
     debug_assert_eq!(dynamic.len() as u64, dynamic_size);

@@ -52,6 +52,8 @@ mod jit;
 mod mach_o;
 #[cfg(feature = "native-emit")]
 mod pe;
+#[cfg(feature = "std")]
+mod so_versions;
 pub(crate) mod ssa_alloc;
 pub(crate) mod ssa_build;
 mod ssa_constfold_branch;

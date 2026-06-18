@@ -1816,7 +1816,22 @@ impl<'a> Walker<'a> {
                         alloc::vec::Vec::with_capacity(args.len() + 1);
                     all_args.push(out_arg);
                     for a in args {
-                        all_args.push(self.walk_expr_rvalue(b, *a)?);
+                        let mut v = self.walk_expr_rvalue(b, *a)?;
+                        // The all-integer cdecl carries each argument in an
+                        // 8-byte integer slot, where the callee reads a
+                        // floating-point parameter as a double. A `double`
+                        // already occupies eight bytes; a `float` must be
+                        // widened to that pattern and reloaded through an
+                        // integer slot, or the marshal moves only its 4-byte
+                        // form into the low half and the f64 read sees noise in
+                        // the high half.
+                        if expr_ty(self.ast.expr(*a)).map(is_float_ty).unwrap_or(false) {
+                            let widened = b.fp_widen_to_f64(v);
+                            let slot = b.alloc_synthetic_local();
+                            b.store_local(slot, widened, super::super::ir::StoreKind::I64);
+                            v = b.load_local(slot, super::super::ir::LoadKind::I64);
+                        }
+                        all_args.push(v);
                     }
                     let target_pc = self.live_fun_val(*sym, *val);
                     // Struct-returning callee: the result is an
@@ -2344,6 +2359,22 @@ impl<'a> Walker<'a> {
                     let mut all_args: alloc::vec::Vec<super::super::ir::ValueId> =
                         alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
                     all_args.push(out_arg);
+                    // The all-integer cdecl reads a floating-point parameter as
+                    // a double from its 8-byte integer slot. A `double` already
+                    // occupies eight bytes; a `float` must be widened to that
+                    // pattern and reloaded through an integer slot so it is not
+                    // passed as its 4-byte form in the low half of the slot.
+                    for i in 0..arg_vals.len() {
+                        if expr_ty(self.ast.expr(args[i]))
+                            .map(is_float_ty)
+                            .unwrap_or(false)
+                        {
+                            let widened = b.fp_widen_to_f64(arg_vals[i]);
+                            let slot = b.alloc_synthetic_local();
+                            b.store_local(slot, widened, super::super::ir::StoreKind::I64);
+                            arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
+                        }
+                    }
                     all_args.extend_from_slice(&arg_vals);
                     let fixed = all_args.len();
                     let call = b.call_indirect(target, all_args, false, fixed, false, 0);

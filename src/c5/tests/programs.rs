@@ -354,6 +354,15 @@ fn struct_arg_indirect_subscript() {
 }
 
 #[test]
+fn out_pointer_return_float_args() {
+    // A struct returned through the out-pointer convention reaches its
+    // callee on the all-integer call path; a float argument rides as its
+    // f64-widened 8-byte pattern (System V AMD64 3.2.3 / Win64), not as a
+    // 4-byte value in the low half of the slot.
+    assert_eq!(run_fixture("out_pointer_return_float_args.c"), 0);
+}
+
+#[test]
 fn compound_literal_tagged_address() {
     // A block-scope compound literal whose member initializer tags an
     // address with a bitwise / shift operator takes the runtime path; a

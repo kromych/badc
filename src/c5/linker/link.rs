@@ -292,13 +292,13 @@ pub fn link_native_objects_with_options(
     // contributes [init bytes ++ zero-fill] to one merged block, and a
     // descriptor's offset is rebased by the unit's base (a unit-local
     // access) or set from the merged TLS symbol table (a cross-unit
-    // `extern _Thread_local`). The Linux/x86_64 path achieves the same
-    // through `NT_BADC_ELF_TPOFF` fixups resolved in Pass 4.1 below. Both
-    // ELF ISAs record those fixups now (x86_64 variant-2 `sub imm32`,
-    // aarch64 variant-1 `add imm12`), so a multi-unit ELF link rebases
-    // each access against the merged layout. The Windows TEB path bakes a
-    // fixed offset with no link-time resolution; it carries no
-    // `elf_tpoff_fixups`, so the resolve loop is a no-op there.
+    // `extern _Thread_local`). The ELF and Windows/aarch64 paths achieve
+    // the same through `NT_BADC_ELF_TPOFF` fixups resolved in Pass 4.1
+    // below (x86_64 variant-2 `sub imm32`, Linux/aarch64 variant-1 `add
+    // imm12`, Windows/aarch64 TEB-indexed `add imm12`), so a multi-unit
+    // link rebases each access against the merged layout. A same-unit
+    // access on the Windows TEB path with no cross-unit reference carries
+    // no fixup and keeps its baked single-unit offset.
     let uses_tlv = objs.iter().any(|o| {
         !o.macho_tlv_descriptors.is_empty()
             || !o.macho_tlv_fixups.is_empty()
@@ -756,20 +756,27 @@ pub fn link_native_objects_with_options(
         }
     }
 
-    // Pass 4.1 -- Linux ELF TLS access fixups. Each unit's
-    // `elf_tpoff_fixups` marks the instruction holding a TLS variable's
-    // TPOFF; the per-unit emit baked a single-unit default (or a
-    // placeholder for an extern access), so re-resolve each against the
-    // merged layout. The two ISAs use opposite static-TLS variants:
-    // x86_64 (variant-2) places the block below the thread pointer, so an
-    // access computes `TP - imm32` with `imm32 = merged_size -
-    // merged_offset` (glibc puts the block at `tp - roundup(memsz,
-    // align)`, matching the writer's PT_TLS `p_align`); aarch64
-    // (variant-1) places it above the thread pointer after a 16-byte TCB
-    // reserve, so an access computes `TP + 16 + merged_offset` baked into
-    // an `add` imm12.
+    // Pass 4.1 -- TLS access fixups. Each unit's `elf_tpoff_fixups` marks
+    // the instruction holding a TLS variable's offset immediate; the
+    // per-unit emit baked a single-unit default (or a 0 placeholder for an
+    // extern access), so re-resolve each against the merged layout. The
+    // immediate's bias depends on the access model:
+    //   * x86_64 (Linux variant-2) places the block below the thread
+    //     pointer, so `imm32 = merged_size - merged_offset` and the access
+    //     computes `TP - imm32` (glibc puts the block at `tp -
+    //     roundup(memsz, align)`, matching the writer's PT_TLS `p_align`).
+    //   * aarch64 Linux (variant-1) places the block above the thread
+    //     pointer after a 16-byte TCB reserve, so `imm12 = 16 +
+    //     merged_offset` baked into an `add`.
+    //   * aarch64 Windows reaches the block through the TEB's TLS array
+    //     (`x16 = tls_array[_tls_index]`), so x16 already holds the
+    //     module's block base and `imm12 = merged_offset` with no bias.
+    // `machine` does not separate the two aarch64 models; the Windows TEB
+    // sequence always records a `_tls_index` fixup, so an object carrying
+    // any such fixup uses the Windows bias.
     let merged_tls_total = align_usize(tls_data.len(), 8) as u64;
     for (i, obj) in objs.iter().enumerate() {
+        let aarch64_teb = !obj.tls_index_fixups.is_empty();
         for (text_off, target) in &obj.elf_tpoff_fixups {
             let merged_offset = match target {
                 ElfTpoffTarget::Local(off) => tls_bases[i] as u64 + off,
@@ -800,7 +807,11 @@ pub fn link_native_objects_with_options(
                     text[patch..patch + 4].copy_from_slice(&(tpoff as i32).to_le_bytes());
                 }
                 NativeMachine::Aarch64 => {
-                    let tpoff = merged_offset + 16;
+                    let tpoff = if aarch64_teb {
+                        merged_offset
+                    } else {
+                        merged_offset + 16
+                    };
                     if tpoff >= 4096 {
                         return Err(err(&format!(
                             "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the 12-bit `add` \

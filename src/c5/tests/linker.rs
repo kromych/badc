@@ -235,6 +235,100 @@ fn cross_tu_thread_local_resolves_by_symbol() {
 }
 
 #[test]
+fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
+    // The Windows/aarch64 analogue of the cross-unit TLS resolve. The
+    // access reaches the variable through the TEB's TLS array
+    // (`ldr x16, [x18, #0x58]`, index by `_tls_index`), so the accessor
+    // records both a `_tls_index` fixup and an extern TLS-offset fixup
+    // (reusing the `elf_tpoff_fixups` channel) keyed by the variable name.
+    // The linker fills the `add x?, x16, #imm12` with the variable's raw
+    // offset in the merged TLS block -- no thread-pointer bias, unlike the
+    // variant-1 ELF path's `+16` -- so the patched immediate equals the
+    // merged offset directly.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::ElfTpoffTarget;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let unit = |src: &str| {
+        let prog = Compiler::with_options(
+            src.to_string(),
+            Target::WindowsAarch64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let bytes = emit_native_with_options(&prog, Target::WindowsAarch64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    };
+
+    let def = unit(
+        "#include <stdlib.h>\n\
+         _Thread_local int counter = 7;\n\
+         _Thread_local int other = 3;\n\
+         int read_other(void) { return other; }\n",
+    );
+    let off_other = def
+        .tls_symbols
+        .iter()
+        .find(|(n, _, _)| n == "other")
+        .map(|(_, off, _)| *off)
+        .expect("definer exports `other` as a TLS symbol");
+    assert_eq!(off_other, 8, "`other` follows the 8-byte-aligned `counter`");
+
+    let acc = unit(
+        "#include <stdlib.h>\n\
+         extern _Thread_local int other;\n\
+         int get_other(void) { return other; }\n",
+    );
+    assert!(
+        acc.tls_data.is_empty() && acc.tls_bss_size == 0,
+        "an extern _Thread_local reference must not reserve storage"
+    );
+    assert!(
+        !acc.tls_index_fixups.is_empty(),
+        "the Windows TEB access must record a `_tls_index` fixup"
+    );
+    assert!(
+        acc.elf_tpoff_fixups
+            .iter()
+            .any(|(_, t)| matches!(t, ElfTpoffTarget::Extern(name) if name == "other")),
+        "the cross-unit access must record an extern TLS-offset fixup for `other`"
+    );
+
+    let merged = link_native_objects(&[acc, def]).expect("link resolves cross-unit Windows TLS");
+
+    // Scan the merged `.text` for the TEB sequence and confirm its closing
+    // `add x?, x16, #imm12` was patched to `other`'s merged offset (8): the
+    // definer is the only TLS contributor (base 0) and `counter` precedes
+    // it. The raw offset (not `8 + 16`) proves the Windows bias.
+    const TEB_LOAD: u32 = 0xF940_2E50; // ldr x16, [x18, #0x58]
+    let text = &merged.text;
+    let mut patched = None;
+    let mut i = 0;
+    while i + 20 <= text.len() {
+        let w = u32::from_le_bytes(text[i..i + 4].try_into().unwrap());
+        if w == TEB_LOAD {
+            let a = u32::from_le_bytes(text[i + 16..i + 20].try_into().unwrap());
+            if (a & 0xFF80_0000) == 0x9100_0000 && (a >> 5) & 0x1F == 16 {
+                patched = Some((a >> 10) & 0xFFF);
+                break;
+            }
+        }
+        i += 4;
+    }
+    assert_eq!(
+        patched,
+        Some(off_other as u32),
+        "the TEB `add x?, x16, #imm12` must hold the raw merged offset {off_other} (no +16 bias)"
+    );
+}
+
+#[test]
 fn pointer_to_extern_data_resolves_cross_tu() {
     // `int *p = &g;` / `int *p = arr;` where the target is defined in
     // another unit must emit a `.rela.data` reloc against the named

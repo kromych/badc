@@ -1639,19 +1639,30 @@ pub(crate) struct MachoTlvFixup {
     pub descriptor_index: usize,
 }
 
-/// Linux/x86_64 TLS access relocation. The codegen emits
-/// `mov rd, fs:[0]; sub rd, imm32` with `imm32` left 0; the linker
-/// patches `imm32` with the variable's TPOFF -- the thread pointer
-/// minus the variable's byte offset in the merged TLS block -- once
-/// every unit's `.tdata` / `.tbss` is concatenated. The variant-2
-/// layout places the block below the thread pointer, so the access
-/// computes `address = TP - imm32` and `imm32 = merged_size -
-/// merged_offset`. `target` selects how the linker finds
+/// TLS access relocation whose immediate the linker resolves against
+/// the merged TLS block once every unit's `.tdata` / `.tbss` is
+/// concatenated. Three access shapes record it, distinguished by the
+/// linker (see `link_native_objects` Pass 4.1):
+///   * Linux/x86_64 -- `mov rd, fs:[0]; sub rd, imm32`: variant-2
+///     places the block below the thread pointer, so `imm32 =
+///     merged_size - merged_offset` and the access computes `TP -
+///     imm32`.
+///   * Linux/aarch64 -- `mrs rd, tpidr_el0; add rd, rd, #imm12`:
+///     variant-1 places the block above the thread pointer after a
+///     16-byte TCB reserve, so `imm12 = 16 + merged_offset`.
+///   * Windows/aarch64 -- the TEB sequence (`ldr x16, [x18, #0x58]`,
+///     index by `_tls_index`, `add rd, x16, #imm12`): x16 already
+///     holds the module's TLS block base, so `imm12 = merged_offset`
+///     with no thread-pointer bias. This shape also records a
+///     `TlsIndexFixup`, which is how the linker tells it apart from
+///     the variant-1 ELF shape on the same machine.
+/// The codegen leaves the immediate at a single-unit default (or 0 for
+/// an extern access); `target` selects how the linker finds
 /// `merged_offset`.
 #[derive(Debug, Clone)]
 pub(crate) struct ElfTpoffFixup {
-    /// Byte offset within `Build::text` of the `sub` instruction's
-    /// 4-byte immediate field.
+    /// Byte offset within `Build::text` of the immediate field the
+    /// linker rewrites (the `sub` imm32 / the `add` imm12 word).
     pub imm_offset: usize,
     pub target: ElfTpoffTarget,
 }

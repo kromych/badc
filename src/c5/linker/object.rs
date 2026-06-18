@@ -321,8 +321,9 @@ pub struct NativeReloc {
     pub addend: i64,
 }
 
-/// Target of a Linux/x86_64 TLS access fixup (`NT_BADC_ELF_TPOFF`).
-/// The linker resolves it to a byte offset in the merged TLS block.
+/// Target of a TLS access fixup (`NT_BADC_ELF_TPOFF`). The linker
+/// resolves it to a byte offset in the merged TLS block (Linux x86_64 /
+/// aarch64 and the Windows/aarch64 TEB path; see `link_native_objects`).
 #[derive(Debug, Clone)]
 pub enum ElfTpoffTarget {
     /// Same-unit `_Thread_local`: this unit's base in the merged block
@@ -402,10 +403,11 @@ pub struct NativeObject {
     /// whose offset the linker fills from the referenced extern
     /// `_Thread_local` variable's offset in the merged TLS block.
     pub macho_tlv_descriptor_syms: Vec<(usize, String)>,
-    /// Linux/x86_64 TLS access fixups (`NT_BADC_ELF_TPOFF`), each a
-    /// `(text_offset, target)`: the byte offset of a `sub` imm32 in this
+    /// TLS access fixups (`NT_BADC_ELF_TPOFF`), each a `(text_offset,
+    /// target)`: the byte offset of the access's immediate field in this
     /// unit's `.text` and the access target. The linker patches the
-    /// imm32 with the variable's TPOFF against the merged TLS block.
+    /// immediate (x86_64 `sub` imm32 / aarch64 `add` imm12) with the
+    /// variable's offset against the merged TLS block.
     pub elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)>,
     /// Data-import copy relocations (`NT_BADC_COPY_RELOC`), each
     /// `(local_name, host_symbol)` from `#pragma binding(data ...)`.

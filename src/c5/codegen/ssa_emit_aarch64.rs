@@ -2338,17 +2338,6 @@ fn emit_tls_addr(
     tls_extern_sym: Option<&str>,
 ) -> bool {
     use super::aarch64::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
-    // A cross-unit `extern _Thread_local` access resolves by symbol: MacOS
-    // through the TLV descriptor table, Linux through an `elf_tpoff_fixups`
-    // entry the linker re-patches against the merged TLS layout. The
-    // Windows TEB path bakes a fixed offset with no link-time symbol
-    // resolution, so reject the cross-unit case there.
-    if tls_extern_sym.is_some() && matches!(target, Target::WindowsAarch64) {
-        bail_msg(
-            "cross-unit `extern _Thread_local` access is not yet supported on Windows/aarch64",
-        );
-        return false;
-    }
     let Some(rd) = int_reg(dst) else {
         bail_msg("TlsAddr: dst not int reg");
         return false;
@@ -2387,16 +2376,29 @@ fn emit_tls_addr(
             true
         }
         Target::WindowsAarch64 => {
-            if offset >= 4096 {
-                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
-                return false;
-            }
             // Windows/aarch64 TLS: x18 is the TEB pointer per the
             // platform ABI; TEB+0x58 holds the per-thread TLS
             // array. Index by `_tls_index` (loaded into x17) and
-            // pick the slot for our module. x16 and x17 are
-            // AAPCS64 scratches outside the SSA allocator pool
-            // (callee=[20..27], caller=[9..15]).
+            // pick the slot for this module; x16 then holds the
+            // module's TLS block base. x16 and x17 are AAPCS64
+            // scratches outside the SSA allocator pool
+            // (callee=[20..27], caller=[9..15]). A unit-local
+            // access bakes the variable's offset within its own
+            // block into the final `add`. A cross-unit `extern
+            // _Thread_local` offset is unknown until the link
+            // merges the TLS blocks, so emit a 0 placeholder and
+            // record an `elf_tpoff_fixups` entry keyed by symbol;
+            // the linker resolves it against the merged TLS layout
+            // and rewrites the `add` imm12. The TEB path indexes a
+            // module-relative block, so the offset baked in is the
+            // raw block offset with no thread-pointer bias -- the
+            // linker tells this path apart from the variant-1 ELF
+            // path by the `_tls_index` fixup the TEB sequence
+            // always records.
+            if tls_extern_sym.is_none() && offset >= 4096 {
+                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
+                return false;
+            }
             emit(code, enc_ldr_imm(Reg(16), Reg(18), 0x58));
             let pair_off = code.len();
             tls_index_fixups.push(super::TlsIndexFixup {
@@ -2405,7 +2407,25 @@ fn emit_tls_addr(
             emit(code, enc_adrp(Reg(17), 0));
             emit(code, enc_ldr32_imm(Reg(17), Reg(17), 0));
             emit(code, enc_ldr_reg_lsl3(Reg(16), Reg(16), Reg(17)));
-            emit(code, enc_add_imm(rd, Reg(16), offset as u32));
+            let add_off = code.len();
+            let imm = if tls_extern_sym.is_some() {
+                0
+            } else {
+                offset as u32
+            };
+            emit(code, enc_add_imm(rd, Reg(16), imm));
+            // Both forms record a fixup so the linker rebases the imm12 to
+            // the variable's offset in the merged TLS block: a unit-local
+            // access is correct only when its defining unit sits at block
+            // base 0, and the same variable read `extern` from another unit
+            // must resolve to the identical offset.
+            elf_tpoff_fixups.push(super::ElfTpoffFixup {
+                imm_offset: add_off,
+                target: match tls_extern_sym {
+                    Some(name) => super::ElfTpoffTarget::Extern(name.into()),
+                    None => super::ElfTpoffTarget::Local(offset as u64),
+                },
+            });
             true
         }
         Target::MacOSAarch64 => {

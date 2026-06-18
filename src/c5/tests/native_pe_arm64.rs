@@ -357,6 +357,246 @@ fn argc_argv_round_trip_through_getmainargs() {
     assert_exit(src, "argc", &["one", "two", "three"], 4);
 }
 
+/// Locate the `.text` section bytes in a PE32+ image by walking the
+/// section table. Used to inspect the emitted TLS access sequence.
+fn pe_text_section(bytes: &[u8]) -> &[u8] {
+    let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+    let coff_off = pe_off + 4;
+    let n_sections = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+    let optional_size = u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+    let sections_off = coff_off + 20 + optional_size;
+    for i in 0..n_sections {
+        let h = sections_off + i * 40;
+        if &bytes[h..h + 5] == b".text" {
+            let v_size = u32::from_le_bytes(bytes[h + 8..h + 12].try_into().unwrap()) as usize;
+            let raw_size = u32::from_le_bytes(bytes[h + 16..h + 20].try_into().unwrap()) as usize;
+            let p_off = u32::from_le_bytes(bytes[h + 20..h + 24].try_into().unwrap()) as usize;
+            let n = v_size.min(raw_size);
+            return &bytes[p_off..p_off + n];
+        }
+    }
+    panic!(".text section not found in PE image");
+}
+
+/// Cross-unit `extern _Thread_local` on Windows/AArch64. One unit
+/// defines the thread-local storage; `main` in another reads it through
+/// an `extern` declaration (the cross-unit access the codegen lowers to
+/// a TEB-indexed sequence with a link-patched offset) and through the
+/// defining unit's accessor (a unit-local access). The linker resolves
+/// the extern access's `add` imm12 against the merged TLS layout. The
+/// test asserts the link succeeds, that the emitted access reads the TEB
+/// TLS array at `[x18, #0x58]` and ends in an `add x?, x16, #imm12` whose
+/// immediate the linker filled to a non-zero value, and -- when a PE
+/// runner is available -- that the program exits 0 (its exit code is a
+/// failure bitmask over the checks).
+#[test]
+fn cross_unit_thread_local() {
+    let copts = crate::CompileOptions::default().with_no_entry_point(true);
+    let compile = |src: &str| -> crate::Program {
+        Compiler::with_options(
+            super::with_prelude(src),
+            Target::WindowsAarch64,
+            copts.clone(),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+
+    const UNIT_DEF: &str = "\
+_Thread_local int g_a = 11;\n\
+_Thread_local int g_b = 22;\n\
+int read_a(void) { return g_a; }\n\
+void set_a(int v) { g_a = v; }\n";
+
+    const UNIT_MAIN: &str = "\
+extern _Thread_local int g_a;\n\
+extern _Thread_local int g_b;\n\
+int read_a(void); void set_a(int);\n\
+int main(void) {\n\
+    int f = 0;\n\
+    if (g_a != 11) f |= 1;\n\
+    if (g_b != 22) f |= 2;\n\
+    if (read_a() != 11) f |= 4;\n\
+    set_a(99);\n\
+    if (g_a != 99) f |= 8;\n\
+    if (read_a() != 99) f |= 16;\n\
+    return f;\n\
+}\n";
+
+    let prog_main = compile(UNIT_MAIN);
+    let prog_def = compile(UNIT_DEF);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_main, &prog_def],
+        Target::WindowsAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link cross-unit TLS: {e}"));
+
+    // The TEB-indexed access opens with `ldr x16, [x18, #0x58]` and ends
+    // four words later in `add x?, x16, #imm12`. The extern access leaves
+    // the imm12 at 0 for the linker to patch, so at least one such `add`
+    // must carry a non-zero offset after the link.
+    let text = pe_text_section(&bytes);
+    const TEB_LOAD: u32 = 0xF940_2E50; // ldr x16, [x18, #0x58]
+    let mut teb_loads = 0usize;
+    let mut patched_add = false;
+    let mut i = 0;
+    while i + 4 <= text.len() {
+        let w = u32::from_le_bytes(text[i..i + 4].try_into().unwrap());
+        if w == TEB_LOAD {
+            teb_loads += 1;
+            // add x?, x16, #imm12 : opcode 0x91, rn (bits 5..10) == 16.
+            let add_off = i + 16;
+            if add_off + 4 <= text.len() {
+                let a = u32::from_le_bytes(text[add_off..add_off + 4].try_into().unwrap());
+                let is_add_imm = (a & 0xFF80_0000) == 0x9100_0000;
+                let rn = (a >> 5) & 0x1F;
+                let imm12 = (a >> 10) & 0xFFF;
+                if is_add_imm && rn == 16 && imm12 != 0 {
+                    patched_add = true;
+                }
+            }
+        }
+        i += 4;
+    }
+    assert!(
+        teb_loads >= 1,
+        "expected at least one TEB TLS-array load `ldr x16, [x18, #0x58]`"
+    );
+    assert!(
+        patched_add,
+        "expected a TEB-indexed `add x?, x16, #imm12` with a link-patched non-zero offset"
+    );
+
+    let path = unique_temp_path("badc-pe-arm64-test", "cross_unit_tls");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    let outcome = run_pe(&path, &[]);
+    let _ = std::fs::remove_file(&path);
+    match outcome {
+        Some(Ok(o)) => assert_eq!(
+            o.status.code(),
+            Some(0),
+            "cross-unit thread-local mismatch (failure bitmask in exit code); stderr: {}",
+            String::from_utf8_lossy(&o.stderr)
+        ),
+        Some(Err(e)) => panic!("exec cross-unit TLS PE: {e}"),
+        None => eprintln!("skip cross_unit_thread_local run: no PE runner on this host"),
+    }
+}
+
+/// A `_Thread_local` defined in a TU that is not first in TLS layout must
+/// have its LOCAL accesses (writes and reads within the defining TU)
+/// resolve to the same merged offset as EXTERN accesses from other TUs. A
+/// pad TU with its own TLS data forces the definer off TLS base 0; if the
+/// local path baked the raw block offset while the extern path rebased to
+/// the merged offset, a local write and an extern read hit different slots.
+#[test]
+fn cross_unit_thread_local_rebased() {
+    let copts = crate::CompileOptions::default().with_no_entry_point(true);
+    let compile = |src: &str| -> crate::Program {
+        Compiler::with_options(
+            super::with_prelude(src),
+            Target::WindowsAarch64,
+            copts.clone(),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+
+    const UNIT_PAD: &str = "\
+_Thread_local long long pad0 = 0x100;\n\
+_Thread_local long long pad1 = 0x200;\n\
+long long read_pad(void) { return pad0 + pad1; }\n";
+
+    const UNIT_DEF: &str = "\
+_Thread_local int g_a = 11;\n\
+_Thread_local int g_b = 22;\n\
+int read_a(void) { return g_a; }\n\
+void set_a(int v) { g_a = v; }\n";
+
+    const UNIT_MAIN: &str = "\
+extern _Thread_local int g_a;\n\
+extern _Thread_local int g_b;\n\
+int read_a(void); void set_a(int);\n\
+long long read_pad(void);\n\
+int main(void) {\n\
+    int f = 0;\n\
+    if (read_pad() != 0x300) f |= 32;\n\
+    if (g_a != 11) f |= 1;\n\
+    if (g_b != 22) f |= 2;\n\
+    if (read_a() != 11) f |= 4;\n\
+    set_a(99);\n\
+    if (g_a != 99) f |= 8;\n\
+    if (read_a() != 99) f |= 16;\n\
+    return f;\n\
+}\n";
+
+    let prog_main = compile(UNIT_MAIN);
+    let prog_pad = compile(UNIT_PAD);
+    let prog_def = compile(UNIT_DEF);
+
+    // Link order places the pad TU's TLS (16 bytes) before the definer's,
+    // so the definer's block starts at merged offset 16.
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_main, &prog_pad, &prog_def],
+        Target::WindowsAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link cross-unit TLS rebased: {e}"));
+
+    // The pad pushes the definer's vars to offset >= 16, so at least one
+    // TEB-indexed `add x?, x16, #imm12` must carry imm12 >= 16. The pad's
+    // own accesses sit at offsets 0 and 8, so this is unique to the rebase.
+    let text = pe_text_section(&bytes);
+    const TEB_LOAD: u32 = 0xF940_2E50; // ldr x16, [x18, #0x58]
+    let mut rebased_add = false;
+    let mut i = 0;
+    while i + 4 <= text.len() {
+        let w = u32::from_le_bytes(text[i..i + 4].try_into().unwrap());
+        if w == TEB_LOAD {
+            let add_off = i + 16;
+            if add_off + 4 <= text.len() {
+                let a = u32::from_le_bytes(text[add_off..add_off + 4].try_into().unwrap());
+                let is_add_imm = (a & 0xFF80_0000) == 0x9100_0000;
+                let rn = (a >> 5) & 0x1F;
+                let imm12 = (a >> 10) & 0xFFF;
+                if is_add_imm && rn == 16 && imm12 >= 16 {
+                    rebased_add = true;
+                }
+            }
+        }
+        i += 4;
+    }
+    assert!(
+        rebased_add,
+        "expected a TEB-indexed `add x?, x16, #imm12` with imm12 >= 16 (definer rebased past the pad)"
+    );
+
+    let path = unique_temp_path("badc-pe-arm64-test", "cross_unit_tls_rebased");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    let outcome = run_pe(&path, &[]);
+    let _ = std::fs::remove_file(&path);
+    match outcome {
+        Some(Ok(o)) => assert_eq!(
+            o.status.code(),
+            Some(0),
+            "rebased cross-unit thread-local mismatch (failure bitmask in exit code); stderr: {}",
+            String::from_utf8_lossy(&o.stderr)
+        ),
+        Some(Err(e)) => panic!("exec rebased cross-unit TLS PE: {e}"),
+        None => eprintln!("skip cross_unit_thread_local_rebased run: no PE runner on this host"),
+    }
+}
+
 // ---------------- fixture parity ----------------
 
 fn build_and_run_fixture(name: &str) -> RunOutcome {
@@ -541,6 +781,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_macro_named_rest.c", 0),
     ("stdatomic_c11.c", 0),
     ("atomic_rmw_ops.c", 0),
+    ("fn_ptr_typedef_multi_declarator.c", 0),
     ("compound_literal_tagged_address.c", 0),
     ("function_typed_parameter.c", 0),
     ("static_init_braced_scalar.c", 0),

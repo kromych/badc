@@ -155,6 +155,12 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
     link_objs = [t for t in link_toks if t.endswith(".o")]
     log(f"interpreter links {len(link_objs)} objects")
 
+    # BADC_PY_O_ONLY restricts the optimizer to a comma-separated set of
+    # source basenames (the rest compile without -O). Used to bisect which
+    # translation unit a -O miscompile lives in.
+    opt_only = os.environ.get("BADC_PY_O_ONLY")
+    opt_only = {n for n in opt_only.split(",") if n} if opt_only else None
+
     objs, fails = [], []
     for obj in link_objs:
         if obj not in compiles:
@@ -181,7 +187,10 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
         # interpreter and to exercise the optimization passes across the
         # whole source. The host build trace's own -O flags are dropped by
         # parse_commands, so this is the only optimization control.
-        opt = ["-O"] if os.environ.get("BADC_PY_O") else []
+        do_opt = bool(os.environ.get("BADC_PY_O"))
+        if do_opt and opt_only is not None:
+            do_opt = os.path.basename(src) in opt_only
+        opt = ["-O"] if do_opt else []
         # `--gnu` mirrors the reference clang build: __GNUC__ makes the
         # struct layouts (packed tracemalloc) match the clang-built
         # extension modules, and the __STRICT_ANSI__ it implies routes

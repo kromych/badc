@@ -31,23 +31,33 @@ fn run_one(func: &mut FunctionSsa) {
         return;
     }
     let entry_range = func.blocks[0].inst_range.clone();
-    let mut canonical_data: HashMap<i64, ValueId> = HashMap::new();
-    let mut canonical_code: HashMap<usize, ValueId> = HashMap::new();
-    let mut canonical_tls: HashMap<i64, ValueId> = HashMap::new();
+    // An `ImmData(k)` / `ImmCode(t)` / `TlsAddr(off)` that binds to a
+    // cross-TU symbol (recorded in the extern-ref tables) materialises
+    // that symbol's address, not a writer-layout address; two such with
+    // a matching inst key but different symbols are different values.
+    // Fold the bound symbol into the dedup key (u32::MAX = no binding).
+    let collect_sym = |refs: &[(u32, u32)]| -> HashMap<u32, u32> { refs.iter().copied().collect() };
+    let data_sym = collect_sym(&func.extern_imm_data_refs);
+    let code_sym = collect_sym(&func.extern_imm_code_refs);
+    let tls_sym = collect_sym(&func.extern_tls_refs);
+    let mut canonical_data: HashMap<(i64, u32), ValueId> = HashMap::new();
+    let mut canonical_code: HashMap<(usize, u32), ValueId> = HashMap::new();
+    let mut canonical_tls: HashMap<(i64, u32), ValueId> = HashMap::new();
     for idx in entry_range.clone() {
         let i = idx as usize;
         if i >= func.insts.len() {
             break;
         }
+        let sym = |m: &HashMap<u32, u32>| m.get(&(idx)).copied().unwrap_or(u32::MAX);
         match &func.insts[i] {
             Inst::ImmData(k) => {
-                canonical_data.entry(*k).or_insert(idx);
+                canonical_data.entry((*k, sym(&data_sym))).or_insert(idx);
             }
             Inst::ImmCode(t) => {
-                canonical_code.entry(*t).or_insert(idx);
+                canonical_code.entry((*t, sym(&code_sym))).or_insert(idx);
             }
             Inst::TlsAddr(off) => {
-                canonical_tls.entry(*off).or_insert(idx);
+                canonical_tls.entry((*off, sym(&tls_sym))).or_insert(idx);
             }
             _ => {}
         }
@@ -60,9 +70,10 @@ fn run_one(func: &mut FunctionSsa) {
     for (idx, inst) in func.insts.iter().enumerate() {
         if idx >= entry_range.end as usize {
             // Non-entry block.
+            let sym = |m: &HashMap<u32, u32>| m.get(&(idx as u32)).copied().unwrap_or(u32::MAX);
             match inst {
                 Inst::ImmData(k) => {
-                    if let Some(&canon) = canonical_data.get(k)
+                    if let Some(&canon) = canonical_data.get(&(*k, sym(&data_sym)))
                         && canon != idx as ValueId
                     {
                         redirect[idx] = Some(canon);
@@ -70,7 +81,7 @@ fn run_one(func: &mut FunctionSsa) {
                     }
                 }
                 Inst::ImmCode(t) => {
-                    if let Some(&canon) = canonical_code.get(t)
+                    if let Some(&canon) = canonical_code.get(&(*t, sym(&code_sym)))
                         && canon != idx as ValueId
                     {
                         redirect[idx] = Some(canon);
@@ -78,7 +89,7 @@ fn run_one(func: &mut FunctionSsa) {
                     }
                 }
                 Inst::TlsAddr(off) => {
-                    if let Some(&canon) = canonical_tls.get(off)
+                    if let Some(&canon) = canonical_tls.get(&(*off, sym(&tls_sym)))
                         && canon != idx as ValueId
                     {
                         redirect[idx] = Some(canon);

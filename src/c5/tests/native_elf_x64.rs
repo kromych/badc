@@ -914,6 +914,55 @@ int main(void) { return (read_shared() == 0x12345678) ? 0 : 1; }\n";
     );
 }
 
+/// Two distinct extern data symbols both lower to `Inst::ImmData(0)`.
+/// The cross-block ImmData dedup must not coalesce them: each binds to a
+/// different cross-TU symbol. `sym_a` is referenced in the entry block
+/// (the dedup canonical for the key) and `sym_b` only in a later block;
+/// coalescing makes the later reference read `sym_a`.
+#[test]
+fn cross_unit_dedup_imm_distinct_symbols() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "long sym_a = 100;\nlong sym_b = 7;\n";
+
+    const UNIT_B: &str = "\
+extern long sym_a;\n\
+extern long sym_b;\n\
+long combine(int c) { long r = sym_a; if (c) { r += sym_b; } return r; }\n\
+int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxX64,
+        NativeOptions::default().with_optimize(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf64-dedup-imm", "cross_unit_dedup_imm");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "distinct extern data symbols were coalesced by the ImmData dedup under -O"
+    );
+}
+
 /// A foreign (system-cc) caller that keeps a live value in r13 across a
 /// call into a badc-compiled callee must find it intact on return. r13
 /// is callee-saved under System V AMD64; badc borrows it as its reserved

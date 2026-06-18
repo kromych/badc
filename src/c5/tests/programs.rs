@@ -313,6 +313,14 @@ fn stdatomic_c11() {
 }
 
 #[test]
+fn atomic_rmw_ops() {
+    // C11 7.17.7 read-modify-write and compare-exchange across every
+    // operator and both exchange outcomes, including the expected-operand
+    // write-back on a failed compare-exchange.
+    assert_eq!(run_fixture("atomic_rmw_ops.c"), 0);
+}
+
+#[test]
 fn compound_literal_tagged_address() {
     // A block-scope compound literal whose member initializer tags an
     // address with a bitwise / shift operator takes the runtime path; a

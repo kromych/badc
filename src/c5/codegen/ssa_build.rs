@@ -32,8 +32,8 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
-    Terminator, ValueId,
+    AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
+    StoreKind, Terminator, ValueId,
 };
 
 /// Cached `(off, kind, value)` for a previously-pushed
@@ -922,6 +922,48 @@ impl SsaBuilder {
     pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64) {
         self.local_cache.clear();
         self.push(Inst::Mcpy { dst, src, size });
+    }
+
+    /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte
+    /// object at `addr` (C11 7.17.7). Returns the inst's id; its value
+    /// is the object's prior contents. Atomics are not pure and must
+    /// not be CSE'd, and they write through `addr` (which may alias an
+    /// escaped local), so the CSE cache is invalidated.
+    pub(crate) fn atomic_rmw(
+        &mut self,
+        op: AtomicRmwOp,
+        addr: ValueId,
+        value: ValueId,
+        width: u8,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicRmw {
+            op,
+            addr,
+            value,
+            width,
+        })
+    }
+
+    /// `Inst::AtomicCas` -- atomic compare-and-exchange on the
+    /// `width`-byte object at `addr` (C11 7.17.7.4). Returns the inst's
+    /// id; its value is 1 on success and 0 on failure, where a failure
+    /// stores the current `*addr` into `*expected_addr`. Writes through
+    /// both pointers, so the CSE cache is invalidated.
+    pub(crate) fn atomic_cas(
+        &mut self,
+        addr: ValueId,
+        expected_addr: ValueId,
+        desired: ValueId,
+        width: u8,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            width,
+        })
     }
 
     /// `Inst::Intrinsic` -- compiler-builtin (alloca / setjmp /

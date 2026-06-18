@@ -1324,9 +1324,18 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
     // get put back so the writer can resolve them against its
     // own `.data` vmaddr later.
     let pending = core::mem::take(&mut merged.pending_imports);
+    let data_imports = merged.data_import_indices.clone();
     let mut parked_back: Vec<PendingImportReloc> = Vec::new();
     for reloc in &pending {
         if reloc.import_index == usize::MAX {
+            parked_back.push(reloc.clone());
+            continue;
+        }
+        // A data import takes no call stub: its reference loads the
+        // IAT slot directly. Re-park the reloc unchanged so
+        // `synth_fixups` projects it to a data-load GotFixup
+        // (lea -> mov against the slot).
+        if data_imports.contains(&reloc.import_index) {
             parked_back.push(reloc.clone());
             continue;
         }
@@ -1363,6 +1372,9 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
     // within the merged text.
     for reloc in &pending {
         if reloc.import_index == usize::MAX {
+            continue;
+        }
+        if data_imports.contains(&reloc.import_index) {
             continue;
         }
         let site = reloc.text_offset as usize;

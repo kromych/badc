@@ -11,7 +11,7 @@
 use alloc::string::String;
 
 use super::super::codegen::Target;
-use super::super::ir::{BinOp, FunctionSsa, LoadKind, StoreKind};
+use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::{AtomicKind, Expr, ExprId, Stmt, StmtId, UnOp};
@@ -2961,16 +2961,14 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Lower a C11 7.17 atomic operation to ordinary load / store /
-    /// read-modify-write on the pointee width. A naturally-aligned
-    /// scalar load and store is already atomic on the supported
-    /// targets, so `atomic_load` / `atomic_store` carry full
-    /// semantics. The read-modify-write and compare-exchange forms
-    /// lower to a non-atomic load-op-store sequence: correct for a
-    /// single thread of execution but not yet inter-thread atomic.
-    // TODO: emit the target's atomic read-modify-write (x86 lock
-    // prefix / xchg / cmpxchg, AArch64 LSE or load-exclusive /
-    // store-exclusive) for the RMW and compare-exchange forms.
+    /// Lower a C11 7.17 atomic operation. A naturally-aligned scalar
+    /// load and store is already atomic on the supported targets, so
+    /// `atomic_load` / `atomic_store` lower to a plain load / store.
+    /// The read-modify-write and compare-exchange forms lower to the
+    /// dedicated `Inst::AtomicRmw` / `Inst::AtomicCas`, which the
+    /// per-arch emit turns into a genuine atomic sequence (C11
+    /// 7.17.7); `width` is the access size of the atomic object's
+    /// element type in bytes.
     fn walk_atomic(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
@@ -2980,6 +2978,7 @@ impl<'a> Walker<'a> {
     ) -> Result<super::super::ir::ValueId, WalkError> {
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
+        let width = type_size_bytes(elem_ty, self.target) as u8;
         let addr = self.walk_expr_rvalue(b, args[0])?;
         match kind {
             AtomicKind::Load => Ok(b.load(addr, load_kind)),
@@ -2996,44 +2995,60 @@ impl<'a> Walker<'a> {
             | AtomicKind::FetchOr
             | AtomicKind::FetchXor => {
                 let value = self.walk_expr_rvalue(b, args[1])?;
-                let old = b.load(addr, load_kind);
-                let new = match kind {
-                    AtomicKind::Exchange => value,
-                    AtomicKind::FetchAdd => b.binop(BinOp::Add, old, value),
-                    AtomicKind::FetchSub => b.binop(BinOp::Sub, old, value),
-                    AtomicKind::FetchAnd => b.binop(BinOp::And, old, value),
-                    AtomicKind::FetchOr => b.binop(BinOp::Or, old, value),
-                    AtomicKind::FetchXor => b.binop(BinOp::Xor, old, value),
+                let op = match kind {
+                    AtomicKind::Exchange => AtomicRmwOp::Xchg,
+                    AtomicKind::FetchAdd => AtomicRmwOp::Add,
+                    AtomicKind::FetchSub => AtomicRmwOp::Sub,
+                    AtomicKind::FetchAnd => AtomicRmwOp::And,
+                    AtomicKind::FetchOr => AtomicRmwOp::Or,
+                    AtomicKind::FetchXor => AtomicRmwOp::Xor,
                     _ => unreachable!(),
                 };
-                b.store(addr, new, store_kind);
-                // C11 7.17.7: the prior value of the object.
-                Ok(old)
+                // C11 7.17.7p2: the prior value of the object. The atomic
+                // instruction sets only the low `width` bytes; normalize
+                // to the element type's representation (C99 6.3.1.3), the
+                // same sign / zero extension a load of `elem_ty` performs.
+                let old = b.atomic_rmw(op, addr, value, width);
+                Ok(self.extend_atomic_result(b, old, elem_ty))
             }
             AtomicKind::CompareExchangeStrong => {
-                // C11 7.17.7.4. Branchless: a select via a 0/-1 mask
-                // keeps the lowering free of basic-block management.
-                // When the comparison fails the back-stores rewrite the
-                // same bytes, a no-op for a single thread.
+                // C11 7.17.7.4: yield 1 on a match (after storing
+                // `desired`), else store the current contents into
+                // `*expected` and yield 0.
                 let exp_addr = self.walk_expr_rvalue(b, args[1])?;
                 let desired = self.walk_expr_rvalue(b, args[2])?;
-                let cur = b.load(addr, load_kind);
-                let ecur = b.load(exp_addr, load_kind);
-                let eq = b.binop(BinOp::Eq, cur, ecur);
-                let zero = b.imm(0);
-                let mask = b.binop(BinOp::Sub, zero, eq); // 0 or -1
-                // *p     = eq ? desired : cur
-                let cxd = b.binop(BinOp::Xor, cur, desired);
-                let sel_p = b.binop(BinOp::And, cxd, mask);
-                let new_p = b.binop(BinOp::Xor, cur, sel_p);
-                b.store(addr, new_p, store_kind);
-                // *expected = eq ? *expected : cur
-                let cxe = b.binop(BinOp::Xor, cur, ecur);
-                let sel_e = b.binop(BinOp::And, cxe, mask);
-                let new_e = b.binop(BinOp::Xor, cur, sel_e);
-                b.store(exp_addr, new_e, store_kind);
-                Ok(eq)
+                Ok(b.atomic_cas(addr, exp_addr, desired, width))
             }
+        }
+    }
+
+    /// Normalize a sub-`int` atomic read-modify-write result to its
+    /// element type's representation (C99 6.3.1.3): zero-extend an
+    /// unsigned narrow type, sign-extend a signed one. A 4- or 8-byte
+    /// type and a pointer ride the register at full width unchanged.
+    fn extend_atomic_result(
+        &self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        v: super::super::ir::ValueId,
+        elem_ty: i64,
+    ) -> super::super::ir::ValueId {
+        if is_pointer_ty(elem_ty) {
+            return v;
+        }
+        let rs = type_size_bytes(elem_ty, self.target);
+        if rs >= 8 {
+            return v;
+        }
+        // The atomic instruction defines only the low `rs` bytes of the
+        // prior value; canonicalize the rest per C99 6.3.1.3. `int` and
+        // `long` are 4 bytes on LLP64, so every sub-8-byte width needs this.
+        if (elem_ty & UNSIGNED_BIT) != 0 {
+            let mask: i64 = (1i64 << (rs as i64 * 8)) - 1;
+            b.binop_imm(BinOp::And, v, mask)
+        } else {
+            let bits = 64i64 - (rs as i64) * 8;
+            let shifted = b.binop_imm(BinOp::Shl, v, bits);
+            b.binop_imm(BinOp::Shr, shifted, bits)
         }
     }
 

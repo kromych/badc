@@ -304,6 +304,20 @@ fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
             *dst = map_v(*dst, remap);
             *src = map_v(*src, remap);
         }
+        Inst::AtomicRmw { addr, value, .. } => {
+            *addr = map_v(*addr, remap);
+            *value = map_v(*value, remap);
+        }
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            ..
+        } => {
+            *addr = map_v(*addr, remap);
+            *expected_addr = map_v(*expected_addr, remap);
+            *desired = map_v(*desired, remap);
+        }
         Inst::Phi { incoming, .. } => {
             for (_, v) in incoming.iter_mut() {
                 *v = map_v(*v, remap);

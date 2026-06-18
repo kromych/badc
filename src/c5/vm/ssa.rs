@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::host::Host;
 use super::super::ir::{
-    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
+    AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
 };
 
 /// `Inst::ImmCode` results are tagged with this bit set so
@@ -876,6 +876,65 @@ fn run_inst<H: Host>(
             mem.copy_within(dst_addr as usize, src_addr as usize, *size as usize)?;
             // Mcpy returns the destination address (c5 model).
             frame.regs[v as usize] = dst_addr;
+            return Ok(());
+        }
+        Inst::AtomicRmw {
+            op,
+            addr,
+            value,
+            width,
+        } => {
+            // C11 7.17.7. The interpreter is single-threaded, so a
+            // load-op-store reproduces the architectural effect; the
+            // prior contents are the result (7.17.7p2).
+            let a = frame.regs[*addr as usize];
+            let operand = frame.regs[*value as usize];
+            atomic_addr_check(a, "AtomicRmw")?;
+            let (lk, sk) = atomic_kinds(*width);
+            mem.check_data_access(a as usize, *width as usize, AccessKind::Read)?;
+            mem.check_data_access(a as usize, *width as usize, AccessKind::Write)?;
+            let old = load_from_memory(mem, a as usize, lk)?;
+            let new = match op {
+                AtomicRmwOp::Xchg => operand,
+                AtomicRmwOp::Add => old.wrapping_add(operand),
+                AtomicRmwOp::Sub => old.wrapping_sub(operand),
+                AtomicRmwOp::And => old & operand,
+                AtomicRmwOp::Or => old | operand,
+                AtomicRmwOp::Xor => old ^ operand,
+            };
+            store_to_memory(mem, a as usize, narrow_store(new, sk), sk)?;
+            frame.regs[v as usize] = old;
+            return Ok(());
+        }
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            width,
+        } => {
+            // C11 7.17.7.4. Single-threaded: load-compare-store. On a
+            // mismatch the current contents are written back into
+            // `*expected_addr` and the result is 0; on a match
+            // `desired` is stored and the result is 1.
+            let a = frame.regs[*addr as usize];
+            let exp = frame.regs[*expected_addr as usize];
+            let des = frame.regs[*desired as usize];
+            atomic_addr_check(a, "AtomicCas")?;
+            atomic_addr_check(exp, "AtomicCas")?;
+            let (lk, sk) = atomic_kinds(*width);
+            mem.check_data_access(a as usize, *width as usize, AccessKind::Read)?;
+            mem.check_data_access(a as usize, *width as usize, AccessKind::Write)?;
+            mem.check_data_access(exp as usize, *width as usize, AccessKind::Read)?;
+            mem.check_data_access(exp as usize, *width as usize, AccessKind::Write)?;
+            let cur = load_from_memory(mem, a as usize, lk)?;
+            let ecur = load_from_memory(mem, exp as usize, lk)?;
+            if cur == ecur {
+                store_to_memory(mem, a as usize, narrow_store(des, sk), sk)?;
+                frame.regs[v as usize] = 1;
+            } else {
+                store_to_memory(mem, exp as usize, narrow_store(cur, sk), sk)?;
+                frame.regs[v as usize] = 0;
+            }
             return Ok(());
         }
         Inst::LoadIndexed { .. } => "LoadIndexed",
@@ -1739,6 +1798,33 @@ fn store_to_memory(
         // `double` is 8 bytes; write the raw f64 bit pattern.
         StoreKind::F64 => mem.write_bytes(addr, &value.to_le_bytes()),
     }
+}
+
+/// Load / store kinds for a `width`-byte atomic object (C11 7.17.7).
+/// The load is signed at the access width so the prior-value result
+/// matches a signed read; an unsigned C type's user re-narrows it.
+fn atomic_kinds(width: u8) -> (LoadKind, StoreKind) {
+    match width {
+        1 => (LoadKind::I8, StoreKind::I8),
+        2 => (LoadKind::I16, StoreKind::I16),
+        4 => (LoadKind::I32, StoreKind::I32),
+        _ => (LoadKind::I64, StoreKind::I64),
+    }
+}
+
+/// Reject a code pointer or negative address for an atomic access,
+/// mirroring the `Load` / `Store` checks.
+fn atomic_addr_check(addr: i64, op: &str) -> Result<(), C5Error> {
+    if addr & CODE_ADDR_MASK != 0
+        || addr < 0
+        || ((addr as usize) >= super::super::CODE_BASE
+            && (addr as usize) < super::super::CODE_BASE + (1usize << 20))
+    {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: {op}: addr 0x{addr:016x} is not a data pointer (code is not data)",
+        )));
+    }
+    Ok(())
 }
 
 /// Truncate a value to the store kind's width; the high bits

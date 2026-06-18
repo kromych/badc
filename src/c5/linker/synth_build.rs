@@ -216,6 +216,41 @@ fn synth_program_and_build(
         }
     }
 
+    // Per-function Win64 unwind descriptors for the x86_64 PE writer.
+    // The merged image holds the final `.text` and each function's
+    // begin offset (identity `pc_to_native`); the end is the next
+    // function's begin. The prologue layout is recovered from the
+    // emitted bytes by this backend's prologue-grammar decoder
+    // (`decode_x86_64_prologue_unwind`), keyed on the post-prologue
+    // anchor that survives the link. Other targets leave it empty.
+    let fn_unwind: Vec<crate::c5::codegen::FnUnwind> = if target == Target::WindowsX64 {
+        let mut begins: Vec<u32> = func_ent_pcs.iter().map(|&p| p as u32).collect();
+        begins.sort_unstable();
+        begins.dedup();
+        let text_len = merged.text.len() as u32;
+        begins
+            .iter()
+            .enumerate()
+            .map(|(i, &begin)| {
+                let end = begins.get(i + 1).copied().unwrap_or(text_len);
+                // No anchor (synthetic trampoline / no standard
+                // prologue) -> frameless leaf covering [begin, end).
+                let prologue_end = func_prologue_native
+                    .get(&(begin as usize))
+                    .map(|&p| p as u32)
+                    .unwrap_or(begin);
+                crate::c5::codegen::decode_x86_64_prologue_unwind(
+                    &merged.text,
+                    begin,
+                    end,
+                    prologue_end,
+                )
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     // Resolve each data-import copy relocation against the merged
     // symbol table. The local data object named in the binding must be
     // defined in the image (e.g. runtime.c's `environ`); carry its
@@ -292,6 +327,7 @@ fn synth_program_and_build(
         func_names,
         func_prologue_native,
         promoted_local_slots: alloc::collections::BTreeMap::new(),
+        fn_unwind,
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),
         user_extern_data_refs: Vec::new(),
@@ -547,9 +583,13 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
         got_fixups.push(GotFixup {
             adrp_offset: tramp.text_offset,
             import_index: tramp.import_index,
+            // Trampolines are branched to via the IAT, not read as
+            // data; the writer patches them with an IAT lookup.
+            is_data_load: false,
         });
     }
 
+    let data_imports = &merged.data_import_indices;
     for reloc in &merged.pending_imports {
         match merged.machine {
             NativeMachine::Aarch64 => {
@@ -561,7 +601,13 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
                 )?;
             }
             NativeMachine::X86_64 => {
-                project_x86_64_pending(reloc, &mut got_fixups, &mut data_fixups, &mut func_fixups)?;
+                project_x86_64_pending(
+                    reloc,
+                    data_imports,
+                    &mut got_fixups,
+                    &mut data_fixups,
+                    &mut func_fixups,
+                )?;
             }
         }
     }
@@ -615,9 +661,13 @@ fn project_aarch64_pending(
                 Ok(())
             }
             NativeSymSection::Undef => {
+                // aarch64 loads the slot via adrp + ldr for both
+                // call thunks and data references, so the data-load
+                // flag is irrelevant here.
                 got_fixups.push(GotFixup {
                     adrp_offset: reloc.text_offset as usize,
                     import_index: reloc.import_index,
+                    is_data_load: false,
                 });
                 Ok(())
             }
@@ -633,6 +683,7 @@ fn project_aarch64_pending(
 
 fn project_x86_64_pending(
     reloc: &super::link::PendingImportReloc,
+    data_imports: &alloc::collections::BTreeSet<usize>,
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
@@ -689,9 +740,16 @@ fn project_x86_64_pending(
             Ok(())
         }
         NativeSymSection::Undef => {
+            // A data import re-parked by `emit_x86_64_plt` reaches
+            // here with no call thunk; its `lea reg, [rip+disp32]`
+            // must become a `mov reg, [rip+disp32]` loading the IAT
+            // slot's value. A function import flows through its
+            // trampoline GotFixup and takes the IAT-lookup form.
+            let is_data_load = data_imports.contains(&reloc.import_index);
             got_fixups.push(GotFixup {
                 adrp_offset: instr_offset,
                 import_index: reloc.import_index,
+                is_data_load,
             });
             Ok(())
         }

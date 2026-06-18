@@ -252,6 +252,13 @@ pub(crate) struct Lexer {
     /// literals store this many bytes per element.
     pub wchar_bytes: usize,
 
+    /// Whether plain `char` is signed for the target (C99 6.2.5p15
+    /// leaves it implementation-defined). Set from the target after
+    /// construction, like `wchar_bytes`. A single-character constant is
+    /// sign-extended when true so `'\x80'` is -128, matching a `char`
+    /// lvalue load and a `switch` over `char`-valued case labels.
+    pub char_signed: bool,
+
     /// `#pragma pack(N)` stack. Top of stack is the active pack value
     /// at the current source position; struct layout (`aggregate.rs`)
     /// reads it via [`Self::current_pack`] and clamps each field's
@@ -380,6 +387,7 @@ impl Lexer {
             int_is_decimal: true,
             str_is_wide: false,
             wchar_bytes: 4,
+            char_signed: true,
             // Bottom of the stack is the default pack -- c5 already
             // caps struct alignment at 8, and that's the implicit
             // upper bound here too. Real `#pragma pack(N)` updates
@@ -1382,10 +1390,21 @@ impl Lexer {
                     } else {
                         char_count += 1;
                         char_acc = (char_acc << 8) | (val & 0xFF);
-                        // Single-character constant keeps its exact value
-                        // (so a hex escape that overran a byte is not
-                        // re-masked); multi-character packs the bytes.
-                        self.ival = if char_count == 1 { val } else { char_acc };
+                        // C99 6.4.4.4p10: a single-character constant has
+                        // the value of its char interpreted as int.
+                        // Sign-extend on signed-char targets so `'\x80'`
+                        // is -128, matching a `char` lvalue read; a hex /
+                        // octal escape that overran a byte keeps its wider
+                        // value. Multi-character packs the bytes.
+                        self.ival = if char_count == 1 {
+                            if self.char_signed && (0..=0xFF).contains(&val) {
+                                val as i8 as i64
+                            } else {
+                                val
+                            }
+                        } else {
+                            char_acc
+                        };
                     }
                 }
                 self.pos += 1;
@@ -2053,6 +2072,26 @@ mod tests {
         assert_eq!(lex_char_literal(r#"'\n'"#), b'\n' as i64);
         assert_eq!(lex_char_literal(r#"'\x7f'"#), 0x7F);
         assert_eq!(lex_char_literal(r#"'\0'"#), 0);
+    }
+
+    #[test]
+    fn char_constant_high_bit_sign_extends_on_signed_char() {
+        // C99 6.4.4.4p10: a single-character constant has the value of
+        // its char as int; on a signed-char target the high bit
+        // sign-extends (so it equals a `char` lvalue holding the byte).
+        // `lex_char_literal` constructs a default Lexer (char_signed).
+        assert_eq!(lex_char_literal(r#"'\x80'"#), -128);
+        assert_eq!(lex_char_literal(r#"'\xff'"#), -1);
+        assert_eq!(lex_char_literal(r#"'A'"#), 0x41);
+
+        // An unsigned-char target keeps the byte value.
+        let mut lex = Lexer::new(r#"'\x80'"#.to_string());
+        lex.char_signed = false;
+        let mut symbols: Vec<Symbol> = Vec::new();
+        let mut index = SymbolIndex::new();
+        let mut data: Vec<u8> = Vec::new();
+        lex.next(&mut symbols, &mut index, &mut data).unwrap();
+        assert_eq!(lex.ival, 128);
     }
 
     #[test]

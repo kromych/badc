@@ -54,11 +54,12 @@ use super::aarch64::{
     enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
     enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzu_x_d, enc_fdiv_d,
     enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
-    enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm,
-    enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv,
-    enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stp_pre, enc_str_d_imm,
-    enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm,
-    enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv, load_imm64,
+    enc_ldaxr, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
+    enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
+    enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv,
+    enc_stlxr, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
+    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv,
+    load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
 
@@ -2061,6 +2062,28 @@ fn emit_inst(
             src: s,
             size,
         } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame, scratch),
+        Inst::AtomicRmw {
+            op,
+            addr,
+            value,
+            width,
+        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame, scratch),
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            width,
+        } => emit_atomic_cas(
+            code,
+            dst,
+            *addr,
+            *expected_addr,
+            *desired,
+            *width,
+            alloc,
+            frame,
+            scratch,
+        ),
         Inst::Intrinsic { kind, args } => emit_intrinsic(
             code,
             func,
@@ -3911,6 +3934,222 @@ fn emit_mcpy(
         let sp_off = spill_off(frame, slot);
         emit_sp_str_x_auto(code, dst_r, sp_off);
     }
+    true
+}
+
+/// Bytes the atomic lowering reserves to save the four borrowed
+/// working registers x9..x12 (two `stp` pairs). 16-byte aligned so the
+/// `stp`/`ldp` pre/post-index forms apply.
+const ATOMIC_SAVE_BYTES: u32 = 32;
+
+/// Save x9..x12 (the borrowed working registers) onto the stack and
+/// return their reload site for [`atomic_restore_working`]. The SSA
+/// emit sees only `Place`s, not liveness past this instruction, so a
+/// value the allocator parked in any caller-pool register survives the
+/// save / restore. sp moves down by [`ATOMIC_SAVE_BYTES`].
+fn atomic_save_working(code: &mut Vec<u8>) {
+    emit(
+        code,
+        enc_stp_pre(Reg(9), Reg(10), Reg(31), -(ATOMIC_SAVE_BYTES as i32)),
+    );
+    emit(code, enc_stp_pre(Reg(11), Reg(12), Reg(31), 0));
+}
+
+/// Restore x9..x12 saved by [`atomic_save_working`]. Run after the
+/// result is held in a reserved scratch (x16 / x17), since the result
+/// must outlive the reload.
+fn atomic_restore_working(code: &mut Vec<u8>) {
+    emit(code, enc_ldp_post(Reg(11), Reg(12), Reg(31), 0));
+    emit(
+        code,
+        enc_ldp_post(Reg(9), Reg(10), Reg(31), ATOMIC_SAVE_BYTES as i32),
+    );
+}
+
+/// Materialise an operand into a designated register, copying it out
+/// of its allocator register when needed so the caller can clobber the
+/// source. `sp_shift` accounts for the working-register save area.
+fn atomic_operand_into(
+    code: &mut Vec<u8>,
+    value: super::super::ir::ValueId,
+    target: Reg,
+    frame: Frame,
+    sp_shift: u32,
+    alloc: &Allocation,
+) -> bool {
+    let place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    match materialize_int_shifted(code, place, target, frame, sp_shift) {
+        Some(r) => {
+            if r.0 != target.0 {
+                emit_mov_reg(code, target, r);
+            }
+            true
+        }
+        None => false,
+    }
+}
+
+/// Write the result `src` of an atomic op into the inst's `dst`
+/// `Place`. Run after the working registers are restored so a spilled
+/// result lands at the unshifted sp offset.
+fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != src.0 {
+            emit_mov_reg(code, rd, src);
+        }
+    } else if let Place::Spill(slot) = dst {
+        let sp_off = spill_off(frame, slot);
+        emit_sp_str_x_auto(code, src, sp_off);
+    }
+}
+
+/// C11 7.17.7.2-7.17.7.5 atomic read-modify-write via an LDAXR / STLXR
+/// retry loop (ARM ARM C6.2): load-acquire the prior value, compute the
+/// new value, store-release it exclusively, and retry while the monitor
+/// was lost. The acquire / release pair carries the
+/// sequentially-consistent ordering. The prior value is the result.
+#[allow(clippy::too_many_arguments)]
+fn emit_atomic_rmw(
+    code: &mut Vec<u8>,
+    dst: Place,
+    op: super::super::ir::AtomicRmwOp,
+    addr: super::super::ir::ValueId,
+    value: super::super::ir::ValueId,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use super::super::ir::AtomicRmwOp as Op;
+    // x9 = addr, x10 = operand (borrowed, saved); x16 = old (result,
+    // reserved so it survives the reload); x11 = new, w12 = status.
+    let a = Reg(9);
+    let operand = Reg(10);
+    let old = scratch.primary; // x16
+    let new = Reg(11);
+    let status = Reg(12);
+    atomic_save_working(code);
+    if !atomic_operand_into(code, addr, a, frame, ATOMIC_SAVE_BYTES, alloc)
+        || !atomic_operand_into(code, value, operand, frame, ATOMIC_SAVE_BYTES, alloc)
+    {
+        bail_msg("AtomicRmw: operand not int reg / spill");
+        return false;
+    }
+    let loop_start = code.len();
+    emit(code, enc_ldaxr(old, a, width));
+    let new_reg = match op {
+        Op::Xchg => operand,
+        Op::Add => {
+            emit(code, enc_add_reg(new, old, operand));
+            new
+        }
+        Op::Sub => {
+            emit(code, enc_sub_reg(new, old, operand));
+            new
+        }
+        Op::And => {
+            emit(code, enc_and_reg(new, old, operand));
+            new
+        }
+        Op::Or => {
+            emit(code, enc_orr_reg(new, old, operand));
+            new
+        }
+        Op::Xor => {
+            emit(code, enc_eor_reg(new, old, operand));
+            new
+        }
+    };
+    emit(code, enc_stlxr(status, new_reg, a, width));
+    // cbnz w12, loop -- retry while the store-exclusive failed.
+    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(code, enc_cbnz(status, back as i32));
+    atomic_restore_working(code);
+    write_atomic_result(code, dst, old, frame);
+    true
+}
+
+/// C11 7.17.7.4 atomic compare-and-exchange via an LDAXR / STLXR retry
+/// loop (ARM ARM C6.2). On a match the loop store-releases `desired`
+/// and the result is 1; on a mismatch the observed value is written
+/// back into `*expected_addr` and the result is 0.
+#[allow(clippy::too_many_arguments)]
+fn emit_atomic_cas(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: super::super::ir::ValueId,
+    expected_addr: super::super::ir::ValueId,
+    desired: super::super::ir::ValueId,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    // x9 = addr, x10 = expected_addr, x11 = desired (borrowed, saved);
+    // x16 = cur (result, reserved); x12 = expected value; w17 = status.
+    let a = Reg(9);
+    let exp_addr = Reg(10);
+    let desired_r = Reg(11);
+    let cur = scratch.primary; // x16
+    let expected = Reg(12);
+    let status = scratch.secondary; // x17
+    atomic_save_working(code);
+    if !atomic_operand_into(code, addr, a, frame, ATOMIC_SAVE_BYTES, alloc)
+        || !atomic_operand_into(
+            code,
+            expected_addr,
+            exp_addr,
+            frame,
+            ATOMIC_SAVE_BYTES,
+            alloc,
+        )
+        || !atomic_operand_into(code, desired, desired_r, frame, ATOMIC_SAVE_BYTES, alloc)
+    {
+        bail_msg("AtomicCas: operand not int reg / spill");
+        return false;
+    }
+    // Load the comparand once; `*expected_addr` is a thread-local object
+    // stable across the loop. Sub-width loads zero-extend, matching the
+    // zero-extended LDAXR result so the 64-bit compare is exact.
+    match width {
+        1 => emit(code, enc_ldrb_imm(expected, exp_addr, 0)),
+        2 => emit(code, enc_ldrh_imm(expected, exp_addr, 0)),
+        4 => emit(code, enc_ldr32_imm(expected, exp_addr, 0)),
+        _ => emit(code, enc_ldr_imm(expected, exp_addr, 0)),
+    }
+    let loop_start = code.len();
+    emit(code, enc_ldaxr(cur, a, width));
+    emit(code, enc_cmp_reg(cur, expected));
+    // b.ne fail -- patched once the failure path's offset is known.
+    emit(code, enc_b_cond(Cond::Ne, 0));
+    let to_fail = code.len() - 4;
+    emit(code, enc_stlxr(status, desired_r, a, width));
+    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(code, enc_cbnz(status, back as i32));
+    // Success: result = 1, branch past the failure path.
+    emit(code, enc_movz(cur, 1, 0));
+    emit(code, enc_b(0));
+    let to_done = code.len() - 4;
+    // Failure: write the observed value back to *expected_addr, result = 0.
+    let fail_lbl = code.len();
+    let delta = ((fail_lbl - to_fail) / 4) as i32;
+    code[to_fail..to_fail + 4].copy_from_slice(&enc_b_cond(Cond::Ne, delta).to_le_bytes());
+    match width {
+        1 => emit(code, enc_strb_imm(cur, exp_addr, 0)),
+        2 => emit(code, enc_strh_imm(cur, exp_addr, 0)),
+        4 => emit(code, enc_str32_imm(cur, exp_addr, 0)),
+        _ => emit(code, enc_str_imm(cur, exp_addr, 0)),
+    }
+    emit(code, enc_movz(cur, 0, 0));
+    let done_lbl = code.len();
+    let delta = ((done_lbl - to_done) / 4) as i32;
+    code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
+    atomic_restore_working(code);
+    write_atomic_result(code, dst, cur, frame);
     true
 }
 

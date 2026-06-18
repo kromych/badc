@@ -231,6 +231,187 @@ fn environ_data_binding_records_copy_relocation() {
     );
 }
 
+/// A `#pragma binding(data lib::sym, ...)` import on the Windows
+/// x86-64 PE target must lower the data reference as a load of the
+/// import's IAT slot, not as the address of a `jmp [IAT]` call
+/// trampoline. The msvcrt `_sys_errlist` array is the bundled
+/// `<stdlib.h>` example (`extern char *_sys_errlist[]` bound to
+/// `msvcrt::_sys_errlist` under `_WIN32`); the binding is declared
+/// inline here so the TU pulls in only the data import under test
+/// and not the header's `environ` / `_environ` block, whose
+/// PE-local-slot lowering still collides with the runtime's
+/// `environ` definition (a separate, pre-existing gap). Compile a TU
+/// that indexes the array, link a complete PE, locate the import's
+/// IAT slot via the standard import-table walk, and confirm the
+/// referencing `.text` instruction is a RIP-relative `mov`
+/// (`48 8B`, an IAT-slot load) rather than `lea` (`48 8D`, an
+/// address-of), and that no `jmp [rip]` thunk (`FF 25`) stands in
+/// for the data symbol.
+#[test]
+fn data_import_lowers_as_iat_load_not_thunk_on_windows_x64() {
+    use crate::{Compiler, NativeOptions, Target};
+    // The msvcrt data binding is `_WIN32`-gated in the bundled
+    // header; declare it directly and compile for the Windows target
+    // so the binding is in scope regardless of the build host.
+    let program = Compiler::with_target(
+        "#pragma dylib(msvcrt, \"msvcrt.dll\")\n\
+         #pragma binding(data msvcrt::_sys_errlist, \"_sys_errlist\")\n\
+         extern char *_sys_errlist[];\n\
+         char *f(int i){return _sys_errlist[i];}\n\
+         int main(void){return f(1)!=0;}\n"
+            .to_string(),
+        Target::WindowsX64,
+    )
+    .compile()
+    .expect("compile _sys_errlist TU for WindowsX64");
+    let image =
+        super::link_executable_with_runtime(&program, Target::WindowsX64, NativeOptions::default())
+            .expect("link WindowsX64 executable");
+
+    let slot_rva = pe_iat_slot_rva(&image, "_sys_errlist")
+        .expect("_sys_errlist must appear as a named IAT import");
+    let (text_rva, text) = pe_text_section(&image).expect("PE must carry a .text section");
+
+    // Scan .text for every RIP-relative instruction whose computed
+    // target equals the IAT slot RVA. `lea`/`mov reg, [rip+disp32]`
+    // share the 7-byte REX.W + modrm 0x05 + disp32 layout, differing
+    // only in the opcode (0x8D vs 0x8B); the `jmp [rip+disp32]` thunk
+    // is `FF 25` + disp32 over 6 bytes.
+    let mut lea_to_slot = 0usize; // 48 8D 05 (address-of -- the bug)
+    let mut mov_to_slot = 0usize; // 48 8B 05 (IAT-slot load -- the fix)
+    let mut thunk_to_slot = 0usize; // FF 25     (call trampoline standing in for data)
+    let mut i = 0usize;
+    while i + 7 <= text.len() {
+        if text[i] == 0x48 && text[i + 2] == 0x05 && (text[i + 1] == 0x8D || text[i + 1] == 0x8B) {
+            let disp = i32::from_le_bytes(text[i + 3..i + 7].try_into().unwrap());
+            let instr_rva = text_rva + i as u32;
+            let target = (instr_rva as i64 + 7 + disp as i64) as u32;
+            if target == slot_rva {
+                if text[i + 1] == 0x8D {
+                    lea_to_slot += 1;
+                } else {
+                    mov_to_slot += 1;
+                }
+            }
+        }
+        if text[i] == 0xFF && text[i + 1] == 0x25 {
+            let disp = i32::from_le_bytes(text[i + 2..i + 6].try_into().unwrap());
+            let instr_rva = text_rva + i as u32;
+            let target = (instr_rva as i64 + 6 + disp as i64) as u32;
+            if target == slot_rva {
+                thunk_to_slot += 1;
+            }
+        }
+        i += 1;
+    }
+
+    assert_eq!(
+        thunk_to_slot, 0,
+        "data import _sys_errlist must not get a `jmp [IAT]` (FF 25) call trampoline; \
+         found {thunk_to_slot} targeting its IAT slot"
+    );
+    assert_eq!(
+        lea_to_slot, 0,
+        "data import _sys_errlist reference must not be `lea` (48 8D, address-of a thunk); \
+         found {lea_to_slot} targeting its IAT slot"
+    );
+    assert!(
+        mov_to_slot >= 1,
+        "data import _sys_errlist reference must be a RIP-relative `mov` (48 8B, IAT-slot load); \
+         found none targeting its IAT slot"
+    );
+}
+
+/// Return the `(VirtualAddress, raw bytes)` of the PE `.text`
+/// section. RVA-relative byte scans use the VirtualAddress; the raw
+/// bytes are the section's file image.
+fn pe_text_section(image: &[u8]) -> Option<(u32, &[u8])> {
+    let u16a = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let pe = u32a(0x3c) as usize;
+    let num_sections = u16a(pe + 6) as usize;
+    let opt_size = u16a(pe + 20) as usize;
+    let sec_table = pe + 24 + opt_size;
+    for s in 0..num_sections {
+        let sh = sec_table + s * 40;
+        if &image[sh..sh + 5] == b".text" {
+            let va = u32a(sh + 12);
+            let raw_off = u32a(sh + 20) as usize;
+            let raw_size = u32a(sh + 16) as usize;
+            return Some((va, &image[raw_off..raw_off + raw_size]));
+        }
+    }
+    None
+}
+
+/// Walk a PE32+ import table and return the RVA of the IAT slot for
+/// the named import. Follows the format: data directory 1 -> import
+/// descriptors; each descriptor's OriginalFirstThunk (ILT) entries
+/// reference an `IMAGE_IMPORT_BY_NAME` (u16 hint + NUL name); the
+/// parallel FirstThunk (IAT) entry at the same index is the slot.
+fn pe_iat_slot_rva(image: &[u8], want: &str) -> Option<u32> {
+    let u16a = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+    let pe = u32a(0x3c) as usize;
+    let opt = pe + 24;
+    // PE32+ data directories start at optional-header offset 112;
+    // entry 1 is the Import Directory (8 bytes: RVA, size).
+    let import_dir_rva = u32a(opt + 112 + 8);
+    if import_dir_rva == 0 {
+        return None;
+    }
+    // Section table maps RVAs to file offsets.
+    let num_sections = u16a(pe + 6) as usize;
+    let opt_size = u16a(pe + 20) as usize;
+    let sec_table = pe + 24 + opt_size;
+    let rva_to_off = |rva: u32| -> Option<usize> {
+        for s in 0..num_sections {
+            let sh = sec_table + s * 40;
+            let va = u32a(sh + 12);
+            let vsize = u32a(sh + 8);
+            let raw_off = u32a(sh + 20);
+            if rva >= va && rva < va + vsize {
+                return Some((raw_off + (rva - va)) as usize);
+            }
+        }
+        None
+    };
+    let import_dir_off = rva_to_off(import_dir_rva)?;
+    // 20-byte descriptors terminated by an all-zero entry.
+    let mut d = import_dir_off;
+    loop {
+        let ilt_rva = u32a(d); // OriginalFirstThunk
+        let iat_rva = u32a(d + 16); // FirstThunk
+        if ilt_rva == 0 && iat_rva == 0 && u32a(d + 12) == 0 {
+            break;
+        }
+        let ilt_off = rva_to_off(ilt_rva)?;
+        let mut k = 0usize;
+        loop {
+            let entry = u64a(ilt_off + k * 8);
+            if entry == 0 {
+                break;
+            }
+            // High bit set selects ordinal import; named imports
+            // store the hint/name RVA in the low bits.
+            if entry & (1u64 << 63) == 0 {
+                let name_off = rva_to_off(entry as u32)? + 2; // skip u16 hint
+                let end = image[name_off..]
+                    .iter()
+                    .position(|&c| c == 0)
+                    .map_or(name_off, |n| name_off + n);
+                if &image[name_off..end] == want.as_bytes() {
+                    return Some(iat_rva + (k * 8) as u32);
+                }
+            }
+            k += 1;
+        }
+        d += 20;
+    }
+    None
+}
+
 /// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for
 /// every `STT_FUNC` entry. Minimal fixed-offset parse for the symbol-
 /// size regression above.
@@ -674,5 +855,84 @@ fn user_defined_c5_entry_links_freestanding() {
     assert!(
         !has("environ"),
         "freestanding image must not pull in the runtime environ"
+    );
+}
+
+/// C11 7.17.7.2 + Intel SDM Vol.2: `atomic_fetch_add` must lower to a
+/// genuine `LOCK XADD`, not a plain load-op-store. Confirm the emitted
+/// x86_64 image carries the `F0` LOCK prefix immediately followed by
+/// the XADD opcode `0F C1` (the 64-bit add form).
+#[test]
+fn atomic_fetch_add_emits_lock_xadd_x86_64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "#include <stdatomic.h>\n\
+         long f(long *p){ return atomic_fetch_add((_Atomic long *)p, 1); } \
+         int main(){ long x = 0; return (int)f(&x); }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let found = bytes
+        .windows(4)
+        .any(|w| w == [0xF0, 0x48, 0x0F, 0xC1] || (w[0] == 0xF0 && w[2] == 0x0F && w[3] == 0xC1));
+    assert!(
+        found,
+        "expected a `LOCK XADD` (F0 .. 0F C1) byte sequence in the x86_64 image",
+    );
+}
+
+/// C11 7.17.7.4 + Intel SDM Vol.2: `atomic_compare_exchange_strong`
+/// must lower to a `LOCK CMPXCHG`. Confirm the emitted x86_64 image
+/// carries the CMPXCHG opcode `0F B1`.
+#[test]
+fn atomic_compare_exchange_emits_cmpxchg_x86_64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "#include <stdatomic.h>\n\
+         int f(int *p, int *e, int d){ \
+             return atomic_compare_exchange_strong((_Atomic int *)p, e, d); } \
+         int main(){ int x = 0, e = 0; return f(&x, &e, 1); }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let found = bytes.windows(2).any(|w| w == [0x0F, 0xB1]);
+    assert!(
+        found,
+        "expected a `CMPXCHG` (0F B1) byte sequence in the x86_64 image",
+    );
+}
+
+/// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering uses an
+/// LDAXR / STLXR exclusive-monitor retry loop. Confirm both opcodes are
+/// present by their fixed bit patterns, independent of register fields:
+/// LDAXR is `_x011000_010_11111_1_11111 Rn Rt` and STLXR is
+/// `_x011000_000 Rs 1_11111 Rn Rt`.
+#[test]
+fn atomic_rmw_emits_ldaxr_stlxr_aarch64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "#include <stdatomic.h>\n\
+         long f(long *p){ return atomic_fetch_add((_Atomic long *)p, 1); } \
+         int main(){ long x = 0; return (int)f(&x); }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    // Match the 32-bit little-endian instruction words by the fixed bits
+    // that do not depend on the chosen registers (size / L / o0 / Rt2 and
+    // the LDAXR all-ones Rs).
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    let any_ldaxr = words().any(|w| (w & 0x3FFF_FC00) == (0x085F_FC00 & 0x3FFF_FC00));
+    let any_stlxr = words().any(|w| (w & 0x3FE0_FC00) == (0x0800_FC00 & 0x3FE0_FC00));
+    assert!(
+        any_ldaxr,
+        "expected an LDAXR opcode word in the aarch64 image",
+    );
+    assert!(
+        any_stlxr,
+        "expected an STLXR opcode word in the aarch64 image",
     );
 }

@@ -2585,6 +2585,7 @@ mod tests {
             func_names: Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             promoted_local_slots: alloc::collections::BTreeMap::new(),
+            fn_unwind: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
             user_extern_data_refs: Vec::new(),

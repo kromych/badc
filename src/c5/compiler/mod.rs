@@ -1210,6 +1210,7 @@ impl Compiler {
             } else {
                 4
             };
+            l.char_signed = target.plain_char_signed();
             l
         };
         Self {

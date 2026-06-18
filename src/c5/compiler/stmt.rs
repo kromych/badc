@@ -832,6 +832,12 @@ impl Compiler {
         // producer whose call did not consume them so they cannot reach an
         // unrelated call in a later statement.
         self.pending.indirect_callee_params = None;
+        // The function-pointer-decay depth (C99 6.3.2.1p4) is intra-
+        // expression state: a function name used as a call argument seeds
+        // it, and without this reset it leaks into the next statement's
+        // unary `*`, which would mis-apply the decay no-op and drop the
+        // load an assignment lvalue needs.
+        self.pending.fn_ptr_chain_depth = -1;
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.labels.push(name.clone());
@@ -942,7 +948,17 @@ impl Compiler {
             };
             cases.push(val);
             let body_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            // C23 6.8.1: a label may precede a declaration. badc parses
+            // block-local declarations in the enclosing block loop, where
+            // scope is tracked, so a case whose body is a declaration is
+            // given an empty body and the declaration is parsed as the
+            // next block item; a preceding case still falls through into it.
+            if !(self.lex.tk == Token::Typedef
+                || self.lex.tk == Token::StaticAssert
+                || self.lex_is_type_start())
+            {
+                self.stmt()?;
+            }
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_case(val, body_s);
         } else if self.lex.tk == Token::Default {
@@ -953,7 +969,15 @@ impl Compiler {
             };
             *def = true;
             let body_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            // C23 6.8.1: a declaration may follow the `default` label;
+            // give the label an empty body and let the enclosing block
+            // loop parse the declaration with correct scope.
+            if !(self.lex.tk == Token::Typedef
+                || self.lex.tk == Token::StaticAssert
+                || self.lex_is_type_start())
+            {
+                self.stmt()?;
+            }
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_default(body_s);
         } else if self.lex.tk == Token::Goto {

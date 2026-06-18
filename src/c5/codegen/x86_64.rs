@@ -608,6 +608,78 @@ pub(super) fn emit_imul_r_r_imm32(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: i
     code.extend_from_slice(&imm.to_le_bytes());
 }
 
+/// `NEG r64` -- two's-complement negate (Intel SDM Vol.2, group 3
+/// `F7 /3`). Used by the atomic subtract lowering, which negates the
+/// operand before a `LOCK XADD`.
+pub(super) fn emit_neg_r(code: &mut Vec<u8>, r: Reg) {
+    emit_byte(code, rex(true, false, false, r.high()));
+    emit_byte(code, 0xF7);
+    emit_byte(code, modrm(0b11, 3, r.lo()));
+}
+
+// ---- Atomic memory operations (Intel SDM Vol.2). The memory operand
+//      is `[base + disp]`; `reg` carries the register operand in the
+//      ModR/M.reg field. `width` is the access size in bytes. The
+//      operand-size prefix `66` selects 16-bit; REX.W selects 64-bit;
+//      an 8-bit access uses the byte opcode and a mandatory REX so the
+//      low byte of any of the 16 GPRs is addressable.
+
+/// Emit the operand-size prefix and REX byte for an atomic memory op
+/// of `width` bytes with register `reg` and memory base `base`. A
+/// byte access always emits REX (per SETcc / MOVZX convention) so
+/// SPL/BPL/SIL/DIL and R8B..R15B are reachable; a 64-bit access sets
+/// REX.W; otherwise REX is emitted only when a high register is used.
+fn atomic_prefix(code: &mut Vec<u8>, width: u8, reg: Reg, base: Reg) {
+    if width == 2 {
+        emit_byte(code, 0x66);
+    }
+    let w = width == 8;
+    if w || width == 1 || reg.high() || base.high() {
+        emit_byte(code, rex(w, reg.high(), false, base.high()));
+    }
+}
+
+/// `LOCK XADD [base + disp], reg` -- atomically add `reg` to the memory
+/// operand and load the prior contents into `reg` (Intel SDM Vol.2,
+/// XADD with the `F0` LOCK prefix). Encoding: `F0 [66] [REX] 0F C0/C1
+/// /r`, byte opcode `C0` else `C1`.
+pub(super) fn emit_lock_xadd_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg: Reg, width: u8) {
+    emit_byte(code, 0xF0);
+    atomic_prefix(code, width, reg, base);
+    emit_byte(code, 0x0F);
+    emit_byte(code, if width == 1 { 0xC0 } else { 0xC1 });
+    emit_modrm_mem(code, reg, base, disp);
+}
+
+/// `XCHG [base + disp], reg` -- atomically exchange `reg` with the
+/// memory operand (Intel SDM Vol.2; a memory operand makes XCHG
+/// implicitly LOCK-ed, so no `F0` prefix is emitted). Encoding:
+/// `[66] [REX] 86/87 /r`, byte opcode `86` else `87`.
+pub(super) fn emit_xchg_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg: Reg, width: u8) {
+    atomic_prefix(code, width, reg, base);
+    emit_byte(code, if width == 1 { 0x86 } else { 0x87 });
+    emit_modrm_mem(code, reg, base, disp);
+}
+
+/// `LOCK CMPXCHG [base + disp], reg` -- compare RAX with the memory
+/// operand; on equality store `reg` and set ZF, else load the memory
+/// operand into RAX and clear ZF (Intel SDM Vol.2 CMPXCHG with the
+/// `F0` LOCK prefix). Encoding: `F0 [66] [REX] 0F B0/B1 /r`, byte
+/// opcode `B0` else `B1`.
+pub(super) fn emit_lock_cmpxchg_mem_r(
+    code: &mut Vec<u8>,
+    base: Reg,
+    disp: i32,
+    reg: Reg,
+    width: u8,
+) {
+    emit_byte(code, 0xF0);
+    atomic_prefix(code, width, reg, base);
+    emit_byte(code, 0x0F);
+    emit_byte(code, if width == 1 { 0xB0 } else { 0xB1 });
+    emit_modrm_mem(code, reg, base, disp);
+}
+
 /// `IDIV r/m64` -- signed divide `rdx:rax / r`. Quotient -> rax,
 /// remainder -> rdx. The caller must sign-extend rax into rdx with
 /// [`emit_cqo`] first.
@@ -1772,6 +1844,7 @@ pub(super) fn lower(
     let mut func_names: Vec<alloc::string::String> = Vec::new();
     let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
+    let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
@@ -1947,6 +2020,7 @@ pub(super) fn lower(
             &mut pc_to_native,
             &mut func_prologue_native,
             &mut ssa_line_rows,
+            &mut fn_unwind,
         );
         #[cfg(feature = "std")]
         if super::ssa_dump::enabled(native) {
@@ -2147,6 +2221,7 @@ pub(super) fn lower(
         func_names,
         func_prologue_native,
         promoted_local_slots,
+        fn_unwind,
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs,
@@ -2269,6 +2344,7 @@ fn emit_plt_trampolines(
         got_fixups.push(GotFixup {
             adrp_offset: tramp_off,
             import_index,
+            is_data_load: false,
         });
         emit_jmp_qword_rip32(code, 0);
     }
@@ -2310,6 +2386,98 @@ fn apply_plt_call_fixups(
         code[fx.instr_offset + 1..fx.instr_offset + 1 + 4].copy_from_slice(&rel32.to_le_bytes());
     }
     Ok(())
+}
+
+/// Recover a function's Win64 unwind descriptor from its emitted
+/// prologue bytes. Used by the multi-TU link path, which holds the
+/// merged `.text` and each function's `[begin, end)` extent but not
+/// the structured [`super::FnUnwind`] the single-TU lowering records
+/// directly. The decode matches this backend's own fixed prologue
+/// grammar, not arbitrary machine code:
+///
+/// * optional arg-spill group: `41 5A` (pop r10), `48 81 EC <M>`
+///   (sub rsp,M), spill stores, `41 52` (push r10);
+/// * standard frame: `55` (push rbp), `48 89 E5` (mov rbp,rsp),
+///   optional `48 81 EC <N>` (sub rsp,N) -- a larger frame lowers
+///   to a page-probe loop, which has no single `sub` to read, so
+///   the alloc is left out of the codes (the body still unwinds
+///   through the frame pointer);
+/// * leaf functions emit none of the above.
+///
+/// The frame-pointer save/establish pair is matched as the 6-byte
+/// unit `41 52 55 48 89 E5` (arg-spill) or `55 48 89 E5` at offset 0
+/// (no arg-spill), both at instruction boundaries, so a spill
+/// store's bytes cannot alias the match. Any shape that does not
+/// match a standard frame is described as a frameless leaf -- safe
+/// (the unwinder returns off the top-of-stack RA) rather than
+/// emitting codes that do not match the prologue.
+pub(crate) fn decode_x86_64_prologue_unwind(
+    text: &[u8],
+    begin: u32,
+    end: u32,
+    prologue_end: u32,
+) -> super::FnUnwind {
+    let mut uw = super::FnUnwind {
+        begin,
+        end,
+        leaf: true,
+        ..super::FnUnwind::default()
+    };
+    let b = begin as usize;
+    let pe = (prologue_end as usize).min(text.len());
+    if b >= pe {
+        return uw;
+    }
+    let read_sub_rsp = |at: usize| -> Option<u32> {
+        // `sub rsp, imm32` == REX.W 0x81 /5 (modrm 0xEC) + imm32.
+        if at + 7 <= text.len() && text[at] == 0x48 && text[at + 1] == 0x81 && text[at + 2] == 0xEC
+        {
+            Some(u32::from_le_bytes([
+                text[at + 3],
+                text[at + 4],
+                text[at + 5],
+                text[at + 6],
+            ]))
+        } else {
+            None
+        }
+    };
+    // Locate the `push rbp; mov rbp,rsp` pair that establishes the
+    // frame. Without an arg-spill group it is at offset 0; with one it
+    // follows the group's `push r10` as the 6-byte unit below.
+    let no_spill = text[b..].starts_with(&[0x55, 0x48, 0x89, 0xE5]);
+    let fp_at = if no_spill {
+        Some(b)
+    } else if text[b..].starts_with(&[0x41, 0x5A]) {
+        // Arg-spill present: `sub rsp,M` sits right after `pop r10`.
+        if let Some(m) = read_sub_rsp(b + 2) {
+            uw.param_spill_bytes = m;
+        }
+        let unit = [0x41u8, 0x52, 0x55, 0x48, 0x89, 0xE5];
+        text[b..pe]
+            .windows(unit.len())
+            .position(|w| w == unit)
+            .map(|p| {
+                // `arg_spill_end` is just past `push r10` (the first two
+                // bytes of the matched unit); `push rbp` starts after.
+                // All `*_end` offsets are relative to the function start.
+                uw.arg_spill_end = (p + 2) as u32;
+                b + p + 2
+            })
+    } else {
+        None
+    };
+    let Some(fp) = fp_at else {
+        return uw; // Unrecognised shape -> safe frameless leaf.
+    };
+    uw.leaf = false;
+    uw.push_rbp_end = (fp - b + 1) as u32;
+    uw.set_fpreg_end = (fp - b + 4) as u32;
+    if let Some(n) = read_sub_rsp(fp + 4) {
+        uw.frame_bytes = n;
+        uw.frame_alloc_end = (fp - b + 4 + 7) as u32;
+    }
+    uw
 }
 
 // ------------------------------------------------------------------
@@ -2713,5 +2881,62 @@ mod tests {
             "console main must NOT spill r9 (function has only 2 params); got {:02X?}",
             prologue
         );
+    }
+
+    // The atomic encodings below were cross-checked against
+    // `clang -target x86_64-linux-gnu` + `objdump -d`.
+
+    #[test]
+    fn lock_xadd_qword_rcx_rax() {
+        // lock xadd qword [rcx], rax -> F0 48 0F C1 01
+        assert_eq!(
+            assemble(|c| emit_lock_xadd_mem_r(c, Reg::RCX, 0, Reg::RAX, 8)),
+            vec![0xF0, 0x48, 0x0F, 0xC1, 0x01]
+        );
+    }
+
+    #[test]
+    fn xchg_qword_rcx_rax() {
+        // xchg qword [rcx], rax -> 48 87 01 (implicitly locked, no F0)
+        assert_eq!(
+            assemble(|c| emit_xchg_mem_r(c, Reg::RCX, 0, Reg::RAX, 8)),
+            vec![0x48, 0x87, 0x01]
+        );
+    }
+
+    #[test]
+    fn lock_cmpxchg_qword_rcx_rdx() {
+        // lock cmpxchg qword [rcx], rdx -> F0 48 0F B1 11
+        assert_eq!(
+            assemble(|c| emit_lock_cmpxchg_mem_r(c, Reg::RCX, 0, Reg::RDX, 8)),
+            vec![0xF0, 0x48, 0x0F, 0xB1, 0x11]
+        );
+    }
+
+    #[test]
+    fn neg_rax() {
+        // neg rax -> 48 F7 D8
+        assert_eq!(
+            assemble(|c| emit_neg_r(c, Reg::RAX)),
+            vec![0x48, 0xF7, 0xD8]
+        );
+    }
+
+    #[test]
+    fn atomic_byte_op_emits_rex_and_byte_opcode() {
+        // lock xadd byte [rax], cl -> F0 [REX] 0F C0 08. A byte access
+        // always emits REX so SPL/BPL/SIL/DIL and R8B.. are addressable.
+        let bytes = assemble(|c| emit_lock_xadd_mem_r(c, Reg::RAX, 0, Reg::RCX, 1));
+        assert_eq!(bytes[0], 0xF0, "missing LOCK prefix");
+        assert_eq!(bytes[1] & 0xF0, 0x40, "byte access must emit REX");
+        assert_eq!(&bytes[2..4], &[0x0F, 0xC0], "byte XADD opcode");
+    }
+
+    #[test]
+    fn atomic_word_op_emits_operand_size_prefix() {
+        // lock cmpxchg word [rax], cx -> F0 66 0F B1 08.
+        let bytes = assemble(|c| emit_lock_cmpxchg_mem_r(c, Reg::RAX, 0, Reg::RCX, 2));
+        assert_eq!(&bytes[0..2], &[0xF0, 0x66], "LOCK + operand-size prefix");
+        assert_eq!(&bytes[2..4], &[0x0F, 0xB1], "word CMPXCHG opcode");
     }
 }

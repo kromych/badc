@@ -501,7 +501,14 @@ pub(super) fn write(
     // data directory entry up separately.
     let pdata_rva: u32 = round_up(text_rva + text_size, SECTION_ALIGNMENT);
     let pdata_file_off: u32 = text_file_off + text_raw_size;
-    let pdata = build_pdata(machine, text_rva, text_size, pdata_rva);
+    let pdata = build_pdata(
+        machine,
+        text_rva,
+        text_size,
+        pdata_rva,
+        text_prologue_len,
+        &build.fn_unwind,
+    );
     let pdata_bytes = pdata.bytes;
     let pdata_size: u32 = pdata_bytes.len() as u32;
     let pdata_directory_size: u32 = pdata.directory_size;
@@ -864,7 +871,17 @@ pub(super) fn write(
     for f in &build.got_fixups {
         let instr_off = (f.adrp_offset as u32) + text_prologue_len;
         let target_rva = idata_layout.iat_rva_for_import[f.import_index];
-        patch_iat_lookup(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+        // A data import has no call thunk: its reference reads the
+        // IAT slot's value. On x86_64 that is a distinct instruction
+        // form (mov vs the call/lea the lookup helper emits), so it
+        // routes to `patch_iat_data_load`. aarch64's adrp + ldr in
+        // `patch_aarch64_adrp_ldr` already loads the slot for both
+        // call thunks and data references.
+        if f.is_data_load && machine == Machine::X86_64 {
+            patch_iat_data_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+        } else {
+            patch_iat_lookup(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+        }
     }
     for f in &build.data_fixups {
         let instr_off = (f.adrp_offset as u32) + text_prologue_len;
@@ -2324,55 +2341,213 @@ struct Pdata {
 /// `UNWIND_INFO` blob; aarch64 uses 8-byte entries with packed
 /// unwind info inline -- so we dispatch and let each builder lay
 /// out its own bytes.
-fn build_pdata(machine: Machine, text_rva: u32, text_size: u32, pdata_rva: u32) -> Pdata {
+fn build_pdata(
+    machine: Machine,
+    text_rva: u32,
+    text_size: u32,
+    pdata_rva: u32,
+    text_prologue_len: u32,
+    fn_unwind: &[super::FnUnwind],
+) -> Pdata {
     match machine {
-        Machine::X86_64 => build_x86_64_pdata(text_rva, text_size, pdata_rva),
+        Machine::X86_64 => {
+            build_x86_64_pdata(text_rva, text_size, pdata_rva, text_prologue_len, fn_unwind)
+        }
         Machine::Aarch64 => build_aarch64_pdata(text_rva, text_size),
     }
+}
+
+/// x86_64 `UNWIND_CODE` operation codes (Win64 ABI, x64 exception
+/// handling). Each code is two bytes: `{ CodeOffset:u8, UnwindOp:4
+/// | OpInfo:4 }`. `UWOP_ALLOC_*` and `UWOP_SAVE_NONVOL` consume one
+/// or two extra `u16` slots.
+const UWOP_PUSH_NONVOL: u8 = 0;
+const UWOP_ALLOC_LARGE: u8 = 1;
+const UWOP_ALLOC_SMALL: u8 = 2;
+const UWOP_SET_FPREG: u8 = 3;
+/// Register encoding for rbp in `OpInfo` / `FrameRegister`.
+const UNWIND_REG_RBP: u8 = 5;
+
+/// Append one `UWOP_ALLOC_SMALL` / `UWOP_ALLOC_LARGE` to a reversed
+/// (descending-`CodeOffset`) `UNWIND_CODE` list for a `sub rsp,size`
+/// at prolog offset `code_offset`. Picks the shortest encoding the
+/// ABI allows: small (8..128), large form 0 (136..512K-8), large
+/// form 1 (>=512K).
+fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
+    debug_assert!(size != 0 && size.is_multiple_of(8));
+    if (8..=128).contains(&size) {
+        codes.push(code_offset);
+        codes.push((UWOP_ALLOC_SMALL & 0x0F) | (((size / 8 - 1) as u8) << 4));
+    } else if size < 512 * 1024 {
+        // OpInfo 0: next slot holds size/8.
+        codes.push(code_offset);
+        codes.push(UWOP_ALLOC_LARGE & 0x0F);
+        codes.extend_from_slice(&((size / 8) as u16).to_le_bytes());
+    } else {
+        // OpInfo 1: next two slots hold the unscaled size.
+        codes.push(code_offset);
+        codes.push((UWOP_ALLOC_LARGE & 0x0F) | (1 << 4));
+        codes.extend_from_slice(&size.to_le_bytes());
+    }
+}
+
+/// Build the `UNWIND_CODE` byte stream for one function, in the
+/// ABI-required descending-`CodeOffset` order. Returns `(codes,
+/// size_of_prolog, frame_register)`; `frame_register` is 0 for a
+/// frameless leaf and `UNWIND_REG_RBP` otherwise.
+///
+/// The c5 prologue is `[arg-spill group] push rbp; mov rbp,rsp;
+/// [sub rsp,N]`, so the codes are, highest offset first:
+/// `UWOP_ALLOC N` (frame), `UWOP_SET_FPREG` (rbp, offset 0),
+/// `UWOP_PUSH_NONVOL rbp`, then `UWOP_ALLOC M` for the arg-spill
+/// group whose net stack effect is `-M`. `RtlVirtualUnwind`
+/// processes them in array order: the alloc for `N` runs first but
+/// is immediately overwritten by `UWOP_SET_FPREG` (`RSP = RBP -
+/// 0`), which makes the recovery exact even though the body moves
+/// RSP for outgoing-call scratch; the push then restores rbp and
+/// the final alloc reverses the arg-spill so RSP and the return
+/// address land at the caller's frame.
+///
+/// TODO: the callee-saved GPRs this backend stores with `mov
+/// [rsp+i*8],reg` (below rbp, after the frame allocation) are not
+/// described. RIP/RSP/RBP recover exactly at any body fault, but a
+/// debugger unwinding past this frame does not recover those
+/// register values. Encoding them as `UWOP_SAVE_NONVOL` needs a
+/// frame pointer that points into the frame (a nonzero scaled
+/// `FrameOffset`), which this backend's `mov rbp,rsp` (offset 0,
+/// rbp at the frame top) cannot express with the required positive
+/// save offsets; that awaits a prologue change.
+fn build_unwind_codes(uw: &super::FnUnwind) -> (Vec<u8>, u8, u8) {
+    if uw.leaf {
+        return (Vec::new(), 0, 0);
+    }
+    let mut codes = Vec::new();
+    // The `*_end` offsets are already relative to the function's first
+    // byte (the CodeOffset domain). Descending CodeOffset order: frame
+    // alloc, set-fpreg, push rbp, arg-spill.
+    //
+    // The frame allocation is described only when it lowered to a
+    // single `sub rsp,N` (`frame_alloc_end != 0`). A Win64 frame of a
+    // page or more lowers to a stack-probe loop with no single `sub`;
+    // it is left undescribed because the probe runs after the frame
+    // pointer is established, so `UWOP_SET_FPREG` recovers RSP exactly
+    // at any fault past it.
+    if uw.frame_alloc_end != 0 {
+        push_alloc_code(&mut codes, uw.frame_alloc_end as u8, uw.frame_bytes);
+    }
+    codes.push(uw.set_fpreg_end as u8);
+    // SET_FPREG's OpInfo is reserved (0); the frame register and its
+    // scaled offset live in the UNWIND_INFO header, not the code slot.
+    codes.push(UWOP_SET_FPREG & 0x0F);
+    codes.push(uw.push_rbp_end as u8);
+    codes.push((UWOP_PUSH_NONVOL & 0x0F) | (UNWIND_REG_RBP << 4));
+    if uw.param_spill_bytes > 0 {
+        push_alloc_code(&mut codes, uw.arg_spill_end as u8, uw.param_spill_bytes);
+    }
+    // SizeOfProlog need only reach past `mov rbp,rsp` so the unwinder
+    // classifies the pre-frame-pointer region (arg-spill, push rbp) as
+    // prolog and the rest as body; PCs past `mov rbp,rsp` unwind
+    // correctly through the frame pointer whether labelled prolog or
+    // body. Use the described frame-alloc end when present.
+    let size_of_prolog = if uw.frame_alloc_end != 0 {
+        uw.frame_alloc_end
+    } else {
+        uw.set_fpreg_end
+    } as u8;
+    (codes, size_of_prolog, UNWIND_REG_RBP)
 }
 
 /// x86_64 `.pdata` builder.
 ///
 /// The x86_64 Windows ABI requires every non-leaf function to have
 /// a `RUNTIME_FUNCTION` entry pointing at an `UNWIND_INFO` struct;
-/// the OS loader and `RtlLookupFunctionEntry` consult these for
-/// SEH unwinding. Older Windows revisions tolerated a missing
-/// Exception Directory, but the spec has always required it on
-/// 64-bit targets and stricter loaders / verifiers reject without
-/// one.
+/// `RtlLookupFunctionEntry` / `RtlVirtualUnwind` consult these to
+/// recover the caller's RIP, RSP, and saved registers at any
+/// instruction. The Exception Directory entry spans only the
+/// `RUNTIME_FUNCTION` array (the loader counts entries as `Size /
+/// 12`); the `UNWIND_INFO` blobs sit in the same section after the
+/// array, outside the directory range.
 ///
-/// We emit a single coarse entry covering the entire `.text`
-/// region, paired with a minimal `UNWIND_INFO` (version=1,
-/// flags=0, no prolog, no codes). The unwinder would treat every
-/// address as a leaf with no frame -- a lie, but the c5 program
-/// never raises a Windows exception, and the loader doesn't
-/// validate the unwind codes against the actual prolog. This
-/// mirrors the coarse approach the AArch64 builder uses.
-///
-/// Layout: [12 bytes: RUNTIME_FUNCTION][4 bytes: UNWIND_INFO].
-/// The UNWIND_INFO sits immediately after the RUNTIME_FUNCTION in
-/// the same section, which keeps everything in one place and
-/// honors the 4-byte alignment requirement. The Exception
-/// Directory only spans the RUNTIME_FUNCTION (the loader uses
-/// `Size / sizeof(RUNTIME_FUNCTION)` to count entries, so the
-/// trailing UNWIND_INFO must not be counted).
-fn build_x86_64_pdata(text_rva: u32, text_size: u32, pdata_rva: u32) -> Pdata {
+/// `fn_unwind` carries one descriptor per emitted function with
+/// the prologue instruction boundaries; each becomes a sorted,
+/// non-overlapping `RUNTIME_FUNCTION` plus an `UNWIND_INFO`
+/// describing the `push rbp` / `mov rbp,rsp` / `sub rsp,N` (and
+/// the optional arg-spill) prologue. Function ranges are byte
+/// offsets in `build.text`; the prepended entry stub shifts them
+/// by `text_prologue_len`. When `fn_unwind` is empty (a hand-built
+/// `Build`, or a path that records no descriptors), fall back to a
+/// single coarse frameless entry over the whole `.text` so the
+/// image still carries a structurally valid Exception Directory.
+fn build_x86_64_pdata(
+    text_rva: u32,
+    text_size: u32,
+    pdata_rva: u32,
+    text_prologue_len: u32,
+    fn_unwind: &[super::FnUnwind],
+) -> Pdata {
     const RUNTIME_FUNCTION_SIZE: u32 = 12;
-    let mut bytes = Vec::with_capacity(16);
-    let unwind_info_rva = pdata_rva + RUNTIME_FUNCTION_SIZE;
-    // RUNTIME_FUNCTION { BeginAddress, EndAddress, UnwindInfoAddress }
-    bytes.extend_from_slice(&text_rva.to_le_bytes());
-    bytes.extend_from_slice(&(text_rva + text_size).to_le_bytes());
-    bytes.extend_from_slice(&unwind_info_rva.to_le_bytes());
-    // UNWIND_INFO:
-    //   byte 0: Version (3 bits) | Flags (5 bits) -- v1, no flags
-    //   byte 1: SizeOfProlog                       -- 0
-    //   byte 2: CountOfCodes                       -- 0
-    //   byte 3: FrameRegister (4) | FrameOffset(4) -- 0
-    bytes.extend_from_slice(&[0x01, 0x00, 0x00, 0x00]);
+    if fn_unwind.is_empty() {
+        let mut bytes = Vec::with_capacity(16);
+        let unwind_info_rva = pdata_rva + RUNTIME_FUNCTION_SIZE;
+        bytes.extend_from_slice(&text_rva.to_le_bytes());
+        bytes.extend_from_slice(&(text_rva + text_size).to_le_bytes());
+        bytes.extend_from_slice(&unwind_info_rva.to_le_bytes());
+        // Frameless UNWIND_INFO: v1, no flags, no prolog, no codes.
+        bytes.extend_from_slice(&[0x01, 0x00, 0x00, 0x00]);
+        return Pdata {
+            bytes,
+            directory_size: RUNTIME_FUNCTION_SIZE,
+        };
+    }
+
+    // Sort by begin so the RUNTIME_FUNCTION array is ascending (the
+    // loader binary-searches it); the emitter already produces them
+    // in order, but the link path collects from a name-keyed map.
+    let mut entries: Vec<&super::FnUnwind> = fn_unwind.iter().collect();
+    entries.sort_by_key(|u| u.begin);
+
+    // Two-pass layout: the array fixes each UNWIND_INFO's position,
+    // so build the blobs first, record each one's RVA, then emit the
+    // array. The blob region starts right after the array, 4-byte
+    // aligned (UNWIND_INFO requires DWORD alignment).
+    let array_size = entries.len() as u32 * RUNTIME_FUNCTION_SIZE;
+    let blobs_rva = round_up(pdata_rva + array_size, 4);
+    let mut blobs: Vec<u8> = Vec::new();
+    let mut info_rvas: Vec<u32> = Vec::with_capacity(entries.len());
+    for uw in &entries {
+        info_rvas.push(blobs_rva + blobs.len() as u32);
+        let (codes, size_of_prolog, frame_reg) = build_unwind_codes(uw);
+        let count_of_codes = (codes.len() / 2) as u8;
+        blobs.push(0x01); // Version 1, Flags 0.
+        blobs.push(size_of_prolog);
+        blobs.push(count_of_codes);
+        // FrameRegister (low nibble) | FrameOffset (high nibble, 0).
+        blobs.push(frame_reg & 0x0F);
+        blobs.extend_from_slice(&codes);
+        // The codes array holds an even number of slots; each slot is
+        // 2 bytes, so the blob is already u16-aligned. Pad to 4 bytes
+        // so the next UNWIND_INFO stays DWORD-aligned.
+        while !blobs.len().is_multiple_of(4) {
+            blobs.push(0);
+        }
+    }
+
+    let mut bytes = Vec::with_capacity((array_size + blobs.len() as u32) as usize);
+    for (i, uw) in entries.iter().enumerate() {
+        let begin = text_rva + text_prologue_len + uw.begin;
+        let end = text_rva + text_prologue_len + uw.end;
+        bytes.extend_from_slice(&begin.to_le_bytes());
+        bytes.extend_from_slice(&end.to_le_bytes());
+        bytes.extend_from_slice(&info_rvas[i].to_le_bytes());
+    }
+    // Pad the array out to the blob region's start, then append blobs.
+    while pdata_rva + bytes.len() as u32 != blobs_rva {
+        bytes.push(0);
+    }
+    bytes.extend_from_slice(&blobs);
     Pdata {
         bytes,
-        directory_size: RUNTIME_FUNCTION_SIZE,
+        directory_size: array_size,
     }
 }
 
@@ -2466,6 +2641,55 @@ fn patch_iat_lookup(
         Machine::Aarch64 => {
             patch_aarch64_adrp_ldr(text, instr_offset_in_text, instr_rva, target_rva)
         }
+    }
+}
+
+/// Patch a data-import reference so it loads the value of the IAT
+/// slot rather than taking the address of a call thunk. On x86_64
+/// the codegen emitted `lea reg, [rip+disp32]` (REX.W 0x48, opcode
+/// 0x8D, modrm 0x05, disp32 at +3, 7-byte instruction). `lea` and
+/// the RIP-relative `mov reg, [rip+disp32]` share the same REX /
+/// modrm / disp layout and differ only in the opcode byte, so the
+/// flip from 0x8D to 0x8B (load) is length-preserving. The disp32
+/// is then patched to reach the IAT slot, whose loader-written
+/// contents are the imported data's runtime address.
+fn patch_iat_data_load(
+    machine: Machine,
+    text: &mut [u8],
+    instr_offset_in_text: u32,
+    text_section_rva: u32,
+    target_rva: u32,
+) -> Result<(), C5Error> {
+    match machine {
+        Machine::X86_64 => {
+            let opcode_off = (instr_offset_in_text + 1) as usize;
+            if text[opcode_off] != 0x8D {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: data-import load expected lea opcode 0x8D at text+{opcode_off:#x}, \
+                         found {:#04x}",
+                        text[opcode_off],
+                    ),
+                )));
+            }
+            // Flip lea (0x8D) to mov r64, [rip+disp32] (0x8B). The
+            // disp32 follows the same +3 offset and 7-byte length.
+            text[opcode_off] = 0x8B;
+            let instr_rva = text_section_rva + instr_offset_in_text;
+            let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);
+            patch_x86_64_disp32(
+                text,
+                (instr_offset_in_text + 3) as usize,
+                after_rva,
+                target_rva,
+            )
+        }
+        // aarch64 routes data-import references through
+        // `patch_iat_lookup`'s adrp + ldr, which already loads the
+        // slot; this helper is x86_64-only.
+        Machine::Aarch64 => Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "PE: patch_iat_data_load is x86_64-only; aarch64 uses patch_iat_lookup",
+        ))),
     }
 }
 
@@ -2942,6 +3166,199 @@ mod tests {
                 .try_into()
                 .unwrap(),
         )
+    }
+
+    /// Resolve an RVA to a file offset through the section table.
+    fn rva_to_file_off(bytes: &[u8], rva: u32) -> Option<usize> {
+        let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+        let coff_off = pe_off + 4;
+        let n_sections = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+        let optional_size =
+            u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+        let sections_off = coff_off + COFF_HEADER_SIZE + optional_size;
+        for i in 0..n_sections {
+            let h = sections_off + i * SECTION_HEADER_SIZE;
+            let v_addr = u32::from_le_bytes(bytes[h + 12..h + 16].try_into().unwrap());
+            let v_size = u32::from_le_bytes(bytes[h + 8..h + 12].try_into().unwrap());
+            let p_off = u32::from_le_bytes(bytes[h + 20..h + 24].try_into().unwrap());
+            let span = v_size.max(u32::from_le_bytes(
+                bytes[h + 16..h + 20].try_into().unwrap(),
+            ));
+            if rva >= v_addr && rva < v_addr + span {
+                return Some((p_off + (rva - v_addr)) as usize);
+            }
+        }
+        None
+    }
+
+    /// A multi-function Windows-x64 PE must carry one
+    /// `RUNTIME_FUNCTION` per emitted function -- sorted by
+    /// `BeginAddress`, non-overlapping, each pointing at a
+    /// well-formed `UNWIND_INFO` (version 1) inside the `.pdata`
+    /// section. The Exception data directory spans only the
+    /// `RUNTIME_FUNCTION` array (`Size / 12` == function count);
+    /// the `UNWIND_INFO` blobs follow in the same section. This
+    /// guards against the previous single coarse whole-`.text`
+    /// entry that left `RtlVirtualUnwind` unable to unwind any
+    /// frame.
+    #[test]
+    fn pdata_has_one_runtime_function_per_function_x64() {
+        use crate::Compiler;
+        // Four user functions with distinct frame shapes (params,
+        // a loop body with locals, a leaf). The lowering records a
+        // per-function unwind descriptor for each.
+        let src = "
+            int add(int a, int b) { return a + b; }
+            int mul3(int a, int b, int c) { return a * b * c; }
+            long sumloop(int n) { long s = 0; for (int i = 0; i < n; i++) s += i; return s; }
+            int main(int argc, char **argv) {
+                (void)argv;
+                return add(argc, mul3(1, 2, 3)) + (int)sumloop(argc);
+            }
+        ";
+        let program = Compiler::new(super::super::super::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let build = lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        // One descriptor per emitted function (the single-TU path
+        // records every function the lowering walked).
+        let n_funcs = build.fn_unwind.len();
+        assert!(
+            n_funcs >= 4,
+            "expected at least the 4 user functions, got {n_funcs}"
+        );
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
+
+        let (exc_rva, exc_size) = read_data_directory(&bytes, DATA_DIRECTORY_EXCEPTION);
+        assert_ne!(exc_rva, 0, "Exception directory RVA must be non-zero");
+        assert_eq!(
+            exc_size % 12,
+            0,
+            "Exception directory size must be a whole number of RUNTIME_FUNCTIONs"
+        );
+        assert_eq!(
+            exc_size as usize / 12,
+            n_funcs,
+            "one RUNTIME_FUNCTION per emitted function (not a single coarse entry)"
+        );
+
+        // The `.pdata` section must hold both the array and the
+        // trailing UNWIND_INFO blobs, so its virtual size exceeds
+        // the directory (array-only) size.
+        let pdata_off = rva_to_file_off(&bytes, exc_rva).expect("Exception dir inside a section");
+
+        // Find the `.text` extent so each BeginAddress lands in it.
+        let (text_lo, text_hi) = {
+            let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+            let coff_off = pe_off + 4;
+            let n_sections =
+                u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+            let optional_size =
+                u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+            let sections_off = coff_off + COFF_HEADER_SIZE + optional_size;
+            let mut span = (0u32, 0u32);
+            for i in 0..n_sections {
+                let h = sections_off + i * SECTION_HEADER_SIZE;
+                if &bytes[h..h + 5] == b".text" {
+                    let v_addr = u32::from_le_bytes(bytes[h + 12..h + 16].try_into().unwrap());
+                    let v_size = u32::from_le_bytes(bytes[h + 8..h + 12].try_into().unwrap());
+                    span = (v_addr, v_addr + v_size);
+                }
+            }
+            span
+        };
+        assert_ne!(text_hi, 0, ".text section not found");
+
+        let n = exc_size as usize / 12;
+        let mut prev_end = 0u32;
+        for i in 0..n {
+            let e = pdata_off + i * 12;
+            let begin = u32::from_le_bytes(bytes[e..e + 4].try_into().unwrap());
+            let end = u32::from_le_bytes(bytes[e + 4..e + 8].try_into().unwrap());
+            let info_rva = u32::from_le_bytes(bytes[e + 8..e + 12].try_into().unwrap());
+            assert!(begin < end, "entry {i}: begin {begin:#x} >= end {end:#x}");
+            assert!(
+                begin >= prev_end,
+                "entry {i}: not sorted / overlaps (begin {begin:#x} < prev_end {prev_end:#x})"
+            );
+            assert!(
+                begin >= text_lo && end <= text_hi,
+                "entry {i}: [{begin:#x},{end:#x}) outside .text [{text_lo:#x},{text_hi:#x})"
+            );
+            let info_off =
+                rva_to_file_off(&bytes, info_rva).expect("UNWIND_INFO RVA inside a section");
+            let ver_flags = bytes[info_off];
+            assert_eq!(ver_flags & 0x07, 1, "entry {i}: UNWIND_INFO version != 1");
+            // The codes array length must match CountOfCodes, and the
+            // FrameRegister, when present, must name rbp (5).
+            let count_of_codes = bytes[info_off + 2];
+            let frame_reg = bytes[info_off + 3] & 0x0F;
+            if count_of_codes > 0 {
+                assert_eq!(frame_reg, 5, "entry {i}: frame register must be rbp");
+            }
+            prev_end = end;
+        }
+    }
+
+    /// The two `FnUnwind` producers -- the structured single-TU
+    /// path (`emit_prologue`) and the link path's prologue-grammar
+    /// decoder (`decode_x86_64_prologue_unwind`) -- must agree, so
+    /// a function unwinds identically whether it is compiled in one
+    /// unit or linked from objects. Drive both from the same lowered
+    /// `.text` and assert the resulting unwind codes match.
+    #[test]
+    fn structured_and_decoded_unwind_agree_x64() {
+        use crate::Compiler;
+        let src = "
+            int add(int a, int b) { return a + b; }
+            int mul3(int a, int b, int c) { return a * b * c; }
+            long sumloop(int n) { long s = 0; for (int i = 0; i < n; i++) s += i; return s; }
+            int main(int argc, char **argv) {
+                (void)argv;
+                return add(argc, mul3(1, 2, 3)) + (int)sumloop(argc);
+            }
+        ";
+        let program = Compiler::new(super::super::super::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let build = lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        for uw in &build.fn_unwind {
+            let prologue_end = if uw.leaf {
+                uw.begin
+            } else if uw.frame_alloc_end != 0 {
+                uw.begin + uw.frame_alloc_end
+            } else {
+                uw.begin + uw.set_fpreg_end
+            };
+            let decoded = super::super::x86_64::decode_x86_64_prologue_unwind(
+                &build.text,
+                uw.begin,
+                uw.end,
+                prologue_end,
+            );
+            assert_eq!(
+                build_unwind_codes(uw),
+                build_unwind_codes(&decoded),
+                "structured vs decoded unwind codes differ for function at {:#x}",
+                uw.begin
+            );
+        }
     }
 
     /// `DYNAMIC_BASE` / `HIGH_ENTROPY_VA` stay on for every

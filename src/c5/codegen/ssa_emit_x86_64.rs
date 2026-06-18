@@ -49,16 +49,16 @@ use super::x86_64::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
     emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
     emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_divss,
-    emit_imul_r_mem, emit_imul_rr, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem, emit_mov_mem_r,
-    emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r,
-    emit_movsd_mem_xmm, emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem,
-    emit_movsx_r_mem16, emit_movsxd_r_mem, emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd,
-    emit_mulss, emit_or_r_mem, emit_or_rr, emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl,
-    emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl, emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr,
-    emit_sub_rsp_imm32, emit_subsd, emit_subss, emit_test_rr, emit_ucomisd, emit_ucomiss,
-    emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd,
-    emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xor_r_mem, emit_xor_rr,
-    emit_xorpd,
+    emit_imul_r_mem, emit_imul_rr, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem,
+    emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r, emit_mov_mem_r, emit_mov_r_imm64,
+    emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r, emit_movsd_mem_xmm,
+    emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16,
+    emit_movsxd_r_mem, emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_neg_r,
+    emit_or_r_mem, emit_or_rr, emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8,
+    emit_shl_r_cl, emit_shr_r_cl, emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32,
+    emit_subsd, emit_subss, emit_test_rr, emit_ucomisd, emit_ucomiss, emit_vfmadd231sd,
+    emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss,
+    emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xchg_mem_r, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
 };
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -1597,6 +1597,7 @@ pub(super) fn emit_function(
     pc_to_native: &mut [usize],
     prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
+    fn_unwind: &mut Vec<super::FnUnwind>,
 ) -> bool {
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
@@ -1633,7 +1634,8 @@ pub(super) fn emit_function(
     // xmm argument register.
     let param_plan = param_placements(func, abi);
 
-    emit_prologue(code, func, alloc, frame, abi);
+    let mut uw = emit_prologue(code, func, alloc, frame, abi, snapshot);
+    uw.begin = snapshot as u32;
     super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     // Place the entry `Inst::ParamRef` values from their host argument
@@ -2225,6 +2227,11 @@ pub(super) fn emit_function(
         }
     }
 
+    // The function emitted end-to-end. Record its [begin, end) extent
+    // for the PE writer's per-function unwind table now that no bail
+    // can truncate `code`.
+    uw.end = code.len() as u32;
+    fn_unwind.push(uw);
     true
 }
 
@@ -2405,13 +2412,25 @@ fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi) {
 }
 
 /// then save rbp and proceed.
+///
+/// `func_start` is `code.len()` at function entry; the returned
+/// [`super::FnUnwind`] records every prologue instruction boundary
+/// relative to it so the PE writer can build a Win64 `UNWIND_INFO`
+/// for the frame. `begin` / `end` are filled by the caller.
 fn emit_prologue(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
-) {
+    func_start: usize,
+) -> super::FnUnwind {
+    let mut uw = super::FnUnwind {
+        param_spill_bytes: frame.param_spill_bytes,
+        frame_bytes: frame.frame_bytes,
+        ..super::FnUnwind::default()
+    };
+    let rel = |code: &Vec<u8>| (code.len() - func_start) as u32;
     // Host-arg-reg spill. `frame.param_spill_bytes` is the
     // single source of truth for how many bytes get allocated
     // here; the epilogue reads the same value to undo the same
@@ -2473,6 +2492,9 @@ fn emit_prologue(
             }
         }
         emit_push_r(code, Reg::R10);
+        // Net stack effect of the group is -M; the unwinder recovers
+        // it as one UWOP_ALLOC at the end of the re-push.
+        uw.arg_spill_end = rel(code);
     }
 
     // Leaf-function elision: a function that makes no calls
@@ -2482,11 +2504,14 @@ fn emit_prologue(
     // it ret directly off the caller-pushed return address with
     // rsp unchanged.
     if is_full_leaf(func, frame, alloc, abi) {
-        return;
+        uw.leaf = true;
+        return uw;
     }
     // Standard frame: push rbp; mov rbp, rsp; sub rsp, frame_bytes.
     emit_push_r(code, Reg::RBP);
+    uw.push_rbp_end = rel(code);
     emit_mov_rr(code, Reg::RBP, Reg::RSP);
+    uw.set_fpreg_end = rel(code);
     // Win64 variadic callee home-area spill (Microsoft x64 calling
     // convention). The caller passes the first four arguments in
     // rcx/rdx/r8/r9 by position and reserves 32 bytes of home area
@@ -2517,7 +2542,18 @@ fn emit_prologue(
         }
     }
     if frame.frame_bytes > 0 {
+        // A single `sub rsp,N` lowers to one instruction the unwinder
+        // can describe with `UWOP_ALLOC`; a Win64 frame >= one page
+        // lowers to a stack-probe loop with no single `sub` and is
+        // left undescribed (SizeOfProlog still covers it, and the
+        // frame-pointer rule recovers RSP exactly at any body fault,
+        // which is where the unwinder samples). `frame_alloc_end == 0`
+        // is the "no single sub" sentinel `build_unwind_codes` reads.
+        let single_sub = abi.shadow_space == 0 || frame.frame_bytes < 4096;
         emit_stack_alloc(code, frame.frame_bytes, abi);
+        if single_sub {
+            uw.frame_alloc_end = rel(code);
+        }
     }
     // System V variadic callee register save area (System V AMD64
     // 3.5.7). Spill the six integer argument registers rdi rsi rdx rcx
@@ -2577,6 +2613,7 @@ fn emit_prologue(
     }
     emit_struct_param_scatter(code, func, frame, abi);
     emit_struct_stack_param_copy(code, func, frame, abi);
+    uw
 }
 
 /// Copy each aggregate parameter the host ABI passes inline on the
@@ -3034,6 +3071,27 @@ fn emit_inst(
             src: s,
             size,
         } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame),
+        Inst::AtomicRmw {
+            op,
+            addr,
+            value,
+            width,
+        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame),
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            width,
+        } => emit_atomic_cas(
+            code,
+            dst,
+            *addr,
+            *expected_addr,
+            *desired,
+            *width,
+            alloc,
+            frame,
+        ),
         Inst::CallIndirect {
             target,
             args,
@@ -3153,6 +3211,8 @@ fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
         Inst::CallExt { .. } => "CallExt",
         Inst::TailExt(_) => "TailExt",
         Inst::Mcpy { .. } => "Mcpy",
+        Inst::AtomicRmw { .. } => "AtomicRmw",
+        Inst::AtomicCas { .. } => "AtomicCas",
         Inst::Intrinsic { .. } => "Intrinsic",
         Inst::AllocaInit(_) => "AllocaInit",
         Inst::ParamRef { .. } => "ParamRef",
@@ -6795,6 +6855,206 @@ fn emit_mcpy(
         Place::Spill(_) => spill_dst_to_slot(code, dst_place, dst_r, frame),
         _ => {}
     }
+    true
+}
+
+/// Write the result `src` of an atomic op into the inst's `dst`
+/// `Place`. Runs after the borrowed registers are restored so the
+/// spill slot's rsp offset is the unshifted one.
+fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+    match dst {
+        Place::IntReg(r) if r != src.0 => emit_mov_rr(code, Reg(r), src),
+        Place::Spill(_) => spill_dst_to_slot(code, dst, src, frame),
+        _ => {}
+    }
+}
+
+/// Load the low `width` bytes of `[base]` into `dst`, zero-extended. A
+/// width-sized access is required so the atomic object's footprint is
+/// not over-read past its end (a 1/2/4-byte `_Atomic` may sit at a page
+/// boundary) and so the prior value carries no high-byte residue.
+fn emit_atomic_load(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
+    match width {
+        1 => super::x86_64::emit_movzx_r_mem8(code, dst, base, 0),
+        2 => super::x86_64::emit_movzx_r_mem16(code, dst, base, 0),
+        4 => super::x86_64::emit_mov_r32_mem(code, dst, base, 0),
+        _ => emit_mov_r_mem(code, dst, base, 0),
+    }
+}
+
+/// Store the low `width` bytes of `src` to `[base]`; the companion to
+/// [`emit_atomic_load`] for the compare-exchange expected-operand writeback.
+fn emit_atomic_store(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
+    match width {
+        1 => super::x86_64::emit_mov_mem_r8(code, base, 0, src),
+        2 => super::x86_64::emit_mov_mem_r16(code, base, 0, src),
+        4 => super::x86_64::emit_mov_mem_r32(code, base, 0, src),
+        _ => emit_mov_mem_r(code, base, 0, src),
+    }
+}
+
+/// Force an operand's value into a designated scratch register. The
+/// operand may already sit in its allocator register; `materialize`
+/// returns that register, and we copy it into `scratch` so the
+/// caller can clobber the source register afterwards. `sp_shift`
+/// accounts for the borrowed registers already pushed.
+fn operand_into(
+    code: &mut Vec<u8>,
+    value: super::super::ir::ValueId,
+    scratch: Reg,
+    frame: Frame,
+    sp_shift: u32,
+    alloc: &Allocation,
+) -> Option<Reg> {
+    let place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let r = materialize_int_shifted(code, place, scratch, frame, sp_shift)?;
+    if r.0 != scratch.0 {
+        emit_mov_rr(code, scratch, r);
+    }
+    Some(scratch)
+}
+
+/// C11 7.17.7.2-7.17.7.5 atomic read-modify-write. Lowers to a genuine
+/// atomic instruction (Intel SDM Vol.2): `XCHG` for exchange, `LOCK
+/// XADD` for add / sub (negating the operand for sub), and a `LOCK
+/// CMPXCHG` retry loop for the bitwise operators (x86 has no
+/// fetch-and-return-old form for AND / OR / XOR). The defined value is
+/// the object's prior contents. The address rides SCRATCH_R13 and the
+/// operand SCRATCH_R10, both outside the allocator's register banks;
+/// RAX and a loop temp are borrowed via push / pop so a value the
+/// allocator parked there survives.
+#[allow(clippy::too_many_arguments)]
+fn emit_atomic_rmw(
+    code: &mut Vec<u8>,
+    dst: Place,
+    op: super::super::ir::AtomicRmwOp,
+    addr: super::super::ir::ValueId,
+    value: super::super::ir::ValueId,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::super::ir::AtomicRmwOp as Op;
+    let a = SCRATCH_R13;
+    let val = SCRATCH_R10;
+    match op {
+        Op::Xchg => {
+            // No RAX involved: XCHG with a memory operand is implicitly
+            // locked. Operands ride the reserved scratches; rsp stable.
+            if operand_into(code, addr, a, frame, 0, alloc).is_none()
+                || operand_into(code, value, val, frame, 0, alloc).is_none()
+            {
+                bail_msg("AtomicRmw: operand not int reg / spill");
+                return false;
+            }
+            emit_xchg_mem_r(code, a, 0, val, width);
+            write_atomic_result(code, dst, val, frame);
+            true
+        }
+        Op::Add | Op::Sub => {
+            emit_push_r(code, Reg::RAX);
+            if operand_into(code, addr, a, frame, 8, alloc).is_none()
+                || operand_into(code, value, val, frame, 8, alloc).is_none()
+            {
+                bail_msg("AtomicRmw: operand not int reg / spill");
+                return false;
+            }
+            emit_mov_rr(code, Reg::RAX, val);
+            if matches!(op, Op::Sub) {
+                emit_neg_r(code, Reg::RAX);
+            }
+            emit_lock_xadd_mem_r(code, a, 0, Reg::RAX, width);
+            // RAX now holds the prior contents; stash it before the pop.
+            emit_mov_rr(code, val, Reg::RAX);
+            emit_pop_r(code, Reg::RAX);
+            write_atomic_result(code, dst, val, frame);
+            true
+        }
+        Op::And | Op::Or | Op::Xor => {
+            // CMPXCHG retry: load the current value into RAX, compute the
+            // new value in a temp, and conditionally publish it; repeat
+            // until the store succeeds (ZF set by CMPXCHG).
+            let temp = Reg::RCX;
+            emit_push_r(code, Reg::RAX);
+            emit_push_r(code, temp);
+            if operand_into(code, addr, a, frame, 16, alloc).is_none()
+                || operand_into(code, value, val, frame, 16, alloc).is_none()
+            {
+                bail_msg("AtomicRmw: operand not int reg / spill");
+                return false;
+            }
+            emit_atomic_load(code, Reg::RAX, a, width);
+            let loop_start = code.len();
+            emit_mov_rr(code, temp, Reg::RAX);
+            match op {
+                Op::And => emit_and_rr(code, temp, val),
+                Op::Or => emit_or_rr(code, temp, val),
+                Op::Xor => emit_xor_rr(code, temp, val),
+                _ => unreachable!(),
+            }
+            emit_lock_cmpxchg_mem_r(code, a, 0, temp, width);
+            // Branch back when the store lost the race (ZF == 0). The
+            // rel8 field is measured from the byte after the 2-byte Jcc.
+            let rel = (loop_start as i64) - (code.len() as i64 + 2);
+            emit_jcc_rel8(code, Cc::Ne, rel as i8);
+            emit_mov_rr(code, val, Reg::RAX);
+            emit_pop_r(code, temp);
+            emit_pop_r(code, Reg::RAX);
+            write_atomic_result(code, dst, val, frame);
+            true
+        }
+    }
+}
+
+/// C11 7.17.7.4 atomic compare-and-exchange. Lowers to `LOCK CMPXCHG`
+/// (Intel SDM Vol.2): RAX is loaded with `*expected`; on a match the
+/// store publishes `desired` and the result is 1, otherwise the
+/// current contents are written back into `*expected` and the result
+/// is 0. The success flag is read from the CMPXCHG ZF (a `mov` does
+/// not disturb the flags, so the post-branch SETcc is correct).
+#[allow(clippy::too_many_arguments)]
+fn emit_atomic_cas(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: super::super::ir::ValueId,
+    expected_addr: super::super::ir::ValueId,
+    desired: super::super::ir::ValueId,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let a = SCRATCH_R13;
+    let des = SCRATCH_R10;
+    let exp = Reg::RCX;
+    emit_push_r(code, Reg::RAX);
+    emit_push_r(code, exp);
+    // Materialise addr / desired before clobbering RCX with the
+    // expected pointer (their Places may name RCX).
+    if operand_into(code, addr, a, frame, 16, alloc).is_none()
+        || operand_into(code, desired, des, frame, 16, alloc).is_none()
+        || operand_into(code, expected_addr, exp, frame, 16, alloc).is_none()
+    {
+        bail_msg("AtomicCas: operand not int reg / spill");
+        return false;
+    }
+    emit_atomic_load(code, Reg::RAX, exp, width);
+    emit_lock_cmpxchg_mem_r(code, a, 0, des, width);
+    // On failure (ZF == 0) write the observed value back to *expected.
+    // Build the conditional body separately to size the forward Jcc.
+    let mut fail = Vec::new();
+    emit_atomic_store(&mut fail, exp, Reg::RAX, width);
+    emit_jcc_rel8(code, Cc::E, fail.len() as i8);
+    code.extend_from_slice(&fail);
+    // Result = ZF from the CMPXCHG. Reuse `a` (addr no longer needed).
+    emit_setcc_r8(code, Cc::E, a);
+    emit_movzx_r_r8(code, a, a);
+    emit_pop_r(code, exp);
+    emit_pop_r(code, Reg::RAX);
+    write_atomic_result(code, dst, a, frame);
     true
 }
 

@@ -1060,6 +1060,42 @@ pub(super) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     0x3900_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+// ---- Exclusive-monitor load / store (ARM ARM C6.2). Used by the
+//      atomic read-modify-write and compare-exchange lowering: a
+//      LDAXR / STLXR retry loop needs no feature detection, unlike the
+//      LSE atomics. `width` selects the access size variant
+//      (B / H / W / X). The acquire (LDAXR) / release (STLXR) ordering
+//      gives the sequentially-consistent semantics C11 7.17.3 requires
+//      for the default memory order.
+
+/// Size field (bits[31:30]) for an exclusive load / store of `width`
+/// bytes: 00 byte, 01 halfword, 10 word, 11 doubleword.
+fn excl_size(width: u8) -> u32 {
+    match width {
+        1 => 0b00,
+        2 => 0b01,
+        4 => 0b10,
+        _ => 0b11,
+    }
+}
+
+/// `LDAXR{B,H} <Wt>, [<Xn|SP>]` / `LDAXR <Wt|Xt>, [<Xn|SP>]` --
+/// load-acquire exclusive register of `width` bytes. No offset.
+pub(super) fn enc_ldaxr(rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x085F_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STLXR{B,H} <Ws>, <Wt>, [<Xn|SP>]` / `STLXR <Ws>, <Wt|Xt>,
+/// [<Xn|SP>]` -- store-release exclusive register of `width` bytes.
+/// `rs` receives 0 on success and 1 when the monitor was lost.
+pub(super) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x0800_FC00
+        | (excl_size(width) << 30)
+        | ((rs.0 as u32) << 16)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
 // ---- Loads / stores (unscaled 9-bit signed offset). Used for negative
 //      stack-frame offsets (locals at fp - N*8).
 
@@ -1758,6 +1794,9 @@ pub(super) fn lower(
         func_names,
         func_prologue_native,
         promoted_local_slots,
+        // x86_64-only Win64 unwind; the aarch64 PE writer uses packed
+        // RUNTIME_FUNCTIONs and consults no per-function descriptor.
+        fn_unwind: Vec::new(),
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs,
@@ -1912,6 +1951,7 @@ fn emit_plt_trampolines(
         got_fixups.push(GotFixup {
             adrp_offset: tramp_off,
             import_index,
+            is_data_load: false,
         });
         emit(code, enc_adrp(Reg::X16, 0));
         emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
@@ -2355,5 +2395,28 @@ mod tests {
             let off = i * 4;
             assert_eq!(&code[off..off + 4], &one(*w));
         }
+    }
+
+    // The exclusive-monitor encodings below were cross-checked against
+    // `clang -target aarch64-linux-gnu` + `objdump -d`:
+    //   ldaxr x1,[x2]=c85ffc41  ldaxr w1,[x2]=885ffc41
+    //   ldaxrh w1,[x2]=485ffc41 ldaxrb w1,[x2]=085ffc41
+    //   stlxr w0,x1,[x2]=c800fc41  stlxr w0,w1,[x2]=8800fc41
+    //   stlxrh w0,w1,[x2]=4800fc41 stlxrb w0,w1,[x2]=0800fc41
+
+    #[test]
+    fn ldaxr_all_widths() {
+        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 8), 0xC85F_FC41);
+        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 4), 0x885F_FC41);
+        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 2), 0x485F_FC41);
+        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 1), 0x085F_FC41);
+    }
+
+    #[test]
+    fn stlxr_all_widths() {
+        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 8), 0xC800_FC41);
+        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 4), 0x8800_FC41);
+        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 2), 0x4800_FC41);
+        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 1), 0x0800_FC41);
     }
 }

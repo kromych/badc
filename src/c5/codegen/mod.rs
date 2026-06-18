@@ -77,6 +77,12 @@ mod ssa_split_crit_edges;
 mod ssa_store_forward;
 mod x86_64;
 
+/// Re-exported for the multi-TU link path, which recovers Win64
+/// unwind descriptors from merged `.text` bytes. Only the linker
+/// (gated on `full`) consumes it.
+#[cfg(feature = "full")]
+pub(crate) use x86_64::decode_x86_64_prologue_unwind;
+
 pub use jit::{jit_run, jit_run_with_options};
 
 /// Which native binary to produce. Adding a target is a structural
@@ -1449,6 +1455,66 @@ pub(crate) struct Build {
     /// longer holds the value (a stale `DW_OP_fbreg` would make the
     /// debugger read uninitialised frame memory).
     pub promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Per-function x86_64 Win64 unwind descriptors, in emission
+    /// order. The PE writer turns each into a `RUNTIME_FUNCTION` +
+    /// `UNWIND_INFO` pair so `RtlVirtualUnwind` can recover the
+    /// caller's RIP/RSP/RBP at any body fault. Populated by the
+    /// x86_64 lowering (from the prologue layout it just emitted)
+    /// and by the multi-TU linker (from the merged prologue bytes).
+    /// Empty for non-x86_64 builds and for hand-built test `Build`s;
+    /// the PE writer then falls back to the coarse whole-`.text`
+    /// entry.
+    pub fn_unwind: Vec<FnUnwind>,
+}
+
+/// x86_64 Win64 prologue unwind descriptor for one function.
+///
+/// `begin` / `end` are absolute byte offsets in [`Build::text`];
+/// every `*_end` prologue boundary is relative to `begin` (the
+/// `CodeOffset` domain a Win64 `UNWIND_CODE` uses). The PE writer
+/// adds the entry-stub prologue length to `begin` / `end` to derive
+/// RVAs and synthesizes the `UNWIND_CODE` array (Win64 ABI, x64
+/// exception handling) from the recorded boundaries.
+///
+/// The c5 prologue order is (optional arg-spill group) `pop r10;
+/// sub rsp,M; <spills>; push r10`, then the standard frame `push
+/// rbp; mov rbp,rsp; [sub rsp,N]`. Each `*_end` field is the byte
+/// offset just past the matching instruction, which the unwind
+/// codes use as their `CodeOffset` (the offset of the next
+/// instruction). The net stack effect of the arg-spill group is a
+/// single `-M` decrement (the intermediate `pop`/`push` of the
+/// return address cancel), so it encodes as one `UWOP_ALLOC` of
+/// `M` whose `CodeOffset` is the end of the `push r10`.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct FnUnwind {
+    /// Byte offset of the function's first instruction in `text`.
+    pub begin: u32,
+    /// Byte offset one past the function's last instruction in
+    /// `text` (its `[begin, end)` extent).
+    pub end: u32,
+    /// `true` for a leaf-elided function with no standard frame
+    /// (no `push rbp` / `mov rbp,rsp`): the `UNWIND_INFO` carries
+    /// no codes and no frame register, and the unwinder treats it
+    /// as a frameless body returning off the top-of-stack RA.
+    pub leaf: bool,
+    /// Total bytes the arg-spill group allocates (`param_spill_bytes`).
+    /// 0 when the function takes no register/stack parameters into
+    /// c5 cdecl cells.
+    pub param_spill_bytes: u32,
+    /// Offset (from `begin`) past the arg-spill group's `push r10`.
+    /// Set only when `param_spill_bytes > 0`.
+    pub arg_spill_end: u32,
+    /// Offset (from `begin`) past `push rbp`.
+    pub push_rbp_end: u32,
+    /// Offset (from `begin`) past `mov rbp,rsp`.
+    pub set_fpreg_end: u32,
+    /// Bytes the standard frame allocation reserves (`frame_bytes`).
+    /// 0 when the function reserves no locals / spill / callee-save
+    /// area.
+    pub frame_bytes: u32,
+    /// Offset (from `begin`) past `sub rsp,frame_bytes`. Set only
+    /// when `frame_bytes > 0`.
+    pub frame_alloc_end: u32,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -1479,6 +1545,13 @@ pub(crate) struct GotFixup {
     pub adrp_offset: usize,
     /// Index into [`aarch64::IMPORTS`].
     pub import_index: usize,
+    /// True when the site is a data-import reference that must read
+    /// the IAT slot's value rather than branch to a call thunk. On
+    /// x86_64 the reference is a `lea reg, [rip+disp32]` the writer
+    /// rewrites to `mov reg, [rip+disp32]` against the slot RVA; a
+    /// data import emits no `jmp [IAT]` trampoline. On aarch64 the
+    /// adrp + ldr form already loads the slot, so the flag is unused.
+    pub is_data_load: bool,
 }
 
 /// Relocation for `Inst::ImmData`: the codegen emits an
@@ -1901,6 +1974,7 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
         build.got_fixups.push(GotFixup {
             adrp_offset: r.instr_offset,
             import_index: idx,
+            is_data_load: false,
         });
     }
     build.user_extern_data_refs = remaining;

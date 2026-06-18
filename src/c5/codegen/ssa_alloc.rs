@@ -1137,6 +1137,20 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
             f(*dst);
             f(*src);
         }
+        Inst::AtomicRmw { addr, value, .. } => {
+            f(*addr);
+            f(*value);
+        }
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            ..
+        } => {
+            f(*addr);
+            f(*expected_addr);
+            f(*desired);
+        }
         Inst::Phi { incoming, .. } => {
             for (_, v) in incoming {
                 f(*v);
@@ -1236,6 +1250,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
         }
         TailExt(_) => ResultKind::None,
         Mcpy { .. } => ResultKind::Int,
+        // C11 7.17.7: the prior value (RMW) / boolean success (CAS) is
+        // an integer scalar.
+        AtomicRmw { .. } | AtomicCas { .. } => ResultKind::Int,
         Intrinsic { kind, .. } => {
             use super::super::op::Intrinsic as I;
             // The unary FP math intrinsics (sqrt / fabs / floor / ceil /

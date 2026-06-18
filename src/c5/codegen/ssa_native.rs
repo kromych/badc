@@ -124,6 +124,9 @@ pub(crate) fn compile_function_to_bytes(
             // Single-unit in-memory emit: TLS accesses keep the baked
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
+            // The JIT single-function path builds no PE; the unwind
+            // descriptor is discarded.
+            let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
             let ok = super::ssa_emit_x86_64::emit_function(
                 func,
                 &alloc,
@@ -145,10 +148,12 @@ pub(crate) fn compile_function_to_bytes(
                 &mut pc_to_native,
                 &mut prologue_native,
                 &mut ssa_line_rows,
+                &mut fn_unwind,
             );
             if !ok {
                 return Err("ssa_native: emit_function bailed".to_string());
             }
+            let _ = &fn_unwind;
             let outer = fixups.len()
                 + plt_call_fixups.len()
                 + got_fixups.len()

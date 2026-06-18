@@ -272,6 +272,29 @@ pub(crate) enum Inst {
         src: ValueId,
         size: i64,
     },
+    /// Atomic read-modify-write on the `width`-byte object at `addr`
+    /// (C11 7.17.7.2-7.17.7.5). `op` selects the operator; the operand
+    /// is `value`. The defined value is the object's prior contents
+    /// (C11 7.17.7p2). The per-arch lowering emits a genuine atomic
+    /// sequence (Intel SDM Vol.2 LOCK XADD / XCHG / CMPXCHG retry on
+    /// x86_64; ARM ARM LDAXR / STLXR retry on aarch64).
+    AtomicRmw {
+        op: AtomicRmwOp,
+        addr: ValueId,
+        value: ValueId,
+        width: u8,
+    },
+    /// Atomic compare-and-exchange on the `width`-byte object at `addr`
+    /// (C11 7.17.7.4). Compares `*addr` against `*expected_addr`; on a
+    /// match stores `desired` and yields 1, otherwise stores the
+    /// current `*addr` into `*expected_addr` and yields 0. Lowered to
+    /// LOCK CMPXCHG on x86_64 and an LDAXR / STLXR retry on aarch64.
+    AtomicCas {
+        addr: ValueId,
+        expected_addr: ValueId,
+        desired: ValueId,
+        width: u8,
+    },
     /// Compiler-builtin intrinsic. The discriminant is the
     /// `Intrinsic` enum value. Single-arg intrinsics carry one
     /// element in `args`; two-arg intrinsics (longjmp, va_start,
@@ -406,6 +429,19 @@ pub(crate) enum BinOp {
     Fgt,
     Fle,
     Fge,
+}
+
+/// Operator for an atomic read-modify-write (C11 7.17.7.2-7.17.7.5).
+/// `Xchg` discards the prior contents in the new value; the others
+/// combine the prior contents with the operand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum AtomicRmwOp {
+    Xchg,
+    Add,
+    Sub,
+    And,
+    Or,
+    Xor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

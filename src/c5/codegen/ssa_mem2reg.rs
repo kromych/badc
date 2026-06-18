@@ -502,6 +502,20 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
             f(dst);
             f(src);
         }
+        Inst::AtomicRmw { addr, value, .. } => {
+            f(addr);
+            f(value);
+        }
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            ..
+        } => {
+            f(addr);
+            f(expected_addr);
+            f(desired);
+        }
         Inst::Phi { incoming, .. } => {
             for (_, v) in incoming {
                 f(v);

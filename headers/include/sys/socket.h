@@ -188,6 +188,10 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #pragma binding(ws2_32::shutdown,    "shutdown")
 #pragma binding(ws2_32::closesocket, "closesocket")
 #pragma binding(ws2_32::ioctlsocket, "ioctlsocket")
+#pragma binding(ws2_32::WSAGetLastError, "WSAGetLastError")
+#pragma binding(ws2_32::WSASetLastError, "WSASetLastError")
+int  WSAGetLastError(void);
+void WSASetLastError(int err);
 
 #define SOL_SOCKET    0xffff
 #define SO_REUSEADDR  0x0004

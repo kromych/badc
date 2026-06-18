@@ -514,20 +514,22 @@ impl Preprocessor {
                 macros.insert("__unix__".to_string(), "1".to_string());
             }
             Target::WindowsX64 | Target::WindowsAarch64 => {
-                // Genuine target-detection macros only. The MSVC-
-                // mimicry surface (`_MSC_VER`, `__MINGW32__`,
-                // `__int64`, the `__declspec(x)` empty-decorator
-                // family, etc.) lives in the bundled
-                // `msvc_compat.h` header and is opted into per
-                // translation unit via `badc -include
-                // msvc_compat.h ...`. Keeping the
-                // predefine table to genuine target-detection
-                // surfaces the "is this TU pretending to be MSVC?"
-                // question at the command line, where the build
-                // driver is the right place to answer it.
+                // Target-detection macros plus the `__intN` fixed-width
+                // type keywords. `__int8/16/32/64` are mingw-gcc builtins
+                // on Windows -- provided independent of MSVC, and used by
+                // essentially all Windows API code -- so they belong to the
+                // target surface. The remaining MSVC-mimicry (`_MSC_VER`,
+                // `__MINGW32__`, the `__declspec(x)` empty-decorator family,
+                // the SAL annotations) stays in the opt-in `msvc_compat.h`
+                // header, included per translation unit via
+                // `badc -include msvc_compat.h ...`.
                 macros.insert("_WIN32".to_string(), "1".to_string());
                 macros.insert("_WIN64".to_string(), "1".to_string());
                 macros.insert("__BADC_WINDOWS__".to_string(), "1".to_string());
+                macros.insert("__int8".to_string(), "char".to_string());
+                macros.insert("__int16".to_string(), "short".to_string());
+                macros.insert("__int32".to_string(), "int".to_string());
+                macros.insert("__int64".to_string(), "long long".to_string());
             }
         }
         Self {

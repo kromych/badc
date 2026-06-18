@@ -89,6 +89,72 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(msvcrt::wcstoul, "wcstoul")
 #pragma binding(msvcrt::wcstod, "wcstod")
 #pragma binding(msvcrt::wcstok, "wcstok")
+#pragma binding(msvcrt::wcsicmp, "_wcsicmp")
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::wcstok_s, "wcstok_s")
+int wcsicmp(const wchar_t *a, const wchar_t *b);
+wchar_t *wcstok_s(wchar_t *str, const wchar_t *delim, wchar_t **context);
+#pragma binding(ucrtbase::wcscpy_s, "wcscpy_s")
+int wcscpy_s(wchar_t *dst, size_t count, const wchar_t *src);
+#pragma binding(ucrtbase::wcsncpy_s, "wcsncpy_s")
+int wcsncpy_s(wchar_t *dst, size_t dstsz, const wchar_t *src, size_t count);
+#pragma binding(ucrtbase::wcscat_s, "wcscat_s")
+int wcscat_s(wchar_t *dst, size_t dstsz, const wchar_t *src);
+#pragma binding(msvcrt::wcscoll,  "wcscoll")
+#pragma binding(msvcrt::wcsxfrm,  "wcsxfrm")
+#pragma binding(msvcrt::wcsftime, "wcsftime")
+
+// Neither msvcrt.dll nor ucrtbase.dll exports the C99 wide-array
+// functions (7.24.4.4 / 7.24.4.5), count-based swprintf (7.24.2.3), or
+// wcsnlen_s; the Microsoft SDK defines them inline over the exported
+// primitives _vsnwprintf and wcsnlen. Mirror that so a reference
+// resolves without a separate support library.
+#include <stdarg.h>
+#pragma binding(msvcrt::_vsnwprintf, "_vsnwprintf")
+#pragma binding(msvcrt::wcsnlen,     "wcsnlen")
+int _vsnwprintf(wchar_t *buffer, size_t count, const wchar_t *format, va_list ap);
+size_t wcsnlen(const wchar_t *s, size_t maxlen);
+static inline int swprintf(wchar_t *buffer, size_t count, const wchar_t *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    int r = _vsnwprintf(buffer, count, format, ap);
+    va_end(ap);
+    return r;
+}
+static inline size_t wcsnlen_s(const wchar_t *s, size_t n) {
+    return s ? wcsnlen(s, n) : 0;
+}
+static inline wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n) {
+    for (; n; --n, ++s)
+        if (*s == c)
+            return (wchar_t *)s;
+    return (wchar_t *)0;
+}
+static inline int wmemcmp(const wchar_t *a, const wchar_t *b, size_t n) {
+    for (; n; --n, ++a, ++b)
+        if (*a != *b)
+            return *a < *b ? -1 : 1;
+    return 0;
+}
+static inline wchar_t *wmemcpy(wchar_t *d, const wchar_t *s, size_t n) {
+    for (size_t i = 0; i < n; ++i)
+        d[i] = s[i];
+    return d;
+}
+static inline wchar_t *wmemmove(wchar_t *d, const wchar_t *s, size_t n) {
+    if (d < s)
+        for (size_t i = 0; i < n; ++i)
+            d[i] = s[i];
+    else
+        for (size_t i = n; i; --i)
+            d[i - 1] = s[i - 1];
+    return d;
+}
+static inline wchar_t *wmemset(wchar_t *d, wchar_t c, size_t n) {
+    for (size_t i = 0; i < n; ++i)
+        d[i] = c;
+    return d;
+}
 #endif
 
 // Wide-string handling (C99 7.24.4). `size_t` comes from <stddef.h>.
@@ -101,12 +167,16 @@ wchar_t *wcscpy(wchar_t *dest, const wchar_t *src);
 wchar_t *wcsncpy(wchar_t *dest, const wchar_t *src, size_t n);
 wchar_t *wcscat(wchar_t *dest, const wchar_t *src);
 
-// Wide-character array handling (C99 7.24.4.4).
+// Wide-character array handling (C99 7.24.4.4). On Windows these have
+// inline definitions in the target block above, since no system CRT
+// exports them.
+#ifndef _WIN32
 wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n);
 int wmemcmp(const wchar_t *s1, const wchar_t *s2, size_t n);
 wchar_t *wmemcpy(wchar_t *s1, const wchar_t *s2, size_t n);
 wchar_t *wmemmove(wchar_t *s1, const wchar_t *s2, size_t n);
 wchar_t *wmemset(wchar_t *s, wchar_t c, size_t n);
+#endif
 
 // Wide-string numeric conversion (C99 7.24.4.1).
 long wcstol(const wchar_t *nptr, wchar_t **endptr, int base);

@@ -208,9 +208,7 @@
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::log,   "log")
 #pragma binding(msvcrt::log10, "log10")
-#pragma binding(msvcrt::log2,  "log2")
 #pragma binding(msvcrt::exp,   "exp")
-#pragma binding(msvcrt::round, "round")
 #pragma binding(msvcrt::fmod,  "fmod")
 // sqrt / fabs / floor / ceil / trunc lower a direct call to a single
 // FP instruction through the `#pragma intrinsic` below; bind them so
@@ -262,6 +260,13 @@
 #pragma binding(ucrtbase::ilogb,      "ilogb")
 #pragma binding(ucrtbase::nextafterf, "nextafterf")
 #pragma binding(ucrtbase::ilogbf,     "ilogbf")
+#pragma binding(ucrtbase::exp2,  "exp2")
+#pragma binding(ucrtbase::exp2f, "exp2f")
+// C99 log2 / round only landed in the Universal CRT.
+#pragma binding(ucrtbase::log2,  "log2")
+#pragma binding(ucrtbase::round, "round")
+double exp2(double x);
+float exp2f(float x);
 #pragma binding(ucrtbase::pow,   "pow")
 #pragma binding(ucrtbase::fmin,  "fmin")
 #pragma binding(ucrtbase::fmax,  "fmax")

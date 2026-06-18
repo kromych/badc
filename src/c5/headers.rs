@@ -254,6 +254,47 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
     ("windows.h", include_str!("../../headers/include/windows.h")),
     (
+        "winapifamily.h",
+        include_str!("../../headers/include/winapifamily.h"),
+    ),
+    (
+        "sdkddkver.h",
+        include_str!("../../headers/include/sdkddkver.h"),
+    ),
+    ("cpuid.h", include_str!("../../headers/include/cpuid.h")),
+    (
+        "winerror.h",
+        include_str!("../../headers/include/winerror.h"),
+    ),
+    ("process.h", include_str!("../../headers/include/process.h")),
+    ("conio.h", include_str!("../../headers/include/conio.h")),
+    (
+        "winsock2.h",
+        include_str!("../../headers/include/winsock2.h"),
+    ),
+    (
+        "ws2tcpip.h",
+        include_str!("../../headers/include/ws2tcpip.h"),
+    ),
+    ("mstcpip.h", include_str!("../../headers/include/mstcpip.h")),
+    ("mswsock.h", include_str!("../../headers/include/mswsock.h")),
+    (
+        "iphlpapi.h",
+        include_str!("../../headers/include/iphlpapi.h"),
+    ),
+    ("ws2bth.h", include_str!("../../headers/include/ws2bth.h")),
+    ("Rpc.h", include_str!("../../headers/include/rpc.h")),
+    ("rpc.h", include_str!("../../headers/include/rpc.h")),
+    (
+        "hvsocket.h",
+        include_str!("../../headers/include/hvsocket.h"),
+    ),
+    (
+        "pshpack1.h",
+        include_str!("../../headers/include/pshpack1.h"),
+    ),
+    ("poppack.h", include_str!("../../headers/include/poppack.h")),
+    (
         "winternl.h",
         include_str!("../../headers/include/winternl.h"),
     ),

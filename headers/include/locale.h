@@ -35,6 +35,8 @@
 #define LC_MONETARY 3
 #define LC_NUMERIC  4
 #define LC_TIME     5
+#define LC_MIN      LC_ALL
+#define LC_MAX      LC_TIME
 #endif
 
 // `struct lconv` layout is implementation-defined (C99 7.11.2.1).
@@ -42,6 +44,45 @@
 // rarely-used currency-formatting fields. Pad the trailing area
 // generously so the host libc can write its own larger struct
 // without overflowing this typedef.
+#ifdef _WIN32
+// MSVC layout: the wide (_W_*) currency strings sit between the narrow
+// pointers and the trailing int_* sign/precedence chars. localeconv()
+// returns the CRT's struct, so the field order must match exactly.
+struct lconv {
+    char *decimal_point;
+    char *thousands_sep;
+    char *grouping;
+    char *int_curr_symbol;
+    char *currency_symbol;
+    char *mon_decimal_point;
+    char *mon_thousands_sep;
+    char *mon_grouping;
+    char *positive_sign;
+    char *negative_sign;
+    char int_frac_digits;
+    char frac_digits;
+    char p_cs_precedes;
+    char p_sep_by_space;
+    char n_cs_precedes;
+    char n_sep_by_space;
+    char p_sign_posn;
+    char n_sign_posn;
+    unsigned short *_W_decimal_point;
+    unsigned short *_W_thousands_sep;
+    unsigned short *_W_int_curr_symbol;
+    unsigned short *_W_currency_symbol;
+    unsigned short *_W_mon_decimal_point;
+    unsigned short *_W_mon_thousands_sep;
+    unsigned short *_W_positive_sign;
+    unsigned short *_W_negative_sign;
+    char int_p_cs_precedes;
+    char int_n_cs_precedes;
+    char int_p_sep_by_space;
+    char int_n_sep_by_space;
+    char int_p_sign_posn;
+    char int_n_sign_posn;
+};
+#else
 struct lconv {
     char *decimal_point;
     char *thousands_sep;
@@ -69,6 +110,7 @@ struct lconv {
     char int_n_sign_posn;
     unsigned char __pad[64];
 };
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

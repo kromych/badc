@@ -363,8 +363,10 @@ typedef struct __c5_fpos_t fpos_t;
 // reach for these under `_MSC_VER`; the `_s` form is the
 // bounded-buffer rewrite of the legacy entry point and behaves
 // the same way for in-bounds inputs.
-#pragma binding(msvcrt::localtime_s,    "localtime_s")
-#pragma binding(msvcrt::gmtime_s,       "gmtime_s")
+// The CRT exports the 64-bit-time_t forms; the unsuffixed names are
+// SDK macros. badc's time_t is 64-bit on Windows, so the ABI matches.
+#pragma binding(msvcrt::localtime_s,    "_localtime64_s")
+#pragma binding(msvcrt::gmtime_s,       "_gmtime64_s")
 #pragma binding(msvcrt::ctime_s,        "ctime_s")
 #pragma binding(msvcrt::asctime_s,      "asctime_s")
 #pragma binding(msvcrt::strerror_s,     "strerror_s")
@@ -382,6 +384,11 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::_kbhit,         "_kbhit")
 #pragma binding(msvcrt::_msize,         "_msize")
 #pragma binding(msvcrt::_open,          "_open")
+#pragma binding(msvcrt::_wopen,         "_wopen")
+#pragma binding(msvcrt::_locking,       "_locking")
+#pragma binding(msvcrt::_get_osfhandle, "_get_osfhandle")
+#pragma binding(msvcrt::_open_osfhandle, "_open_osfhandle")
+#pragma binding(msvcrt::_heapmin,       "_heapmin")
 #pragma binding(msvcrt::_close,         "_close")
 #pragma binding(msvcrt::_read,          "_read")
 #pragma binding(msvcrt::_write,         "_write")
@@ -613,6 +620,11 @@ int   _getch();
 int   _kbhit();
 long long _msize(void *p);
 int   _open(char *path, int flags, int mode);
+int   _wopen(const unsigned short *path, int flags, int mode);
+int   _locking(int fd, int mode, long nbytes);
+long long _get_osfhandle(int fd);
+int _open_osfhandle(long long osfhandle, int flags);
+int   _heapmin(void);
 int   _close(int fd);
 long long _read(int fd, void *buf, long long n);
 long long _write(int fd, void *buf, long long n);

@@ -53,6 +53,11 @@
 #define O_DIRECTORY  0
 #define O_CLOEXEC    0
 #define O_NOFOLLOW   0
+#define O_NOINHERIT  0x0080
+#define _O_RDONLY    O_RDONLY
+#define _O_WRONLY    O_WRONLY
+#define _O_RDWR      O_RDWR
+#define _O_NOINHERIT O_NOINHERIT
 #endif
 
 // Most fcntl command numbers are stable across Linux and

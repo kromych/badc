@@ -154,6 +154,10 @@ int GetCurrentProcessId(void);
 static int getpid(void) {
     return (int)GetCurrentProcessId();
 }
+// Suppress unistd.h's competing msvcrt `_getpid` binding: this
+// translation unit already has a definition, and a binding would
+// re-declare the name as a predefined library function.
+#define __BADC_GETPID_PROVIDED 1
 
 // NOTE: `_CRT_INSECURE_DEPRECATE` / `_CRT_NONSTDC_DEPRECATE` /
 // `_CRT_OBSOLETE` / `_CRT_DEPRECATE_TEXT` are deliberately NOT

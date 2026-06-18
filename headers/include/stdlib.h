@@ -162,6 +162,7 @@
 // msvcrt's `setenv` is the underscored `_putenv_s`. Same shape:
 // (name, value, overwrite) -> int.
 #pragma binding(msvcrt::setenv,    "_putenv_s")
+#pragma binding(msvcrt::_wputenv_s, "_wputenv_s")
 #pragma binding(msvcrt::qsort,     "qsort")
 #pragma binding(msvcrt::bsearch,   "bsearch")
 #pragma binding(msvcrt::rand,      "rand")
@@ -174,6 +175,31 @@
 // msvcrt exports the bare `atexit` directly so we bind it as
 // itself.
 #pragma binding(msvcrt::atexit,    "atexit")
+#pragma binding(msvcrt::_exit,     "_exit")
+#pragma binding(msvcrt::mbstowcs,  "mbstowcs")
+#pragma binding(msvcrt::wcstombs,  "wcstombs")
+// CRT data exports: the system error table and the wide / narrow
+// process environment blocks.
+#pragma binding(data msvcrt::_sys_nerr,    "_sys_nerr")
+#pragma binding(data msvcrt::_sys_errlist, "_sys_errlist")
+#pragma binding(data msvcrt::_wenviron,    "_wenviron")
+#pragma binding(data msvcrt::_environ,     "_environ")
+// `_doserrno` is an SDK macro over the exported accessor `__doserrno`,
+// which returns a pointer to the thread's OS error code.
+#pragma binding(msvcrt::__doserrno, "__doserrno")
+int *__doserrno(void);
+#define _doserrno (*__doserrno())
+extern int _sys_nerr;
+extern char *_sys_errlist[];
+extern unsigned short **_wenviron;
+extern char **_environ;
+// MSVC CRT size limits (_makepath / _splitpath / environment).
+#define _MAX_PATH   260
+#define _MAX_DRIVE  3
+#define _MAX_DIR    256
+#define _MAX_FNAME  256
+#define _MAX_EXT    256
+#define _MAX_ENV    32767
 #endif
 
 char *malloc(int size);

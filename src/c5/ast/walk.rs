@@ -1599,9 +1599,9 @@ impl<'a> Walker<'a> {
                 // C99 6.7.2.1: bitfield write -- load the storage
                 // unit, clear the destination slice, mask + shift
                 // the new value into place, OR the cleared old
-                // value with the shifted new, store back.
-                // Returns the combined word so an outer expression
-                // chain keeps a stable rvalue.
+                // value with the shifted new, store back. The
+                // assignment's own value (for an enclosing expression)
+                // is the masked field value, not the storage word.
                 let bf = *bitfield;
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
@@ -1633,10 +1633,14 @@ impl<'a> Walker<'a> {
                     (1i64 << bf.bit_width) - 1
                 };
                 let clear_mask: i64 = !(mask << bf.bit_offset);
-                let old = b.load(addr, load_kind);
-                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
+                // Evaluate the RHS before loading the storage unit: a
+                // chained assignment whose RHS writes the same unit
+                // (adjacent bitfields, `a.x = a.y = v`) must be observed by
+                // this read-modify-write, else its store is clobbered.
                 let rhs_v = self.walk_expr_rvalue(b, *rhs)?;
                 let masked = b.binop_imm(BinOp::And, rhs_v, mask);
+                let old = b.load(addr, load_kind);
+                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
                 let shifted = if bf.bit_offset > 0 {
                     b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
                 } else {
@@ -1644,7 +1648,17 @@ impl<'a> Walker<'a> {
                 };
                 let combined = b.binop(BinOp::Or, cleared, shifted);
                 b.store(addr, combined, store_kind);
-                Ok(combined)
+                // C99 6.5.16p3: the value of the assignment is the value
+                // stored in the bitfield converted to its declared type --
+                // the right-aligned masked field value, sign-extended for a
+                // signed field -- not the whole storage word.
+                if bf.signed && bf.bit_width < 64 {
+                    let shift = 64i64 - (bf.bit_width as i64);
+                    let up = b.binop_imm(BinOp::Shl, masked, shift);
+                    Ok(b.binop_imm(BinOp::Shr, up, shift))
+                } else {
+                    Ok(masked)
+                }
             }
             Expr::Assign { lhs, rhs, ty } => {
                 // C99 6.5.16.1p1 + the c5 address-as-value rule:

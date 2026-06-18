@@ -337,6 +337,14 @@ fn hfa_struct_return() {
 }
 
 #[test]
+fn bitfield_assign_value() {
+    // A bitfield assignment used as an rvalue yields the masked field
+    // value (C99 6.5.16p3), not the storage word; a chained assignment to
+    // adjacent fields of one storage unit observes the inner store.
+    assert_eq!(run_fixture("bitfield_assign_value.c"), 0);
+}
+
+#[test]
 fn compound_literal_tagged_address() {
     // A block-scope compound literal whose member initializer tags an
     // address with a bitwise / shift operator takes the runtime path; a

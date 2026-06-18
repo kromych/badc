@@ -263,9 +263,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x20(%rbp), %rax
-               	movl	(%rax), %ecx
-               	andq	$-0x10, %rcx
-               	movl	$0xf, %edx
+               	movl	$0xf, %ecx
+               	movl	(%rax), %edx
+               	andq	$-0x10, %rdx
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x20(%rbp), %rax

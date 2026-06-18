@@ -1450,6 +1450,55 @@ fn marshal_args(
         }
     }
 
+    // System V FP-eightbyte aggregate arguments: any aggregate containing
+    // an SSE eightbyte. regs[0] may be an xmm, so the regs[0]-as-base scheme
+    // below cannot apply -- materialize the source address into a scratch
+    // GPR and load each eightbyte into its register (movsd for SSE, mov for
+    // INTEGER). Runs after the scalar-FP moves (their xmm sources consumed)
+    // and before the integer marshal (the source address, in a GPR, not yet
+    // overwritten); the eightbytes are memory loads, joining no xmm cycle.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let super::ArgPlacement::StructRegs { regs, n } = placement else {
+            continue;
+        };
+        if n == 0 || !regs.iter().take(n as usize).any(|c| c.is_fp) {
+            continue;
+        }
+        let base = match materialize_int_shifted(
+            code,
+            arg_place(i),
+            SCRATCH_R10,
+            frame,
+            plan.scratch_bytes,
+        ) {
+            Some(s) => s,
+            None => {
+                bail_msg(&alloc::format!(
+                    "{site}: fp aggregate base not in int reg / spill"
+                ));
+                return false;
+            }
+        };
+        // The source address must not share a register with an INTEGER
+        // eightbyte's destination (an argument GPR): loading that eightbyte
+        // would clobber the base before a later SSE eightbyte loads from it.
+        // materialize_int_shifted may return the value's existing register
+        // (an argument GPR), so stage it in SCRATCH_R10, never an argument
+        // or aggregate destination.
+        if base.0 != SCRATCH_R10.0 {
+            emit_mov_rr(code, SCRATCH_R10, base);
+        }
+        let base = SCRATCH_R10;
+        for (k, cr) in regs.iter().take(n as usize).enumerate() {
+            let off = (k as i32) * 8;
+            if cr.is_fp {
+                emit_movsd_xmm_mem(code, Reg(cr.reg), base, off);
+            } else {
+                emit_mov_r_mem(code, Reg(cr.reg), base, off);
+            }
+        }
+    }
+
     // Integer-register placements plus aggregate base addresses are one
     // parallel register move (System V AMD64 3.2.3). A scalar `IntReg`
     // arg moves src->target; a `StructRegs` arg positions its base
@@ -1468,7 +1517,10 @@ fn marshal_args(
                     int_moves.push((s, r));
                 }
             }
-            super::ArgPlacement::StructRegs { regs, n } if n > 0 => {
+            // FP-eightbyte aggregates (an SSE unit) loaded above.
+            super::ArgPlacement::StructRegs { regs, n }
+                if n > 0 && !regs.iter().take(n as usize).any(|c| c.is_fp) =>
+            {
                 let dst = regs[0].reg;
                 if let Place::IntReg(s) = arg_place(i)
                     && s != dst
@@ -1523,6 +1575,7 @@ fn marshal_args(
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::StructRegs { regs, n } = placement
             && n > 0
+            && !regs.iter().take(n as usize).any(|c| c.is_fp)
             && !matches!(arg_place(i), Place::IntReg(_))
         {
             let dst = regs[0].reg;
@@ -1552,11 +1605,11 @@ fn marshal_args(
     // overwritten by its own eightbyte. Integer-only (homogeneous
     // floating-point aggregates excluded upstream).
     for &placement in plan.placements.iter() {
-        if let super::ArgPlacement::StructRegs { regs, n } = placement {
-            debug_assert!(
-                !regs.iter().take(n as usize).any(|c| c.is_fp),
-                "x86_64 marshal: floating-point aggregate eightbyte not supported"
-            );
+        // Integer-class aggregate: load eightbytes from the base in regs[0].
+        // FP-eightbyte aggregates (an SSE unit) were loaded above.
+        if let super::ArgPlacement::StructRegs { regs, n } = placement
+            && !regs.iter().take(n as usize).any(|c| c.is_fp)
+        {
             let base = regs[0].reg;
             for k in (1..n as usize).rev() {
                 emit_mov_r_mem(code, Reg(regs[k].reg), Reg(base), (k as i32) * 8);
@@ -2695,14 +2748,14 @@ fn emit_struct_param_scatter(
         if slot >= 0 {
             continue;
         }
-        debug_assert!(
-            !regs.iter().take(*n as usize).any(|c| c.is_fp),
-            "x86_64 scatter: floating-point aggregate eightbyte not supported"
-        );
         let base = local_slot_off(slot, func, frame, abi);
         for (k, cr) in regs.iter().take(*n as usize).enumerate() {
             let off = (base + (k as i64) * 8) as i32;
-            super::x86_64::emit_mov_mem_r(code, Reg::RBP, off, Reg(cr.reg));
+            if cr.is_fp {
+                super::x86_64::emit_movsd_mem_xmm(code, Reg::RBP, off, Reg(cr.reg));
+            } else {
+                super::x86_64::emit_mov_mem_r(code, Reg::RBP, off, Reg(cr.reg));
+            }
         }
     }
 }
@@ -5663,11 +5716,32 @@ fn emit_call(
     // temp. (> 16-byte returns keep the out-pointer convention and
     // never set `ret_agg`.)
     if let Some(ai) = ret_agg {
-        let size = agg_descs[ai as usize].size;
+        let desc = &agg_descs[ai as usize];
         let base = local_slot_off(ret_slot_local, func, frame, abi);
-        emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
-        if size > 8 {
-            emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+        let eb_classes = match super::abi_classify::classify_aggregate(
+            desc.size,
+            desc.align,
+            &desc.fields,
+            abi,
+            true,
+        ) {
+            super::abi_classify::AggClass::Regs(c) => c,
+            _ => alloc::vec::Vec::new(),
+        };
+        // SSE eightbytes arrive in xmm0/xmm1, INTEGER in rax/rdx; store each
+        // into the caller's result temp at its eightbyte offset.
+        let int_ret = [Reg::RAX, Reg::RDX];
+        let mut int_i = 0usize;
+        let mut sse_i = 0u8;
+        for (k, class) in eb_classes.iter().enumerate() {
+            let disp = (base + (k as i64) * 8) as i32;
+            if matches!(class, super::abi_classify::RegClass::Sse) {
+                emit_movsd_mem_xmm(code, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
+                sse_i += 1;
+            } else {
+                emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
+                int_i += 1;
+            }
         }
         return true;
     }
@@ -6008,11 +6082,32 @@ fn emit_call_indirect(
     // the register-returned class, so > 16-byte (out-pointer) returns do
     // not reach here.
     if let Some(ai) = ret_agg {
-        let size = agg_descs[ai as usize].size;
+        let desc = &agg_descs[ai as usize];
         let base = local_slot_off(ret_slot_local, func, frame, abi);
-        emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
-        if size > 8 {
-            emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+        let eb_classes = match super::abi_classify::classify_aggregate(
+            desc.size,
+            desc.align,
+            &desc.fields,
+            abi,
+            true,
+        ) {
+            super::abi_classify::AggClass::Regs(c) => c,
+            _ => alloc::vec::Vec::new(),
+        };
+        // SSE eightbytes arrive in xmm0/xmm1, INTEGER in rax/rdx; store each
+        // into the caller's result temp at its eightbyte offset.
+        let int_ret = [Reg::RAX, Reg::RDX];
+        let mut int_i = 0usize;
+        let mut sse_i = 0u8;
+        for (k, class) in eb_classes.iter().enumerate() {
+            let disp = (base + (k as i64) * 8) as i32;
+            if matches!(class, super::abi_classify::RegClass::Sse) {
+                emit_movsd_mem_xmm(code, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
+                sse_i += 1;
+            } else {
+                emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
+                int_i += 1;
+            }
         }
         return true;
     }
@@ -7254,7 +7349,17 @@ fn emit_return(
     // through rcx (caller-saved, untouched by the callee-saved restore)
     // before the restore, then load the eightbytes after it.
     if let Some(ai) = func.ret_agg {
-        let size = func.agg_descs[ai as usize].size;
+        let desc = &func.agg_descs[ai as usize];
+        let eb_classes = match super::abi_classify::classify_aggregate(
+            desc.size,
+            desc.align,
+            &desc.fields,
+            abi,
+            true,
+        ) {
+            super::abi_classify::AggClass::Regs(c) => c,
+            _ => alloc::vec::Vec::new(),
+        };
         match return_place {
             Place::IntReg(r) => {
                 if r != Reg::RCX.0 {
@@ -7270,9 +7375,20 @@ fn emit_return(
         for (i, &r) in alloc.gpr_used.iter().enumerate() {
             super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, (i as i32) * 8);
         }
-        emit_mov_r_mem(code, Reg::RAX, Reg::RCX, 0);
-        if size > 8 {
-            emit_mov_r_mem(code, Reg::RDX, Reg::RCX, 8);
+        // Place each eightbyte in its bank: System V returns SSE eightbytes
+        // in xmm0/xmm1 and INTEGER eightbytes in rax/rdx, each in order.
+        let int_ret = [Reg::RAX, Reg::RDX];
+        let mut int_i = 0usize;
+        let mut sse_i = 0u8;
+        for (k, class) in eb_classes.iter().enumerate() {
+            let off = (k as i32) * 8;
+            if matches!(class, super::abi_classify::RegClass::Sse) {
+                emit_movsd_xmm_mem(code, Reg(Reg::XMM0.0 + sse_i), Reg::RCX, off);
+                sse_i += 1;
+            } else {
+                emit_mov_r_mem(code, int_ret[int_i], Reg::RCX, off);
+                int_i += 1;
+            }
         }
         if is_full_leaf(func, frame, alloc, abi) {
             emit_ret(code);

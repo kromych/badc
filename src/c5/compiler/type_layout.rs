@@ -392,10 +392,13 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
             // it inline on the stack (MEMORY class), handled by the marshal.
             return None;
         }
-        // Off the HFA path, only integer-class aggregates route through the
-        // host ABI. A System V FP-eightbyte or a mixed int+FP aggregate
-        // would need FP-bank accounting not yet implemented there.
-        // TODO: System V FP-eightbyte + mixed aggregates.
+        // An aggregate with a floating-point member keeps the by-address
+        // convention for arguments. The System V xmm-eightbyte argument emit
+        // (marshal + prologue) is in place and handles the register/stack
+        // cases, but enabling it surfaces a parameter-passing bug not yet
+        // localized, so FP-aggregate arguments stay by-address for now; the
+        // FP-aggregate *return* path (xmm0/xmm1) is unaffected and enabled.
+        // TODO: System V FP-eightbyte aggregate arguments via xmm.
         if fields.iter().any(|f| f.kind != ScalarKind::Int) {
             return None;
         }
@@ -463,21 +466,11 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
             fields,
         });
     }
-    // A <=16B aggregate whose eightbyte classification places any unit in a
-    // floating-point return register (a pure-FP eightbyte on System V) keeps
-    // the out-pointer convention: the System V emit returns aggregate units
-    // only through integer registers. An eightbyte shared by integer and FP
-    // members (a union overlapping a double with an int/pointer) classifies
-    // as Integer and returns in the integer registers, bit-for-bit.
-    // TODO: FP-bank aggregate returns on System V (xmm0/xmm1).
-    let returns_in_fp = matches!(
-        crate::c5::codegen::abi_classify::classify_aggregate(size, align, &fields, target.abi(), true),
-        crate::c5::codegen::abi_classify::AggClass::Regs(ref c)
-            if c.contains(&crate::c5::codegen::abi_classify::RegClass::Sse)
-    );
-    if returns_in_fp {
-        return StructReturnAbi::OutPtr;
-    }
+    // A <=16B aggregate returns in registers: System V AMD64 3.2.3 places
+    // each eightbyte in the integer (rax/rdx) or SSE (xmm0/xmm1) bank per its
+    // classification, and the emit reads the per-eightbyte class to pick the
+    // bank. An eightbyte shared by integer and FP members classifies as
+    // Integer and returns in the integer registers bit-for-bit.
     let desc = AggDesc {
         size,
         align,

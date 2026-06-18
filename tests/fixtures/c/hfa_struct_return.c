@@ -1,15 +1,10 @@
-// A homogeneous floating-point aggregate (AAPCS64 6.4.2 / 6.9: 1..4
-// members all the same FP type) returns in consecutive FP registers
-// v0..v(n-1), not through an out-pointer, and its members pass in the
-// FP argument bank. The values must round-trip through a call so a
-// caller built by another compiler (the platform ABI) reads them back
-// intact. A four-member double HFA spans 32 bytes yet still returns in
-// v0..v3, past the 16-byte integer-register threshold.
-//
-// Members are double: System V x86_64 keeps the out-pointer convention
-// for FP-class aggregate returns, which round-trips the same members,
-// so this fixture exercises the register path on AAPCS64 while staying
-// correct on every target.
+// A homogeneous floating-point aggregate returns in FP registers, not
+// through an out-pointer: AAPCS64 6.9 uses v0..v(n-1) for 1..4 members;
+// System V x86_64 3.2.3 returns a <=16-byte aggregate's eightbytes in
+// xmm0 / xmm1 (a larger one through memory). The values must round-trip
+// through a call so a caller built by the platform compiler reads them
+// back intact. AArch64 also passes HFA arguments in the FP bank; System V
+// FP-aggregate arguments stay by-address for now (sumf4 below).
 
 typedef struct {
     double x;
@@ -23,6 +18,12 @@ typedef struct {
 typedef struct {
     double a, b, c, d;
 } D4;
+typedef struct {
+    float r, i;
+} F2;
+typedef struct {
+    float a, b, c, d;
+} F4;
 
 static D1 mkd1(double x) {
     D1 r;
@@ -50,14 +51,15 @@ static D4 mkd4(double a, double b, double c, double d) {
     r.d = d;
     return r;
 }
+static F2 mkf2(float a, float b) {
+    F2 c;
+    c.r = a;
+    c.i = b;
+    return c;
+}
 
-typedef struct {
-    float a, b, c, d;
-} F4;
-
-// Aggregate parameters: an HFA passes in the FP argument bank (AAPCS64
-// 6.8.2); the callee reads each member back. A float HFA passes in the FP
-// bank on AArch64 and by reference on System V x86_64 -- both round-trip.
+// Aggregate parameters: an HFA / SSE-eightbyte aggregate passes in the FP
+// argument bank; the callee reads each member back.
 static double sumd2(D2 c) {
     return c.r + c.i;
 }
@@ -77,10 +79,12 @@ int main(void) {
     if (d3.a != 1.0 || d3.b != 2.0 || d3.c != 3.0) return 3;
     D4 d4 = mkd4(10.0, 20.0, 30.0, 40.0);
     if (d4.a != 10.0 || d4.b != 20.0 || d4.c != 30.0 || d4.d != 40.0) return 4;
-
-    if (sumd2(d2) != 0.75) return 5;
-    if (sumd4(d4) != 100.0) return 6;
+    F2 f2 = mkf2(1.5f, 2.5f);
+    if (f2.r != 1.5f || f2.i != 2.5f) return 5;
     F4 f4 = {1.0f, 2.0f, 3.0f, 4.0f};
-    if (sumf4(f4) != 10.0f) return 7;
+
+    if (sumd2(d2) != 0.75) return 6;
+    if (sumd4(d4) != 100.0) return 7;
+    if (sumf4(f4) != 10.0f) return 8;
     return 0;
 }

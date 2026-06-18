@@ -703,6 +703,31 @@ fn splice_multi_block(
         exit_acc: postfix_exit_acc,
     };
 
+    // Carry both the caller's own and the spliced callee's cross-TU
+    // symbol references onto their new value-ids. The symbol indices
+    // are translation-unit parser symbols, valid in the merged
+    // function because the callee is in the same unit.
+    let carry = |refs: &[(u32, u32)], m: &[ValueId], out: &mut Vec<(u32, u32)>| {
+        for &(vid, sym) in refs {
+            let nv = map_v(vid, m);
+            if nv != NO_VALUE {
+                out.push((nv, sym));
+            }
+        }
+    };
+    let mut call_refs = Vec::new();
+    carry(&original.extern_call_refs, &remap, &mut call_refs);
+    carry(&callee.extern_call_refs, &callee_remap, &mut call_refs);
+    let mut code_refs = Vec::new();
+    carry(&original.extern_imm_code_refs, &remap, &mut code_refs);
+    carry(&callee.extern_imm_code_refs, &callee_remap, &mut code_refs);
+    let mut data_refs = Vec::new();
+    carry(&original.extern_imm_data_refs, &remap, &mut data_refs);
+    carry(&callee.extern_imm_data_refs, &callee_remap, &mut data_refs);
+    let mut tls_refs = Vec::new();
+    carry(&original.extern_tls_refs, &remap, &mut tls_refs);
+    carry(&callee.extern_tls_refs, &callee_remap, &mut tls_refs);
+
     *caller = FunctionSsa {
         name: original.name,
         ent_pc: original.ent_pc,
@@ -714,10 +739,10 @@ fn splice_multi_block(
         insts: new_insts,
         inst_src: new_inst_src,
         blocks: new_blocks,
-        extern_call_refs: Vec::new(),
-        extern_imm_code_refs: Vec::new(),
-        extern_imm_data_refs: Vec::new(),
-        extern_tls_refs: Vec::new(),
+        extern_call_refs: call_refs,
+        extern_imm_code_refs: code_refs,
+        extern_imm_data_refs: data_refs,
+        extern_tls_refs: tls_refs,
         f32_values: new_f32,
         param_fp_mask: original.param_fp_mask,
         // Inlining only splices callees with no aggregate ABI
@@ -761,11 +786,21 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     // across passes, so every old inst keeps the same new id and the map
     // converges (one forward-reference level per pass).
     let mut guard = caller.insts.len() + 2;
+    // Cross-TU symbol references carried from spliced callee insts onto
+    // their new caller value-ids. The symbol index is a translation-unit
+    // parser symbol, valid in the caller because the callee is in the
+    // same unit. Rebuilt every pass; the final pass's entries are kept.
+    let mut spliced_data_refs: Vec<(u32, u32)> = Vec::new();
+    let mut spliced_code_refs: Vec<(u32, u32)> = Vec::new();
+    let mut spliced_tls_refs: Vec<(u32, u32)> = Vec::new();
     loop {
         new_insts.clear();
         new_inst_src.clear();
         new_f32.clear();
         new_block_starts.clear();
+        spliced_data_refs.clear();
+        spliced_code_refs.clear();
+        spliced_tls_refs.clear();
         let before = remap.clone();
         for block in &caller.blocks {
             new_block_starts.push(new_insts.len() as u32);
@@ -844,6 +879,24 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                                     .copied()
                                     .unwrap_or(false),
                             );
+                        }
+                    }
+                    for &(ce_vid, sym) in &callee.extern_imm_data_refs {
+                        let nv = map_v(ce_vid, &callee_remap);
+                        if nv != NO_VALUE {
+                            spliced_data_refs.push((nv, sym));
+                        }
+                    }
+                    for &(ce_vid, sym) in &callee.extern_imm_code_refs {
+                        let nv = map_v(ce_vid, &callee_remap);
+                        if nv != NO_VALUE {
+                            spliced_code_refs.push((nv, sym));
+                        }
+                    }
+                    for &(ce_vid, sym) in &callee.extern_tls_refs {
+                        let nv = map_v(ce_vid, &callee_remap);
+                        if nv != NO_VALUE {
+                            spliced_tls_refs.push((nv, sym));
                         }
                     }
                     let Terminator::Return(ret_v) = callee_block.terminator else {
@@ -942,6 +995,17 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
         .map(|(_, n, s)| (*n, *s))
         .collect();
     caller.extern_tls_refs = extern_tls_remap.iter().map(|(_, n, s)| (*n, *s)).collect();
+
+    // Append the symbol references carried from spliced callee insts.
+    caller
+        .extern_imm_data_refs
+        .extend(spliced_data_refs.iter().copied());
+    caller
+        .extern_imm_code_refs
+        .extend(spliced_code_refs.iter().copied());
+    caller
+        .extern_tls_refs
+        .extend(spliced_tls_refs.iter().copied());
 
     // Single-block flat splice complete. Now find any remaining
     // multi-block inlinable Call sites and apply the multi-block

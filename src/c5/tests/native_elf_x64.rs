@@ -866,6 +866,54 @@ int main(void) {\n\
     );
 }
 
+/// An inline candidate that returns the address of an extern (cross-TU)
+/// data object must keep that symbol reference after the splice. The
+/// optimizer inlines `get_shared` into `main`; the spliced `ImmData`
+/// has to resolve to `shared_value`, not the caller's local data base.
+#[test]
+fn cross_unit_inlined_extern_data_ref() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "long shared_value = 0x12345678;\n";
+
+    const UNIT_B: &str = "\
+extern long shared_value;\n\
+static long *get_shared(void) { return &shared_value; }\n\
+long read_shared(void) { long *p = get_shared(); return *p; }\n\
+int main(void) { return (read_shared() == 0x12345678) ? 0 : 1; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxX64,
+        NativeOptions::default().with_optimize(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf64-inl-extref", "cross_unit_inline_extref");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "inlined extern-data reference resolved to the wrong symbol under -O"
+    );
+}
+
 /// A foreign (system-cc) caller that keeps a live value in r13 across a
 /// call into a badc-compiled callee must find it intact on return. r13
 /// is callee-saved under System V AMD64; badc borrows it as its reserved

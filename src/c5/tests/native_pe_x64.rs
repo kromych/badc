@@ -355,6 +355,26 @@ fn malloc_memset_memcmp_roundtrip() {
 }
 
 #[test]
+fn windows_crt_open_flags_defined() {
+    // The Windows CRT open() flags must match ucrt corecrt_io.h; _open
+    // and the underscore-less O_* aliases programs expect depend on these
+    // exact values. The _Static_asserts fail the compile if one drifts.
+    let src = r#"
+        #include <fcntl.h>
+        _Static_assert(O_TEMPORARY == 0x0040, "O_TEMPORARY");
+        _Static_assert(O_BINARY == 0x8000, "O_BINARY");
+        _Static_assert(O_TEXT == 0x4000, "O_TEXT");
+        _Static_assert(O_RANDOM == 0x0010, "O_RANDOM");
+        _Static_assert(O_SEQUENTIAL == 0x0020, "O_SEQUENTIAL");
+        _Static_assert(O_SHORT_LIVED == 0x1000, "O_SHORT_LIVED");
+        _Static_assert(O_NOINHERIT == 0x0080, "O_NOINHERIT");
+        _Static_assert(_O_BINARY == O_BINARY, "_O_BINARY alias");
+        int main(void) { return (O_TEMPORARY | O_BINARY) == 0x8040 ? 0 : 1; }
+    "#;
+    assert_exit(src, "win_open_flags", &[], 0);
+}
+
+#[test]
 fn argc_argv_round_trip_through_getmainargs() {
     // The PE entry stub pumps argc / argv out of msvcrt's
     // __getmainargs. Pass three extra args and verify the count

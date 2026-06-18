@@ -54,10 +54,39 @@
 #define O_CLOEXEC    0
 #define O_NOFOLLOW   0
 #define O_NOINHERIT  0x0080
-#define _O_RDONLY    O_RDONLY
-#define _O_WRONLY    O_WRONLY
-#define _O_RDWR      O_RDWR
-#define _O_NOINHERIT O_NOINHERIT
+// Windows CRT open() flags (ucrt corecrt_io.h), exposed under the
+// underscore-less O_* names. _open/_sopen and the temporary, text and
+// binary modes require these exact values.
+#define O_RANDOM      0x0010
+#define O_SEQUENTIAL  0x0020
+#define O_TEMPORARY   0x0040
+#define O_SHORT_LIVED 0x1000
+#define O_OBTAIN_DIR  0x2000
+#define O_TEXT        0x4000
+#define O_BINARY      0x8000
+#define O_RAW         O_BINARY
+#define O_WTEXT       0x10000
+#define O_U16TEXT     0x20000
+#define O_U8TEXT      0x40000
+#define _O_RDONLY     O_RDONLY
+#define _O_WRONLY     O_WRONLY
+#define _O_RDWR       O_RDWR
+#define _O_APPEND     O_APPEND
+#define _O_RANDOM     O_RANDOM
+#define _O_SEQUENTIAL O_SEQUENTIAL
+#define _O_TEMPORARY  O_TEMPORARY
+#define _O_NOINHERIT  O_NOINHERIT
+#define _O_CREAT      O_CREAT
+#define _O_TRUNC      O_TRUNC
+#define _O_EXCL       O_EXCL
+#define _O_SHORT_LIVED O_SHORT_LIVED
+#define _O_OBTAIN_DIR O_OBTAIN_DIR
+#define _O_TEXT       O_TEXT
+#define _O_BINARY     O_BINARY
+#define _O_RAW        O_RAW
+#define _O_WTEXT      O_WTEXT
+#define _O_U16TEXT    O_U16TEXT
+#define _O_U8TEXT     O_U8TEXT
 #endif
 
 // Most fcntl command numbers are stable across Linux and

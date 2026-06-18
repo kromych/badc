@@ -1600,9 +1600,9 @@ fn emit_struct_param_scatter(
     }
     let placements = param_placements(func, abi);
     for (i, agg) in func.param_aggs.iter().enumerate() {
-        if agg.is_none() {
+        let Some(agg_idx) = agg else {
             continue;
-        }
+        };
         let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
             continue;
         };
@@ -1610,18 +1610,26 @@ fn emit_struct_param_scatter(
         if slot >= 0 {
             continue;
         }
-        // Materialise the body local's address into scratch.primary,
-        // then store each eightbyte at offset 8k from it. scratch
-        // (x16/x17) is never an argument register, so the source
-        // registers in `regs` are untouched.
+        // Materialise the body local's address into x16, then store each
+        // unit from its argument register. An integer eightbyte stores at
+        // offset 8k; an HFA member stores at its own offset with its
+        // natural size (d-register for 8 bytes, s-register for 4). x16/x17
+        // are never argument registers, so the source `regs` are untouched.
+        let hfa = super::abi_classify::hfa_member_layout(&func.agg_descs[*agg_idx as usize].fields);
         emit_local_addr(code, Place::IntReg(16), slot, frame);
         for (k, cr) in regs.iter().take(*n as usize).enumerate() {
-            let off = (k as u32) * 8;
             if cr.is_fp {
-                emit(code, enc_fmov_d_to_x(Reg(17), cr.reg));
-                emit(code, enc_str_imm(Reg(17), Reg(16), off));
+                let (off, msize) = hfa
+                    .as_ref()
+                    .and_then(|m| m.get(k).copied())
+                    .unwrap_or(((k as u32) * 8, 8));
+                if msize == 8 {
+                    emit(code, super::aarch64::enc_str_d_imm(cr.reg, Reg(16), off));
+                } else {
+                    emit(code, super::aarch64::enc_str_s_imm(cr.reg, Reg(16), off));
+                }
             } else {
-                emit(code, enc_str_imm(Reg(cr.reg), Reg(16), off));
+                emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
             }
         }
     }
@@ -3285,7 +3293,9 @@ fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+    if !marshal_args(
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+    ) {
         return false;
     }
     plt_call_fixups.push(PltCallFixup {
@@ -3503,7 +3513,9 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
-        if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+        if !marshal_args(
+            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        ) {
             return false;
         }
         // A variadic callee may still return an aggregate by value; load
@@ -3552,7 +3564,9 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+    if !marshal_args(
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+    ) {
         return false;
     }
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
@@ -3789,7 +3803,9 @@ fn emit_call_indirect(
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
-        if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+        if !marshal_args(
+            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        ) {
             return false;
         }
         setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
@@ -6133,6 +6149,8 @@ fn marshal_args(
     alloc: &Allocation,
     scratch: &ScratchPool,
     frame: Frame,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
 ) -> bool {
     let arg_place = |i: usize| -> Place {
         alloc
@@ -6209,6 +6227,47 @@ fn marshal_args(
         }
     }
 
+    // AAPCS64 6.8.2 HFA arguments: each member passes in its own FP
+    // register, loaded from the source aggregate's address. Run after the
+    // scalar-FP moves (so any d-register source they read is consumed) and
+    // before the integer marshal (so the source address, still in an
+    // integer register, is not yet overwritten). Members are memory loads,
+    // so they join no FP move cycle; the base goes through scratch.primary,
+    // reused per aggregate. Integer-class `StructRegs` (regs[0] is a GPR)
+    // are left to the eightbyte path below.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let super::ArgPlacement::StructRegs { regs, n } = placement else {
+            continue;
+        };
+        if n == 0 || !regs[0].is_fp {
+            continue;
+        }
+        let members = arg_aggs.get(i).copied().flatten().and_then(|idx| {
+            super::abi_classify::hfa_member_layout(&agg_descs[idx as usize].fields)
+        });
+        let base = match materialize_int_shifted(
+            code,
+            arg_place(i),
+            scratch.primary,
+            frame,
+            plan.scratch_bytes,
+        ) {
+            Some(r) => r,
+            None => return false,
+        };
+        for (k, cr) in regs.iter().take(n as usize).enumerate() {
+            let (off, msize) = members
+                .as_ref()
+                .and_then(|m| m.get(k).copied())
+                .unwrap_or(((k as u32) * 8, 8));
+            if msize == 8 {
+                emit(code, super::aarch64::enc_ldr_d_imm(cr.reg, base, off));
+            } else {
+                emit(code, super::aarch64::enc_ldr_s_imm(cr.reg, base, off));
+            }
+        }
+    }
+
     // Integer-register placements plus aggregate base addresses are
     // one parallel register move. A scalar `IntReg` arg moves
     // src->target; a `StructRegs` arg positions its base address into
@@ -6230,7 +6289,8 @@ fn marshal_args(
                     int_moves.push((s, r));
                 }
             }
-            super::ArgPlacement::StructRegs { regs, n } if n > 0 => {
+            // HFA aggregates (regs[0] is an FP register) loaded above.
+            super::ArgPlacement::StructRegs { regs, n } if n > 0 && !regs[0].is_fp => {
                 let dst = regs[0].reg;
                 if let Place::IntReg(s) = arg_place(i)
                     && s != dst
@@ -6277,6 +6337,7 @@ fn marshal_args(
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::StructRegs { regs, n } = placement
             && n > 0
+            && !regs[0].is_fp
             && !matches!(arg_place(i), Place::IntReg(_))
         {
             let dst = regs[0].reg;
@@ -6303,11 +6364,9 @@ fn marshal_args(
     // so every eightbyte register is general-purpose.
     for (i, &placement) in plan.placements.iter().enumerate() {
         match placement {
-            super::ArgPlacement::StructRegs { regs, n } => {
-                debug_assert!(
-                    !regs.iter().take(n as usize).any(|c| c.is_fp),
-                    "aarch64 marshal: floating-point aggregate eightbyte not supported"
-                );
+            // Integer-class aggregate: load the eightbytes from the base in
+            // regs[0]. An HFA (regs[0] is an FP register) loaded above.
+            super::ArgPlacement::StructRegs { regs, n } if !regs[0].is_fp => {
                 let base = regs[0].reg;
                 for k in (1..n as usize).rev() {
                     emit(

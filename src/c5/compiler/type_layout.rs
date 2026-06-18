@@ -366,32 +366,39 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
     if size == 0 {
         return None;
     }
-    if matches!(target, Target::WindowsX64) {
-        // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
-        // value in a register; larger ones go by implicit reference,
-        // which keeps the by-address convention.
-        if !matches!(size, 1 | 2 | 4 | 8) {
-            return None;
-        }
-    } else if size > 16 && !matches!(target, Target::LinuxX64) {
-        // AArch64 (AAPCS64) passes a larger aggregate by reference; the
-        // c5 by-address convention already matches that on the wire, so
-        // it is not tagged. System V x86_64 passes it inline on the
-        // stack (MEMORY class), which the marshal / prologue handle, so
-        // LinuxX64 is admitted at any size.
-        return None;
-    }
+    let aarch64 = matches!(
+        target,
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
+    );
     let align = (structs[id].align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // Phase 1 routes only integer-class aggregates through the host
-    // ABI. A homogeneous floating-point aggregate (AAPCS64 HFA) would
-    // consume the FP argument bank and shift the placement of any
-    // following floating-point scalar parameter; until the callee /
-    // caller FP-bank accounting handles that, such aggregates keep the
-    // by-address convention. TODO: HFA / mixed int+FP aggregates.
-    if fields.iter().any(|f| f.kind != ScalarKind::Int) {
-        return None;
+    // AAPCS64 6.8.2: a homogeneous floating-point aggregate (1..4 members
+    // all the same FP type) passes in the FP argument bank, up to four
+    // registers -- a four-`double` HFA is 32 bytes, past the by-reference
+    // threshold. Admit it on AArch64 ahead of the size / FP-class gates.
+    let is_hfa = aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some();
+    if !is_hfa {
+        if matches!(target, Target::WindowsX64) {
+            // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
+            // value in a register; larger ones go by implicit reference,
+            // which keeps the by-address convention.
+            if !matches!(size, 1 | 2 | 4 | 8) {
+                return None;
+            }
+        } else if size > 16 && !matches!(target, Target::LinuxX64) {
+            // AArch64 passes a larger non-HFA aggregate by reference; the c5
+            // by-address convention already matches. System V x86_64 passes
+            // it inline on the stack (MEMORY class), handled by the marshal.
+            return None;
+        }
+        // Off the HFA path, only integer-class aggregates route through the
+        // host ABI. A System V FP-eightbyte or a mixed int+FP aggregate
+        // would need FP-bank accounting not yet implemented there.
+        // TODO: System V FP-eightbyte + mixed aggregates.
+        if fields.iter().any(|f| f.kind != ScalarKind::Int) {
+            return None;
+        }
     }
     Some(AggDesc {
         size,

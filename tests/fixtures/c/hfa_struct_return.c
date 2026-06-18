@@ -51,6 +51,23 @@ static D4 mkd4(double a, double b, double c, double d) {
     return r;
 }
 
+typedef struct {
+    float a, b, c, d;
+} F4;
+
+// Aggregate parameters: an HFA passes in the FP argument bank (AAPCS64
+// 6.8.2); the callee reads each member back. A float HFA passes in the FP
+// bank on AArch64 and by reference on System V x86_64 -- both round-trip.
+static double sumd2(D2 c) {
+    return c.r + c.i;
+}
+static double sumd4(D4 v) {
+    return v.a + v.b + v.c + v.d;
+}
+static float sumf4(F4 v) {
+    return v.a + v.b + v.c + v.d;
+}
+
 int main(void) {
     D1 d1 = mkd1(7.0);
     if (d1.x != 7.0) return 1;
@@ -60,5 +77,10 @@ int main(void) {
     if (d3.a != 1.0 || d3.b != 2.0 || d3.c != 3.0) return 3;
     D4 d4 = mkd4(10.0, 20.0, 30.0, 40.0);
     if (d4.a != 10.0 || d4.b != 20.0 || d4.c != 30.0 || d4.d != 40.0) return 4;
+
+    if (sumd2(d2) != 0.75) return 5;
+    if (sumd4(d4) != 100.0) return 6;
+    F4 f4 = {1.0f, 2.0f, 3.0f, 4.0f};
+    if (sumf4(f4) != 10.0f) return 7;
     return 0;
 }

@@ -48,7 +48,10 @@ Multi-TU knobs:
 Compile knobs:
   -O, --optimize           Run the SSA optimization passes (mem2reg,
                            inlining, rotate and branch const-fold,
-                           immediate dedup). Off by default.
+                           immediate dedup). Off by default. The
+                           `-O1`/`-O2`/`-O3`/`-Os`/`-Oz`/`-Ofast`/`-Og`
+                           forms all select this single level; `-O0`
+                           disables it.
   -g, --debug              Emit DWARF debug info. Off by default;
                            adds ~10-30% to the output size.
   -g0, --no-debug          Skip DWARF emission (the default).
@@ -272,7 +275,14 @@ fn main() {
             "--list-symbols" => claim(&mut mode, Mode::ListSymbols),
             "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
             "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
-            "--optimize" | "-O" => optimize_flag = true,
+            // The optimizer has a single level; every `-O<n>` form maps
+            // onto it, matching gcc/clang where a build system may pass
+            // any of them. `-O0` explicitly disables it (and overrides an
+            // earlier `-O` on the same command line).
+            "--optimize" | "-O" | "-O1" | "-O2" | "-O3" | "-Os" | "-Oz" | "-Ofast" | "-Og" => {
+                optimize_flag = true
+            }
+            "-O0" => optimize_flag = false,
             "--dump-ssa" => dump_ssa = true,
             s if s.starts_with("--inline-cap=") => {
                 let body = &s["--inline-cap=".len()..];

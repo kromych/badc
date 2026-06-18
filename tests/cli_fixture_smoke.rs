@@ -154,3 +154,61 @@ fn quoted_include_resolves_relative_to_including_file() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// The optimizer has a single level; every `-O<n>` form selects it and
+// `-O0` disables it. With an inline candidate present the optimizer
+// changes the emitted object, so the byte image distinguishes
+// "optimized" from "not". Compile for a fixed target for a
+// deterministic image.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn opt_level_flags_map_to_the_single_level() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-optlvl-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("u.c");
+    std::fs::write(
+        &src,
+        "static int helper(int x) { return x + 1; }\nint f(int v) { return helper(v) * 2; }\n",
+    )
+    .expect("write source");
+
+    let compile = |tag: &str, flags: &[&str]| -> Vec<u8> {
+        let obj = dir.join(format!("u{tag}.o"));
+        let mut cmd = Command::new(badc);
+        cmd.arg("--target=linux-x64").arg("-c");
+        for f in flags {
+            cmd.arg(f);
+        }
+        let out = cmd
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "compile {flags:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        std::fs::read(&obj).expect("read object")
+    };
+
+    let none = compile("none", &[]);
+    let o0 = compile("o0", &["-O0"]);
+    let o = compile("o", &["-O"]);
+    let o2 = compile("o2", &["-O2"]);
+    let o3 = compile("o3", &["-O3"]);
+    let os = compile("os", &["-Os"]);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // The optimizer is observable here: the helper inlines under -O.
+    assert_ne!(o, none, "-O produced the same object as no optimization");
+    // -O0 and no flag both leave the optimizer off.
+    assert_eq!(o0, none, "-O0 should match the unoptimized image");
+    // Every other level selects the same single optimization level.
+    assert_eq!(o2, o, "-O2 should match -O");
+    assert_eq!(o3, o, "-O3 should match -O");
+    assert_eq!(os, o, "-Os should match -O");
+}

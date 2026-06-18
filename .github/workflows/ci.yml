@@ -982,3 +982,25 @@ jobs:
         run: cargo build --release --locked --features full --bin badc
       - name: tcl smoke (build tclsh + run tests/all.tcl)
         run: python demos/tcl/smoke.py
+
+  cpython:
+    name: cpython (ubuntu)
+    runs-on: ubuntu-latest
+    # configure+make of the reference interpreter and the badc compile of
+    # the link set dominate; 30 leaves headroom over the warm run.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cpython
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: cpython smoke (configure+make, badc compile+link, run test slice)
+        run: python3 demos/python/smoke.py -v
+      - name: cpython windows-x64 cross-compile (badc PE compile+link)
+        run: BADC_PY_TARGET=windows-x64 python3 demos/python/win_build.py --link

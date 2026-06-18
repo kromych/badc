@@ -375,6 +375,116 @@ fn windows_crt_open_flags_defined() {
 }
 
 #[test]
+fn cross_unit_thread_local_rebased() {
+    // A cross-unit `extern _Thread_local` on Windows/x86_64 reads the
+    // variable at its offset within the merged TLS block. When a padding
+    // unit's TLS precedes the definer's, the definer's vars move past
+    // offset 0, so the extern read's `lea [r10+disp32]` must rebase the
+    // displacement to the merged offset; baking the raw per-unit offset
+    // read the wrong slot (NULL) and crashed.
+    let copts = crate::CompileOptions::default().with_no_entry_point(true);
+    let compile = |src: &str| -> crate::Program {
+        Compiler::with_options(super::with_prelude(src), Target::WindowsX64, copts.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+
+    const UNIT_PAD: &str = "\
+_Thread_local long long pad0 = 0x100;\n\
+_Thread_local long long pad1 = 0x200;\n\
+long long read_pad(void) { return pad0 + pad1; }\n";
+
+    const UNIT_DEF: &str = "\
+_Thread_local int g_a = 11;\n\
+_Thread_local int g_b = 22;\n\
+int read_a(void) { return g_a; }\n\
+void set_a(int v) { g_a = v; }\n";
+
+    const UNIT_MAIN: &str = "\
+extern _Thread_local int g_a;\n\
+extern _Thread_local int g_b;\n\
+int read_a(void); void set_a(int);\n\
+long long read_pad(void);\n\
+int main(void) {\n\
+    int f = 0;\n\
+    if (read_pad() != 0x300) f |= 32;\n\
+    if (g_a != 11) f |= 1;\n\
+    if (g_b != 22) f |= 2;\n\
+    if (read_a() != 11) f |= 4;\n\
+    set_a(99);\n\
+    if (g_a != 99) f |= 8;\n\
+    if (read_a() != 99) f |= 16;\n\
+    return f;\n\
+}\n";
+
+    let prog_main = compile(UNIT_MAIN);
+    let prog_pad = compile(UNIT_PAD);
+    let prog_def = compile(UNIT_DEF);
+
+    // Link order places the pad TU's TLS (16 bytes) before the definer's,
+    // so the definer's block starts at merged offset 16.
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_main, &prog_pad, &prog_def],
+        Target::WindowsX64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link cross-unit TLS rebased: {e}"));
+
+    // The pad pushes the definer's vars to offset >= 16, so at least one
+    // TEB-indexed `lea rd, [r10 + disp32]` must carry disp32 >= 16. The
+    // gs:[0x58] TEB load anchors the sequence; the pad's own accesses sit
+    // at offsets 0 and 8, so disp >= 16 is unique to the rebased extern.
+    const TEB_LOAD: &[u8] = &[0x65, 0x4C, 0x8B, 0x14, 0x25, 0x58, 0, 0, 0];
+    let mut rebased_lea = false;
+    let mut i = 0;
+    while i + TEB_LOAD.len() <= bytes.len() {
+        if &bytes[i..i + TEB_LOAD.len()] == TEB_LOAD {
+            // lea rd, [r10 + disp32]: REX.WB (0x49 or 0x4D) 8D ModRM disp32,
+            // ModRM mod=10 rm=010 -> (byte & 0xC7) == 0x82.
+            let mut j = i + TEB_LOAD.len();
+            let end = (j + 28).min(bytes.len().saturating_sub(7));
+            while j <= end {
+                if (bytes[j] == 0x49 || bytes[j] == 0x4D)
+                    && bytes[j + 1] == 0x8D
+                    && (bytes[j + 2] & 0xC7) == 0x82
+                {
+                    let disp = i32::from_le_bytes(bytes[j + 3..j + 7].try_into().unwrap());
+                    if disp >= 16 {
+                        rebased_lea = true;
+                    }
+                    break;
+                }
+                j += 1;
+            }
+        }
+        i += 1;
+    }
+    assert!(
+        rebased_lea,
+        "expected a TEB-indexed `lea rd, [r10 + disp32]` with disp32 >= 16 (definer rebased past the pad)"
+    );
+
+    let path = unique_temp_path("badc-pe-x64-test", "cross_unit_tls_rebased");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    let outcome = run_pe(&path, &[]);
+    let _ = std::fs::remove_file(&path);
+    match outcome {
+        Some(Ok(o)) => assert_eq!(
+            o.status.code(),
+            Some(0),
+            "rebased cross-unit thread-local mismatch (failure bitmask in exit code); stderr: {}",
+            String::from_utf8_lossy(&o.stderr)
+        ),
+        Some(Err(e)) => panic!("run cross-unit TLS rebased: {e}"),
+        None => {}
+    }
+}
+
+#[test]
 fn argc_argv_round_trip_through_getmainargs() {
     // The PE entry stub pumps argc / argv out of msvcrt's
     // __getmainargs. Pass three extra args and verify the count

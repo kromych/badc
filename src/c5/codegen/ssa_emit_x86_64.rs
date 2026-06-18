@@ -3404,15 +3404,32 @@ fn emit_tls_addr(
             code.push(0x8B);
             code.push(0x14);
             code.push(0xC2 | ((rd.0 & 7) << 3));
-            // lea rd, [r10 + offset]:
+            // lea rd, [r10 + disp32]: r10 already holds the module's TLS
+            // block base, so disp32 is the variable's offset within the
+            // merged block with no thread-pointer bias. A cross-unit
+            // `extern _Thread_local` offset is unknown until the link merges
+            // the TLS blocks, so emit a 0 placeholder; a same-unit access
+            // bakes its raw block offset. Both record an `elf_tpoff_fixups`
+            // entry so the linker rebases the disp32 to the merged offset
+            // (Local) or resolves it by symbol (Extern).
             //   REX.W=1, REX.R = (rd >= 8), REX.B=1 (r10 base);
             //   opcode 8D;
             //   ModR/M mod=10 (disp32), reg=rd.lo, rm=010 (r10).
+            let extern_sym = extern_tls_names.get(&v).cloned();
+            let disp: i64 = if extern_sym.is_some() { 0 } else { offset };
             let rex_lea = 0x49 | (if rd.0 >= 8 { 0x04 } else { 0 });
             code.push(rex_lea);
             code.push(0x8D);
             code.push(0x82 | ((rd.0 & 7) << 3));
-            code.extend_from_slice(&(offset as i32).to_le_bytes());
+            let imm_offset = code.len();
+            code.extend_from_slice(&(disp as i32).to_le_bytes());
+            elf_tpoff_fixups.push(super::ElfTpoffFixup {
+                imm_offset,
+                target: match extern_sym {
+                    Some(name) => super::ElfTpoffTarget::Extern(name),
+                    None => super::ElfTpoffTarget::Local(offset as u64),
+                },
+            });
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }

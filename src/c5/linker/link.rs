@@ -768,15 +768,17 @@ pub fn link_native_objects_with_options(
     //   * aarch64 Linux (variant-1) places the block above the thread
     //     pointer after a 16-byte TCB reserve, so `imm12 = 16 +
     //     merged_offset` baked into an `add`.
-    //   * aarch64 Windows reaches the block through the TEB's TLS array
-    //     (`x16 = tls_array[_tls_index]`), so x16 already holds the
-    //     module's block base and `imm12 = merged_offset` with no bias.
-    // `machine` does not separate the two aarch64 models; the Windows TEB
-    // sequence always records a `_tls_index` fixup, so an object carrying
-    // any such fixup uses the Windows bias.
+    //   * Windows (both arches) reaches the block through the TEB's TLS
+    //     array (`r10`/`x16 = tls_array[_tls_index]`), so the register
+    //     already holds the module's block base and the immediate is
+    //     `merged_offset` with no bias (an x86_64 `lea` disp32, an aarch64
+    //     `add` imm12).
+    // `machine` does not separate the Windows and ELF models; the Windows
+    // TEB sequence always records a `_tls_index` fixup, so an object
+    // carrying any such fixup uses the Windows no-bias offset.
     let merged_tls_total = align_usize(tls_data.len(), 8) as u64;
     for (i, obj) in objs.iter().enumerate() {
-        let aarch64_teb = !obj.tls_index_fixups.is_empty();
+        let win_teb = !obj.tls_index_fixups.is_empty();
         for (text_off, target) in &obj.elf_tpoff_fixups {
             let merged_offset = match target {
                 ElfTpoffTarget::Local(off) => tls_bases[i] as u64 + off,
@@ -798,16 +800,24 @@ pub fn link_native_objects_with_options(
             }
             match machine {
                 NativeMachine::X86_64 => {
-                    let tpoff = merged_tls_total - merged_offset;
-                    if tpoff > i32::MAX as u64 {
+                    // Windows: the `lea` adds disp32 to the TEB block base,
+                    // so disp32 = merged_offset (no bias). Linux variant-2:
+                    // the block sits below the thread pointer, so
+                    // imm32 = merged_size - merged_offset (a `sub` from fs:[0]).
+                    let value = if win_teb {
+                        merged_offset
+                    } else {
+                        merged_tls_total - merged_offset
+                    };
+                    if value > i32::MAX as u64 {
                         return Err(err(&format!(
-                            "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the i32 `sub` immediate",
+                            "link_native_objects: TLS offset 0x{value:x} exceeds the i32 immediate",
                         )));
                     }
-                    text[patch..patch + 4].copy_from_slice(&(tpoff as i32).to_le_bytes());
+                    text[patch..patch + 4].copy_from_slice(&(value as i32).to_le_bytes());
                 }
                 NativeMachine::Aarch64 => {
-                    let tpoff = if aarch64_teb {
+                    let tpoff = if win_teb {
                         merged_offset
                     } else {
                         merged_offset + 16

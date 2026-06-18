@@ -2290,6 +2290,35 @@ impl<'a> Walker<'a> {
                     None => self.walk_expr_rvalue(b, *callee)?,
                 };
                 let fp_return = is_floating_scalar(*ty);
+                // Aggregate arguments through a function pointer classify by
+                // the pointed-to prototype's parameter types (System V AMD64
+                // 3.2.3 / AAPCS64 6.4 / 6.8.2). The parser narrows each
+                // argument to its parameter type before the call, so the
+                // argument's own type is that parameter type; classify from
+                // it. A variadic aggregate keeps the by-address convention
+                // (matching the direct-call variadic handling). Inert on the
+                // ABIs / sizes / by-address aggregates the classifier
+                // declines.
+                let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+                for i in 0..arg_vals.len() {
+                    if callee_variadic && i >= callee_fixed {
+                        continue;
+                    }
+                    let Some(aty) = expr_ty(self.ast.expr(args[i])) else {
+                        continue;
+                    };
+                    if !(is_struct_ty(aty) && struct_ptr_depth(aty) == 0) {
+                        continue;
+                    }
+                    if let Some(desc) =
+                        crate::c5::compiler::host_abi_agg_desc(self.structs, self.target, aty)
+                    {
+                        if arg_aggs.is_empty() {
+                            arg_aggs = alloc::vec![None; arg_vals.len()];
+                        }
+                        arg_aggs[i] = Some(b.intern_agg_desc(desc));
+                    }
+                }
                 // Host-ABI out-pointer struct return through a function
                 // pointer (SysV x86_64 > 16 bytes, Win64 aggregates outside
                 // {1,2,4,8} bytes). Mirror the direct-call path: allocate
@@ -2317,7 +2346,14 @@ impl<'a> Walker<'a> {
                     all_args.push(out_arg);
                     all_args.extend_from_slice(&arg_vals);
                     let fixed = all_args.len();
-                    b.call_indirect(target, all_args, false, fixed, false, 0);
+                    let call = b.call_indirect(target, all_args, false, fixed, false, 0);
+                    if !arg_aggs.is_empty() {
+                        // `all_args` prepends the hidden out-pointer, so the
+                        // aggregate descriptors shift by one slot.
+                        let mut shifted = alloc::vec![None; arg_aggs.len() + 1];
+                        shifted[1..].clone_from_slice(&arg_aggs);
+                        b.set_call_arg_aggs(call, shifted);
+                    }
                     return Ok(b.local_addr(result_slot));
                 }
                 // Host-ABI aggregate return through a function pointer:
@@ -2363,6 +2399,9 @@ impl<'a> Walker<'a> {
                         fp_return,
                         fp_arg_mask,
                     );
+                    if !arg_aggs.is_empty() {
+                        b.set_call_arg_aggs(call, arg_aggs);
+                    }
                     if let Some((ridx, slot)) = ret_temp {
                         b.set_call_ret_agg(call, ridx, slot);
                         return Ok(b.local_addr(slot));
@@ -2403,6 +2442,9 @@ impl<'a> Walker<'a> {
                         fp_return,
                         fp_arg_mask,
                     );
+                    if !arg_aggs.is_empty() {
+                        b.set_call_arg_aggs(call, arg_aggs);
+                    }
                     if let Some((ridx, slot)) = ret_temp {
                         b.set_call_ret_agg(call, ridx, slot);
                         return Ok(b.local_addr(slot));
@@ -2467,6 +2509,9 @@ impl<'a> Walker<'a> {
                     fp_return,
                     call_fp_arg_mask,
                 );
+                if !arg_aggs.is_empty() {
+                    b.set_call_arg_aggs(call, arg_aggs);
+                }
                 if let Some((ridx, slot)) = ret_temp {
                     b.set_call_ret_agg(call, ridx, slot);
                     return Ok(b.local_addr(slot));

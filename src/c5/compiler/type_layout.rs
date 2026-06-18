@@ -392,14 +392,12 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
             // it inline on the stack (MEMORY class), handled by the marshal.
             return None;
         }
-        // An aggregate with a floating-point member keeps the by-address
-        // convention for arguments. The System V xmm-eightbyte argument emit
-        // (marshal + prologue) is in place and handles the register/stack
-        // cases, but enabling it surfaces a parameter-passing bug not yet
-        // localized, so FP-aggregate arguments stay by-address for now; the
-        // FP-aggregate *return* path (xmm0/xmm1) is unaffected and enabled.
-        // TODO: System V FP-eightbyte aggregate arguments via xmm.
-        if fields.iter().any(|f| f.kind != ScalarKind::Int) {
+        // System V x86_64 routes FP eightbytes to xmm (<= 16 bytes, in
+        // registers) or the stack (> 16 bytes), so an aggregate with a
+        // floating-point member is admitted there. Other non-HFA targets
+        // keep FP aggregates by-address (Windows x64 has no SSE-eightbyte
+        // struct class). TODO: Windows x64 FP-aggregate arguments.
+        if !matches!(target, Target::LinuxX64) && fields.iter().any(|f| f.kind != ScalarKind::Int) {
             return None;
         }
     }

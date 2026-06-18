@@ -3152,6 +3152,7 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs,
             ret_agg,
             ret_slot_local,
             ..
@@ -3167,6 +3168,7 @@ fn emit_inst(
             abi,
             *fp_return,
             *fp_arg_mask,
+            arg_aggs,
             &func.agg_descs,
             *ret_agg,
             *ret_slot_local,
@@ -5933,6 +5935,7 @@ fn emit_call_indirect(
     abi: super::Abi,
     fp_return: bool,
     fp_arg_mask: u32,
+    arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
     ret_agg: Option<u32>,
     ret_slot_local: i64,
@@ -5958,16 +5961,56 @@ fn emit_call_indirect(
     //   * SCRATCH_R10: the marshal's parallel-register-move scratch
     //     (`schedule_int_reg_moves`) and spill/stack staging
     //     register; it is clobbered mid-marshal.
-    let n_reg_args = args.len().min(abi.int_arg_regs.len());
+    // A Win64 variadic indirect call (the pointed-to prototype is
+    // variadic and the target is Win64) splits the arguments into the
+    // named prefix and the variadic tail: the planner places the named
+    // prefix per Win64 position-indexing and the variadic tail at
+    // 8-byte stride past the home area (Microsoft x64 calling
+    // convention). The walker widened the variadic floating-point
+    // arguments to double and passed `fp_arg_mask` 0, so every argument
+    // rides the integer side. Every other dialect (SysV, or a
+    // non-variadic Win64 callee) treats all arguments as fixed, which
+    // leaves `fixed = args.len()` and the placement unchanged.
+    let fixed = if callee_variadic && abi.position_indexed_args {
+        fixed_args.min(args.len())
+    } else {
+        args.len()
+    };
+    // A by-value aggregate argument the classifier tagged rides through
+    // `plan_call_args_aggs`, which lays its eightbytes into the argument
+    // registers / stack (System V AMD64 3.2.3); with no tagged aggregate
+    // this reduces to the scalar placement.
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
+    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
+    // Collect every register `marshal_args` reads or writes for this
+    // call; the staged target pointer must avoid all of them.
+    //   * Arg SOURCES: each argument is read from its allocator
+    //     placement; staging the target over a source corrupts it.
+    //   * Arg DESTINATIONS: every integer register the plan writes -- a
+    //     scalar `IntReg`, a by-reference base, or an aggregate's
+    //     integer eightbytes -- is overwritten before the `call`.
+    //   * SCRATCH_R10: the marshal's parallel-move / staging scratch.
     let mut blocked: alloc::vec::Vec<Reg> =
-        alloc::vec::Vec::with_capacity(args.len() + n_reg_args + 1);
+        alloc::vec::Vec::with_capacity(args.len() + abi.int_arg_regs.len() + 2);
     for &a in args {
         if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
             blocked.push(Reg(*r));
         }
     }
-    for &r in &abi.int_arg_regs[..n_reg_args] {
-        blocked.push(Reg(r));
+    for p in &plan.placements {
+        match p {
+            super::ArgPlacement::IntReg(r) | super::ArgPlacement::StructByRefReg(r) => {
+                blocked.push(Reg(*r));
+            }
+            super::ArgPlacement::StructRegs { regs, n } => {
+                for cr in &regs[..*n as usize] {
+                    if !cr.is_fp {
+                        blocked.push(Reg(cr.reg));
+                    }
+                }
+            }
+            _ => {}
+        }
     }
     blocked.push(SCRATCH_R10);
     // A System V variadic indirect call sets `al` to the XMM-argument
@@ -5985,26 +6028,6 @@ fn emit_call_indirect(
     // for an alternative otherwise. When everything is blocked the
     // `else` branch below spills the target to the stack.
     let target_scratch = pick_caller_saved_scratch(Reg(0xff), &blocked);
-    // FP scalar arguments ride the FP register bank (System V AMD64
-    // 3.2.3); the integer-only `blocked` set above is unaffected since
-    // an FP arg never occupies an integer argument register.
-    //
-    // A Win64 variadic indirect call (the pointed-to prototype is
-    // variadic and the target is Win64) splits the arguments into the
-    // named prefix and the variadic tail: `plan_call_args` then places
-    // the named prefix per Win64 position-indexing and the variadic
-    // tail at 8-byte stride past the home area (Microsoft x64 calling
-    // convention). The walker widened the variadic floating-point
-    // arguments to double and passed `fp_arg_mask` 0, so every argument
-    // rides the integer side. Every other dialect (SysV, or a
-    // non-variadic Win64 callee) treats all arguments as fixed, which
-    // leaves `fixed = args.len()` and the placement unchanged.
-    let fixed = if callee_variadic && abi.position_indexed_args {
-        fixed_args.min(args.len())
-    } else {
-        args.len()
-    };
-    let plan = super::plan_call_args(args.len(), fixed, fp_arg_mask, abi);
     // System V AMD64 3.2.3: a variadic call passes the XMM-argument
     // count in `al`. Computed from the plan and emitted after the
     // marshal (which never writes rax, blocked above for the target).
@@ -7202,13 +7225,25 @@ fn detect_tail_call<'a>(
     if inst_end == 0 || v + 1 != inst_end {
         return None;
     }
-    let (target_pc, args) = match &func.insts[v as usize] {
+    let (target_pc, args, arg_aggs) = match &func.insts[v as usize] {
         Inst::Call {
-            target_pc, args, ..
-        } => (*target_pc, args.as_slice()),
+            target_pc,
+            args,
+            arg_aggs,
+            ..
+        } => (*target_pc, args.as_slice(), arg_aggs.as_slice()),
         _ => return None,
     };
     if args.len() > abi.int_arg_regs.len() {
+        return None;
+    }
+    // A by-value aggregate argument is marshalled into one or two
+    // argument registers loaded from its source address (System V AMD64
+    // 3.2.3); the tail-call path plans with the scalar `plan_call_args`,
+    // which would instead pass the address as a single pointer. Fall
+    // back to the regular call-and-return path, which honours the
+    // aggregate placement.
+    if arg_aggs.iter().any(Option::is_some) {
         return None;
     }
     if func.is_variadic {

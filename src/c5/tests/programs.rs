@@ -345,6 +345,15 @@ fn bitfield_assign_value() {
 }
 
 #[test]
+fn struct_arg_indirect_subscript() {
+    // A by-value aggregate argument is placed in the platform-ABI
+    // registers (System V AMD64 3.2.3 / AAPCS64 6.4.2) through a function
+    // pointer, in tail position, and when the argument is a subscript
+    // lvalue -- not passed by address on either end.
+    assert_eq!(run_fixture("struct_arg_indirect_subscript.c"), 0);
+}
+
+#[test]
 fn compound_literal_tagged_address() {
     // A block-scope compound literal whose member initializer tags an
     // address with a bitwise / shift operator takes the runtime path; a

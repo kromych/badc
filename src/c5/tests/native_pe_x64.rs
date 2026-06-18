@@ -669,6 +669,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("fn_ptr_typedef_multi_declarator.c", 0),
     ("hfa_struct_return.c", 0),
     ("bitfield_assign_value.c", 0),
+    ("struct_arg_indirect_subscript.c", 0),
     ("compound_literal_tagged_address.c", 0),
     ("function_typed_parameter.c", 0),
     ("static_init_braced_scalar.c", 0),

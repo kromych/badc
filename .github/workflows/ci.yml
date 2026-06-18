@@ -1002,5 +1002,7 @@ jobs:
         run: cargo build --release --locked --features full --bin badc
       - name: cpython smoke (configure+make, badc compile+link, run test slice)
         run: python3 demos/python/smoke.py -v
+      - name: cpython benchmark parity (badc interpreter vs reference, differential check)
+        run: python3 demos/python/bench.py --scale 0.1 --reps 1
       - name: cpython windows-x64 cross-compile (badc PE compile+link)
         run: BADC_PY_TARGET=windows-x64 python3 demos/python/win_build.py --link

@@ -13,6 +13,14 @@ evaluator, the object and memory model, Unicode, and the parser.
   frozen-module headers, `Modules/config.c`) and a reference `python` used
   during the build, then recompiles each core translation unit through
   badc, links the interpreter, and runs a baselined test slice.
+- `bench.py` + `benchmarks/` -- runs the dependency-free pure-Python
+  benchmarks on the badc-built interpreter and a reference interpreter,
+  asserts per-benchmark output parity (a differential correctness check
+  over a workload broader than the test slice), and reports wall-clock
+  timings relative to the reference.
+- `win_build.py` -- cross-compiles a static Windows `python.exe`
+  (`BADC_PY_TARGET=windows-x64` or `windows-arm64`) from any host; see the
+  module docstring.
 
 CPython's object allocator embeds mimalloc, whose per-thread heap tables
 use a thread-local pointer initialized with the address of a global -- a
@@ -20,8 +28,11 @@ relocation against the TLS template badc does not yet emit. The build is
 configured `--without-mimalloc` so `Objects/obmalloc.c` uses the pymalloc
 allocator.
 
-POSIX only: the build runs `configure` and `make`. macOS is the first
-supported host. This demo is not wired into CI yet.
+The `smoke.py` build runs `configure` and `make`, so it is POSIX-only;
+it is exercised on macOS and Linux. `win_build.py` constructs the
+translation-unit list directly and cross-compiles from any host. The
+POSIX smoke, the benchmark parity check, and the Windows-x64 cross-compile
+run in CI.
 
 ## Running
 
@@ -29,7 +40,9 @@ supported host. This demo is not wired into CI yet.
 python3 demos/python/setup.py        # once, to fetch the source
 python3 demos/python/smoke.py -v     # build + run the test slice
 python3 demos/python/smoke.py --compile-only -v   # stop after link
+python3 demos/python/bench.py        # parity + timings vs the reference
 ```
 
 `cargo build --release --features full` must have produced
-`target/release/badc` first.
+`target/release/badc` first. `bench.py` reuses the interpreters built by
+`smoke.py` under `.cache/`.

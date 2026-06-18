@@ -182,7 +182,16 @@
 // process environment blocks.
 #pragma binding(data msvcrt::_sys_nerr,    "_sys_nerr")
 #pragma binding(data msvcrt::_sys_errlist, "_sys_errlist")
+#if defined(__aarch64__)
+// The legacy arm64 msvcrt.dll does not export the `_wenviron` data
+// symbol; UCRT exposes the wide environment only via this accessor.
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::__p__wenviron, "__p__wenviron")
+unsigned short ***__p__wenviron(void);
+#define _wenviron (*__p__wenviron())
+#else
 #pragma binding(data msvcrt::_wenviron,    "_wenviron")
+#endif
 #pragma binding(data msvcrt::_environ,     "_environ")
 // `_doserrno` is an SDK macro over the exported accessor `__doserrno`,
 // which returns a pointer to the thread's OS error code.
@@ -191,7 +200,9 @@ int *__doserrno(void);
 #define _doserrno (*__doserrno())
 extern int _sys_nerr;
 extern char *_sys_errlist[];
+#if !defined(__aarch64__)
 extern unsigned short **_wenviron;
+#endif
 extern char **_environ;
 // MSVC CRT size limits (_makepath / _splitpath / environment).
 #define _MAX_PATH   260

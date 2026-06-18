@@ -324,7 +324,13 @@ extern char **environ;
 // arm64 msvcrt.dll lacks `_getpid`); skip the binding when that
 // translation-unit definition is present.
 #ifndef __BADC_GETPID_PROVIDED
+#if defined(__aarch64__)
+// The legacy arm64 msvcrt.dll does not export `_getpid`; UCRT does.
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::getpid, "_getpid")
+#else
 #pragma binding(msvcrt::getpid, "_getpid")
+#endif
 #endif
 #pragma binding(msvcrt::umask,  "_umask")
 #endif

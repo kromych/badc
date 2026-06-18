@@ -37,7 +37,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PY_DIR = Path(__file__).resolve().parent
 VERSION = "3.14.6"
 SRC = PY_DIR / ".cache" / f"Python-{VERSION}"
-TARGET = "windows-x64"
+TARGET = os.environ.get("BADC_PY_TARGET", "windows-x64")
 
 # Translation units excluded from the minimal static interpreter. zlib needs
 # the vendored zlib-ng; the SIMD HACL variants need AVX intrinsics and the
@@ -220,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     badc = badc_path()
-    out = PY_DIR / ".cache" / "obj-win"
+    out = PY_DIR / ".cache" / ("obj-win" if TARGET == "windows-x64" else f"obj-{TARGET}")
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)

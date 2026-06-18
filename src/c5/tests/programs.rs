@@ -321,6 +321,14 @@ fn atomic_rmw_ops() {
 }
 
 #[test]
+fn fn_ptr_typedef_multi_declarator() {
+    // A function-pointer typedef declaring several variables in one
+    // declaration must give every declarator the pointed-to return type;
+    // a later declarator's call result must not be truncated to int.
+    assert_eq!(run_fixture("fn_ptr_typedef_multi_declarator.c"), 0);
+}
+
+#[test]
 fn compound_literal_tagged_address() {
     // A block-scope compound literal whose member initializer tags an
     // address with a bitwise / shift operator takes the runtime path; a

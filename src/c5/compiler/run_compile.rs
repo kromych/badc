@@ -244,7 +244,21 @@ impl Compiler {
                 self.next()?;
             }
 
+            // A function-pointer typedef base type contributes its lineage
+            // to every declarator in the list (`fn_t a, b;`). The
+            // per-declarator symbol creation consumes these pending fields,
+            // so capture them and re-seed each iteration; otherwise only the
+            // first declarator keeps the lineage and a call through a later
+            // one defaults its result type to int.
+            let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+            let base_is_function_type = self.pending.base_is_function_type;
+            let base_typedef_fn_proto = self.pending.typedef_fn_proto;
+            let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
             while self.lex.tk != ';' && self.lex.tk != '}' {
+                self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
+                self.pending.base_is_function_type = base_is_function_type;
+                self.pending.typedef_fn_proto = base_typedef_fn_proto;
+                self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
                 // A declarator may carry a trailing attribute before the
                 // terminator (`name(args) __attribute__((...));`, an

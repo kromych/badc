@@ -64,6 +64,16 @@ impl Compiler {
         } else {
             self.parse_decl_base_type()?
         };
+        // A function-pointer typedef base type contributes its lineage to
+        // every declarator in the list (`fn_t a, b;` makes both a and b
+        // function pointers). The per-declarator symbol creation consumes
+        // these pending fields, so capture them and re-seed each iteration;
+        // otherwise only the first declarator keeps the lineage and a call
+        // through a later one defaults its result type to int.
+        let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+        let base_is_function_type = self.pending.base_is_function_type;
+        let base_typedef_fn_proto = self.pending.typedef_fn_proto;
+        let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
         // Function declaration at function-body scope (C99 6.7p1):
         // `T name(args);` or `T *name(args);` where the leading run
         // of `*` qualifies the return type. C99 6.2.2p5: with no
@@ -137,6 +147,12 @@ impl Compiler {
         // declarator to walk its own `*` chain).
         self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
+            // Re-seed the base type's function-pointer lineage for this
+            // declarator; the previous declarator's symbol creation took it.
+            self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
+            self.pending.base_is_function_type = base_is_function_type;
+            self.pending.typedef_fn_proto = base_typedef_fn_proto;
+            self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             // C23 6.7.13.5 `[[maybe_unused]]` / GNU
             // `__attribute__((unused))` on the declaration suppresses

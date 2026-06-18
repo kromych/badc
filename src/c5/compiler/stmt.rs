@@ -317,6 +317,13 @@ impl Compiler {
             self.next()?;
         }
         let lbt = self.parse_decl_base_type()?;
+        // A function-pointer typedef base type contributes its lineage to
+        // every declarator in the list; the per-declarator symbol creation
+        // consumes these pending fields, so capture and re-seed each one.
+        let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+        let base_is_function_type = self.pending.base_is_function_type;
+        let base_typedef_fn_proto = self.pending.typedef_fn_proto;
+        let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
         // Function declaration at block scope (C99 6.7p1):
         // `T name(args);` or `T *name(args);` where the leading run of
         // `*` qualifies the return type. C99 6.2.2p5: with no
@@ -388,6 +395,10 @@ impl Compiler {
         // sees the leading `*`s and consumes them per declarator.
         self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
+            self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
+            self.pending.base_is_function_type = base_is_function_type;
+            self.pending.typedef_fn_proto = base_typedef_fn_proto;
+            self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             // C99 6.3.2.1p4: a function-pointer rvalue auto-decays
             // through any unary `*` chain. The `Symbol::fn_ptr_indirection`

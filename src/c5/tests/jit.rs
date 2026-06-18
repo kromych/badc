@@ -1235,6 +1235,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("variadic_macro_named_rest.c", 0),
     ("stdatomic_c11.c", 0),
     ("atomic_rmw_ops.c", 0),
+    ("fn_ptr_typedef_multi_declarator.c", 0),
     ("compound_literal_tagged_address.c", 0),
     ("function_typed_parameter.c", 0),
     ("static_init_braced_scalar.c", 0),

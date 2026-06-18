@@ -474,6 +474,15 @@ impl Compiler {
             // fields (`int (*xCompare)(int, int);`) and array fields
             // (`int counts[8];`) parse with the same rules as locals
             // and globals.
+            //
+            // A function-pointer typedef base (`fn_t a, b;`) seeds its
+            // lineage once into `self.pending`; the per-declarator
+            // `.take()` below would zero it for declarators after the
+            // first. Capture and re-seed each iteration. Only the two
+            // typedef-derived fields are restored; `fn_ptr_param_types`
+            // is a per-declarator output of `parse_declarator`.
+            let base_field_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+            let base_field_is_function_type = self.pending.base_is_function_type;
             loop {
                 // Anonymous bitfield (`int :N;`) -- skips a name and
                 // just reserves bits for padding. Detected by `:`
@@ -525,6 +534,8 @@ impl Compiler {
                     break;
                 }
 
+                self.pending.fn_ptr_indirection = base_field_fn_ptr_indirection;
+                self.pending.base_is_function_type = base_field_is_function_type;
                 let (id_idx, mut field_ty, mut field_array_size) =
                     self.parse_declarator(field_base)?;
                 // A member may carry a trailing attribute

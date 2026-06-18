@@ -445,13 +445,24 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
     let align = (structs[id].align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // A <=16B aggregate whose eightbyte/HFA classification places any unit
-    // in a floating-point return register (a pure-FP eightbyte on System V,
-    // an HFA on AAPCS64) keeps the out-pointer convention: the emit path
-    // returns aggregate units only through integer registers. An eightbyte
-    // shared by integer and FP members (a union overlapping a double with an
-    // int/pointer) classifies as Integer and returns in the integer
-    // registers, bit-for-bit. TODO: FP-bank aggregate returns.
+    // AAPCS64 6.9: a homogeneous floating-point aggregate returns in up to
+    // four consecutive FP registers (v0..v3), independent of the 16-byte
+    // integer-register threshold -- a four-`double` HFA is 32 bytes. The
+    // emit places each member by its `hfa_member_layout` offset.
+    if aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some() {
+        return StructReturnAbi::Regs(AggDesc {
+            size,
+            align,
+            fields,
+        });
+    }
+    // A <=16B aggregate whose eightbyte classification places any unit in a
+    // floating-point return register (a pure-FP eightbyte on System V) keeps
+    // the out-pointer convention: the System V emit returns aggregate units
+    // only through integer registers. An eightbyte shared by integer and FP
+    // members (a union overlapping a double with an int/pointer) classifies
+    // as Integer and returns in the integer registers, bit-for-bit.
+    // TODO: FP-bank aggregate returns on System V (xmm0/xmm1).
     let returns_in_fp = matches!(
         crate::c5::codegen::abi_classify::classify_aggregate(size, align, &fields, target.abi(), true),
         crate::c5::codegen::abi_classify::AggClass::Regs(ref c)

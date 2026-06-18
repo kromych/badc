@@ -329,6 +329,14 @@ fn fn_ptr_typedef_multi_declarator() {
 }
 
 #[test]
+fn hfa_struct_return() {
+    // A homogeneous floating-point aggregate returns in FP registers
+    // (AAPCS64 6.9) rather than through an out-pointer; the member values
+    // must round-trip through a call intact.
+    assert_eq!(run_fixture("hfa_struct_return.c"), 0);
+}
+
+#[test]
 fn compound_literal_tagged_address() {
     // A block-scope compound literal whose member initializer tags an
     // address with a bitwise / shift operator takes the runtime path; a

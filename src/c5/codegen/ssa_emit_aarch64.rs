@@ -3594,7 +3594,10 @@ fn setup_indirect_result(
 ) {
     if let Some(ai) = ret_agg
         && agg_descs[ai as usize].size > 16
+        && super::abi_classify::hfa_member_layout(&agg_descs[ai as usize].fields).is_none()
     {
+        // An HFA larger than 16 bytes (three or four members) still returns
+        // in v-registers, not through x8.
         emit_local_addr(code, Place::IntReg(8), ret_slot_off, frame);
     }
 }
@@ -3615,8 +3618,26 @@ fn finish_call_result(
     fp_return: bool,
 ) {
     if let Some(ai) = ret_agg {
-        let size = agg_descs[ai as usize].size;
-        if size <= 16 {
+        let desc = &agg_descs[ai as usize];
+        let size = desc.size;
+        if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
+            // AAPCS64 6.9: an HFA result arrives with member k in v[k].
+            // Store each into the result temp at its byte offset.
+            emit_local_addr(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            for (k, (off, msize)) in members.iter().enumerate() {
+                if *msize == 8 {
+                    emit(
+                        code,
+                        super::aarch64::enc_str_d_imm(k as u8, scratch.primary, *off),
+                    );
+                } else {
+                    emit(
+                        code,
+                        super::aarch64::enc_str_s_imm(k as u8, scratch.primary, *off),
+                    );
+                }
+            }
+        } else if size <= 16 {
             emit_local_addr(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
             emit(code, enc_str_imm(Reg(0), scratch.primary, 0));
             if size > 8 {
@@ -6361,7 +6382,8 @@ fn emit_return(
     // supplied x8 pointer (saved to `indirect_result_slot` by the
     // prologue) and that pointer is returned in x0.
     if let Some(ai) = func.ret_agg {
-        let size = func.agg_descs[ai as usize].size;
+        let desc = &func.agg_descs[ai as usize];
+        let size = desc.size;
         let place = alloc
             .places
             .get(value as usize)
@@ -6372,7 +6394,18 @@ fn emit_return(
             emit_mov_reg(code, scratch.primary, saddr);
         }
         let base = scratch.primary;
-        if size <= 16 {
+        if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
+            // AAPCS64 6.9: a homogeneous floating-point aggregate returns
+            // member k in v[k] (d-register for an F64 member, s-register
+            // for an F32). Load each from its byte offset in the source.
+            for (k, (off, msize)) in members.iter().enumerate() {
+                if *msize == 8 {
+                    emit(code, super::aarch64::enc_ldr_d_imm(k as u8, base, *off));
+                } else {
+                    emit(code, super::aarch64::enc_ldr_s_imm(k as u8, base, *off));
+                }
+            }
+        } else if size <= 16 {
             if size > 8 {
                 emit(code, enc_ldr_imm(Reg(1), base, 8));
             }

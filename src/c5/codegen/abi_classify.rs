@@ -190,6 +190,16 @@ fn hfa_member_count(fields: &[FlatField]) -> Option<usize> {
     }
 }
 
+/// When `fields` form a homogeneous floating-point aggregate, return each
+/// member's `(byte_offset, byte_size)` in declaration order; `None`
+/// otherwise. The aarch64 emit places member `k` in `v[k]` for an HFA
+/// argument or return (AAPCS64 6.4.2 / 6.8.2), so the layout drives the
+/// per-member FP load / store.
+pub(crate) fn hfa_member_layout(fields: &[FlatField]) -> Option<alloc::vec::Vec<(u32, u32)>> {
+    hfa_member_count(fields)?;
+    Some(fields.iter().map(|f| (f.offset, f.size)).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -187,9 +187,7 @@ def ensure_derived_sources() -> None:
     if missing:
         sys.exit(
             "win_build: frozen-module headers missing (e.g. "
-            f"{missing[0]}) -- run a host build first: "
-            "`python3 demos/python/smoke.py --compile-only` or "
-            "`(cd %s && make)`" % SRC
+            f"{missing[0]}) -- run `python3 demos/python/setup.py` to fetch them"
         )
 
 

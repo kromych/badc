@@ -32,6 +32,26 @@ ASSET = f"python-{VERSION}-{SHA256[:8]}.tar.gz"
 RELEASE_TAG = "vendor-deps-v1"
 # Directory the tarball unpacks into.
 SRC_DIRNAME = f"Python-{VERSION}"
+# The release source tarball omits the derived frozen-module headers
+# (Python/frozen_modules/*.h) a POSIX configure/make would generate. They are
+# platform-independent marshalled bytecode, so vendor them once and fetch here;
+# the build then needs no make on any target.
+FROZEN_SHA256 = "c04d5878dc61149e743eed163e867da65a508c64db4fe6b8e08bd4a6fe930ea3"
+FROZEN_ASSET = f"python-frozen-{VERSION}-{FROZEN_SHA256[:8]}.tar.gz"
+
+
+def ensure_frozen(src: Path, cache_dir: Path, log) -> None:
+    landmark = src / "Python" / "frozen_modules" / "importlib._bootstrap.h"
+    if landmark.is_file():
+        log("frozen headers already present")
+        return
+    tar_path = cache_dir / FROZEN_ASSET
+    _fetch.fetch_and_verify(RELEASE_TAG, FROZEN_ASSET, tar_path, FROZEN_SHA256, log)
+    log("extracting frozen headers")
+    with tarfile.open(tar_path, "r:gz") as tf:
+        tf.extractall(src)
+    if not landmark.is_file():
+        sys.exit(f"setup: frozen extract missing {landmark}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -48,22 +68,21 @@ def main(argv: list[str] | None = None) -> int:
     tar_path = cache_dir / ASSET
     extract_root = cache_dir / SRC_DIRNAME
 
+    cache_dir.mkdir(parents=True, exist_ok=True)
     if (extract_root / "configure").is_file():
         log("source already extracted")
-        return 0
+    else:
+        _fetch.fetch_and_verify(RELEASE_TAG, ASSET, tar_path, SHA256, log)
+        log("extracting source")
+        if extract_root.exists():
+            shutil.rmtree(extract_root)
+        with tarfile.open(tar_path, "r:gz") as tf:
+            tf.extractall(cache_dir)
+        if not (extract_root / "configure").is_file():
+            sys.exit(f"setup: extracted tree missing configure at {extract_root}")
+        log(f"source ready at {extract_root}")
 
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    _fetch.fetch_and_verify(RELEASE_TAG, ASSET, tar_path, SHA256, log)
-
-    log("extracting source")
-    if extract_root.exists():
-        shutil.rmtree(extract_root)
-    with tarfile.open(tar_path, "r:gz") as tf:
-        tf.extractall(cache_dir)
-
-    if not (extract_root / "configure").is_file():
-        sys.exit(f"setup: extracted tree missing configure at {extract_root}")
-    log(f"source ready at {extract_root}")
+    ensure_frozen(extract_root, cache_dir, log)
     return 0
 
 

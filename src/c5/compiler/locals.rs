@@ -1579,6 +1579,72 @@ impl Compiler {
             // member's offset (C99 6.7.8p13). The recursion handles a
             // union the same way -- its fields share offset 0.
             self.skip_opt_compound_literal_cast()?;
+            // C11 6.7.2.1: a flattened anonymous union/struct member taking a
+            // brace-enclosed sub-initializer (`{ .member = v }`). The brace
+            // selects one group member; emit it and advance past the group.
+            if field.anon_union_group != 0 && self.lex.tk == '{' {
+                self.next()?; // consume `{`
+                let group = field.anon_union_group;
+                while self.lex.tk != '}' {
+                    let mem_idx = if self.lex.tk == Token::Dot {
+                        self.next()?;
+                        if self.lex.tk != Token::Id {
+                            return Err(self.compile_err("field name expected after `.`"));
+                        }
+                        let nm = self.symbols[self.lex.curr_id_idx].name.clone();
+                        self.next()?;
+                        if self.lex.tk != Token::Assign {
+                            return Err(self
+                                .compile_err(format!("`=` expected after `.{nm}` designator")));
+                        }
+                        self.next()?;
+                        self.structs[sid]
+                            .fields
+                            .iter()
+                            .position(|f| f.anon_union_group == group && f.name == nm)
+                            .ok_or_else(|| {
+                                self.compile_err(format!("anonymous member {nm} not found"))
+                            })?
+                    } else {
+                        field_idx
+                    };
+                    let mem = self.structs[sid].fields[mem_idx].clone();
+                    let total = extra_offset + mem.offset as i64;
+                    if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
+                        self.emit_struct_local_init_runtime_at(local_val, total, struct_id_of(mem.ty), true)?;
+                    } else {
+                        self.emit_lea(local_val);
+                        if total > 0 {
+                            self.ast_psh();
+                            self.emit_imm(total);
+                            self.ast_binop(crate::c5::ir::BinOp::Add);
+                        }
+                        self.ast_psh();
+                        self.expr(Token::Assign as i64)?;
+                        let v = self.ast_acc;
+                        self.ast_assign();
+                        if let Some(value) = v {
+                            self.pending_local_runtime_elements.push(
+                                super::super::ast::RuntimeInitElement { offset: total, value, ty: mem.ty },
+                            );
+                        }
+                    }
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                }
+                self.next()?; // consume `}`
+                pos = field_idx + 1;
+                while pos < self.structs[sid].fields.len()
+                    && self.structs[sid].fields[pos].anon_union_group == group
+                {
+                    pos += 1;
+                }
+                if self.lex.tk == ',' {
+                    self.next()?;
+                }
+                continue;
+            }
             if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 && self.lex.tk == '{' {
                 let nested_sid = struct_id_of(field.ty);
                 self.emit_struct_local_init_runtime_at(

@@ -1706,6 +1706,67 @@ impl Compiler {
             // the shared pending value for its own member).
             self.skip_opt_compound_literal_cast()?;
             let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            // C11 6.7.2.1: an anonymous union/struct member whose members are
+            // flattened into the parent (shared anon_union_group) may take a
+            // brace-enclosed sub-initializer (`{ .member = v }` or `{ v }`).
+            // The brace selects one group member rather than a nested object;
+            // fill it, then advance past the whole group.
+            if field.anon_union_group != 0 && self.lex.tk == '{' {
+                self.next()?; // consume `{`
+                let group = field.anon_union_group;
+                while self.lex.tk != '}' {
+                    let mem_idx = if self.lex.tk == Token::Dot {
+                        self.next()?;
+                        if self.lex.tk != Token::Id {
+                            return Err(self.compile_err("field name expected after `.`"));
+                        }
+                        let nm = self.symbols[self.lex.curr_id_idx].name.clone();
+                        self.next()?;
+                        if self.lex.tk != Token::Assign {
+                            return Err(self
+                                .compile_err(format!("`=` expected after `.{nm}` designator")));
+                        }
+                        self.next()?;
+                        self.structs[struct_id]
+                            .fields
+                            .iter()
+                            .position(|f| f.anon_union_group == group && f.name == nm)
+                            .ok_or_else(|| {
+                                self.compile_err(format!("anonymous member {nm} not found"))
+                            })?
+                    } else {
+                        field_idx
+                    };
+                    let mem = self.structs[struct_id].fields[mem_idx].clone();
+                    let mem_base = (var_offset as usize) + mem.offset;
+                    if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
+                        self.collect_struct_initializer(struct_id_of(mem.ty), mem_base as i64)?;
+                    } else {
+                        let (value, reloc) = self.parse_constant_init_value()?;
+                        let size = self.size_of_type(mem.ty);
+                        self.write_init_value(mem_base, size, value, reloc, mem.ty);
+                    }
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                }
+                self.next()?; // consume `}`
+                pos = field_idx + 1;
+                while pos < self.structs[struct_id].fields.len()
+                    && self.structs[struct_id].fields[pos].anon_union_group == group
+                {
+                    pos += 1;
+                }
+                for _ in 0..close_parens {
+                    if self.lex.tk == ')' {
+                        self.next()?;
+                    }
+                }
+                if self.lex.tk == ',' {
+                    self.next()?;
+                }
+                continue;
+            }
             // Flexible array member (`T v[]`, array_size == -1) with a
             // static initializer. C99 6.7.2.1p18 forbids initializing a
             // FAM, but GCC and clang accept it for a top-level object,

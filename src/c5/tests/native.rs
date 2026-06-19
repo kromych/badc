@@ -436,6 +436,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("case_label_declaration.c", 0),
     ("char_constant_signedness.c", 0),
     ("func_name_in_initializer.c", 0),
+    ("anon_union_braced_init.c", 0),
     ("slot_coalesce_disjoint_temps.c", 0),
     ("alloca_alignment.c", 0),
     ("slot_coalesce_declared.c", 0),

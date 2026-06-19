@@ -60,6 +60,8 @@
 #pragma binding(msvcrt::toupper,  "toupper")
 #endif
 
+// isascii: the C macro form; no libc symbol.
+#define isascii(c) (((unsigned)(c)) < 128)
 int isspace(int c);
 int isdigit(int c);
 int isalpha(int c);

@@ -35,6 +35,13 @@ struct rlimit {
 #define RLIMIT_AS      9
 #endif
 
+// Count of RLIMIT_* identifiers; Linux defines more than macOS.
+#ifdef __APPLE__
+#define RLIM_NLIMITS 9
+#else
+#define RLIM_NLIMITS 16
+#endif
+
 #define RUSAGE_SELF      0
 #define RUSAGE_CHILDREN (-1)
 

@@ -112,7 +112,8 @@ def run(cmd, **kw):
 
 
 def badc_path() -> str:
-    p = REPO_ROOT / "target" / "release" / "badc"
+    name = "badc.exe" if os.name == "nt" else "badc"
+    p = REPO_ROOT / "target" / "release" / name
     if not p.is_file():
         sys.exit(f"win_build: badc not built at {p} -- run `cargo build --release --features full`")
     return str(p)

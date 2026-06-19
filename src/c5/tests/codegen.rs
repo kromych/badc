@@ -936,3 +936,76 @@ fn atomic_rmw_emits_ldaxr_stlxr_aarch64() {
         "expected an STLXR opcode word in the aarch64 image",
     );
 }
+
+/// Bytes of the section named `name` in an ELF64 little-endian
+/// object, or `None` when absent. Reads only the section header
+/// table and the section-name string table.
+fn elf64_section<'a>(obj: &'a [u8], name: &str) -> Option<&'a [u8]> {
+    let rd_u16 = |off: usize| u16::from_le_bytes(obj[off..off + 2].try_into().unwrap()) as usize;
+    let rd_u32 = |off: usize| u32::from_le_bytes(obj[off..off + 4].try_into().unwrap()) as usize;
+    let rd_u64 = |off: usize| u64::from_le_bytes(obj[off..off + 8].try_into().unwrap()) as usize;
+    let e_shoff = rd_u64(0x28);
+    let e_shentsize = rd_u16(0x3a);
+    let e_shnum = rd_u16(0x3c);
+    let e_shstrndx = rd_u16(0x3e);
+    let sh = |i: usize| e_shoff + i * e_shentsize;
+    let shstr_off = rd_u64(sh(e_shstrndx) + 0x18);
+    let sh_name_str = |hdr: usize| {
+        let n = rd_u32(hdr); // sh_name at +0x00
+        let start = shstr_off + n;
+        let end = start + obj[start..].iter().position(|&b| b == 0).unwrap();
+        &obj[start..end]
+    };
+    (0..e_shnum)
+        .map(sh)
+        .find(|&hdr| sh_name_str(hdr) == name.as_bytes())
+        .map(|hdr| {
+            let off = rd_u64(hdr + 0x18);
+            let size = rd_u64(hdr + 0x20);
+            &obj[off..off + size]
+        })
+}
+
+/// `-g` must not change emitted machine code: DWARF tables are
+/// appended to the image, never woven into `.text`. The function's
+/// disjoint-lifetime locals exercise slot coalescing -- the pass
+/// whose debug gate was the only -g/codegen coupling. Emit with
+/// debug info on and off for each ELF target and require
+/// byte-identical `.text`.
+#[test]
+fn debug_info_does_not_change_codegen() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str(
+        r#"
+            int coalesce_me(int n) {
+                int a = n + 1, b = n + 2; int s1 = a + b;
+                int c = n + 3, d = n + 4; int s2 = c + d;
+                int e = n + 5, g = n + 6; int s3 = e + g;
+                return s1 + s2 + s3;
+            }
+            int main() { return coalesce_me(7); }
+        "#,
+    );
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let emit = |debug: bool| {
+            emit_native_with_options(
+                &program,
+                target,
+                NativeOptions::new().with_debug_info(debug),
+            )
+            .unwrap_or_else(|e| panic!("emit_native({target:?}, debug={debug}): {e}"))
+        };
+        let with_g = emit(true);
+        let without_g = emit(false);
+        let text_g = elf64_section(&with_g, ".text").expect(".text in -g image");
+        let text_no_g = elf64_section(&without_g, ".text").expect(".text in no-g image");
+        assert!(!text_g.is_empty(), ".text must be non-empty");
+        assert_eq!(
+            text_g,
+            text_no_g,
+            "-g changed .text for {target:?} ({} vs {} bytes)",
+            text_g.len(),
+            text_no_g.len()
+        );
+    }
+}

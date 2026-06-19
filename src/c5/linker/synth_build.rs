@@ -327,6 +327,7 @@ fn synth_program_and_build(
         func_names,
         func_prologue_native,
         promoted_local_slots: alloc::collections::BTreeMap::new(),
+        coalesced_slot_remap: alloc::collections::BTreeMap::new(),
         fn_unwind,
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),

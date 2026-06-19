@@ -1456,6 +1456,14 @@ pub(crate) struct Build {
     /// longer holds the value (a stale `DW_OP_fbreg` would make the
     /// debugger read uninitialised frame memory).
     pub promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Per-function map from a declared local's original frame slot to the
+    /// new slot it was coalesced onto, keyed by `ent_pc`. The slot-coalescing
+    /// pass compacts the frame regardless of debug info; the debug-info
+    /// emitter consults this so a surviving local's `DW_OP_fbreg` location
+    /// uses its post-coalesce offset. Slots coalesced onto shared storage are
+    /// recorded in `promoted_local_slots` (empty location) instead.
+    pub coalesced_slot_remap:
+        alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, i64>>,
     /// Per-function x86_64 Win64 unwind descriptors, in emission
     /// order. The PE writer turns each into a `RUNTIME_FUNCTION` +
     /// `UNWIND_INFO` pair so `RtlVirtualUnwind` can recover the

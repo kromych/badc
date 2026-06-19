@@ -1448,21 +1448,44 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
             super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
+    // Frame slots mem2reg promoted to registers (-O) or that slot
+    // coalescing moved onto shared storage: the debug-info emitter drops
+    // their stale frame location. Slots coalescing moved to a new exclusive
+    // offset are recorded separately so the emitter rewrites the location.
+    let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
+        alloc::collections::BTreeMap::new();
+    let mut coalesced_slot_remap: alloc::collections::BTreeMap<
+        usize,
+        alloc::collections::BTreeMap<i64, i64>,
+    > = alloc::collections::BTreeMap::new();
     // Reuse non-overlapping synthetic stack slots. At -O, mem2reg promotes
     // these address-free slots to SSA values; this is the default-level
     // analog, shrinking frames built from many control-flow merges whose
-    // phi-substitute slots never overlap.
+    // phi-substitute slots never overlap. The pass runs regardless of debug
+    // info so the emitted code is identical with and without -g.
     if !native.optimize {
-        super::ssa_emit_common::time_pass("ssa_slot_coalesce::run (aarch64)", || {
-            super::ssa_slot_coalesce::run(&mut ssa_funcs, !native.debug_info);
-        });
+        let coalesce_dwarf =
+            super::ssa_emit_common::time_pass("ssa_slot_coalesce::run (aarch64)", || {
+                super::ssa_slot_coalesce::run(&mut ssa_funcs)
+            });
+        for (ent_pc, map) in coalesce_dwarf {
+            for (orig, new) in map {
+                match new {
+                    Some(new) => {
+                        coalesced_slot_remap
+                            .entry(ent_pc)
+                            .or_default()
+                            .insert(orig, new);
+                    }
+                    None => promoted_local_slots.entry(ent_pc).or_default().push(orig),
+                }
+            }
+        }
     }
     // -O: promote address-free local slots to SSA values before
     // register allocation, dropping their frame load / store traffic.
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
-    let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
-        alloc::collections::BTreeMap::new();
     if native.optimize {
         super::ssa_emit_common::time_pass("ssa_mem2reg::run (aarch64)", || {
             for f in &mut ssa_funcs {
@@ -1807,6 +1830,7 @@ pub(super) fn lower(
         func_names,
         func_prologue_native,
         promoted_local_slots,
+        coalesced_slot_remap,
         // x86_64-only Win64 unwind; the aarch64 PE writer uses packed
         // RUNTIME_FUNCTIONs and consults no per-function descriptor.
         fn_unwind: Vec::new(),

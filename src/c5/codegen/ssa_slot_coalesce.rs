@@ -21,39 +21,51 @@
 //! blocks; overlapping declared groups (one slot reused across disjoint
 //! scopes) merge into a single block.
 //!
-//! `coalesce_declared` is false when debug info is emitted: the pass then
-//! confines itself to the synthetic range (offset magnitude greater than
-//! `synthetic_base`), leaving the parser's declared locals at their original
-//! slots so per-local `DW_OP_fbreg` locations stay accurate. Without debug
-//! info no per-local locations are emitted, so the declared range is
-//! coalesced too.
+//! The pass always coalesces the whole movable frame (declared locals
+//! included) so the emitted machine code is independent of whether debug
+//! info is requested. `run` returns, per function, a map from each original
+//! movable slot offset to its post-coalesce classification, which the DWARF
+//! emitter consumes: an EXCLUSIVE slot (the new offset backs exactly one
+//! original slot) carries `Some(new_off)` and its location is rewritten to
+//! the new offset; a SHARED slot (the new offset backs disjoint-lifetime
+//! scalars) carries `None` and its location is dropped, since no single
+//! frame address holds it for the whole scope.
 
 use super::super::ir::{FunctionSsa, Inst, ValueId};
 use super::ssa_mem2reg::successors;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-pub(crate) fn run(funcs: &mut [FunctionSsa], coalesce_declared: bool) {
+/// Per-function map from an original movable slot offset to its
+/// post-coalesce DWARF classification (`Some(new_off)` = exclusive,
+/// `None` = shared), keyed by the function's `ent_pc`.
+pub(crate) type CoalesceDwarf = BTreeMap<usize, BTreeMap<i64, Option<i64>>>;
+
+pub(crate) fn run(funcs: &mut [FunctionSsa]) -> CoalesceDwarf {
+    let mut out = CoalesceDwarf::new();
     for f in funcs.iter_mut() {
-        coalesce(f, coalesce_declared);
+        let ent_pc = f.ent_pc;
+        let m = coalesce(f);
+        if !m.is_empty() {
+            out.insert(ent_pc, m);
+        }
     }
+    out
 }
 
-fn coalesce(f: &mut FunctionSsa, coalesce_declared: bool) {
+fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
     // `synthetic_base > 0` marks a walker-built function with declared
     // locals; hand-built SSA (sys-trampolines, CRT entry) carries 0 and is
     // left alone -- its slot model is not the walker's.
     let synth_base = f.synthetic_base;
     let total = f.locals;
     if synth_base <= 0 || total <= 0 {
-        return;
+        return BTreeMap::new();
     }
-    // Magnitude floor: a slot whose offset magnitude is `<= floor` keeps its
-    // offset. With debug info the declared range stays put; without it the
-    // whole frame is coalesced.
-    let floor = if coalesce_declared { 0 } else { synth_base };
+    // The whole movable frame is coalesced; a slot at offset 0 is not movable.
+    let floor = 0;
     if total <= floor {
-        return;
+        return BTreeMap::new();
     }
     let movable = |off: i64| off < 0 && -off > floor && -off <= total;
 
@@ -67,7 +79,7 @@ fn coalesce(f: &mut FunctionSsa, coalesce_declared: bool) {
         .iter()
         .any(|i| matches!(i, Inst::AllocaInit(slot) if *slot > 0))
     {
-        return;
+        return BTreeMap::new();
     }
 
     // Interior cells of every movable multi-cell object: declared aggregates
@@ -205,7 +217,7 @@ fn coalesce(f: &mut FunctionSsa, coalesce_declared: bool) {
         }
     }
     if candidates.len() < 2 {
-        return;
+        return BTreeMap::new();
     }
     let slots: Vec<i64> = candidates.iter().copied().collect();
     let slot_bit: BTreeMap<i64, usize> = slots.iter().enumerate().map(|(i, &o)| (o, i)).collect();
@@ -371,7 +383,7 @@ fn coalesce(f: &mut FunctionSsa, coalesce_declared: bool) {
     }
     let new_locals = next_mag;
     if new_locals >= total {
-        return;
+        return BTreeMap::new();
     }
     for inst in &mut f.insts {
         match inst {
@@ -401,4 +413,26 @@ fn coalesce(f: &mut FunctionSsa, coalesce_declared: bool) {
     }
     f.multi_cell_slots.clear();
     f.locals = new_locals;
+
+    // Classify each original movable slot for the DWARF emitter. A new
+    // offset that backs exactly one original slot (an aggregate, a reserved
+    // single, or a single-use colour) holds that slot's value for its whole
+    // scope, so the location is rewritten to the new offset (exclusive). A
+    // new offset shared by more than one original slot (disjoint-lifetime
+    // scalars sharing storage) has no single stable location, so the slot's
+    // location is dropped (shared).
+    let mut reverse_count: BTreeMap<i64, usize> = BTreeMap::new();
+    for &new in new_off.values() {
+        *reverse_count.entry(new).or_insert(0) += 1;
+    }
+    new_off
+        .into_iter()
+        .map(|(orig, new)| {
+            if reverse_count.get(&new).copied().unwrap_or(0) == 1 {
+                (orig, Some(new))
+            } else {
+                (orig, None)
+            }
+        })
+        .collect()
 }

@@ -987,8 +987,9 @@ jobs:
     name: cpython (ubuntu)
     runs-on: ubuntu-latest
     # configure+make of the reference interpreter and the badc compile of
-    # the link set dominate; 30 leaves headroom over the warm run.
-    timeout-minutes: 30
+    # the link set dominate, plus two PE cross-compiles (x64 + arm64);
+    # 35 leaves headroom over the warm run.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -1006,3 +1007,5 @@ jobs:
         run: python3 demos/python/bench.py --scale 0.1 --reps 1
       - name: cpython windows-x64 cross-compile (badc PE compile+link)
         run: BADC_PY_TARGET=windows-x64 python3 demos/python/win_build.py --link
+      - name: cpython windows-arm64 cross-compile (badc PE compile+link)
+        run: BADC_PY_TARGET=windows-arm64 python3 demos/python/win_build.py --link

@@ -36,6 +36,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PY_DIR = Path(__file__).resolve().parent
 VERSION = "3.14.6"
+# X.Y form used for sys.winver and MS_DLL_ID (PC/dl_nt.c convention).
+WINVER_XY = VERSION.rsplit(".", 1)[0]
 SRC = PY_DIR / ".cache" / f"Python-{VERSION}"
 TARGET = os.environ.get("BADC_PY_TARGET", "windows-x64")
 
@@ -72,6 +74,12 @@ ADDITIONAL_TUS = [
 # Core defines. MS_WIN32/MS_WINDOWS come from PC/pyconfig.h; MS_WIN64 is gated
 # on _MSC_VER/__MINGW32__ there, neither of which badc presents, so set it
 # directly. Py_NO_ENABLE_SHARED selects the static (non-DLL) core.
+# MS_COREDLL (kept independent of Py_ENABLE_SHARED so no DLL import/export
+# decoration is introduced) re-enables sysmodule.c's sys.winver / sys.dllhandle
+# registration, which the static core otherwise omits; site.py reads sys.winver
+# at startup. MS_DLL_ID is the X.Y version string (pythoncore.vcxproj passes the
+# same), also consumed by getpath.c PYWINVER. The two globals it names live in
+# win_excluded_stubs.c.
 DEFINES = [
     "Py_BUILD_CORE",
     "Py_BUILD_CORE_BUILTIN",
@@ -79,6 +87,8 @@ DEFINES = [
     "WIN32",
     "MS_WINDOWS",
     "MS_WIN64",
+    "MS_COREDLL",
+    f'MS_DLL_ID="{WINVER_XY}"',
     'VPATH="."',
 ]
 
@@ -277,11 +287,11 @@ def main(argv: list[str] | None = None) -> int:
     # command line) and stub init functions for the excluded builtin modules.
     for helper in ("win_entry.c", "win_excluded_stubs.c"):
         hobj = out / (helper[:-2] + ".o")
-        r = run(
-            [badc, "--gnu", "-c", f"--target={TARGET}", "-UHAVE_GCC_UINT128_T", *dbg,
-             str(PY_DIR / helper), "-o", str(hobj)],
-            timeout=120,
-        )
+        hcmd = [badc, "--gnu", "-c", f"--target={TARGET}", "-UHAVE_GCC_UINT128_T", *dbg]
+        for d in DEFINES:
+            hcmd.append(f"-D{d}")
+        hcmd += [str(PY_DIR / helper), "-o", str(hobj)]
+        r = run(hcmd, timeout=120)
         if r.returncode != 0:
             sys.stderr.write((r.stderr or r.stdout)[-2000:])
             sys.exit(f"win_build: {helper} failed to compile")

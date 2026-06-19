@@ -163,7 +163,7 @@ mod tests {
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             synthetic_base: 0,
-            synthetic_struct_slots: Vec::new(),
+            multi_cell_slots: Vec::new(),
             insts,
             blocks,
             extern_call_refs: Vec::new(),

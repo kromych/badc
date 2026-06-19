@@ -530,6 +530,13 @@ pub(crate) struct FinishedFunction {
     /// the running top. Zero when `alloca` is unused, in which
     /// case codegen treats AllocaInit as a no-op.
     pub alloca_top_slot: i64,
+    /// `(base_offset, cells)` for each declared multi-cell local (aggregate
+    /// or multi-cell scalar): the local occupies `base_offset ..=
+    /// base_offset + cells - 1`. The walker seeds `FunctionSsa::multi_cell_slots`
+    /// with these so slot coalescing reserves the interior cells, which carry
+    /// no direct slot reference (reached only via the base address). Empty
+    /// when the function has no multi-cell local.
+    pub multi_cell_slots: alloc::vec::Vec<(i64, i64)>,
     pub name: alloc::string::String,
 }
 

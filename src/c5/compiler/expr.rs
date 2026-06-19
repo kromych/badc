@@ -739,6 +739,9 @@ impl Compiler {
                         if self.loc_offs > self.max_loc_offs {
                             self.max_loc_offs = self.loc_offs;
                         }
+                        if slots > 1 {
+                            self.multi_cell_temps.push((-self.loc_offs, slots));
+                        }
                         -self.loc_offs
                     } else {
                         0

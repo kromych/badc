@@ -1119,10 +1119,14 @@ impl Compiler {
         } else if is_struct_ty(t) && struct_ptr_depth(t) == 0 {
             let sid = struct_id_of(t);
             let elem_size = self.size_of_type(t);
-            self.loc_offs += self.slots_of_type(t);
+            let cl_slots = self.slots_of_type(t);
+            self.loc_offs += cl_slots;
             slot = -self.loc_offs;
             if self.loc_offs > self.max_loc_offs {
                 self.max_loc_offs = self.loc_offs;
+            }
+            if cl_slots > 1 {
+                self.multi_cell_temps.push((slot, cl_slots));
             }
             let needs_runtime = self.struct_init_needs_runtime()?;
             let staged = self.data.len();

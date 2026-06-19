@@ -163,7 +163,7 @@ impl SsaBuilder {
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             synthetic_base: 0,
-            synthetic_struct_slots: Vec::new(),
+            multi_cell_slots: Vec::new(),
         };
         let mut b = Self {
             func,
@@ -1009,7 +1009,7 @@ impl SsaBuilder {
         // Record the multi-cell range so slot coalescing reserves the
         // interior cells, which carry no instruction reference.
         if nslots >= 1 {
-            self.func.synthetic_struct_slots.push((base, nslots));
+            self.func.multi_cell_slots.push((base, nslots));
         }
         base
     }

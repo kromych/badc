@@ -467,6 +467,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("char_constant_signedness.c", 0),
     ("slot_coalesce_disjoint_temps.c", 0),
     ("alloca_alignment.c", 0),
+    ("slot_coalesce_declared.c", 0),
+    ("slot_coalesce_alloca.c", 0),
     ("fn_arg_decay_then_deref_assign.c", 0),
     ("array_range_designator.c", 0),
     ("bitfield_mixed_base_packing.c", 0),

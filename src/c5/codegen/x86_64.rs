@@ -1881,7 +1881,7 @@ pub(super) fn lower(
     // phi-substitute slots never overlap.
     if !native.optimize {
         super::ssa_emit_common::time_pass("ssa_slot_coalesce::run (x86_64)", || {
-            super::ssa_slot_coalesce::run(&mut ssa_funcs);
+            super::ssa_slot_coalesce::run(&mut ssa_funcs, !native.debug_info);
         });
     }
     // -O: promote address-free local slots to SSA values before

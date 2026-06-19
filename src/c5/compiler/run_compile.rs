@@ -859,6 +859,7 @@ impl Compiler {
 
                     self.loc_offs = 0;
                     self.max_loc_offs = 0;
+                    self.multi_cell_temps.clear();
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.uses_alloca_in_current_fn = false;
@@ -913,6 +914,9 @@ impl Compiler {
                         let local_val = -self.loc_offs;
                         if self.loc_offs > self.max_loc_offs {
                             self.max_loc_offs = self.loc_offs;
+                        }
+                        if slots > 1 {
+                            self.multi_cell_temps.push((local_val, slots));
                         }
                         // dst = &local
                         self.emit_lea(local_val);
@@ -1190,6 +1194,36 @@ impl Compiler {
                     for mut bl in core::mem::take(&mut self.pending_block_locals) {
                         bl.function_bc_pc = ent_pc as u64;
                         self.variables.push(bl);
+                    }
+                    // Record declared multi-cell locals (aggregates and
+                    // multi-cell scalars) for slot coalescing. A declared
+                    // local at frame slot `fp_slot` (most-negative cell)
+                    // occupying `cells` 8-byte cells covers
+                    // `fp_slot ..= fp_slot + cells - 1`; the interior cells
+                    // carry no direct slot reference, so the pass must
+                    // reserve them. Computed from the per-function variable
+                    // list assembled just above (`local_storage_slots`
+                    // mirrors the parser's reservation). Patches the
+                    // `FinishedFunction` pushed by `ast_finish_function`.
+                    // A struct-by-value parameter keeps its body-visible copy
+                    // in a negative slot too (C99 6.5.2.2 + the host ABI), so
+                    // `fp_slot < 0` -- not `!is_parameter` -- selects every
+                    // local that needs its interior cells reserved.
+                    let mut multi_cell: Vec<(i64, i64)> = Vec::new();
+                    for v in &self.variables {
+                        if v.function_bc_pc == ent_pc as u64 && v.fp_slot < 0 {
+                            let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
+                            if cells > 1 {
+                                multi_cell.push((v.fp_slot, cells));
+                            }
+                        }
+                    }
+                    // Multi-cell temporaries the parser allocated without a
+                    // symbol (struct call results, parameter copies, compound
+                    // literals); these never appear in the variable list.
+                    multi_cell.extend_from_slice(&self.multi_cell_temps);
+                    if let Some(ff) = self.finished_functions.last_mut() {
+                        ff.multi_cell_slots = multi_cell;
                     }
                     // Collect unused-parameter and unused-local
                     // diagnostics for the function's top-level

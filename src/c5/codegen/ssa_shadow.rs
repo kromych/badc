@@ -51,6 +51,9 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
         })?;
         func.name = f.name.clone();
         func.is_inline = f.is_inline;
+        // Seed declared multi-cell extents alongside the synthetic ones the
+        // walker recorded. Slot coalescing reserves every interior cell.
+        func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);
         // `n_params` on FinishedFunction is the parser's
         // declared count. The codegen prologue spills the
         // matching host-arg regs into slots [2, 2+n). Use the

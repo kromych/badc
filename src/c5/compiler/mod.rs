@@ -631,6 +631,12 @@ pub struct Compiler {
     /// so the prologue reserves enough stack for every nested-call
     /// temp the function ever needs.
     max_loc_offs: i64,
+    /// `(base_offset, cells)` for each multi-cell temporary the parser
+    /// allocates that carries no symbol (a struct call result, a
+    /// struct-by-value parameter copy, a struct compound literal). Slot
+    /// coalescing reserves these interior cells; without a symbol they are
+    /// absent from the per-function variable list. Reset per function.
+    multi_cell_temps: alloc::vec::Vec<(i64, i64)>,
 
     /// True once the current function has emitted at least one
     /// alloca intrinsic. Drives the function-end backpatch that
@@ -1225,6 +1231,7 @@ impl Compiler {
             ty: 0,
             loc_offs: 0,
             max_loc_offs: 0,
+            multi_cell_temps: alloc::vec::Vec::new(),
             uses_alloca_in_current_fn: false,
             pending_is_inline: false,
             pending_noreturn: false,

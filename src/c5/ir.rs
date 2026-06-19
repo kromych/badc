@@ -693,15 +693,19 @@ pub(crate) struct FunctionSsa {
     /// builder's synthetic slots. `set_locals` records the declared-
     /// plus-alloca count here; every slot reserved afterward by
     /// `alloc_synthetic_local` / `alloc_synthetic_struct` has an offset
-    /// magnitude greater than this. `ssa_slot_coalesce` reuses only those
-    /// synthetic scalar slots, leaving the declared range untouched (its
-    /// per-local sizes are not visible in the SSA). 0 for SSA built outside
-    /// the walker, which disables coalescing for that function.
+    /// magnitude greater than this. The declared/synthetic boundary:
+    /// `ssa_slot_coalesce` confines itself to the synthetic range when
+    /// debug info is emitted (preserving per-local `DW_OP_fbreg`
+    /// locations); without debug info it coalesces the declared range
+    /// too. 0 for SSA built outside the walker, which disables coalescing.
     pub synthetic_base: i64,
-    /// `(base_offset, cells)` for each multi-cell synthetic slot group
-    /// (`alloc_synthetic_struct`); the group occupies `base_offset
-    /// ..= base_offset + cells - 1`. `ssa_slot_coalesce` reserves these so a
-    /// coalesced scalar never lands on an interior cell, which is referenced
-    /// by no instruction. Empty for SSA built outside the walker.
-    pub synthetic_struct_slots: Vec<(i64, i64)>,
+    /// `(base_offset, cells)` for each multi-cell slot group -- a declared
+    /// aggregate / multi-cell scalar (seeded from the parser) or a synthetic
+    /// aggregate (`alloc_synthetic_struct`). The group occupies `base_offset
+    /// ..= base_offset + cells - 1` (base is the lowest address). Declared
+    /// groups may overlap a reused slot across disjoint scopes.
+    /// `ssa_slot_coalesce` reserves these so a coalesced scalar never lands on
+    /// an interior cell, which is referenced by no instruction. Empty for SSA
+    /// built outside the walker.
+    pub multi_cell_slots: Vec<(i64, i64)>,
 }

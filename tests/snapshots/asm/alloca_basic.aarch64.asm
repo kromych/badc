@@ -69,7 +69,7 @@ Disassembly of section .text:
                	str	x16, [x16]
                	mov	x2, #0x20               // =32
                	add	x17, x2, #0xf
-               	and	x17, x17, #0xfffffffffffffff
+               	and	x17, x17, #0xfffffffffffffff0
                	sub	x16, x29, #0x28
                	ldr	x0, [x16]
                	sub	x0, x0, x17
@@ -127,7 +127,7 @@ Disassembly of section .text:
                	lsl	x0, x0, #2
                	sxtw	x0, w0
                	add	x17, x0, #0xf
-               	and	x17, x17, #0xfffffffffffffff
+               	and	x17, x17, #0xfffffffffffffff0
                	sub	x16, x29, #0x20
                	ldr	x0, [x16]
                	sub	x0, x0, x17
@@ -190,14 +190,14 @@ Disassembly of section .text:
                	str	x16, [x16]
                	mov	x0, #0x10               // =16
                	add	x17, x0, #0xf
-               	and	x17, x17, #0xfffffffffffffff
+               	and	x17, x17, #0xfffffffffffffff0
                	sub	x16, x29, #0x30
                	ldr	x1, [x16]
                	sub	x1, x1, x17
                	str	x1, [x16]
                	stur	x1, [x29, #-0x8]
                	add	x17, x0, #0xf
-               	and	x17, x17, #0xfffffffffffffff
+               	and	x17, x17, #0xfffffffffffffff0
                	sub	x16, x29, #0x30
                	ldr	x0, [x16]
                	sub	x0, x0, x17
@@ -320,7 +320,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x8                // =8
                	add	x17, x0, #0xf
-               	and	x17, x17, #0xfffffffffffffff
+               	and	x17, x17, #0xfffffffffffffff0
                	sub	x16, x29, #0x20
                	ldr	x0, [x16]
                	sub	x0, x0, x17
@@ -357,7 +357,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #0x10]
                	mov	x2, #0x40               // =64
                	add	x17, x2, #0xf
-               	and	x17, x17, #0xfffffffffffffff
+               	and	x17, x17, #0xfffffffffffffff0
                	sub	x16, x29, #0x28
                	ldr	x0, [x16]
                	sub	x0, x0, x17

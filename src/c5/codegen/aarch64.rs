@@ -304,10 +304,14 @@ pub(super) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 /// result is a multiple of 16. Used by the alloca lowering to
 /// round the requested size up to the platform's stack-alignment
 /// before bumping the per-frame arena top. AArch64 logical-
-/// immediate encoding for the 64-bit mask `0xFFFFFFFFFFFFFFF0`:
-/// `sf=1`, `N=1`, `immr=0`, `imms=59` (sixty ones, no rotation).
+/// immediate encoding for the 64-bit mask `0xFFFFFFFFFFFFFFF0`
+/// (sixty ones over four low zeros): `sf=1`, `N=1`, `imms=59`
+/// (sixty-bit run), `immr=60` -- the run is rotated right by 60 so
+/// the four zero bits land at the bottom. `immr=0` encodes
+/// `0x0FFFFFFFFFFFFFFF` instead (the zeros at the top), which fails
+/// to clear the low bits and leaves the arena pointer unaligned.
 pub(super) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
-    0x9240_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    0x927C_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.

@@ -26,6 +26,19 @@
 #define MS_SYNC       4
 #define MS_INVALIDATE 2
 
+// madvise advice values shared by the POSIX targets; the caller guards each
+// on #ifdef. MADV_FREE diverges (macOS 5, Linux 8).
+#define MADV_NORMAL     0
+#define MADV_RANDOM     1
+#define MADV_SEQUENTIAL 2
+#define MADV_WILLNEED   3
+#define MADV_DONTNEED   4
+#ifdef __APPLE__
+#define MADV_FREE 5
+#else
+#define MADV_FREE 8
+#endif
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::mmap,     "_mmap")
@@ -33,6 +46,9 @@
 #pragma binding(libc::mremap,   "_mremap")
 #pragma binding(libc::msync,    "_msync")
 #pragma binding(libc::mprotect, "_mprotect")
+#pragma binding(libc::madvise,    "_madvise")
+#pragma binding(libc::shm_open,   "_shm_open")
+#pragma binding(libc::shm_unlink, "_shm_unlink")
 #endif
 
 #ifdef __linux__
@@ -46,6 +62,9 @@
 #pragma binding(libc::mremap,   "mremap")
 #pragma binding(libc::msync,    "msync")
 #pragma binding(libc::mprotect, "mprotect")
+#pragma binding(libc::madvise,    "madvise")
+#pragma binding(libc::shm_open,   "shm_open")
+#pragma binding(libc::shm_unlink, "shm_unlink")
 #pragma binding(libc::memfd_create, "memfd_create")
 // memfd_create flags.
 #define MFD_CLOEXEC       0x0001
@@ -63,3 +82,7 @@ int munmap(char *addr, unsigned long len);
 char *mremap(char *old, unsigned long old_size, unsigned long new_size, int flags);
 int msync(char *addr, unsigned long len, int flags);
 int mprotect(char *addr, unsigned long len, int prot);
+int madvise(char *addr, unsigned long len, int advice);
+// POSIX shared memory objects; mode is mode_t (an unsigned int on the targets).
+int shm_open(const char *name, int oflag, int mode);
+int shm_unlink(const char *name);

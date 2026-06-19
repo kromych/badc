@@ -113,6 +113,10 @@
 #define F_SETLKW 7
 #endif
 #define FD_CLOEXEC 1
+#ifdef __APPLE__
+// Darwin-only fcntl command: flush buffered data to permanent storage.
+#define F_FULLFSYNC 51
+#endif
 
 // `F_RDLCK` / `F_WRLCK` / `F_UNLCK` are the lock-type values
 // stored in `struct flock::l_type`. Their numeric values also

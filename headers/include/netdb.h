@@ -126,6 +126,17 @@ int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
 const char *gai_strerror(int errcode);
 // Error string for an h_errno value (the network database).
 const char *hstrerror(int err);
+
+// h_errno: the network-database error code. macOS exposes it as a data
+// symbol; glibc routes it through a thread-local accessor (like errno).
+#ifdef __APPLE__
+#pragma binding(data libc::h_errno, "_h_errno")
+extern int h_errno;
+#elif defined(__linux__)
+#pragma binding(libc::__h_errno_location, "__h_errno_location")
+int *__h_errno_location(void);
+#define h_errno (*__h_errno_location())
+#endif
 struct servent *getservbyname(const char *name, const char *proto);
 struct hostent *gethostbyname(const char *name);
 struct hostent *gethostbyaddr(const void *addr, unsigned int len, int type);

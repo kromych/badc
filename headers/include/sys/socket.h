@@ -114,6 +114,8 @@ struct sockaddr_storage {
 #pragma binding(libc::getsockname, "_getsockname")
 #pragma binding(libc::recv,       "_recv")
 #pragma binding(libc::send,       "_send")
+#pragma binding(libc::recvfrom,   "_recvfrom")
+#pragma binding(libc::sendto,     "_sendto")
 #pragma binding(libc::shutdown,   "_shutdown")
 #pragma binding(libc::sendfile,   "_sendfile")
 
@@ -157,6 +159,8 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #pragma binding(libc::getsockname, "getsockname")
 #pragma binding(libc::recv,       "recv")
 #pragma binding(libc::send,       "send")
+#pragma binding(libc::recvfrom,   "recvfrom")
+#pragma binding(libc::sendto,     "sendto")
 #pragma binding(libc::shutdown,   "shutdown")
 
 #define SOL_SOCKET    1
@@ -185,6 +189,8 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #pragma binding(ws2_32::getsockopt,  "getsockopt")
 #pragma binding(ws2_32::recv,        "recv")
 #pragma binding(ws2_32::send,        "send")
+#pragma binding(ws2_32::recvfrom,    "recvfrom")
+#pragma binding(ws2_32::sendto,      "sendto")
 #pragma binding(ws2_32::shutdown,    "shutdown")
 #pragma binding(ws2_32::closesocket, "closesocket")
 #pragma binding(ws2_32::ioctlsocket, "ioctlsocket")
@@ -227,3 +233,5 @@ int send(int fd, char *buf, int n, int flags);
 int shutdown(int fd, int how);
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
+long recvfrom(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t *addrlen);
+long sendto(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t addrlen);

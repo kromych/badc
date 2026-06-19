@@ -58,6 +58,8 @@
 #pragma binding(libc::getegid,   "_getegid")
 #pragma binding(libc::getppid,   "_getppid")
 #pragma binding(libc::getpid,    "_getpid")
+#pragma binding(libc::gethostname, "_gethostname")
+#pragma binding(libc::sethostname, "_sethostname")
 #pragma binding(libc::sleep,     "_sleep")
 #pragma binding(libc::alarm,     "_alarm")
 #pragma binding(libc::pause,     "_pause")
@@ -199,6 +201,8 @@ extern char **environ;
 #pragma binding(libc::getegid,   "getegid")
 #pragma binding(libc::getppid,   "getppid")
 #pragma binding(libc::getpid,    "getpid")
+#pragma binding(libc::gethostname, "gethostname")
+#pragma binding(libc::sethostname, "sethostname")
 #pragma binding(libc::sleep,     "sleep")
 #pragma binding(libc::alarm,     "alarm")
 #pragma binding(libc::pause,     "pause")
@@ -380,6 +384,8 @@ int getgid();
 int getegid();
 int getppid();
 int getpid();
+int gethostname(char *name, unsigned long len);
+int sethostname(const char *name, unsigned long len);
 int sleep(int seconds);
 // Schedule a SIGALRM after `seconds`; returns the prior alarm's
 // remaining seconds (POSIX). Both counts are unsigned.

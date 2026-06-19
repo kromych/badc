@@ -88,6 +88,7 @@ struct hostent {
 #pragma binding(libc::gai_strerror, "_gai_strerror")
 #pragma binding(libc::getservbyname,"_getservbyname")
 #pragma binding(libc::gethostbyname,"_gethostbyname")
+#pragma binding(libc::hstrerror,   "_hstrerror")
 #pragma binding(libc::gethostbyaddr,"_gethostbyaddr")
 #endif
 
@@ -98,6 +99,7 @@ struct hostent {
 #pragma binding(libc::gai_strerror, "gai_strerror")
 #pragma binding(libc::getservbyname,"getservbyname")
 #pragma binding(libc::gethostbyname,"gethostbyname")
+#pragma binding(libc::hstrerror,   "hstrerror")
 #pragma binding(libc::gethostbyaddr,"gethostbyaddr")
 // Linux reentrant resolver variants (GNU extensions). configure
 // selects these over the non-reentrant forms when present, so a
@@ -122,6 +124,8 @@ void freeaddrinfo(struct addrinfo *res);
 int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
                 socklen_t hostlen, char *serv, socklen_t servlen, int flags);
 const char *gai_strerror(int errcode);
+// Error string for an h_errno value (the network database).
+const char *hstrerror(int err);
 struct servent *getservbyname(const char *name, const char *proto);
 struct hostent *gethostbyname(const char *name);
 struct hostent *gethostbyaddr(const void *addr, unsigned int len, int type);

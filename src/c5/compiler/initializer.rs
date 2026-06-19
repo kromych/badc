@@ -128,6 +128,29 @@ impl Compiler {
         }
     }
 
+    /// C99 6.4.2.2 predefined identifier `__func__` (with the GCC
+    /// `__FUNCTION__` / `__PRETTY_FUNCTION__` aliases), valid only inside a
+    /// function body. The cursor must be on the identifier token.
+    pub(super) fn is_func_name_ident(&self) -> bool {
+        self.lex.tk == Token::Id
+            && !self.current_function_name.is_empty()
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "__func__" | "__FUNCTION__" | "__PRETTY_FUNCTION__"
+            )
+    }
+
+    /// Materialise the enclosing function's name as the bytes of an implicit
+    /// `static const char[]` (C99 6.4.2.2) in the data segment and return the
+    /// offset of the first byte. The caller advances past the identifier.
+    pub(super) fn intern_func_name(&mut self) -> i64 {
+        let offset = self.data.len() as i64;
+        let name = self.current_function_name.clone();
+        self.data.extend_from_slice(name.as_bytes());
+        self.data.push(0);
+        offset
+    }
+
     /// Convert an initializer element's `(value, reloc)` to the
     /// bit pattern that should land in the data segment for an
     /// element of type `elem_ty`:
@@ -1128,6 +1151,14 @@ impl Compiler {
         if self.lex.tk == Token::Id {
             let idx = self.lex.curr_id_idx;
             let class = self.symbols[idx].class;
+            // C99 6.4.2.2: __func__ / __FUNCTION__ / __PRETTY_FUNCTION__
+            // decay to a pointer to the enclosing function's name; resolve
+            // them here so the undeclared name is not taken as a forward fn.
+            if self.is_func_name_ident() {
+                let off = self.intern_func_name();
+                self.next()?;
+                return Ok((off, InitElemReloc::Data(None)));
+            }
             // Forward-referenced function pointer in a static
             // initializer: dispatch tables that list functions
             // defined later in the same TU. The post-parse

@@ -321,23 +321,13 @@ impl Compiler {
             self.emit_imm(align);
             self.ty = Ty::Int as i64;
             self.ast_emit_int_lit(align, self.ty);
-        } else if self.lex.tk == Token::Id
-            && !self.current_function_name.is_empty()
-            && matches!(
-                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                "__func__" | "__FUNCTION__" | "__PRETTY_FUNCTION__"
-            )
-        {
+        } else if self.is_func_name_ident() {
             // C99 6.4.2.2: __func__ is implicitly declared as
-            // `static const char __func__[] = "function-name";` at
-            // the start of every function body. GCC predates the
-            // standard with __FUNCTION__ / __PRETTY_FUNCTION__ as
-            // aliases. The bytes are appended to the data segment
-            // and the expression's value is the pointer to them.
-            let fn_name = self.current_function_name.clone();
-            let offset = self.data.len() as i64;
-            self.data.extend_from_slice(fn_name.as_bytes());
-            self.data.push(0);
+            // `static const char __func__[] = "function-name";` at the
+            // start of every function body; __FUNCTION__ /
+            // __PRETTY_FUNCTION__ are the GCC aliases. The bytes live in
+            // the data segment and the expression decays to a pointer.
+            let offset = self.intern_func_name();
             self.emit_data_imm(offset);
             self.next()?;
             self.ty = Ty::Char as i64 + Ty::Ptr as i64;
@@ -345,7 +335,7 @@ impl Compiler {
             // 6.4.2.2); surface that to an enclosing `sizeof` the same
             // way a decayed array does, so `sizeof(__func__)` is the
             // array size, not the decayed pointer's.
-            self.pending.last_array_decay_size = fn_name.len() as i64 + 1;
+            self.pending.last_array_decay_size = self.current_function_name.len() as i64 + 1;
             // Dual-emit the decayed `char *` value so the walker
             // sees the address on `ast_acc` (identical shape to a
             // plain string literal -- the same `Expr::StrLit`

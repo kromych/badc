@@ -775,6 +775,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("integer_negate_shift_overflow.c", 0),
     ("case_label_declaration.c", 0),
     ("char_constant_signedness.c", 0),
+    ("func_name_in_initializer.c", 0),
     ("slot_coalesce_disjoint_temps.c", 0),
     ("alloca_alignment.c", 0),
     ("slot_coalesce_declared.c", 0),

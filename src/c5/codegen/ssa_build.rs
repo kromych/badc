@@ -162,6 +162,8 @@ impl SsaBuilder {
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            synthetic_base: 0,
+            synthetic_struct_slots: Vec::new(),
         };
         let mut b = Self {
             func,
@@ -184,6 +186,9 @@ impl SsaBuilder {
     /// bytes. Consumed by the per-arch emit's frame layout.
     pub(crate) fn set_locals(&mut self, n: i64) {
         self.func.locals = n;
+        // Slots reserved after this point are synthetic; `ssa_slot_coalesce`
+        // reuses only those, leaving the declared range untouched.
+        self.func.synthetic_base = n;
     }
 
     /// One-past-the-last ent_pc the source function spans.
@@ -1000,6 +1005,11 @@ impl SsaBuilder {
             if k == nslots - 1 {
                 base = s;
             }
+        }
+        // Record the multi-cell range so slot coalescing reserves the
+        // interior cells, which carry no instruction reference.
+        if nslots >= 1 {
+            self.func.synthetic_struct_slots.push((base, nslots));
         }
         base
     }

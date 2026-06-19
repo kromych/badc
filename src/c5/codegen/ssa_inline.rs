@@ -757,6 +757,8 @@ fn splice_multi_block(
         ret_is_fp: original.ret_is_fp,
         indirect_result_slot: original.indirect_result_slot,
         computed_goto_targets: original.computed_goto_targets,
+        synthetic_base: original.synthetic_base,
+        synthetic_struct_slots: original.synthetic_struct_slots,
     };
 }
 

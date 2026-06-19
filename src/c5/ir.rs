@@ -689,4 +689,19 @@ pub(crate) struct FunctionSsa {
     /// treat an indirect branch as a branch to all of these. Empty
     /// for functions with no computed goto.
     pub computed_goto_targets: Vec<BlockId>,
+    /// Boundary between the parser's declared local slots and the SSA
+    /// builder's synthetic slots. `set_locals` records the declared-
+    /// plus-alloca count here; every slot reserved afterward by
+    /// `alloc_synthetic_local` / `alloc_synthetic_struct` has an offset
+    /// magnitude greater than this. `ssa_slot_coalesce` reuses only those
+    /// synthetic scalar slots, leaving the declared range untouched (its
+    /// per-local sizes are not visible in the SSA). 0 for SSA built outside
+    /// the walker, which disables coalescing for that function.
+    pub synthetic_base: i64,
+    /// `(base_offset, cells)` for each multi-cell synthetic slot group
+    /// (`alloc_synthetic_struct`); the group occupies `base_offset
+    /// ..= base_offset + cells - 1`. `ssa_slot_coalesce` reserves these so a
+    /// coalesced scalar never lands on an interior cell, which is referenced
+    /// by no instruction. Empty for SSA built outside the walker.
+    pub synthetic_struct_slots: Vec<(i64, i64)>,
 }

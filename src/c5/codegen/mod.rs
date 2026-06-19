@@ -73,6 +73,7 @@ mod ssa_native;
 mod ssa_phi_class;
 mod ssa_rotate;
 pub(crate) mod ssa_shadow;
+mod ssa_slot_coalesce;
 mod ssa_split_crit_edges;
 mod ssa_store_forward;
 mod x86_64;

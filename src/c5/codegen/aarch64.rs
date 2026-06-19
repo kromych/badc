@@ -1444,6 +1444,15 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
             super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
+    // Reuse non-overlapping synthetic stack slots. At -O, mem2reg promotes
+    // these address-free slots to SSA values; this is the default-level
+    // analog, shrinking frames built from many control-flow merges whose
+    // phi-substitute slots never overlap.
+    if !native.optimize {
+        super::ssa_emit_common::time_pass("ssa_slot_coalesce::run (aarch64)", || {
+            super::ssa_slot_coalesce::run(&mut ssa_funcs);
+        });
+    }
     // -O: promote address-free local slots to SSA values before
     // register allocation, dropping their frame load / store traffic.
     // Record the promoted slots per function so the debug-info emitter

@@ -1500,6 +1500,47 @@ impl Compiler {
         Ok(())
     }
 
+    /// Fill a multi-dimensional array of structs from a brace list, recursing
+    /// per inner dimension. `dims` lists the remaining dimensions, outermost
+    /// first; `struct_size` is the element struct's size. Consumes the opening
+    /// `{` through the matching `}`. Positional only -- a designator at the
+    /// outermost level is handled by the caller.
+    pub(super) fn collect_struct_array_data(
+        &mut self,
+        struct_id: usize,
+        base: i64,
+        dims: &[i64],
+        struct_size: i64,
+    ) -> Result<(), C5Error> {
+        if self.lex.tk != '{' {
+            return Err(self.compile_err("array initializer must start with `{{`"));
+        }
+        self.next()?;
+        let stride = struct_size * dims[1..].iter().product::<i64>();
+        let mut i: i64 = 0;
+        while self.lex.tk != '}' {
+            if i >= dims[0] {
+                return Err(self.compile_err("too many initializers for array"));
+            }
+            let here = base + i * stride;
+            if dims.len() == 1 {
+                if self.lex.tk == '{' {
+                    self.collect_struct_initializer(struct_id, here)?;
+                } else {
+                    self.fill_struct_fields(struct_id, here, false)?;
+                }
+            } else {
+                self.collect_struct_array_data(struct_id, here, &dims[1..], struct_size)?;
+            }
+            i += 1;
+            if self.lex.tk == ',' {
+                self.next()?;
+            }
+        }
+        self.next()?; // consume `}`
+        Ok(())
+    }
+
     /// C99 6.5.2.5: an initializer element may be written as a compound
     /// literal `(Type){ ... }`. When it appears as an aggregate member's
     /// value the cast type names the member's own type, so the `(Type)`

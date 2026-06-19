@@ -1650,6 +1650,14 @@ impl Compiler {
                                 // entries stay zero-init.
                                 let elem_size = self.size_of_type(ty);
                                 let sid = struct_id_of(ty);
+                                // A multi-dimensional array (`T xs[A][B]`) has an
+                                // element that is itself an array of structs; each
+                                // top-level group spans the inner dimensions.
+                                let inner_dims: Vec<i64> =
+                                    self.inner_dims_of(id_idx).iter().map(|&d| d as i64).collect();
+                                let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
+                                let group_stride = elem_size as i64 * inner_product;
+                                let group_count = array_size / inner_product;
                                 if self.lex.tk != '{' {
                                     return Err(
                                         self.compile_err("array initializer must start with `{{`")
@@ -1684,18 +1692,20 @@ impl Compiler {
                                         self.next()?;
                                         idx = desig;
                                     }
-                                    if idx >= array_size {
+                                    if idx >= group_count {
                                         return Err(self.compile_err(format!(
                                             "too many initializers for `{}`",
                                             self.symbols[id_idx].name
                                         )));
                                     }
-                                    let here = var_offset + idx * elem_size as i64;
-                                    // C99 6.7.8p20: the braces around each
-                                    // struct element may be elided, in which
-                                    // case the flat list fills that element's
-                                    // fields in order.
-                                    if self.lex.tk == '{' {
+                                    let here = var_offset + idx * group_stride;
+                                    // C99 6.7.8p20: the braces around each struct
+                                    // element may be elided. A multi-dimensional
+                                    // array's element is itself an array of
+                                    // structs -- recurse into the inner dimensions.
+                                    if !inner_dims.is_empty() {
+                                        self.collect_struct_array_data(sid, here, &inner_dims, elem_size as i64)?;
+                                    } else if self.lex.tk == '{' {
                                         self.collect_struct_initializer(sid, here)?;
                                     } else {
                                         self.fill_struct_fields(sid, here, false)?;

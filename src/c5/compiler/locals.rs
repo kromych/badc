@@ -444,20 +444,29 @@ impl Compiler {
                 let sid = struct_id_of(ty);
                 let elem_size = self.size_of_type(ty);
                 let var_offset = self.symbols[loc_idx].val;
+                // A multi-dimensional array's element is itself an array of
+                // structs; each top-level group spans the inner dimensions.
+                let inner_dims: Vec<i64> =
+                    self.inner_dims_of(loc_idx).iter().map(|&d| d as i64).collect();
+                let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
+                let group_stride = elem_size as i64 * inner_product;
+                let group_count = array_size / inner_product;
                 if self.lex.tk != '{' {
                     return Err(self.compile_err("array initializer must start with `{{`"));
                 }
                 self.next()?;
                 let mut i: i64 = 0;
                 while self.lex.tk != '}' {
-                    if i >= array_size {
+                    if i >= group_count {
                         return Err(self.compile_err(format!(
                             "too many initializers for `{}`",
                             self.symbols[loc_idx].name
                         )));
                     }
-                    let here = var_offset + i * elem_size as i64;
-                    if self.lex.tk == '{' {
+                    let here = var_offset + i * group_stride;
+                    if !inner_dims.is_empty() {
+                        self.collect_struct_array_data(sid, here, &inner_dims, elem_size as i64)?;
+                    } else if self.lex.tk == '{' {
                         self.collect_struct_initializer(sid, here)?;
                     } else {
                         self.fill_struct_fields(sid, here, false)?;

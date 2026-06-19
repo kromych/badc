@@ -18,6 +18,11 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::tcgetattr, "_tcgetattr")
 #pragma binding(libc::tcsetattr, "_tcsetattr")
+#pragma binding(libc::tcsendbreak, "_tcsendbreak")
+#pragma binding(libc::tcdrain,     "_tcdrain")
+#pragma binding(libc::tcflush,     "_tcflush")
+#pragma binding(libc::tcflow,      "_tcflow")
+#pragma binding(libc::cfmakeraw,   "_cfmakeraw")
 #pragma binding(libc::cfgetospeed, "_cfgetospeed")
 #pragma binding(libc::cfgetispeed, "_cfgetispeed")
 #pragma binding(libc::cfsetospeed, "_cfsetospeed")
@@ -81,6 +86,11 @@ struct termios {
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::tcgetattr, "tcgetattr")
 #pragma binding(libc::tcsetattr, "tcsetattr")
+#pragma binding(libc::tcsendbreak, "tcsendbreak")
+#pragma binding(libc::tcdrain,     "tcdrain")
+#pragma binding(libc::tcflush,     "tcflush")
+#pragma binding(libc::tcflow,      "tcflow")
+#pragma binding(libc::cfmakeraw,   "cfmakeraw")
 #pragma binding(libc::cfgetospeed, "cfgetospeed")
 #pragma binding(libc::cfgetispeed, "cfgetispeed")
 #pragma binding(libc::cfsetospeed, "cfsetospeed")
@@ -196,3 +206,8 @@ unsigned int cfgetispeed(const struct termios *termios_p);
 int cfsetospeed(struct termios *termios_p, unsigned int speed);
 int cfsetispeed(struct termios *termios_p, unsigned int speed);
 int tcsetattr(int fd, int optional_actions, struct termios *termios_p);
+int tcsendbreak(int fd, int duration);
+int tcdrain(int fd);
+int tcflush(int fd, int queue_selector);
+int tcflow(int fd, int action);
+void cfmakeraw(struct termios *termios_p);

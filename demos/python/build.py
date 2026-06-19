@@ -33,23 +33,46 @@ TEST_SLICE = [
     "test_list", "test_dict", "test_string", "test_exceptions",
 ]
 
+POSIX_INCLUDES = ["Include", "Include/internal", "."]
+EXPORT_FLAGS = ["--export-all", "--export-data"]
+
+
+def _posix_defines(platform: str, multiarch: str, soabi: str) -> dict:
+    # The macros a host configure bakes into these specific TUs: the platform
+    # identity, the install layout getpath resolves, and the build-info strings.
+    return {
+        "Python/getplatform.c": [f'PLATFORM="{platform}"'],
+        "Python/sysmodule.c": ['ABIFLAGS=""', f'MULTIARCH="{multiarch}"'],
+        "Python/dynload_shlib.c": [f'SOABI="{soabi}"'],
+        "Modules/getpath.c": [
+            'PREFIX="/usr/local"', 'EXEC_PREFIX="/usr/local"', 'PLATLIBDIR="lib"',
+            'VERSION="3.14"', 'VPATH=""', 'PYTHONPATH=""', 'PYTHONFRAMEWORK=""',
+        ],
+        "Modules/getbuildinfo.c": ['GITVERSION=""', 'GITTAG=""', 'GITBRANCH=""'],
+    }
+
+
 # Per-target build configuration. The manifest's per-TU core/builtin class
-# selects Py_BUILD_CORE vs Py_BUILD_CORE_BUILTIN; `extra_defines` carries the
-# few target-specific macros (paths, platform identity) a host build injects.
+# selects Py_BUILD_CORE vs Py_BUILD_CORE_BUILTIN; extra_defines carries the few
+# target-specific macros a host build injects; asm_trampoline substitutes the
+# portable trampoline for the hand-written .S a host build assembles.
 TARGETS = {
     "macos-aarch64": {
-        "includes": ["Include", "Include/internal", "."],
-        "extra_defines": {
-            "Python/getplatform.c": ['PLATFORM="darwin"'],
-            "Python/sysmodule.c": ['ABIFLAGS=""', 'MULTIARCH="darwin"'],
-            "Python/dynload_shlib.c": ['SOABI="cpython-314-darwin"'],
-            "Modules/getpath.c": [
-                'PREFIX="/usr/local"', 'EXEC_PREFIX="/usr/local"', 'PLATLIBDIR="lib"',
-                'VERSION="3.14"', 'VPATH=""', 'PYTHONPATH=""', 'PYTHONFRAMEWORK=""',
-            ],
-            "Modules/getbuildinfo.c": ['GITVERSION=""', 'GITTAG=""', 'GITBRANCH=""'],
-        },
-        "link_flags": ["--export-all", "--export-data"],
+        "includes": POSIX_INCLUDES,
+        "extra_defines": _posix_defines("darwin", "darwin", "cpython-314-darwin"),
+        "link_flags": EXPORT_FLAGS,
+    },
+    "linux-x64": {
+        "includes": POSIX_INCLUDES,
+        "extra_defines": _posix_defines("linux", "x86_64-linux-gnu", "cpython-314-x86_64-linux-gnu"),
+        "asm_trampoline": True,
+        "link_flags": EXPORT_FLAGS,
+    },
+    "linux-aarch64": {
+        "includes": POSIX_INCLUDES,
+        "extra_defines": _posix_defines("linux", "aarch64-linux-gnu", "cpython-314-aarch64-linux-gnu"),
+        "asm_trampoline": True,
+        "link_flags": EXPORT_FLAGS,
     },
 }
 
@@ -136,6 +159,14 @@ def build(target: str, do_link: bool, log) -> Path | None:
         sys.exit(f"build: {len(fails)} translation unit(s) failed")
     if not do_link:
         return None
+
+    if cfg.get("asm_trampoline"):
+        tobj = out / "asm_trampoline.o"
+        r = run([badc, "-c", f"--target={target}", str(PY_DIR / "asm_trampoline.c"), "-o", str(tobj)], timeout=120)
+        if r.returncode != 0:
+            sys.stderr.write(r.stderr or r.stdout)
+            sys.exit("build: asm_trampoline compile failed")
+        objs.append(str(tobj))
 
     py = out / ("python.exe" if "windows" in target else "python")
     log(f"link -> {py}")

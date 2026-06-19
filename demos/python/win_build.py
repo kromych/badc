@@ -181,6 +181,38 @@ def manifest() -> list[str]:
     return rels
 
 
+def module_search_path() -> str:
+    # The standard library lives under the source tree's ``Lib/``; the
+    # interpreter needs it on the path to import ``encodings`` (required for
+    # stdio). All C extension modules are linked as builtins here, so unlike
+    # the POSIX build there is no separate extension-module directory to add.
+    return str(SRC / "Lib")
+
+
+# A single deep-recursion module the native interpreter must clear; the broad
+# slice is a follow-up. TODO: expand to the full smoke.py TEST_SLICE.
+TEST_SLICE = ["test_functools"]
+
+
+def run_tests(py: Path) -> int:
+    env = dict(os.environ, PYTHONHOME=str(SRC), PYTHONPATH=module_search_path())
+    r = run([str(py), "-c", "print(2 + 2)"], env=env, timeout=120)
+    if r.returncode != 0 or r.stdout.strip() != "4":
+        sys.stderr.write(r.stdout + r.stderr)
+        print("win_build: interpreter failed the `print(2 + 2)` check")
+        return 1
+    print("win_build: interpreter runs `print(2 + 2)`")
+
+    cmd = [str(py), "-m", "test", "-q", *TEST_SLICE]
+    r = run(cmd, cwd=SRC, env=env, timeout=1800)
+    out = r.stdout + r.stderr
+    print(f"win_build: test slice {' '.join(TEST_SLICE)} exit={r.returncode}")
+    if r.returncode != 0:
+        sys.stderr.write(out[-3000:])
+        return 1
+    return 0
+
+
 def compile_one(badc: str, rel: str, out: Path, dbg: list[str]) -> tuple[bool, str]:
     obj = out / (rel.replace("/", "_")[:-2] + ".o")
     cmd = [badc, "--gnu", "-c", f"--target={TARGET}", "-UHAVE_GCC_UINT128_T", *dbg]
@@ -204,8 +236,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--list", action="store_true", help="print the TU manifest and exit")
     p.add_argument("--link", action="store_true", help="attempt the python.exe link after compile")
+    p.add_argument("--test", action="store_true",
+                   help="run the built python.exe (print check + test slice); implies --link")
     p.add_argument("--max-fail", type=int, default=40, help="failures to print")
     args = p.parse_args(argv)
+    if args.test:
+        args.link = True
 
     def log(msg: str) -> None:
         if args.verbose:
@@ -258,6 +294,8 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write((r.stderr or r.stdout)[-3000:])
             return 1
         print(f"win_build: linked {py}")
+        if args.test:
+            return run_tests(py)
     return 0
 
 

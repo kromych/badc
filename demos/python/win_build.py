@@ -62,13 +62,14 @@ EXCLUDE = {
 }
 
 # Translation units built into the core on Windows that pythoncore.vcxproj
-# does not list (their MSVC builds ship as separate .pyd projects). Their
-# PyInit_* entries are wired into PC/config.c so they link as builtins.
+# does not list (their MSVC builds ship as separate .pyd projects), each
+# paired with its PyInit_* symbol. wire_builtin_inittab() registers them in
+# PC/config.c; the inittab key is the symbol minus the PyInit_ prefix.
 ADDITIONAL_TUS = [
-    "Modules/socketmodule.c",
-    "Modules/unicodedata.c",
-    "Modules/overlapped.c",
-    "Modules/selectmodule.c",
+    ("Modules/socketmodule.c", "PyInit__socket"),
+    ("Modules/unicodedata.c", "PyInit_unicodedata"),
+    ("Modules/overlapped.c", "PyInit__overlapped"),
+    ("Modules/selectmodule.c", "PyInit_select"),
 ]
 
 # Core defines. MS_WIN32/MS_WINDOWS come from PC/pyconfig.h; MS_WIN64 is gated
@@ -144,10 +145,41 @@ def disable_mimalloc() -> None:
         cfg.write_text(text.replace(needle, "/* WITH_MIMALLOC disabled (see win_build.py) */"))
 
 
+def wire_builtin_inittab() -> None:
+    """Register the ADDITIONAL_TUS modules in PC/config.c's inittab.
+
+    pythoncore.vcxproj ships them as separate .pyd projects, so PC/config.c
+    omits them; the static all-builtin interpreter must add the extern
+    declaration and the _PyImport_Inittab entry, or the linked PyInit_* stay
+    unreachable and `import` raises ModuleNotFoundError. Idempotent: a
+    re-extract reverts config.c, so re-apply each run.
+    """
+    cfg = SRC / "PC/config.c"
+    text = cfg.read_text()
+    struct = "struct _inittab _PyImport_Inittab[] = {"
+    term = "    {0, 0}"
+    externs = "".join(
+        f"extern PyObject* {sym}(void);\n"
+        for _rel, sym in ADDITIONAL_TUS
+        if f"extern PyObject* {sym}(void);" not in text
+    )
+    entries = "".join(
+        f'    {{"{sym.removeprefix("PyInit_")}", {sym}}},\n'
+        for _rel, sym in ADDITIONAL_TUS
+        if f"{sym}}}," not in text
+    )
+    if externs:
+        text = text.replace(struct, externs + struct, 1)
+    if entries:
+        text = text.replace(term, entries + term, 1)
+    cfg.write_text(text)
+
+
 def ensure_derived_sources() -> None:
     if not (SRC / "configure").is_file():
         sys.exit(f"win_build: source not extracted at {SRC} -- run setup.py")
     disable_mimalloc()
+    wire_builtin_inittab()
     missing = [
         h for h in re.findall(r'frozen_modules/[\w.]+\.h', (SRC / "Python/frozen.c").read_text())
         if not (SRC / "Python" / h).is_file()
@@ -181,7 +213,7 @@ def manifest() -> list[str]:
             continue
         seen.add(rel)
         rels.append(rel)
-    for rel in ADDITIONAL_TUS:
+    for rel, _sym in ADDITIONAL_TUS:
         if rel in EXCLUDE or rel in seen or not (SRC / rel).is_file():
             continue
         seen.add(rel)
@@ -206,15 +238,21 @@ TEST_SLICE = ["test_functools"]
 
 
 def run_tests(py: Path) -> int:
+    # The test suite spawns isolated child interpreters (-I), which ignore
+    # PYTHONHOME; getpath then locates Lib relative to the executable. Run from
+    # a copy co-located with the source tree's Lib (a prefix layout) so those
+    # children find the standard library.
+    exe = SRC / py.name
+    shutil.copy2(py, exe)
     env = dict(os.environ, PYTHONHOME=str(SRC), PYTHONPATH=module_search_path())
-    r = run([str(py), "-c", "print(2 + 2)"], env=env, timeout=120)
+    r = run([str(exe), "-c", "print(2 + 2)"], env=env, timeout=120)
     if r.returncode != 0 or r.stdout.strip() != "4":
         sys.stderr.write(r.stdout + r.stderr)
         print("win_build: interpreter failed the `print(2 + 2)` check")
         return 1
     print("win_build: interpreter runs `print(2 + 2)`")
 
-    cmd = [str(py), "-m", "test", "-q", *TEST_SLICE]
+    cmd = [str(exe), "-m", "test", "-q", *TEST_SLICE]
     r = run(cmd, cwd=SRC, env=env, timeout=1800)
     out = r.stdout + r.stderr
     print(f"win_build: test slice {' '.join(TEST_SLICE)} exit={r.returncode}")

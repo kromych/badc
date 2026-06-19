@@ -86,7 +86,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=17
     v56  CallExt { binding_idx=151, args=[v47, v55], fp_arg_mask=0x0 } -> x0
     v57  Imm(21523)                                       -> x6
     v58  LocalAddr(-14)                                   -> x2
-    v59  CallExt { binding_idx=157, args=[v47, v57, v58], fp_arg_mask=0x0 } -> x0
+    v59  CallExt { binding_idx=162, args=[v47, v57, v58], fp_arg_mask=0x0 } -> x0
     terminator Return(v47)   (exit_acc=v47)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

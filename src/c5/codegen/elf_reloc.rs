@@ -731,15 +731,40 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // Defined data globals: STB_GLOBAL + STT_OBJECT, shndx
-    // points at `.data`. C99 6.2.2: external-linkage objects
+    // Section symbol indices follow the order they are pushed:
+    // null(0), file(1), text(2), data(3), bss(4), .debug_line(5),
+    // .debug_abbrev(6). Data + function-pointer fixups land against the
+    // matching section symbol; the `r_addend` carries the offset within
+    // the section.
+    let text_sym_idx: u64 = 2;
+    let data_sym_idx: u64 = 3;
+    let bss_sym_idx: u64 = 4;
+    let debug_line_sym_idx: u64 = 5;
+    let debug_abbrev_sym_idx: u64 = 6;
+
+    // A data offset at or past the file image names a byte in the
+    // zero-fill `.bss` section; map it to that section symbol and the
+    // offset within it. `build.data` holds only the file-backed bytes
+    // after zero-object segregation.
+    let data_file_len = build.data.len() as i64;
+    let data_section_ref = |off: i64| -> (u64, i64) {
+        if off >= data_file_len {
+            (bss_sym_idx, off - data_file_len)
+        } else {
+            (data_sym_idx, off)
+        }
+    };
+
+    // Defined data globals: STB_GLOBAL + STT_OBJECT, in `.data` or, for
+    // a wholly-zero object, `.bss`. C99 6.2.2: external-linkage objects
     // surface by name so sibling TUs can resolve `extern T x;`.
     for (i, (_, val, size)) in defined_data_globals.iter().enumerate() {
+        let (sym_sec, value) = data_section_ref(*val);
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_data_globals_start + i],
             st_info: pack_sym_info(STB_GLOBAL, STT_OBJECT),
-            st_shndx: SHIDX_DATA,
-            st_value: *val as u64,
+            st_shndx: sym_sec as u16,
+            st_value: value as u64,
             st_size: *size,
             ..Default::default()
         });
@@ -758,16 +783,6 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
-
-    // Section symbol indices follow the order we pushed them in
-    // above: null(0), file(1), then text(2), data(3), bss(4),
-    // .debug_line(5), .debug_abbrev(6). Data + function-pointer
-    // fixups land against the matching section symbol; the
-    // `r_addend` carries the offset within the section.
-    let text_sym_idx: u64 = 2;
-    let data_sym_idx: u64 = 3;
-    let debug_line_sym_idx: u64 = 5;
-    let debug_abbrev_sym_idx: u64 = 6;
 
     // Build the `.rela.text` payload now that import symbols
     // have their final indices.
@@ -854,12 +869,13 @@ pub(super) fn write_relocatable(
     // x86_64; each becomes one or two ELF relocs against the
     // `.data` section symbol with `r_addend = data_offset`.
     for fx in &build.data_fixups {
+        let (sym, addend) = data_section_ref(fx.data_offset as i64);
         emit_addr_fixup_relocs(
             machine_for_rela,
             &mut rela_bytes,
             fx.adrp_offset as u64,
-            data_sym_idx,
-            fx.data_offset as i64,
+            sym,
+            addend,
         );
     }
 
@@ -1031,14 +1047,16 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
 
-    // .bss (no file bytes)
+    // .bss (no file bytes) -- zero-init data segregated past the file
+    // image; the linker zero-fills it. `sh_addralign` 16 matches the
+    // segregation's alignment.
     sh.push(Elf64Shdr {
         sh_name: shstrtab_offs[3],
         sh_type: SHT_NOBITS,
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: out.len() as u64,
-        sh_size: 0,
-        sh_addralign: 8,
+        sh_size: build.bss_size as u64,
+        sh_addralign: 16,
         ..Default::default()
     });
 
@@ -1097,10 +1115,11 @@ pub(super) fn write_relocatable(
     let mut rela_data_bytes: Vec<u8> =
         Vec::with_capacity((build.data_relocs.len() + build.code_relocs.len()) * ELF64_RELA_SIZE);
     for r in &build.data_relocs {
+        let (sym, addend) = data_section_ref(r.target_offset as i64);
         let rela = Elf64Rela {
             r_offset: r.data_offset,
-            r_info: (data_sym_idx << 32) | rtype_abs64 as u64,
-            r_addend: r.target_offset as i64,
+            r_info: (sym << 32) | rtype_abs64 as u64,
+            r_addend: addend,
         };
         write_struct(&mut rela_data_bytes, &rela);
     }

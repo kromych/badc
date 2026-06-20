@@ -2577,6 +2577,7 @@ mod tests {
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
+            bss_size: 0,
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),

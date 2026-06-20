@@ -417,16 +417,19 @@ fn remap_data_off(off: i64, starts: &[i64], new_base: &[i64], data_len: i64) -> 
 /// keep their 8-byte alignment (the maximum badc lays `.data` out at) by
 /// aligning each packed interval base. `tls_data` is a separate segment
 /// and is left unchanged.
-pub(crate) fn compact_program_data(program: &Program, target: Target) -> Result<Program, C5Error> {
+pub(crate) fn compact_program_data(
+    program: &Program,
+    target: Target,
+) -> Result<(Program, i64), C5Error> {
     use crate::c5::token::Token;
 
     let data_len = program.data.len() as i64;
     if data_len == 0 || program.finished_functions.is_empty() {
-        return Ok(program.clone());
+        return Ok((program.clone(), 0));
     }
     #[cfg(feature = "std")]
     if std::env::var("BADC_NO_DATA_DCE").is_ok() {
-        return Ok(program.clone());
+        return Ok((program.clone(), 0));
     }
     let funcs = produce_ssa_funcs(program, target)?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
@@ -443,19 +446,59 @@ pub(crate) fn compact_program_data(program: &Program, target: Target) -> Result<
     // it. badc lays `.data` out at 8-byte alignment; 16 covers any
     // wider scalar without measurable padding cost.
     const ALIGN: i64 = 16;
+    let obj_end = |i: usize| -> i64 { if i + 1 < n { starts[i + 1] } else { data_len } };
+    // Object 0 spans the leading NULL guard and must stay file-backed at
+    // offset 0 so `remap(0) == 0` (the extern `ImmData(0)` sentinel and
+    // VM NULL-distinctness both depend on it). Every other live object
+    // whose bytes are all zero is uninitialised data: it carries no file
+    // bytes and moves to the `.bss` region past the file image, which the
+    // loader zero-fills. A partly-non-zero object keeps its interior zeros
+    // in the file -- only wholly-zero objects can move.
+    // Segregation is opt-in while the per-format writers are brought up;
+    // with it off, every live object (zero or not) is packed into the
+    // file image exactly as before and `bss_size` stays 0.
+    #[cfg(feature = "std")]
+    let segregate = std::env::var("BADC_BSS_SEGREGATE").is_ok();
+    #[cfg(not(feature = "std"))]
+    let segregate = false;
+    let is_bss = |i: usize| -> bool {
+        segregate
+            && i != 0
+            && live[i]
+            && program.data[starts[i] as usize..obj_end(i) as usize]
+                .iter()
+                .all(|&b| b == 0)
+    };
+
     let mut new_base = alloc::vec![-1i64; n];
     let mut new_data: Vec<u8> = Vec::with_capacity(program.data.len());
     for i in 0..n {
-        if live[i] {
+        if live[i] && !is_bss(i) {
             let want = starts[i].rem_euclid(ALIGN);
             while (new_data.len() as i64).rem_euclid(ALIGN) != want {
                 new_data.push(0);
             }
             new_base[i] = new_data.len() as i64;
-            let end = if i + 1 < n { starts[i + 1] } else { data_len };
-            new_data.extend_from_slice(&program.data[starts[i] as usize..end as usize]);
+            new_data.extend_from_slice(&program.data[starts[i] as usize..obj_end(i) as usize]);
         }
     }
+    // The `.bss` region begins immediately past the file image; an offset
+    // into it is `>= new_data.len()`, which each writer maps to a vaddr the
+    // loader zero-fills (p_memsz > p_filesz / VirtualSize > SizeOfRawData /
+    // vmsize > filesize).
+    let bss_base = new_data.len() as i64;
+    let mut bss_cursor = bss_base;
+    for i in 0..n {
+        if is_bss(i) {
+            let want = starts[i].rem_euclid(ALIGN);
+            while bss_cursor.rem_euclid(ALIGN) != want {
+                bss_cursor += 1;
+            }
+            new_base[i] = bss_cursor;
+            bss_cursor += obj_end(i) - starts[i];
+        }
+    }
+    let bss_size = bss_cursor - bss_base;
     let map = |off: i64| remap_data_off(off, &starts, &new_base, data_len);
 
     let mut out = program.clone();
@@ -492,7 +535,7 @@ pub(crate) fn compact_program_data(program: &Program, target: Target) -> Result<
     for s in &mut out.data_object_starts {
         *s = map(*s);
     }
-    Ok(out)
+    Ok((out, bss_size))
 }
 
 /// Read-only measurement of statically-dead data objects (no mutation,

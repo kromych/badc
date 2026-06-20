@@ -1747,6 +1747,7 @@ mod tests {
             copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),
+            bss_size: 0,
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),

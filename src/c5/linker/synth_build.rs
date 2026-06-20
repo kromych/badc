@@ -319,6 +319,7 @@ fn synth_program_and_build(
         dynamic_exports,
         text: merged.text.clone(),
         data: merged.data.clone(),
+        bss_size: merged.bss_size as i64,
         entry_offset,
         got_fixups,
         data_fixups,

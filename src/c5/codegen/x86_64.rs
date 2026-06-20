@@ -2244,6 +2244,7 @@ pub(super) fn lower(
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
+        bss_size: 0,
         entry_offset,
         got_fixups,
         data_fixups,

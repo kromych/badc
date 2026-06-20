@@ -1225,6 +1225,12 @@ pub(crate) struct Build {
     /// segment, so a `DataFixup { data_offset: K }` resolves to
     /// byte K of this `Vec`.
     pub data: Vec<u8>,
+    /// Bytes of zero-initialised data placed past the file image, in the
+    /// `[data.len(), data.len() + bss_size)` offset range. Carries no file
+    /// storage: the loader zero-fills it (ELF `p_memsz > p_filesz`, PE
+    /// `VirtualSize > SizeOfRawData`, Mach-O `vmsize > filesize`). A data
+    /// offset at or past `data.len()` names a byte in this region.
+    pub bss_size: i64,
     /// Offset (within `text`) of the program's entry point. Becomes
     /// the entry address of `LC_MAIN`.
     pub entry_offset: usize,
@@ -2019,9 +2025,11 @@ pub fn emit_native_with_options_named(
     // compaction feeds both the backend lowering (which bakes data-relative
     // fixups) and the container writer (which emits the symbol table), so
     // the emitted `.data` and its symbols stay consistent.
-    let compacted = crate::c5::codegen::ssa_shadow::compact_program_data(program, target)?;
+    let (compacted, bss_size) =
+        crate::c5::codegen::ssa_shadow::compact_program_data(program, target)?;
     let program = &compacted;
     let mut build = lower_for(program, target, options)?;
+    build.bss_size = bss_size;
     route_single_tu_data_imports(&mut build, target);
     if options.output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
@@ -2041,9 +2049,11 @@ pub(crate) fn emit_native_single_tu_for_test(
     target: Target,
     options: NativeOptions,
 ) -> Result<alloc::vec::Vec<u8>, C5Error> {
-    let compacted = crate::c5::codegen::ssa_shadow::compact_program_data(program, target)?;
+    let (compacted, bss_size) =
+        crate::c5::codegen::ssa_shadow::compact_program_data(program, target)?;
     let program = &compacted;
     let mut build = lower_for(program, target, options)?;
+    build.bss_size = bss_size;
     let pc = build.pc_to_native.len();
     build.pc_to_native.push(build.entry_offset);
     // The entry adapter targets `__c5_entry`; the real link path

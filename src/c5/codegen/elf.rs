@@ -146,23 +146,20 @@ const R_X86_64_RELATIVE: u64 = 8;
 const R_AARCH64_COPY: u64 = 1024;
 const R_X86_64_COPY: u64 = 5;
 
-/// Maximum supported page size, used both for `p_align` and for
-/// VA spacing between adjacent `PT_LOAD` segments. Distros build
-/// AArch64 Linux kernels with 4K, 16K, or **64K** pages, and the
-/// kernel can only enforce distinct permissions at page
-/// granularity. With a 64K-page kernel, two LOAD segments at e.g.
-/// `0x400000` (R+E) and `0x406000` (RW) collapse into the same
-/// kernel page; whichever permission the loader picks for that
-/// page, one of the segments ends up wrong -- and `.text` ending
-/// up non-executable manifests as `SIGSEGV (invalid permissions
-/// for mapped object)` on the first instruction.
-///
-/// `binutils ld` defaults to `-z max-page-size=0x10000` on
-/// AArch64 Linux for exactly this reason. We do the same, which
-/// trades ~60K of file-size padding (ET_EXEC binaries gain one
-/// 64K hole between the R+E and RW segments) for correctness on
-/// all three page-size configurations.
-const PAGE_SIZE: u64 = 0x10000;
+/// `PT_LOAD` segment alignment. The kernel enforces segment
+/// permissions at page granularity, so the R+E and RW segments must
+/// land on separate pages; the alignment also drives `p_vaddr ==
+/// p_offset (mod align)`, the gap the ET_EXEC file pays once between
+/// the two segments. x86_64 is always 4K. AArch64 Linux kernels run
+/// 4K or 16K pages, and a 16K-aligned segment is also 4K-aligned, so
+/// 16K covers both; 64K-page AArch64 kernels are out of scope (they
+/// would cost a 64K hole per binary).
+fn seg_align(machine: Machine) -> u64 {
+    match machine {
+        Machine::Aarch64 => 0x4000,
+        Machine::X86_64 => 0x1000,
+    }
+}
 
 /// Default load address for non-PIE ET_EXEC binaries on Linux/aarch64.
 /// The kernel maps the binary at exactly this vmaddr (no slide); all
@@ -1585,7 +1582,8 @@ pub(super) fn write(
     let code_size = code.len() as u64;
 
     let segment1_filesize = code_off + code_size;
-    let segment1_end = round_up(segment1_filesize, PAGE_SIZE);
+    let seg = seg_align(machine);
+    let segment1_end = round_up(segment1_filesize, seg);
 
     // ---- Layout pass 2: rw segment (.dynamic, .got, build.data,
     //      .tdata, .tbss). ----
@@ -1617,7 +1615,7 @@ pub(super) fn write(
     // The PT_LOAD's p_memsz must cover `.tbss` even though it has
     // no file backing -- the loader zero-fills the difference.
     let segment2_memsize = segment2_filesize + tbss_size;
-    let segment2_end = round_up(segment2_off + segment2_filesize, PAGE_SIZE);
+    let segment2_end = round_up(segment2_off + segment2_filesize, seg);
 
     // ---- VM addresses (ET_EXEC, no slide). ----
     let interp_vmaddr = TEXT_VMADDR_BASE + interp_off;
@@ -1639,7 +1637,7 @@ pub(super) fn write(
     // them, no SHF_ALLOC) -- they're metadata that lldb / gdb
     // pick up by walking the section header table. We append:
     //
-    //   <segment2_end aligned to PAGE_SIZE>
+    //   <segment2_end aligned to seg>
     //   .debug_info | .debug_abbrev | .debug_line | .debug_str
     //   .shstrtab (the section name string table)
     //   <pad to 8>
@@ -1930,7 +1928,7 @@ pub(super) fn write(
         TEXT_VMADDR_BASE,
         segment1_filesize,
         segment1_filesize,
-        PAGE_SIZE,
+        seg,
     );
 
     // PT_LOAD rw -- .dynamic, .got, .data, .tdata, [.tbss memsz].
@@ -1942,7 +1940,7 @@ pub(super) fn write(
         TEXT_VMADDR_BASE + segment2_off,
         segment2_filesize,
         segment2_memsize,
-        PAGE_SIZE,
+        seg,
     );
 
     // PT_DYNAMIC -- mirror of the .dynamic section.
@@ -3175,6 +3173,45 @@ mod tests {
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
         assert_eq!(p_memsz, 8, "single int TLS var => 8 bytes per thread");
+    }
+
+    /// The R+E and RW `PT_LOAD` segments are packed at the per-arch page
+    /// size (4K x86_64, 16K aarch64), so an executable's file size tracks
+    /// its loaded content. A blanket 64K segment alignment forced a ~64K
+    /// inter-segment hole, ballooning a trivial program to ~130K of mostly
+    /// zero padding.
+    #[test]
+    fn executable_file_size_tracks_content_not_max_page() {
+        use crate::Compiler;
+        let src = "const char *g_msg = \"data-segment string literal for size accounting\"; \
+             int main() { return g_msg[0]; }";
+        for (machine, target, max_bytes) in [
+            (
+                Machine::X86_64,
+                super::super::Target::LinuxX64,
+                32 * 1024usize,
+            ),
+            (
+                Machine::Aarch64,
+                super::super::Target::LinuxAarch64,
+                64 * 1024usize,
+            ),
+        ] {
+            let program =
+                Compiler::with_target(super::super::super::tests::with_prelude(src), target)
+                    .compile()
+                    .expect("compile");
+            let build =
+                super::super::lower_for(&program, target, super::super::NativeOptions::default())
+                    .expect("lower");
+            let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
+            assert!(
+                bytes.len() < max_bytes,
+                "{machine:?} executable is {} bytes; per-arch page packing must keep it under {max_bytes} \
+                 (a 64K-aligned layout would push it past ~130K)",
+                bytes.len(),
+            );
+        }
     }
 
     /// Shared-library output (`OutputKind::SharedLibrary`)

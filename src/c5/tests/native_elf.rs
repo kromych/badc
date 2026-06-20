@@ -1032,3 +1032,57 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
         "distinct extern data symbols were coalesced by the ImmData dedup under -O"
     );
 }
+
+/// Static data DCE (C99 6.2.2 / 6.7.8) must keep an externally-visible
+/// global's symbol value consistent with the compacted `.data` it names.
+/// The defining unit carries dead static data -- the string literals of
+/// two unused static functions -- ahead of a live `extern`-visible array;
+/// the prune drops the strings and repacks, moving the array to a lower
+/// offset. A second unit reads the array across the TU boundary, so a
+/// stale symbol offset (the writer fed a pre-compaction symbol table)
+/// would resolve to the wrong bytes.
+#[test]
+fn cross_unit_data_dce_keeps_extern_global_offset() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "\
+static const char *dead_a(void) { return \"dead string A, unreferenced, must be stripped\"; }\n\
+static const char *dead_b(void) { return \"dead string B, also unreferenced and stripped\"; }\n\
+const long live_arr[3] = { 111, 222, 333 };\n";
+
+    const UNIT_B: &str = "\
+extern const long live_arr[3];\n\
+long sum_arr(void) { return live_arr[0] + live_arr[1] + live_arr[2]; }\n\
+int main(void) { return (sum_arr() == 666) ? 0 : 1; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf-aarch64-data-dce", "cross_unit_data_dce");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "extern global moved by data DCE but its symbol offset was not updated to match"
+    );
+}

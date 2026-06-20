@@ -4,7 +4,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(56)                                      -> x0
+    v1   ImmData(40)                                      -> x0
     v2   Imm(0)                                           -> x1
     v3   Load { addr=v1, disp=0, kind=F32 }               -> d0 [f32]
     v4   Imm(4611686018427387904)                         -> x1
@@ -15,7 +15,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
-    v8   ImmData(56)                                      -> x1
+    v8   ImmData(40)                                      -> x1
     v9   Imm(4)                                           -> x1
     v10  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
     v11  Load { addr=v10, disp=0, kind=F32 }              -> d0 [f32]
@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v16  Imm(2)                                           -> x0
     terminator Return(v16)   (exit_acc=v16)
   block 4  start_pc=0
-    v17  ImmData(56)                                      -> x1
+    v17  ImmData(40)                                      -> x1
     v18  Imm(8)                                           -> x1
     v19  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
     v20  Load { addr=v19, disp=0, kind=F32 }              -> d0 [f32]
@@ -40,7 +40,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v24  Imm(3)                                           -> x0
     terminator Return(v24)   (exit_acc=v24)
   block 6  start_pc=0
-    v25  ImmData(72)                                      -> x0
+    v25  ImmData(56)                                      -> x0
     v26  Imm(0)                                           -> x1
     v27  Load { addr=v25, disp=0, kind=F64 }              -> d0
     v28  Imm(4616009474069663580)                         -> x0
@@ -48,7 +48,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v30  Imm(0)                                           -> x0
     terminator Bnz { cond=v29, target=b13, fall=b7 }   (exit_acc=v29)
   block 7  start_pc=0
-    v31  ImmData(72)                                      -> x0
+    v31  ImmData(56)                                      -> x0
     v32  Imm(0)                                           -> x1
     v33  Load { addr=v31, disp=0, kind=F64 }              -> d0
     v34  Imm(4616031992067800433)                         -> x0
@@ -63,7 +63,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v39  Imm(4)                                           -> x0
     terminator Return(v39)   (exit_acc=v39)
   block 10  start_pc=0
-    v40  ImmData(72)                                      -> x0
+    v40  ImmData(56)                                      -> x0
     v41  Imm(8)                                           -> x1
     v42  BinopI { op=add, lhs=v40, rhs_imm=8 }            -> x0
     v43  Load { addr=v42, disp=0, kind=F64 }              -> d0

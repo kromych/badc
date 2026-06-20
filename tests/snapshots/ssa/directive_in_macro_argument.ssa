@@ -46,13 +46,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v22  BinopI { op=ne, lhs=v21, rhs_imm=7 }             -> x0
     terminator Bz { cond=v22, target=b11, fall=b10 }   (exit_acc=v22)
   block 10  start_pc=0
-    v23  ImmData(52)                                      -> x7
+    v23  ImmData(36)                                      -> x7
     v24  Extend { value=v17, kind=I32 }                   -> x6
     v25  CallExt { binding_idx=0, args=[v23, v24], fp_arg_mask=0x0 } -> x0
     v26  Imm(1)                                           -> x0
     terminator Return(v26)   (exit_acc=v26)
   block 11  start_pc=0
-    v27  ImmData(63)                                      -> x7
+    v27  ImmData(47)                                      -> x7
     v28  CallExt { binding_idx=0, args=[v27], fp_arg_mask=0x0 } -> x0
     v29  Imm(0)                                           -> x0
     terminator Return(v29)   (exit_acc=v29)

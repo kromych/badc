@@ -137,7 +137,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=14
     v85  Imm(12)                                          -> x0
     terminator Return(v85)   (exit_acc=v85)
   block 24  start_pc=0
-    v86  ImmData(52)                                      -> x7
+    v86  ImmData(36)                                      -> x7
     v87  CallExt { binding_idx=0, args=[v86], fp_arg_mask=0x0 } -> x0
     v88  Imm(0)                                           -> x0
     terminator Return(v88)   (exit_acc=v88)

@@ -91,6 +91,15 @@ pub struct CodeReloc {
 #[derive(Debug, Clone)]
 pub struct Program {
     pub data: Vec<u8>,
+    /// Start offsets of anonymous data objects (string literals and the
+    /// implicit `__func__` arrays of C99 6.4.2.2) within `data`. Named
+    /// globals already carry their offset in `symbols[..].val`; these are
+    /// the objects with no symbol. Static DCE treats the sorted union of
+    /// these and the named-global offsets as object boundaries: an
+    /// `[start, next_start)` interval is one object. Only true object
+    /// starts are recorded, so a missing entry merely glues an object to
+    /// its predecessor (kept conservatively), never splits a live one.
+    pub data_object_starts: Vec<i64>,
     pub entry_pc: usize,
     pub warnings: Vec<String>,
     /// Initialised + zero-init thread-local data. Layout matches

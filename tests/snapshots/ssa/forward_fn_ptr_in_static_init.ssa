@@ -47,7 +47,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=2
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I32)                            -> x6
     v4   Imm(0)                                           -> x0
-    v5   ImmData(56)                                      -> x0
+    v5   ImmData(40)                                      -> x0
     v6   LoadLocal { off=2, kind=I32 }                    -> x1
     v7   BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x1
     v8   Binop { op=add, lhs=v5, rhs=v7 }                 -> x1

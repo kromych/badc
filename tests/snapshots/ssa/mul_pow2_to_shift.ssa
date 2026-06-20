@@ -71,7 +71,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
     v65  LoadLocal { off=-13, kind=I64 }                  -> x2
     v66  Binop { op=add, lhs=v64, rhs=v38 }               -> x3
     v67  Imm(0)                                           -> x0
-    v68  ImmData(52)                                      -> x7
+    v68  ImmData(36)                                      -> x7
     v69  LoadLocal { off=-14, kind=I64 }                  -> x0
     v70  CallExt { binding_idx=0, args=[v68, v66], fp_arg_mask=0x0 } -> x0
     v71  LoadLocal { off=-14, kind=I64 }                  -> x0

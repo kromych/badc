@@ -558,7 +558,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=60
     v169 BinopI { op=eq, lhs=v168, rhs_imm=0 }            -> x0
     terminator Bz { cond=v169, target=b22, fall=b21 }   (exit_acc=v169)
   block 21  start_pc=0
-    v170 ImmData(116)                                     -> x7
+    v170 ImmData(100)                                     -> x7
     v171 CallExt { binding_idx=0, args=[v170], fp_arg_mask=0x0 } -> x0
     v172 Imm(1)                                           -> x0
     terminator Return(v172)   (exit_acc=v172)

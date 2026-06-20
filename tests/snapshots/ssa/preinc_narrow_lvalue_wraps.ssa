@@ -340,7 +340,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=3
     v25  Binop { op=or, lhs=v23, rhs=v24 }                -> x3
     v26  Imm(0)                                           -> x0
     v27  Extend { value=v25, kind=I32 }                   -> x6
-    v28  ImmData(52)                                      -> x7
+    v28  ImmData(36)                                      -> x7
     v29  CallExt { binding_idx=0, args=[v28, v27], fp_arg_mask=0x0 } -> x0
     v30  Extend { value=v25, kind=I32 }                   -> x0
     terminator Return(v30)   (exit_acc=v30)

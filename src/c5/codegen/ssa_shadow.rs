@@ -203,6 +203,8 @@ pub(crate) fn produce_ssa_funcs(
         // unit do not reach the image.
         let live = compute_live_functions(&funcs, program);
         funcs.retain(|f| live.contains(&f.ent_pc));
+        #[cfg(feature = "std")]
+        measure_dead_data(&funcs, program);
         return Ok(funcs);
     }
     if !program.user_ssa_funcs.is_empty() || !program.synthetic_ssa_funcs.is_empty() {
@@ -278,6 +280,271 @@ pub(crate) fn compute_live_functions(
         }
     }
     live
+}
+
+/// Sorted data-object start offsets and a per-object live flag, shared by
+/// the data-DCE measurement and the compaction prune so the two cannot
+/// disagree on what is reachable. Objects are the `[starts[i],
+/// starts[i+1])` intervals (the last running to `data_len`) of the sorted
+/// union of `Program::data_object_starts` (anonymous literals) and the
+/// named-global offsets (`symbols[..].val`).
+///
+/// `Inst::ImmData` in a surviving function is the only code->data edge
+/// (string literals, global addresses, and aggregate-initializer
+/// templates all lower through it); `data_relocs` are the data->data
+/// edges. Roots are those edges plus externally-linked globals,
+/// relocation slots, and the leading NULL guard (object 0). Marking is
+/// conservative: a referenced object is never reported dead.
+fn live_data_intervals(
+    funcs: &[FunctionSsa],
+    program: &Program,
+    data_len: i64,
+) -> (Vec<i64>, Vec<bool>) {
+    use crate::c5::ir::Inst;
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    use alloc::collections::BTreeSet;
+
+    let mut start_set: BTreeSet<i64> = BTreeSet::new();
+    start_set.insert(0);
+    for &s in &program.data_object_starts {
+        if (0..data_len).contains(&s) {
+            start_set.insert(s);
+        }
+    }
+    for sym in &program.symbols {
+        if sym.class == Token::Glo as i64 && sym.defined_here && (0..data_len).contains(&sym.val) {
+            start_set.insert(sym.val);
+        }
+    }
+    let starts: Vec<i64> = start_set.into_iter().collect();
+    let n = starts.len();
+    let interval_of = |off: i64| -> usize {
+        match starts.binary_search(&off) {
+            Ok(i) => i,
+            Err(i) => i.saturating_sub(1),
+        }
+    };
+
+    let mut live = alloc::vec![false; n];
+    // The 8-byte NULL guard at offset 0 must stay at offset 0 so a data
+    // pointer is never confused with NULL.
+    if n > 0 {
+        live[0] = true;
+    }
+    for f in funcs {
+        for inst in &f.insts {
+            if let Inst::ImmData(off) = inst
+                && (0..data_len).contains(off)
+            {
+                live[interval_of(*off)] = true;
+            }
+        }
+    }
+    for sym in &program.symbols {
+        if sym.class == Token::Glo as i64
+            && sym.defined_here
+            && matches!(sym.linkage, Linkage::External)
+            && (0..data_len).contains(&sym.val)
+        {
+            live[interval_of(sym.val)] = true;
+        }
+    }
+    for off in program
+        .code_relocs
+        .iter()
+        .map(|r| r.data_offset as i64)
+        .chain(
+            program
+                .extern_data_relocs
+                .iter()
+                .map(|r| r.data_offset as i64),
+        )
+    {
+        if (0..data_len).contains(&off) {
+            live[interval_of(off)] = true;
+        }
+    }
+    let edges: Vec<(usize, usize)> = program
+        .data_relocs
+        .iter()
+        .filter(|r| (r.data_offset as i64) < data_len && (r.target_offset as i64) < data_len)
+        .map(|r| {
+            (
+                interval_of(r.data_offset as i64),
+                interval_of(r.target_offset as i64),
+            )
+        })
+        .collect();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for &(src, dst) in &edges {
+            if live[src] && !live[dst] {
+                live[dst] = true;
+                changed = true;
+            }
+        }
+    }
+    (starts, live)
+}
+
+/// New packed offset for a data byte at `off`, given the sorted object
+/// `starts` and each object's packed base (`new_base[i] < 0` for a
+/// dropped object). An offset outside `[0, data_len)` passes through
+/// (e.g. the extern-import `ImmData(0)` sentinel maps to 0). A live
+/// reference always lands in a kept object by construction; a dropped
+/// object is only named from unreferenced nodes and maps to 0.
+fn remap_data_off(off: i64, starts: &[i64], new_base: &[i64], data_len: i64) -> i64 {
+    if !(0..data_len).contains(&off) {
+        return off;
+    }
+    let i = match starts.binary_search(&off) {
+        Ok(i) => i,
+        Err(i) => i.saturating_sub(1),
+    };
+    if new_base[i] < 0 {
+        return 0;
+    }
+    new_base[i] + (off - starts[i])
+}
+
+/// C99 6.2.2 / 6.7.8: return a copy of `program` whose `.data` holds only
+/// the objects a surviving function or relocation can reach, every offset
+/// surface rewritten to the packed layout. The static function prune has
+/// already removed unreferenced functions; this drops the string literals
+/// and `__func__` arrays that only those functions named. Live objects
+/// keep their 8-byte alignment (the maximum badc lays `.data` out at) by
+/// aligning each packed interval base. `tls_data` is a separate segment
+/// and is left unchanged.
+pub(crate) fn compact_program_data(program: &Program, target: Target) -> Result<Program, C5Error> {
+    use crate::c5::token::Token;
+
+    let data_len = program.data.len() as i64;
+    if data_len == 0 || program.finished_functions.is_empty() {
+        return Ok(program.clone());
+    }
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_NO_DATA_DCE").is_ok() {
+        return Ok(program.clone());
+    }
+    let funcs = produce_ssa_funcs(program, target)?;
+    let live_func_pcs: alloc::collections::BTreeSet<usize> =
+        funcs.iter().map(|f| f.ent_pc).collect();
+    let (starts, live) = live_data_intervals(&funcs, program, data_len);
+    let n = starts.len();
+
+    // Each kept object moves to a new base congruent to its old start
+    // modulo `ALIGN`, so every byte keeps its original alignment residue.
+    // This holds even when adjacent objects share an interval (an object
+    // whose start the parser did not record glues onto its predecessor):
+    // the relative layout inside the copied span is preserved, and a
+    // congruent base preserves the absolute alignment of every object in
+    // it. badc lays `.data` out at 8-byte alignment; 16 covers any
+    // wider scalar without measurable padding cost.
+    const ALIGN: i64 = 16;
+    let mut new_base = alloc::vec![-1i64; n];
+    let mut new_data: Vec<u8> = Vec::with_capacity(program.data.len());
+    for i in 0..n {
+        if live[i] {
+            let want = starts[i].rem_euclid(ALIGN);
+            while (new_data.len() as i64).rem_euclid(ALIGN) != want {
+                new_data.push(0);
+            }
+            new_base[i] = new_data.len() as i64;
+            let end = if i + 1 < n { starts[i + 1] } else { data_len };
+            new_data.extend_from_slice(&program.data[starts[i] as usize..end as usize]);
+        }
+    }
+    let map = |off: i64| remap_data_off(off, &starts, &new_base, data_len);
+
+    let mut out = program.clone();
+    out.data = new_data;
+    out.finished_functions
+        .retain(|f| live_func_pcs.contains(&f.ent_pc));
+    for sym in &mut out.symbols {
+        if sym.class == Token::Glo as i64 && sym.defined_here && (0..data_len).contains(&sym.val) {
+            sym.val = map(sym.val);
+        }
+    }
+    for r in &mut out.data_relocs {
+        r.data_offset = map(r.data_offset as i64) as u64;
+        r.target_offset = map(r.target_offset as i64) as u64;
+    }
+    for r in &mut out.code_relocs {
+        r.data_offset = map(r.data_offset as i64) as u64;
+    }
+    for r in &mut out.extern_data_relocs {
+        r.data_offset = map(r.data_offset as i64) as u64;
+    }
+    for f in &mut out.finished_functions {
+        f.ast.remap_data_offsets(&map);
+    }
+    out.data_object_starts.retain(|&s| {
+        (0..data_len).contains(&s) && {
+            let i = match starts.binary_search(&s) {
+                Ok(i) => i,
+                Err(i) => i.saturating_sub(1),
+            };
+            live[i]
+        }
+    });
+    for s in &mut out.data_object_starts {
+        *s = map(*s);
+    }
+    Ok(out)
+}
+
+/// Read-only measurement of statically-dead data objects (no mutation,
+/// no effect on codegen). Emits one line per translation unit to the
+/// path in `BADC_DATA_DCE_LOG` when that variable is set, validating the
+/// object-boundary model and the achievable `.data` reduction.
+///
+/// Objects are the `[start, next_start)` intervals of the sorted union of
+/// `Program::data_object_starts` (anonymous literals) and the named-global
+/// offsets (`symbols[..].val`). An interval is live if reached from a root
+/// -- an `Inst::ImmData` in a surviving function, an externally-linked
+/// named global, or a relocation slot -- or, transitively, from a live
+/// object holding a data pointer (`data_relocs`). Marking is conservative:
+/// it never reports a referenced object dead.
+#[cfg(feature = "std")]
+fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
+    use std::io::Write;
+
+    let Ok(log_path) = std::env::var("BADC_DATA_DCE_LOG") else {
+        return;
+    };
+    let data_len = program.data.len() as i64;
+    if data_len == 0 {
+        return;
+    }
+    let (starts, live) = live_data_intervals(funcs, program, data_len);
+    let n = starts.len();
+
+    let mut dead_bytes: i64 = 0;
+    let mut dead_objs = 0usize;
+    for i in 0..n {
+        let end = if i + 1 < n { starts[i + 1] } else { data_len };
+        if !live[i] {
+            dead_bytes += end - starts[i];
+            dead_objs += 1;
+        }
+    }
+    let line = alloc::format!(
+        "{} total={} dead={} objs={} dead_objs={}\n",
+        program.source_path,
+        data_len,
+        dead_bytes,
+        n,
+        dead_objs,
+    );
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        let _ = f.write_all(line.as_bytes());
+    }
 }
 
 /// Maximum param slot the function reads or writes. C5's

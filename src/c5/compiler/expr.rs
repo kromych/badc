@@ -289,6 +289,10 @@ impl Compiler {
             if !is_wide {
                 self.data.push(0);
             }
+            // Record the resolved object start (after adjacent-literal
+            // concatenation and the trailing NUL) for static DCE
+            // boundaries. Interior part starts are not recorded.
+            self.data_object_starts.push(start_offset);
             self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
             self.ty = Ty::Ptr as i64;
             // Dual-emit: capture the decayed `char *` rvalue so

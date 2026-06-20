@@ -627,6 +627,10 @@ pub struct Compiler {
     /// across translation units.
     next_ent_pc: usize,
     data: Vec<u8>,
+    /// Start offsets of anonymous data objects (string literals,
+    /// `__func__`) recorded as they are placed in `data`, for static
+    /// DCE object boundaries. See `Program::data_object_starts`.
+    data_object_starts: Vec<i64>,
     /// Type of the current expression -- set by `expr` callees, read by callers
     /// to decide between byte and word loads/stores and for pointer scaling.
     ty: i64,
@@ -1237,6 +1241,7 @@ impl Compiler {
             target,
             next_ent_pc: 0,
             data,
+            data_object_starts: Vec::new(),
             ty: 0,
             loc_offs: 0,
             max_loc_offs: 0,
@@ -1640,6 +1645,7 @@ impl Compiler {
         let exports = self.resolve_exports()?;
         Ok(Program {
             data: self.data,
+            data_object_starts: self.data_object_starts,
             entry_pc,
             warnings: self.warnings,
             tls_data: self.tls_data,

@@ -6,7 +6,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x0
     v2   Imm(0)                                           -> x1
-    v3   ImmData(56)                                      -> x1
+    v3   ImmData(40)                                      -> x1
     v4   Load { addr=v3, disp=0, kind=I32 }               -> x2
     v5   BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x2
     v6   Store { addr=v3, disp=0, value=v5, kind=I32 }    -> -
@@ -102,7 +102,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=3
     v52  Extend { value=v50, kind=I32 }                   -> x0
     terminator Jmp(b14)   (exit_acc=v52)
   block 16  start_pc=0
-    v53  ImmData(56)                                      -> x0
+    v53  ImmData(40)                                      -> x0
     v54  Load { addr=v53, disp=0, kind=I32 }              -> x0
     v55  BinopI { op=ne, lhs=v54, rhs_imm=7 }             -> x0
     terminator Bz { cond=v55, target=b18, fall=b17 }   (exit_acc=v55)

@@ -7,7 +7,7 @@ fn ent_pc=1 n_params=2 variadic=true locals=8
     v1   LocalAddr(-3)                                    -> x0
     v2   LocalAddr(3)                                     -> x1
     v3   Intrinsic { kind=4, args=[v1, v2] }              -> x0
-    v4   ImmData(52)                                      -> x7
+    v4   ImmData(36)                                      -> x7
     v5   LoadLocal { off=2, kind=I64 }                    -> x6
     v6   LoadLocal { off=3, kind=I32 }                    -> x2
     v7   CallExt { binding_idx=0, args=[v4, v5, v6], fp_arg_mask=0x0 } -> x0
@@ -31,7 +31,7 @@ fn ent_pc=1 n_params=2 variadic=true locals=8
     v19  Intrinsic { kind=5, args=[v17, v18] }            -> x0
     v20  Load { addr=v19, disp=0, kind=I32 }              -> x2
     v21  Imm(0)                                           -> x0
-    v22  ImmData(60)                                      -> x7
+    v22  ImmData(44)                                      -> x7
     v23  Extend { value=v10, kind=I32 }                   -> x6
     v24  Extend { value=v20, kind=I32 }                   -> x0
     v25  CallExt { binding_idx=0, args=[v22, v23, v20], fp_arg_mask=0x0 } -> x0
@@ -39,7 +39,7 @@ fn ent_pc=1 n_params=2 variadic=true locals=8
   block 4  start_pc=0
     v26  LocalAddr(-3)                                    -> x0
     v27  Intrinsic { kind=6, args=[v26] }                 -> x0
-    v28  ImmData(70)                                      -> x7
+    v28  ImmData(54)                                      -> x7
     v29  CallExt { binding_idx=0, args=[v28], fp_arg_mask=0x0 } -> x0
     v30  Imm(0)                                           -> x0
     terminator Return(v30)   (exit_acc=v30)
@@ -49,7 +49,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
   spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(72)                                      -> x7
+    v1   ImmData(56)                                      -> x7
     v2   Imm(3)                                           -> x6
     v3   Imm(11)                                          -> x2
     v4   Imm(22)                                          -> x1

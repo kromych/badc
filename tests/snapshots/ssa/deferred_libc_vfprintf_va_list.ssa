@@ -25,17 +25,17 @@ fn ent_pc=2 n_params=0 variadic=false locals=13
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-8)                                    -> x7
     v2   Imm(64)                                          -> x6
-    v3   ImmData(52)                                      -> x2
+    v3   ImmData(36)                                      -> x2
     v4   Imm(42)                                          -> x1
     v5   Imm(99)                                          -> x8
     v6   Call { target_pc=1, args=[v1, v2, v3, v4, v5], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-8)                                    -> x7
-    v8   ImmData(58)                                      -> x6
+    v8   ImmData(42)                                      -> x6
     v9   CallExt { binding_idx=62, args=[v7, v8], fp_arg_mask=0x0 } -> x0
     v10  BinopI { op=ne, lhs=v9, rhs_imm=0 }              -> x0
     terminator Bz { cond=v10, target=b2, fall=b1 }   (exit_acc=v10)
   block 1  start_pc=0
-    v11  ImmData(64)                                      -> x7
+    v11  ImmData(48)                                      -> x7
     v12  LocalAddr(-8)                                    -> x6
     v13  CallExt { binding_idx=0, args=[v11, v12], fp_arg_mask=0x0 } -> x0
     v14  Imm(1)                                           -> x0

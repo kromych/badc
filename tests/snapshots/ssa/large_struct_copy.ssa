@@ -251,7 +251,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=142
     v187 Binop { op=ne, lhs=v182, rhs=v186 }              -> x0
     terminator Bz { cond=v187, target=b32, fall=b31 }   (exit_acc=v187)
   block 30  start_pc=0
-    v188 ImmData(52)                                      -> x7
+    v188 ImmData(36)                                      -> x7
     v189 CallExt { binding_idx=0, args=[v188], fp_arg_mask=0x0 } -> x0
     v190 Imm(0)                                           -> x0
     terminator Return(v190)   (exit_acc=v190)

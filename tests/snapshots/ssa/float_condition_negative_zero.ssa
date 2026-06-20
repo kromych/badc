@@ -154,13 +154,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v92  Extend { value=v91, kind=I32 }                   -> x0
     terminator Bz { cond=v92, target=b30, fall=b29 }   (exit_acc=v92)
   block 29  start_pc=0
-    v93  ImmData(52)                                      -> x7
+    v93  ImmData(36)                                      -> x7
     v94  Extend { value=v91, kind=I32 }                   -> x6
     v95  CallExt { binding_idx=0, args=[v93, v94], fp_arg_mask=0x0 } -> x0
     v96  Imm(1)                                           -> x0
     terminator Return(v96)   (exit_acc=v96)
   block 30  start_pc=0
-    v97  ImmData(66)                                      -> x7
+    v97  ImmData(50)                                      -> x7
     v98  CallExt { binding_idx=0, args=[v97], fp_arg_mask=0x0 } -> x0
     v99  Imm(0)                                           -> x0
     terminator Return(v99)   (exit_acc=v99)

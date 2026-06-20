@@ -148,6 +148,7 @@ impl Compiler {
         let name = self.current_function_name.clone();
         self.data.extend_from_slice(name.as_bytes());
         self.data.push(0);
+        self.data_object_starts.push(offset);
         offset
     }
 

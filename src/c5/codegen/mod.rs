@@ -2013,6 +2013,14 @@ pub fn emit_native_with_options_named(
     options: NativeOptions,
     shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
+    // C99 6.2.2 / 6.7.8: drop static data no surviving function or
+    // relocation references, repacking `.data` and rewriting every offset
+    // surface (symbol values, AST data offsets, relocation slots). The one
+    // compaction feeds both the backend lowering (which bakes data-relative
+    // fixups) and the container writer (which emits the symbol table), so
+    // the emitted `.data` and its symbols stay consistent.
+    let compacted = crate::c5::codegen::ssa_shadow::compact_program_data(program, target)?;
+    let program = &compacted;
     let mut build = lower_for(program, target, options)?;
     route_single_tu_data_imports(&mut build, target);
     if options.output_kind == OutputKind::SharedLibrary {
@@ -2033,6 +2041,8 @@ pub(crate) fn emit_native_single_tu_for_test(
     target: Target,
     options: NativeOptions,
 ) -> Result<alloc::vec::Vec<u8>, C5Error> {
+    let compacted = crate::c5::codegen::ssa_shadow::compact_program_data(program, target)?;
+    let program = &compacted;
     let mut build = lower_for(program, target, options)?;
     let pc = build.pc_to_native.len();
     build.pc_to_native.push(build.entry_offset);

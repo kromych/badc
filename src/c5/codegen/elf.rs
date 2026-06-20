@@ -2740,6 +2740,7 @@ mod tests {
     fn tiny_program() -> Program {
         Program {
             data: Vec::new(),
+            data_object_starts: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
             tls_data: Vec::new(),

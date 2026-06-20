@@ -15,7 +15,7 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v9   LoadLocal { off=3, kind=I64 }                    -> x0
     v10  BinopI { op=and, lhs=v3, rhs_imm=255 }           -> x0
     v11  LoadLocal { off=2, kind=I64 }                    -> x0
-    v12  ImmData(56)                                      -> x0
+    v12  ImmData(40)                                      -> x0
     v13  Store { addr=v1, disp=0, value=v12, kind=I64 }   -> -
     v14  LoadLocal { off=2, kind=I64 }                    -> x0
     v15  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
@@ -53,12 +53,12 @@ fn ent_pc=3 n_params=0 variadic=false locals=14
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-2)                                    -> x0
-    v2   ImmData(88)                                      -> x1
+    v2   ImmData(72)                                      -> x1
     v3   Mcpy { dst=v1, src=v2, size=16 }                 -> x0
-    v4   ImmData(56)                                      -> x0
+    v4   ImmData(40)                                      -> x0
     v5   Load { addr=v4, disp=0, kind=I64 }               -> x0
     v6   LocalAddr(-2)                                    -> x7
-    v7   ImmData(72)                                      -> x6
+    v7   ImmData(56)                                      -> x6
     v8   Imm(42)                                          -> x2
     v9   Imm(8)                                           -> x1
     v10  CallIndirect { target=v5, args=[v6, v7, v8, v9], callee_variadic=false, fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -74,7 +74,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=14
     v20  CallIndirect { target=v16, args=[v17, v18, v19], callee_variadic=false, fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x0
     v22  BinopI { op=shr, lhs=v21, rhs_imm=32 }           -> x0
-    v23  ImmData(104)                                     -> x7
+    v23  ImmData(88)                                      -> x7
     v24  LoadLocal { off=-8, kind=I32 }                   -> x6
     v25  CallExt { binding_idx=0, args=[v23, v24], fp_arg_mask=0x0 } -> x0
     v26  LoadLocal { off=-8, kind=I32 }                   -> x0

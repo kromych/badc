@@ -10,9 +10,11 @@
 #if defined(__aarch64__)
 #define SYS_gettid     178
 #define SYS_getrandom  278
+#define SYS_getdents64  61
 #else
 #define SYS_gettid     186
 #define SYS_getrandom  318
+#define SYS_getdents64 217
 #endif
 
 long syscall(long number, ...);

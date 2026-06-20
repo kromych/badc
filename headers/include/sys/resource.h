@@ -54,10 +54,17 @@ struct rlimit {
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::getrlimit, "getrlimit")
 #pragma binding(libc::setrlimit, "setrlimit")
+#pragma binding(libc::prlimit, "prlimit64")
 #endif
 
 int getrlimit(int resource, struct rlimit *rlp);
 int setrlimit(int resource, const struct rlimit *rlp);
+#ifdef __linux__
+// Linux prlimit: read and/or replace a process's limits in one call. Bound to
+// glibc's 64-bit entry; badc's rlim_t is already 64-bit.
+int prlimit(int pid, int resource, const struct rlimit *new_limit,
+            struct rlimit *old_limit);
+#endif
 // getrusage itself is declared in <unistd.h>; the RUSAGE_* selectors
 // above are the resource.h half of its interface.
 #endif

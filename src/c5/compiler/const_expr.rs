@@ -633,6 +633,15 @@ impl Compiler {
                 while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
+                // Parenthesized abstract declarator: `(*)(args)` (function
+                // pointer) or `(*)[N]` (pointer to array). The shared helper
+                // absorbs the suffixes and returns the pointer level (C99 6.7.7).
+                if self.lex.tk == '(' {
+                    target_ty += self.parse_abstract_ptr_declarator_levels()? * Ty::Ptr as i64;
+                    while self.lex.tk == Token::TypeQual {
+                        self.next()?;
+                    }
+                }
                 if self.lex.tk != ')' {
                     return Err(self.compile_err("close paren expected after cast"));
                 }

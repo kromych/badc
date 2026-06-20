@@ -562,6 +562,13 @@ impl Compiler {
             }
         }
 
+        // GNU C: an attribute-specifier-list may trail the declarator
+        // (`T x[N] __attribute__((aligned(8)))`); it does not change c5's
+        // type tag. Consume it so the caller resumes at `=` / `,` / `;`.
+        while self.lex.tk == Token::Attribute {
+            self.skip_attribute_specifiers()?;
+        }
+
         Ok((idx, ty, array_size))
     }
 }

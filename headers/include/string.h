@@ -85,6 +85,8 @@
 // GNU extension: like memchr but scans backward from the end of the
 // `n`-byte region. No macOS / msvcrt export.
 #pragma binding(libc::memrchr, "memrchr")
+// BSD/glibc: zero a buffer; the write is not elided by the optimizer.
+#pragma binding(libc::explicit_bzero, "explicit_bzero")
 #endif
 
 #ifdef _WIN32
@@ -174,6 +176,7 @@ char *strtok_r(char *s, char *delim, char **saveptr);
 // GNU extensions, declared only where they are bound.
 char *strchrnul(const char *s, int c);
 char *memrchr(char *s, int c, int n);
+void explicit_bzero(void *s, size_t n);
 #endif
 #ifdef _WIN32
 // Case-insensitive compares -- msvcrt-only, no POSIX equivalent

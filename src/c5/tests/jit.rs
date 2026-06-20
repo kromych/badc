@@ -1585,3 +1585,34 @@ fn variable_shift_to_spill_under_pressure() {
     let opt = jit_exit_native_optimized(src, &["shift-spill-O"]);
     assert_eq!(opt, 200, "variable shift miscompiled at -O");
 }
+
+#[test]
+fn dead_strip_drops_unused_static_function() {
+    // C99 6.2.2: an internal-linkage function that no reachable code or data
+    // references is dropped before codegen. The entry, a called static, and
+    // an external function all survive; only the unreferenced static is gone.
+    use crate::Target;
+    use crate::c5::codegen::ssa_shadow::produce_ssa_funcs;
+    let src = "static int never_called(int x){return x+100;}\n\
+               static int helper(int x){return x*2;}\n\
+               int used_export(int x){return x-1;}\n\
+               int main(void){return helper(3);}";
+    let program = Compiler::new(src.to_string())
+        .compile()
+        .expect("compile failed");
+    let funcs = produce_ssa_funcs(&program, Target::host()).expect("produce_ssa_funcs");
+    let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
+    assert!(names.contains(&"main"), "entry must survive: {names:?}");
+    assert!(
+        names.contains(&"helper"),
+        "called static must survive: {names:?}"
+    );
+    assert!(
+        names.contains(&"used_export"),
+        "external fn must survive: {names:?}"
+    );
+    assert!(
+        !names.contains(&"never_called"),
+        "unused static must be dead-stripped: {names:?}"
+    );
+}

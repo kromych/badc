@@ -196,7 +196,14 @@ pub(crate) fn produce_ssa_funcs(
     target: Target,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     if !program.finished_functions.is_empty() {
-        return walk_program(program, target);
+        let mut funcs = walk_program(program, target)?;
+        // C99 6.2.2: a function with internal linkage that no reachable
+        // code or data references is unobservable; drop it before codegen
+        // so the unused `static inline` helpers headers pull into every
+        // unit do not reach the image.
+        let live = compute_live_functions(&funcs, program);
+        funcs.retain(|f| live.contains(&f.ent_pc));
+        return Ok(funcs);
     }
     if !program.user_ssa_funcs.is_empty() || !program.synthetic_ssa_funcs.is_empty() {
         let mut covered: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
@@ -216,6 +223,61 @@ pub(crate) fn produce_ssa_funcs(
         return Ok(out);
     }
     Ok(Vec::new())
+}
+
+/// Reachable user functions: the set of `ent_pc`s the program can reach.
+/// Roots are externally-visible functions (C99 6.2.2 external linkage --
+/// callable from another unit) and functions whose address is stored in
+/// the data segment (dispatch tables, via `code_relocs`). From the roots,
+/// a function's direct calls (`Inst::Call`) and address-of references
+/// (`Inst::ImmCode`) keep their targets reachable. A function absent from
+/// the result has internal linkage and no reference path, so it can be
+/// dropped before codegen.
+pub(crate) fn compute_live_functions(
+    funcs: &[FunctionSsa],
+    program: &Program,
+) -> alloc::collections::BTreeSet<usize> {
+    use crate::c5::ir::Inst;
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    use alloc::collections::{BTreeMap, BTreeSet};
+
+    let by_ent: BTreeMap<usize, &FunctionSsa> = funcs.iter().map(|f| (f.ent_pc, f)).collect();
+    let mut live: BTreeSet<usize> = BTreeSet::new();
+    let mut work: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
+
+    for s in &program.symbols {
+        if s.class == Token::Fun as i64
+            && matches!(s.linkage, Linkage::External)
+            && by_ent.contains_key(&(s.val as usize))
+            && live.insert(s.val as usize)
+        {
+            work.push(s.val as usize);
+        }
+    }
+    for r in &program.code_relocs {
+        let ent = r.target_ent_pc as usize;
+        if by_ent.contains_key(&ent) && live.insert(ent) {
+            work.push(ent);
+        }
+    }
+    while let Some(ent) = work.pop() {
+        let Some(f) = by_ent.get(&ent) else { continue };
+        for inst in &f.insts {
+            let target = match inst {
+                Inst::Call { target_pc, .. } => Some(*target_pc),
+                Inst::ImmCode(t) => Some(*t),
+                _ => None,
+            };
+            if let Some(t) = target
+                && by_ent.contains_key(&t)
+                && live.insert(t)
+            {
+                work.push(t);
+            }
+        }
+    }
+    live
 }
 
 /// Maximum param slot the function reads or writes. C5's

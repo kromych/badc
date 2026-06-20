@@ -887,6 +887,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     // instead of gs:[0x58].
     ("thread_local_basic.c", 0),
     ("msvc_decl_decorators.c", 0),
+    ("msvc_pragma_operator.c", 0),
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
     // Windows AArch64 routes setjmp / longjmp through the

@@ -1314,7 +1314,7 @@ impl Preprocessor {
         line_no: usize,
         filename: &str,
     ) -> Result<String, C5Error> {
-        if !text.contains("_Pragma") {
+        if !text.contains("_Pragma") && !text.contains("__pragma") {
             return Ok(text.to_string());
         }
         let bytes = text.as_bytes();
@@ -1344,6 +1344,22 @@ impl Preprocessor {
                 && !bytes.get(i + 7).copied().is_some_and(is_ident_byte);
             if let Some((args, next)) = is_operator
                 .then(|| parse_pragma_operator_args(text, i + 7))
+                .flatten()
+            {
+                out.push_str(&text[copied..i]);
+                self.dispatch_pragma_operator(&args, line_no, filename, &mut out)?;
+                i = next;
+                copied = next;
+                continue;
+            }
+            // MSVC `__pragma(tokens)`: same operator as C99 `_Pragma`, but
+            // the operand is raw tokens rather than a string literal.
+            let is_msvc_operator = c == b'_'
+                && bytes[i..].starts_with(b"__pragma")
+                && (i == 0 || !is_ident_byte(bytes[i - 1]))
+                && !bytes.get(i + 8).copied().is_some_and(is_ident_byte);
+            if let Some((args, next)) = is_msvc_operator
+                .then(|| parse_msvc_pragma_args(text, i + 8))
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
@@ -3048,6 +3064,60 @@ fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
+/// Parse the `( token-string )` operand of an MSVC `__pragma` operator,
+/// starting at `start` (just past the `__pragma` keyword). Returns the
+/// content between the outer parens verbatim (trimmed) and the byte
+/// index just past the closing `)`, or `None` when the parens are
+/// missing or unbalanced. `__pragma(X)` is the MSVC analog of C99
+/// `_Pragma("X")`: the operand is raw tokens rather than a string
+/// literal, so no destringizing applies. Nested parens and string /
+/// char literals are tracked so an inner `)` does not close the operand.
+fn parse_msvc_pragma_args(text: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut i = start;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    let inner_start = i + 1;
+    let mut depth = 1usize;
+    i = inner_start;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' | b'\'' => {
+                let q = bytes[i];
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == b'\\' {
+                        i += 2;
+                        continue;
+                    }
+                    let closed = bytes[i] == q;
+                    i += 1;
+                    if closed {
+                        break;
+                    }
+                }
+            }
+            b'(' => {
+                depth += 1;
+                i += 1;
+            }
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some((text[inner_start..i].trim().to_string(), i + 1));
+                }
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    None
+}
+
 /// Parse the `( string-literal )` operand of a `_Pragma` operator,
 /// starting at `start` (just past the `_Pragma` keyword). Returns the
 /// destringized pragma text and the byte index just past the closing
@@ -4585,6 +4655,30 @@ mod tests {
         // The operator name inside a string literal is ordinary text.
         let out = process("const char *s = \"_Pragma(\\\"once\\\")\";\n");
         assert!(out.contains("\"_Pragma(\\\"once\\\")\""), "got: {out:?}");
+    }
+
+    #[test]
+    fn msvc_pragma_operator_warning_leaves_no_tokens() {
+        // MSVC `__pragma(tokens)` carries a `#pragma` directive with a raw
+        // token operand; `warning(...)` is handled and contributes no tokens.
+        let out = process("__pragma(warning(disable : 4201))\nint x = 1;\n");
+        assert!(!out.contains("__pragma"), "operator leaked: {out:?}");
+        assert!(out.contains("int x = 1;"));
+    }
+
+    #[test]
+    fn msvc_pragma_operator_pack_emits_inline_directive() {
+        // `pack` via `__pragma` re-emits an inline `#pragma pack` like the
+        // C99 `_Pragma` path, so the lexer folds it at this position.
+        let out = process("__pragma(pack(1))\nstruct S { char a; };\n");
+        assert!(out.contains("#pragma pack(1)"), "no inline pack: {out:?}");
+    }
+
+    #[test]
+    fn msvc_pragma_operator_ignored_inside_string_literal() {
+        // The operator name inside a string literal is ordinary text.
+        let out = process("const char *s = \"__pragma(warning(pop))\";\n");
+        assert!(out.contains("\"__pragma(warning(pop))\""), "got: {out:?}");
     }
 
     #[test]

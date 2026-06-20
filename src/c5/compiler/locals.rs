@@ -446,8 +446,7 @@ impl Compiler {
                 let var_offset = self.symbols[loc_idx].val;
                 // A multi-dimensional array's element is itself an array of
                 // structs; each top-level group spans the inner dimensions.
-                let inner_dims: Vec<i64> =
-                    self.inner_dims_of(loc_idx).iter().map(|&d| d as i64).collect();
+                let inner_dims = self.inner_dims_of(loc_idx);
                 let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
                 let group_stride = elem_size as i64 * inner_product;
                 let group_count = array_size / inner_product;
@@ -1603,8 +1602,9 @@ impl Compiler {
                         let nm = self.symbols[self.lex.curr_id_idx].name.clone();
                         self.next()?;
                         if self.lex.tk != Token::Assign {
-                            return Err(self
-                                .compile_err(format!("`=` expected after `.{nm}` designator")));
+                            return Err(
+                                self.compile_err(format!("`=` expected after `.{nm}` designator"))
+                            );
                         }
                         self.next()?;
                         self.structs[sid]
@@ -1620,7 +1620,12 @@ impl Compiler {
                     let mem = self.structs[sid].fields[mem_idx].clone();
                     let total = extra_offset + mem.offset as i64;
                     if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
-                        self.emit_struct_local_init_runtime_at(local_val, total, struct_id_of(mem.ty), true)?;
+                        self.emit_struct_local_init_runtime_at(
+                            local_val,
+                            total,
+                            struct_id_of(mem.ty),
+                            true,
+                        )?;
                     } else {
                         self.emit_lea(local_val);
                         if total > 0 {
@@ -1634,7 +1639,11 @@ impl Compiler {
                         self.ast_assign();
                         if let Some(value) = v {
                             self.pending_local_runtime_elements.push(
-                                super::super::ast::RuntimeInitElement { offset: total, value, ty: mem.ty },
+                                super::super::ast::RuntimeInitElement {
+                                    offset: total,
+                                    value,
+                                    ty: mem.ty,
+                                },
                             );
                         }
                     }

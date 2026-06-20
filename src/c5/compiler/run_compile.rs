@@ -1653,8 +1653,7 @@ impl Compiler {
                                 // A multi-dimensional array (`T xs[A][B]`) has an
                                 // element that is itself an array of structs; each
                                 // top-level group spans the inner dimensions.
-                                let inner_dims: Vec<i64> =
-                                    self.inner_dims_of(id_idx).iter().map(|&d| d as i64).collect();
+                                let inner_dims = self.inner_dims_of(id_idx);
                                 let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
                                 let group_stride = elem_size as i64 * inner_product;
                                 let group_count = array_size / inner_product;
@@ -1704,7 +1703,12 @@ impl Compiler {
                                     // array's element is itself an array of
                                     // structs -- recurse into the inner dimensions.
                                     if !inner_dims.is_empty() {
-                                        self.collect_struct_array_data(sid, here, &inner_dims, elem_size as i64)?;
+                                        self.collect_struct_array_data(
+                                            sid,
+                                            here,
+                                            &inner_dims,
+                                            elem_size as i64,
+                                        )?;
                                     } else if self.lex.tk == '{' {
                                         self.collect_struct_initializer(sid, here)?;
                                     } else {

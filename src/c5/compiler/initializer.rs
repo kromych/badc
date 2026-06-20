@@ -1764,8 +1764,9 @@ impl Compiler {
                         let nm = self.symbols[self.lex.curr_id_idx].name.clone();
                         self.next()?;
                         if self.lex.tk != Token::Assign {
-                            return Err(self
-                                .compile_err(format!("`=` expected after `.{nm}` designator")));
+                            return Err(
+                                self.compile_err(format!("`=` expected after `.{nm}` designator"))
+                            );
                         }
                         self.next()?;
                         self.structs[struct_id]

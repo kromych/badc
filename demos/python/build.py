@@ -400,6 +400,9 @@ def run_tests(target: str, py: Path, log) -> int:
     slice_ = _WIN_TEST_SLICE if TARGETS[target].get("windows") else POSIX_TEST_SLICE
     exe = SRC / py.name
     shutil.copy2(py, exe)
+    # Ensure the executable bit on the copy regardless of the host's copy
+    # behavior, so the interpreter and its -I children can run.
+    os.chmod(exe, 0o755)
     env = dict(os.environ, PYTHONHOME=str(SRC), PYTHONPATH=str(SRC / "Lib"))
     r = run([str(exe), "-c", "print(2 + 2)"], env=env, timeout=120)
     if r.returncode != 0 or r.stdout.strip() != "4":

@@ -35,6 +35,10 @@
 #define LC_MONETARY 3
 #define LC_NUMERIC  4
 #define LC_TIME     5
+#ifdef __APPLE__
+// POSIX category absent from the Windows CRT; BSD/macOS numbers it after LC_TIME.
+#define LC_MESSAGES 6
+#endif
 #define LC_MIN      LC_ALL
 #define LC_MAX      LC_TIME
 #endif

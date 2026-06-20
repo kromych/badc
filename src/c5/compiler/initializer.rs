@@ -1159,32 +1159,26 @@ impl Compiler {
                 self.next()?;
                 return Ok((off, InitElemReloc::Data(None)));
             }
-            // Forward-referenced function pointer in a static
-            // initializer: dispatch tables that list functions
-            // defined later in the same TU. The post-parse
-            // [`Compiler::resolve_code_relocs`] pass rewrites
-            // each `code_relocs[i].target_ent_pc` from the
-            // originating symbol's now-resolved `Symbol::val`,
-            // so we bind the identifier as `Token::Fun` with
-            // val=0 here and let the resolve pass fill in the
-            // CodeReloc once the body has been emitted. The
-            // forward-ref heuristic only fires when the next
-            // token is `,` / `}` -- i.e., the identifier is the
-            // entire init slot, not the start of an expression
-            // that happens to use an undeclared name.
-            if class == 0
-                && (self.lex.peek_after_whitespace(b',') || self.lex.peek_after_whitespace(b'}'))
-            {
-                self.symbols[idx].class = Token::Fun as i64;
-                self.symbols[idx].type_ = Ty::Int as i64;
-                self.symbols[idx].was_referenced = true;
-                // Record the reference site so `resolve_code_relocs`
-                // can diagnose the name if it is never declared or
-                // defined in the unit (a missing header or a typo --
-                // C99 6.5.1 requires a declaration before use).
-                self.symbols[idx].decl_line = self.lex.line;
-                self.next()?;
-                return Ok((0, InitElemReloc::Code(idx)));
+            // C99 6.5.1: an identifier must be declared before use. An
+            // undeclared identifier as an initializer element has no
+            // resolvable value, so reject it rather than bind a placeholder
+            // that resolves to a silent zero; name the header that declares
+            // it when one is known. A function referenced before its
+            // definition reaches the `Token::Fun` branch below through its
+            // prototype (C99 6.7p7 -- a prior declaration satisfies the
+            // type), so this rejects only genuinely undeclared names.
+            if class == 0 {
+                let name = self.symbols[idx].name.clone();
+                return Err(self.compile_err(
+                    match super::super::headers::header_declaring(&name) {
+                        Some(h) => format!(
+                            "use of undeclared identifier `{name}` in an initializer -- try `#include <{h}>`"
+                        ),
+                        None => {
+                            format!("use of undeclared identifier `{name}` in an initializer")
+                        }
+                    },
+                ));
             }
             if class == Token::Fun as i64 {
                 self.symbols[idx].was_referenced = true;

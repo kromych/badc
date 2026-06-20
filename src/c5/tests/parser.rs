@@ -221,30 +221,25 @@ fn matching_redeclaration_is_silent() {
 }
 
 #[test]
-fn undeclared_function_in_initializer_warns() {
-    // A static function-pointer initializer naming an identifier that is
-    // never declared or defined in the unit (a missing header or a typo)
-    // is diagnosed. The call path already rejects the same mistake; this
-    // covers the dispatch-table-entry path that the forward-reference
-    // heuristic otherwise binds silently.
+fn undeclared_identifier_in_initializer_errors() {
+    // C99 6.5.1: an identifier must be declared before use. An undeclared
+    // identifier as an initializer element (a missing header or a typo) is
+    // rejected, not bound to a placeholder that resolves to a silent zero.
     let src = "typedef void (*fp)(void); fp t[] = { undeclared_xyz }; int main(void) { return 0; }";
-    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    let err = crate::c5::Compiler::new(src.to_string()).compile();
     assert!(
-        prog.warnings
-            .iter()
-            .any(|w| w.contains("undeclared_xyz") && w.contains("never declared")),
-        "expected an undeclared-function warning, got {:?}",
-        prog.warnings,
+        err.is_err(),
+        "expected a compile error for the undeclared initializer element",
     );
-    // A function defined later in the same unit is a valid forward
-    // reference and stays silent.
-    let ok = "typedef int (*fp)(void); fp t[] = { fwd }; \
+    // A function declared by a prior prototype and defined later in the same
+    // unit is a valid forward reference (C99 6.7p7) and compiles silently.
+    let ok = "typedef int (*fp)(void); int fwd(void); fp t[] = { fwd }; \
               int fwd(void) { return 0; } int main(void) { return 0; }";
-    let prog2 = crate::c5::Compiler::new(ok.to_string()).compile().unwrap();
+    let prog = crate::c5::Compiler::new(ok.to_string()).compile().unwrap();
     assert!(
-        prog2.warnings.is_empty(),
+        prog.warnings.is_empty(),
         "valid forward reference should be silent, got {:?}",
-        prog2.warnings,
+        prog.warnings,
     );
 }
 

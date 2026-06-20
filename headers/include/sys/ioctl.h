@@ -33,3 +33,47 @@ struct winsize {
 #endif
 
 int ioctl(int fd, unsigned long request, void *argp);
+
+// ioctl request codes referenced by terminal/file modules. Per-target codes.
+#ifndef FIOASYNC
+#if defined(__APPLE__)
+#define FIOASYNC 2147772029
+#endif
+#endif
+#ifndef FIOCLEX
+#if defined(__APPLE__)
+#define FIOCLEX 536897025
+#endif
+#endif
+#ifndef FIONBIO
+#if defined(__APPLE__)
+#define FIONBIO 2147772030
+#endif
+#endif
+#ifndef FIONCLEX
+#if defined(__APPLE__)
+#define FIONCLEX 536897026
+#endif
+#endif
+#ifndef FIONREAD
+#if defined(__APPLE__)
+#define FIONREAD 1074030207
+#endif
+#endif
+#ifdef __APPLE__
+// BSD terminal size. TIOCGSIZE / TIOCSSIZE are aliases of TIOCGWINSZ /
+// TIOCSWINSZ on this platform, and `struct ttysize` is layout-compatible with
+// `struct winsize`; programs that prefer this spelling fill ts_cols / ts_lines.
+struct ttysize {
+    unsigned short ts_lines;
+    unsigned short ts_cols;
+    unsigned short ts_xxx;
+    unsigned short ts_yyy;
+};
+#ifndef TIOCGSIZE
+#define TIOCGSIZE 1074295912
+#endif
+#ifndef TIOCSSIZE
+#define TIOCSSIZE 2148037735
+#endif
+#endif

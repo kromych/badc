@@ -37,3 +37,29 @@ long flistxattr(int fd, char *list, unsigned long size);
 int removexattr(const char *path, const char *name);
 int lremovexattr(const char *path, const char *name);
 int fremovexattr(int fd, const char *name);
+
+// xattr operation flags and size limits (Linux).
+#ifndef XATTR_CREATE
+#if defined(__APPLE__)
+#define XATTR_CREATE 2
+#else
+#define XATTR_CREATE 1
+#endif
+#endif
+#ifndef XATTR_REPLACE
+#if defined(__APPLE__)
+#define XATTR_REPLACE 4
+#else
+#define XATTR_REPLACE 2
+#endif
+#endif
+#ifndef XATTR_SIZE_MAX
+#if defined(__linux__)
+#define XATTR_SIZE_MAX 65536
+#endif
+#endif
+#ifndef XATTR_LIST_MAX
+#if defined(__linux__)
+#define XATTR_LIST_MAX 65536
+#endif
+#endif

@@ -3,7 +3,7 @@
 // definition the link fails. Returning NULL makes `import <mod>` raise
 // rather than link-fail. None of these modules are used by the test slice.
 //
-// Excluded (see win_build.py): mmap, cmath, _hmac.
+// Excluded (see build.py): mmap, cmath, _hmac.
 
 typedef void PyObject;
 
@@ -15,7 +15,7 @@ PyObject *PyInit__hmac(void)  { return 0; }
 // The static interpreter still registers sys.winver / sys.dllhandle from them
 // under MS_COREDLL (sysmodule.c), so provide them: there is no Python DLL, so
 // the module handle is null and the version string is MS_DLL_ID (X.Y).
-// win_build.py passes -DMS_DLL_ID; the fallback only lets this file parse
+// build.py passes -DMS_DLL_ID; the fallback only lets this file parse
 // standalone (the build value always wins).
 #ifndef MS_DLL_ID
 #define MS_DLL_ID "0.0"

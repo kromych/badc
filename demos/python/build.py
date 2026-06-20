@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Build CPython 3.14.6 with badc for a target, with no make/configure at build
-time. Each target's all-builtin link set is committed under ``targets/<target>/``
-as a self-describing ``manifest.json`` (per-TU class, defines, extra includes)
-plus the matching ``config.c`` (the builtin inittab) and ``pyconfig.h``; the
-frozen-module headers come from ``setup.py``. One command for every target.
+"""Build CPython 3.14.6 with badc for any target, with no make/configure.
+
+One command for every target -- macOS, Linux (x64/arm64), Windows (x64/arm64):
 
     python3 demos/python/build.py --target=macos-aarch64 --test
 
-The manifest is produced offline once per target by gen_manifest.py from a host
-all-static build; replaces the configure+make host build (smoke.py) and
-win_build.py as targets are ported. Pass --target or set BADC_PY_TARGET.
+POSIX targets compile a committed per-target ``manifest.json`` (the all-builtin
+link set distilled offline by gen_manifest.py from a host all-static build) with
+its ``config.c`` (the builtin inittab) and ``pyconfig.h``. Windows targets parse
+the core link set from ``PCbuild/pythoncore.vcxproj`` and wire the inittab in
+``PC/config.c``, since the MSVC project files carry no per-file command list to
+scrape. Either way setup.py provides the source and the vendored frozen-module
+headers, so no target needs make. badc cross-compiles every target from any host.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -27,33 +30,30 @@ PY_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PY_DIR.parents[1]
 VERSION = "3.14.6"
 SRC = PY_DIR / ".cache" / f"Python-{VERSION}"
+# X.Y form for MS_DLL_ID / getpath PYWINVER (PC/dl_nt.c convention).
+WINVER_XY = VERSION.rsplit(".", 1)[0]
 
-# Tier 1: a fast module slice every lane must clear. Tier 2 (a broader set + a
-# pyperformance subset) runs only if tier 1 passes. TODO: add tier 2.
-TEST_SLICE = [
+EXPORT_FLAGS = ["--export-all", "--export-data"]
+
+# --- POSIX targets ---------------------------------------------------------
+
+# Tier 1: a fast module slice every POSIX lane must clear. Tier 2 (a broader set
+# + a pyperformance subset) runs only if tier 1 passes. TODO: add tier 2.
+POSIX_TEST_SLICE = [
     "test_grammar", "test_builtin", "test_int", "test_float",
     "test_list", "test_dict", "test_string", "test_exceptions",
 ]
-
-# Includes common to every TU; the manifest carries any per-TU extras.
+# Includes common to every POSIX TU; the manifest carries any per-TU extras.
 POSIX_INCLUDES = ["Include", "Include/internal", "."]
-EXPORT_FLAGS = ["--export-all", "--export-data"]
 
-# Per-target options not encoded in the manifest. asm_trampoline substitutes the
-# portable trampoline for the hand-written .S a host build assembles (POSIX with
-# the perf trampoline; macOS does not link it).
 # Linux modules badc cannot yet build: ELF/process introspection.
 _LINUX_EXCLUDE = [("_remote_debugging_module.c", "_remote_debugging")]
-# pyconfig advertises headers badc's bundled set does not provide; undefining
-# the HAVE_ macros makes the module take a supported path: select uses
-# poll/select (no epoll); socket builds the common families without the
+# pyconfig advertises headers badc's bundled set does not provide; undefining the
+# HAVE_ macros makes the module take a supported path: select uses poll/select
+# (no epoll); socket builds the common families without the
 # AF_PACKET/NETLINK/CAN/VSOCK/ALG address handling.
 _LINUX_UNDEF = [
-    # select: no epoll backend (poll/select instead).
     "HAVE_EPOLL", "HAVE_EPOLL_CREATE1", "HAVE_SYS_EPOLL_H",
-    # socket: the common families only -- no AF_PACKET/NETLINK/CAN/VSOCK/QRTR/
-    # TIPC/ALG/netfilter address or option handling (those need headers and
-    # structs badc's bundled set does not provide).
     "HAVE_NETPACKET_PACKET_H", "HAVE_SOCKADDR_ALG",
     "HAVE_LINUX_NETLINK_H", "HAVE_LINUX_VM_SOCKETS_H", "HAVE_LINUX_TIPC_H",
     "HAVE_LINUX_QRTR_H", "HAVE_LINUX_NETFILTER_IPV4_H",
@@ -61,6 +61,60 @@ _LINUX_UNDEF = [
     "HAVE_LINUX_CAN_RAW_H", "HAVE_LINUX_CAN_RAW_FD_FRAMES",
     "HAVE_LINUX_CAN_RAW_JOIN_FILTERS",
 ]
+
+# --- Windows targets -------------------------------------------------------
+
+# A single deep-recursion module the native interpreter must clear; broadening
+# to the POSIX slice is a follow-up. TODO: expand to POSIX_TEST_SLICE.
+_WIN_TEST_SLICE = ["test_functools"]
+# PC precedes the source root so PC/pyconfig.h wins over the root pyconfig.h.
+_WIN_INCLUDES = [
+    "PC", "Include", "Include/internal", "Python",
+    "Modules", "Modules/_hacl", "Modules/_hacl/include", ".",
+]
+# MS_WIN32/MS_WINDOWS come from PC/pyconfig.h; MS_WIN64 is gated on
+# _MSC_VER/__MINGW32__ there, neither of which badc presents, so set it directly.
+# Py_NO_ENABLE_SHARED selects the static (non-DLL) core. MS_COREDLL re-enables
+# sysmodule.c's sys.winver registration (site.py reads it) without DLL
+# import/export decoration; MS_DLL_ID is the X.Y string. The two globals MS_DLL_ID
+# names live in win_excluded_stubs.c.
+_WIN_DEFINES = [
+    "Py_BUILD_CORE", "Py_BUILD_CORE_BUILTIN", "Py_NO_ENABLE_SHARED",
+    "WIN32", "MS_WINDOWS", "MS_WIN64", "MS_COREDLL",
+    f'MS_DLL_ID="{WINVER_XY}"', 'VPATH="."',
+]
+# getpath.c reads the install layout from these; bytes-only placeholders, the
+# runtime path comes from PYTHONHOME.
+_WIN_GETPATH_DEFINES = [
+    "PREFIX=NULL", "EXEC_PREFIX=NULL", 'VERSION="3.14"', 'VPATH="."',
+    'PLATLIBDIR="DLLs"', 'PYDEBUGEXT=""',
+]
+# TUs excluded from the minimal static interpreter. zlib needs the vendored
+# zlib-ng; the SIMD HACL variants need AVX intrinsics (the scalar Blake2 covers
+# the same hashes); mmap uses SEH and cmath/_hmac use initializer forms badc does
+# not yet accept. win_excluded_stubs.c provides stub PyInit_* so the PC/config.c
+# inittab entries still resolve. None are in the Windows test slice.
+_WIN_EXCLUDE = {
+    "Modules/zlibmodule.c",
+    "Modules/_hacl/Hacl_Hash_Blake2b_Simd256.c",
+    "Modules/_hacl/Hacl_Hash_Blake2s_Simd128.c",
+    "Modules/mmapmodule.c",
+    "Modules/cmathmodule.c",
+    "Modules/hmacmodule.c",
+    "Modules/_hacl/Hacl_Streaming_HMAC.c",
+}
+# Built into the core on Windows but shipped as separate .pyd projects by
+# pythoncore.vcxproj, so PC/config.c omits them; _wire_builtin_inittab registers
+# each (the inittab key is the symbol minus the PyInit_ prefix).
+_WIN_ADDITIONAL_TUS = [
+    ("Modules/socketmodule.c", "PyInit__socket"),
+    ("Modules/unicodedata.c", "PyInit_unicodedata"),
+    ("Modules/overlapped.c", "PyInit__overlapped"),
+    ("Modules/selectmodule.c", "PyInit_select"),
+]
+# Harness sources: the console entry shim (main over the wide command line) and
+# stub PyInit_* for the excluded builtins.
+_WIN_HELPERS = ["win_entry.c", "win_excluded_stubs.c"]
 
 TARGETS = {
     "macos-aarch64": {
@@ -88,25 +142,24 @@ TARGETS = {
         ],
     },
     "linux-aarch64": {"asm_trampoline": True, "undef_haves": _LINUX_UNDEF, "exclude": _LINUX_EXCLUDE},
+    "windows-x64": {"windows": True},
+    "windows-arm64": {"windows": True},
 }
 
 
 def run(cmd, **kw):
-    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+    return subprocess.run(cmd, capture_output=True, text=True, errors="replace", **kw)
 
 
 def _compile_one(job):
-    """Compile one TU. Runs in a worker process, so the args are plain and
-    picklable. Returns (src, obj-path-or-None, error-or-None)."""
-    badc, target, entry, common_inc, dbg, opt, out_dir, src_root = job
-    src = entry["src"]
+    """Compile one TU in a worker process; args are plain + picklable. The
+    caller has resolved the full -D / -I flags for the target. Returns
+    (src, obj-path-or-None, error-or-None)."""
+    badc, target, src, defs, incs, dbg, opt, out_dir, src_root = job
     obj = os.path.join(out_dir, src.replace("/", "_")[:-2] + ".o")
-    core = "Py_BUILD_CORE_BUILTIN" if entry["class"] == "builtin" else "Py_BUILD_CORE"
-    defs = [f"-D{core}"] + [f"-D{d}" for d in entry.get("defines", [])]
-    inc = common_inc + [a for d in entry.get("includes", []) for a in ("-I", d)]
     cmd = [badc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T",
-           *dbg, *opt, *defs, *inc, src, "-o", obj]
-    r = subprocess.run(cmd, cwd=src_root, capture_output=True, text=True, timeout=240)
+           *dbg, *opt, *defs, *incs, src, "-o", obj]
+    r = subprocess.run(cmd, cwd=src_root, capture_output=True, text=True, errors="replace", timeout=240)
     if r.returncode != 0:
         msg = ((r.stderr or r.stdout).strip().splitlines() or [f"rc{r.returncode}"])[-1]
         return (src, None, msg[:200])
@@ -121,17 +174,74 @@ def badc_path() -> str:
     return str(p)
 
 
+# --- input preparation -----------------------------------------------------
+
+def _disable_mimalloc() -> None:
+    # PC/pyconfig.h hardcodes WITH_MIMALLOC; its per-thread heap needs a
+    # TLS-template relocation badc does not emit, and pymalloc serves instead.
+    cfg = SRC / "PC/pyconfig.h"
+    text = cfg.read_text()
+    needle = "#define WITH_MIMALLOC 1"
+    if needle in text:
+        cfg.write_text(text.replace(needle, "/* WITH_MIMALLOC disabled (badc) */"))
+
+
+def _wire_builtin_inittab() -> None:
+    # Register the additional builtins in PC/config.c: add the extern and the
+    # _PyImport_Inittab entry, or the linked PyInit_* stay unreachable and
+    # `import` raises ModuleNotFoundError. Idempotent (a re-extract reverts it).
+    cfg = SRC / "PC/config.c"
+    text = cfg.read_text()
+    struct = "struct _inittab _PyImport_Inittab[] = {"
+    term = "    {0, 0}"
+    externs = "".join(
+        f"extern PyObject* {sym}(void);\n"
+        for _rel, sym in _WIN_ADDITIONAL_TUS
+        if f"extern PyObject* {sym}(void);" not in text
+    )
+    entries = "".join(
+        f'    {{"{sym.removeprefix("PyInit_")}", {sym}}},\n'
+        for _rel, sym in _WIN_ADDITIONAL_TUS
+        if f"{sym}}}," not in text
+    )
+    if externs:
+        text = text.replace(struct, externs + struct, 1)
+    if entries:
+        text = text.replace(term, entries + term, 1)
+    cfg.write_text(text)
+
+
+def _check_frozen() -> None:
+    missing = [
+        h for h in re.findall(r'frozen_modules/[\w.]+\.h', (SRC / "Python/frozen.c").read_text())
+        if not (SRC / "Python" / h).is_file()
+    ]
+    if missing:
+        sys.exit(f"build: frozen-module headers missing (e.g. {missing[0]}) -- setup.py should fetch them")
+
+
 def ensure_inputs(target: str, log) -> None:
     # setup.py fetches the source tarball and the vendored frozen-module headers
-    # (no make). The remaining derived sources are committed per target.
+    # (no make).
     r = run([sys.executable, str(PY_DIR / "setup.py")])
     if r.returncode != 0:
         sys.stderr.write(r.stdout + r.stderr)
         sys.exit("build: setup.py failed")
+    cfg = TARGETS[target]
+    if cfg.get("windows"):
+        # Windows derives its config from the in-tree PC/ files rather than a
+        # committed manifest: disable mimalloc, wire the extra builtins into the
+        # inittab, and confirm setup.py fetched the frozen headers.
+        if not (SRC / "PC/pyconfig.h").is_file():
+            sys.exit(f"build: source not extracted at {SRC}")
+        _disable_mimalloc()
+        _wire_builtin_inittab()
+        _check_frozen()
+        log(f"inputs ready for {target}")
+        return
     tdir = PY_DIR / "targets" / target
     if not tdir.is_dir():
         sys.exit(f"build: no committed inputs for target {target} at {tdir}")
-    cfg = TARGETS[target]
     shutil.copy2(tdir / "pyconfig.h", SRC / "pyconfig.h")
     # Undefine HAVE_ macros for headers badc's bundled set does not provide, so
     # the dependent modules take a supported path rather than failing to compile.
@@ -164,26 +274,75 @@ def ensure_inputs(target: str, log) -> None:
     log(f"inputs ready for {target}")
 
 
+# --- source list -----------------------------------------------------------
+
+def _win_sources() -> list[str]:
+    # Core TUs from PCbuild/pythoncore.vcxproj (each <ClCompile Include=".."/> is
+    # relative to PCbuild/; the leading ../ resolves to the source root). Drop
+    # entries with unexpanded MSBuild variables (external deps), the EXCLUDE set,
+    # and paths absent from the tree; append the extra builtins.
+    proj = (SRC / "PCbuild/pythoncore.vcxproj").read_text()
+    rels: list[str] = []
+    seen: set[str] = set()
+    for raw in re.findall(r'<ClCompile\s+Include="([^"]+\.c)"', proj):
+        if "$(" in raw:
+            continue
+        rel = re.sub(r'^(\.\./)+', "", raw.replace("\\", "/"))
+        if rel in _WIN_EXCLUDE or rel in seen or not (SRC / rel).is_file():
+            continue
+        seen.add(rel)
+        rels.append(rel)
+    for rel, _sym in _WIN_ADDITIONAL_TUS:
+        if rel in _WIN_EXCLUDE or rel in seen or not (SRC / rel).is_file():
+            continue
+        seen.add(rel)
+        rels.append(rel)
+    return rels
+
+
 def manifest(target: str) -> list[dict]:
     p = PY_DIR / "targets" / target / "manifest.json"
     if not p.is_file():
         sys.exit(f"build: {target} has no manifest.json -- capture it with gen_manifest.py "
-                 "from a host all-static build (only macos-aarch64 is captured so far)")
+                 "from a host all-static build")
     return json.loads(p.read_text())
+
+
+def _entries(target: str) -> list[tuple[str, list[str], list[str]]]:
+    """Per-TU ``(src, -D flags, -I flags)`` for the target."""
+    cfg = TARGETS[target]
+    if cfg.get("windows"):
+        incs = [a for d in _WIN_INCLUDES for a in ("-I", d)]
+        base = [f"-D{d}" for d in _WIN_DEFINES]
+        getpath = [f"-D{d}" for d in _WIN_GETPATH_DEFINES]
+        return [
+            (src, base + (getpath if src == "Modules/getpath.c" else []), incs)
+            for src in _win_sources()
+        ]
+    excl_srcs = [s for s, _ in cfg.get("exclude", [])]
+    common = [a for d in POSIX_INCLUDES for a in ("-I", d)]
+    out: list[tuple[str, list[str], list[str]]] = []
+    for e in manifest(target):
+        if any(s in e["src"] for s in excl_srcs):
+            continue
+        core = "Py_BUILD_CORE_BUILTIN" if e["class"] == "builtin" else "Py_BUILD_CORE"
+        defs = [f"-D{core}"] + [f"-D{d}" for d in e.get("defines", [])]
+        incs = common + [a for d in e.get("includes", []) for a in ("-I", d)]
+        out.append((e["src"], defs, incs))
+    return out
 
 
 def build(target: str, do_link: bool, log) -> Path | None:
     cfg = TARGETS[target]
+    win = bool(cfg.get("windows"))
     badc = badc_path()
     out = PY_DIR / ".cache" / f"obj-{target}"
     out.mkdir(parents=True, exist_ok=True)
-    common_inc = [a for d in POSIX_INCLUDES for a in ("-I", d)]
     dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
     opt = ["-O"] if os.environ.get("BADC_PY_O") else []
 
-    excl_srcs = [s for s, _ in cfg.get("exclude", [])]
-    entries = [e for e in manifest(target) if not any(s in e["src"] for s in excl_srcs)]
-    jobs = [(badc, target, e, common_inc, dbg, opt, str(out), str(SRC)) for e in entries]
+    entries = _entries(target)
+    jobs = [(badc, target, src, defs, incs, dbg, opt, str(out), str(SRC)) for src, defs, incs in entries]
     objs, fails = [], []
     workers = int(os.environ.get("BADC_PY_JOBS") or (os.cpu_count() or 4))
     # ex.map preserves input order, so the object (link) order is deterministic.
@@ -202,7 +361,19 @@ def build(target: str, do_link: bool, log) -> Path | None:
     if not do_link:
         return None
 
-    if cfg.get("asm_trampoline"):
+    if win:
+        # The console entry shim and the excluded-builtin stubs, compiled with
+        # the core defines (no CPython includes needed).
+        for helper in _WIN_HELPERS:
+            hobj = out / (helper[:-2] + ".o")
+            hcmd = [badc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T", *dbg,
+                    *[f"-D{d}" for d in _WIN_DEFINES], str(PY_DIR / helper), "-o", str(hobj)]
+            r = run(hcmd, timeout=120)
+            if r.returncode != 0:
+                sys.stderr.write((r.stderr or r.stdout)[-2000:])
+                sys.exit(f"build: {helper} failed to compile")
+            objs.append(str(hobj))
+    elif cfg.get("asm_trampoline"):
         tobj = out / "asm_trampoline.o"
         r = run([badc, "-c", f"--target={target}", str(PY_DIR / "asm_trampoline.c"), "-o", str(tobj)], timeout=120)
         if r.returncode != 0:
@@ -210,19 +381,23 @@ def build(target: str, do_link: bool, log) -> Path | None:
             sys.exit("build: asm_trampoline compile failed")
         objs.append(str(tobj))
 
-    py = out / ("python.exe" if "windows" in target else "python")
+    py = out / ("python.exe" if win else "python")
     log(f"link -> {py}")
-    r = run([badc, f"--target={target}", *EXPORT_FLAGS, *dbg, *objs, "-o", str(py)], timeout=900)
+    # The static all-builtin POSIX image exports the C-API for its own use; the
+    # Windows image is fully static and needs no export decoration.
+    export = [] if win else EXPORT_FLAGS
+    r = run([badc, f"--target={target}", *export, *dbg, *objs, "-o", str(py)], timeout=900)
     if r.returncode != 0:
         sys.stderr.write((r.stderr or r.stdout)[-3000:])
         sys.exit("build: link failed")
     return py
 
 
-def run_tests(py: Path, log) -> int:
+def run_tests(target: str, py: Path, log) -> int:
     # The suite spawns isolated child interpreters (-I) that ignore PYTHONHOME;
     # getpath then locates Lib relative to the executable, so run from a copy
     # co-located with the source tree's Lib (a prefix layout).
+    slice_ = _WIN_TEST_SLICE if TARGETS[target].get("windows") else POSIX_TEST_SLICE
     exe = SRC / py.name
     shutil.copy2(py, exe)
     env = dict(os.environ, PYTHONHOME=str(SRC), PYTHONPATH=str(SRC / "Lib"))
@@ -232,8 +407,8 @@ def run_tests(py: Path, log) -> int:
         print("build: interpreter failed the `print(2 + 2)` check")
         return 1
     print("build: interpreter runs `print(2 + 2)`")
-    r = run([str(exe), "-m", "test", "-q", *TEST_SLICE], cwd=SRC, env=env, timeout=1800)
-    print(f"build: test slice {' '.join(TEST_SLICE)} exit={r.returncode}")
+    r = run([str(exe), "-m", "test", "-q", *slice_], cwd=SRC, env=env, timeout=1800)
+    print(f"build: test slice {' '.join(slice_)} exit={r.returncode}")
     if r.returncode != 0:
         sys.stderr.write((r.stdout + r.stderr)[-3000:])
         return 1
@@ -256,7 +431,7 @@ def main(argv: list[str] | None = None) -> int:
     ensure_inputs(args.target, log)
     py = build(args.target, args.link or args.test, log)
     if args.test:
-        return run_tests(py, log)
+        return run_tests(args.target, py, log)
     return 0
 
 

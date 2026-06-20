@@ -984,49 +984,24 @@ jobs:
         run: python demos/tcl/smoke.py
 
   cpython:
-    name: cpython (ubuntu)
-    runs-on: ubuntu-latest
-    # ~5 min warm (the reference configure+make and the badc compile of
-    # the link set dominate); the timeout is a hang guard for a cold cache.
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: cpython
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
-      - name: cpython smoke (configure+make, badc compile+link, run test slice)
-        run: python3 demos/python/smoke.py -v
-      - name: cpython benchmark parity (badc interpreter vs reference, differential check)
-        run: python3 demos/python/bench.py --scale 0.1 --reps 1
-      - name: tar the prepared source (derived sources for the native Windows lanes)
-        # The host configure+make above generated the derived sources the
-        # release tarball omits (frozen-module headers, Modules/config.c,
-        # the pegen tables). The native Windows jobs (cpython-windows-*)
-        # consume them via win_build.py, which does not run make. Tar (not a
-        # raw directory upload) keeps the artifact small and the transfer
-        # fast.
-        run: tar -czf cpython-prepared-src.tar.gz -C demos/python/.cache Python-3.14.6
-      - name: upload the prepared source
-        uses: actions/upload-artifact@v4
-        with:
-          name: cpython-prepared-src
-          path: cpython-prepared-src.tar.gz
-          if-no-files-found: error
-          retention-days: 1
-
-  cpython-windows-x64:
-    name: cpython (windows-x64)
-    needs: cpython
-    runs-on: windows-latest
-    # win_build.py recompiles the core link set with badc and links a static
-    # python.exe, then runs the print check + test slice; 40 is a hang guard
-    # for a cold rust-cache.
+    # One no-make build for every target: build.py compiles CPython's
+    # all-builtin link set with badc (POSIX from the committed per-target
+    # manifest; Windows from PCbuild/pythoncore.vcxproj) and runs the tier-1
+    # test slice. setup.py fetches the source and the vendored frozen-module
+    # headers, so no lane runs make. badc cross-compiles, but each lane builds
+    # and runs natively on its own runner.
+    name: cpython (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: macos-aarch64, label: macos-arm64 }
+          - { os: ubuntu-latest, target: linux-x64, label: ubuntu-x64 }
+          - { os: ubuntu-24.04-arm, target: linux-aarch64, label: ubuntu-arm64 }
+          - { os: windows-latest, target: windows-x64, label: windows-x64 }
+          - { os: windows-11-arm, target: windows-arm64, label: windows-arm64 }
+    runs-on: ${{ matrix.os }}
+    # Hang guard for a cold rust-cache; a warm build + slice runs well under it.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -1036,50 +1011,8 @@ jobs:
           python-version: '3.x'
       - uses: Swatinem/rust-cache@v2
         with:
-          key: cpython-windows-x64
-      - name: download the prepared source
-        uses: actions/download-artifact@v4
-        with:
-          name: cpython-prepared-src
-      - name: extract the prepared source into the build cache
-        # The cpython job tarred demos/python/.cache/Python-3.14.6; extract it
-        # back so win_build.py's SRC (.cache/Python-3.14.6) exists. bsdtar
-        # ships with the Windows runner image and handles the gzip stream.
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path demos/python/.cache | Out-Null
-          tar -xzf cpython-prepared-src.tar.gz -C demos/python/.cache
+          key: cpython-${{ matrix.target }}
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
-      - name: cpython windows-x64 native build + test (badc PE compile+link, run)
-        run: python demos/python/win_build.py --link --test
-
-  cpython-windows-arm64:
-    name: cpython (windows-arm64)
-    needs: cpython
-    runs-on: windows-11-arm
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: cpython-windows-arm64
-      - name: download the prepared source
-        uses: actions/download-artifact@v4
-        with:
-          name: cpython-prepared-src
-      - name: extract the prepared source into the build cache
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path demos/python/.cache | Out-Null
-          tar -xzf cpython-prepared-src.tar.gz -C demos/python/.cache
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
-      - name: cpython windows-arm64 native build + test (badc PE compile+link, run)
-        env:
-          BADC_PY_TARGET: windows-arm64
-        run: python demos/python/win_build.py --link --test
+      - name: cpython no-make build + tier-1 test slice
+        run: python demos/python/build.py --target=${{ matrix.target }} --test

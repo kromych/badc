@@ -6,43 +6,41 @@ evaluator, the object and memory model, Unicode, and the parser.
 
 ## Layout
 
-- `setup.py` -- fetches the pinned `Python-3.14.6.tgz` from the badc
-  vendor-deps mirror and extracts it under `.cache/Python-3.14.6`.
-- `smoke.py` -- runs `./configure --without-mimalloc` and `make` with the
-  host compiler to generate the derived sources (the pegen tables, the
-  frozen-module headers, `Modules/config.c`) and a reference `python` used
-  during the build, then recompiles each core translation unit through
-  badc, links the interpreter, and runs a baselined test slice.
-- `bench.py` + `benchmarks/` -- runs the dependency-free pure-Python
-  benchmarks on the badc-built interpreter and a reference interpreter,
-  asserts per-benchmark output parity (a differential correctness check
-  over a workload broader than the test slice), and reports wall-clock
-  timings relative to the reference.
-- `win_build.py` -- cross-compiles a static Windows `python.exe`
-  (`BADC_PY_TARGET=windows-x64` or `windows-arm64`) from any host; see the
-  module docstring.
+- `setup.py` -- fetches the pinned `Python-3.14.6.tgz` and the vendored
+  frozen-module headers from the badc vendor-deps mirror and extracts them
+  under `.cache/Python-3.14.6`. No make.
+- `build.py` -- the build command for every target (macOS, Linux x64/arm64,
+  Windows x64/arm64): compiles CPython's all-builtin link set with badc and
+  runs the tier-1 test slice, with no make. POSIX targets use a committed
+  per-target `manifest.json` + `config.c` + `pyconfig.h`; Windows targets parse
+  the link set from `PCbuild/pythoncore.vcxproj` and wire the `PC/config.c`
+  inittab.
+- `smoke.py` -- the reference build: `./configure --without-mimalloc` + `make`
+  with the host compiler, producing a reference `python` for `bench.py`.
+- `bench.py` + `benchmarks/` -- runs the dependency-free pure-Python benchmarks
+  on the badc-built interpreter and the `smoke.py` reference, asserts
+  per-benchmark output parity (a differential correctness check over a workload
+  broader than the test slice), and reports timings relative to the reference.
 
-CPython's object allocator embeds mimalloc, whose per-thread heap tables
-use a thread-local pointer initialized with the address of a global -- a
-relocation against the TLS template badc does not yet emit. The build is
-configured `--without-mimalloc` so `Objects/obmalloc.c` uses the pymalloc
-allocator.
+CPython's object allocator embeds mimalloc, whose per-thread heap tables use a
+thread-local pointer initialized with the address of a global -- a relocation
+against the TLS template badc does not yet emit. The build disables mimalloc so
+`Objects/obmalloc.c` uses the pymalloc allocator.
 
-The `smoke.py` build runs `configure` and `make`, so it is POSIX-only;
-it is exercised on macOS and Linux. `win_build.py` constructs the
-translation-unit list directly and cross-compiles from any host. The
-POSIX smoke, the benchmark parity check, and the Windows-x64 cross-compile
-run in CI.
+CI builds and tests every target with `build.py` -- a matrix over macOS, Linux
+x64/arm64, and Windows x64/arm64; each lane builds and runs natively. `smoke.py`
+and `bench.py` cover the differential benchmark, which still needs a make-built
+reference.
 
 ## Running
 
 ```
-python3 demos/python/setup.py        # once, to fetch the source
-python3 demos/python/smoke.py -v     # build + run the test slice
-python3 demos/python/smoke.py --compile-only -v   # stop after link
-python3 demos/python/bench.py        # parity + timings vs the reference
+python3 demos/python/setup.py                                # once, to fetch the source
+python3 demos/python/build.py --target=macos-aarch64 --test  # build + run the test slice
+python3 demos/python/build.py --target=windows-x64 --link    # build + link only
+python3 demos/python/bench.py                                # parity + timings vs the reference
 ```
 
 `cargo build --release --features full` must have produced
-`target/release/badc` first. `bench.py` reuses the interpreters built by
-`smoke.py` under `.cache/`.
+`target/release/badc` first. `bench.py` reuses the reference interpreter built
+by `smoke.py` under `.cache/`.

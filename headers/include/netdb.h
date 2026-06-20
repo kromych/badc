@@ -52,11 +52,16 @@ struct servent {
     char *s_proto;
 };
 
+// `struct protoent` is provided by <winsock2.h> on Windows; defining it here as
+// well would redefine it wherever both headers are included (ws2tcpip.h pulls in
+// netdb.h). servent and hostent are not declared by winsock2.h, so they stay.
+#ifndef _WIN32
 struct protoent {
     char *p_name;
     char **p_aliases;
     int p_proto;
 };
+#endif
 
 struct hostent {
     char *h_name;

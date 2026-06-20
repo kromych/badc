@@ -1213,6 +1213,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("array_2d_struct_init.c", 0),
     ("cast_abstract_fn_ptr.c", 0),
     ("decl_trailing_attribute.c", 0),
+    ("winsock_netdb_protoent.c", 0),
     ("slot_coalesce_disjoint_temps.c", 0),
     ("alloca_alignment.c", 0),
     ("slot_coalesce_declared.c", 0),

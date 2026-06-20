@@ -1442,12 +1442,23 @@ impl Compiler {
                                 items.div_ceil(slots) as i64
                             };
                             self.next()?;
-                            self.align_data_to_8();
-                            let off = self.data.len() as i64;
+                            // C99 6.9.2: a prior tentative definition (`T x[N];`)
+                            // already reserved storage. Reuse it so references
+                            // emitted before this definition -- which baked in
+                            // the tentative's offset -- observe the initialized
+                            // object, not the tentative's separate zero copy.
+                            // Allocate fresh only without a prior tentative.
+                            let off = if was_tentative_glo {
+                                self.symbols[id_idx].val
+                            } else {
+                                self.align_data_to_8();
+                                let fresh = self.data.len() as i64;
+                                for _ in 0..(count * elem_size as i64) {
+                                    self.data.push(0);
+                                }
+                                fresh
+                            };
                             self.symbols[id_idx].val = off;
-                            for _ in 0..(count * elem_size as i64) {
-                                self.data.push(0);
-                            }
                             let mut i: i64 = 0;
                             while self.lex.tk != '}' {
                                 // C99 6.7.8p7 array designator on a
@@ -1528,18 +1539,24 @@ impl Compiler {
                         }
                         let total_bytes = (self.size_of_type(ty) as i64) * final_size;
                         let aligned = ((total_bytes + 7) / 8) * 8;
-                        // On a tentative-merge path the prior
-                        // declaration would have had no `[]` either
-                        // (deferred size cannot be a re-decl), so
-                        // always allocate fresh storage here.
-                        if self.size_of_type(ty) > 1 {
-                            self.align_data_to_8();
-                        }
-                        let off = self.data.len() as i64;
+                        // C99 6.9.2: a prior tentative definition (`T x[N];`)
+                        // already reserved storage. Reuse it so references
+                        // emitted before this definition observe the
+                        // initialized object, not the tentative's separate zero
+                        // copy. Allocate fresh only without a prior tentative.
+                        let off = if was_tentative_glo {
+                            self.symbols[id_idx].val
+                        } else {
+                            if self.size_of_type(ty) > 1 {
+                                self.align_data_to_8();
+                            }
+                            let fresh = self.data.len() as i64;
+                            for _ in 0..aligned {
+                                self.data.push(0);
+                            }
+                            fresh
+                        };
                         self.symbols[id_idx].val = off;
-                        for _ in 0..aligned {
-                            self.data.push(0);
-                        }
                         self.write_array_init_into_data(off, ty, &elements);
                         self.symbols[id_idx].has_initializer = true;
                         self.symbols[id_idx].defined_here = true;

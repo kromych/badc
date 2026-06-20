@@ -585,6 +585,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("fn_ptr_ternary_call_return.c", 0),
     ("float_condition_negative_zero.c", 0),
     ("tentative_array_definition.c", 0),
+    ("tentative_array_use_before_init.c", 0),
     ("directive_in_macro_argument.c", 0),
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),

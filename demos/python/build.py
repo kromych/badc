@@ -161,8 +161,11 @@ def _compile_one(job):
     (src, obj-path-or-None, error-or-None)."""
     badc, target, src, defs, incs, dbg, opt, out_dir, src_root = job
     obj = os.path.join(out_dir, src.replace("/", "_")[:-2] + ".o")
+    # sys.version reports the build compiler; badc presents the GNU C surface
+    # (__GNUC__), so name the actual compiler rather than let getcompiler.c
+    # report GCC. Every target is built by badc, so this applies to all of them.
     cmd = [badc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T",
-           *dbg, *opt, *defs, *incs, src, "-o", obj]
+           '-DCOMPILER="[badc]"', *dbg, *opt, *defs, *incs, src, "-o", obj]
     r = subprocess.run(cmd, cwd=src_root, capture_output=True, text=True, errors="replace", timeout=240)
     if r.returncode != 0:
         msg = ((r.stderr or r.stdout).strip().splitlines() or [f"rc{r.returncode}"])[-1]
@@ -180,17 +183,15 @@ def badc_path() -> str:
 
 # --- input preparation -----------------------------------------------------
 
-def _apply_win_overrides(target: str) -> None:
-    # Append the committed per-target overrides to the distribution's
-    # PC/pyconfig.h (idempotent). PC/pyconfig.h ships in the source tree with the
-    # Windows configuration; the overrides change what badc needs different (no
-    # mimalloc -- its per-thread heap needs a TLS-template relocation badc does
-    # not emit; the reported compiler).
+def _disable_mimalloc() -> None:
+    # The distribution's PC/pyconfig.h enables WITH_MIMALLOC (the POSIX targets'
+    # configure-generated pyconfig.h does not); mimalloc's per-thread heap needs
+    # a TLS-template relocation badc does not emit, so pymalloc serves instead.
     cfg = SRC / "PC/pyconfig.h"
     text = cfg.read_text()
-    if "badc Windows target overrides" in text:
-        return
-    cfg.write_text(text + "\n" + (PY_DIR / "targets" / target / "pyconfig.h").read_text())
+    needle = "#define WITH_MIMALLOC 1"
+    if needle in text:
+        cfg.write_text(text.replace(needle, "/* WITH_MIMALLOC disabled (badc) */"))
 
 
 def _wire_builtin_inittab() -> None:
@@ -241,7 +242,7 @@ def ensure_inputs(target: str, log) -> None:
         # inittab, and confirm setup.py fetched the frozen headers.
         if not (SRC / "PC/pyconfig.h").is_file():
             sys.exit(f"build: source not extracted at {SRC}")
-        _apply_win_overrides(target)
+        _disable_mimalloc()
         _wire_builtin_inittab()
         _check_frozen()
         log(f"inputs ready for {target}")

@@ -8,6 +8,13 @@ pub(crate) struct Symbol {
     pub class: i64,
     pub type_: i64,
     pub val: i64,
+    /// For a file-scope object that reserved storage in the data
+    /// segment, the byte count reserved at `val`. C99 6.9.2: a later
+    /// defining declaration reuses a tentative definition's storage,
+    /// but only when it fits -- a deferred-size tentative (`T x[];`)
+    /// reserves one element, so a larger initializer must allocate
+    /// fresh storage rather than overrun the following globals.
+    pub reserved_data_bytes: i64,
     pub h_class: i64,
     pub h_type: i64,
     pub h_val: i64,

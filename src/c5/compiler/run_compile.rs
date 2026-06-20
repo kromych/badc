@@ -1417,6 +1417,7 @@ impl Compiler {
                             }
                             let off = self.data.len() as i64;
                             self.symbols[id_idx].val = off;
+                            self.symbols[id_idx].reserved_data_bytes = aligned;
                             for _ in 0..aligned {
                                 self.data.push(0);
                             }
@@ -1460,18 +1461,25 @@ impl Compiler {
                                 items.div_ceil(slots) as i64
                             };
                             self.next()?;
-                            // C99 6.9.2: a prior tentative definition (`T x[N];`)
-                            // already reserved storage. Reuse it so references
-                            // emitted before this definition -- which baked in
-                            // the tentative's offset -- observe the initialized
+                            // C99 6.9.2: a prior tentative definition already
+                            // reserved storage; reuse it so references emitted
+                            // before this definition -- which baked in the
+                            // tentative's offset -- observe the initialized
                             // object, not the tentative's separate zero copy.
-                            // Allocate fresh only without a prior tentative.
-                            let off = if was_tentative_glo {
+                            // Reuse only when the initializer fits the reserved
+                            // bytes: a deferred-size tentative (`T x[];`)
+                            // reserves one element, so a larger initializer must
+                            // allocate fresh rather than overrun later globals.
+                            let needed = count * elem_size as i64;
+                            let off = if was_tentative_glo
+                                && needed <= self.symbols[id_idx].reserved_data_bytes
+                            {
                                 self.symbols[id_idx].val
                             } else {
                                 self.align_data_to_8();
                                 let fresh = self.data.len() as i64;
-                                for _ in 0..(count * elem_size as i64) {
+                                self.symbols[id_idx].reserved_data_bytes = needed;
+                                for _ in 0..needed {
                                     self.data.push(0);
                                 }
                                 fresh
@@ -1557,18 +1565,24 @@ impl Compiler {
                         }
                         let total_bytes = (self.size_of_type(ty) as i64) * final_size;
                         let aligned = ((total_bytes + 7) / 8) * 8;
-                        // C99 6.9.2: a prior tentative definition (`T x[N];`)
-                        // already reserved storage. Reuse it so references
-                        // emitted before this definition observe the
-                        // initialized object, not the tentative's separate zero
-                        // copy. Allocate fresh only without a prior tentative.
-                        let off = if was_tentative_glo {
+                        // C99 6.9.2: a prior tentative definition already
+                        // reserved storage; reuse it so references emitted
+                        // before this definition observe the initialized object,
+                        // not the tentative's separate zero copy. Reuse only
+                        // when the initializer fits the reserved bytes: a
+                        // deferred-size tentative (`T x[];`) reserves one
+                        // element, so a larger initializer must allocate fresh
+                        // rather than overrun later globals.
+                        let off = if was_tentative_glo
+                            && aligned <= self.symbols[id_idx].reserved_data_bytes
+                        {
                             self.symbols[id_idx].val
                         } else {
                             if self.size_of_type(ty) > 1 {
                                 self.align_data_to_8();
                             }
                             let fresh = self.data.len() as i64;
+                            self.symbols[id_idx].reserved_data_bytes = aligned;
                             for _ in 0..aligned {
                                 self.data.push(0);
                             }
@@ -1643,6 +1657,7 @@ impl Compiler {
                             }
                             let off = self.data.len() as i64;
                             self.symbols[id_idx].val = off;
+                            self.symbols[id_idx].reserved_data_bytes = bytes;
                             for _ in 0..bytes {
                                 self.data.push(0);
                             }

@@ -124,6 +124,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("sys/uio.h", include_str!("../../headers/include/sys/uio.h")),
     ("sys/un.h", include_str!("../../headers/include/sys/un.h")),
+    ("net/if.h", include_str!("../../headers/include/net/if.h")),
     (
         "sys/attr.h",
         include_str!("../../headers/include/sys/attr.h"),

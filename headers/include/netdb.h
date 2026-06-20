@@ -52,6 +52,12 @@ struct servent {
     char *s_proto;
 };
 
+struct protoent {
+    char *p_name;
+    char **p_aliases;
+    int p_proto;
+};
+
 struct hostent {
     char *h_name;
     char **h_aliases;
@@ -65,14 +71,28 @@ struct hostent {
 #define AI_PASSIVE 0x0001
 #define NI_MAXHOST 1025
 #define NI_MAXSERV 32
+#define AI_CANONNAME 0x0002
+#define AI_NUMERICHOST 0x0004
 #if defined(__APPLE__) || defined(_WIN32)
 #define AI_ADDRCONFIG  0x0400
 #define NI_NUMERICHOST 0x0002
 #define NI_NUMERICSERV 0x0008
+#define AI_NUMERICSERV 0x1000
+#define AI_ALL 0x0100
+#define AI_V4MAPPED 0x0800
+#define NI_NOFQDN 0x01
+#define NI_NAMEREQD 0x04
+#define NI_DGRAM 0x10
 #elif defined(__linux__)
 #define AI_ADDRCONFIG  0x0020
 #define NI_NUMERICHOST 0x0001
 #define NI_NUMERICSERV 0x0002
+#define AI_NUMERICSERV 0x0400
+#define AI_ALL 0x0010
+#define AI_V4MAPPED 0x0008
+#define NI_NOFQDN 0x04
+#define NI_NAMEREQD 0x08
+#define NI_DGRAM 0x10
 #endif
 // EAI_SYSTEM: positive on macOS, negative on Linux; Windows does not define it.
 #ifdef __APPLE__
@@ -87,6 +107,9 @@ struct hostent {
 #pragma binding(libc::getnameinfo,  "_getnameinfo")
 #pragma binding(libc::gai_strerror, "_gai_strerror")
 #pragma binding(libc::getservbyname,"_getservbyname")
+#pragma binding(libc::getservbyport,"_getservbyport")
+#pragma binding(libc::getprotobyname,"_getprotobyname")
+#pragma binding(libc::getprotobynumber,"_getprotobynumber")
 #pragma binding(libc::gethostbyname,"_gethostbyname")
 #pragma binding(libc::hstrerror,   "_hstrerror")
 #pragma binding(libc::gethostbyaddr,"_gethostbyaddr")
@@ -98,6 +121,9 @@ struct hostent {
 #pragma binding(libc::getnameinfo,  "getnameinfo")
 #pragma binding(libc::gai_strerror, "gai_strerror")
 #pragma binding(libc::getservbyname,"getservbyname")
+#pragma binding(libc::getservbyport,"getservbyport")
+#pragma binding(libc::getprotobyname,"getprotobyname")
+#pragma binding(libc::getprotobynumber,"getprotobynumber")
 #pragma binding(libc::gethostbyname,"gethostbyname")
 #pragma binding(libc::hstrerror,   "hstrerror")
 #pragma binding(libc::gethostbyaddr,"gethostbyaddr")
@@ -114,6 +140,9 @@ struct hostent {
 #pragma binding(ws2_32::freeaddrinfo, "freeaddrinfo")
 #pragma binding(ws2_32::getnameinfo,  "getnameinfo")
 #pragma binding(ws2_32::getservbyname,"getservbyname")
+#pragma binding(ws2_32::getservbyport,"getservbyport")
+#pragma binding(ws2_32::getprotobyname,"getprotobyname")
+#pragma binding(ws2_32::getprotobynumber,"getprotobynumber")
 #pragma binding(ws2_32::gethostbyname,"gethostbyname")
 #pragma binding(ws2_32::gethostbyaddr,"gethostbyaddr")
 #endif
@@ -138,6 +167,9 @@ int *__h_errno_location(void);
 #define h_errno (*__h_errno_location())
 #endif
 struct servent *getservbyname(const char *name, const char *proto);
+struct servent *getservbyport(int port, const char *proto);
+struct protoent *getprotobyname(const char *name);
+struct protoent *getprotobynumber(int proto);
 struct hostent *gethostbyname(const char *name);
 struct hostent *gethostbyaddr(const void *addr, unsigned int len, int type);
 #ifdef __linux__

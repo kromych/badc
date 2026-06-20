@@ -117,6 +117,7 @@ struct sockaddr_storage {
 #pragma binding(libc::recvfrom,   "_recvfrom")
 #pragma binding(libc::sendto,     "_sendto")
 #pragma binding(libc::shutdown,   "_shutdown")
+#pragma binding(libc::socketpair, "_socketpair")
 #pragma binding(libc::sendfile,   "_sendfile")
 
 // Optional header / trailer iovecs for Darwin's sendfile(). `struct
@@ -162,6 +163,7 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #pragma binding(libc::recvfrom,   "recvfrom")
 #pragma binding(libc::sendto,     "sendto")
 #pragma binding(libc::shutdown,   "shutdown")
+#pragma binding(libc::socketpair, "socketpair")
 
 #define SOL_SOCKET    1
 #define SO_REUSEADDR  2
@@ -231,6 +233,7 @@ int getsockopt(int fd, int level, int optname, char *optval, int *optlen);
 int recv(int fd, char *buf, int n, int flags);
 int send(int fd, char *buf, int n, int flags);
 int shutdown(int fd, int how);
+int socketpair(int domain, int type, int protocol, int *sv);
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
 long recvfrom(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t *addrlen);

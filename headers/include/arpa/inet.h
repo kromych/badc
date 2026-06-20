@@ -9,6 +9,7 @@
 #pragma binding(libc::inet_addr, "_inet_addr")
 #pragma binding(libc::inet_ntop, "_inet_ntop")
 #pragma binding(libc::inet_pton, "_inet_pton")
+#pragma binding(libc::inet_aton, "_inet_aton")
 #endif
 
 #ifdef __linux__
@@ -16,6 +17,7 @@
 #pragma binding(libc::inet_addr, "inet_addr")
 #pragma binding(libc::inet_ntop, "inet_ntop")
 #pragma binding(libc::inet_pton, "inet_pton")
+#pragma binding(libc::inet_aton, "inet_aton")
 #endif
 
 #ifdef _WIN32
@@ -29,3 +31,4 @@ char *inet_ntoa(struct in_addr in);
 unsigned int inet_addr(const char *cp);
 const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);
 int inet_pton(int af, const char *src, void *dst);
+int inet_aton(const char *cp, struct in_addr *addr);

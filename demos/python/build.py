@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -179,14 +180,17 @@ def badc_path() -> str:
 
 # --- input preparation -----------------------------------------------------
 
-def _disable_mimalloc() -> None:
-    # PC/pyconfig.h hardcodes WITH_MIMALLOC; its per-thread heap needs a
-    # TLS-template relocation badc does not emit, and pymalloc serves instead.
+def _apply_win_overrides(target: str) -> None:
+    # Append the committed per-target overrides to the distribution's
+    # PC/pyconfig.h (idempotent). PC/pyconfig.h ships in the source tree with the
+    # Windows configuration; the overrides change what badc needs different (no
+    # mimalloc -- its per-thread heap needs a TLS-template relocation badc does
+    # not emit; the reported compiler).
     cfg = SRC / "PC/pyconfig.h"
     text = cfg.read_text()
-    needle = "#define WITH_MIMALLOC 1"
-    if needle in text:
-        cfg.write_text(text.replace(needle, "/* WITH_MIMALLOC disabled (badc) */"))
+    if "badc Windows target overrides" in text:
+        return
+    cfg.write_text(text + "\n" + (PY_DIR / "targets" / target / "pyconfig.h").read_text())
 
 
 def _wire_builtin_inittab() -> None:
@@ -237,7 +241,7 @@ def ensure_inputs(target: str, log) -> None:
         # inittab, and confirm setup.py fetched the frozen headers.
         if not (SRC / "PC/pyconfig.h").is_file():
             sys.exit(f"build: source not extracted at {SRC}")
-        _disable_mimalloc()
+        _apply_win_overrides(target)
         _wire_builtin_inittab()
         _check_frozen()
         log(f"inputs ready for {target}")
@@ -429,9 +433,23 @@ def run_tests(target: str, py: Path, log) -> int:
     return 0
 
 
+def _host_target() -> str:
+    # Map the running host to its badc target so the default needs no flag.
+    machine = platform.machine().lower()
+    arm = machine in ("arm64", "aarch64")
+    system = platform.system()
+    if system == "Darwin":
+        return "macos-aarch64"
+    if system == "Linux":
+        return "linux-aarch64" if arm else "linux-x64"
+    if system == "Windows":
+        return "windows-arm64" if arm else "windows-x64"
+    sys.exit(f"build: unsupported host {system} / {machine}")
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--target", default=os.environ.get("BADC_PY_TARGET", "macos-aarch64"))
+    p.add_argument("--target", default=os.environ.get("BADC_PY_TARGET") or _host_target())
     p.add_argument("--link", action="store_true", help="link the interpreter")
     p.add_argument("--test", action="store_true", help="link + run the tier-1 slice")
     p.add_argument("-v", "--verbose", action="store_true")

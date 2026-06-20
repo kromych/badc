@@ -219,6 +219,41 @@ def _wire_builtin_inittab() -> None:
     cfg.write_text(text)
 
 
+def _fix_winsock_fd_gates() -> None:
+    # On Windows a socket fd is a SOCKET handle whose value is unrelated to
+    # FD_SETSIZE, so select() accepts any fd and `_PyIsSelectable_fd` is (1).
+    # CPython keys both on `_MSC_VER`, but this is a platform property, not a
+    # compiler one; badc presents the GNU C surface (no `_MSC_VER`) and would
+    # otherwise take the POSIX path, where `select()` rejects fds >= FD_SETSIZE
+    # ("filedescriptor out of range"). Widen the two gates to MS_WINDOWS, which
+    # every Windows target defines. Idempotent (a re-extract reverts it).
+    fileutils = SRC / "Include/internal/pycore_fileutils.h"
+    text = fileutils.read_text()
+    needle = "#ifdef _MSC_VER\n    /* On Windows, any socket fd can be select()-ed"
+    if needle in text:
+        text = text.replace(
+            "#ifdef _MSC_VER\n    /* On Windows, any socket fd",
+            "#if defined(_MSC_VER) || defined(MS_WINDOWS)\n    /* On Windows, any socket fd",
+            1,
+        )
+        fileutils.write_text(text)
+    elif "#if defined(_MSC_VER) || defined(MS_WINDOWS)" not in text:
+        sys.exit("build: _PyIsSelectable_fd gate not found in pycore_fileutils.h")
+
+    selectmod = SRC / "Modules/selectmodule.c"
+    text = selectmod.read_text()
+    needle = "#if defined(_MSC_VER)\n        max = 0;"
+    if needle in text:
+        text = text.replace(
+            needle,
+            "#if defined(_MSC_VER) || defined(MS_WINDOWS)\n        max = 0;",
+            1,
+        )
+        selectmod.write_text(text)
+    elif "#if defined(_MSC_VER) || defined(MS_WINDOWS)\n        max = 0;" not in text:
+        sys.exit("build: select() fd-range gate not found in selectmodule.c")
+
+
 def _check_frozen() -> None:
     missing = [
         h for h in re.findall(r'frozen_modules/[\w.]+\.h', (SRC / "Python/frozen.c").read_text())
@@ -244,6 +279,7 @@ def ensure_inputs(target: str, log) -> None:
             sys.exit(f"build: source not extracted at {SRC}")
         _disable_mimalloc()
         _wire_builtin_inittab()
+        _fix_winsock_fd_gates()
         _check_frozen()
         log(f"inputs ready for {target}")
         return
@@ -426,6 +462,35 @@ def run_tests(target: str, py: Path, log) -> int:
         print("build: interpreter failed the `print(2 + 2)` check")
         return 1
     print("build: interpreter runs `print(2 + 2)`")
+    if cfg.get("windows"):
+        # A Windows socket fd is a SOCKET handle whose value is unrelated to
+        # FD_SETSIZE, so select() must accept it regardless of magnitude. Open
+        # sockets until one's fd reaches FD_SETSIZE (512) and select on it; the
+        # POSIX fd-range gate would raise "filedescriptor out of range in
+        # select()". (POSIX targets are skipped: there a high fd genuinely
+        # exceeds select()'s fd_set and is not selectable.)
+        smoke = (
+            "import socket, select\n"
+            "socks = []\n"
+            "hi = None\n"
+            "try:\n"
+            "    for _ in range(2000):\n"
+            "        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n"
+            "        socks.append(s)\n"
+            "        if s.fileno() >= 512:\n"
+            "            hi = s\n"
+            "            break\n"
+            "    select.select([hi] if hi else [], [], [], 0)\n"
+            "    print('select-high-fd-ok' if hi else 'select-high-fd-inconclusive')\n"
+            "finally:\n"
+            "    [s.close() for s in socks]\n"
+        )
+        r = run([str(exe), "-c", smoke], env=env, timeout=120)
+        if r.returncode != 0 or "select-high-fd" not in r.stdout:
+            sys.stderr.write(r.stdout + r.stderr)
+            print("build: select() rejected a high socket fd")
+            return 1
+        print(f"build: {r.stdout.strip()}")
     r = run([str(exe), "-m", "test", "-q", *slice_], cwd=str(cwd), env=env, timeout=1800)
     print(f"build: test slice {' '.join(slice_)} exit={r.returncode}")
     if r.returncode != 0:

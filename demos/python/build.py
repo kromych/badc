@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -119,6 +120,9 @@ _WIN_HELPERS = ["win_entry.c", "win_excluded_stubs.c"]
 TARGETS = {
     "macos-aarch64": {
         "asm_trampoline": False,
+        # The hosted macOS runner does not execute binaries from the checked-out
+        # workspace (the demos run from a temp directory); run_tests does too.
+        "run_from_tempdir": True,
         # The captured pyconfig.h claims headers badc's bundled set does not
         # fully provide; undefine them so the module takes a supported path
         # (kqueue -> select/poll; no AF_SYSTEM kernel-control socket).
@@ -395,13 +399,21 @@ def build(target: str, do_link: bool, log) -> Path | None:
 
 def run_tests(target: str, py: Path, log) -> int:
     # The suite spawns isolated child interpreters (-I) that ignore PYTHONHOME;
-    # getpath then locates Lib relative to the executable, so run from a copy
-    # co-located with the source tree's Lib (a prefix layout).
-    slice_ = _WIN_TEST_SLICE if TARGETS[target].get("windows") else POSIX_TEST_SLICE
-    exe = SRC / py.name
+    # getpath locates Lib relative to the executable, so the interpreter runs
+    # from a copy beside Lib. The source tree serves for that, except where the
+    # runner does not execute binaries from the checked-out workspace: there the
+    # copy runs from a temp directory with Lib symlinked beside it.
+    cfg = TARGETS[target]
+    slice_ = _WIN_TEST_SLICE if cfg.get("windows") else POSIX_TEST_SLICE
+    if cfg.get("run_from_tempdir"):
+        rundir = Path(tempfile.mkdtemp(prefix="badc-cpython-"))
+        exe = rundir / py.name
+        (rundir / "Lib").symlink_to(SRC / "Lib")
+        cwd = rundir
+    else:
+        exe = SRC / py.name
+        cwd = SRC
     shutil.copy2(py, exe)
-    # Ensure the executable bit on the copy regardless of the host's copy
-    # behavior, so the interpreter and its -I children can run.
     os.chmod(exe, 0o755)
     env = dict(os.environ, PYTHONHOME=str(SRC), PYTHONPATH=str(SRC / "Lib"))
     r = run([str(exe), "-c", "print(2 + 2)"], env=env, timeout=120)
@@ -410,7 +422,7 @@ def run_tests(target: str, py: Path, log) -> int:
         print("build: interpreter failed the `print(2 + 2)` check")
         return 1
     print("build: interpreter runs `print(2 + 2)`")
-    r = run([str(exe), "-m", "test", "-q", *slice_], cwd=SRC, env=env, timeout=1800)
+    r = run([str(exe), "-m", "test", "-q", *slice_], cwd=str(cwd), env=env, timeout=1800)
     print(f"build: test slice {' '.join(slice_)} exit={r.returncode}")
     if r.returncode != 0:
         sys.stderr.write((r.stdout + r.stderr)[-3000:])

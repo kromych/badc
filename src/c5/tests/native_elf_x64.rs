@@ -607,6 +607,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // (tls_total - offset)) sequence on x86_64. Requires PT_TLS
     // + .tbss to exist in the ELF.
     ("thread_local_basic.c", 0),
+    ("msvc_decl_decorators.c", 0),
     ("thread_local_gnu.c", 0),
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),

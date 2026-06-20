@@ -558,6 +558,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// skip to mark the declared locals so their unused-variable
     /// diagnostics are suppressed.
     pub attr_maybe_unused: bool,
+    /// A consumed `__declspec(thread)`. Read by the declaration parse to mark
+    /// the declared object thread-local (the storage class `_Thread_local`
+    /// reaches the same flag through the keyword path).
+    pub attr_thread_local: bool,
+    /// A consumed `__declspec(dllexport)`. Read after the declarator to add the
+    /// declared name to the export list -- the equivalent of `#pragma export`.
+    pub attr_dllexport: bool,
 }
 
 impl Default for Pending {
@@ -595,6 +602,8 @@ impl Default for Pending {
             last_imm_was_zero: false,
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
+            attr_thread_local: false,
+            attr_dllexport: false,
         }
     }
 }

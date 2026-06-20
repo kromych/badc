@@ -80,9 +80,12 @@ impl Compiler {
             let mut extern_seen = false;
             let mut atomic_base: Option<i64> = None;
             let mut m = decl_base::IntModifiers::default();
-            // `_Noreturn` scopes to this declaration; clear the carrier
-            // so it cannot leak onto the next one.
+            // `_Noreturn`, `__declspec(thread)`, and `__declspec(dllexport)`
+            // scope to this declaration; clear the carriers so they cannot leak
+            // onto the next one.
             self.pending_noreturn = false;
+            self.pending.attr_thread_local = false;
+            self.pending.attr_dllexport = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
@@ -108,6 +111,11 @@ impl Compiler {
                     || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
                 {
                     self.skip_attribute_specifiers()?;
+                    // `__declspec(thread)` in the specifier run -> thread-local.
+                    if self.pending.attr_thread_local {
+                        thread_local = true;
+                        self.pending.attr_thread_local = false;
+                    }
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline {
                         self.pending_is_inline = true;
@@ -260,6 +268,16 @@ impl Compiler {
                 self.pending.typedef_fn_proto = base_typedef_fn_proto;
                 self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
+                // `__declspec(dllexport)` on the declarator exports the name,
+                // the equivalent of `#pragma export(name)`. resolve_exports
+                // validates the name resolves to a defined function.
+                if self.pending.attr_dllexport {
+                    self.pending.attr_dllexport = false;
+                    let name = self.symbols[id_idx].name.clone();
+                    if !self.pending_exports.contains(&name) {
+                        self.pending_exports.push(name);
+                    }
+                }
                 // A declarator may carry a trailing attribute before the
                 // terminator (`name(args) __attribute__((...));`, an
                 // initializer, a comma, or a function body's `{`).

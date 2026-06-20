@@ -704,6 +704,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // `adrp+add` that materialises the descriptor's address,
     // then `ldr x16, [x0]; blr x16` to call into the getter.
     ("thread_local_basic.c", 0),
+    ("msvc_decl_decorators.c", 0),
     ("thread_local_gnu.c", 0),
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),

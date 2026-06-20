@@ -649,6 +649,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // bytes and zero-fills the rest; the test reads/writes the
     // resulting per-thread region.
     ("thread_local_basic.c", 0),
+    ("msvc_decl_decorators.c", 0),
     ("thread_local_gnu.c", 0),
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),

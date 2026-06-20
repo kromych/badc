@@ -886,6 +886,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     // tls_array out of `[x18 + 0x58]` (TEB->ThreadLocalStoragePointer)
     // instead of gs:[0x58].
     ("thread_local_basic.c", 0),
+    ("msvc_decl_decorators.c", 0),
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
     // Windows AArch64 routes setjmp / longjmp through the

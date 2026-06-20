@@ -1,6 +1,7 @@
 // MSVC `__declspec(...)` is a declaration decorator the dialect treats
-// like a GCC `__attribute__`: parsed and discarded (the hints -- dll
-// linkage, alignment, calling convention, inlining -- are advisory).
+// like a GCC `__attribute__`. `__declspec(dllexport)` exports the symbol,
+// the equivalent of `#pragma export`; the remaining hints here --
+// `noinline`, `align`, calling convention -- are advisory and discarded.
 // Real-world Windows C gates these on `_WIN32` (not just `_MSC_VER`),
 // so a GNU-C-on-Windows toolchain must accept them. Spelled here
 // unconditionally so the parser path is exercised on every target;

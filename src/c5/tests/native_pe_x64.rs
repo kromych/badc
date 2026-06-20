@@ -903,6 +903,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // need Win32 CreateThread bindings for that), but the basic
     // round-trip on the main thread is.
     ("thread_local_basic.c", 0),
+    ("msvc_decl_decorators.c", 0),
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
     // Windows x86_64 alignment of `_setjmp`: the header's macro

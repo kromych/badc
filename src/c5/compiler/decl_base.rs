@@ -284,13 +284,31 @@ impl Compiler {
     /// corresponding attribute name (`packed` / `__packed__`,
     /// `unused` / `maybe_unused` / `__unused__`). Other names are
     /// ignored.
-    fn note_attribute_name(&self, packed: &mut bool, maybe_unused: &mut bool) {
+    fn note_attribute_name(
+        &self,
+        packed: &mut bool,
+        maybe_unused: &mut bool,
+        thread_local: &mut bool,
+        noreturn: &mut bool,
+        dllexport: &mut bool,
+    ) {
         if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.as_str();
             if n == "packed" || n == "__packed__" {
                 *packed = true;
             } else if n == "unused" || n == "maybe_unused" || n == "__unused__" {
                 *maybe_unused = true;
+            } else if n == "thread" {
+                // MSVC `__declspec(thread)`: thread-local storage. `thread` is
+                // not a GNU attribute, so it can only mean this.
+                *thread_local = true;
+            } else if n == "noreturn" || n == "__noreturn__" {
+                // `__declspec(noreturn)` / `__attribute__((noreturn))`.
+                *noreturn = true;
+            } else if n == "dllexport" {
+                // MSVC `__declspec(dllexport)`: export the symbol, the
+                // equivalent of `#pragma export(name)`.
+                *dllexport = true;
             }
         }
     }
@@ -307,6 +325,9 @@ impl Compiler {
     pub(super) fn skip_attribute_specifiers(&mut self) -> Result<bool, C5Error> {
         let mut packed = false;
         let mut maybe_unused = false;
+        let mut thread_local = false;
+        let mut noreturn = false;
+        let mut dllexport = false;
         loop {
             if self.lex.tk == Token::Attribute {
                 // `__attribute__((...))`, `__declspec(...)`,
@@ -330,7 +351,13 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err("unterminated attribute specifier"));
                     } else {
-                        self.note_attribute_name(&mut packed, &mut maybe_unused);
+                        self.note_attribute_name(
+                            &mut packed,
+                            &mut maybe_unused,
+                            &mut thread_local,
+                            &mut noreturn,
+                            &mut dllexport,
+                        );
                         self.next()?;
                     }
                 }
@@ -362,7 +389,13 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err("unterminated `[[` attribute"));
                     } else {
-                        self.note_attribute_name(&mut packed, &mut maybe_unused);
+                        self.note_attribute_name(
+                            &mut packed,
+                            &mut maybe_unused,
+                            &mut thread_local,
+                            &mut noreturn,
+                            &mut dllexport,
+                        );
                         self.next()?;
                     }
                 }
@@ -372,6 +405,15 @@ impl Compiler {
         }
         if maybe_unused {
             self.pending.attr_maybe_unused = true;
+        }
+        if thread_local {
+            self.pending.attr_thread_local = true;
+        }
+        if noreturn {
+            self.pending_noreturn = true;
+        }
+        if dllexport {
+            self.pending.attr_dllexport = true;
         }
         Ok(packed)
     }

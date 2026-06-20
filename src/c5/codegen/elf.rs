@@ -1612,9 +1612,15 @@ pub(super) fn write(
     let tdata_size = build.tls_init_size as u64;
     let tbss_size = build.tls_data.len() as u64 - tdata_size;
     let segment2_filesize = tdata_off + tdata_size - segment2_off;
-    // The PT_LOAD's p_memsz must cover `.tbss` even though it has
-    // no file backing -- the loader zero-fills the difference.
-    let segment2_memsize = segment2_filesize + tbss_size;
+    // Regular zero-init data (`.bss`) sits at the very end of the RW
+    // segment, past `.data` / `.tdata` / `.tbss`, with no file backing.
+    // A data offset at or past `data_size` names a byte here, at
+    // `bss_vmaddr + (offset - data_size)`, which the loader zero-fills
+    // through `p_memsz > p_filesz`.
+    let bss_vmaddr = TEXT_VMADDR_BASE + segment2_off + segment2_filesize + tbss_size;
+    // The PT_LOAD's p_memsz must cover `.tbss` and `.bss` even though
+    // neither has file backing -- the loader zero-fills the difference.
+    let segment2_memsize = segment2_filesize + tbss_size + build.bss_size as u64;
     let segment2_end = round_up(segment2_off + segment2_filesize, seg);
 
     // ---- VM addresses (ET_EXEC, no slide). ----
@@ -1630,6 +1636,16 @@ pub(super) fn write(
     let got_vmaddr = TEXT_VMADDR_BASE + got_off;
     let data_vmaddr = TEXT_VMADDR_BASE + data_off;
     let tdata_vmaddr = TEXT_VMADDR_BASE + tdata_off;
+
+    // Runtime VA of a data-segment byte: `.data` for an offset within the
+    // file image, otherwise the zero-fill `.bss` tail past it.
+    let data_off_to_vaddr = |off: u64| -> u64 {
+        if off < data_size {
+            data_vmaddr + off
+        } else {
+            bss_vmaddr + (off - data_size)
+        }
+    };
 
     // ---- Layout pass 3: DWARF + section header table ----
     //
@@ -1994,16 +2010,22 @@ pub(super) fn write(
             // shared-library output has stub_len=0 so the shift is a
             // no-op there. A data export's offset is within `build.data`.
             super::DynamicExportSection::Text => code_vmaddr + stub_len + e.offset,
-            super::DynamicExportSection::Data => data_vmaddr + e.offset,
+            super::DynamicExportSection::Data => data_off_to_vaddr(e.offset),
         })
         .collect();
     // Copy-relocation targets sit in the static data segment: a `.data`
-    // symbol at `data_vmaddr + offset`, or `.bss` (past the data bytes)
-    // at `data_vmaddr + data_size + offset`.
+    // symbol at `data_vmaddr + offset`, or a `.bss` symbol in the
+    // zero-fill tail at `bss_vmaddr + offset`.
     let copy_addrs: Vec<u64> = build
         .copy_relocs
         .iter()
-        .map(|cr| data_vmaddr + if cr.is_bss { data_size } else { 0 } + cr.local_offset)
+        .map(|cr| {
+            if cr.is_bss {
+                bss_vmaddr + cr.local_offset
+            } else {
+                data_vmaddr + cr.local_offset
+            }
+        })
         .collect();
     let final_dynsym = build_dynsym(
         &name_offsets,
@@ -2049,7 +2071,7 @@ pub(super) fn write(
     if is_shared {
         let r_type = r_relative(machine);
         for r in &build.data_relocs {
-            let addend = data_vmaddr + r.target_offset;
+            let addend = data_off_to_vaddr(r.target_offset);
             write_struct(
                 &mut rela,
                 &Elf64Rela {
@@ -2149,7 +2171,7 @@ pub(super) fn write(
     // -- no `.rela.dyn` relocations needed.
     let mut data_with_relocs = build.data.clone();
     for r in &build.data_relocs {
-        let absolute = data_vmaddr + r.target_offset;
+        let absolute = data_off_to_vaddr(r.target_offset);
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -2667,7 +2689,7 @@ pub(super) fn write(
             code_file_offset,
             code_vmaddr,
             stub_len + fx.adrp_offset as u64,
-            data_vmaddr + fx.data_offset,
+            data_off_to_vaddr(fx.data_offset),
             "data fixup",
         )?;
     }

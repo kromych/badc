@@ -38,11 +38,13 @@ EXPORT_FLAGS = ["--export-all", "--export-data"]
 
 # --- POSIX targets ---------------------------------------------------------
 
-# Tier 1: a fast module slice every POSIX lane must clear. Tier 2 (a broader set
-# + a pyperformance subset) runs only if tier 1 passes. TODO: add tier 2.
-POSIX_TEST_SLICE = [
+# Tier 1: a fast module slice every lane (POSIX and Windows) must clear. Tier 2
+# (a broader set + a pyperformance subset) runs only if tier 1 passes.
+# TODO: add tier 2.
+TEST_SLICE = [
     "test_grammar", "test_builtin", "test_int", "test_float",
     "test_list", "test_dict", "test_string", "test_exceptions",
+    "test_functools",
 ]
 # Includes common to every POSIX TU; the manifest carries any per-TU extras.
 POSIX_INCLUDES = ["Include", "Include/internal", "."]
@@ -65,9 +67,6 @@ _LINUX_UNDEF = [
 
 # --- Windows targets -------------------------------------------------------
 
-# A single deep-recursion module the native interpreter must clear; broadening
-# to the POSIX slice is a follow-up. TODO: expand to POSIX_TEST_SLICE.
-_WIN_TEST_SLICE = ["test_functools"]
 # PC precedes the source root so PC/pyconfig.h wins over the root pyconfig.h.
 _WIN_INCLUDES = [
     "PC", "Include", "Include/internal", "Python",
@@ -404,7 +403,7 @@ def run_tests(target: str, py: Path, log) -> int:
     # runner does not execute binaries from the checked-out workspace: there the
     # copy runs from a temp directory with Lib symlinked beside it.
     cfg = TARGETS[target]
-    slice_ = _WIN_TEST_SLICE if cfg.get("windows") else POSIX_TEST_SLICE
+    slice_ = TEST_SLICE
     if cfg.get("run_from_tempdir"):
         rundir = Path(tempfile.mkdtemp(prefix="badc-cpython-"))
         exe = rundir / py.name

@@ -74,6 +74,14 @@ manifest = list(bysrc.values())
 for m in manifest:
     if m["src"].endswith("getbuildinfo.c"):
         m["defines"] = ['GITVERSION=""', 'GITTAG=""', 'GITBRANCH=""']
+    # badc provides no __int128, so force the decimal library onto its portable
+    # double-word path (CONFIG_64 + ANSI without HAVE_UINT128_T).
+    if "_decimal/" in m["src"] or m["src"].endswith("_decimal.c"):
+        m["defines"] = [d for d in m["defines"] if not d.startswith("HAVE_UINT128_T")]
+    # zlib is not built into the interpreter; binascii's CRC uses its built-in
+    # table rather than zlib's crc32.
+    if m["src"].endswith("binascii.c"):
+        m["defines"] = [d for d in m["defines"] if d not in ("USE_ZLIB_CRC32", "WITH_GZFILEOP")]
 # getpath.c builds via a recipe that shells out to _freeze_module and spans
 # multiple lines, so it is not captured as a plain compile. Its install-layout
 # defines are a build configuration, not derived; getpath.h is a fetched frozen
@@ -84,6 +92,11 @@ if "Modules/getpath.c" not in bysrc:
                                  'PLATLIBDIR="lib"', 'VERSION="3.14"', 'VPATH=""',
                                  'PYTHONPATH=""', 'PYTHONFRAMEWORK=""']})
     missing = [m for m in missing if "getpath.o" not in m]
+# frozen.c (the frozen-module table) is built by a recipe that runs the freeze
+# tool, so it is not captured as a plain compile. A core TU with no flags.
+if "Python/frozen.c" not in bysrc:
+    manifest.append({"src": "Python/frozen.c", "class": "core", "includes": [], "defines": []})
+    missing = [m for m in missing if "frozen.o" not in m]
 json.dump(manifest, open(out_manifest, "w"), indent=0)
 
 n_core = sum(1 for m in manifest if m["class"] == "core")

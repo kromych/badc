@@ -42,6 +42,26 @@ EXPORT_FLAGS = ["--export-all", "--export-data"]
 # Per-target options not encoded in the manifest. asm_trampoline substitutes the
 # portable trampoline for the hand-written .S a host build assembles (POSIX with
 # the perf trampoline; macOS does not link it).
+# Linux modules badc cannot yet build: ELF/process introspection.
+_LINUX_EXCLUDE = [("_remote_debugging_module.c", "_remote_debugging")]
+# pyconfig advertises headers badc's bundled set does not provide; undefining
+# the HAVE_ macros makes the module take a supported path: select uses
+# poll/select (no epoll); socket builds the common families without the
+# AF_PACKET/NETLINK/CAN/VSOCK/ALG address handling.
+_LINUX_UNDEF = [
+    # select: no epoll backend (poll/select instead).
+    "HAVE_EPOLL", "HAVE_EPOLL_CREATE1", "HAVE_SYS_EPOLL_H",
+    # socket: the common families only -- no AF_PACKET/NETLINK/CAN/VSOCK/QRTR/
+    # TIPC/ALG/netfilter address or option handling (those need headers and
+    # structs badc's bundled set does not provide).
+    "HAVE_NETPACKET_PACKET_H", "HAVE_SOCKADDR_ALG",
+    "HAVE_LINUX_NETLINK_H", "HAVE_LINUX_VM_SOCKETS_H", "HAVE_LINUX_TIPC_H",
+    "HAVE_LINUX_QRTR_H", "HAVE_LINUX_NETFILTER_IPV4_H",
+    "HAVE_LINUX_CAN_H", "HAVE_LINUX_CAN_BCM_H", "HAVE_LINUX_CAN_J1939_H",
+    "HAVE_LINUX_CAN_RAW_H", "HAVE_LINUX_CAN_RAW_FD_FRAMES",
+    "HAVE_LINUX_CAN_RAW_JOIN_FILTERS",
+]
+
 TARGETS = {
     "macos-aarch64": {
         "asm_trampoline": False,
@@ -57,8 +77,17 @@ TARGETS = {
             ("_scproxy.c", "_scproxy"),
         ],
     },
-    "linux-x64": {"asm_trampoline": True},
-    "linux-aarch64": {"asm_trampoline": True},
+    "linux-x64": {
+        "asm_trampoline": True,
+        # badc has no x86 SSE/AVX intrinsics; build HACL's scalar BLAKE2 and drop
+        # the vectorized variants (the runtime dispatch checks these macros).
+        "undef_haves": _LINUX_UNDEF + ["_Py_HACL_CAN_COMPILE_VEC128", "_Py_HACL_CAN_COMPILE_VEC256"],
+        "exclude": _LINUX_EXCLUDE + [
+            ("Hacl_Hash_Blake2s_Simd128.c", "_blake2_simd128"),
+            ("Hacl_Hash_Blake2b_Simd256.c", "_blake2_simd256"),
+        ],
+    },
+    "linux-aarch64": {"asm_trampoline": True, "undef_haves": _LINUX_UNDEF, "exclude": _LINUX_EXCLUDE},
 }
 
 

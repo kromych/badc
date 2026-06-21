@@ -1764,6 +1764,13 @@ fn alloca_arena_in_bounds() {
 }
 
 #[test]
+fn init_float_to_int() {
+    // C99 6.3.1.4: a floating constant initializing an integer aggregate
+    // element converts (truncates), not a raw IEEE-754 bit copy.
+    assert_eq!(run_fixture("init_float_to_int.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec

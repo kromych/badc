@@ -171,6 +171,13 @@ impl Compiler {
         let is_float = stripped == Ty::Float as i64;
         let is_double = stripped == Ty::Double as i64;
         if !is_float && !is_double {
+            // A floating constant initializing an integer element
+            // converts to the integer value (C99 6.3.1.4, truncation
+            // toward zero); without this the raw IEEE-754 bit pattern
+            // would land in the slot (e.g. `int a[] = {1.5}` -> 0).
+            if matches!(reloc, InitElemReloc::Float64Bits) {
+                return f64::from_bits(value as u64) as i64;
+            }
             return value;
         }
         // Compute the canonical f64 bit pattern from the source

@@ -22,6 +22,7 @@ import os
 import platform
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -516,30 +517,127 @@ def _xcrun(tool: str):
 
 
 def section_sizes(py: Path) -> dict:
-    """text / data / bss / file bytes of a built binary via `--format=sysv`
-    (uniform across ELF / Mach-O / PE), falling back to the file size when no
-    sizer is found. Prefers llvm-size, then GNU binutils `size` (present on
-    Linux runners that lack llvm-size). macOS `size` is BSD and lacks
-    --format=sysv, but xcrun llvm-size is found first there."""
-    sizer = shutil.which("llvm-size") or _xcrun("llvm-size") or shutil.which("size")
+    """text / data / bss / file bytes of a built binary. Prefers an external
+    sizer (llvm-size, then GNU binutils `size`) with `--format=sysv` (uniform
+    across ELF / Mach-O / PE); when none is on PATH (the Windows runners ship
+    neither) or it matched no section, reads the binary's own section table.
+    Falls back to the file size alone if that also fails."""
     out = {"text": 0, "data": 0, "bss": 0, "file": py.stat().st_size}
-    if not sizer:
-        return out
-    r = subprocess.run([sizer, "--format=sysv", str(py)], capture_output=True, text=True)
-    if r.returncode != 0:
-        return out
-    for line in r.stdout.splitlines():
-        f = line.split()
-        if len(f) < 2 or not f[-1].lstrip("-").isdigit():
-            continue
-        name, val = f[0], int(f[1])
-        low = name.lower()
-        if low in ("__text", ".text") or low.endswith("text"):
-            out["text"] += val
-        elif "bss" in low:
-            out["bss"] += val
-        elif low in ("__data", ".data", ".rodata", "__const") or "data" in low or "const" in low:
-            out["data"] += val
+    sizer = shutil.which("llvm-size") or _xcrun("llvm-size") or shutil.which("size")
+    if sizer:
+        r = subprocess.run([sizer, "--format=sysv", str(py)], capture_output=True, text=True)
+        if r.returncode == 0:
+            for line in r.stdout.splitlines():
+                f = line.split()
+                if len(f) < 2 or not f[-1].lstrip("-").isdigit():
+                    continue
+                name, val = f[0], int(f[1])
+                low = name.lower()
+                if low in ("__text", ".text") or low.endswith("text"):
+                    out["text"] += val
+                elif "bss" in low or "common" in low:  # Mach-O __common is zero-fill
+                    out["bss"] += val
+                elif low in ("__data", ".data", ".rodata", "__const") or "data" in low or "const" in low:
+                    out["data"] += val
+            if out["text"] or out["data"] or out["bss"]:
+                return out
+    native = _native_section_sizes(py)
+    if native:
+        out.update(native)
+    return out
+
+
+def _native_section_sizes(py: Path) -> dict | None:
+    """Sum text / data / bss from a binary's own section table, dispatching on
+    the format magic. Dependency-free; covers the targets badc emits (ELF,
+    PE, Mach-O). Returns None when the format is unrecognized or malformed."""
+    try:
+        data = py.read_bytes()
+        if data[:4] == b"\x7fELF":
+            return _elf_section_sizes(data)
+        if data[:2] == b"MZ":
+            return _pe_section_sizes(data)
+        if data[:4] in (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe"):
+            return _macho_section_sizes(data)
+    except (struct.error, IndexError, ValueError):
+        return None
+    return None
+
+
+def _elf_section_sizes(d: bytes) -> dict | None:
+    # ELF64 only (EI_CLASS == 2); the section header table at e_shoff carries
+    # name / type / size, and SHT_NOBITS (8) marks .bss.
+    if d[4] != 2:
+        return None
+    le = "<" if d[5] == 1 else ">"
+    e_shoff = struct.unpack_from(le + "Q", d, 0x28)[0]
+    e_shentsize = struct.unpack_from(le + "H", d, 0x3A)[0]
+    e_shnum, e_shstrndx = struct.unpack_from(le + "HH", d, 0x3C)
+    if not e_shoff or not e_shnum:
+        return None
+    strtab = struct.unpack_from(le + "Q", d, e_shoff + e_shstrndx * e_shentsize + 24)[0]
+    out = {"text": 0, "data": 0, "bss": 0}
+    for i in range(e_shnum):
+        base = e_shoff + i * e_shentsize
+        sh_name, sh_type = struct.unpack_from(le + "II", d, base)
+        sh_size = struct.unpack_from(le + "Q", d, base + 32)[0]
+        name = d[strtab + sh_name : d.index(b"\0", strtab + sh_name)].decode("ascii", "replace")
+        if sh_type == 8:  # SHT_NOBITS
+            out["bss"] += sh_size
+        elif name.startswith(".text"):
+            out["text"] += sh_size
+        elif name.startswith((".data", ".rodata")):
+            out["data"] += sh_size
+    return out
+
+
+def _pe_section_sizes(d: bytes) -> dict | None:
+    # PE: the COFF header at e_lfanew lists the section table. Classify by the
+    # section characteristics and sum VirtualSize (the in-memory content size,
+    # what `size` reports), falling back to SizeOfRawData when VirtualSize is 0.
+    e_lfanew = struct.unpack_from("<I", d, 0x3C)[0]
+    if d[e_lfanew : e_lfanew + 4] != b"PE\x00\x00":
+        return None
+    coff = e_lfanew + 4
+    nsec, opt = struct.unpack_from("<H", d, coff + 2)[0], struct.unpack_from("<H", d, coff + 16)[0]
+    table = coff + 20 + opt
+    out = {"text": 0, "data": 0, "bss": 0}
+    for i in range(nsec):
+        base = table + i * 40
+        vsize, _vaddr, rawsize = struct.unpack_from("<III", d, base + 8)
+        chars = struct.unpack_from("<I", d, base + 36)[0]
+        size = vsize or rawsize
+        if chars & 0x20:  # IMAGE_SCN_CNT_CODE
+            out["text"] += size
+        elif chars & 0x80:  # IMAGE_SCN_CNT_UNINITIALIZED_DATA
+            out["bss"] += size
+        elif chars & 0x40:  # IMAGE_SCN_CNT_INITIALIZED_DATA
+            out["data"] += size
+    return out
+
+
+def _macho_section_sizes(d: bytes) -> dict | None:
+    # Mach-O 64: walk the LC_SEGMENT_64 (0x19) load commands and their sections;
+    # S_ZEROFILL / S_GB_ZEROFILL section types (0x1 / 0xc) mark .bss.
+    ncmds = struct.unpack_from("<I", d, 16)[0]
+    off = 32
+    out = {"text": 0, "data": 0, "bss": 0}
+    for _ in range(ncmds):
+        cmd, cmdsize = struct.unpack_from("<II", d, off)
+        if cmd == 0x19:  # LC_SEGMENT_64
+            nsects = struct.unpack_from("<I", d, off + 64)[0]
+            for s in range(nsects):
+                sbase = off + 72 + s * 80
+                sectname = d[sbase : sbase + 16].split(b"\0", 1)[0].decode("ascii", "replace")
+                size = struct.unpack_from("<Q", d, sbase + 40)[0]
+                flags = struct.unpack_from("<I", d, sbase + 64)[0]
+                if flags & 0xFF in (0x1, 0xC):
+                    out["bss"] += size
+                elif sectname.startswith("__text"):
+                    out["text"] += size
+                elif sectname.startswith(("__data", "__const", "__cstring", "__rodata")):
+                    out["data"] += size
+        off += cmdsize
     return out
 
 

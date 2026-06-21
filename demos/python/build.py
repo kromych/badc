@@ -168,19 +168,23 @@ TARGETS = {
         "exclude": _LINUX_EXCLUDE,
     },
     # Windows wcsftime/ldexp differ from C99 in narrow ways that are runtime
-    # properties, not code generation (both arches fail identically, the basic
-    # paths pass). ldexp truncates denormal output (testLdexp_denormal documents
-    # this) -> skip test_math; wcsftime lacks the C99 %C/%F/%G specifiers
-    # (returns "") -> ignore the strftime methods that need them, keeping the
-    # rest of the suite. test_cmath is skipped while cmath is excluded (its
-    # complex arithmetic is wrong on the Windows build, see _WIN_EXCLUDE).
-    "windows-x64": {"windows": True, "tier2_skip": ["test_math", "test_cmath"],
-                    "tier2_ignore": ["test_strftime_y2k", "test_strftime_y2k_c99"]},
+    # properties of the legacy msvcrt CRT, not code generation (both arches behave
+    # identically, the rest of each module passes). ldexp rounds a denormal result
+    # toward zero, not to nearest (testLdexp_denormal: ldexp(6993274598585239,
+    # -1126) gives 5e-324, not 1e-323); mathmodule.c recomputes errno from the
+    # operands, so the rest of test_math is unaffected -> ignore just that method.
+    # wcsftime lacks the C99 %C/%F/%G specifiers (returns "") -> ignore the
+    # strftime methods that need them. test_cmath is skipped while cmath is
+    # excluded (see _WIN_EXCLUDE).
+    "windows-x64": {"windows": True, "tier2_skip": ["test_cmath"],
+                    "tier2_ignore": ["testLdexp_denormal",
+                                     "test_strftime_y2k", "test_strftime_y2k_c99"]},
     # arm64 also ignores test_gh_120161: it spawns a child interpreter whose
     # socket startup fails with WinError 10106 (WSASYSNOTREADY) on Windows arm64
     # only -- a TODO socket/WSAStartup gap on that target, not in this test.
-    "windows-arm64": {"windows": True, "tier2_skip": ["test_math", "test_cmath"],
-                      "tier2_ignore": ["test_strftime_y2k", "test_strftime_y2k_c99",
+    "windows-arm64": {"windows": True, "tier2_skip": ["test_cmath"],
+                      "tier2_ignore": ["testLdexp_denormal",
+                                       "test_strftime_y2k", "test_strftime_y2k_c99",
                                        "test_gh_120161"]},
 }
 

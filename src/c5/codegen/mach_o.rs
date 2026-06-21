@@ -237,6 +237,7 @@ const S_ATTR_DEBUG: u32 = 0x0200_0000;
 /// `__thread_data` (S_THREAD_LOCAL_REGULAR = 0x11) would be
 /// emitted alongside if we ever support TLS initialisers.
 #[allow(dead_code)]
+const S_ZEROFILL: u32 = 0x1; // __bss (zero-fill, no file backing)
 const S_THREAD_LOCAL_REGULAR: u32 = 0x11; // __thread_data (init data)
 const S_THREAD_LOCAL_ZEROFILL: u32 = 0x12; // __thread_bss (zero-fill)
 const S_THREAD_LOCAL_VARIABLES: u32 = 0x13; // __thread_vars (descriptors)
@@ -641,14 +642,17 @@ fn segment_data_with_tlv(
     thread_storage_size: u64,
     thread_storage_offset: u32,
     thread_storage_initialised: bool,
+    bss_addr: u64,
+    bss_size: u64,
 ) -> Vec<u8> {
-    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(TOTAL);
+    let nsects: u32 = if bss_size > 0 { 5 } else { 4 };
+    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
         &SegmentCommand64 {
             cmd: LC_SEGMENT_64,
-            cmdsize: TOTAL as u32,
+            cmdsize: total as u32,
             segname: pack_name16("__DATA"),
             vmaddr,
             vmsize,
@@ -656,7 +660,7 @@ fn segment_data_with_tlv(
             filesize,
             maxprot: VM_PROT_READ | VM_PROT_WRITE,
             initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects: 4,
+            nsects,
             flags: 0,
         },
     );
@@ -759,7 +763,28 @@ fn segment_data_with_tlv(
             reserved3: 0,
         },
     );
-    debug_assert_eq!(out.len(), TOTAL);
+    // __bss -- regular zero-init storage at the segment tail, past the
+    // thread storage. Present only when segregation produced it.
+    if bss_size > 0 {
+        write_struct(
+            &mut out,
+            &Section64 {
+                sectname: pack_name16("__bss"),
+                segname: pack_name16("__DATA"),
+                addr: bss_addr,
+                size: bss_size,
+                offset: 0, // S_ZEROFILL: zero-filled by the loader
+                align: 3,
+                reloff: 0,
+                nreloc: 0,
+                flags: S_ZEROFILL,
+                reserved1: 0,
+                reserved2: 0,
+                reserved3: 0,
+            },
+        );
+    }
+    debug_assert_eq!(out.len(), total);
     out
 }
 
@@ -781,14 +806,17 @@ fn segment_data(
     data_addr: u64,
     data_size: u64,
     data_offset: u32,
+    bss_addr: u64,
+    bss_size: u64,
 ) -> Vec<u8> {
-    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(TOTAL);
+    let nsects: u32 = if bss_size > 0 { 3 } else { 2 };
+    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
         &SegmentCommand64 {
             cmd: LC_SEGMENT_64,
-            cmdsize: TOTAL as u32,
+            cmdsize: total as u32,
             segname: pack_name16("__DATA"),
             vmaddr,
             vmsize,
@@ -796,7 +824,7 @@ fn segment_data(
             filesize,
             maxprot: VM_PROT_READ | VM_PROT_WRITE,
             initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects: 2,
+            nsects,
             flags: 0,
         },
     );
@@ -822,8 +850,9 @@ fn segment_data(
         },
     );
     // __data section. Holds the program's static data segment --
-    // string literals + zero-initialised globals. Copied into the
-    // file at write time; dyld maps it RW alongside __got.
+    // string literals + initialised globals. Copied into the file at
+    // write time; dyld maps it RW alongside __got. Wholly-zero globals
+    // move to __bss below.
     write_struct(
         &mut out,
         &Section64 {
@@ -841,7 +870,28 @@ fn segment_data(
             reserved3: 0,
         },
     );
-    debug_assert_eq!(out.len(), TOTAL);
+    // __bss section (zero-fill, no file backing). Present only when
+    // segregation produced zero-init storage; sizers read its size.
+    if bss_size > 0 {
+        write_struct(
+            &mut out,
+            &Section64 {
+                sectname: pack_name16("__bss"),
+                segname: pack_name16("__DATA"),
+                addr: bss_addr,
+                size: bss_size,
+                offset: 0, // S_ZEROFILL: zero-filled by the loader
+                align: 3,
+                reloff: 0,
+                nreloc: 0,
+                flags: S_ZEROFILL,
+                reserved1: 0,
+                reserved2: 0,
+                reserved3: 0,
+            },
+        );
+    }
+    debug_assert_eq!(out.len(), total);
     out
 }
 
@@ -1677,10 +1727,12 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let mh_size = MACH_HEADER_64_SIZE as u64;
     let pagezero_size = SEGMENT_COMMAND_64_SIZE as u64;
     let text_seg_size = (SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE) as u64;
-    // __DATA carries 2 sections normally (__got, __data) and 4
-    // when the program has `_Thread_local` globals (+__thread_vars,
-    // __thread_bss).
-    let data_seg_section_count: u64 = if tls_present { 4 } else { 2 };
+    // __DATA carries 2 sections normally (__got, __data), 4 when the
+    // program has `_Thread_local` globals (+__thread_vars, __thread_bss),
+    // and one more (__bss) when segregation produced zero-init storage.
+    let has_bss_section = build.bss_size > 0;
+    let data_seg_section_count: u64 =
+        (if tls_present { 4 } else { 2 }) + if has_bss_section { 1 } else { 0 };
     let data_seg_size: u64 =
         SEGMENT_COMMAND_64_SIZE as u64 + data_seg_section_count * SECTION_64_SIZE as u64;
     let linkedit_seg_size = SEGMENT_COMMAND_64_SIZE as u64;
@@ -2218,6 +2270,8 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             thread_storage_size,
             thread_storage_fileoff as u32,
             thread_storage_initialised,
+            bss_base_vmaddr,
+            build.bss_size as u64,
         )
     } else {
         segment_data(
@@ -2231,6 +2285,8 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             data_section_vmaddr,
             program_data_size,
             data_section_fileoff as u32,
+            bss_base_vmaddr,
+            build.bss_size as u64,
         )
     };
     let linkedit = segment_no_sections(
@@ -3106,6 +3162,53 @@ mod tests {
         assert!(
             stdout.contains("U _write"),
             "nm didn't show `U _write`.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+        );
+    }
+
+    /// A segregated zero global produces a `__DATA,__bss` S_ZEROFILL
+    /// section whose size equals `build.bss_size`, so sizers report bss.
+    #[test]
+    fn segregated_bss_emits_zerofill_section() {
+        use crate::Compiler;
+        let target = super::super::Target::MacOSAarch64;
+        let src = "static long zeros[512]; long *const p = &zeros[3]; \
+                   int main() { zeros[3] = 1; return (int)zeros[3] + (p == &zeros[3]); }";
+        let program = Compiler::with_target(super::super::super::tests::with_prelude(src), target)
+            .compile()
+            .expect("compile");
+        let (compacted, bss_size) =
+            super::super::ssa_shadow::compact_program_data(&program, target, true)
+                .expect("compact");
+        let mut build =
+            super::super::lower_for(&compacted, target, super::super::NativeOptions::default())
+                .expect("lower");
+        build.bss_size = bss_size;
+        assert!(build.bss_size > 0, "the zero array must occupy bss");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
+
+        let read_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+        let lc_end = 32 + read_u32(&bytes, 20) as usize;
+        let mut p = 32usize;
+        let mut bss = None;
+        while p < lc_end {
+            let cmdsize = read_u32(&bytes, p + 4) as usize;
+            if read_u32(&bytes, p) == LC_SEGMENT_64 && bytes[p + 8..p + 24].starts_with(b"__DATA\0")
+            {
+                let mut sp = p + 72;
+                for _ in 0..read_u32(&bytes, p + 64) {
+                    if bytes[sp..sp + 16].starts_with(b"__bss\0") {
+                        bss = Some((read_u64(sp + 40), read_u32(&bytes, sp + 64) & 0xFF));
+                    }
+                    sp += SECTION_64_SIZE;
+                }
+            }
+            p += cmdsize;
+        }
+        let (size, sect_type) = bss.expect("__DATA,__bss section must be present");
+        assert_eq!(sect_type, S_ZEROFILL, "__bss must be S_ZEROFILL");
+        assert_eq!(
+            size, build.bss_size as u64,
+            "__bss size must equal bss_size"
         );
     }
 }

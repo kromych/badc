@@ -54,9 +54,11 @@ ARM64 processor, and on x86_64 processors not older than Intel Hasswell and AMD 
 
 `badc` emits position-independent code and the real native binaries (macOS Mach-O,
 Linux ELF, or Windows PE32+), on any of five targets, from any host:
+
 * macOS (`ARM64`),
 * Linux (`ARM64`, `x86_64`),
 * Windows ({`ARM64`, `x86_64`} `x` {`console`, `GUI`, `NT`, `driver`}).
+
 It supports also separate translation units (always translated to ELF) and has a small
 linker (so no relaxations or LTO).  `badc` tries hard not to get in the way with assumptions
 on the runtime library, and `--freestanding` as available should you need that. `EFI`
@@ -84,6 +86,9 @@ There are various demo's under [`demos`](./demos/):
 * `tinycc` - a cool and small C toolchain
 * `tweetNacCl`, `MonoCypher`, `BearSSL` - cryptography
 * `Lua` - the embeddable scripting language
+* `quickjs` - JavaScript interpreter
+* [`TCL`](https://en.wikipedia.org/wiki/Tcl_(programming_language)) - Tool command language
+* `Python` - Python 3.14
 
 Besides these, there are some fun test fixtures implementing Horner scheme, RK4,
 8-Queens and more.

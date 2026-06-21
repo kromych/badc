@@ -2074,6 +2074,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
                 (code_vmaddr_base + d.offset, SECT_INDEX_TEXT)
             }
             crate::c5::codegen::DynamicExportSection::Data => {
+                // Data exports are never bss-resident today (synth_build drops
+                // zero-init globals from the export set). When that is wired
+                // up, a `d.offset >= program_data_size` export needs n_sect =
+                // __DATA,__bss, not __data.
                 (data_off_to_vaddr(d.offset), SECT_INDEX_DATA)
             }
         };

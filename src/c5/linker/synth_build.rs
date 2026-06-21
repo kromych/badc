@@ -301,6 +301,12 @@ fn synth_program_and_build(
                 let section = match sym.section {
                     NativeSymSection::Text if export_funcs => DynamicExportSection::Text,
                     NativeSymSection::Data if export_data_globals => DynamicExportSection::Data,
+                    // TODO: a zero-init (Bss) global is not dynamically
+                    // exportable. Its `value` here is the pre-compaction data
+                    // offset; bss compaction (codegen) later relocates the
+                    // storage past the file image, so the export would bind to
+                    // a stale address. A fix must remap export offsets through
+                    // compaction and tag the bss section in each writer.
                     _ => return None,
                 };
                 Some(DynamicExport {

@@ -4029,14 +4029,22 @@ fn atomic_save_working(code: &mut Vec<u8>) {
         code,
         enc_stp_pre(Reg(9), Reg(10), Reg(31), -(ATOMIC_SAVE_BYTES as i32)),
     );
-    emit(code, enc_stp_pre(Reg(11), Reg(12), Reg(31), 0));
+    // Second pair at [sp+16] without a second writeback; storing at
+    // offset 0 would overwrite x9/x10's slot.
+    emit(
+        code,
+        super::aarch64::enc_stp_off(Reg(11), Reg(12), Reg(31), 16),
+    );
 }
 
 /// Restore x9..x12 saved by [`atomic_save_working`]. Run after the
 /// result is held in a reserved scratch (x16 / x17), since the result
 /// must outlive the reload.
 fn atomic_restore_working(code: &mut Vec<u8>) {
-    emit(code, enc_ldp_post(Reg(11), Reg(12), Reg(31), 0));
+    emit(
+        code,
+        super::aarch64::enc_ldp_off(Reg(11), Reg(12), Reg(31), 16),
+    );
     emit(
         code,
         enc_ldp_post(Reg(9), Reg(10), Reg(31), ATOMIC_SAVE_BYTES as i32),

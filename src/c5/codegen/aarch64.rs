@@ -172,6 +172,38 @@ pub(super) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
         | (rt.0 as u32)
 }
 
+/// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset
+/// (no writeback). Same scaling / range as [`enc_stp_pre`].
+pub(super) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
+    let imm7 = imm / 8;
+    debug_assert!(
+        (-64..64).contains(&imm7),
+        "stp: offset {imm} (scaled {imm7}) out of range"
+    );
+    0xA900_0000
+        | (((imm7 as u32) & 0x7F) << 15)
+        | ((rt2.0 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
+/// `LDP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset
+/// (no writeback). Mirror of [`enc_stp_off`].
+pub(super) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
+    let imm7 = imm / 8;
+    debug_assert!(
+        (-64..64).contains(&imm7),
+        "ldp: offset {imm} (scaled {imm7}) out of range"
+    );
+    0xA940_0000
+        | (((imm7 as u32) & 0x7F) << 15)
+        | ((rt2.0 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
 /// `MOV <Xd>, <Xn>` -- alias for `ORR <Xd>, XZR, <Xn>`. Note that ARM
 /// uses two distinct mov forms: this one (register-to-register, where
 /// `Rn` field 31 means XZR) and `add xd, sp, #0` (which is what you

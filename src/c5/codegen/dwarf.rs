@@ -140,6 +140,8 @@ const DW_OP_FBREG: u8 = 0x91;
 /// stored at x29's address" -- breg gets the right semantics
 /// for c5's stack-frame layout.
 const DW_OP_BREG29: u8 = 0x8d;
+/// `DW_OP_breg6` -- "frame base is rbp + offset" on x86_64.
+const DW_OP_BREG6: u8 = 0x76;
 /// `DW_OP_reg0..reg31` -- "this variable IS in register N".
 /// Used by PLT formal_parameter DIEs so gdb can evaluate the
 /// value of e.g. malloc's `size` arg directly out of the
@@ -1681,11 +1683,16 @@ fn build_debug_info(
         // DW_AT_calling_convention: DW_CC_normal pins user-defined
         // functions to the host C ABI (SysV / Win64 / AAPCS64).
         body.push(DW_CC_NORMAL);
-        // DW_AT_frame_base (DW_FORM_exprloc): "frame base is
-        // x29 + 0", encoded as `DW_OP_breg29 0`. Two bytes:
-        // opcode + sleb128(0).
-        write_uleb128(&mut body, ABBREV_SUBPROGRAM);
-        body.push(DW_OP_BREG29);
+        // DW_AT_frame_base (DW_FORM_exprloc): "frame base is the
+        // frame pointer + 0" -- DW_OP_breg29 (x29) on aarch64,
+        // DW_OP_breg6 (rbp) on x86_64. exprloc length is 2 (opcode +
+        // sleb128(0)).
+        let frame_base_breg = match target {
+            Target::LinuxX64 | Target::WindowsX64 => DW_OP_BREG6,
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => DW_OP_BREG29,
+        };
+        write_uleb128(&mut body, 2);
+        body.push(frame_base_breg);
         body.push(0);
 
         // Variable / formal_parameter children. Order parameters
@@ -3182,7 +3189,29 @@ mod info_golden {
             hex,
             "440000000400000000000801010000000c0c0000000b0000000010000000000000\
              10000000000000000000000002100000000010000000000000100000000000000001\
-             028d000000"
+             0276000000"
+        );
+        // Same unit, aarch64 target: DW_AT_frame_base selects
+        // DW_OP_breg29 (0x8d) rather than x86_64's DW_OP_breg6 (0x76).
+        let info_a64 = build_debug_info(
+            cu_name_off,
+            comp_dir_off,
+            producer_off,
+            0,
+            0x1000,
+            0x10,
+            &catalog,
+            &subs,
+            &plt_subs,
+            Target::LinuxAarch64,
+            &structs,
+            &enums,
+        );
+        let hex_a64: alloc::string::String =
+            info_a64.iter().map(|b| alloc::format!("{b:02x}")).collect();
+        assert!(
+            hex_a64.ends_with("028d000000"),
+            "aarch64 frame_base should be breg29: {hex_a64}"
         );
     }
 }

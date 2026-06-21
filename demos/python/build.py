@@ -564,6 +564,31 @@ def _native_section_sizes(py: Path) -> dict | None:
     return None
 
 
+def _elf_load_segment_sizes(d: bytes, le: str) -> dict | None:
+    # No section header table (a fully static image): size the regions from the
+    # PT_LOAD program headers. text = read-only load, data = writable load
+    # p_filesz, bss = writable p_memsz - p_filesz (the zero-fill tail).
+    e_phoff = struct.unpack_from(le + "Q", d, 0x20)[0]
+    e_phentsize = struct.unpack_from(le + "H", d, 0x36)[0]
+    e_phnum = struct.unpack_from(le + "H", d, 0x38)[0]
+    if not e_phoff or not e_phnum:
+        return None
+    out = {"text": 0, "data": 0, "bss": 0}
+    for i in range(e_phnum):
+        base = e_phoff + i * e_phentsize
+        p_type, p_flags = struct.unpack_from(le + "II", d, base)
+        p_filesz = struct.unpack_from(le + "Q", d, base + 32)[0]
+        p_memsz = struct.unpack_from(le + "Q", d, base + 40)[0]
+        if p_type != 1:  # PT_LOAD
+            continue
+        if p_flags & 0x2:  # PF_W
+            out["data"] += p_filesz
+            out["bss"] += max(0, p_memsz - p_filesz)
+        else:
+            out["text"] += p_filesz
+    return out
+
+
 def _elf_section_sizes(d: bytes) -> dict | None:
     # ELF64 only (EI_CLASS == 2); the section header table at e_shoff carries
     # name / type / size, and SHT_NOBITS (8) marks .bss.
@@ -574,7 +599,7 @@ def _elf_section_sizes(d: bytes) -> dict | None:
     e_shentsize = struct.unpack_from(le + "H", d, 0x3A)[0]
     e_shnum, e_shstrndx = struct.unpack_from(le + "HH", d, 0x3C)
     if not e_shoff or not e_shnum:
-        return None
+        return _elf_load_segment_sizes(d, le)
     strtab = struct.unpack_from(le + "Q", d, e_shoff + e_shstrndx * e_shentsize + 24)[0]
     out = {"text": 0, "data": 0, "bss": 0}
     for i in range(e_shnum):
@@ -763,5 +788,35 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _selftest_section_sizes() -> None:
+    # A section-less ELF64 (no section header table, as the static-image
+    # writer emits) must still report bss from the writable PT_LOAD's
+    # p_memsz - p_filesz, not 0.
+    eh = bytearray(64)
+    eh[0:4] = b"\x7fELF"
+    eh[4] = 2  # ELFCLASS64
+    eh[5] = 1  # ELFDATA2LSB
+    struct.pack_into("<H", eh, 16, 2)  # e_type ET_EXEC
+    struct.pack_into("<H", eh, 18, 62)  # e_machine x86-64
+    struct.pack_into("<Q", eh, 32, 64)  # e_phoff (right after the header)
+    struct.pack_into("<H", eh, 52, 64)  # e_ehsize
+    struct.pack_into("<H", eh, 54, 56)  # e_phentsize
+    struct.pack_into("<H", eh, 56, 2)  # e_phnum
+
+    def ph(flags: int, filesz: int, memsz: int) -> bytes:
+        p = bytearray(56)
+        struct.pack_into("<I", p, 0, 1)  # PT_LOAD
+        struct.pack_into("<I", p, 4, flags)
+        struct.pack_into("<Q", p, 32, filesz)
+        struct.pack_into("<Q", p, 40, memsz)
+        return bytes(p)
+
+    img = bytes(eh) + ph(5, 0x400, 0x400) + ph(6, 0x100, 0x900)
+    got = _elf_section_sizes(img)
+    want = {"text": 0x400, "data": 0x100, "bss": 0x800}
+    assert got == want, f"section-less ELF bss fallback: {got} != {want}"
+
+
 if __name__ == "__main__":
+    _selftest_section_sizes()
     sys.exit(main())

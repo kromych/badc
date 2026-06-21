@@ -864,6 +864,35 @@ fn original_c4_compiles_and_runs_hello_natively() {
     );
 }
 
+/// Plain `char` is unsigned on Linux/aarch64, so <limits.h> must give
+/// CHAR_MAX == UCHAR_MAX (255) and CHAR_MIN == 0 (C99 5.2.4.2.1). The
+/// fixture exits 0 only when the header agrees with the runtime signedness;
+/// a signed CHAR_MAX (127) here is the bug that broke decimal locale
+/// overrides (the `if CHAR_MAX == 127` branch fires on an unsigned target).
+#[test]
+fn char_limits_match_unsigned_char() {
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
+    path.push("fixtures");
+    path.push("c");
+    path.push("char_limits_consistency.c");
+    let src = std::fs::read_to_string(&path).unwrap();
+    let program = Compiler::new(src)
+        .compile()
+        .expect("compile char_limits_consistency.c");
+    let bytes = emit_native(&program, Target::LinuxAarch64).expect("emit_native");
+    let bin_path = unique_temp_path("badc-elf-char-limits", "char_limits");
+    std::fs::write(&bin_path, &bytes).unwrap();
+    set_executable(&bin_path);
+    let output = exec_with_retry(&bin_path).expect("exec native binary");
+    let _ = std::fs::remove_file(&bin_path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "limits.h CHAR_MIN/CHAR_MAX disagree with unsigned plain char on aarch64 ELF"
+    );
+}
+
 /// Cross-unit `extern _Thread_local` on Linux/aarch64. Two translation
 /// units each define TLS storage; `main` reads its own and the other
 /// unit's thread-locals both directly (extern) and through the defining

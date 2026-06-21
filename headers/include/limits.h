@@ -20,8 +20,15 @@
 #define SCHAR_MIN   (-128)
 #define SCHAR_MAX     127
 #define UCHAR_MAX     255
+// Plain char takes the range of its signedness (C99 5.2.4.2.1). The compiler
+// predefines __CHAR_UNSIGNED__ exactly when plain char is unsigned.
+#ifdef __CHAR_UNSIGNED__
+#define CHAR_MIN      0
+#define CHAR_MAX  UCHAR_MAX
+#else
 #define CHAR_MIN  SCHAR_MIN
 #define CHAR_MAX  SCHAR_MAX
+#endif
 
 #define SHRT_MIN   (-32768)
 #define SHRT_MAX     32767

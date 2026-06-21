@@ -169,8 +169,11 @@ TARGETS = {
         "exclude": _LINUX_EXCLUDE,
         "tier2_skip": ["test_decimal"],
     },
-    "windows-x64": {"windows": True},
-    "windows-arm64": {"windows": True},
+    # cmathmodule.c is in _WIN_EXCLUDE (an initializer form badc does not yet
+    # accept), so cmath is not built into the Windows interpreter and
+    # test_cmath cannot import; skipped in tier 2 until cmath builds.
+    "windows-x64": {"windows": True, "tier2_skip": ["test_cmath"]},
+    "windows-arm64": {"windows": True, "tier2_skip": ["test_cmath"]},
 }
 
 

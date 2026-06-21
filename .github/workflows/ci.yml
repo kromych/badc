@@ -998,8 +998,8 @@ jobs:
           - { os: macos-latest, target: macos-aarch64, label: macos-arm64, test_flag: --tier2 }
           - { os: ubuntu-latest, target: linux-x64, label: ubuntu-x64, test_flag: --tier2 }
           - { os: ubuntu-24.04-arm, target: linux-aarch64, label: ubuntu-arm64, test_flag: --tier2 }
-          - { os: windows-latest, target: windows-x64, label: windows-x64, test_flag: --test }
-          - { os: windows-11-arm, target: windows-arm64, label: windows-arm64, test_flag: --test }
+          - { os: windows-latest, target: windows-x64, label: windows-x64, test_flag: --tier2 }
+          - { os: windows-11-arm, target: windows-arm64, label: windows-arm64, test_flag: --tier2 }
     runs-on: ${{ matrix.os }}
     # Hang guard for a cold rust-cache; a warm build + slice runs well under it.
     timeout-minutes: 40

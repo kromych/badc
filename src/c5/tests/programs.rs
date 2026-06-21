@@ -266,6 +266,15 @@ fn flexible_array_member() {
 }
 
 #[test]
+fn flex_array_member_static_init() {
+    // A file-scope object initializing a flexible array member with
+    // trailing elements (C99 6.7.2.1p18 GCC/clang extension) must place
+    // the element bytes past the fixed struct size without corrupting
+    // the next file-scope object.
+    assert_eq!(run_fixture("flex_array_member_static_init.c"), 0);
+}
+
+#[test]
 fn sizeof_array_type_and_binding() {
     // `sizeof(T [N])` sizes the array type; `sizeof(arr)[i]` binds to
     // the full unary-expression.
@@ -293,6 +302,131 @@ fn variadic_macro_named_rest() {
     // The GCC named-rest variadic macro `#define foo(rest...)`: the named
     // tail behaves like `__VA_ARGS__`, including `#rest` and `, ##rest`.
     assert_eq!(run_fixture("variadic_macro_named_rest.c"), 0);
+}
+
+#[test]
+fn stdatomic_c11() {
+    // C11 <stdatomic.h> over c5's atomic builtins, the `_Atomic(type-name)`
+    // specifier in every base-type position, and the C99 least/fast stdint
+    // types.
+    assert_eq!(run_fixture("stdatomic_c11.c"), 0);
+}
+
+#[test]
+fn atomic_rmw_ops() {
+    // C11 7.17.7 read-modify-write and compare-exchange across every
+    // operator and both exchange outcomes, including the expected-operand
+    // write-back on a failed compare-exchange.
+    assert_eq!(run_fixture("atomic_rmw_ops.c"), 0);
+}
+
+#[test]
+fn fn_ptr_typedef_multi_declarator() {
+    // A function-pointer typedef declaring several variables in one
+    // declaration must give every declarator the pointed-to return type;
+    // a later declarator's call result must not be truncated to int.
+    assert_eq!(run_fixture("fn_ptr_typedef_multi_declarator.c"), 0);
+}
+
+#[test]
+fn hfa_struct_return() {
+    // A homogeneous floating-point aggregate returns in FP registers
+    // (AAPCS64 6.9) rather than through an out-pointer; the member values
+    // must round-trip through a call intact.
+    assert_eq!(run_fixture("hfa_struct_return.c"), 0);
+}
+
+#[test]
+fn bitfield_assign_value() {
+    // A bitfield assignment used as an rvalue yields the masked field
+    // value (C99 6.5.16p3), not the storage word; a chained assignment to
+    // adjacent fields of one storage unit observes the inner store.
+    assert_eq!(run_fixture("bitfield_assign_value.c"), 0);
+}
+
+#[test]
+fn struct_arg_indirect_subscript() {
+    // A by-value aggregate argument is placed in the platform-ABI
+    // registers (System V AMD64 3.2.3 / AAPCS64 6.4.2) through a function
+    // pointer, in tail position, and when the argument is a subscript
+    // lvalue -- not passed by address on either end.
+    assert_eq!(run_fixture("struct_arg_indirect_subscript.c"), 0);
+}
+
+#[test]
+fn out_pointer_return_float_args() {
+    // A struct returned through the out-pointer convention reaches its
+    // callee on the all-integer call path; a float argument rides as its
+    // f64-widened 8-byte pattern (System V AMD64 3.2.3 / Win64), not as a
+    // 4-byte value in the low half of the slot.
+    assert_eq!(run_fixture("out_pointer_return_float_args.c"), 0);
+}
+
+#[test]
+fn compound_literal_tagged_address() {
+    // A block-scope compound literal whose member initializer tags an
+    // address with a bitwise / shift operator takes the runtime path; a
+    // bare `&global` stays a link-time constant (C99 6.5.2.5).
+    assert_eq!(run_fixture("compound_literal_tagged_address.c"), 0);
+}
+
+#[test]
+fn function_typed_parameter() {
+    // A function-typed parameter `RET name(args)` / `RET (name)(args)`
+    // decays to a pointer to function (C99 6.7.5.3p8).
+    assert_eq!(run_fixture("function_typed_parameter.c"), 0);
+}
+
+#[test]
+fn static_init_braced_scalar() {
+    // A scalar member's initializer may be brace-enclosed (C99 6.7.9p11),
+    // including nested aggregates (the PyVarObject_HEAD_INIT shape).
+    assert_eq!(run_fixture("static_init_braced_scalar.c"), 0);
+}
+
+#[test]
+fn paren_string_char_array_init() {
+    // C99 6.7.9p14 + 6.5.1: a parenthesized string literal initializes a
+    // char array by copying its bytes (the `_PyASCIIObject_INIT` macro
+    // shape `._data = (LITERAL)`), not by storing the literal's pointer.
+    assert_eq!(run_fixture("paren_string_char_array_init.c"), 0);
+}
+
+#[test]
+fn static_init_paren_relocation() {
+    // A relocation-bearing initializer leaf (function / `&global`) may be
+    // wrapped in redundant parentheses and casts (the method-table idiom).
+    assert_eq!(run_fixture("static_init_paren_relocation.c"), 0);
+}
+
+#[test]
+fn const_conditional_address_init() {
+    // C99 6.6: a constant-condition conditional whose arms are address
+    // constants selects one arm; its relocation must reach the static
+    // initializer (the `_Py_LATIN1_CHR` clinic-table idiom).
+    assert_eq!(run_fixture("const_conditional_address_init.c"), 0);
+}
+
+#[test]
+fn do_while_zero_returns() {
+    // A `do { ...; return; } while (0)` body never reaches the exit test,
+    // so the function does not fall off its end (C99 6.8.5).
+    assert_eq!(run_fixture("do_while_zero_returns.c"), 0);
+}
+
+#[test]
+fn self_referential_macro() {
+    // A self-referential function-like macro expands once and the
+    // recurring name becomes the function, while an argument macro still
+    // expands (C99 6.10.3.4) -- the Py_TYPE / Py_SIZE idiom.
+    assert_eq!(run_fixture("self_referential_macro.c"), 0);
+}
+
+#[test]
+fn logical_not_float() {
+    // `!x` on a floating-point operand is the FP comparison `x == 0`
+    // (C99 6.5.3.3p5), not an integer comparison of the bit pattern.
+    assert_eq!(run_fixture("logical_not_float.c"), 0);
 }
 
 #[test]
@@ -1690,6 +1824,38 @@ fn predefined_macros_resolve() {
     // C99 predefines. __LINE__ and __FILE__ expand dynamically per
     // line; the rest are seeded once.
     assert_eq!(run_fixture("predefined_macros.c"), 0);
+}
+
+#[test]
+fn macro_multiline_comment_body_resolve() {
+    // A `\`-continued macro whose body holds a block comment spanning a
+    // physical-line break must not be truncated at the comment.
+    assert_eq!(run_fixture("macro_multiline_comment_body.c"), 0);
+}
+
+#[test]
+fn compound_literal_paren_init_resolve() {
+    // A parenthesized compound literal `((T){...})` must be accepted as
+    // an aggregate-initializer element (C99 6.5.1/6.5.2.5).
+    assert_eq!(run_fixture("compound_literal_paren_init.c"), 0);
+}
+
+#[test]
+fn atomic_ops_require_stdatomic_header() {
+    // The C11 7.17 atomic operations are recognized only when declared
+    // via `#pragma intrinsic` (which `<stdatomic.h>` does); a call with
+    // no such declaration is an ordinary unresolved function reference,
+    // so a name like `atomic_load` is not silently intercepted.
+    use crate::c5::Compiler;
+    let src = "int main(void){int x=0; return atomic_load(&x);}\n";
+    let err = Compiler::new(src.to_string())
+        .compile()
+        .expect_err("atomic_load without <stdatomic.h> must not be recognized");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("atomic_load"),
+        "expected an unresolved-reference diagnostic, got {msg:?}"
+    );
 }
 
 #[test]

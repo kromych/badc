@@ -6,11 +6,15 @@ Disassembly of section .text:
 <.text>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
-               	movl	$0x280, %esi            # imm = 0x280
+               	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
 
 <onExit>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%r13, (%rsp)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	testq	%rcx, %rcx
@@ -18,6 +22,11 @@ Disassembly of section .text:
                	movl	$0x2, %ecx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %r13
+               	movq	%rcx, %rax
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
 
 <main>:
@@ -25,6 +34,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
+               	movq	%r13, 0x8(%rsp)
                	leaq	-<rip>, %rdi       # <addr>
                	xorq	%rbx, %rbx
                	movq	%rbx, %rsi
@@ -34,8 +44,10 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r13
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

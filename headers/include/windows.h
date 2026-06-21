@@ -21,6 +21,13 @@
 // that only pull in `<windows.h>` get them too.
 #include <stddef.h>
 
+// Windows SDK version constants. Real <windows.h> pulls these in so
+// version-gated API selection (condition variables, etc.) resolves.
+#include <sdkddkver.h>
+
+// Win32 system error codes (GetLastError values) and the Winsock codes.
+#include <winerror.h>
+
 // Win32 API decoration macros. The runtime calls go through the
 // IAT (kernel32.dll already exports them by name) so the
 // __stdcall / __declspec(dllimport) tagging the headers carry on
@@ -83,6 +90,7 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::VirtualFree,             "VirtualFree")
 #pragma binding(kernel32::LoadLibraryA,            "LoadLibraryA")
 #pragma binding(kernel32::LoadLibraryExA,          "LoadLibraryExA")
+#pragma binding(kernel32::LoadLibraryExW,          "LoadLibraryExW")
 #pragma binding(kernel32::GetProcAddress,          "GetProcAddress")
 #pragma binding(kernel32::FreeLibrary,             "FreeLibrary")
 #pragma binding(kernel32::GetModuleFileNameA,      "GetModuleFileNameA")
@@ -109,6 +117,134 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::EnterCriticalSection,    "EnterCriticalSection")
 #pragma binding(kernel32::LeaveCriticalSection,    "LeaveCriticalSection")
 #pragma binding(kernel32::DeleteCriticalSection,   "DeleteCriticalSection")
+// Thread-local storage slots indexed off the TEB. A TlsAlloc index
+// names a per-thread pointer-sized slot read/written by TlsGetValue /
+// TlsSetValue and released by TlsFree.
+#pragma binding(kernel32::TlsAlloc,                "TlsAlloc")
+#pragma binding(kernel32::TlsGetValue,             "TlsGetValue")
+#pragma binding(kernel32::TlsSetValue,             "TlsSetValue")
+#pragma binding(kernel32::TlsFree,                 "TlsFree")
+// Slim reader/writer locks and condition variables (Vista+).
+#pragma binding(kernel32::InitializeSRWLock,           "InitializeSRWLock")
+#pragma binding(kernel32::AcquireSRWLockExclusive,     "AcquireSRWLockExclusive")
+#pragma binding(kernel32::ReleaseSRWLockExclusive,     "ReleaseSRWLockExclusive")
+#pragma binding(kernel32::AcquireSRWLockShared,        "AcquireSRWLockShared")
+#pragma binding(kernel32::ReleaseSRWLockShared,        "ReleaseSRWLockShared")
+#pragma binding(kernel32::TryAcquireSRWLockExclusive,  "TryAcquireSRWLockExclusive")
+#pragma binding(kernel32::TryAcquireSRWLockShared,     "TryAcquireSRWLockShared")
+#pragma binding(kernel32::InitializeConditionVariable, "InitializeConditionVariable")
+#pragma binding(kernel32::SleepConditionVariableSRW,   "SleepConditionVariableSRW")
+#pragma binding(kernel32::SleepConditionVariableCS,    "SleepConditionVariableCS")
+#pragma binding(kernel32::WakeConditionVariable,       "WakeConditionVariable")
+#pragma binding(kernel32::WakeAllConditionVariable,    "WakeAllConditionVariable")
+#pragma binding(kernel32::CreateSemaphoreW,            "CreateSemaphoreW")
+#pragma binding(kernel32::ReleaseSemaphore,            "ReleaseSemaphore")
+#pragma binding(kernel32::GetCurrentThread,            "GetCurrentThread")
+#pragma binding(kernel32::GetProcessTimes,             "GetProcessTimes")
+#pragma binding(kernel32::CancelIoEx,                  "CancelIoEx")
+#pragma binding(kernel32::GetNumberOfConsoleInputEvents, "GetNumberOfConsoleInputEvents")
+#pragma binding(kernel32::SetErrorMode,                "SetErrorMode")
+#pragma binding(kernel32::GetErrorMode,                "GetErrorMode")
+#pragma binding(kernel32::WaitForMultipleObjects,      "WaitForMultipleObjects")
+#pragma binding(kernel32::GetThreadTimes,              "GetThreadTimes")
+#pragma binding(kernel32::OpenThread,                  "OpenThread")
+#pragma binding(kernel32::CompareStringOrdinal,        "CompareStringOrdinal")
+#pragma binding(kernel32::GetOverlappedResult,         "GetOverlappedResult")
+#pragma dylib(bcrypt, "bcrypt.dll")
+#pragma binding(bcrypt::BCryptGenRandom,               "BCryptGenRandom")
+#pragma dylib(advapi32, "advapi32.dll")
+#pragma binding(advapi32::GetUserNameW,                "GetUserNameW")
+#pragma binding(advapi32::ConvertStringSecurityDescriptorToSecurityDescriptorW, "ConvertStringSecurityDescriptorToSecurityDescriptorW")
+// advapi32 registry API (winreg.h). The reflection-key entry points
+// (RegEnable/Disable/QueryReflectionKey) are absent: callers resolve
+// them at runtime through GetProcAddress, so no binding is needed.
+#pragma binding(advapi32::RegCloseKey,                 "RegCloseKey")
+#pragma binding(advapi32::RegConnectRegistryW,         "RegConnectRegistryW")
+#pragma binding(advapi32::RegCreateKeyW,               "RegCreateKeyW")
+#pragma binding(advapi32::RegCreateKeyExW,             "RegCreateKeyExW")
+#pragma binding(advapi32::RegDeleteKeyW,               "RegDeleteKeyW")
+#pragma binding(advapi32::RegDeleteKeyExW,             "RegDeleteKeyExW")
+#pragma binding(advapi32::RegDeleteValueW,             "RegDeleteValueW")
+#pragma binding(advapi32::RegEnumKeyExW,               "RegEnumKeyExW")
+#pragma binding(advapi32::RegEnumValueW,               "RegEnumValueW")
+#pragma binding(advapi32::RegFlushKey,                 "RegFlushKey")
+#pragma binding(advapi32::RegLoadKeyW,                 "RegLoadKeyW")
+#pragma binding(advapi32::RegOpenKeyExW,               "RegOpenKeyExW")
+#pragma binding(advapi32::RegQueryInfoKeyW,            "RegQueryInfoKeyW")
+#pragma binding(advapi32::RegQueryValueExW,            "RegQueryValueExW")
+#pragma binding(advapi32::RegSaveKeyW,                 "RegSaveKeyW")
+#pragma binding(advapi32::RegSetValueExW,              "RegSetValueExW")
+#pragma dylib(pathcch, "api-ms-win-core-path-l1-1-0.dll")
+#pragma binding(pathcch::PathCchSkipRoot,              "PathCchSkipRoot")
+#pragma binding(pathcch::PathCchCombineEx,             "PathCchCombineEx")
+#pragma dylib(version, "version.dll")
+#pragma binding(version::GetFileVersionInfoSizeW,      "GetFileVersionInfoSizeW")
+#pragma binding(version::GetFileVersionInfoW,          "GetFileVersionInfoW")
+#pragma binding(version::VerQueryValueW,               "VerQueryValueW")
+#pragma binding(kernel32::GetACP,                      "GetACP")
+#pragma binding(kernel32::GetLocaleInfoA,              "GetLocaleInfoA")
+#pragma binding(kernel32::GetFinalPathNameByHandleW,   "GetFinalPathNameByHandleW")
+#pragma binding(kernel32::CreateWaitableTimerExW,      "CreateWaitableTimerExW")
+#pragma binding(kernel32::ConnectNamedPipe,            "ConnectNamedPipe")
+#pragma binding(kernel32::GetCurrentThreadStackLimits, "GetCurrentThreadStackLimits")
+#pragma binding(kernel32::SetThreadStackGuarantee,     "SetThreadStackGuarantee")
+#pragma binding(kernel32::GetModuleFileNameW,          "GetModuleFileNameW")
+#pragma binding(kernel32::GetFileType,                 "GetFileType")
+#pragma binding(kernel32::GetFileInformationByHandle,  "GetFileInformationByHandle")
+#pragma binding(kernel32::GetFileInformationByHandleEx, "GetFileInformationByHandleEx")
+#pragma binding(kernel32::SetFileInformationByHandle,  "SetFileInformationByHandle")
+#pragma binding(kernel32::GetHandleInformation,        "GetHandleInformation")
+#pragma binding(kernel32::SetHandleInformation,        "SetHandleInformation")
+#pragma binding(kernel32::GetNamedPipeHandleStateW,    "GetNamedPipeHandleStateW")
+#pragma binding(kernel32::SetNamedPipeHandleState,     "SetNamedPipeHandleState")
+#pragma binding(kernel32::CreatePipe,                  "CreatePipe")
+#pragma binding(kernel32::DeviceIoControl,             "DeviceIoControl")
+#pragma binding(kernel32::CreateHardLinkW,             "CreateHardLinkW")
+#pragma binding(kernel32::CreateSymbolicLinkW,         "CreateSymbolicLinkW")
+#pragma binding(kernel32::MoveFileExW,                 "MoveFileExW")
+#pragma binding(kernel32::SetEnvironmentVariableW,     "SetEnvironmentVariableW")
+#pragma binding(kernel32::GetDriveTypeW,               "GetDriveTypeW")
+#pragma binding(kernel32::GetDiskFreeSpaceExW,         "GetDiskFreeSpaceExW")
+#pragma binding(kernel32::GetLogicalDriveStringsW,     "GetLogicalDriveStringsW")
+#pragma binding(kernel32::GetVolumePathNameW,          "GetVolumePathNameW")
+#pragma binding(kernel32::GetVolumePathNamesForVolumeNameW, "GetVolumePathNamesForVolumeNameW")
+#pragma binding(kernel32::FindFirstVolumeW,            "FindFirstVolumeW")
+#pragma binding(kernel32::FindNextVolumeW,             "FindNextVolumeW")
+#pragma binding(kernel32::FindVolumeClose,             "FindVolumeClose")
+#pragma binding(kernel32::GetActiveProcessorCount,     "GetActiveProcessorCount")
+#pragma binding(kernel32::OpenProcess,                 "OpenProcess")
+#pragma binding(kernel32::AddDllDirectory,             "AddDllDirectory")
+#pragma binding(kernel32::RemoveDllDirectory,          "RemoveDllDirectory")
+#pragma binding(kernel32::SetWaitableTimer,            "SetWaitableTimer")
+#pragma binding(kernel32::SetWaitableTimerEx,          "SetWaitableTimerEx")
+#pragma binding(kernel32::GetStringTypeW,              "GetStringTypeW")
+#pragma binding(kernel32::PssCaptureSnapshot,          "PssCaptureSnapshot")
+#pragma binding(kernel32::PssFreeSnapshot,             "PssFreeSnapshot")
+#pragma binding(kernel32::PssQuerySnapshot,            "PssQuerySnapshot")
+// Process / named-pipe / synchronization surface (processthreadsapi.h,
+// namedpipeapi.h, memoryapi.h, fileapi.h, winbase.h).
+#pragma binding(kernel32::CreateNamedPipeW,            "CreateNamedPipeW")
+#pragma binding(kernel32::WaitNamedPipeW,              "WaitNamedPipeW")
+#pragma binding(kernel32::PeekNamedPipe,               "PeekNamedPipe")
+#pragma binding(kernel32::GetExitCodeProcess,          "GetExitCodeProcess")
+#pragma binding(kernel32::ResumeThread,                "ResumeThread")
+#pragma binding(kernel32::TerminateThread,             "TerminateThread")
+#pragma binding(kernel32::GetVersion,                  "GetVersion")
+#pragma binding(kernel32::GetTickCount64,              "GetTickCount64")
+#pragma binding(kernel32::GetLongPathNameW,            "GetLongPathNameW")
+#pragma binding(kernel32::GetShortPathNameW,           "GetShortPathNameW")
+#pragma binding(kernel32::OpenFileMappingW,            "OpenFileMappingW")
+#pragma binding(kernel32::VirtualQuery,                "VirtualQuery")
+#pragma binding(kernel32::CopyFile2,                   "CopyFile2")
+#pragma binding(kernel32::NeedCurrentDirectoryForExePathW, "NeedCurrentDirectoryForExePathW")
+#pragma binding(kernel32::LCMapStringEx,               "LCMapStringEx")
+#pragma binding(kernel32::InitializeProcThreadAttributeList, "InitializeProcThreadAttributeList")
+#pragma binding(kernel32::UpdateProcThreadAttribute,   "UpdateProcThreadAttribute")
+#pragma binding(kernel32::DeleteProcThreadAttributeList, "DeleteProcThreadAttributeList")
+// Token-privilege surface (processthreadsapi.h / securitybaseapi.h).
+#pragma binding(advapi32::OpenProcessToken,            "OpenProcessToken")
+#pragma binding(advapi32::LookupPrivilegeValueW,       "LookupPrivilegeValueW")
+#pragma binding(advapi32::AdjustTokenPrivileges,       "AdjustTokenPrivileges")
 
 #define INFINITE        0xFFFFFFFF
 #define WAIT_OBJECT_0   0
@@ -166,6 +302,12 @@ typedef unsigned short     WORD;
 typedef unsigned short     USHORT;
 typedef unsigned char      BYTE;
 typedef unsigned char      UCHAR;
+typedef unsigned char     *LPBYTE;
+// REGSAM is winnt.h's ACCESS_MASK (a DWORD = unsigned long on Win32)
+// used as the security-access mask of the registry API. LSTATUS is
+// winreg.h's LONG-valued status return of the registry functions.
+typedef unsigned long      REGSAM;
+typedef LONG               LSTATUS;
 typedef void              *LPVOID;
 typedef void              *PVOID;
 typedef char              *LPSTR;
@@ -177,9 +319,37 @@ typedef unsigned short    *PWSTR;
 typedef unsigned short    *PCWSTR;
 typedef long long          INT_PTR;
 typedef long long          SSIZE_T;
+typedef long long          LRESULT;
+typedef long long          LPARAM;
+typedef unsigned long long WPARAM;
 typedef int                NTSTATUS;
 typedef int               *LPBOOL;
 typedef int               *PBOOL;
+typedef unsigned char      BOOLEAN;
+
+// Slim reader/writer lock, condition variable, and one-time init
+// (Vista+). Pointer-sized opaque values per the Windows SDK.
+typedef struct _RTL_SRWLOCK { PVOID Ptr; } SRWLOCK;
+typedef struct _RTL_CONDITION_VARIABLE { PVOID Ptr; } CONDITION_VARIABLE;
+typedef struct _RTL_RUN_ONCE { PVOID Ptr; } INIT_ONCE;
+typedef SRWLOCK            *PSRWLOCK;
+typedef CONDITION_VARIABLE *PCONDITION_VARIABLE;
+
+// Layout matches RTL_CRITICAL_SECTION so the type embeds at the right
+// size inside other structures (x64: 40 bytes).
+typedef struct _RTL_CRITICAL_SECTION {
+    PVOID     DebugInfo;
+    LONG      LockCount;
+    LONG      RecursionCount;
+    HANDLE    OwningThread;
+    HANDLE    LockSemaphore;
+    ULONG_PTR SpinCount;
+} CRITICAL_SECTION;
+typedef CRITICAL_SECTION   *LPCRITICAL_SECTION;
+typedef CRITICAL_SECTION   *PCRITICAL_SECTION;
+
+// 128-bit volume-relative file identifier, per the Windows SDK.
+typedef struct _FILE_ID_128 { unsigned char Identifier[16]; } FILE_ID_128;
 
 union _LARGE_INTEGER {
     struct {
@@ -227,6 +397,7 @@ typedef void              *HMUTANT;
 typedef void              *HEVENT;
 typedef void              *HSEMAPHORE;
 typedef void              *HKEY;
+typedef HKEY              *PHKEY;
 typedef void              *HCRYPTPROV;
 typedef void              *HCRYPTKEY;
 typedef void              *HMONITOR;
@@ -303,6 +474,172 @@ typedef struct _FILETIME FILETIME;
 typedef struct _FILETIME *LPFILETIME;
 typedef struct _FILETIME *PFILETIME;
 
+// File-information structures the path / stat layer reads field by field.
+typedef struct _BY_HANDLE_FILE_INFORMATION {
+    DWORD    dwFileAttributes;
+    FILETIME ftCreationTime;
+    FILETIME ftLastAccessTime;
+    FILETIME ftLastWriteTime;
+    DWORD    dwVolumeSerialNumber;
+    DWORD    nFileSizeHigh;
+    DWORD    nFileSizeLow;
+    DWORD    nNumberOfLinks;
+    DWORD    nFileIndexHigh;
+    DWORD    nFileIndexLow;
+} BY_HANDLE_FILE_INFORMATION;
+typedef struct _FILE_BASIC_INFO {
+    LARGE_INTEGER CreationTime;
+    LARGE_INTEGER LastAccessTime;
+    LARGE_INTEGER LastWriteTime;
+    LARGE_INTEGER ChangeTime;
+    DWORD         FileAttributes;
+} FILE_BASIC_INFO;
+typedef struct _FILE_ID_INFO {
+    ULONGLONG   VolumeSerialNumber;
+    FILE_ID_128 FileId;
+} FILE_ID_INFO;
+typedef struct _FILE_ATTRIBUTE_TAG_INFO {
+    DWORD FileAttributes;
+    DWORD ReparseTag;
+} FILE_ATTRIBUTE_TAG_INFO;
+typedef struct _VS_FIXEDFILEINFO {
+    DWORD dwSignature;
+    DWORD dwStrucVersion;
+    DWORD dwFileVersionMS;
+    DWORD dwFileVersionLS;
+    DWORD dwProductVersionMS;
+    DWORD dwProductVersionLS;
+    DWORD dwFileFlagsMask;
+    DWORD dwFileFlags;
+    DWORD dwFileOS;
+    DWORD dwFileType;
+    DWORD dwFileSubtype;
+    DWORD dwFileDateMS;
+    DWORD dwFileDateLS;
+} VS_FIXEDFILEINFO;
+typedef struct _GUID {
+    DWORD Data1;
+    WORD  Data2;
+    WORD  Data3;
+    BYTE  Data4[8];
+} GUID;
+typedef struct _SECURITY_ATTRIBUTES {
+    DWORD  nLength;
+    LPVOID lpSecurityDescriptor;
+    int    bInheritHandle;
+} SECURITY_ATTRIBUTES;
+
+// STARTUPINFOW / STARTUPINFOEXW / PROCESS_INFORMATION (processthreadsapi.h).
+// Field order and widths match the Win64 ABI: STARTUPINFOW is passed by
+// pointer to CreateProcessW, so the kernel reads each field at its native
+// offset. cbReserved2 / lpReserved2 sit between wShowWindow and hStdInput as
+// the SDK lays them out (a WORD then 4 bytes padding then an 8-byte pointer).
+typedef struct _STARTUPINFOW {
+    DWORD  cb;
+    LPWSTR lpReserved;
+    LPWSTR lpDesktop;
+    LPWSTR lpTitle;
+    DWORD  dwX;
+    DWORD  dwY;
+    DWORD  dwXSize;
+    DWORD  dwYSize;
+    DWORD  dwXCountChars;
+    DWORD  dwYCountChars;
+    DWORD  dwFillAttribute;
+    DWORD  dwFlags;
+    WORD   wShowWindow;
+    WORD   cbReserved2;
+    LPBYTE lpReserved2;
+    HANDLE hStdInput;
+    HANDLE hStdOutput;
+    HANDLE hStdError;
+} STARTUPINFOW;
+typedef struct _STARTUPINFOW *LPSTARTUPINFOW;
+
+// Opaque process-thread attribute list. CreateProcessW reads the bytes;
+// callers only ever pass a pointer obtained from
+// InitializeProcThreadAttributeList.
+typedef struct _PROC_THREAD_ATTRIBUTE_LIST PROC_THREAD_ATTRIBUTE_LIST;
+typedef PROC_THREAD_ATTRIBUTE_LIST *LPPROC_THREAD_ATTRIBUTE_LIST;
+
+typedef struct _STARTUPINFOEXW {
+    STARTUPINFOW                 StartupInfo;
+    LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList;
+} STARTUPINFOEXW;
+typedef struct _STARTUPINFOEXW *LPSTARTUPINFOEXW;
+
+typedef struct _PROCESS_INFORMATION {
+    HANDLE hProcess;
+    HANDLE hThread;
+    DWORD  dwProcessId;
+    DWORD  dwThreadId;
+} PROCESS_INFORMATION;
+typedef struct _PROCESS_INFORMATION *LPPROCESS_INFORMATION;
+typedef struct _PROCESS_INFORMATION *PPROCESS_INFORMATION;
+
+// Token-privilege structures (winnt.h). LUID is the locally-unique 64-bit
+// identifier a privilege is named by; TOKEN_PRIVILEGES carries a
+// variable-length Privileges array (declared [1]; callers overallocate).
+typedef struct _LUID {
+    DWORD LowPart;
+    LONG  HighPart;
+} LUID;
+typedef struct _LUID *PLUID;
+typedef struct _LUID_AND_ATTRIBUTES {
+    LUID  Luid;
+    DWORD Attributes;
+} LUID_AND_ATTRIBUTES;
+typedef struct _TOKEN_PRIVILEGES {
+    DWORD               PrivilegeCount;
+    LUID_AND_ATTRIBUTES Privileges[1];
+} TOKEN_PRIVILEGES;
+typedef struct _TOKEN_PRIVILEGES *PTOKEN_PRIVILEGES;
+
+// MEMORY_BASIC_INFORMATION (winnt.h) populated by VirtualQuery; Win64
+// layout is 48 bytes with the trailing PartitionId on recent SDKs.
+typedef struct _MEMORY_BASIC_INFORMATION {
+    PVOID  BaseAddress;
+    PVOID  AllocationBase;
+    DWORD  AllocationProtect;
+    WORD   PartitionId;
+    SIZE_T RegionSize;
+    DWORD  State;
+    DWORD  Protect;
+    DWORD  Type;
+} MEMORY_BASIC_INFORMATION;
+typedef struct _MEMORY_BASIC_INFORMATION *PMEMORY_BASIC_INFORMATION;
+
+// COPYFILE2_EXTENDED_PARAMETERS (winbase.h) passed by pointer to CopyFile2.
+typedef struct _COPYFILE2_EXTENDED_PARAMETERS {
+    DWORD  dwSize;
+    DWORD  dwCopyFlags;
+    int   *pfCancel;
+    void  *pProgressRoutine;
+    void  *pvCallbackContext;
+} COPYFILE2_EXTENDED_PARAMETERS;
+typedef void *DLL_DIRECTORY_COOKIE;
+typedef struct _FILE_FS_PERSISTENT_VOLUME_INFORMATION {
+    ULONG VolumeFlags;
+    ULONG FlagMask;
+    ULONG Version;
+    ULONG Reserved;
+} FILE_FS_PERSISTENT_VOLUME_INFORMATION;
+typedef struct _OSVERSIONINFOEXW {
+    DWORD          dwOSVersionInfoSize;
+    DWORD          dwMajorVersion;
+    DWORD          dwMinorVersion;
+    DWORD          dwBuildNumber;
+    DWORD          dwPlatformId;
+    unsigned short szCSDVersion[128];
+    WORD           wServicePackMajor;
+    WORD           wServicePackMinor;
+    WORD           wSuiteMask;
+    unsigned char  wProductType;
+    unsigned char  wReserved;
+} OSVERSIONINFOEXW;
+typedef struct _OSVERSIONINFOEXW *LPOSVERSIONINFOEXW;
+typedef struct _OSVERSIONINFOEXW *POSVERSIONINFOEXW;
+
 // OSVERSIONINFOA / OSVERSIONINFOW -- sqlite reads `dwPlatformId`
 // out of the struct after a `GetVersionEx*` call. The other fields
 // are present for layout fidelity (so the kernel32 callee writes
@@ -335,9 +672,54 @@ typedef struct _OSVERSIONINFOW OSVERSIONINFOW;
 typedef struct _OSVERSIONINFOW *LPOSVERSIONINFOW;
 typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 
+// Generic OSVERSIONINFO* names resolve to the W variant (winbase.h
+// under UNICODE), matching the rest of this header's A/W convention.
+typedef OSVERSIONINFOW OSVERSIONINFO;
+typedef OSVERSIONINFOW *LPOSVERSIONINFO;
+typedef OSVERSIONINFOW *POSVERSIONINFO;
+typedef OSVERSIONINFOEXW OSVERSIONINFOEX;
+typedef OSVERSIONINFOEXW *LPOSVERSIONINFOEX;
+typedef OSVERSIONINFOEXW *POSVERSIONINFOEX;
+
 #define VER_PLATFORM_WIN32s         0
 #define VER_PLATFORM_WIN32_WINDOWS  1
 #define VER_PLATFORM_WIN32_NT       2
+
+// VerifyVersionInfo type masks and comparison operators (winnt.h).
+// VER_SET_CONDITION folds an operator into the condition mask via
+// VerSetConditionMask.
+#define VER_MINORVERSION     0x0000001
+#define VER_MAJORVERSION     0x0000002
+#define VER_BUILDNUMBER      0x0000004
+#define VER_PLATFORMID       0x0000008
+#define VER_SERVICEPACKMINOR 0x0000010
+#define VER_SERVICEPACKMAJOR 0x0000020
+#define VER_SUITENAME        0x0000040
+#define VER_PRODUCT_TYPE     0x0000080
+#define VER_EQUAL            1
+#define VER_GREATER          2
+#define VER_GREATER_EQUAL    3
+#define VER_LESS             4
+#define VER_LESS_EQUAL       5
+#define VER_AND              6
+#define VER_OR               7
+#define VER_SET_CONDITION(mask, type, cond) \
+    ((mask) = VerSetConditionMask((mask), (type), (cond)))
+
+// GetComputerNameExW name selector (sysinfoapi.h) and the NetBIOS
+// name length cap (winbase.h).
+#define MAX_COMPUTERNAME_LENGTH 15
+typedef enum _COMPUTER_NAME_FORMAT {
+    ComputerNameNetBIOS,
+    ComputerNameDnsHostname,
+    ComputerNameDnsDomain,
+    ComputerNameDnsFullyQualified,
+    ComputerNamePhysicalNetBIOS,
+    ComputerNamePhysicalDnsHostname,
+    ComputerNamePhysicalDnsDomain,
+    ComputerNamePhysicalDnsFullyQualified,
+    ComputerNameMax
+} COMPUTER_NAME_FORMAT;
 
 // Codepage / API constants the Win32 VFS reaches for. Values
 // pinned by the platform; sqlite consumes them as plain integer
@@ -451,28 +833,219 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 #define HEAP_ZERO_MEMORY               0x00000008
 #define HEAP_REALLOC_IN_PLACE_ONLY     0x00000010
 
-// Windows error codes sqlite checks against the GetLastError
-// return.
-#define ERROR_SUCCESS                  0
-#define ERROR_INVALID_HANDLE           6
-#define ERROR_NOT_LOCKED               158
-#define ERROR_LOCK_VIOLATION           33
-#define ERROR_HANDLE_DISK_FULL         39
-#define ERROR_FILE_NOT_FOUND           2
-#define ERROR_PATH_NOT_FOUND           3
-#define ERROR_DISK_FULL                112
-#define ERROR_SHARING_VIOLATION        32
-#define ERROR_NOT_SUPPORTED            50
-#define ERROR_ACCESS_DENIED            5
-#define ERROR_GEN_FAILURE              31
-#define ERROR_NETNAME_DELETED          64
-#define ERROR_INVALID_PARAMETER        87
-#define ERROR_INSUFFICIENT_BUFFER      122
-#define ERROR_OUTOFMEMORY              14
-#define ERROR_NO_MORE_FILES            18
-#define ERROR_BROKEN_PIPE              109
-#define ERROR_HANDLE_EOF               38
-#define ERROR_NOT_READY                21
+// Win32 system error codes are in <winerror.h> (included above).
+#define WAIT_TIMEOUT                   258
+#define SEM_FAILCRITICALERRORS         0x0001
+#define THREAD_QUERY_LIMITED_INFORMATION 0x0800
+#define FILE_ATTRIBUTE_VIRTUAL         0x00010000
+#define STATUS_CONTROL_C_EXIT          0xC000013A
+#define CP_UTF7                        65000
+#define CP_UTF8                        65001
+#define IO_REPARSE_TAG_SYMLINK         0xA000000C
+// winnt.h surrogate-bit predicate over the reparse tag; not an export.
+#define IsReparseTagNameSurrogate(tag) (((tag) & 0x20000000))
+#define BCRYPT_USE_SYSTEM_PREFERRED_RNG 0x00000002
+#define EXCEPTION_CONTINUE_SEARCH      0
+#define EXCEPTION_EXECUTE_HANDLER      1
+#define EXCEPTION_NONCONTINUABLE       0x1
+#define EXCEPTION_ACCESS_VIOLATION     0xC0000005
+#define EXCEPTION_IN_PAGE_ERROR        0xC0000006
+#define EXCEPTION_NONCONTINUABLE_EXCEPTION 0xC0000025
+#define EXCEPTION_FLT_DIVIDE_BY_ZERO   0xC000008E
+#define EXCEPTION_FLT_OVERFLOW         0xC0000091
+#define EXCEPTION_INT_DIVIDE_BY_ZERO   0xC0000094
+#define EXCEPTION_INT_OVERFLOW         0xC0000095
+#define EXCEPTION_STACK_OVERFLOW       0xC00000FD
+#define IO_REPARSE_TAG_MOUNT_POINT     0xA0000003
+#define IO_REPARSE_TAG_APPEXECLINK     0x8000001B
+#define SDDL_REVISION_1                1
+#define MOVEFILE_REPLACE_EXISTING      0x00000001
+#define MOVEFILE_COPY_ALLOWED          0x00000002
+#define MOVEFILE_WRITE_THROUGH         0x00000008
+#define SYMBOLIC_LINK_FLAG_DIRECTORY   0x00000001
+#define SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE 0x00000002
+#define HANDLE_FLAG_INHERIT            0x00000001
+#define HANDLE_FLAG_PROTECT_FROM_CLOSE 0x00000002
+#define ALL_PROCESSOR_GROUPS           0xffff
+#define SEM_NOGPFAULTERRORBOX          0x0002
+#define SEM_NOALIGNMENTFAULTEXCEPT     0x0004
+#define SEM_NOOPENFILEERRORBOX         0x8000
+#define CSTR_LESS_THAN                 1
+#define CSTR_EQUAL                     2
+#define CSTR_GREATER_THAN              3
+#define LOAD_WITH_ALTERED_SEARCH_PATH      0x00000008
+#define LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR   0x00000100
+#define LOAD_LIBRARY_SEARCH_APPLICATION_DIR 0x00000200
+#define LOAD_LIBRARY_SEARCH_USER_DIRS      0x00000400
+#define LOAD_LIBRARY_SEARCH_SYSTEM32       0x00000800
+#define LOAD_LIBRARY_SEARCH_DEFAULT_DIRS   0x00001000
+#define BCRYPT_SUCCESS(status) (((NTSTATUS)(status)) >= 0)
+#define TLS_OUT_OF_INDEXES             0xFFFFFFFF
+#define TIMER_ALL_ACCESS               0x1F0003
+#define VOLUME_NAME_DOS                0x0
+#define VOLUME_NAME_GUID               0x1
+#define VOLUME_NAME_NT                 0x2
+#define VOLUME_NAME_NONE               0x4
+#define FILE_NAME_NORMALIZED           0x0
+#define FILE_NAME_OPENED               0x8
+#define CreateEvent CreateEventA
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#define CT_CTYPE1          1
+#define CT_CTYPE2          2
+#define CT_CTYPE3          4
+#define FILE_TYPE_UNKNOWN  0x0000
+#define FILE_TYPE_DISK     0x0001
+#define FILE_TYPE_CHAR     0x0002
+#define FILE_TYPE_PIPE     0x0003
+#define FILE_TYPE_REMOTE   0x8000
+#define FILE_DEVICE_BEEP                0x00000001
+#define FILE_DEVICE_CD_ROM              0x00000002
+#define FILE_DEVICE_CD_ROM_FILE_SYSTEM  0x00000003
+#define FILE_DEVICE_CONTROLLER          0x00000004
+#define FILE_DEVICE_DATALINK            0x00000005
+#define FILE_DEVICE_DFS                 0x00000006
+#define FILE_DEVICE_DISK                0x00000007
+#define FILE_DEVICE_DISK_FILE_SYSTEM    0x00000008
+#define FILE_DEVICE_FILE_SYSTEM         0x00000009
+#define FILE_DEVICE_INPORT_PORT         0x0000000a
+#define FILE_DEVICE_KEYBOARD            0x0000000b
+#define FILE_DEVICE_MAILSLOT            0x0000000c
+#define FILE_DEVICE_MIDI_IN             0x0000000d
+#define FILE_DEVICE_MIDI_OUT            0x0000000e
+#define FILE_DEVICE_MOUSE               0x0000000f
+#define FILE_DEVICE_MULTI_UNC_PROVIDER  0x00000010
+#define FILE_DEVICE_NAMED_PIPE          0x00000011
+#define FILE_DEVICE_NETWORK             0x00000012
+#define FILE_DEVICE_NETWORK_BROWSER     0x00000013
+#define FILE_DEVICE_NETWORK_FILE_SYSTEM 0x00000014
+#define FILE_DEVICE_NULL                0x00000015
+#define FILE_DEVICE_PARALLEL_PORT       0x00000016
+#define FILE_DEVICE_PHYSICAL_NETCARD    0x00000017
+#define FILE_DEVICE_PRINTER             0x00000018
+#define FILE_DEVICE_SCANNER             0x00000019
+#define FILE_DEVICE_SERIAL_MOUSE_PORT   0x0000001a
+#define FILE_DEVICE_SERIAL_PORT         0x0000001b
+#define FILE_DEVICE_SCREEN              0x0000001c
+#define FILE_DEVICE_SOUND               0x0000001d
+#define FILE_DEVICE_STREAMS             0x0000001e
+#define FILE_DEVICE_TAPE                0x0000001f
+#define FILE_DEVICE_TAPE_FILE_SYSTEM    0x00000020
+#define FILE_DEVICE_TRANSPORT           0x00000021
+#define FILE_DEVICE_UNKNOWN             0x00000022
+#define FILE_DEVICE_VIDEO               0x00000023
+#define FILE_DEVICE_VIRTUAL_DISK        0x00000024
+#define FILE_DEVICE_WAVE_IN             0x00000025
+#define FILE_DEVICE_WAVE_OUT            0x00000026
+#define FILE_DEVICE_8042_PORT           0x00000027
+#define FILE_DEVICE_NETWORK_REDIRECTOR  0x00000028
+#define FILE_DEVICE_BATTERY             0x00000029
+#define FILE_DEVICE_BUS_EXTENDER        0x0000002a
+#define FILE_DEVICE_MODEM               0x0000002b
+#define FILE_DEVICE_VDM                 0x0000002c
+#define FILE_DEVICE_MASS_STORAGE        0x0000002d
+#define FILE_DEVICE_SMB                 0x0000002e
+#define FILE_DEVICE_KS                  0x0000002f
+#define FILE_DEVICE_CHANGER             0x00000030
+#define FILE_DEVICE_SMARTCARD           0x00000031
+#define FILE_DEVICE_ACPI                0x00000032
+#define FILE_DEVICE_DVD                 0x00000033
+#define FILE_DEVICE_FULLSCREEN_VIDEO    0x00000034
+#define FILE_DEVICE_DFS_FILE_SYSTEM     0x00000035
+#define FILE_DEVICE_DFS_VOLUME          0x00000036
+#define FILE_DEVICE_SERENUM             0x00000037
+#define FILE_DEVICE_TERMSRV             0x00000038
+#define FILE_DEVICE_KSEC                0x00000039
+#define FILE_DEVICE_FIPS                0x0000003a
+#define FILE_DEVICE_INFINIBAND          0x0000003b
+#define FILE_DEVICE_CONSOLE             0x00000050
+#define FILE_DEVICE_NFS                 0x00000051
+#define FILE_DEVICE_TCP_UDP             0x00000052
+// FILE_INFO_BY_HANDLE_CLASS values for GetFileInformationByHandleEx.
+#define FileBasicInfo        0
+#define FileStandardInfo     1
+#define FileNameInfo         2
+#define FileStreamInfo       7
+#define FileAttributeTagInfo 9
+#define FileIdBothDirectoryInfo 10
+#define FileIdInfo           18
+// Locale identifiers for GetLocaleInfoA.
+#define LOCALE_USER_DEFAULT      0x0400
+#define LOCALE_SYSTEM_DEFAULT    0x0800
+#define LOCALE_SISO639LANGNAME   0x59
+#define LOCALE_SISO3166CTRYNAME  0x5a
+#define LOCALE_NAME_MAX_LENGTH   85
+#define LOCALE_IDEFAULTLANGUAGE     0x09
+#define LOCALE_IDEFAULTCOUNTRY      0x0a
+#define LOCALE_IDEFAULTCODEPAGE     0x0b
+#define LOCALE_IDEFAULTANSICODEPAGE 0x1004
+#define DRIVE_UNKNOWN      0
+#define DRIVE_NO_ROOT_DIR  1
+#define DRIVE_REMOVABLE    2
+#define DRIVE_FIXED        3
+#define DRIVE_REMOTE       4
+#define DRIVE_CDROM        5
+#define DRIVE_RAMDISK      6
+#define PIPE_WAIT             0x00000000
+#define PIPE_NOWAIT           0x00000001
+#define PIPE_READMODE_BYTE    0x00000000
+#define PIPE_READMODE_MESSAGE 0x00000002
+#define PIPE_TYPE_BYTE        0x00000000
+#define PIPE_TYPE_MESSAGE     0x00000004
+#define PIPE_ACCESS_INBOUND   0x00000001
+#define PIPE_ACCESS_OUTBOUND  0x00000002
+#define PIPE_ACCESS_DUPLEX    0x00000003
+// Device I/O control codes (winioctl.h CTL_CODE construction).
+#define METHOD_BUFFERED   0
+#define METHOD_IN_DIRECT  1
+#define METHOD_OUT_DIRECT 2
+#define METHOD_NEITHER    3
+#define FILE_ANY_ACCESS     0
+#define FILE_SPECIAL_ACCESS 0
+#define FILE_READ_ACCESS    1
+#define FILE_WRITE_ACCESS   2
+#define CTL_CODE(DeviceType, Function, Method, Access) \
+    (((DeviceType) << 16) | ((Access) << 14) | ((Function) << 2) | (Method))
+#define FSCTL_GET_REPARSE_POINT \
+    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 42, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define FSCTL_SET_REPARSE_POINT \
+    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 41, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+#define FSCTL_DELETE_REPARSE_POINT \
+    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 43, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+#define FSCTL_QUERY_PERSISTENT_VOLUME_STATE \
+    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 57, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define PATHCCH_ALLOW_LONG_PATHS 0x00000001
+// winnt.h byte-offset of a struct member; equivalent to <stddef.h>
+// offsetof, which windows.h pulls in above.
+#define FIELD_OFFSET(type, field) ((LONG)offsetof(type, field))
+#define RTL_SIZEOF_THROUGH_FIELD(type, field) \
+    (FIELD_OFFSET(type, field) + sizeof(((type *)0)->field))
+#define LOWORD(l) ((WORD)((DWORD_PTR)(l) & 0xffff))
+#define HIWORD(l) ((WORD)(((DWORD_PTR)(l) >> 16) & 0xffff))
+#define LOBYTE(w) ((BYTE)((DWORD_PTR)(w) & 0xff))
+#define HIBYTE(w) ((BYTE)(((DWORD_PTR)(w) >> 8) & 0xff))
+// Character-type bits returned by GetStringTypeW for CT_CTYPE3.
+#define C3_NONSPACING    0x0001
+#define C3_DIACRITIC     0x0002
+#define C3_VOWELMARK     0x0004
+#define C3_SYMBOL        0x0008
+#define C3_KATAKANA      0x0010
+#define C3_HIRAGANA      0x0020
+#define C3_HALFWIDTH     0x0040
+#define C3_FULLWIDTH     0x0080
+#define C3_IDEOGRAPH     0x0100
+#define C3_KASHIDA       0x0200
+#define C3_LEXICAL       0x0400
+#define C3_HIGHSURROGATE 0x0800
+#define C3_LOWSURROGATE  0x1000
+#define C3_ALPHA         0x8000
+#define C3_NOTAPPLICABLE 0x0000
+#define MAKELANGID(p, s) ((((WORD)(s)) << 10) | (WORD)(p))
+#ifndef min
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#endif
+#ifndef max
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+#endif
 #define ERROR_INVALID_FUNCTION         1
 #define ERROR_TOO_MANY_OPEN_FILES      4
 #define ERROR_CANNOT_MAKE              82
@@ -487,12 +1060,226 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 #define ERROR_USER_MAPPED_FILE         1224
 #define NO_ERROR                       0
 #define STATUS_PENDING                 0x00000103
+
+// Registry predefined keys, access rights, and value/option types
+// (winnt.h). HKEY_* are the fixed pseudo-handles; the cast routes a
+// 32-bit constant through the 64-bit HKEY without sign extension.
+// The registry status codes ERROR_SUCCESS / ERROR_MORE_DATA come
+// from <winerror.h>.
+#define HKEY_CLASSES_ROOT     ((HKEY)(unsigned long long)0x80000000)
+#define HKEY_CURRENT_USER     ((HKEY)(unsigned long long)0x80000001)
+#define HKEY_LOCAL_MACHINE    ((HKEY)(unsigned long long)0x80000002)
+#define HKEY_USERS            ((HKEY)(unsigned long long)0x80000003)
+#define HKEY_PERFORMANCE_DATA ((HKEY)(unsigned long long)0x80000004)
+#define HKEY_CURRENT_CONFIG   ((HKEY)(unsigned long long)0x80000005)
+#define HKEY_DYN_DATA         ((HKEY)(unsigned long long)0x80000006)
+
+#define KEY_QUERY_VALUE        0x0001
+#define KEY_SET_VALUE          0x0002
+#define KEY_CREATE_SUB_KEY     0x0004
+#define KEY_ENUMERATE_SUB_KEYS 0x0008
+#define KEY_NOTIFY             0x0010
+#define KEY_CREATE_LINK        0x0020
+#define KEY_WOW64_64KEY        0x0100
+#define KEY_WOW64_32KEY        0x0200
+#define KEY_READ               0x20019
+#define KEY_WRITE              0x20006
+#define KEY_EXECUTE            0x20019
+#define KEY_ALL_ACCESS         0xF003F
+
+#define REG_NONE                       0
+#define REG_SZ                         1
+#define REG_EXPAND_SZ                  2
+#define REG_BINARY                     3
+#define REG_DWORD                      4
+#define REG_DWORD_LITTLE_ENDIAN        4
+#define REG_DWORD_BIG_ENDIAN           5
+#define REG_LINK                       6
+#define REG_MULTI_SZ                   7
+#define REG_RESOURCE_LIST              8
+#define REG_FULL_RESOURCE_DESCRIPTOR   9
+#define REG_RESOURCE_REQUIREMENTS_LIST 10
+#define REG_QWORD                      11
+#define REG_QWORD_LITTLE_ENDIAN        11
+
+#define REG_OPTION_RESERVED       0
+#define REG_OPTION_NON_VOLATILE   0
+#define REG_OPTION_VOLATILE       1
+#define REG_OPTION_CREATE_LINK    2
+#define REG_OPTION_BACKUP_RESTORE 4
+#define REG_OPTION_OPEN_LINK      8
+
+#define REG_CREATED_NEW_KEY     1
+#define REG_OPENED_EXISTING_KEY 2
+
+#define REG_WHOLE_HIVE_VOLATILE 1
+#define REG_REFRESH_HIVE        2
+#define REG_NO_LAZY_FLUSH       4
+
+#define REG_NOTIFY_CHANGE_NAME       1
+#define REG_NOTIFY_CHANGE_ATTRIBUTES 2
+#define REG_NOTIFY_CHANGE_LAST_SET   4
+#define REG_NOTIFY_CHANGE_SECURITY   8
+#define REG_LEGAL_CHANGE_FILTER      0xF
+#define REG_LEGAL_OPTION             0x1F
 #define WAIT_OBJECT_0_BASE             0
 #define INVALID_FILE_SIZE              0xFFFFFFFF
 
 #define WAIT_FAILED                    0xFFFFFFFF
 #define WAIT_TIMEOUT                   258
 #define WAIT_ABANDONED                 0x00000080
+#define WAIT_ABANDONED_0               0x00000080
+#define MAXIMUM_WAIT_OBJECTS           64
+
+// Win32 system error codes referenced as integer literals. Values per
+// <winerror.h>; the registry/socket subset lives in the bundled
+// <winerror.h>, these complete the process/pipe surface.
+#define ERROR_PIPE_BUSY                231
+#define ERROR_NO_MORE_ITEMS            259
+#define ERROR_ABANDONED_WAIT_0         735
+#define ERROR_CONTROL_C_EXIT           572
+#define ERROR_PIPE_CONNECTED           535
+#define ERROR_PRIVILEGE_NOT_HELD       1314
+#define ERROR_NOT_FOUND                1168
+#define ERROR_NO_SYSTEM_RESOURCES      1450
+
+// CreateProcess dwCreationFlags and process priority classes (winbase.h).
+#define DEBUG_PROCESS                  0x00000001
+#define DEBUG_ONLY_THIS_PROCESS        0x00000002
+#define CREATE_SUSPENDED               0x00000004
+#define DETACHED_PROCESS               0x00000008
+#define CREATE_NEW_CONSOLE             0x00000010
+#define NORMAL_PRIORITY_CLASS          0x00000020
+#define IDLE_PRIORITY_CLASS            0x00000040
+#define HIGH_PRIORITY_CLASS            0x00000080
+#define REALTIME_PRIORITY_CLASS        0x00000100
+#define CREATE_NEW_PROCESS_GROUP       0x00000200
+#define CREATE_UNICODE_ENVIRONMENT     0x00000400
+#define CREATE_DEFAULT_ERROR_MODE      0x04000000
+#define CREATE_NO_WINDOW               0x08000000
+#define CREATE_BREAKAWAY_FROM_JOB      0x01000000
+#define BELOW_NORMAL_PRIORITY_CLASS    0x00004000
+#define ABOVE_NORMAL_PRIORITY_CLASS    0x00008000
+#define EXTENDED_STARTUPINFO_PRESENT   0x00080000
+
+// STARTUPINFO dwFlags bits (winbase.h).
+#define STARTF_USESHOWWINDOW           0x00000001
+#define STARTF_USESIZE                 0x00000002
+#define STARTF_USEPOSITION             0x00000004
+#define STARTF_USECOUNTCHARS           0x00000008
+#define STARTF_USEFILLATTRIBUTE        0x00000010
+#define STARTF_RUNFULLSCREEN           0x00000020
+#define STARTF_FORCEONFEEDBACK         0x00000040
+#define STARTF_FORCEOFFFEEDBACK        0x00000080
+#define STARTF_USESTDHANDLES           0x00000100
+#define STARTF_USEHOTKEY               0x00000200
+#define STARTF_TITLEISLINKNAME         0x00000800
+#define STARTF_TITLEISAPPID            0x00001000
+#define STARTF_PREVENTPINNING          0x00002000
+#define STARTF_UNTRUSTEDSOURCE         0x00008000
+
+// GetExitCodeProcess sentinel and ShowWindow command (winbase.h/winuser.h).
+#define STILL_ACTIVE                   259
+#define SW_HIDE                        0
+
+// Standard device handle ids and DuplicateHandle options (processenv.h /
+// handleapi.h).
+#define DUPLICATE_CLOSE_SOURCE         0x00000001
+#define DUPLICATE_SAME_ACCESS          0x00000002
+
+// Process / token access rights (winnt.h).
+#define PROCESS_DUP_HANDLE             0x0040
+#define TOKEN_QUERY                    0x0008
+#define TOKEN_ADJUST_PRIVILEGES        0x0020
+#define SE_PRIVILEGE_ENABLED           0x00000002
+
+// Named-pipe creation flags (winbase.h / namedpipeapi.h).
+#define PIPE_UNLIMITED_INSTANCES       255
+#define NMPWAIT_WAIT_FOREVER           0xFFFFFFFF
+#define NMPWAIT_NOWAIT                 0x00000001
+#define NMPWAIT_USE_DEFAULT_WAIT       0x00000000
+#define FILE_FLAG_FIRST_PIPE_INSTANCE  0x00080000
+
+// File-mapping view access and section flags (memoryapi.h / winnt.h).
+#define FILE_MAP_ALL_ACCESS            0x000F001F
+#define FILE_MAP_EXECUTE               0x0020
+#define SEC_RESERVE                    0x04000000
+#define SEC_COMMIT                     0x08000000
+#define SEC_NOCACHE                    0x10000000
+#define SEC_WRITECOMBINE               0x40000000
+#define SEC_LARGE_PAGES                0x80000000
+
+// Memory protection / region-state bits (winnt.h) beyond the VirtualAlloc
+// subset declared earlier.
+#define PAGE_WRITECOPY                 0x08
+#define PAGE_EXECUTE_WRITECOPY         0x80
+#define PAGE_GUARD                     0x100
+#define PAGE_NOCACHE                   0x200
+#define PAGE_WRITECOMBINE              0x400
+#define MEM_FREE                       0x10000
+#define MEM_PRIVATE                    0x20000
+#define MEM_MAPPED                     0x40000
+#define MEM_IMAGE                      0x1000000
+
+// Composite generic file-access masks (winnt.h).
+#define FILE_GENERIC_READ              0x00120089
+#define FILE_GENERIC_WRITE             0x00120116
+
+// LCMapStringEx mapping flags (winnls.h).
+#define LCMAP_LOWERCASE                0x00000100
+#define LCMAP_UPPERCASE                0x00000200
+#define LCMAP_TITLECASE                0x00000300
+#define LCMAP_SORTKEY                  0x00000400
+#define LCMAP_BYTEREV                  0x00000800
+#define LCMAP_HIRAGANA                 0x00100000
+#define LCMAP_KATAKANA                 0x00200000
+#define LCMAP_HALFWIDTH                0x00400000
+#define LCMAP_FULLWIDTH                0x00800000
+#define LCMAP_LINGUISTIC_CASING        0x01000000
+#define LCMAP_SIMPLIFIED_CHINESE       0x02000000
+#define LCMAP_TRADITIONAL_CHINESE      0x04000000
+#define LCMAP_SORTHANDLE               0x20000000
+#define LCMAP_HASH                     0x00040000
+
+// Locale-name constants for the *Ex APIs (winnls.h).
+#define LOCALE_NAME_USER_DEFAULT       NULL
+#define LOCALE_NAME_INVARIANT          L""
+#define LOCALE_NAME_SYSTEM_DEFAULT     L"!x-sys-default-locale"
+
+// ProcThreadAttribute identifier for the inherited-handle list
+// (processthreadsapi.h). Encoded as ProcThreadAttributeHandleList(2) with
+// the THREAD(0x10000) and INPUT(0x20000) flag bits set.
+#define PROC_THREAD_ATTRIBUTE_HANDLE_LIST 0x00020002
+
+// CopyFile2 dwCopyFlags (winbase.h).
+#define COPY_FILE_FAIL_IF_EXISTS              0x00000001
+#define COPY_FILE_RESTARTABLE                 0x00000002
+#define COPY_FILE_OPEN_SOURCE_FOR_WRITE       0x00000004
+#define COPY_FILE_ALLOW_DECRYPTED_DESTINATION 0x00000008
+#define COPY_FILE_COPY_SYMLINK                0x00000800
+#define COPY_FILE_NO_BUFFERING                0x00001000
+#define COPY_FILE_REQUEST_SECURITY_PRIVILEGES 0x00002000
+#define COPY_FILE_RESUME_FROM_PAUSE           0x00004000
+#define COPY_FILE_NO_OFFLOAD                  0x00040000
+#define COPY_FILE_REQUEST_COMPRESSED_TRAFFIC  0x10000000
+#define COPY_FILE_DIRECTORY                   0x00000080
+// COPYFILE2 progress-callback reason and result codes (winbase.h).
+#define COPYFILE2_CALLBACK_CHUNK_STARTED   1
+#define COPYFILE2_CALLBACK_CHUNK_FINISHED  2
+#define COPYFILE2_CALLBACK_STREAM_STARTED  3
+#define COPYFILE2_CALLBACK_STREAM_FINISHED 4
+#define COPYFILE2_CALLBACK_POLL_CONTINUE   5
+#define COPYFILE2_CALLBACK_ERROR           6
+#define COPYFILE2_PROGRESS_CONTINUE        0
+#define COPYFILE2_PROGRESS_CANCEL          1
+#define COPYFILE2_PROGRESS_STOP            2
+#define COPYFILE2_PROGRESS_QUIET           3
+#define COPYFILE2_PROGRESS_PAUSE           4
+
+// UNICODE name mapping for the privilege-lookup call and its name string
+// (winbase.h / winnt.h). Source uses the bare spelling under UNICODE.
+#define LookupPrivilegeValue LookupPrivilegeValueW
+#define SE_RESTORE_NAME L"SeRestorePrivilege"
 
 // SEH exception codes sqlite checks against in its mmap recovery
 // hook. Spelled out because c5's preprocessor can't expand the
@@ -538,6 +1325,16 @@ struct _SYSTEMTIME {
     WORD wMilliseconds;
 };
 typedef struct _SYSTEMTIME SYSTEMTIME;
+
+typedef struct _TIME_ZONE_INFORMATION {
+    LONG       Bias;
+    WCHAR      StandardName[32];
+    SYSTEMTIME StandardDate;
+    LONG       StandardBias;
+    WCHAR      DaylightName[32];
+    SYSTEMTIME DaylightDate;
+    LONG       DaylightBias;
+} TIME_ZONE_INFORMATION;
 
 // WIN32_FILE_ATTRIBUTE_DATA -- output buffer for
 // GetFileAttributesEx. sqlite reads the attribute / size pair to
@@ -673,6 +1470,7 @@ HANDLE LoadLibraryA(char *name);
 // LoadLibraryExA: name, hFile (reserved, must be NULL), dwFlags.
 // dwFlags bits (LOAD_*) control search-path and binding semantics.
 HANDLE LoadLibraryExA(char *name, HANDLE reserved, int flags);
+HANDLE LoadLibraryExW(const unsigned short *name, HANDLE reserved, int flags);
 PVOID  GetProcAddress(HANDLE module, char *name);
 int    FreeLibrary(HANDLE module);
 DWORD  GetLastError(void);
@@ -699,6 +1497,125 @@ int InitializeCriticalSection(char *cs);
 int EnterCriticalSection(char *cs);
 int LeaveCriticalSection(char *cs);
 int DeleteCriticalSection(char *cs);
+DWORD TlsAlloc(void);
+PVOID TlsGetValue(DWORD index);
+int   TlsSetValue(DWORD index, PVOID value);
+int   TlsFree(DWORD index);
+void InitializeSRWLock(PSRWLOCK lock);
+void AcquireSRWLockExclusive(PSRWLOCK lock);
+void ReleaseSRWLockExclusive(PSRWLOCK lock);
+void AcquireSRWLockShared(PSRWLOCK lock);
+void ReleaseSRWLockShared(PSRWLOCK lock);
+BOOLEAN TryAcquireSRWLockExclusive(PSRWLOCK lock);
+BOOLEAN TryAcquireSRWLockShared(PSRWLOCK lock);
+void InitializeConditionVariable(PCONDITION_VARIABLE cv);
+int  SleepConditionVariableSRW(PCONDITION_VARIABLE cv, PSRWLOCK lock, DWORD ms, ULONG flags);
+int  SleepConditionVariableCS(PCONDITION_VARIABLE cv, PCRITICAL_SECTION cs, DWORD ms);
+void WakeConditionVariable(PCONDITION_VARIABLE cv);
+void WakeAllConditionVariable(PCONDITION_VARIABLE cv);
+HANDLE CreateSemaphoreW(void *attrs, LONG initial, LONG maximum, PCWSTR name);
+#define CreateSemaphore CreateSemaphoreW
+int ReleaseSemaphore(HANDLE sem, LONG release, LONG *previous);
+HANDLE GetCurrentThread(void);
+int GetProcessTimes(HANDLE proc, void *creation, void *exit, void *kernel, void *user);
+int CancelIoEx(HANDLE h, LPOVERLAPPED overlapped);
+int GetNumberOfConsoleInputEvents(HANDLE h, LPDWORD count);
+
+// The SDK inlines SecureZeroMemory so the clear is not elided. badc does
+// no dead-store elimination at -O0 (the build default), so a plain clear
+// matches. A volatile form is the follow-up if the image is built -O.
+#define SecureZeroMemory(ptr, cnt) memset((ptr), 0, (cnt))
+// winbase.h block-memory aliases over the C library primitives.
+#define ZeroMemory(dst, len)      memset((dst), 0, (len))
+#define FillMemory(dst, len, val) memset((dst), (val), (len))
+#define CopyMemory(dst, src, len) memcpy((dst), (src), (len))
+#define MoveMemory(dst, src, len) memmove((dst), (src), (len))
+
+typedef UINT_PTR SOCKET;
+#define FAILED(hr) (((HRESULT)(hr)) < 0)
+unsigned int SetErrorMode(unsigned int mode);
+unsigned int GetErrorMode(void);
+DWORD WaitForMultipleObjects(DWORD count, HANDLE *handles, int wait_all, DWORD millis);
+int GetThreadTimes(HANDLE thread, void *creation, void *exit, void *kernel, void *user);
+HANDLE OpenThread(DWORD access, int inherit, DWORD thread_id);
+int CompareStringOrdinal(PCWSTR s1, int n1, PCWSTR s2, int n2, int ignore_case);
+int GetOverlappedResult(HANDLE h, LPOVERLAPPED overlapped, LPDWORD transferred, int wait);
+int BCryptGenRandom(void *algorithm, unsigned char *buffer, unsigned long count, unsigned long flags);
+unsigned int GetACP(void);
+int GetLocaleInfoA(DWORD locale, DWORD info_type, char *data, int cch_data);
+DWORD GetFinalPathNameByHandleW(HANDLE file, unsigned short *path, DWORD len, DWORD flags);
+HANDLE CreateWaitableTimerExW(void *timer_attrs, const unsigned short *name, DWORD flags, DWORD access);
+int ConnectNamedPipe(HANDLE pipe, LPOVERLAPPED overlapped);
+void GetCurrentThreadStackLimits(ULONG_PTR *low_limit, ULONG_PTR *high_limit);
+int SetThreadStackGuarantee(ULONG *stack_size_in_bytes);
+int GetModuleFileNameW(HANDLE module, unsigned short *filename, DWORD size);
+DWORD GetFileType(HANDLE file);
+int GetFileInformationByHandle(HANDLE file, BY_HANDLE_FILE_INFORMATION *info);
+int GetFileInformationByHandleEx(HANDLE file, int info_class, void *info, DWORD size);
+int SetFileInformationByHandle(HANDLE file, int info_class, void *info, DWORD size);
+int GetHandleInformation(HANDLE object, LPDWORD flags);
+int SetHandleInformation(HANDLE object, DWORD mask, DWORD flags);
+int GetNamedPipeHandleStateW(HANDLE pipe, LPDWORD state, LPDWORD instances, LPDWORD max_collect, LPDWORD timeout, unsigned short *user, DWORD user_size);
+int SetNamedPipeHandleState(HANDLE pipe, LPDWORD mode, LPDWORD max_collect, LPDWORD timeout);
+int CreatePipe(PHANDLE read_handle, PHANDLE write_handle, void *attrs, DWORD size);
+int DeviceIoControl(HANDLE device, DWORD code, void *in_buf, DWORD in_size, void *out_buf, DWORD out_size, LPDWORD returned, LPOVERLAPPED overlapped);
+int CreateHardLinkW(const unsigned short *link, const unsigned short *target, void *attrs);
+int CreateSymbolicLinkW(const unsigned short *symlink, const unsigned short *target, DWORD flags);
+int MoveFileExW(const unsigned short *from, const unsigned short *to, DWORD flags);
+int SetEnvironmentVariableW(const unsigned short *name, const unsigned short *value);
+unsigned int GetDriveTypeW(const unsigned short *root);
+int GetDiskFreeSpaceExW(const unsigned short *dir, void *avail, void *total, void *free_total);
+DWORD GetLogicalDriveStringsW(DWORD size, unsigned short *buffer);
+int GetVolumePathNameW(const unsigned short *filename, unsigned short *volume, DWORD len);
+int GetVolumePathNamesForVolumeNameW(const unsigned short *volume, unsigned short *names, DWORD len, LPDWORD returned);
+HANDLE FindFirstVolumeW(unsigned short *volume, DWORD len);
+int FindNextVolumeW(HANDLE find, unsigned short *volume, DWORD len);
+int FindVolumeClose(HANDLE find);
+DWORD GetActiveProcessorCount(WORD group);
+HANDLE OpenProcess(DWORD access, int inherit, DWORD pid);
+void *AddDllDirectory(const unsigned short *path);
+int RemoveDllDirectory(void *cookie);
+int SetWaitableTimer(HANDLE timer, void *due, LONG period, void *routine, void *arg, int resume);
+int SetWaitableTimerEx(HANDLE timer, void *due, LONG period, void *routine, void *arg, void *wake_ctx, DWORD tolerable_delay);
+int GetStringTypeW(DWORD info_type, const unsigned short *src, int count, WORD *char_type);
+int PssCaptureSnapshot(HANDLE process, DWORD flags, DWORD ctx_flags, void *snapshot);
+int PssFreeSnapshot(HANDLE process, void *snapshot);
+int PssQuerySnapshot(void *snapshot, int info_class, void *buffer, DWORD len);
+int GetUserNameW(unsigned short *buffer, LPDWORD size);
+int ConvertStringSecurityDescriptorToSecurityDescriptorW(const unsigned short *str, DWORD revision, void *sd, LPDWORD size);
+long PathCchSkipRoot(const unsigned short *path, const unsigned short **root_end);
+long PathCchCombineEx(unsigned short *out, unsigned long len, const unsigned short *base, const unsigned short *more, unsigned long flags);
+DWORD GetFileVersionInfoSizeW(const unsigned short *filename, LPDWORD handle);
+int GetFileVersionInfoW(const unsigned short *filename, DWORD handle, DWORD len, void *data);
+int VerQueryValueW(void *block, const unsigned short *sub_block, void **buffer, UINT *len);
+
+// advapi32 registry API (winreg.h). Each returns a LONG status
+// (ERROR_SUCCESS on success); signatures track the Win32 wide forms.
+LONG RegCloseKey(HKEY hKey);
+LONG RegConnectRegistryW(LPCWSTR lpMachineName, HKEY hKey, PHKEY phkResult);
+LONG RegCreateKeyW(HKEY hKey, LPCWSTR lpSubKey, PHKEY phkResult);
+LONG RegCreateKeyExW(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved, LPWSTR lpClass,
+                     DWORD dwOptions, REGSAM samDesired, LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                     PHKEY phkResult, LPDWORD lpdwDisposition);
+LONG RegDeleteKeyW(HKEY hKey, LPCWSTR lpSubKey);
+LONG RegDeleteKeyExW(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved);
+LONG RegDeleteValueW(HKEY hKey, LPCWSTR lpValueName);
+LONG RegEnumKeyExW(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
+                   LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass, PFILETIME lpftLastWriteTime);
+LONG RegEnumValueW(HKEY hKey, DWORD dwIndex, LPWSTR lpValueName, LPDWORD lpcchValueName,
+                   LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
+LONG RegFlushKey(HKEY hKey);
+LONG RegLoadKeyW(HKEY hKey, LPCWSTR lpSubKey, LPCWSTR lpFile);
+LONG RegOpenKeyExW(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult);
+LONG RegQueryInfoKeyW(HKEY hKey, LPWSTR lpClass, LPDWORD lpcchClass, LPDWORD lpReserved,
+                      LPDWORD lpcSubKeys, LPDWORD lpcbMaxSubKeyLen, LPDWORD lpcbMaxClassLen,
+                      LPDWORD lpcValues, LPDWORD lpcbMaxValueNameLen, LPDWORD lpcbMaxValueLen,
+                      LPDWORD lpcbSecurityDescriptor, PFILETIME lpftLastWriteTime);
+LONG RegQueryValueExW(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType,
+                      LPBYTE lpData, LPDWORD lpcbData);
+LONG RegSaveKeyW(HKEY hKey, LPCWSTR lpFile, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+LONG RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwType,
+                    const BYTE *lpData, DWORD cbData);
 
 // kernel32 API surface that sqlite's Windows VFS dispatch table
 // (`aSyscall[]`) takes the address of with `(SYSCALL)Name`. The
@@ -755,6 +1672,9 @@ int DeleteCriticalSection(char *cs);
 #pragma binding(kernel32::GetTickCount,            "GetTickCount")
 #pragma binding(kernel32::GetVersionExA,           "GetVersionExA")
 #pragma binding(kernel32::GetVersionExW,           "GetVersionExW")
+#pragma binding(kernel32::VerifyVersionInfoW,      "VerifyVersionInfoW")
+#pragma binding(kernel32::VerSetConditionMask,     "VerSetConditionMask")
+#pragma binding(kernel32::GetComputerNameExW,      "GetComputerNameExW")
 #pragma binding(kernel32::HeapAlloc,               "HeapAlloc")
 #pragma binding(kernel32::HeapCompact,             "HeapCompact")
 #pragma binding(kernel32::HeapCreate,              "HeapCreate")
@@ -812,6 +1732,12 @@ int DeleteCriticalSection(char *cs);
 #pragma binding(kernel32::ReleaseMutex,            "ReleaseMutex")
 #pragma binding(kernel32::SetEvent,                "SetEvent")
 #pragma binding(kernel32::ResetEvent,              "ResetEvent")
+#pragma binding(kernel32::CreateIoCompletionPort,  "CreateIoCompletionPort")
+#pragma binding(kernel32::GetQueuedCompletionStatus, "GetQueuedCompletionStatus")
+#pragma binding(kernel32::PostQueuedCompletionStatus, "PostQueuedCompletionStatus")
+#pragma binding(kernel32::RegisterWaitForSingleObject, "RegisterWaitForSingleObject")
+#pragma binding(kernel32::UnregisterWait,          "UnregisterWait")
+#pragma binding(kernel32::UnregisterWaitEx,        "UnregisterWaitEx")
 #pragma binding(kernel32::OpenMutexA,              "OpenMutexA")
 #pragma binding(kernel32::OpenMutexW,              "OpenMutexW")
 #pragma binding(kernel32::OpenEventA,              "OpenEventA")
@@ -977,6 +1903,14 @@ int GetTempPathW(DWORD nBufferLength, LPWSTR lpBuffer);
 int GetTickCount(void);
 int GetVersionExA(LPOSVERSIONINFOA lpVersionInformation);
 int GetVersionExW(LPOSVERSIONINFOW lpVersionInformation);
+#define GetVersionEx GetVersionExW
+int VerifyVersionInfoW(LPOSVERSIONINFOEXW lpVersionInformation,
+                       DWORD dwTypeMask, DWORDLONG dwlConditionMask);
+DWORDLONG VerSetConditionMask(DWORDLONG ConditionMask, DWORD TypeMask,
+                              unsigned char Condition);
+#define VerifyVersionInfo VerifyVersionInfoW
+int GetComputerNameExW(COMPUTER_NAME_FORMAT NameType, LPWSTR lpBuffer,
+                       DWORD *nSize);
 LPVOID HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
 int    HeapCompact(HANDLE hHeap, DWORD dwFlags);
 HANDLE HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize);
@@ -1061,6 +1995,43 @@ HANDLE CreateEventW(LPSECURITY_ATTRIBUTES lpEventAttributes, int bManualReset,
 int ReleaseMutex(HANDLE hMutex);
 int SetEvent(HANDLE hEvent);
 int ResetEvent(HANDLE hEvent);
+
+// I/O completion ports and thread-pool waits (synchapi.h / ioapiset.h).
+// RegisterWaitForSingleObject queues a callback of this shape when the
+// object signals; the BOOLEAN reports whether the wait timed out.
+typedef void (CALLBACK *WAITORTIMERCALLBACK)(PVOID lpParameter,
+                                             BOOLEAN TimerOrWaitFired);
+
+// dwFlags for RegisterWaitForSingleObject (winnt.h).
+#define WT_EXECUTEDEFAULT       0x00000000
+#define WT_EXECUTEINIOTHREAD    0x00000001
+#define WT_EXECUTEINWAITTHREAD  0x00000004
+#define WT_EXECUTEONLYONCE      0x00000008
+#define WT_EXECUTELONGFUNCTION  0x00000010
+#define WT_EXECUTEINTIMERTHREAD 0x00000020
+#define WT_EXECUTEINPERSISTENTTHREAD 0x00000080
+
+// True once the kernel has finished the overlapped request (winbase.h):
+// the Internal status word is no longer STATUS_PENDING.
+#define HasOverlappedIoCompleted(lpOverlapped) \
+    (((DWORD)(lpOverlapped)->Internal) != STATUS_PENDING)
+
+HANDLE CreateIoCompletionPort(HANDLE FileHandle, HANDLE ExistingCompletionPort,
+                              ULONG_PTR CompletionKey,
+                              DWORD NumberOfConcurrentThreads);
+int GetQueuedCompletionStatus(HANDLE CompletionPort, LPDWORD lpNumberOfBytes,
+                              ULONG_PTR *lpCompletionKey,
+                              OVERLAPPED **lpOverlapped, DWORD dwMilliseconds);
+int PostQueuedCompletionStatus(HANDLE CompletionPort,
+                               DWORD dwNumberOfBytesTransferred,
+                               ULONG_PTR dwCompletionKey,
+                               LPOVERLAPPED lpOverlapped);
+int RegisterWaitForSingleObject(PHANDLE phNewWaitObject, HANDLE hObject,
+                                WAITORTIMERCALLBACK Callback, PVOID Context,
+                                ULONG dwMilliseconds, ULONG dwFlags);
+int UnregisterWait(HANDLE WaitHandle);
+int UnregisterWaitEx(HANDLE WaitHandle, HANDLE CompletionEvent);
+
 HANDLE OpenMutexA(DWORD dwDesiredAccess, int bInheritHandle, LPCSTR lpName);
 HANDLE OpenMutexW(DWORD dwDesiredAccess, int bInheritHandle, LPCWSTR lpName);
 HANDLE OpenEventA(DWORD dwDesiredAccess, int bInheritHandle, LPCSTR lpName);
@@ -1181,4 +2152,47 @@ int GetLocalTime(SYSTEMTIME *lpSystemTime);
 int SetLastError(DWORD dwErrCode);
 int UuidCreate(void *Uuid);
 int UuidCreateSequential(void *Uuid);
+
+// Process / named-pipe / synchronization surface (processthreadsapi.h,
+// namedpipeapi.h, memoryapi.h, fileapi.h, winbase.h). Struct-by-pointer
+// parameters use the typedefs declared earlier; the kernel reads/writes
+// the bytes at the native field offsets.
+HANDLE CreateNamedPipeW(LPCWSTR lpName, DWORD dwOpenMode, DWORD dwPipeMode,
+                        DWORD nMaxInstances, DWORD nOutBufferSize,
+                        DWORD nInBufferSize, DWORD nDefaultTimeOut,
+                        LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+int WaitNamedPipeW(LPCWSTR lpNamedPipeName, DWORD nTimeOut);
+int PeekNamedPipe(HANDLE hNamedPipe, LPVOID lpBuffer, DWORD nBufferSize,
+                  LPDWORD lpBytesRead, LPDWORD lpTotalBytesAvail,
+                  LPDWORD lpBytesLeftThisMessage);
+int GetExitCodeProcess(HANDLE hProcess, LPDWORD lpExitCode);
+DWORD ResumeThread(HANDLE hThread);
+int TerminateThread(HANDLE hThread, DWORD dwExitCode);
+DWORD GetVersion(void);
+DWORD GetLongPathNameW(LPCWSTR lpszShortPath, LPWSTR lpszLongPath, DWORD cchBuffer);
+DWORD GetShortPathNameW(LPCWSTR lpszLongPath, LPWSTR lpszShortPath, DWORD cchBuffer);
+HANDLE OpenFileMappingW(DWORD dwDesiredAccess, int bInheritHandle, LPCWSTR lpName);
+SIZE_T VirtualQuery(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer,
+                    SIZE_T dwLength);
+HRESULT CopyFile2(LPCWSTR pwszExistingFileName, LPCWSTR pwszNewFileName,
+                  COPYFILE2_EXTENDED_PARAMETERS *pExtendedParameters);
+int NeedCurrentDirectoryForExePathW(LPCWSTR ExeName);
+int LCMapStringEx(LPCWSTR lpLocaleName, DWORD dwMapFlags, LPCWSTR lpSrcStr,
+                  int cchSrc, LPWSTR lpDestStr, int cchDest, void *lpVersionInformation,
+                  void *lpReserved, LONG_PTR sortHandle);
+int InitializeProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
+                                      DWORD dwAttributeCount, DWORD dwFlags,
+                                      SIZE_T *lpSize);
+int UpdateProcThreadAttribute(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
+                              DWORD dwFlags, DWORD_PTR Attribute, PVOID lpValue,
+                              SIZE_T cbSize, PVOID lpPreviousValue,
+                              SIZE_T *lpReturnSize);
+void DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList);
+
+// Token-privilege surface (processthreadsapi.h / securitybaseapi.h).
+int OpenProcessToken(HANDLE ProcessHandle, DWORD DesiredAccess, PHANDLE TokenHandle);
+int LookupPrivilegeValueW(LPCWSTR lpSystemName, LPCWSTR lpName, PLUID lpLuid);
+int AdjustTokenPrivileges(HANDLE TokenHandle, int DisableAllPrivileges,
+                          PTOKEN_PRIVILEGES NewState, DWORD BufferLength,
+                          PTOKEN_PRIVILEGES PreviousState, LPDWORD ReturnLength);
 #endif

@@ -97,6 +97,9 @@ impl Compiler {
     /// the decay happened, but for c5 today the equivalence is
     /// sufficient.
     pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
+        // Taken once so it scopes to this parameter's own declarator, not
+        // any nested one (a function-pointer parameter's prototype).
+        let param_ctx = core::mem::take(&mut self.pending.param_decl_context);
         let mut ty = base;
         let mut leading_ptr_count: i64 = 0;
         while self.lex.tk == Token::MulOp {
@@ -104,9 +107,17 @@ impl Compiler {
             ty += Ty::Ptr as i64;
             leading_ptr_count += 1;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
-            // `char *restrict s`. Consumed; no semantic effect.
-            while self.lex.tk == Token::TypeQual {
-                self.next()?;
+            // `char *restrict s`. Consumed; no semantic effect. An
+            // attribute may sit here too (`void * __attribute__((malloc))
+            // p`).
+            loop {
+                if self.lex.tk == Token::TypeQual {
+                    self.next()?;
+                } else if self.lex.tk == Token::Attribute {
+                    self.skip_attribute_specifiers()?;
+                } else {
+                    break;
+                }
             }
         }
         // Fn-pointer lineage propagation: if the caller pre-seeded
@@ -216,7 +227,17 @@ impl Compiler {
             // parses `(args)` as a regular function signature on
             // the identifier and a plain `[N]` (handled by the
             // array-suffix branch below) lands as a real array.
-            if !saw_fn_signature && inner_ptr_levels == 0 && idx != usize::MAX && self.lex.tk == '('
+            // In parameter position a `(name)(args)` shape is a
+            // function-typed parameter that decays to a pointer to
+            // function (C99 6.7.5.3p8), so it must fall through to the
+            // function-signature handling below rather than return the
+            // bare identifier for `run_compile` to treat as a function
+            // definition.
+            if !param_ctx
+                && !saw_fn_signature
+                && inner_ptr_levels == 0
+                && idx != usize::MAX
+                && self.lex.tk == '('
             {
                 return Ok((idx, inner_ty, inner_array_size));
             }
@@ -299,6 +320,12 @@ impl Compiler {
                 // (function-returning-fp shape), and the outer
                 // call's value is the right one to expose.
                 self.pending.fn_ptr_indirection = Some(inner_ptr_levels);
+            } else if saw_fn_signature && inner_ptr_levels == 0 && param_ctx {
+                // `RET (name)(args)` parameter: the function type decays
+                // to a pointer to function, the same encoding as
+                // `RET (*name)(args)` (one indirection level).
+                inner_ty += Ty::Ptr as i64;
+                self.pending.fn_ptr_indirection = Some(1);
             }
             if idx != usize::MAX && !pointee_dims.is_empty() {
                 // Pointer-to-array shape: `T (*p)[M1][M2]...[Mn]`.
@@ -334,6 +361,26 @@ impl Compiler {
         }
         let idx = self.lex.curr_id_idx;
         self.next()?;
+
+        // A function-typed parameter `RET name(args)` (no parentheses
+        // around the name) decays to a pointer to function in parameter
+        // position (C99 6.7.5.3p8), the same encoding as `RET (*name)(args)`.
+        // Outside parameter position the trailing `(args)` is a function
+        // declaration the caller parses, so only act in parameter context.
+        if param_ctx && self.lex.tk == '(' {
+            self.next()?;
+            let saved_proto = self.pending.parsing_fn_ptr_proto;
+            self.pending.parsing_fn_ptr_proto = true;
+            let pp = self.parse_function_params()?;
+            self.pending.parsing_fn_ptr_proto = saved_proto;
+            for &pidx in &pp.indices {
+                Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
+            }
+            self.pending.typedef_fn_proto = Some((pp.types.len(), pp.is_variadic));
+            self.pending.fn_ptr_param_types = Some(pp.types);
+            self.pending.fn_ptr_indirection = Some(1);
+            return Ok((idx, ty + Ty::Ptr as i64, 0));
+        }
 
         let mut array_size: i64 = 0;
         if self.lex.tk == Token::Brak {
@@ -513,6 +560,13 @@ impl Compiler {
                 self.symbols[idx].inner_array_size = inner;
                 self.symbols[idx].array_dims = alloc::vec![1, inner];
             }
+        }
+
+        // GNU C: an attribute-specifier-list may trail the declarator
+        // (`T x[N] __attribute__((aligned(8)))`); it does not change c5's
+        // type tag. Consume it so the caller resumes at `=` / `,` / `;`.
+        while self.lex.tk == Token::Attribute {
+            self.skip_attribute_specifiers()?;
         }
 
         Ok((idx, ty, array_size))

@@ -1,7 +1,7 @@
 // pthread.h -- POSIX threads on Linux + macOS.
 //
-// On Linux glibc >= 2.34 pthread_create / pthread_join have been
-// folded into libc; older glibcs still ship a separate libpthread
+// On recent Linux C libraries pthread_create / pthread_join have been
+// folded into libc; older ones still ship a separate libpthread
 // but the dynamic loader auto-pulls it in for any process linking
 // libc, so dlopen(NULL, RTLD_NOW) finds the symbols either way.
 // macOS keeps everything in libSystem (which is what `dlopen(NULL)`
@@ -29,6 +29,13 @@
 #pragma binding(libc::pthread_detach,           "_pthread_detach")
 #pragma binding(libc::pthread_self,             "_pthread_self")
 #pragma binding(libc::pthread_equal,            "_pthread_equal")
+#pragma binding(libc::pthread_getname_np,       "_pthread_getname_np")
+#pragma binding(libc::pthread_setname_np,       "_pthread_setname_np")
+#pragma binding(libc::pthread_kill,             "_pthread_kill")
+#pragma binding(libc::pthread_threadid_np,      "_pthread_threadid_np")
+#pragma binding(libc::pthread_get_stackaddr_np, "_pthread_get_stackaddr_np")
+#pragma binding(libc::pthread_get_stacksize_np, "_pthread_get_stacksize_np")
+#pragma binding(libc::pthread_cond_timedwait_relative_np, "_pthread_cond_timedwait_relative_np")
 #pragma binding(libc::pthread_mutex_init,       "_pthread_mutex_init")
 #pragma binding(libc::pthread_mutex_lock,       "_pthread_mutex_lock")
 #pragma binding(libc::pthread_mutex_trylock,    "_pthread_mutex_trylock")
@@ -74,6 +81,13 @@
 #pragma binding(libc::pthread_detach,           "pthread_detach")
 #pragma binding(libc::pthread_self,             "pthread_self")
 #pragma binding(libc::pthread_equal,            "pthread_equal")
+#pragma binding(libc::pthread_setname_np,       "pthread_setname_np")
+#pragma binding(libc::pthread_getname_np,       "pthread_getname_np")
+#pragma binding(libc::pthread_getcpuclockid,    "pthread_getcpuclockid")
+#pragma binding(libc::pthread_condattr_init,    "pthread_condattr_init")
+#pragma binding(libc::pthread_condattr_destroy, "pthread_condattr_destroy")
+#pragma binding(libc::pthread_condattr_setclock,"pthread_condattr_setclock")
+#pragma binding(libc::pthread_kill,             "pthread_kill")
 #pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
 #pragma binding(libc::pthread_mutex_lock,       "pthread_mutex_lock")
 #pragma binding(libc::pthread_mutex_trylock,    "pthread_mutex_trylock")
@@ -93,7 +107,7 @@
 #pragma binding(libc::pthread_attr_setdetachstate, "pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "pthread_attr_setstacksize")
 #pragma binding(libc::pthread_attr_setscope,    "pthread_attr_setscope")
-// glibc's pthread_atfork lives in libc_nonshared.a (a static stub),
+// The Linux C library's pthread_atfork lives in libc_nonshared.a (a static stub),
 // not as a dynamic export of libc.so.6 -- x86_64 keeps a weak legacy
 // alias but aarch64 does not, so a dynamic import resolves on one and
 // not the other. Bind the underlying dynamic symbol the stub forwards
@@ -105,11 +119,11 @@
 #pragma binding(libc::pthread_getspecific,      "pthread_getspecific")
 #pragma binding(libc::pthread_once,             "pthread_once")
 
-// glibc pthread_mutex_t is 40 bytes on x86_64, 48 on aarch64;
+// On Linux pthread_mutex_t is 40 bytes on x86_64, 48 on aarch64;
 // 64 covers both with room.
 #define PTHREAD_MUTEX_SIZE 64
 #define PTHREAD_T_SIZE     8
-// glibc detach-state value passed to pthread_attr_setdetachstate.
+// Linux detach-state value passed to pthread_attr_setdetachstate.
 #define PTHREAD_CREATE_DETACHED 1
 #define PTHREAD_CREATE_JOINABLE 0
 #define PTHREAD_SCOPE_SYSTEM  0
@@ -126,28 +140,44 @@
 #define PTHREAD_CREATE_JOINABLE 0
 #endif
 
-// Opaque-buffer typedefs for the POSIX thread types. Each wraps a
-// leading signature word plus a fixed-size buffer big enough for the
-// underlying libc layout on every supported target. c5 code passes
-// pointers to these into the bindings; the libc side reads the actual
-// platform layout. The signature word is exposed (rather than folded
-// into the buffer) so the static initialisers below can set it.
-struct __c5_pthread_mutex { long __sig; char __opaque[56]; };
+// Opaque storage for the POSIX thread types. The libc reads the real
+// platform layout through a passed pointer; c5 only needs each object to
+// occupy the exact platform size and alignment, because these types are
+// embedded in larger structs (CPython's `_PyRuntime`) whose field
+// offsets a separately-compiled module reads back. An over-wide object
+// shifts every later field. The leading word carries 8-byte alignment;
+// macOS additionally uses it for the signature the static initialisers
+// seed (its libpthread rejects a zero-signature statically-allocated
+// object from pthread_mutex_lock / pthread_cond_wait with EINVAL). Sizes
+// per `bits/pthreadtypes-arch.h` (Linux) and `<sys/_pthread/*>` (macOS).
+#if defined(__APPLE__)
+struct __c5_pthread_mutex { long __sig; char __opaque[56]; };     // 64
+struct __c5_pthread_cond { long __sig; char __opaque[56]; };      // 64
+struct __c5_pthread_mutexattr { char __opaque[16]; };             // 16
+struct __c5_pthread_condattr { char __opaque[16]; };              // 16
+struct __c5_pthread_attr { char __opaque[64]; };                  // 64
+#elif defined(__aarch64__) && defined(__linux__)
+struct __c5_pthread_mutex { long __align; char __size[40]; };     // 48
+struct __c5_pthread_cond { long __align; char __size[40]; };      // 48
+struct __c5_pthread_mutexattr { long __size; };                   // 8
+struct __c5_pthread_condattr { long __size; };                    // 8
+struct __c5_pthread_attr { long __align; char __size[56]; };      // 64
+#else // Linux x86_64
+struct __c5_pthread_mutex { long __align; char __size[32]; };     // 40
+struct __c5_pthread_cond { long __align; char __size[40]; };      // 48
+struct __c5_pthread_mutexattr { int __size; };                    // 4
+struct __c5_pthread_condattr { int __size; };                     // 4
+struct __c5_pthread_attr { long __align; char __size[48]; };      // 56
+#endif
 typedef struct __c5_pthread_mutex pthread_mutex_t;
-
-struct __c5_pthread_mutexattr { char __opaque[16]; };
-typedef struct __c5_pthread_mutexattr pthread_mutexattr_t;
-
-struct __c5_pthread_cond { long __sig; char __opaque[56]; };
 typedef struct __c5_pthread_cond pthread_cond_t;
+typedef struct __c5_pthread_mutexattr pthread_mutexattr_t;
+typedef struct __c5_pthread_condattr pthread_condattr_t;
+typedef struct __c5_pthread_attr pthread_attr_t;
 
-// Static-storage initialisers for the mutex / condition variable
-// types. Darwin's libpthread checks a signature word at offset 0 and
-// rejects a zero-signature object from pthread_mutex_lock /
-// pthread_cond_wait (EINVAL), so the macro must seed the magic the
-// system <pthread/pthread_impl.h> uses for a statically initialised
-// object. glibc and Windows take an all-zero object, so the signature
-// word stays zero there.
+// Static-storage initialisers. macOS seeds the signature word; Linux
+// takes an all-zero object. Both forms match the leading-word + buffer
+// shape above.
 #if defined(__APPLE__)
 #define PTHREAD_MUTEX_INITIALIZER { 0x32AAABA7, {0} }
 #define PTHREAD_COND_INITIALIZER  { 0x3CB0B1BB, {0} }
@@ -157,29 +187,31 @@ typedef struct __c5_pthread_cond pthread_cond_t;
 #endif
 #define PTHREAD_ONCE_INIT          0
 
-struct __c5_pthread_condattr { char __opaque[16]; };
-typedef struct __c5_pthread_condattr pthread_condattr_t;
-
-struct __c5_pthread_attr { char __opaque[64]; };
-typedef struct __c5_pthread_attr pthread_attr_t;
-
 // `pthread_t` is pointer-sized on every supported POSIX target
-// (an opaque struct pointer on macOS, `unsigned long` on Linux
-// glibc); we need 8 bytes of storage per handle so the libc
+// (an opaque struct pointer on macOS, `unsigned long` on
+// Linux); we need 8 bytes of storage per handle so the libc
 // can write a real ID and the c5-side join can pass it back
 // unbroken. Plain `int` was 8 bytes pre-M31 but has been 4 since
 // real i32 storage landed -- the gap is what made
 // `demos/threads.c` print all zeroes (each pthread_create wrote
 // 8 bytes into a 4-byte slot, smashing the next handle).
 //
-// `pthread_once_t` is `long` (8 bytes) on macOS and `int` (4)
-// on Linux glibc; we use `long long` to cover both. The libc
-// reads only the low 4 bytes on Linux, so the wider slot is
-// harmless. `pthread_key_t` is `unsigned long` on macOS and
-// `unsigned int` on Linux glibc -- same shape, same fix.
+// `pthread_key_t` and `pthread_once_t` must match the platform
+// width exactly, not a wider catch-all: they appear inside
+// structs whose layout a program reads back (CPython's `Py_tss_t`
+// wraps `pthread_key_t` in `_PyRuntime`, and a dlopen'd extension
+// computes field offsets against the host's struct). macOS uses
+// `unsigned long` / `long` (8 bytes); Linux uses `unsigned int` /
+// `int` (4). An over-wide slot shifts every later field and
+// breaks the shared layout.
 typedef long long pthread_t;
-typedef long long pthread_key_t;
-typedef long long pthread_once_t;
+#ifdef __APPLE__
+typedef unsigned long pthread_key_t;
+typedef long pthread_once_t;
+#else
+typedef unsigned int pthread_key_t;
+typedef int pthread_once_t;
+#endif
 
 int pthread_create(pthread_t *thread, char *attr, int *start, char *arg);
 int pthread_join(pthread_t thread, int **retval);
@@ -187,6 +219,36 @@ void pthread_exit(void *retval);
 int pthread_detach(pthread_t thread);
 pthread_t pthread_self();
 int pthread_equal(pthread_t t1, pthread_t t2);
+// Deliver a signal to a specific thread (POSIX).
+int pthread_kill(pthread_t thread, int sig);
+#ifdef __APPLE__
+// Darwin sets only the calling thread's name (no pthread_t parameter).
+int pthread_setname_np(const char *name);
+int pthread_getname_np(pthread_t thread, char *name, unsigned long len);
+// Darwin per-thread 64-bit id (`uint64_t *` out-parameter).
+int pthread_threadid_np(pthread_t thread, unsigned long long *thread_id);
+// Darwin stack introspection used for native stack-overflow guards.
+void *pthread_get_stackaddr_np(pthread_t thread);
+unsigned long pthread_get_stacksize_np(pthread_t thread);
+// Darwin relative-timeout condition wait (the monotonic-clock analogue
+// of pthread_cond_timedwait, which takes an absolute time).
+int pthread_cond_timedwait_relative_np(pthread_cond_t *cond,
+                                       pthread_mutex_t *mutex,
+                                       const struct timespec *reltime);
+#endif
+
+#ifdef __linux__
+// Linux takes the target thread as the first parameter (Darwin names
+// only the calling thread). `pthread_getcpuclockid` yields a clock for
+// thread CPU-time queries; the condattr setters select the clock a
+// condition variable's absolute timed waits run against.
+int pthread_setname_np(pthread_t thread, const char *name);
+int pthread_getname_np(pthread_t thread, char *name, unsigned long len);
+int pthread_getcpuclockid(pthread_t thread, int *clock_id);
+int pthread_condattr_init(pthread_condattr_t *attr);
+int pthread_condattr_destroy(pthread_condattr_t *attr);
+int pthread_condattr_setclock(pthread_condattr_t *attr, int clock_id);
+#endif
 int pthread_mutex_init(char *mutex, char *attr);
 int pthread_mutex_lock(char *mutex);
 int pthread_mutex_trylock(char *mutex);
@@ -207,7 +269,9 @@ int pthread_attr_setdetachstate(char *attr, int detachstate);
 int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
 int pthread_attr_setscope(char *attr, int scope);
 #ifdef __linux__
-// pthread_atfork is not a libc.so.6 dynamic symbol on every glibc port;
+// Linux names the calling-convention pair (pthread_t, name).
+int pthread_setname_np(pthread_t thread, const char *name);
+// pthread_atfork is not a libc.so.6 dynamic symbol on every Linux port;
 // forward to __register_atfork, which is, passing a null DSO handle (the
 // process-global registration libc_nonshared.a's stub uses).
 extern int __register_atfork(void (*prepare)(void), void (*parent)(void),

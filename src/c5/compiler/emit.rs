@@ -636,6 +636,10 @@ impl Compiler {
             return_struct_size,
             return_ty,
             alloca_top_slot,
+            // Filled in by the function-close hook once the per-function
+            // `VariableInfo` list is assembled (the declared locals are
+            // not yet collected at this point).
+            multi_cell_slots: alloc::vec::Vec::new(),
         };
         self.pending_is_inline = false;
         self.finished_functions.push(finished);

@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=fdim
 fn ent_pc=7 n_params=2 variadic=false locals=3
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -54,7 +54,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=3
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=fdimf
 fn ent_pc=8 n_params=2 variadic=false locals=4
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F32)                            -> d0 [f32]
@@ -71,7 +71,7 @@ fn ent_pc=8 n_params=2 variadic=false locals=4
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=scalbn
 fn ent_pc=9 n_params=2 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -80,12 +80,12 @@ fn ent_pc=9 n_params=2 variadic=false locals=2
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=2, kind=F64 }                    -> d1
     v6   LoadLocal { off=3, kind=I32 }                    -> x0
-    v7   CallExt { binding_idx=23, args=[v1, v3], fp_arg_mask=0x1, fp_return=true } -> d0
+    v7   CallExt { binding_idx=24, args=[v1, v3], fp_arg_mask=0x1, fp_return=true } -> d0
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=scalbln
 fn ent_pc=10 n_params=2 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -96,12 +96,12 @@ fn ent_pc=10 n_params=2 variadic=false locals=2
     v6   LoadLocal { off=3, kind=I64 }                    -> x0
     v7   BinopI { op=shl, lhs=v3, rhs_imm=32 }            -> x0
     v8   BinopI { op=shr, lhs=v7, rhs_imm=32 }            -> x7
-    v9   CallExt { binding_idx=23, args=[v1, v8], fp_arg_mask=0x1, fp_return=true } -> d0
+    v9   CallExt { binding_idx=24, args=[v1, v8], fp_arg_mask=0x1, fp_return=true } -> d0
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=scalbnf
 fn ent_pc=11 n_params=2 variadic=false locals=3
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(1, kind=I32)                            -> x7
@@ -111,13 +111,13 @@ fn ent_pc=11 n_params=2 variadic=false locals=3
     v5   LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     v6   FpCast { kind=F32ToF64, value=v3 }               -> d0
     v7   LoadLocal { off=3, kind=I32 }                    -> x0
-    v8   CallExt { binding_idx=23, args=[v6, v1], fp_arg_mask=0x1, fp_return=true } -> d0
+    v8   CallExt { binding_idx=24, args=[v6, v1], fp_arg_mask=0x1, fp_return=true } -> d0
     v9   FpCast { kind=F64ToF32, value=v8 }               -> d0 [f32]
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=main
 fn ent_pc=13 n_params=0 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4617315517961601024)                         -> x7
@@ -209,7 +209,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -221,7 +221,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[3, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -241,7 +241,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v15  Imm(8)                                           -> x1
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
     v17  Imm(0)                                           -> x1
-    v18  ImmData(8)                                       -> x1
+    v18  ImmData(24)                                      -> x1
     v19  LoadLocal { off=-3, kind=I64 }                   -> x2
     v20  Extend { value=v13, kind=I32 }                   -> x2
     v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x2

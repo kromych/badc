@@ -27,6 +27,15 @@ Output mode -- pick at most one (defaults to a native binary):
   --dump-headers           Print every bundled header to stdout and
                            exit. Useful for extracting a header into
                            `./include` to override it locally.
+  --install [<dir>]        Write every embedded header and the runtime
+                           source under <dir> (default ~/.badc, or
+                           $BADC_HOME), recreating the include/ + lib/
+                           hierarchy, then exit. Later runs prefer the
+                           installed copies: ~/.badc/include is searched
+                           before the embedded headers and
+                           ~/.badc/lib/runtime.c overrides the embedded
+                           runtime, so editing an installed file changes
+                           the build without rebuilding badc.
   --dump-pp, -E            Run the preprocessor on the input and
                            print the expanded source to stdout.
                            Mirrors gcc / clang `-E`.
@@ -48,7 +57,10 @@ Multi-TU knobs:
 Compile knobs:
   -O, --optimize           Run the SSA optimization passes (mem2reg,
                            inlining, rotate and branch const-fold,
-                           immediate dedup). Off by default.
+                           immediate dedup). Off by default. The
+                           `-O1`/`-O2`/`-O3`/`-Os`/`-Oz`/`-Ofast`/`-Og`
+                           forms all select this single level; `-O0`
+                           disables it.
   -g, --debug              Emit DWARF debug info. Off by default;
                            adds ~10-30% to the output size.
   -g0, --no-debug          Skip DWARF emission (the default).
@@ -96,15 +108,27 @@ Compile knobs:
                            dlopen consumer can dlsym it without a
                            #pragma export. Applies to --shared and
                            executable output.
+  --export-data            Export every non-static data global from an
+                           ELF executable into .dynsym (STT_OBJECT) so a
+                           dlopen'd module resolves it, the data half of
+                           the toolchain's -rdynamic. Pair with
+                           --export-all for full coverage.
+  --gnu                    Define the GCC identity macros (__GNUC__,
+                           __VERSION__, __extension__, ...). Off by
+                           default: badc implements most but not all of
+                           the GNU C surface, so code gating a feature
+                           badc lacks (__int128) on __GNUC__ keeps
+                           compiling unless this is requested.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
   --trace                  Per-instruction stdout trace (noisy).
 
 Mutually exclusive: --interp / --jit / --shared /
---list-symbols / --dump-headers all pick the output mode; only one
-applies. --track-pointers and --trace require --interp. -o has no
-effect under --interp / --list-symbols / --dump-headers.";
+--list-symbols / --dump-headers / --install all pick the output
+mode; only one applies. --track-pointers and --trace require
+--interp. -o has no effect under --interp / --list-symbols /
+--dump-headers / --install.";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
 /// so we don't accidentally pick up a homebrew shim that signs differently.
@@ -133,6 +157,11 @@ enum Mode {
     /// `--dump-headers` -- print every bundled header (with
     /// file separators) to stdout and exit. Takes no source.
     DumpHeaders,
+    /// `--install [<dir>]` -- write every embedded header and the
+    /// runtime source under `<dir>` (default `~/.badc`), recreating
+    /// the `include/` + `lib/` hierarchy, and exit. A later run prefers
+    /// those on-disk copies over the embedded ones.
+    Install,
     /// `--dump-pp` -- run the preprocessor on the input and
     /// print the expanded source to stdout. Mirrors gcc / clang
     /// `-E` for inspecting macro expansion and include
@@ -161,6 +190,7 @@ impl Mode {
             Mode::Jit => "--jit",
             Mode::ListSymbols => "--list-symbols",
             Mode::DumpHeaders => "--dump-headers",
+            Mode::Install => "--install",
             Mode::DumpPp => "--dump-pp",
             Mode::BuildArchive => "--ar",
             Mode::DumpNativeLink => "--dump-native-link",
@@ -218,6 +248,15 @@ fn main() {
     // native target (Mach-O / ELF / PE); a host executable that loads
     // plugin modules sets it so the modules resolve the host's symbols.
     let mut export_all = false;
+    // `--export-data` -- add every defined non-static global (function
+    // and data) to the dynamic symbol table of a native executable, so a
+    // `dlopen`'d module resolves the host's symbols (a Python C extension
+    // binding the interpreter's `Py*` API, including the `PyTypeObject`
+    // data globals). ELF only; macOS already exports executable globals,
+    // Windows has no analogue.
+    let mut export_data = false;
+    // `--gnu` -- define the GCC identity macros (`__GNUC__` etc.).
+    let mut gnu = false;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
     // arrive either positionally or through `-l<name>` after a
@@ -251,8 +290,19 @@ fn main() {
             "--trace" => trace = true,
             "--list-symbols" => claim(&mut mode, Mode::ListSymbols),
             "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
+            // `--install [<dir>]`: the optional destination is the first
+            // positional token (it falls through to `args`); a bare
+            // `--install` defaults to ~/.badc. Dispatched after parsing.
+            "--install" => claim(&mut mode, Mode::Install),
             "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
-            "--optimize" | "-O" => optimize_flag = true,
+            // The optimizer has a single level; every `-O<n>` form maps
+            // onto it, matching gcc/clang where a build system may pass
+            // any of them. `-O0` explicitly disables it (and overrides an
+            // earlier `-O` on the same command line).
+            "--optimize" | "-O" | "-O1" | "-O2" | "-O3" | "-Os" | "-Oz" | "-Ofast" | "-Og" => {
+                optimize_flag = true
+            }
+            "-O0" => optimize_flag = false,
             "--dump-ssa" => dump_ssa = true,
             s if s.starts_with("--inline-cap=") => {
                 let body = &s["--inline-cap=".len()..];
@@ -380,6 +430,16 @@ fn main() {
             "-q" | "--quiet" => quiet = true,
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
+            // Export every defined non-static global (function and data)
+            // into the executable's dynamic symbol table for `dlopen`
+            // resolution.
+            "--export-data" => export_data = true,
+            // Define the GCC identity macros (`__GNUC__`, `__VERSION__`,
+            // `__extension__`, ...). Off by default: badc implements
+            // most but not all of the GNU C surface, so code that gates
+            // a feature badc lacks (`__int128`) on `__GNUC__` keeps
+            // compiling unless this is requested.
+            "--gnu" => gnu = true,
             // `-c` / `--compile-only` -- emit a c5 object file
             // (`.o`) per source instead of linking through to a
             // native binary. The output goes to either the
@@ -424,8 +484,56 @@ fn main() {
             include_paths.push(default.to_string());
         }
     }
+    // The `badc --install` overlay under ~/.badc (or $BADC_HOME) sits
+    // between the repo-local overlays and the embedded headers: a user
+    // without the source tree edits ~/.badc/include/<h> to override a
+    // bundled header, and ~/.badc/lib joins the `-l` archive search.
+    // Appended last so explicit -I / -L and the repo-local dirs win.
+    if let Some(home) = badc_home() {
+        for (sub, paths) in [("include", &mut include_paths), ("lib", &mut library_paths)] {
+            let dir = home.join(sub);
+            if dir.is_dir() {
+                let s = dir.to_string_lossy().into_owned();
+                if !paths.contains(&s) {
+                    paths.push(s);
+                }
+            }
+        }
+    }
 
     let mode = mode.map(|(m, _)| m).unwrap_or(Mode::NativeExecutable);
+
+    // `--install [<dir>]` copies the embedded headers + runtime source
+    // to disk and exits. The destination is the first positional token
+    // (`args[1]`), else ~/.badc. Dispatched before the compile paths:
+    // it takes no source input.
+    if mode == Mode::Install {
+        let dir = match args.get(1).map(PathBuf::from).or_else(badc_home) {
+            Some(d) => d,
+            None => {
+                eprint_diagnostic(
+                    "badc: error: --install: no home directory -- set HOME / USERPROFILE / \
+                     BADC_HOME or pass an explicit <dir>",
+                );
+                std::process::exit(1);
+            }
+        };
+        match install_embedded(&dir) {
+            Ok((headers, runtime)) => {
+                if !quiet {
+                    eprint_diagnostic(format!(
+                        "info: installed {headers} header(s) + {runtime} runtime source(s) under {}",
+                        dir.display()
+                    ));
+                }
+            }
+            Err(e) => {
+                eprint_diagnostic(format!("badc: error: --install to {}: {e}", dir.display()));
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
 
     let target = match Target::parse(target_spec.as_deref()) {
         Ok(t) => t,
@@ -597,6 +705,7 @@ fn main() {
             }
         };
         let copts = badc::CompileOptions::default()
+            .with_gnu(gnu)
             .with_defines(defines.clone())
             .with_undefines(undefines.clone())
             .with_include_paths(include_paths.clone())
@@ -680,6 +789,7 @@ fn main() {
                 }
             };
             let opts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -759,6 +869,7 @@ fn main() {
                 }
             };
             let copts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -806,6 +917,7 @@ fn main() {
                 copts_defines.push((k.to_string(), v.to_string()));
             }
             let copts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(copts_defines)
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -924,12 +1036,29 @@ fn main() {
                 runtime_defines.push(("__BADC_WIN_WIDE__", "1"));
             }
         }
+        // Prefer an installed runtime source (~/.badc/lib/<name>) over the
+        // embedded copy, mirroring the header overlay: `badc --install`
+        // writes it there and editing it overrides the built-in runtime.
+        let runtime_dir = badc_home().map(|h| h.join("lib"));
         for (name, body) in badc::embedded_runtime().iter() {
-            let bytes = compile_in_memory(name, body.to_string(), &runtime_defines);
+            let (label, src) = match runtime_dir.as_ref().map(|d| d.join(name)) {
+                Some(p) if p.is_file() => match std::fs::read_to_string(&p) {
+                    Ok(s) => (p.display().to_string(), s),
+                    Err(e) => {
+                        eprint_diagnostic(format!(
+                            "badc: error: cannot read installed runtime {}: {e}",
+                            p.display()
+                        ));
+                        std::process::exit(1);
+                    }
+                },
+                _ => (format!("<runtime/{name}>"), body.to_string()),
+            };
+            let bytes = compile_in_memory(&label, src, &runtime_defines);
             match badc::parse_native_elf(&bytes) {
                 Ok(o) => native_objs.push(o),
                 Err(e) => {
-                    eprint_diagnostic(format!("badc: <runtime/{name}>: {e}"));
+                    eprint_diagnostic(format!("badc: {label}: {e}"));
                     std::process::exit(1);
                 }
             }
@@ -1048,7 +1177,7 @@ fn main() {
         } else {
             None
         };
-        let write_result = badc::write_native_image_from_merged(
+        let write_result = badc::write_native_image_from_merged_ex(
             &merged,
             &plt,
             entry_name,
@@ -1056,6 +1185,8 @@ fn main() {
             native_output_kind,
             target,
             shared_lib_name,
+            export_all,
+            export_data,
         );
         let bytes = match write_result {
             Ok(b) => b,
@@ -1126,6 +1257,7 @@ fn main() {
                 }
             };
             let copts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -1229,6 +1361,7 @@ fn main() {
                 }
             };
             let copts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -1652,6 +1785,44 @@ fn dump_native_link(rest: &[String]) {
             eprintln!("badc: --dump-native-link: PLT lowering failed: {e}");
         }
     }
+}
+
+/// The badc home directory: `$BADC_HOME` if set, else `~/.badc`
+/// (`$HOME` on Unix, `%USERPROFILE%` on Windows). `None` when none of
+/// those is set. Drives both the `--install` default destination and
+/// the on-disk header / runtime overlay the compile paths consult.
+fn badc_home() -> Option<PathBuf> {
+    if let Some(h) = std::env::var_os("BADC_HOME") {
+        return Some(PathBuf::from(h));
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    Some(PathBuf::from(home).join(".badc"))
+}
+
+/// Write every embedded header under `dir/include` and every embedded
+/// runtime source under `dir/lib`, recreating the source hierarchy
+/// (e.g. `dir/include/sys/socket.h`). Returns the (headers, runtime)
+/// counts. Existing files are overwritten so a re-install refreshes a
+/// stale tree.
+fn install_embedded(dir: &std::path::Path) -> std::io::Result<(usize, usize)> {
+    fn write_tree<'a>(
+        root: &std::path::Path,
+        entries: impl Iterator<Item = &'a (&'a str, &'a str)>,
+    ) -> std::io::Result<usize> {
+        let mut n = 0;
+        for (name, body) in entries {
+            let dest = root.join(name);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&dest, body)?;
+            n += 1;
+        }
+        Ok(n)
+    }
+    let headers = write_tree(&dir.join("include"), badc::embedded_headers().iter())?;
+    let runtime = write_tree(&dir.join("lib"), badc::embedded_runtime().iter())?;
+    Ok((headers, runtime))
 }
 
 fn dump_bundled_headers() {

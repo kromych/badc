@@ -194,9 +194,20 @@ pub struct CompileOptions {
     /// matching the default visibility of a system toolchain's shared
     /// library.
     pub export_all_functions: bool,
+    /// `--gnu` -- when true the preprocessor defines the GCC identity
+    /// macros (`__GNUC__` and the rest, via
+    /// [`Preprocessor::enable_gnu`]). Off by default: badc implements
+    /// most but not all of the GNU C surface, so it claims `__GNUC__`
+    /// only when the caller opts in.
+    pub gnu: bool,
 }
 
 impl CompileOptions {
+    /// Enable the `--gnu` GCC identity predefines.
+    pub fn with_gnu(mut self, gnu: bool) -> Self {
+        self.gnu = gnu;
+        self
+    }
     /// Replace the `-D` predefine list.
     pub fn with_defines(mut self, defines: Vec<(String, String)>) -> Self {
         self.defines = defines;
@@ -426,6 +437,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// a callback type nested in another prototype -- must not trip the
     /// duplicate-parameter check).
     pub parsing_fn_ptr_proto: bool,
+    /// Set by `parse_function_params` immediately before the per-parameter
+    /// `parse_declarator` call and taken (cleared) at the top of that call,
+    /// so it applies only to the parameter's own declarator and not to any
+    /// nested one. In parameter position a function-typed declarator
+    /// `RET (name)(args)` decays to a pointer to function (C99 6.7.5.3p8),
+    /// the same as `RET (*name)(args)`.
+    pub param_decl_context: bool,
     pub last_array_decay_size: i64,
 
     /// Companion to `last_array_decay_size` for cases where the
@@ -525,6 +543,28 @@ pub(in crate::c5::compiler) struct Pending {
     /// `Self::last_emit_is_zero` to suppress the NULL-idiom
     /// warning on `pointer = 0`.
     pub last_imm_was_zero: bool,
+
+    /// Number of grouping parentheses stripped from around a compound
+    /// literal by `skip_opt_compound_literal_cast` (`((T){...})`,
+    /// C99 6.5.1/6.5.2.5). The aggregate-initializer dispatch consumes
+    /// this many closing `)` after the literal's brace list. 0 when the
+    /// literal carried no surrounding parentheses.
+    pub compound_lit_close_parens: i64,
+
+    /// Side channel from `skip_attribute_specifiers`: set true when a
+    /// consumed attribute named `unused` / `maybe_unused` (C23
+    /// 6.7.12.4 `[[maybe_unused]]` or GNU `__attribute__((unused))`).
+    /// Read by `parse_block_stmt` right after the leading-attribute
+    /// skip to mark the declared locals so their unused-variable
+    /// diagnostics are suppressed.
+    pub attr_maybe_unused: bool,
+    /// A consumed `__declspec(thread)`. Read by the declaration parse to mark
+    /// the declared object thread-local (the storage class `_Thread_local`
+    /// reaches the same flag through the keyword path).
+    pub attr_thread_local: bool,
+    /// A consumed `__declspec(dllexport)`. Read after the declarator to add the
+    /// declared name to the export list -- the equivalent of `#pragma export`.
+    pub attr_dllexport: bool,
 }
 
 impl Default for Pending {
@@ -547,6 +587,7 @@ impl Default for Pending {
             fn_ptr_param_types: None,
             indirect_callee_params: None,
             parsing_fn_ptr_proto: false,
+            param_decl_context: false,
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
@@ -559,6 +600,10 @@ impl Default for Pending {
             bf_compound_assign: None,
             last_emit_was_indirect_call: false,
             last_imm_was_zero: false,
+            compound_lit_close_parens: 0,
+            attr_maybe_unused: false,
+            attr_thread_local: false,
+            attr_dllexport: false,
         }
     }
 }
@@ -582,6 +627,10 @@ pub struct Compiler {
     /// across translation units.
     next_ent_pc: usize,
     data: Vec<u8>,
+    /// Start offsets of anonymous data objects (string literals,
+    /// `__func__`) recorded as they are placed in `data`, for static
+    /// DCE object boundaries. See `Program::data_object_starts`.
+    data_object_starts: Vec<i64>,
     /// Type of the current expression -- set by `expr` callees, read by callers
     /// to decide between byte and word loads/stores and for pointer scaling.
     ty: i64,
@@ -595,6 +644,12 @@ pub struct Compiler {
     /// so the prologue reserves enough stack for every nested-call
     /// temp the function ever needs.
     max_loc_offs: i64,
+    /// `(base_offset, cells)` for each multi-cell temporary the parser
+    /// allocates that carries no symbol (a struct call result, a
+    /// struct-by-value parameter copy, a struct compound literal). Slot
+    /// coalescing reserves these interior cells; without a symbol they are
+    /// absent from the per-function variable list. Reset per function.
+    multi_cell_temps: alloc::vec::Vec<(i64, i64)>,
 
     /// True once the current function has emitted at least one
     /// alloca intrinsic. Drives the function-end backpatch that
@@ -792,6 +847,9 @@ pub struct Compiler {
     /// either an absolute write (ELF / ET_EXEC), a Mach-O
     /// rebase opcode, or a PE `.reloc` entry.
     data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// Pointer-to-extern-data static initializers; the target symbol is
+    /// resolved by name at link time. See [`program::ExternDataReloc`].
+    pub(super) extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
     /// Function-pointer relocations for static initializers like
     /// `static const VTable v = { .xClose = my_close };`. Each
     /// entry is the byte offset in `data` of an 8-byte slot plus
@@ -1042,6 +1100,9 @@ impl Compiler {
         opts: CompileOptions,
     ) -> Result<String, C5Error> {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        if opts.gnu {
+            pp.enable_gnu();
+        }
         pp.set_source_label(&opts.source_label);
         pp.set_show_includes(opts.show_includes);
         for path in &opts.include_paths {
@@ -1089,6 +1150,9 @@ impl Compiler {
         // error out of the codegen's import resolver, not a
         // mysterious link-time mismatch.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        if opts.gnu {
+            pp.enable_gnu();
+        }
         pp.set_source_label(&opts.source_label);
         pp.set_show_includes(opts.show_includes);
         for path in &opts.include_paths {
@@ -1165,6 +1229,7 @@ impl Compiler {
             } else {
                 4
             };
+            l.char_signed = target.plain_char_signed();
             l
         };
         Self {
@@ -1176,9 +1241,11 @@ impl Compiler {
             target,
             next_ent_pc: 0,
             data,
+            data_object_starts: Vec::new(),
             ty: 0,
             loc_offs: 0,
             max_loc_offs: 0,
+            multi_cell_temps: alloc::vec::Vec::new(),
             uses_alloca_in_current_fn: false,
             pending_is_inline: false,
             pending_noreturn: false,
@@ -1208,6 +1275,7 @@ impl Compiler {
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             pending_exports,
             current_func_return_ty: 0,
@@ -1395,37 +1463,48 @@ impl Compiler {
     pub fn compile(mut self) -> Result<Program, C5Error> {
         let retry_state = self.retry_state.take();
         let target = self.target;
-        match self.compile_one_pass() {
-            Ok(p) => Ok(p),
-            Err(e) => {
-                let Some((source, opts)) = retry_state else {
-                    return Err(e);
-                };
-                let Some(name) = Self::parse_unknown_function_name_from(&e) else {
-                    return Err(e);
-                };
-                let header = match super::headers::header_declaring(&name) {
-                    Some(h) => h,
-                    None => return Err(e),
-                };
-                if opts.force_includes.iter().any(|h| h == header) {
-                    return Err(e);
+        let mut result = self.compile_one_pass();
+        let Some((source, mut opts)) = retry_state else {
+            return result;
+        };
+        // Auto-include retry. Each pass that fails on an undeclared
+        // function names the header declaring it; force-include that
+        // header and run again. Looping (rather than retrying once)
+        // resolves a chain -- a `__builtin_*` thunk header pulling in
+        // the library function's header -- and several independent
+        // missing headers. The force-include set only grows, and a
+        // header already in it ends the loop, so progress is monotone.
+        let mut infos: Vec<String> = Vec::new();
+        loop {
+            let e = match result {
+                Ok(mut prog) => {
+                    // Surface each recovery through the same diagnostic
+                    // pipeline the CLI colourises (`info:` -> bold
+                    // green), oldest first above the retry pass's own
+                    // warnings.
+                    for info in infos.into_iter().rev() {
+                        prog.warnings.insert(0, info);
+                    }
+                    return Ok(prog);
                 }
-                let mut opts2 = opts;
-                opts2.force_includes.push(header.to_string());
-                let mut prog = Compiler::with_options_inner(source, target, opts2, false)
-                    .compile_one_pass()?;
-                // Surface the recovery through the same diagnostic
-                // pipeline the CLI colourises (`info:` -> bold green).
-                // Insert at the head so it lands above any
-                // preprocessor / parser warnings that fired during
-                // the successful retry pass.
-                prog.warnings.insert(
-                    0,
-                    format!("info: auto-including <{header}> for undeclared `{name}`"),
-                );
-                Ok(prog)
+                Err(e) => e,
+            };
+            let Some(name) = Self::parse_unknown_function_name_from(&e) else {
+                return Err(e);
+            };
+            let header = match super::headers::header_declaring(&name) {
+                Some(h) => h,
+                None => return Err(e),
+            };
+            if opts.force_includes.iter().any(|h| h == header) {
+                return Err(e);
             }
+            opts.force_includes.push(header.to_string());
+            infos.push(format!(
+                "info: auto-including <{header}> for undeclared `{name}`"
+            ));
+            result = Compiler::with_options_inner(source.clone(), target, opts.clone(), false)
+                .compile_one_pass();
         }
     }
 
@@ -1566,12 +1645,14 @@ impl Compiler {
         let exports = self.resolve_exports()?;
         Ok(Program {
             data: self.data,
+            data_object_starts: self.data_object_starts,
             entry_pc,
             warnings: self.warnings,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
             exports,
             data_relocs: self.data_relocs,
+            extern_data_relocs: self.extern_data_relocs,
             code_relocs: self.code_relocs,
             dylibs: self.dylibs,
             dllmain_pc,

@@ -55,6 +55,11 @@
 #ifndef L_tmpnam
 #define L_tmpnam     20
 #endif
+// Buffer size for ctermid() (POSIX). macOS uses 1024; Linux uses 9, but
+// the larger value is safe everywhere since ctermid writes a short path.
+#ifndef L_ctermid
+#define L_ctermid    1024
+#endif
 #ifndef PATH_MAX
 #define PATH_MAX     4096
 #endif
@@ -69,7 +74,7 @@ typedef struct __c5_FILE FILE;
 // C99 7.19.1: `fpos_t` records a stream position for `fgetpos` /
 // `fsetpos`. Like `FILE` it is opaque -- programs pass `fpos_t *`
 // through the bound libc routines and never inspect the bytes. The
-// buffer is sized for the widest host layout (glibc's `fpos_t` is 16
+// buffer is sized for the widest host layout (the Linux `fpos_t` is 16
 // bytes; macOS and Windows use 8) and the union member forces the
 // 8-byte alignment the libc fields expect.
 struct __c5_fpos_t { union { char __opaque[16]; long long __align; } __u; };
@@ -141,7 +146,7 @@ typedef struct __c5_fpos_t fpos_t;
 // through it. The caller passes (char **buf, size_t *sz)
 // addresses that get updated to the current buffer + length
 // on every `fflush` / `fclose`. Available on macOS 10.13+
-// and every modern glibc / musl; absent from msvcrt.
+// and every recent Linux C library / musl; absent from msvcrt.
 #pragma binding(libc::open_memstream, "_open_memstream")
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on macOS / BSD. A source that opens its own
@@ -155,6 +160,11 @@ typedef struct __c5_fpos_t fpos_t;
 // raw fd from a system call and need stdio-level formatting.
 #pragma binding(libc::fdopen,    "_fdopen")
 #pragma binding(libc::fileno,    "_fileno")
+#pragma binding(libc::flockfile,    "_flockfile")
+#pragma binding(libc::funlockfile,  "_funlockfile")
+#pragma binding(libc::ftrylockfile, "_ftrylockfile")
+#pragma binding(libc::getc_unlocked, "_getc_unlocked")
+#pragma binding(libc::putc_unlocked, "_putc_unlocked")
 #endif
 
 #ifdef __linux__
@@ -206,10 +216,10 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma dylib(libdl_for_stdio, "libdl.so.2")
 #pragma binding(libdl_for_stdio::dlsym, "dlsym")
 // POSIX `open_memstream` -- same shape as on macOS, exported
-// directly by glibc / musl.
+// directly by the Linux C library / musl.
 #pragma binding(libc::open_memstream, "open_memstream")
 // POSIX `popen` / `pclose` -- not in C89 but universally
-// available on glibc / musl. A source that opens its own
+// available on Linux / musl. A source that opens its own
 // `extern FILE *popen(const char *, const char *);` prototype
 // binds through this entry instead of leaving the call as an
 // unresolved Token::Fun.
@@ -220,6 +230,11 @@ typedef struct __c5_fpos_t fpos_t;
 // raw fd from a system call and need stdio-level formatting.
 #pragma binding(libc::fdopen,    "fdopen")
 #pragma binding(libc::fileno,    "fileno")
+#pragma binding(libc::flockfile,    "flockfile")
+#pragma binding(libc::funlockfile,  "funlockfile")
+#pragma binding(libc::ftrylockfile, "ftrylockfile")
+#pragma binding(libc::getc_unlocked, "getc_unlocked")
+#pragma binding(libc::putc_unlocked, "putc_unlocked")
 #endif
 
 #ifdef _WIN32
@@ -348,8 +363,10 @@ typedef struct __c5_fpos_t fpos_t;
 // reach for these under `_MSC_VER`; the `_s` form is the
 // bounded-buffer rewrite of the legacy entry point and behaves
 // the same way for in-bounds inputs.
-#pragma binding(msvcrt::localtime_s,    "localtime_s")
-#pragma binding(msvcrt::gmtime_s,       "gmtime_s")
+// The CRT exports the 64-bit-time_t forms; the unsuffixed names are
+// SDK macros. badc's time_t is 64-bit on Windows, so the ABI matches.
+#pragma binding(msvcrt::localtime_s,    "_localtime64_s")
+#pragma binding(msvcrt::gmtime_s,       "_gmtime64_s")
 #pragma binding(msvcrt::ctime_s,        "ctime_s")
 #pragma binding(msvcrt::asctime_s,      "asctime_s")
 #pragma binding(msvcrt::strerror_s,     "strerror_s")
@@ -367,6 +384,11 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::_kbhit,         "_kbhit")
 #pragma binding(msvcrt::_msize,         "_msize")
 #pragma binding(msvcrt::_open,          "_open")
+#pragma binding(msvcrt::_wopen,         "_wopen")
+#pragma binding(msvcrt::_locking,       "_locking")
+#pragma binding(msvcrt::_get_osfhandle, "_get_osfhandle")
+#pragma binding(msvcrt::_open_osfhandle, "_open_osfhandle")
+#pragma binding(msvcrt::_heapmin,       "_heapmin")
 #pragma binding(msvcrt::_close,         "_close")
 #pragma binding(msvcrt::_read,          "_read")
 #pragma binding(msvcrt::_write,         "_write")
@@ -425,6 +447,14 @@ int fread(char *buf, int size, int n, FILE *stream);
 int fwrite(char *buf, int size, int n, FILE *stream);
 // POSIX.1: the integer file descriptor underlying a stream.
 int fileno(FILE *stream);
+// POSIX stdio stream locking (not part of msvcrt's stdio surface).
+#ifndef __BADC_WINDOWS__
+void flockfile(FILE *stream);
+void funlockfile(FILE *stream);
+int ftrylockfile(FILE *stream);
+int getc_unlocked(FILE *stream);
+int putc_unlocked(int c, FILE *stream);
+#endif
 int fputs(char *s, FILE *stream);
 char *fgets(char *buf, int n, FILE *stream);
 int fputc(int c, FILE *stream);
@@ -590,6 +620,11 @@ int   _getch();
 int   _kbhit();
 long long _msize(void *p);
 int   _open(char *path, int flags, int mode);
+int   _wopen(const unsigned short *path, int flags, int mode);
+int   _locking(int fd, int mode, long nbytes);
+long long _get_osfhandle(int fd);
+int _open_osfhandle(long long osfhandle, int flags);
+int   _heapmin(void);
 int   _close(int fd);
 long long _read(int fd, void *buf, long long n);
 long long _write(int fd, void *buf, long long n);

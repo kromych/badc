@@ -191,6 +191,20 @@ fn fmt_inst(inst: &Inst) -> String {
         }
         TailExt(b) => format!("TailExt({b})"),
         Mcpy { dst, src, size } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size} }}"),
+        AtomicRmw {
+            op,
+            addr,
+            value,
+            width,
+        } => format!("AtomicRmw {{ op={op:?}, addr=v{addr}, value=v{value}, width={width} }}"),
+        AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            width,
+        } => format!(
+            "AtomicCas {{ addr=v{addr}, expected_addr=v{expected_addr}, desired=v{desired}, width={width} }}"
+        ),
         Intrinsic { kind, args } => format!(
             "Intrinsic {{ kind={kind}, args=[{}] }}",
             fmt_value_list(args),

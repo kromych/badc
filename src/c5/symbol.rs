@@ -8,6 +8,13 @@ pub(crate) struct Symbol {
     pub class: i64,
     pub type_: i64,
     pub val: i64,
+    /// For a file-scope object that reserved storage in the data
+    /// segment, the byte count reserved at `val`. C99 6.9.2: a later
+    /// defining declaration reuses a tentative definition's storage,
+    /// but only when it fits -- a deferred-size tentative (`T x[];`)
+    /// reserves one element, so a larger initializer must allocate
+    /// fresh storage rather than overrun the following globals.
+    pub reserved_data_bytes: i64,
     pub h_class: i64,
     pub h_type: i64,
     pub h_val: i64,
@@ -274,6 +281,13 @@ pub(crate) struct Symbol {
     /// translation unit, and the header is the wrong place to
     /// flag them.
     pub decl_in_main_source: bool,
+
+    /// True when the declaration carried a `maybe_unused` /
+    /// `unused` attribute (C23 6.7.12.4 `[[maybe_unused]]` or GNU
+    /// `__attribute__((unused))`). Suppresses the unused-variable
+    /// and dead-store diagnostics for this symbol, matching the
+    /// documented effect of the attribute.
+    pub maybe_unused: bool,
 }
 
 /// C99 6.2.2 linkage class. `None` is the default for block-scope

@@ -156,6 +156,9 @@ impl Compiler {
         let is_union = self.lex.tk == Token::Union;
         let kind = if is_union { "union" } else { "struct" };
         self.next()?;
+        // An attribute may sit between the keyword and the tag
+        // (`struct __attribute__((packed)) name`).
+        let packed = self.skip_attribute_specifiers()?;
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
@@ -169,8 +172,17 @@ impl Compiler {
             return Err(self.compile_err(format!("{kind} name or `{{` expected")));
         };
         let id = if self.lex.tk == '{' {
-            self.parse_aggregate_body(&name, is_union)?
+            let id = self.parse_aggregate_body(&name, is_union, packed)?;
+            // `struct name { ... } __attribute__((packed))`: the attribute
+            // follows the body. Re-pack the already-laid-out fields.
+            if self.skip_attribute_specifiers()? {
+                self.repack_struct(id);
+            }
+            id
         } else {
+            // A trailing attribute on a tag use without a body
+            // (`struct name __attribute__((...))`); consume it.
+            self.skip_attribute_specifiers()?;
             self.find_or_forward_declare_struct(&name)
         };
         Ok(struct_ty_for(id))
@@ -192,6 +204,220 @@ impl Compiler {
     ///   * `struct Tag`, `union Tag`, `struct Tag { ... }`,
     ///     `struct { ... }` (anonymous)
     ///   * a typedef name bound earlier in the translation unit
+    /// C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`. When the
+    /// current token is `_Atomic` immediately followed by `(`, consume the
+    /// whole specifier and return the inner type-name's type. c5 does not
+    /// model atomicity, so this is the unqualified inner type plus any
+    /// abstract pointer declarator inside the parentheses. Returns `None`
+    /// without consuming when the current token is not this specifier form
+    /// (e.g. the `_Atomic` qualifier). Shared by every base-type parser
+    /// (decl base, file-scope declaration, struct field).
+    pub(super) fn try_parse_atomic_type_specifier(&mut self) -> Result<Option<i64>, C5Error> {
+        if self.lex.tk != Token::Atomic || !self.lex.peek_after_whitespace(b'(') {
+            return Ok(None);
+        }
+        self.next()?; // _Atomic
+        self.next()?; // (
+        let mut inner = self.parse_decl_base_type()?;
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+            inner += Ty::Ptr as i64;
+        }
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected after `_Atomic(type-name)`"));
+        }
+        self.next()?; // )
+        Ok(Some(inner))
+    }
+
+    /// `typeof ( type-name )` / `typeof ( expression )` (C23 6.7.2.5,
+    /// the GCC `__typeof__` extension). The result is the operand's
+    /// type. A type-name operand parses as a base type plus any
+    /// abstract pointer decoration; an expression operand is parsed
+    /// unevaluated and its type recovered, mirroring `sizeof`'s
+    /// expression branch. Only the flat scalar / pointer / aggregate
+    /// type the rest of the parser carries is recovered; an array
+    /// operand's element type is returned (the dimension is dropped,
+    /// matching the decay the value contexts already apply).
+    pub(super) fn parse_typeof_specifier(&mut self) -> Result<i64, C5Error> {
+        self.next()?; // typeof
+        if self.lex.tk != '(' {
+            return Err(self.compile_err("`(` expected after `typeof`"));
+        }
+        self.next()?; // (
+        let ty = if self.lex_is_type_start() {
+            let mut inner = self.parse_decl_base_type()?;
+            core::mem::take(&mut self.pending.typedef_base_array_size);
+            while self.lex.tk == Token::MulOp {
+                self.next()?;
+                inner += Ty::Ptr as i64;
+                while self.lex.tk == Token::TypeQual {
+                    self.next()?;
+                }
+            }
+            inner
+        } else {
+            // Unevaluated expression operand: parse it to learn the
+            // type, then discard everything the parse pushed so no
+            // live code, AST node, or PC reservation survives.
+            let saved_text_len = self.next_ent_pc;
+            let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
+            let saved_ast_acc = self.ast_acc;
+            let saved_vstack = self.ast_vstack.len();
+            self.expr(Token::Inc as i64)?;
+            let expr_ty = self.ty;
+            self.next_ent_pc = saved_text_len;
+            self.clear_recent_emits();
+            self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
+            self.ast_acc = saved_ast_acc;
+            self.ast_vstack.truncate(saved_vstack);
+            expr_ty
+        };
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected after `typeof` operand"));
+        }
+        self.next()?; // )
+        Ok(ty)
+    }
+
+    /// Set `*packed` / `*maybe_unused` if the current token is the
+    /// corresponding attribute name (`packed` / `__packed__`,
+    /// `unused` / `maybe_unused` / `__unused__`). Other names are
+    /// ignored.
+    fn note_attribute_name(
+        &self,
+        packed: &mut bool,
+        maybe_unused: &mut bool,
+        thread_local: &mut bool,
+        noreturn: &mut bool,
+        dllexport: &mut bool,
+    ) {
+        if self.lex.tk == Token::Id {
+            let n = self.symbols[self.lex.curr_id_idx].name.as_str();
+            if n == "packed" || n == "__packed__" {
+                *packed = true;
+            } else if n == "unused" || n == "maybe_unused" || n == "__unused__" {
+                *maybe_unused = true;
+            } else if n == "thread" {
+                // MSVC `__declspec(thread)`: thread-local storage. `thread` is
+                // not a GNU attribute, so it can only mean this.
+                *thread_local = true;
+            } else if n == "noreturn" || n == "__noreturn__" {
+                // `__declspec(noreturn)` / `__attribute__((noreturn))`.
+                *noreturn = true;
+            } else if n == "dllexport" {
+                // MSVC `__declspec(dllexport)`: export the symbol, the
+                // equivalent of `#pragma export(name)`.
+                *dllexport = true;
+            }
+        }
+    }
+
+    /// Consume a run of declaration decorators -- GCC
+    /// `__attribute__ (( ... ))` / `__declspec ( ... )` / `_Alignas
+    /// ( ... )` and C23 `[[ ... ]]` -- if any. Returns true when one
+    /// names the `packed` attribute, which sets an aggregate's layout;
+    /// `maybe_unused` / `unused` is recorded on `pending.attr_maybe_unused`.
+    /// Every other decorator is an advisory hint the dialect does not act
+    /// on and is discarded. The payload is matched by balance, so any
+    /// parenthesis depth and content -- nested calls, string literals,
+    /// comma lists -- is consumed.
+    pub(super) fn skip_attribute_specifiers(&mut self) -> Result<bool, C5Error> {
+        let mut packed = false;
+        let mut maybe_unused = false;
+        let mut thread_local = false;
+        let mut noreturn = false;
+        let mut dllexport = false;
+        loop {
+            if self.lex.tk == Token::Attribute {
+                // `__attribute__((...))`, `__declspec(...)`,
+                // `_Alignas(...)`. Consume the balanced parenthesised
+                // payload, recording the `packed` attribute.
+                self.next()?;
+                if self.lex.tk != '(' {
+                    return Err(self.compile_err("`(` expected after attribute specifier"));
+                }
+                let mut depth = 0i32;
+                loop {
+                    if self.lex.tk == '(' {
+                        depth += 1;
+                        self.next()?;
+                    } else if self.lex.tk == ')' {
+                        depth -= 1;
+                        self.next()?;
+                        if depth == 0 {
+                            break;
+                        }
+                    } else if self.lex.tk == 0 {
+                        return Err(self.compile_err("unterminated attribute specifier"));
+                    } else {
+                        self.note_attribute_name(
+                            &mut packed,
+                            &mut maybe_unused,
+                            &mut thread_local,
+                            &mut noreturn,
+                            &mut dllexport,
+                        );
+                        self.next()?;
+                    }
+                }
+            } else if self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'[') {
+                // C23 6.7.13 `[[ ... ]]` attribute. The opening `[[` and
+                // closing `]]` are each two bracket tokens; argument
+                // lists use balanced parentheses, so a `]` closes only at
+                // paren depth zero. The `gnu::` / `clang::` namespace
+                // prefixes lex as separate tokens and need no special
+                // handling -- the `packed` name is detected wherever it
+                // appears.
+                self.next()?; // first `[`
+                self.next()?; // second `[`
+                let mut depth = 0i32;
+                loop {
+                    if self.lex.tk == '(' {
+                        depth += 1;
+                        self.next()?;
+                    } else if self.lex.tk == ')' {
+                        depth -= 1;
+                        self.next()?;
+                    } else if self.lex.tk == ']' && depth == 0 {
+                        self.next()?; // first `]`
+                        if self.lex.tk != ']' {
+                            return Err(self.compile_err("`]]` expected to close attribute"));
+                        }
+                        self.next()?; // second `]`
+                        break;
+                    } else if self.lex.tk == 0 {
+                        return Err(self.compile_err("unterminated `[[` attribute"));
+                    } else {
+                        self.note_attribute_name(
+                            &mut packed,
+                            &mut maybe_unused,
+                            &mut thread_local,
+                            &mut noreturn,
+                            &mut dllexport,
+                        );
+                        self.next()?;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        if maybe_unused {
+            self.pending.attr_maybe_unused = true;
+        }
+        if thread_local {
+            self.pending.attr_thread_local = true;
+        }
+        if noreturn {
+            self.pending_noreturn = true;
+        }
+        if dllexport {
+            self.pending.attr_dllexport = true;
+        }
+        Ok(packed)
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -217,25 +443,25 @@ impl Compiler {
         // collect everything we see, then look at the next token
         // for the type keyword.
         let mut m = IntModifiers::default();
-        while is_decl_modifier(self.lex.tk) {
+        loop {
+            // C23 6.7.13 `[[...]]` and GNU `__attribute__`/`__declspec`
+            // may lead the declaration specifiers.
+            if self.lex.tk == Token::Attribute
+                || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+            {
+                self.skip_attribute_specifiers()?;
+                continue;
+            }
+            if !is_decl_modifier(self.lex.tk) {
+                break;
+            }
             // C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`.
             // Distinct from the `_Atomic` qualifier handled below: here
             // `_Atomic` names the type rather than qualifying a later
             // one. c5 does not model atomicity, so the declared type is
             // the unqualified inner type-name (base plus any abstract
             // pointer declarator inside the parentheses).
-            if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
-                self.next()?; // _Atomic
-                self.next()?; // (
-                let mut inner = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp {
-                    self.next()?;
-                    inner += Ty::Ptr as i64;
-                }
-                if self.lex.tk != ')' {
-                    return Err(self.compile_err("`)` expected after `_Atomic(type-name)`"));
-                }
-                self.next()?; // )
+            if let Some(inner) = self.try_parse_atomic_type_specifier()? {
                 return Ok(inner);
             }
             if self.lex.tk == Token::Inline {
@@ -249,6 +475,14 @@ impl Compiler {
                 // all no-ops in c5, just consume.
                 self.next()?;
             }
+        }
+
+        // `typeof` / `__typeof__` (C23 6.7.2.5) names the type of a
+        // parenthesized type-name or unevaluated expression operand.
+        // The operand supplies the complete type, so the int-modifier
+        // soup collected above does not apply.
+        if self.lex.tk == Token::Typeof {
+            return self.parse_typeof_specifier();
         }
 
         let bt = if self.lex.tk == Token::Int {
@@ -367,6 +601,10 @@ impl Compiler {
         // `unsigned int long long`, etc. all collapse to the base type
         // already chosen.
         while is_decl_modifier(self.lex.tk) {
+            if self.lex.tk == Token::Attribute {
+                self.skip_attribute_specifiers()?;
+                continue;
+            }
             self.next()?;
         }
 

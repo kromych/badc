@@ -112,6 +112,9 @@ pub(crate) enum Token {
     Return,
     /// 'sizeof' keyword
     Sizeof,
+    /// '_Alignof' keyword (C11 6.5.3.4), and its `__alignof__` /
+    /// `__alignof` GCC spellings.
+    Alignof,
     /// 'while' keyword
     While,
     /// Assignment '='
@@ -351,6 +354,23 @@ pub(crate) enum Token {
     /// keeping the encoding untouched and carrying void-ness on
     /// the side avoids that collision.
     Void,
+    /// `typeof` (C23 6.7.2.5) and its GCC `__typeof__` / `__typeof`
+    /// spellings: a type specifier naming the type of a parenthesized
+    /// type-name or unevaluated expression operand. Added at the end of
+    /// the enum so the operator variants keep their precedence-ordinal
+    /// values.
+    Typeof,
+    /// A declaration decorator -- GCC `__attribute__` / `__attribute` or
+    /// MSVC `__declspec`. Consumed by `skip_attribute_specifiers`, which
+    /// parses the parenthesised payload, acts on the `packed` attribute
+    /// (aggregate layout), and ignores the rest. Added at the end so the
+    /// operator ordinals are unchanged.
+    Attribute,
+    /// GCC `__extension__` -- a no-op annotation that prefixes an
+    /// expression or declaration to suppress a GNU-extension diagnostic.
+    /// The lexer skips it, so it never reaches the parser. Added at the
+    /// end so the operator ordinals are unchanged.
+    Extension,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a
@@ -389,6 +409,7 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::Int as i64 => "`int`",
         x if x == Token::Return as i64 => "`return`",
         x if x == Token::Sizeof as i64 => "`sizeof`",
+        x if x == Token::Alignof as i64 => "`_Alignof`",
         x if x == Token::While as i64 => "`while`",
         x if x == Token::Assign as i64 => "`=`",
         x if x == Token::AssignOp as i64 => "compound-assign (`+=` / `-=` / ...)",

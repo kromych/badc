@@ -162,6 +162,17 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
+        # CPython 3.14.6 source distribution from www.python.org.
+        # Pinned by the sha256 of the released .tgz (the vendored asset
+        # is that file renamed to the `name-version-sha8` convention).
+        name="python",
+        version="3.14.6",
+        url="https://www.python.org/ftp/python/3.14.6/Python-3.14.6.tgz",
+        ext=".tar.gz",
+        upstream_sha="74d0d71d0600e477651a077101d6e62d1e2e69b8e992ba18c993dd643b7ba222",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
         # Lua 5.5.0 -- the interpreter source distribution from
         # www.lua.org. Pinned by the sha256 of the released tarball
         # (Lua is published as standalone tarballs, with no public

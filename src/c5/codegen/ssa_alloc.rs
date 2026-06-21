@@ -255,6 +255,53 @@ impl RegBanks {
 
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
+/// Whether an x86_64 function body writes r13, the writer's reserved
+/// secondary scratch (`SCRATCH_R13` in ssa_emit_x86_64). r13 is
+/// callee-saved under System V / Win64, so the prologue must preserve
+/// the caller's value when the body clobbers it. The predicate is
+/// safe-by-default: it returns `true` for any instruction outside a
+/// short whitelist of lowerings that target their destination register
+/// directly and never need a second scratch (immediates, address
+/// materialisation, loads, sign/zero extension, parameter reads). A
+/// spilled operand materialises through r13, and block-argument moves
+/// (`emit_phi_predecessor_moves`) route through it, so any spill or any
+/// control-flow join also forces the save. A new `Inst` variant that is
+/// not whitelisted defaults to forcing the save rather than risking a
+/// silent unsaved clobber.
+fn function_clobbers_r13(func: &FunctionSsa, spill_count: u32) -> bool {
+    // A tail-call forwarder (`Terminator::TailExt`, the synthetic libc
+    // trampolines) exits through a `jmp` with no epilogue, so a saved
+    // r13 could never be restored -- the callee's `ret` would pop the
+    // trampoline's frame as its return address. These forwarders do not
+    // clobber r13 either: their arguments are already in the host ABI
+    // registers when control reaches them. Leave them frame-less.
+    if func
+        .blocks
+        .iter()
+        .any(|b| matches!(b.terminator, Terminator::TailExt(_)))
+    {
+        return false;
+    }
+    if spill_count > 0 || func.blocks.len() > 1 {
+        return true;
+    }
+    func.insts.iter().any(|inst| {
+        !matches!(
+            inst,
+            Inst::Imm(_)
+                | Inst::ImmData(_)
+                | Inst::ImmCode(_)
+                | Inst::ImmExtCode(_)
+                | Inst::BlockAddr(_)
+                | Inst::LocalAddr(_)
+                | Inst::Load { .. }
+                | Inst::LoadLocal { .. }
+                | Inst::ParamRef { .. }
+                | Inst::Extend { .. }
+        )
+    })
+}
+
 pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
@@ -377,10 +424,26 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // prologue's `str xN, [sp, ...]` sequence to exactly the
     // registers AAPCS64 / SysV / Win64 require the callee to
     // preserve.
-    let gpr_used_callee: Vec<u8> = gpr_used
+    let mut gpr_used_callee: Vec<u8> = gpr_used
         .into_iter()
         .filter(|r| banks.callee_gprs.contains(r))
         .collect();
+    // The x86_64 writer borrows r13 as its reserved secondary scratch
+    // (`SCRATCH_R13` in ssa_emit_x86_64). r13 is callee-saved under both
+    // System V and Win64, so a function that clobbers it must save and
+    // restore the caller's value -- otherwise a foreign (clang/gcc)
+    // caller holding a live value in r13 across a call into c5 code sees
+    // it corrupted. r13 sits outside `callee_gprs` (it is never an
+    // allocator value), so the filter above drops it; list it here when
+    // the body actually touches it so the prologue / epilogue's
+    // callee-save loop preserves it exactly as it does rbx / r12 / r14 /
+    // r15. The aarch64 writer handles its own callee-saved scratch (x19)
+    // through the analogous `function_clobbers_x19` path.
+    if matches!(target, Target::LinuxX64 | Target::WindowsX64)
+        && function_clobbers_r13(func, spill_count)
+    {
+        gpr_used_callee.push(13);
+    }
     let fp_used_callee: Vec<u8> = fp_used
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r))
@@ -1074,6 +1137,20 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
             f(*dst);
             f(*src);
         }
+        Inst::AtomicRmw { addr, value, .. } => {
+            f(*addr);
+            f(*value);
+        }
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            ..
+        } => {
+            f(*addr);
+            f(*expected_addr);
+            f(*desired);
+        }
         Inst::Phi { incoming, .. } => {
             for (_, v) in incoming {
                 f(*v);
@@ -1173,6 +1250,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
         }
         TailExt(_) => ResultKind::None,
         Mcpy { .. } => ResultKind::Int,
+        // C11 7.17.7: the prior value (RMW) / boolean success (CAS) is
+        // an integer scalar.
+        AtomicRmw { .. } | AtomicCas { .. } => ResultKind::Int,
         Intrinsic { kind, .. } => {
             use super::super::op::Intrinsic as I;
             // The unary FP math intrinsics (sqrt / fabs / floor / ceil /
@@ -2343,6 +2423,8 @@ int main(void) { return 0; }
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            synthetic_base: 0,
+            multi_cell_slots: Vec::new(),
             insts,
             blocks,
             extern_call_refs: Vec::new(),

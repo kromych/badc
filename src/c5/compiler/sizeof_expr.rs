@@ -236,4 +236,53 @@ impl Compiler {
         self.ty = saved_ty;
         Ok(total)
     }
+
+    /// C11 6.5.3.4: `_Alignof ( type-name )`. The operand is always a
+    /// parenthesized type name (an expression operand is a constraint
+    /// violation), so the dual operand-shape dispatch `sizeof` needs is
+    /// not required here. The alignment of an array type is the
+    /// alignment of its element type (C11 6.2.8), and pointer / abstract
+    /// declarators collapse to a pointer's alignment, so the abstract
+    /// declarator suffixes are consumed but do not change the result
+    /// beyond the pointer decoration.
+    pub(super) fn alignof_operand_bytes(&mut self) -> Result<i64, C5Error> {
+        if self.lex.tk != '(' {
+            return Err(self.compile_err("`(` expected after `_Alignof`"));
+        }
+        self.next()?;
+        if !self.lex_is_type_start() {
+            return Err(self.compile_err("type name expected in `_Alignof`"));
+        }
+        let saved_ty = self.ty;
+        self.ty = self.parse_decl_base_type()?;
+        let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+            self.ty += Ty::Ptr as i64;
+            while self.lex.tk == Token::TypeQual {
+                self.next()?;
+            }
+        }
+        if self.lex.tk == '(' {
+            let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
+            if nested_ptrs > 0 {
+                self.ty += nested_ptrs * (Ty::Ptr as i64);
+            }
+        }
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            let _ = self.parse_constant_int()?;
+            if self.lex.tk != ']' {
+                return Err(self.compile_err("close bracket expected in `_Alignof` array type"));
+            }
+            self.next()?;
+        }
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected to close `_Alignof`"));
+        }
+        self.next()?;
+        let align = self.align_of_type(self.ty) as i64;
+        self.ty = saved_ty;
+        Ok(align)
+    }
 }

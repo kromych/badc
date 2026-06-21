@@ -124,6 +124,55 @@ fn return_value_truncates_to_byte() {
     assert_eq!(build_and_run("int main() { return 257; }", "ret257"), 1);
 }
 
+#[test]
+fn bss_segregation_maps_and_zero_fills() {
+    // With segregation on, wholly-zero globals leave `__data` for the
+    // `__DATA` segment's `vmsize > filesize` zero-fill tail. The array
+    // is larger than the page padding, so without the vmsize tail its
+    // trailing reads fault; the pointer initializer must also resolve
+    // to the global's runtime address in the tail.
+    let opts = NativeOptions {
+        bss_segregate: true,
+        ..NativeOptions::default()
+    };
+    let src = "static long zeros[4096]; long *const p = &zeros[3000]; \
+               int main(void){ int ok = 1; \
+               for (int i = 0; i < 4096; i++) ok &= (zeros[i] == 0); \
+               zeros[3000] = 99; ok &= (zeros[3000] == 99); \
+               ok &= (p == &zeros[3000]); ok &= (*p == 99); \
+               return ok ? 0 : 1; }";
+    match build_and_run_outcome_with_options(src, "bss_segregate", opts) {
+        RunOutcome::Exit(0) => {}
+        other => panic!("segregated .bss program must exit 0, got {other:?}"),
+    }
+}
+
+#[test]
+fn bss_segregation_coexists_with_thread_local() {
+    // Zero-fill must be the segment's tail. `__thread_bss`/thread storage
+    // already sits past `__data`, so regular bss is laid out past the
+    // thread storage and addressed through `data_off_to_vaddr`. The second
+    // `_Thread_local` has a non-zero block offset: the `.data` compaction
+    // must not remap a TLS symbol's tls-image offset, or the TLV
+    // descriptor points past the per-thread block and dyld aborts.
+    let opts = NativeOptions {
+        bss_segregate: true,
+        ..NativeOptions::default()
+    };
+    let src = "_Thread_local int t0; _Thread_local int t1; \
+               static long zeros[4096]; long *const p = &zeros[3000]; \
+               int main(void){ int ok = 1; \
+               for (int i = 0; i < 4096; i++) ok &= (zeros[i] == 0); \
+               t0 = 5; t1 = 6; zeros[3000] = 9; \
+               ok &= (t0 == 5); ok &= (t1 == 6); ok &= (zeros[3000] == 9); \
+               ok &= (p == &zeros[3000]); ok &= (*p == 9); \
+               return ok ? 0 : 1; }";
+    match build_and_run_outcome_with_options(src, "bss_tls", opts) {
+        RunOutcome::Exit(0) => {}
+        other => panic!("segregated .bss with _Thread_local must exit 0, got {other:?}"),
+    }
+}
+
 // ---- Every non-intrinsic op exercised end-to-end. ----
 
 #[test]
@@ -329,6 +378,10 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("variadic_struct_arg.c", 18),
     ("variadic_struct_arg_16b.c", 51),
     ("libc_div.c", 0),
+    ("wide_string_literal_alignment.c", 0),
+    ("va_arg_through_pointer.c", 0),
+    ("pthread_key_once_width.c", 0),
+    ("dev_t_width.c", 0),
     ("libc_int_arith.c", 0),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),
@@ -345,6 +398,10 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("c99_qualifiers.c", 0),
     ("integer_suffixes.c", 0),
     ("predefined_macros.c", 0),
+    ("macro_multiline_comment_body.c", 0),
+    ("compound_literal_paren_init.c", 0),
+    ("alignof_operator.c", 0),
+    ("return_void_expression.c", 0),
     ("macro_operators.c", 0),
     ("typedef_basic.c", 0),
     ("local_init_and_block_scope.c", 0),
@@ -425,6 +482,19 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("struct_array_init_from_lvalue.c", 0),
     ("shift_result_type_signedness.c", 0),
     ("integer_negate_shift_overflow.c", 0),
+    ("case_label_declaration.c", 0),
+    ("char_constant_signedness.c", 0),
+    ("func_name_in_initializer.c", 0),
+    ("anon_union_braced_init.c", 0),
+    ("array_2d_struct_init.c", 0),
+    ("cast_abstract_fn_ptr.c", 0),
+    ("decl_trailing_attribute.c", 0),
+    ("winsock_netdb_protoent.c", 0),
+    ("slot_coalesce_disjoint_temps.c", 0),
+    ("alloca_alignment.c", 0),
+    ("slot_coalesce_declared.c", 0),
+    ("slot_coalesce_alloca.c", 0),
+    ("fn_arg_decay_then_deref_assign.c", 0),
     ("array_range_designator.c", 0),
     ("bitfield_mixed_base_packing.c", 0),
     ("flex_array_member_sizing.c", 0),
@@ -435,10 +505,29 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("fn_ptr_float_arg.c", 0),
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
+    ("flex_array_member_static_init.c", 0),
+    ("array_compound_literal_static_init.c", 0),
+    ("const_address_cast_and_arith.c", 0),
+    ("const_conditional_address_init.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("sizeof_abstract_fn_ptr.c", 0),
     ("pragma_operator.c", 0),
     ("variadic_macro_named_rest.c", 0),
+    ("stdatomic_c11.c", 0),
+    ("atomic_rmw_ops.c", 0),
+    ("fn_ptr_typedef_multi_declarator.c", 0),
+    ("hfa_struct_return.c", 0),
+    ("bitfield_assign_value.c", 0),
+    ("struct_arg_indirect_subscript.c", 0),
+    ("out_pointer_return_float_args.c", 0),
+    ("compound_literal_tagged_address.c", 0),
+    ("function_typed_parameter.c", 0),
+    ("static_init_braced_scalar.c", 0),
+    ("paren_string_char_array_init.c", 0),
+    ("static_init_paren_relocation.c", 0),
+    ("do_while_zero_returns.c", 0),
+    ("self_referential_macro.c", 0),
+    ("logical_not_float.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),
@@ -462,6 +551,20 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("local_struct_array_runtime_init.c", 0),
     ("scanf_fscanf_binding.c", 0),
     ("builtin_bit_count.c", 0),
+    ("typeof_operator.c", 0),
+    ("attribute_packed.c", 0),
+    ("attribute_positions.c", 0),
+    ("attribute_declspec.c", 0),
+    ("attribute_c23.c", 0),
+    ("static_assert_in_struct.c", 0),
+    ("gnu_extension_keyword.c", 0),
+    ("variadic_struct_by_value_arg.c", 0),
+    ("fn_ptr_ternary_call_return.c", 0),
+    ("float_condition_negative_zero.c", 0),
+    ("tentative_array_definition.c", 0),
+    ("tentative_array_use_before_init.c", 0),
+    ("tentative_deferred_array_grows.c", 0),
+    ("directive_in_macro_argument.c", 0),
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
@@ -651,6 +754,16 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // `adrp+add` that materialises the descriptor's address,
     // then `ldr x16, [x0]; blr x16` to call into the getter.
     ("thread_local_basic.c", 0),
+    ("msvc_decl_decorators.c", 0),
+    ("msvc_pragma_operator.c", 0),
+    ("thread_local_gnu.c", 0),
+    ("wmem_functions.c", 0),
+    ("posix_module_headers.c", 0),
+    ("mmap_anonymous.c", 0),
+    ("struct_tm_tm_zone_offset.c", 0),
+    ("for_init_multiple_declarators.c", 0),
+    ("compound_literal_member_operand.c", 0),
+    ("signal_nsig.c", 0),
     ("thread_local_initializer.c", 0),
     // Per-thread isolation -- spawns a pthread, has the child
     // mutate a TLS variable, joins, and verifies the main
@@ -676,6 +789,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // Plain `char` follows the target's implementation-defined
     // signedness and the widening load agrees with it (C99 6.2.5p15).
     ("plain_char_signedness.c", 0),
+    // <limits.h> CHAR_MIN/CHAR_MAX agree with that signedness (C99 5.2.4.2.1).
+    ("char_limits_consistency.c", 0),
     // Brace-wrapped string literal initializing a char-array struct
     // member (C99 6.7.9p14): copy the bytes, not the pointer.
     ("struct_member_brace_wrapped_string.c", 0),

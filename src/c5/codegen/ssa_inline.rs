@@ -304,6 +304,20 @@ fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
             *dst = map_v(*dst, remap);
             *src = map_v(*src, remap);
         }
+        Inst::AtomicRmw { addr, value, .. } => {
+            *addr = map_v(*addr, remap);
+            *value = map_v(*value, remap);
+        }
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            ..
+        } => {
+            *addr = map_v(*addr, remap);
+            *expected_addr = map_v(*expected_addr, remap);
+            *desired = map_v(*desired, remap);
+        }
         Inst::Phi { incoming, .. } => {
             for (_, v) in incoming.iter_mut() {
                 *v = map_v(*v, remap);
@@ -689,6 +703,31 @@ fn splice_multi_block(
         exit_acc: postfix_exit_acc,
     };
 
+    // Carry both the caller's own and the spliced callee's cross-TU
+    // symbol references onto their new value-ids. The symbol indices
+    // are translation-unit parser symbols, valid in the merged
+    // function because the callee is in the same unit.
+    let carry = |refs: &[(u32, u32)], m: &[ValueId], out: &mut Vec<(u32, u32)>| {
+        for &(vid, sym) in refs {
+            let nv = map_v(vid, m);
+            if nv != NO_VALUE {
+                out.push((nv, sym));
+            }
+        }
+    };
+    let mut call_refs = Vec::new();
+    carry(&original.extern_call_refs, &remap, &mut call_refs);
+    carry(&callee.extern_call_refs, &callee_remap, &mut call_refs);
+    let mut code_refs = Vec::new();
+    carry(&original.extern_imm_code_refs, &remap, &mut code_refs);
+    carry(&callee.extern_imm_code_refs, &callee_remap, &mut code_refs);
+    let mut data_refs = Vec::new();
+    carry(&original.extern_imm_data_refs, &remap, &mut data_refs);
+    carry(&callee.extern_imm_data_refs, &callee_remap, &mut data_refs);
+    let mut tls_refs = Vec::new();
+    carry(&original.extern_tls_refs, &remap, &mut tls_refs);
+    carry(&callee.extern_tls_refs, &callee_remap, &mut tls_refs);
+
     *caller = FunctionSsa {
         name: original.name,
         ent_pc: original.ent_pc,
@@ -700,10 +739,10 @@ fn splice_multi_block(
         insts: new_insts,
         inst_src: new_inst_src,
         blocks: new_blocks,
-        extern_call_refs: Vec::new(),
-        extern_imm_code_refs: Vec::new(),
-        extern_imm_data_refs: Vec::new(),
-        extern_tls_refs: Vec::new(),
+        extern_call_refs: call_refs,
+        extern_imm_code_refs: code_refs,
+        extern_imm_data_refs: data_refs,
+        extern_tls_refs: tls_refs,
         f32_values: new_f32,
         param_fp_mask: original.param_fp_mask,
         // Inlining only splices callees with no aggregate ABI
@@ -718,6 +757,8 @@ fn splice_multi_block(
         ret_is_fp: original.ret_is_fp,
         indirect_result_slot: original.indirect_result_slot,
         computed_goto_targets: original.computed_goto_targets,
+        synthetic_base: original.synthetic_base,
+        multi_cell_slots: original.multi_cell_slots,
     };
 }
 
@@ -739,102 +780,161 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     let mut extern_tls_remap: Vec<(u32, u32, u32)> = Vec::new();
     let mut any_change = false;
 
-    for block in &caller.blocks {
-        new_block_starts.push(new_insts.len() as u32);
-        for old_pc in block.inst_range.start..block.inst_range.end {
-            let src_pos = caller
-                .inst_src
-                .get(old_pc as usize)
-                .copied()
-                .unwrap_or((0, 0));
-            let inst = &caller.insts[old_pc as usize];
-            let inlined = match inst {
-                Inst::Call {
-                    target_pc, args, ..
-                } => callees
-                    .get(target_pc)
-                    // A call passing fewer arguments than the callee has
-                    // parameters (an argument-count mismatch, e.g. via a
-                    // macro) would leave a callee `ParamRef` with no
-                    // matching argument; inlining it resolves that ref to
-                    // NO_VALUE. Leave such a call un-inlined so the IR
-                    // stays well-formed.
-                    .filter(|c| args.len() >= c.n_params)
-                    .map(|c| (*c, args)),
-                _ => None,
-            };
-            // Multi-block callees: handled by `splice_multi_block`
-            // after this block-walk pass exits via the early-return
-            // below. Skip the single-block inline path here and let
-            // the call survive the local walk; the multi-block
-            // pass runs once over the whole function.
-            let inlined = inlined.filter(|(c, _)| c.blocks.len() == 1);
-            if let Some((callee, call_args)) = inlined {
-                any_change = true;
-                let remapped_args: Vec<ValueId> =
-                    call_args.iter().map(|&a| map_v(a, &remap)).collect();
-                let callee_block = &callee.blocks[0];
-                let mut callee_remap: Vec<ValueId> = vec![NO_VALUE; callee.insts.len()];
-                for ce_pc in callee_block.inst_range.start..callee_block.inst_range.end {
-                    let cinst = &callee.insts[ce_pc as usize];
-                    match cinst {
-                        Inst::ParamRef { idx, .. } => {
-                            let i = *idx as usize;
-                            let mapped = if i < remapped_args.len() {
-                                remapped_args[i]
-                            } else {
-                                NO_VALUE
-                            };
-                            callee_remap[ce_pc as usize] = mapped;
-                            continue;
-                        }
-                        // Walker-emitted cdecl-cell loads + stores
-                        // and the alloca-init no-op marker carry no
-                        // value into the caller's frame (the candidate
-                        // filter verified loads are dead and stores
-                        // address cells off >= 2); the splice drops
-                        // them entirely.
-                        Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
-                            callee_remap[ce_pc as usize] = NO_VALUE;
-                            continue;
-                        }
-                        _ => {}
-                    }
-                    if let Some(translated) =
-                        rewrite_callee_inst(cinst, &remapped_args, &callee_remap)
-                    {
-                        let new_id = new_insts.len() as u32;
-                        callee_remap[ce_pc as usize] = new_id;
-                        new_insts.push(translated);
-                        new_inst_src.push(src_pos);
-                        new_f32.push(
-                            callee
-                                .f32_values
-                                .get(ce_pc as usize)
-                                .copied()
-                                .unwrap_or(false),
-                        );
-                    }
-                }
-                let Terminator::Return(ret_v) = callee_block.terminator else {
-                    unreachable!("inline candidate guaranteed Return terminator")
+    // The block array is not ordered definitions-before-uses: a value
+    // can be defined in a block positioned after one that uses it, so
+    // resolving an operand needs `remap` populated for that definition.
+    // The walk runs to a fixed point -- each pass reads the prior pass's
+    // `remap` and recomputes it. Emission is structurally identical
+    // across passes, so every old inst keeps the same new id and the map
+    // converges (one forward-reference level per pass).
+    let mut guard = caller.insts.len() + 2;
+    // Cross-TU symbol references carried from spliced callee insts onto
+    // their new caller value-ids. The symbol index is a translation-unit
+    // parser symbol, valid in the caller because the callee is in the
+    // same unit. Rebuilt every pass; the final pass's entries are kept.
+    let mut spliced_data_refs: Vec<(u32, u32)> = Vec::new();
+    let mut spliced_code_refs: Vec<(u32, u32)> = Vec::new();
+    let mut spliced_tls_refs: Vec<(u32, u32)> = Vec::new();
+    loop {
+        new_insts.clear();
+        new_inst_src.clear();
+        new_f32.clear();
+        new_block_starts.clear();
+        spliced_data_refs.clear();
+        spliced_code_refs.clear();
+        spliced_tls_refs.clear();
+        let before = remap.clone();
+        for block in &caller.blocks {
+            new_block_starts.push(new_insts.len() as u32);
+            for old_pc in block.inst_range.start..block.inst_range.end {
+                let src_pos = caller
+                    .inst_src
+                    .get(old_pc as usize)
+                    .copied()
+                    .unwrap_or((0, 0));
+                let inst = &caller.insts[old_pc as usize];
+                let inlined = match inst {
+                    Inst::Call {
+                        target_pc, args, ..
+                    } => callees
+                        .get(target_pc)
+                        // A call passing fewer arguments than the callee has
+                        // parameters (an argument-count mismatch, e.g. via a
+                        // macro) would leave a callee `ParamRef` with no
+                        // matching argument; inlining it resolves that ref to
+                        // NO_VALUE. Leave such a call un-inlined so the IR
+                        // stays well-formed.
+                        .filter(|c| args.len() >= c.n_params)
+                        .map(|c| (*c, args)),
+                    _ => None,
                 };
-                remap[old_pc as usize] = map_v(ret_v, &callee_remap);
-            } else {
-                let new_id = new_insts.len() as u32;
-                let mut mapped = inst.clone();
-                remap_caller_inst(&mut mapped, &remap);
-                new_insts.push(mapped);
-                new_inst_src.push(src_pos);
-                new_f32.push(
-                    caller
-                        .f32_values
-                        .get(old_pc as usize)
-                        .copied()
-                        .unwrap_or(false),
-                );
-                remap[old_pc as usize] = new_id;
+                // Multi-block callees: handled by `splice_multi_block`
+                // after this block-walk pass exits via the early-return
+                // below. Skip the single-block inline path here and let
+                // the call survive the local walk; the multi-block
+                // pass runs once over the whole function.
+                let inlined = inlined.filter(|(c, _)| c.blocks.len() == 1);
+                if let Some((callee, call_args)) = inlined {
+                    any_change = true;
+                    let remapped_args: Vec<ValueId> =
+                        call_args.iter().map(|&a| map_v(a, &remap)).collect();
+                    let callee_block = &callee.blocks[0];
+                    let mut callee_remap: Vec<ValueId> = vec![NO_VALUE; callee.insts.len()];
+                    for ce_pc in callee_block.inst_range.start..callee_block.inst_range.end {
+                        let cinst = &callee.insts[ce_pc as usize];
+                        match cinst {
+                            Inst::ParamRef { idx, .. } => {
+                                let i = *idx as usize;
+                                let mapped = if i < remapped_args.len() {
+                                    remapped_args[i]
+                                } else {
+                                    NO_VALUE
+                                };
+                                callee_remap[ce_pc as usize] = mapped;
+                                continue;
+                            }
+                            // Walker-emitted cdecl-cell loads + stores
+                            // and the alloca-init no-op marker carry no
+                            // value into the caller's frame (the candidate
+                            // filter verified loads are dead and stores
+                            // address cells off >= 2); the splice drops
+                            // them entirely.
+                            Inst::LoadLocal { .. }
+                            | Inst::StoreLocal { .. }
+                            | Inst::AllocaInit(_) => {
+                                callee_remap[ce_pc as usize] = NO_VALUE;
+                                continue;
+                            }
+                            _ => {}
+                        }
+                        if let Some(translated) =
+                            rewrite_callee_inst(cinst, &remapped_args, &callee_remap)
+                        {
+                            let new_id = new_insts.len() as u32;
+                            callee_remap[ce_pc as usize] = new_id;
+                            new_insts.push(translated);
+                            new_inst_src.push(src_pos);
+                            new_f32.push(
+                                callee
+                                    .f32_values
+                                    .get(ce_pc as usize)
+                                    .copied()
+                                    .unwrap_or(false),
+                            );
+                        }
+                    }
+                    for &(ce_vid, sym) in &callee.extern_imm_data_refs {
+                        let nv = map_v(ce_vid, &callee_remap);
+                        if nv != NO_VALUE {
+                            spliced_data_refs.push((nv, sym));
+                        }
+                    }
+                    for &(ce_vid, sym) in &callee.extern_imm_code_refs {
+                        let nv = map_v(ce_vid, &callee_remap);
+                        if nv != NO_VALUE {
+                            spliced_code_refs.push((nv, sym));
+                        }
+                    }
+                    for &(ce_vid, sym) in &callee.extern_tls_refs {
+                        let nv = map_v(ce_vid, &callee_remap);
+                        if nv != NO_VALUE {
+                            spliced_tls_refs.push((nv, sym));
+                        }
+                    }
+                    let Terminator::Return(ret_v) = callee_block.terminator else {
+                        unreachable!("inline candidate guaranteed Return terminator")
+                    };
+                    remap[old_pc as usize] = map_v(ret_v, &callee_remap);
+                } else {
+                    let new_id = new_insts.len() as u32;
+                    let mut mapped = inst.clone();
+                    remap_caller_inst(&mut mapped, &remap);
+                    new_insts.push(mapped);
+                    new_inst_src.push(src_pos);
+                    new_f32.push(
+                        caller
+                            .f32_values
+                            .get(old_pc as usize)
+                            .copied()
+                            .unwrap_or(false),
+                    );
+                    remap[old_pc as usize] = new_id;
+                }
             }
+        }
+        // No candidate matched: `remap` is the identity and the caller
+        // is left unchanged below.
+        if !any_change {
+            break;
+        }
+        // Converged once a full pass leaves `remap` unchanged; the
+        // emission just produced is resolved against a stable map.
+        if remap == before {
+            break;
+        }
+        guard -= 1;
+        if guard == 0 {
+            break;
         }
     }
 
@@ -897,6 +997,17 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
         .map(|(_, n, s)| (*n, *s))
         .collect();
     caller.extern_tls_refs = extern_tls_remap.iter().map(|(_, n, s)| (*n, *s)).collect();
+
+    // Append the symbol references carried from spliced callee insts.
+    caller
+        .extern_imm_data_refs
+        .extend(spliced_data_refs.iter().copied());
+    caller
+        .extern_imm_code_refs
+        .extend(spliced_code_refs.iter().copied());
+    caller
+        .extern_tls_refs
+        .extend(spliced_tls_refs.iter().copied());
 
     // Single-block flat splice complete. Now find any remaining
     // multi-block inlinable Call sites and apply the multi-block

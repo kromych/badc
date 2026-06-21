@@ -706,28 +706,36 @@ fn collect_subprograms(
             .variables
             .iter()
             .filter(|v| v.function_bc_pc == function_bc_pc)
-            .map(|v| SubprogVar {
-                name_off: strs.intern(&v.name),
-                is_parameter: v.is_parameter,
-                type_tag: v.type_tag,
-                // c5's slot -> byte conversion: positive (args)
-                // use 16-byte AAPCS64 slot stride starting at
-                // `(slot - 1) * 16` (so slot 2 -> +16, slot 3 ->
-                // +32). Negative (locals) use 8-byte stride. Mirror
-                // of `aarch64::lea_offset_bytes`. The x86_64 backend
-                // matches; both arches share this layout.
-                fp_byte_offset: if v.fp_slot >= 2 {
-                    (v.fp_slot - 1) * 16
-                } else {
-                    v.fp_slot * 8
-                },
-                promoted: build
-                    .promoted_local_slots
+            .map(|v| {
+                // Slot coalescing may have moved this local onto a new
+                // exclusive frame offset; use it so the location is not
+                // stale. A local moved onto shared storage is in
+                // `promoted_local_slots` and gets an empty location below.
+                let eff = build
+                    .coalesced_slot_remap
                     .get(&ent_pc)
-                    .is_some_and(|slots| slots.contains(&v.fp_slot)),
-                decl_line: v.decl_line,
-                array_size: v.array_size,
-                decl_file: v.decl_file,
+                    .and_then(|m| m.get(&v.fp_slot))
+                    .copied()
+                    .unwrap_or(v.fp_slot);
+                SubprogVar {
+                    name_off: strs.intern(&v.name),
+                    is_parameter: v.is_parameter,
+                    type_tag: v.type_tag,
+                    // c5's slot -> byte conversion: positive (args)
+                    // use 16-byte AAPCS64 slot stride starting at
+                    // `(slot - 1) * 16` (so slot 2 -> +16, slot 3 ->
+                    // +32). Negative (locals) use 8-byte stride. Mirror
+                    // of `aarch64::lea_offset_bytes`. The x86_64 backend
+                    // matches; both arches share this layout.
+                    fp_byte_offset: if eff >= 2 { (eff - 1) * 16 } else { eff * 8 },
+                    promoted: build
+                        .promoted_local_slots
+                        .get(&ent_pc)
+                        .is_some_and(|slots| slots.contains(&v.fp_slot)),
+                    decl_line: v.decl_line,
+                    array_size: v.array_size,
+                    decl_file: v.decl_file,
+                }
             })
             .collect();
 

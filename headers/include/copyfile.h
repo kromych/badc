@@ -5,8 +5,7 @@
 // symbol. Callers in this codebase pass a NULL state, so the opaque
 // state type is forward-declared without its accessors.
 
-#ifndef _C5_COPYFILE_H
-#define _C5_COPYFILE_H
+#pragma once
 
 #ifdef __APPLE__
 
@@ -30,10 +29,12 @@ typedef unsigned int copyfile_flags_t;
 
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::copyfile, "_copyfile")
+#pragma binding(libc::fcopyfile, "_fcopyfile")
 
 int copyfile(char *from, char *to, copyfile_state_t state,
              copyfile_flags_t flags);
+// Same as copyfile() but between two open descriptors.
+int fcopyfile(int from, int to, copyfile_state_t state,
+              copyfile_flags_t flags);
 
 #endif /* __APPLE__ */
-
-#endif /* _C5_COPYFILE_H */

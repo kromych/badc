@@ -324,6 +324,10 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("variadic_struct_arg.c", 18),
     ("variadic_struct_arg_16b.c", 51),
     ("libc_div.c", 0),
+    ("wide_string_literal_alignment.c", 0),
+    ("va_arg_through_pointer.c", 0),
+    ("pthread_key_once_width.c", 0),
+    ("dev_t_width.c", 0),
     ("libc_int_arith.c", 0),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),
@@ -340,6 +344,10 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("c99_qualifiers.c", 0),
     ("integer_suffixes.c", 0),
     ("predefined_macros.c", 0),
+    ("macro_multiline_comment_body.c", 0),
+    ("compound_literal_paren_init.c", 0),
+    ("alignof_operator.c", 0),
+    ("return_void_expression.c", 0),
     ("macro_operators.c", 0),
     ("typedef_basic.c", 0),
     ("local_init_and_block_scope.c", 0),
@@ -497,6 +505,19 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("struct_array_init_from_lvalue.c", 0),
     ("shift_result_type_signedness.c", 0),
     ("integer_negate_shift_overflow.c", 0),
+    ("case_label_declaration.c", 0),
+    ("char_constant_signedness.c", 0),
+    ("func_name_in_initializer.c", 0),
+    ("anon_union_braced_init.c", 0),
+    ("array_2d_struct_init.c", 0),
+    ("cast_abstract_fn_ptr.c", 0),
+    ("decl_trailing_attribute.c", 0),
+    ("winsock_netdb_protoent.c", 0),
+    ("slot_coalesce_disjoint_temps.c", 0),
+    ("alloca_alignment.c", 0),
+    ("slot_coalesce_declared.c", 0),
+    ("slot_coalesce_alloca.c", 0),
+    ("fn_arg_decay_then_deref_assign.c", 0),
     ("array_range_designator.c", 0),
     ("bitfield_mixed_base_packing.c", 0),
     ("flex_array_member_sizing.c", 0),
@@ -507,10 +528,29 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("fn_ptr_float_arg.c", 0),
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
+    ("flex_array_member_static_init.c", 0),
+    ("array_compound_literal_static_init.c", 0),
+    ("const_address_cast_and_arith.c", 0),
+    ("const_conditional_address_init.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("sizeof_abstract_fn_ptr.c", 0),
     ("pragma_operator.c", 0),
     ("variadic_macro_named_rest.c", 0),
+    ("stdatomic_c11.c", 0),
+    ("atomic_rmw_ops.c", 0),
+    ("fn_ptr_typedef_multi_declarator.c", 0),
+    ("hfa_struct_return.c", 0),
+    ("bitfield_assign_value.c", 0),
+    ("struct_arg_indirect_subscript.c", 0),
+    ("out_pointer_return_float_args.c", 0),
+    ("compound_literal_tagged_address.c", 0),
+    ("function_typed_parameter.c", 0),
+    ("static_init_braced_scalar.c", 0),
+    ("paren_string_char_array_init.c", 0),
+    ("static_init_paren_relocation.c", 0),
+    ("do_while_zero_returns.c", 0),
+    ("self_referential_macro.c", 0),
+    ("logical_not_float.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),
@@ -534,6 +574,20 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("local_struct_array_runtime_init.c", 0),
     ("scanf_fscanf_binding.c", 0),
     ("builtin_bit_count.c", 0),
+    ("typeof_operator.c", 0),
+    ("attribute_packed.c", 0),
+    ("attribute_positions.c", 0),
+    ("attribute_declspec.c", 0),
+    ("attribute_c23.c", 0),
+    ("static_assert_in_struct.c", 0),
+    ("gnu_extension_keyword.c", 0),
+    ("variadic_struct_by_value_arg.c", 0),
+    ("fn_ptr_ternary_call_return.c", 0),
+    ("float_condition_negative_zero.c", 0),
+    ("tentative_array_definition.c", 0),
+    ("tentative_array_use_before_init.c", 0),
+    ("tentative_deferred_array_grows.c", 0),
+    ("directive_in_macro_argument.c", 0),
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
@@ -596,6 +650,16 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // bytes and zero-fills the rest; the test reads/writes the
     // resulting per-thread region.
     ("thread_local_basic.c", 0),
+    ("msvc_decl_decorators.c", 0),
+    ("msvc_pragma_operator.c", 0),
+    ("thread_local_gnu.c", 0),
+    ("wmem_functions.c", 0),
+    ("posix_module_headers.c", 0),
+    ("mmap_anonymous.c", 0),
+    ("struct_tm_tm_zone_offset.c", 0),
+    ("for_init_multiple_declarators.c", 0),
+    ("compound_literal_member_operand.c", 0),
+    ("signal_nsig.c", 0),
     // thread_local_initializer.c works in isolation but fails when
     // the test prelude pulls in <stdio.h>'s static lazy-resolver
     // state. The TLS template offset assignment interacts with
@@ -797,5 +861,257 @@ fn original_c4_compiles_and_runs_hello_natively() {
         "c4 self-host failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Plain `char` is unsigned on Linux/aarch64, so <limits.h> must give
+/// CHAR_MAX == UCHAR_MAX (255) and CHAR_MIN == 0 (C99 5.2.4.2.1). The
+/// fixture exits 0 only when the header agrees with the runtime signedness;
+/// a signed CHAR_MAX (127) here is the bug that broke decimal locale
+/// overrides (the `if CHAR_MAX == 127` branch fires on an unsigned target).
+#[test]
+fn char_limits_match_unsigned_char() {
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
+    path.push("fixtures");
+    path.push("c");
+    path.push("char_limits_consistency.c");
+    let src = std::fs::read_to_string(&path).unwrap();
+    let program = Compiler::new(src)
+        .compile()
+        .expect("compile char_limits_consistency.c");
+    let bytes = emit_native(&program, Target::LinuxAarch64).expect("emit_native");
+    let bin_path = unique_temp_path("badc-elf-char-limits", "char_limits");
+    std::fs::write(&bin_path, &bytes).unwrap();
+    set_executable(&bin_path);
+    let output = exec_with_retry(&bin_path).expect("exec native binary");
+    let _ = std::fs::remove_file(&bin_path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "limits.h CHAR_MIN/CHAR_MAX disagree with unsigned plain char on aarch64 ELF"
+    );
+}
+
+/// Cross-unit `extern _Thread_local` on Linux/aarch64. Two translation
+/// units each define TLS storage; `main` reads its own and the other
+/// unit's thread-locals both directly (extern) and through the defining
+/// unit's accessors (local), then mutates one and re-reads it. Exercises
+/// the merged-TLS layout, the `NT_BADC_ELF_TPOFF` note round-trip, and
+/// the linker's variant-1 `add` imm12 resolution (`TP + 16 +
+/// merged_offset`). `main` returns a bitmask of failures, so exit 0
+/// means every access resolved correctly.
+#[test]
+fn cross_unit_thread_local() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "\
+_Thread_local int g_a = 11;\n\
+_Thread_local int g_b = 22;\n\
+int read_a(void) { return g_a; }\n\
+int read_b(void) { return g_b; }\n\
+void set_a(int v) { g_a = v; }\n";
+
+    const UNIT_B: &str = "\
+extern _Thread_local int g_a;\n\
+extern _Thread_local int g_b;\n\
+_Thread_local int g_c = 33;\n\
+int read_a(void); int read_b(void); void set_a(int);\n\
+int main(void) {\n\
+    int f = 0;\n\
+    if (g_a != 11) f |= 1;\n\
+    if (g_b != 22) f |= 2;\n\
+    if (g_c != 33) f |= 4;\n\
+    if (read_a() != 11) f |= 8;\n\
+    if (read_b() != 22) f |= 16;\n\
+    set_a(99);\n\
+    if (g_a != 99) f |= 32;\n\
+    if (read_a() != 99) f |= 64;\n\
+    return f;\n\
+}\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf-aarch64-tls2", "cross_unit_tls");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "cross-unit thread-local mismatch (failure bitmask in exit code)"
+    );
+}
+
+/// An inline candidate that returns the address of an extern (cross-TU)
+/// data object must keep that symbol reference after the splice. The
+/// optimizer inlines `get_shared` into `main`; the spliced `ImmData`
+/// has to resolve to `shared_value`, not the caller's local data base.
+/// Without carrying the callee's `extern_imm_data_refs`, the inlined
+/// address points at the wrong section and the load reads garbage.
+#[test]
+fn cross_unit_inlined_extern_data_ref() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "long shared_value = 0x12345678;\n";
+
+    const UNIT_B: &str = "\
+extern long shared_value;\n\
+static long *get_shared(void) { return &shared_value; }\n\
+long read_shared(void) { long *p = get_shared(); return *p; }\n\
+int main(void) { return (read_shared() == 0x12345678) ? 0 : 1; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxAarch64,
+        NativeOptions::default().with_optimize(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf-aarch64-inl-extref", "cross_unit_inline_extref");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "inlined extern-data reference resolved to the wrong symbol under -O"
+    );
+}
+
+/// Two distinct extern data symbols both lower to `Inst::ImmData(0)`.
+/// The cross-block ImmData dedup must not coalesce them: each binds to a
+/// different cross-TU symbol, so they hold different addresses. `sym_a`
+/// is referenced in the entry block (the dedup canonical for the key)
+/// and `sym_b` only in a later block; coalescing makes the later
+/// reference read `sym_a`.
+#[test]
+fn cross_unit_dedup_imm_distinct_symbols() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "long sym_a = 100;\nlong sym_b = 7;\n";
+
+    const UNIT_B: &str = "\
+extern long sym_a;\n\
+extern long sym_b;\n\
+long combine(int c) { long r = sym_a; if (c) { r += sym_b; } return r; }\n\
+int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxAarch64,
+        NativeOptions::default().with_optimize(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf-aarch64-dedup-imm", "cross_unit_dedup_imm");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "distinct extern data symbols were coalesced by the ImmData dedup under -O"
+    );
+}
+
+/// Static data DCE (C99 6.2.2 / 6.7.8) must keep an externally-visible
+/// global's symbol value consistent with the compacted `.data` it names.
+/// The defining unit carries dead static data -- the string literals of
+/// two unused static functions -- ahead of a live `extern`-visible array;
+/// the prune drops the strings and repacks, moving the array to a lower
+/// offset. A second unit reads the array across the TU boundary, so a
+/// stale symbol offset (the writer fed a pre-compaction symbol table)
+/// would resolve to the wrong bytes.
+#[test]
+fn cross_unit_data_dce_keeps_extern_global_offset() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "\
+static const char *dead_a(void) { return \"dead string A, unreferenced, must be stripped\"; }\n\
+static const char *dead_b(void) { return \"dead string B, also unreferenced and stripped\"; }\n\
+const long live_arr[3] = { 111, 222, 333 };\n";
+
+    const UNIT_B: &str = "\
+extern const long live_arr[3];\n\
+long sum_arr(void) { return live_arr[0] + live_arr[1] + live_arr[2]; }\n\
+int main(void) { return (sum_arr() == 666) ? 0 : 1; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf-aarch64-data-dce", "cross_unit_data_dce");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "extern global moved by data DCE but its symbol offset was not updated to match"
     );
 }

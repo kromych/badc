@@ -12,8 +12,7 @@
 //
 // Programs that want a target-independent 64-bit limit should
 // reach for `INT64_MAX` (in stdint.h) or `LLONG_MAX`.
-#ifndef _C5_LIMITS_H
-#define _C5_LIMITS_H
+#pragma once
 
 #define CHAR_BIT      8
 #define MB_LEN_MAX    1
@@ -21,8 +20,15 @@
 #define SCHAR_MIN   (-128)
 #define SCHAR_MAX     127
 #define UCHAR_MAX     255
+// Plain char takes the range of its signedness (C99 5.2.4.2.1). The compiler
+// predefines __CHAR_UNSIGNED__ exactly when plain char is unsigned.
+#ifdef __CHAR_UNSIGNED__
+#define CHAR_MIN      0
+#define CHAR_MAX  UCHAR_MAX
+#else
 #define CHAR_MIN  SCHAR_MIN
 #define CHAR_MAX  SCHAR_MAX
+#endif
 
 #define SHRT_MIN   (-32768)
 #define SHRT_MAX     32767
@@ -55,4 +61,6 @@
 #define HOST_NAME_MAX 255
 #define LOGIN_NAME_MAX 256
 
-#endif
+// `ssize_t` is 64-bit on every supported target (see <sys/types.h>), so
+// its maximum is the signed 64-bit limit.
+#define SSIZE_MAX   9223372036854775807

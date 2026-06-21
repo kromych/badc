@@ -7,8 +7,7 @@
 // big-endian conversions swap and the little-endian conversions are the
 // identity.
 
-#ifndef _C5_LIBKERN_OSBYTEORDER_H
-#define _C5_LIBKERN_OSBYTEORDER_H
+#pragma once
 
 #ifdef __APPLE__
 
@@ -56,5 +55,3 @@
 #define OSSwapLittleToHostInt64(x) ((unsigned long long)(x))
 
 #endif /* __APPLE__ */
-
-#endif /* _C5_LIBKERN_OSBYTEORDER_H */

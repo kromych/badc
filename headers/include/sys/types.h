@@ -13,8 +13,7 @@
 // and offset types have to switch to `long long` to keep the
 // 8-byte width that the Windows ABI / UCRT expects (e.g.
 // `_off64_t`, `__time64_t`, `size_t`).
-#ifndef _C5_SYS_TYPES_H
-#define _C5_SYS_TYPES_H
+#pragma once
 
 /* POSIX-2017 requires `<sys/types.h>` to make `size_t` visible.
 ** In c5 the canonical declaration lives in `<stddef.h>`; pulling
@@ -38,7 +37,22 @@ typedef int pid_t;
 typedef int uid_t;
 typedef int gid_t;
 typedef int mode_t;
+// `dev_t` is the device number. Its width is platform-defined and
+// matters in struct layout (it sits in stat and in libc runtime state):
+// 4 bytes on macOS (`int32_t`) and Windows (`unsigned int`), 8 on Linux
+// (glibc `__dev_t` is `unsigned long`).
+#if defined(__APPLE__) || defined(__BADC_WINDOWS__)
 typedef int dev_t;
+#else
+typedef unsigned long dev_t;
+#endif
+#ifdef __APPLE__
+// Darwin device-number split: major in the high 8 bits, minor in the
+// low 24 (sys/types.h). Linux uses a wider split via <sys/sysmacros.h>.
+#define major(x)      ((int)(((unsigned int)(x) >> 24) & 0xff))
+#define minor(x)      ((int)((x) & 0xffffff))
+#define makedev(x, y) ((dev_t)(((x) << 24) | ((y) & 0xffffff)))
+#endif
 // BSD fixed-width unsigned aliases. Present on Linux and macOS; some
 // platform sources (macOS file-attribute code) use them directly.
 typedef unsigned char u_int8_t;
@@ -76,7 +90,7 @@ typedef long fsfilcnt_t;
 typedef int socklen_t;
 typedef int key_t;
 
-/* glibc's <sys/types.h> makes `fd_set` and the `FD_*` macros visible
+/* The Linux <sys/types.h> makes `fd_set` and the `FD_*` macros visible
 ** (under __USE_MISC, on by default), so POSIX code that reaches select()
 ** through <sys/types.h> alone -- without <sys/select.h> and without a
 ** configure-detected HAVE_SYS_SELECT_H -- still sees the type. The
@@ -85,6 +99,4 @@ typedef int key_t;
 ** `#pragma once`, so a direct include elsewhere stays a no-op. */
 #ifndef __BADC_WINDOWS__
 #include <sys/select.h>
-#endif
-
 #endif

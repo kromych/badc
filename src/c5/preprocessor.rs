@@ -364,7 +364,7 @@ impl Preprocessor {
     ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
-        let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        let fn_macros: HashMap<String, FnMacro> = HashMap::new();
         // GCC bit-count / byte-swap builtins are available with no header
         // (they are compiler builtins, not library functions), matching
         // gcc/clang. The call-site lowering in the walker expands each to a
@@ -391,53 +391,80 @@ impl Preprocessor {
         ] {
             intrinsics.insert(name.to_string(), kind as i64);
         }
+        // The `l` (long) bit-builtins operate on `unsigned long`, whose
+        // width is the target's: 8 bytes on LP64 (so they match the
+        // `ll` 64-bit intrinsics), 4 bytes on LLP64 (so they match the
+        // plain 32-bit intrinsics).
+        let (clzl, ctzl, popcountl) = if target.long_width_bytes() == 8 {
+            (
+                super::op::Intrinsic::Clzll,
+                super::op::Intrinsic::Ctzll,
+                super::op::Intrinsic::Popcountll,
+            )
+        } else {
+            (
+                super::op::Intrinsic::Clz,
+                super::op::Intrinsic::Ctz,
+                super::op::Intrinsic::Popcount,
+            )
+        };
+        intrinsics.insert("__builtin_clzl".to_string(), clzl as i64);
+        intrinsics.insert("__builtin_ctzl".to_string(), ctzl as i64);
+        intrinsics.insert("__builtin_popcountl".to_string(), popcountl as i64);
         // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
-        // common implementation-defined extensions used throughout
-        // real-world C source for hints the c5 dialect doesn't act
-        // on (printf-format checks, alignment, packing, calling
-        // convention). Absorbing them as empty function-like
-        // macros lets the parser see attribute-free declarations
-        // without losing the surrounding tokens. C99 6.10.3 paragraph
-        // 11 keeps the inner `(...)` payload as one macro argument
-        // because commas inside balanced parens are not separators.
-        for name in ["__attribute__", "__attribute", "__declspec"] {
-            fn_macros.insert(
-                name.to_string(),
-                FnMacro {
-                    params: alloc::vec!["x".to_string()],
-                    body: String::new(),
-                    is_variadic: false,
-                    va_name: None,
-                },
-            );
-        }
-        // GCC `__builtin_expect(exp, c)` is a branch-prediction hint that
-        // evaluates to its first operand. The dialect does not consume the
-        // hint, so it expands to the operand. Defined here (not via a
-        // header) to match gcc/clang, where it needs no include.
-        fn_macros.insert(
-            "__builtin_expect".to_string(),
-            FnMacro {
-                params: alloc::vec!["x".to_string(), "c".to_string()],
-                body: "(x)".to_string(),
-                is_variadic: false,
-                va_name: None,
-            },
-        );
+        // declaration decorators carrying hints the dialect does not act
+        // on, except for the `packed` attribute, which changes aggregate
+        // layout. Both are lexer tokens parsed by
+        // `skip_attribute_specifiers` rather than preprocessed away, so
+        // `packed` reaches the parser and the rest is consumed in place.
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),
         );
         macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
-        // Standard predefines (C99 sec 6.10.8). `__STDC_VERSION__`
-        // is omitted, not an implementation of any specific C standard year.
-        // `__DATE__` and `__TIME__` are seeded at badc build time; C99 says they
-        // reflect "the date and time of translation", and the closest
-        // analogue for an embedded library is the build time of badc
-        // itself. `__STDC_HOSTED__` reflects that every supported
-        // target binds the host libc, so the dialect is hosted.
+        // Standard predefines (C99 sec 6.10.8). `__DATE__` and `__TIME__`
+        // are seeded at badc build time; C99 says they reflect "the date
+        // and time of translation", and the closest analogue for an
+        // embedded library is the build time of badc itself.
+        // `__STDC_HOSTED__` reflects that every supported target binds the
+        // host libc, so the dialect is hosted. `__STDC_VERSION__` reports
+        // C11 (201112L): the implemented surface is C99 plus the C11
+        // features real code gates on this macro (`_Static_assert`,
+        // `_Noreturn`, `_Atomic`, `_Thread_local`, anonymous members, and
+        // `<stdatomic.h>`).
         macros.insert("__STDC__".to_string(), "1".to_string());
         macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
+        macros.insert("__STDC_VERSION__".to_string(), "201112L".to_string());
+        // `__GNUC__` and the rest of the GCC identity are opt-in
+        // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
+        // extensions real code gates on `__GNUC__`, but not all of them
+        // (`__int128` is absent), so it does not claim the macro by
+        // default; code that gates a 128-bit path on `__GNUC__` plus a
+        // 64-bit target would otherwise fail to compile.
+        // Byte-order predefines (GCC/clang form). Every supported target
+        // is little-endian.
+        macros.insert("__ORDER_LITTLE_ENDIAN__".to_string(), "1234".to_string());
+        macros.insert("__ORDER_BIG_ENDIAN__".to_string(), "4321".to_string());
+        macros.insert("__ORDER_PDP_ENDIAN__".to_string(), "3412".to_string());
+        macros.insert(
+            "__BYTE_ORDER__".to_string(),
+            "__ORDER_LITTLE_ENDIAN__".to_string(),
+        );
+        // C11 6.10.8.3 conditional-feature macros. An implementation that
+        // reports `__STDC_VERSION__ == 201112L` defines each of these for an
+        // optional feature it does not provide; library code gates on them
+        // to pick a portable fallback. badc has no variable length arrays
+        // and no `_Complex` / `_Imaginary`, so it advertises both.
+        // `__STDC_NO_THREADS__` is deliberately left undefined: although
+        // badc ships no `<threads.h>`, real code gates the `_Thread_local`
+        // storage classifier on `!defined(__STDC_NO_THREADS__)` (the two are
+        // independent in C11, but the conflation is widespread), and badc
+        // does support `_Thread_local`; defining the macro would suppress
+        // thread-local storage. GCC and clang made the same choice while
+        // they lacked `<threads.h>`. `<stdatomic.h>` is provided, so
+        // `__STDC_NO_ATOMICS__` also stays undefined.
+        macros.insert("__STDC_NO_VLA__".to_string(), "1".to_string());
+        macros.insert("__STDC_NO_COMPLEX__".to_string(), "1".to_string());
         macros.insert(
             "__DATE__".to_string(),
             format!("\"{}\"", env!("BADC_BUILD_DATE")),
@@ -450,6 +477,9 @@ impl Preprocessor {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
                 macros.insert("__aarch64__".to_string(), "1".to_string());
                 macros.insert("__arm64__".to_string(), "1".to_string());
+                // Little-endian AArch64; gcc/clang define this and
+                // arch-dispatch code keys its aarch64 branch on it.
+                macros.insert("__AARCH64EL__".to_string(), "1".to_string());
             }
             Target::LinuxX64 | Target::WindowsX64 => {
                 macros.insert("__x86_64__".to_string(), "1".to_string());
@@ -484,20 +514,22 @@ impl Preprocessor {
                 macros.insert("__unix__".to_string(), "1".to_string());
             }
             Target::WindowsX64 | Target::WindowsAarch64 => {
-                // Genuine target-detection macros only. The MSVC-
-                // mimicry surface (`_MSC_VER`, `__MINGW32__`,
-                // `__int64`, the `__declspec(x)` empty-decorator
-                // family, etc.) lives in the bundled
-                // `msvc_compat.h` header and is opted into per
-                // translation unit via `badc -include
-                // msvc_compat.h ...`. Keeping the
-                // predefine table to genuine target-detection
-                // surfaces the "is this TU pretending to be MSVC?"
-                // question at the command line, where the build
-                // driver is the right place to answer it.
+                // Target-detection macros plus the `__intN` fixed-width
+                // type keywords. `__int8/16/32/64` are mingw-gcc builtins
+                // on Windows -- provided independent of MSVC, and used by
+                // essentially all Windows API code -- so they belong to the
+                // target surface. The remaining MSVC-mimicry (`_MSC_VER`,
+                // `__MINGW32__`, the `__declspec(x)` empty-decorator family,
+                // the SAL annotations) stays in the opt-in `msvc_compat.h`
+                // header, included per translation unit via
+                // `badc -include msvc_compat.h ...`.
                 macros.insert("_WIN32".to_string(), "1".to_string());
                 macros.insert("_WIN64".to_string(), "1".to_string());
                 macros.insert("__BADC_WINDOWS__".to_string(), "1".to_string());
+                macros.insert("__int8".to_string(), "char".to_string());
+                macros.insert("__int16".to_string(), "short".to_string());
+                macros.insert("__int32".to_string(), "int".to_string());
+                macros.insert("__int64".to_string(), "long long".to_string());
             }
         }
         Self {
@@ -521,6 +553,35 @@ impl Preprocessor {
             warn_disabled: BTreeSet::new(),
             intrinsics,
         }
+    }
+
+    /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
+    /// only on request because it implements most, but not all, of the
+    /// GNU C surface (`__int128` is absent). `__GNUC_STDC_INLINE__`
+    /// reports ISO C99 inline semantics (not the GNU89 dialect);
+    /// `__VERSION__` is the compiler-identification string embedded by
+    /// code such as `Py_GetCompiler`. `__STRICT_ANSI__` reports strict
+    /// ISO conformance alongside `__GNUC__`, exactly as
+    /// `gcc`/`clang -std=c11` does, so portable code uses the standard
+    /// path for the GNU-only features badc lacks.
+    pub fn enable_gnu(&mut self) {
+        self.macros.insert("__GNUC__".to_string(), "4".to_string());
+        self.macros
+            .insert("__GNUC_MINOR__".to_string(), "2".to_string());
+        self.macros
+            .insert("__GNUC_PATCHLEVEL__".to_string(), "1".to_string());
+        self.macros
+            .insert("__GNUC_STDC_INLINE__".to_string(), "1".to_string());
+        self.macros
+            .insert("__VERSION__".to_string(), "\"4.2.1\"".to_string());
+        // badc backs the `__`-prefixed GNU extensions but not the ones a
+        // GNU dialect gates on `!__STRICT_ANSI__` (`typeof` of an array,
+        // `__builtin_types_compatible_p`, `__int128`). Reporting strict
+        // ISO conformance alongside `__GNUC__` -- exactly `gcc`/`clang
+        // -std=c11` -- routes portable code to the standard path for
+        // those, while keeping the `__`-prefixed surface available.
+        self.macros
+            .insert("__STRICT_ANSI__".to_string(), "1".to_string());
     }
 
     /// Enable / disable gcc-`-H`-style include tracing. When on,
@@ -1096,12 +1157,99 @@ impl Preprocessor {
             if active {
                 let mut buffer = String::from(line);
                 let mut consumed = 1usize;
+                // A function-like macro call may span lines whose arguments
+                // carry conditional directives (C99 6.10.3p11 leaves this
+                // undefined, but the common toolchains evaluate them and
+                // real code relies on it). Track a local conditional state
+                // so only the active branch's lines join the argument
+                // buffer; directive lines never become argument text.
+                let mut join_stack: Vec<CondFrame> = Vec::new();
+                let mut join_active = true;
                 while macro_call_unclosed(&buffer, &self.fn_macros, &self.macros)
                     && idx + consumed < lines.len()
                 {
-                    buffer.push('\n');
-                    buffer.push_str(lines[idx + consumed]);
+                    let cont = lines[idx + consumed];
                     consumed += 1;
+                    let cont_trimmed = cont.trim_start();
+                    if let Some(rest) = cont_trimmed.strip_prefix('#') {
+                        match parse_directive(rest.trim_start()) {
+                            Directive::Ifdef(name) => {
+                                let taken = join_active
+                                    && (self.macros.contains_key(name)
+                                        || self.fn_macros.contains_key(name));
+                                join_stack.push(CondFrame {
+                                    parent_active: join_active,
+                                    this_branch_taken: taken,
+                                    any_branch_taken: taken,
+                                    saw_else: false,
+                                });
+                                join_active = taken;
+                            }
+                            Directive::Ifndef(name) => {
+                                let taken = join_active
+                                    && !(self.macros.contains_key(name)
+                                        || self.fn_macros.contains_key(name));
+                                join_stack.push(CondFrame {
+                                    parent_active: join_active,
+                                    this_branch_taken: taken,
+                                    any_branch_taken: taken,
+                                    saw_else: false,
+                                });
+                                join_active = taken;
+                            }
+                            Directive::If(expr) => {
+                                let taken =
+                                    join_active && self.eval_condition(expr, source_line)?;
+                                join_stack.push(CondFrame {
+                                    parent_active: join_active,
+                                    this_branch_taken: taken,
+                                    any_branch_taken: taken,
+                                    saw_else: false,
+                                });
+                                join_active = taken;
+                            }
+                            Directive::Elif(expr) => {
+                                let parent_active =
+                                    join_stack.last().map(|f| f.parent_active).unwrap_or(false);
+                                let any_taken = join_stack
+                                    .last()
+                                    .map(|f| f.any_branch_taken)
+                                    .unwrap_or(true);
+                                let eligible = parent_active && !any_taken;
+                                let cond = if eligible {
+                                    self.eval_condition(expr, source_line)?
+                                } else {
+                                    false
+                                };
+                                if let Some(frame) = join_stack.last_mut() {
+                                    frame.this_branch_taken = cond;
+                                    frame.any_branch_taken |= cond;
+                                }
+                                join_active = cond;
+                            }
+                            Directive::Else => {
+                                if let Some(frame) = join_stack.last_mut() {
+                                    let taken = frame.parent_active && !frame.any_branch_taken;
+                                    frame.saw_else = true;
+                                    frame.this_branch_taken = taken;
+                                    frame.any_branch_taken |= taken;
+                                    join_active = taken;
+                                }
+                            }
+                            Directive::Endif => {
+                                if let Some(frame) = join_stack.pop() {
+                                    join_active = frame.parent_active;
+                                }
+                            }
+                            // Other directives inside a macro argument are
+                            // rare and undefined; consume the line without
+                            // adding it to the argument text.
+                            _ => {}
+                        }
+                    } else if join_active {
+                        buffer.push('\n');
+                        buffer.push_str(cont);
+                    }
                 }
                 // `__LINE__` reflects the presumed line (`source_line`),
                 // which a `#line` directive can retarget (C99 6.10.4);
@@ -1166,7 +1314,7 @@ impl Preprocessor {
         line_no: usize,
         filename: &str,
     ) -> Result<String, C5Error> {
-        if !text.contains("_Pragma") {
+        if !text.contains("_Pragma") && !text.contains("__pragma") {
             return Ok(text.to_string());
         }
         let bytes = text.as_bytes();
@@ -1196,6 +1344,22 @@ impl Preprocessor {
                 && !bytes.get(i + 7).copied().is_some_and(is_ident_byte);
             if let Some((args, next)) = is_operator
                 .then(|| parse_pragma_operator_args(text, i + 7))
+                .flatten()
+            {
+                out.push_str(&text[copied..i]);
+                self.dispatch_pragma_operator(&args, line_no, filename, &mut out)?;
+                i = next;
+                copied = next;
+                continue;
+            }
+            // MSVC `__pragma(tokens)`: same operator as C99 `_Pragma`, but
+            // the operand is raw tokens rather than a string literal.
+            let is_msvc_operator = c == b'_'
+                && bytes[i..].starts_with(b"__pragma")
+                && (i == 0 || !is_ident_byte(bytes[i - 1]))
+                && !bytes.get(i + 8).copied().is_some_and(is_ident_byte);
+            if let Some((args, next)) = is_msvc_operator
+                .then(|| parse_msvc_pragma_args(text, i + 8))
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
@@ -1247,14 +1411,16 @@ impl Preprocessor {
     /// during pre-expansion, so it must not re-fire during the
     /// body rescan.
     ///
-    /// Only object-like macros are blue-painted from this scan.
-    /// A function-like macro name appearing in arg text without a
-    /// trailing `(` cannot have fired during pre-expansion (fn-
-    /// like macros only expand when followed by `(` per C99
-    /// 6.10.3p10), so its presence carries no information and
-    /// blue-painting it would suppress the canonical `APPLY(OP,
-    /// ...)` rescan shape where `OP` only becomes a call after
-    /// substitution.
+    /// An object-like macro name always counts: if it survived
+    /// pre-expansion it fired. A function-like macro name counts only
+    /// when immediately followed by `(`: such a call could have fired
+    /// (fn-like macros expand only when followed by `(`, C99 6.10.3p10),
+    /// so its survival means it was blue-painted during pre-expansion --
+    /// the self-referential `#define Py_DECREF(op) Py_DECREF(...)` idiom
+    /// -- and it must stay blue-painted in the body rescan. A bare
+    /// function-like name with no `(` carries no information; blue-
+    /// painting it would suppress the canonical `APPLY(OP, ...)` shape
+    /// where `OP` only becomes a call after substitution.
     fn collect_macro_idents_into(&self, text: &str, out: &mut alloc::vec::Vec<String>) {
         let bytes = text.as_bytes();
         let mut i = 0;
@@ -1274,7 +1440,15 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &text[start..i];
-                if self.macros.contains_key(ident) && !out.iter().any(|s| s == ident) {
+                let counts = self.macros.contains_key(ident)
+                    || (self.fn_macros.contains_key(ident) && {
+                        let mut k = i;
+                        while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                            k += 1;
+                        }
+                        k < bytes.len() && bytes[k] == b'('
+                    });
+                if counts && !out.iter().any(|s| s == ident) {
                     out.push(ident.to_string());
                 }
             } else if c == b'"' || c == b'\'' {
@@ -1685,7 +1859,13 @@ impl Preprocessor {
                         }
                     }
                     if !name.is_empty() {
-                        let v = self.macros.contains_key(name) || self.fn_macros.contains_key(name);
+                        // `__has_include` / `__has_include_next` are
+                        // always-available operators, so the guard
+                        // `defined(__has_include)` is true.
+                        let v = name == "__has_include"
+                            || name == "__has_include_next"
+                            || self.macros.contains_key(name)
+                            || self.fn_macros.contains_key(name);
                         out.push_str(if v { "1" } else { "0" });
                         i = j;
                         continue;
@@ -2065,7 +2245,9 @@ impl Preprocessor {
     /// `Symbol::intrinsic` field with the [`Intrinsic`]
     /// discriminant from `op.rs`, and the call-site lowering
     /// emits an `Inst::Intrinsic` instead of a regular call +
-    /// stack-cleanup sequence. The arg list is
+    /// stack-cleanup sequence. The C11 7.17 atomic operations use the
+    /// same registry but lower to load / store / read-modify-write at
+    /// the call site rather than to an `Inst::Intrinsic`. The arg list is
     /// expected to be a quoted string so future intrinsics
     /// whose spellings collide with c5 keywords don't trip
     /// the identifier parser; the body uses `is_ident` to
@@ -2100,6 +2282,20 @@ impl Preprocessor {
         }
         let id = match name {
             "alloca" | "__builtin_alloca" => super::op::Intrinsic::Alloca as i64,
+            // C11 7.17 atomic generic operations. Lowered at the call
+            // site to load / store / read-modify-write, not to an
+            // `Inst::Intrinsic`.
+            "atomic_load" => super::op::Intrinsic::AtomicLoad as i64,
+            "atomic_store" => super::op::Intrinsic::AtomicStore as i64,
+            "atomic_exchange" => super::op::Intrinsic::AtomicExchange as i64,
+            "atomic_fetch_add" => super::op::Intrinsic::AtomicFetchAdd as i64,
+            "atomic_fetch_sub" => super::op::Intrinsic::AtomicFetchSub as i64,
+            "atomic_fetch_and" => super::op::Intrinsic::AtomicFetchAnd as i64,
+            "atomic_fetch_or" => super::op::Intrinsic::AtomicFetchOr as i64,
+            "atomic_fetch_xor" => super::op::Intrinsic::AtomicFetchXor as i64,
+            "atomic_compare_exchange_strong" => {
+                super::op::Intrinsic::AtomicCompareExchangeStrong as i64
+            }
             "__c5_aarch64_setjmp" => super::op::Intrinsic::SetjmpAArch64 as i64,
             "__c5_aarch64_longjmp" => super::op::Intrinsic::LongjmpAArch64 as i64,
             "__builtin_va_start" => super::op::Intrinsic::VaStart as i64,
@@ -2130,7 +2326,7 @@ impl Preprocessor {
                          __c5_aarch64_longjmp, __builtin_va_start, \
                          __builtin_va_arg, __builtin_va_end, \
                          __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
-                         fabs, fabsf"
+                         fabs, fabsf, and the C11 atomic_* operations"
                     ),
                 )));
             }
@@ -2657,18 +2853,92 @@ fn strip_c_comments(source: &str) -> String {
     out
 }
 
+/// Report whether `s` (a partially assembled logical line with its
+/// newlines already removed) ends inside an unterminated `/* */` block
+/// comment. String and character literals and `//` line comments are
+/// tracked so a `/*` appearing inside one of them does not count as a
+/// comment opener.
+fn ends_in_open_block_comment(s: &str) -> bool {
+    let b = s.as_bytes();
+    let mut i = 0;
+    let mut in_str = false;
+    let mut in_char = false;
+    let mut in_block = false;
+    while i < b.len() {
+        let c = b[i];
+        if in_block {
+            if c == b'*' && b.get(i + 1) == Some(&b'/') {
+                in_block = false;
+                i += 2;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        if in_str {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == b'"' {
+                in_str = false;
+            }
+            i += 1;
+            continue;
+        }
+        if in_char {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == b'\'' {
+                in_char = false;
+            }
+            i += 1;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'*') {
+            in_block = true;
+            i += 2;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'/') {
+            // A line comment runs to the end of the assembled line, so
+            // nothing after it can leave a block comment open.
+            return false;
+        }
+        if c == b'"' {
+            in_str = true;
+        } else if c == b'\'' {
+            in_char = true;
+        }
+        i += 1;
+    }
+    in_block
+}
+
 /// Phase-2 line-continuation collapse: every line ending in `\\`
 /// joins with the next, preserving total line count by emitting
 /// blank padding lines. The c99 spec runs this before all other
 /// preprocessing passes.
+///
+/// A physical line whose logical line ends inside an open `/* */`
+/// block comment also joins with the next line even without a trailing
+/// `\\`: a newline inside a block comment is comment white space, not a
+/// directive terminator (C99 5.1.1.2), so a multi-line comment embedded
+/// in a `\\`-continued macro definition must not split the definition.
 fn unfold_line_continuations(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let mut iter = source.lines().peekable();
     while let Some(line) = iter.next() {
         let mut joined = line.to_string();
         let mut padding = 0;
-        while joined.ends_with('\\') {
-            joined.pop();
+        loop {
+            if joined.ends_with('\\') {
+                joined.pop();
+            } else if !ends_in_open_block_comment(&joined) {
+                break;
+            }
             padding += 1;
             match iter.next() {
                 Some(next) => joined.push_str(next),
@@ -2792,6 +3062,60 @@ fn is_ident(s: &str) -> bool {
 
 fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Parse the `( token-string )` operand of an MSVC `__pragma` operator,
+/// starting at `start` (just past the `__pragma` keyword). Returns the
+/// content between the outer parens verbatim (trimmed) and the byte
+/// index just past the closing `)`, or `None` when the parens are
+/// missing or unbalanced. `__pragma(X)` is the MSVC analog of C99
+/// `_Pragma("X")`: the operand is raw tokens rather than a string
+/// literal, so no destringizing applies. Nested parens and string /
+/// char literals are tracked so an inner `)` does not close the operand.
+fn parse_msvc_pragma_args(text: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut i = start;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    let inner_start = i + 1;
+    let mut depth = 1usize;
+    i = inner_start;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' | b'\'' => {
+                let q = bytes[i];
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == b'\\' {
+                        i += 2;
+                        continue;
+                    }
+                    let closed = bytes[i] == q;
+                    i += 1;
+                    if closed {
+                        break;
+                    }
+                }
+            }
+            b'(' => {
+                depth += 1;
+                i += 1;
+            }
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some((text[inner_start..i].trim().to_string(), i + 1));
+                }
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    None
 }
 
 /// Parse the `( string-literal )` operand of a `_Pragma` operator,
@@ -3728,6 +4052,16 @@ impl<'a> IfExprParser<'a> {
                 "preprocessor: unterminated string in `#if` expression".to_string(),
             ));
         }
+        // C11 6.4.4.4: a character constant may carry an `L`, `u`, or
+        // `U` encoding prefix (`L'/'`). In a `#if` controlling
+        // expression its value is the character code, so the prefix is
+        // consumed and the literal read as below.
+        if let Some(&p) = self.src.as_bytes().get(self.pos)
+            && matches!(p, b'L' | b'u' | b'U')
+            && self.src.as_bytes().get(self.pos + 1) == Some(&b'\'')
+        {
+            self.pos += 1;
+        }
         if self.eat_byte(b'\'') {
             // Character literal -- a single byte, optionally escaped.
             // Multi-char (`'AB'`) is implementation-defined; we use
@@ -3893,6 +4227,47 @@ impl<'a> IfExprParser<'a> {
                 }
             }
             return Ok(IfValue::Int(self.pp.macros.contains_key(&id) as i64));
+        }
+        // C23 6.10.1 / universal compiler practice: `__has_include(<h>)`
+        // and `__has_include("h")` evaluate to 1 when the header is
+        // found on the include search path, 0 otherwise.
+        // `__has_include_next` follows the same grammar; c5 resolves it
+        // against the same paths.
+        if name == "__has_include" || name == "__has_include_next" {
+            self.skip_ws();
+            if !self.eat_byte(b'(') {
+                return Err(C5Error::Compile(
+                    "preprocessor: `(` expected after `__has_include`".to_string(),
+                ));
+            }
+            self.skip_ws();
+            let close = if self.eat_byte(b'<') {
+                b'>'
+            } else if self.eat_byte(b'"') {
+                b'"'
+            } else {
+                return Err(C5Error::Compile(
+                    "preprocessor: `<header>` or \"header\" expected in `__has_include`"
+                        .to_string(),
+                ));
+            };
+            let h_start = self.pos;
+            while let Some(b) = self.peek_byte() {
+                if b == close {
+                    break;
+                }
+                self.pos += 1;
+            }
+            let header = self.src[h_start..self.pos].to_string();
+            self.eat_byte(close);
+            self.skip_ws();
+            if !self.eat_byte(b')') {
+                return Err(C5Error::Compile(
+                    "preprocessor: missing `)` in `__has_include`".to_string(),
+                ));
+            }
+            let found = self.pp.find_include(&header, None).is_some();
+            return Ok(IfValue::Int(found as i64));
         }
         // Identifier -- look up in the macro table. Function-like
         // macros are skipped (they need an argument list which the
@@ -4132,6 +4507,47 @@ mod tests {
     }
 
     #[test]
+    fn gnu_identity_macros_are_opt_in() {
+        // `__GNUC__` and `__STRICT_ANSI__` are undefined by default.
+        let probe = "#ifdef __GNUC__\nG yes\n#else\nG no\n#endif\n\
+                     #ifdef __STRICT_ANSI__\nS yes\n#else\nS no\n#endif\n";
+        let out = process(probe);
+        assert!(
+            out.contains("G no") && out.contains("S no"),
+            "default: {out}"
+        );
+
+        // `enable_gnu` (the `--gnu` flag) defines both.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.enable_gnu();
+        let out = pp.process(probe).expect("preprocessor failed");
+        assert!(
+            out.contains("G yes") && out.contains("S yes"),
+            "--gnu: {out}"
+        );
+    }
+
+    #[test]
+    fn self_referential_function_macro_in_nested_arg() {
+        // C99 6.10.3.4: a self-referential function-like macro
+        // (`#define M(x) M(inner(x))`) expands once and the recurring `M`
+        // is not re-expanded, while `inner` in an argument still expands.
+        // The blue-paint carries the painted `M(` through a nested call.
+        let out = process(
+            "#define _Py_CAST(t, e) ((t)(e))\n\
+             #define _PyObject_CAST(op) _Py_CAST(void*, (op))\n\
+             #define GET(m) GET(_PyObject_CAST(m))\n\
+             #define DECREF(o) DECREF(_PyObject_CAST(o))\n\
+             void f(void *self) { DECREF(GET(self)); }\n",
+        );
+        assert!(
+            out.contains("DECREF(((void*)((GET(((void*)((self))))))))"),
+            "self-referential macros expanded wrong: {out}"
+        );
+        assert!(!out.contains("_PyObject_CAST"), "leftover macro: {out}");
+    }
+
+    #[test]
     fn lp64_predefined_for_lp64_targets_only() {
         let src = "#ifdef __LP64__\nint lp64;\n#endif\n#ifdef _LP64\nint _lp64;\n#endif\n";
         for t in [Target::MacOSAarch64, Target::LinuxAarch64, Target::LinuxX64] {
@@ -4152,6 +4568,32 @@ mod tests {
     fn define_substitutes_in_subsequent_lines() {
         let out = process("#define FOO 42\nint x = FOO;\n");
         assert!(out.contains("int x = 42;"));
+    }
+
+    #[test]
+    fn macro_body_block_comment_spanning_lines() {
+        // A `\`-continued macro whose body holds a block comment that
+        // spans a physical-line break, where the comment-opening line
+        // carries no trailing `\`. The newline inside the comment must
+        // not terminate the definition (C99 5.1.1.2). Before the fix the
+        // body truncated at the comment and `b = 1;` leaked to file scope.
+        let src = "#define M(x) \\\n    do { \\\n        /* one\n           two */ \\\n        x = 1; \\\n    } while (0)\nint after;\nM(after);\n";
+        let out = process(src);
+        // The whole body is one macro, so `do {` and `while (0)` land on
+        // the expansion line together and `after` is the only file-scope
+        // object before the expansion.
+        assert!(out.contains("do {"), "macro body lost: {out:?}");
+        assert!(out.contains("while (0)"), "macro tail leaked: {out:?}");
+        assert!(out.contains("int after;"), "{out:?}");
+    }
+
+    #[test]
+    fn block_comment_open_detector() {
+        assert!(ends_in_open_block_comment("foo /* bar"));
+        assert!(!ends_in_open_block_comment("foo /* bar */ baz"));
+        assert!(!ends_in_open_block_comment("foo // /* not open"));
+        assert!(!ends_in_open_block_comment("s = \"/*\""));
+        assert!(ends_in_open_block_comment("c = '/' ; /* open"));
     }
 
     #[test]
@@ -4213,6 +4655,30 @@ mod tests {
         // The operator name inside a string literal is ordinary text.
         let out = process("const char *s = \"_Pragma(\\\"once\\\")\";\n");
         assert!(out.contains("\"_Pragma(\\\"once\\\")\""), "got: {out:?}");
+    }
+
+    #[test]
+    fn msvc_pragma_operator_warning_leaves_no_tokens() {
+        // MSVC `__pragma(tokens)` carries a `#pragma` directive with a raw
+        // token operand; `warning(...)` is handled and contributes no tokens.
+        let out = process("__pragma(warning(disable : 4201))\nint x = 1;\n");
+        assert!(!out.contains("__pragma"), "operator leaked: {out:?}");
+        assert!(out.contains("int x = 1;"));
+    }
+
+    #[test]
+    fn msvc_pragma_operator_pack_emits_inline_directive() {
+        // `pack` via `__pragma` re-emits an inline `#pragma pack` like the
+        // C99 `_Pragma` path, so the lexer folds it at this position.
+        let out = process("__pragma(pack(1))\nstruct S { char a; };\n");
+        assert!(out.contains("#pragma pack(1)"), "no inline pack: {out:?}");
+    }
+
+    #[test]
+    fn msvc_pragma_operator_ignored_inside_string_literal() {
+        // The operator name inside a string literal is ordinary text.
+        let out = process("const char *s = \"__pragma(warning(pop))\";\n");
+        assert!(out.contains("\"__pragma(warning(pop))\""), "got: {out:?}");
     }
 
     #[test]
@@ -4584,6 +5050,27 @@ mod tests {
         let src = "#if defined(__BADC_VERSION__)\nint a;\n#endif\n";
         let out = process(src);
         assert!(out.contains("int a;"));
+    }
+
+    #[test]
+    fn wide_char_constant_in_if() {
+        // C11 6.4.4.4: a character constant in a `#if` controlling
+        // expression may carry an `L` / `u` / `U` encoding prefix.
+        let src = "#define SEP L'/'\n#if SEP == '/'\nint yes;\n#else\nint no;\n#endif\n";
+        let out = process(src);
+        assert!(out.contains("int yes;"), "{out:?}");
+        assert!(!out.contains("int no;"), "{out:?}");
+    }
+
+    #[test]
+    fn has_include_operator_in_if() {
+        // C23 6.10.1: `__has_include(<header>)` is 1 when the header
+        // resolves, 0 otherwise; `defined(__has_include)` is the guard.
+        let src = "#if defined(__has_include) && __has_include(<stdint.h>)\nint found;\n#endif\n\
+                   #if __has_include(<no_such_header_zz.h>)\nint bogus;\n#endif\n";
+        let out = process(src);
+        assert!(out.contains("int found;"), "{out:?}");
+        assert!(!out.contains("int bogus;"), "{out:?}");
     }
 
     #[test]

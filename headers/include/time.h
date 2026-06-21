@@ -17,7 +17,7 @@
 // otherwise the call returns -1 with errno = EINVAL and the timespec
 // is left untouched.
 //
-//   * Linux glibc / musl: REALTIME=0, MONOTONIC=1 (linux/time.h).
+//   * Linux / musl: REALTIME=0, MONOTONIC=1 (linux/time.h).
 //   * Apple libSystem:   REALTIME=0, MONOTONIC=6 (sys/_types/_clockid_t.h).
 //   * Windows: no POSIX `clock_gettime` -- the time.h surface routes
 //     through a c5-side shim that internally calls
@@ -30,6 +30,9 @@
 #define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 1
 #endif
+// `clock_nanosleep` / `timer_settime` flag: the supplied time is
+// absolute, not a relative interval. Same value on every target.
+#define TIMER_ABSTIME 1
 
 // `tv_sec` is `time_t` per POSIX; we just inline the per-target
 // width so the typedef order doesn't matter. `tv_nsec` / `tv_usec`
@@ -73,11 +76,11 @@ struct timeval {
 };
 #endif
 
-// `struct tm` exposed as an opaque mirror of the libc shape so
-// programs that walk the broken-down components (`tm_year`,
-// `tm_mon`, ...) typecheck. Layout matches the common Unix /
-// glibc / musl encoding; callers that hand pointers to libc
-// don't need it to be byte-exact, just large enough.
+// `struct tm`. The host's localtime / gmtime fill this and the program
+// reads the fields back, so the BSD extension members must sit at the
+// host's offsets. On macOS and Linux `tm_gmtoff` is a `long` (8 bytes,
+// 8-aligned), which places `tm_zone` at offset 48; an `int tm_gmtoff`
+// would put `tm_zone` at offset 40 and read a garbage pointer.
 struct tm {
     int tm_sec;
     int tm_min;
@@ -88,12 +91,12 @@ struct tm {
     int tm_wday;
     int tm_yday;
     int tm_isdst;
-    int tm_gmtoff;
+    long tm_gmtoff;
     char *tm_zone;
 };
 
 // `time_t` and `clock_t` are 8-byte signed counts everywhere
-// 64-bit (Linux glibc, macOS Darwin, Windows UCRT after Y2038
+// 64-bit (Linux, macOS Darwin, Windows UCRT after Y2038
 // transitioned everything to `long long`). Storing them as
 // `int` means values past 2038 wrap silently; programs that
 // `time(NULL)` and arithmetic on the result lose 4 bytes.
@@ -114,6 +117,9 @@ typedef long clock_t;
 #pragma binding(libc::time,          "_time")
 #pragma binding(libc::clock,         "_clock")
 #pragma binding(libc::clock_gettime, "_clock_gettime")
+#pragma binding(libc::clock_settime, "_clock_settime")
+#pragma binding(libc::clock_getres,  "_clock_getres")
+#pragma binding(libc::clock_nanosleep, "_clock_nanosleep")
 #pragma binding(libc::gettimeofday,  "_gettimeofday")
 #pragma binding(libc::difftime,      "_difftime")
 #pragma binding(libc::mktime,        "_mktime")
@@ -124,6 +130,11 @@ typedef long clock_t;
 #pragma binding(libc::ctime_r,       "_ctime_r")
 #pragma binding(libc::strftime,      "_strftime")
 #pragma binding(libc::tzset,         "_tzset")
+// `tzset` outputs, bound as data imports to libSystem (the underscored
+// symbols), mirroring the `environ` GOT-import treatment.
+#pragma binding(data libc::tzname,   "_tzname")
+#pragma binding(data libc::timezone, "_timezone")
+#pragma binding(data libc::daylight, "_daylight")
 #endif
 
 #ifdef __linux__
@@ -131,6 +142,9 @@ typedef long clock_t;
 #pragma binding(libc::time,          "time")
 #pragma binding(libc::clock,         "clock")
 #pragma binding(libc::clock_gettime, "clock_gettime")
+#pragma binding(libc::clock_settime, "clock_settime")
+#pragma binding(libc::clock_getres,  "clock_getres")
+#pragma binding(libc::clock_nanosleep, "clock_nanosleep")
 #pragma binding(libc::gettimeofday,  "gettimeofday")
 #pragma binding(libc::difftime,      "difftime")
 #pragma binding(libc::mktime,        "mktime")
@@ -141,6 +155,12 @@ typedef long clock_t;
 #pragma binding(libc::ctime_r,       "ctime_r")
 #pragma binding(libc::strftime,      "strftime")
 #pragma binding(libc::tzset,         "tzset")
+// `tzset` writes the zone names / offset / DST flag into these C library
+// data symbols; bind them as data imports so a read after `tzset()` sees
+// the library's values (the COPY-relocation analogue of `environ`).
+#pragma binding(data libc::tzname,   "tzname")
+#pragma binding(data libc::timezone, "timezone")
+#pragma binding(data libc::daylight, "daylight")
 #endif
 
 #ifdef _WIN32
@@ -169,6 +189,12 @@ typedef long clock_t;
 time_t time(time_t *out);
 clock_t clock();
 int clock_gettime(int clk_id, struct timespec *ts);
+// Suspend until `request` (relative, or absolute under TIMER_ABSTIME);
+// `remain` receives the unslept interval on EINTR.
+int clock_nanosleep(int clk_id, int flags, struct timespec *request,
+                    struct timespec *remain);
+int clock_settime(int clk_id, const struct timespec *ts);
+int clock_getres(int clk_id, struct timespec *res);
 int gettimeofday(struct timeval *tv, char *tz);
 double difftime(time_t t1, time_t t0);
 // C99 7.23.2.3: convert broken-down time to a `time_t`. The
@@ -187,3 +213,8 @@ int strftime(char *buf, int max, char *fmt, struct tm *tm);
 // POSIX 7.24.1: initialize the timezone conversion state from the TZ
 // environment variable (or the system default). No arguments, no result.
 void tzset(void);
+// POSIX `tzset` outputs: the two timezone-abbreviation strings (standard
+// and daylight), the seconds west of UTC, and a daylight-saving flag.
+extern char *tzname[2];
+extern long timezone;
+extern int daylight;

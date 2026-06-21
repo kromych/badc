@@ -6,18 +6,36 @@
 #define NULL 0
 #endif
 
-// `RTLD_LAZY` is only meaningful on POSIX; on Windows it's a no-op
-// flag for the convenience of cross-platform fixtures that pass it
-// through to `dlopen` regardless of target.
+// dlopen() mode flags. RTLD_LAZY / RTLD_NOW agree across hosts, but the
+// scope and extra-mode bits diverge -- the value reaches the host's
+// dlopen, so each target uses its own numbering. On Windows these are
+// no-ops for cross-platform fixtures that pass them through.
 #define RTLD_LAZY    1
 #define RTLD_NOW     2
+#ifdef __APPLE__
+#define RTLD_LOCAL    4
+#define RTLD_GLOBAL   8
+#define RTLD_NOLOAD   0x10
+#define RTLD_NODELETE 0x80
+#define RTLD_FIRST    0x100
+#elif defined(__linux__)
+#define RTLD_LOCAL    0
+#define RTLD_GLOBAL   0x100
+#define RTLD_NOLOAD   0x04
+#define RTLD_DEEPBIND 0x08
+#define RTLD_NODELETE 0x1000
+// Linux `dladdr1` request type: yield the matching object's link_map.
+#define RTLD_DL_LINKMAP 2
+#define RTLD_DL_SYMENT  1
+#else
 #define RTLD_LOCAL   0
 #define RTLD_GLOBAL  256
+#endif
 
 // `RTLD_DEFAULT` / `RTLD_NEXT` are pseudo-handles whose numeric
 // values differ across platforms:
 //
-//   * Linux glibc:    DEFAULT = NULL,         NEXT = (void*)-1
+//   * Linux:          DEFAULT = NULL,         NEXT = (void*)-1
 //   * macOS dyld:     DEFAULT = (void*)-2,    NEXT = (void*)-1
 //   * Windows:        not meaningful (LoadLibraryA wants a real path)
 //
@@ -45,6 +63,7 @@
 #pragma binding(libc::dlsym,   "_dlsym")
 #pragma binding(libc::dlclose, "_dlclose")
 #pragma binding(libc::dlerror, "_dlerror")
+#pragma binding(libc::dladdr,  "_dladdr")
 #endif
 
 #ifdef __linux__
@@ -53,6 +72,10 @@
 #pragma binding(libdl::dlsym,   "dlsym")
 #pragma binding(libdl::dlclose, "dlclose")
 #pragma binding(libdl::dlerror, "dlerror")
+#pragma binding(libdl::dladdr,  "dladdr")
+// GNU extension: dladdr plus an extra out-parameter selected by
+// `flags` (RTLD_DL_LINKMAP / RTLD_DL_SYMENT).
+#pragma binding(libdl::dladdr1, "dladdr1")
 #endif
 
 #ifdef _WIN32
@@ -67,3 +90,17 @@ char *dlopen(char *path, int flags);
 char *dlsym(char *handle, char *name);
 int dlclose(char *handle);
 char *dlerror();
+
+#ifndef __BADC_WINDOWS__
+// Symbol / module lookup for an address (POSIX `dladdr`).
+typedef struct {
+    const char *dli_fname;
+    void *dli_fbase;
+    const char *dli_sname;
+    void *dli_saddr;
+} Dl_info;
+int dladdr(const void *addr, Dl_info *info);
+#ifdef __linux__
+int dladdr1(const void *addr, Dl_info *info, void **extra_info, int flags);
+#endif
+#endif

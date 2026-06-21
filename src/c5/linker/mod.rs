@@ -59,4 +59,4 @@ pub use object::{
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use synth_build::write_native_image_from_merged;
+pub use synth_build::{write_native_image_from_merged, write_native_image_from_merged_ex};

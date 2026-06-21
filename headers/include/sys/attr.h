@@ -4,8 +4,7 @@
 // group flags used to read and write a file's resource-fork length
 // and Finder info. macOS only; libSystem supplies the syscalls.
 
-#ifndef _C5_SYS_ATTR_H
-#define _C5_SYS_ATTR_H
+#pragma once
 
 #ifdef __APPLE__
 
@@ -37,5 +36,3 @@ int setattrlist(char *path, void *attrList, void *attrBuf,
                 unsigned long attrBufSize, unsigned long options);
 
 #endif /* __APPLE__ */
-
-#endif /* _C5_SYS_ATTR_H */

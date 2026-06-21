@@ -52,6 +52,9 @@
 #pragma binding(libc::system,  "_system")
 #pragma binding(libc::getenv,  "_getenv")
 #pragma binding(libc::setenv,  "_setenv")
+#pragma binding(libc::putenv,  "_putenv")
+#pragma binding(libc::mbstowcs, "_mbstowcs")
+#pragma binding(libc::wcstombs, "_wcstombs")
 #pragma binding(libc::qsort,   "_qsort")
 #pragma binding(libc::bsearch, "_bsearch")
 #pragma binding(libc::rand,    "_rand")
@@ -65,6 +68,12 @@
 #pragma binding(libc::mktemp,  "_mktemp")
 #pragma binding(libc::random,  "_random")
 #pragma binding(libc::srandom, "_srandom")
+#pragma binding(libc::grantpt,   "_grantpt")
+#pragma binding(libc::unlockpt,  "_unlockpt")
+#pragma binding(libc::posix_openpt,"_posix_openpt")
+#pragma binding(libc::ptsname,   "_ptsname")
+#pragma binding(libc::ptsname_r, "_ptsname_r")
+#pragma binding(libc::getloadavg,"_getloadavg")
 #endif
 
 #ifdef __linux__
@@ -87,18 +96,21 @@
 #pragma binding(libc::system,  "system")
 #pragma binding(libc::getenv,  "getenv")
 #pragma binding(libc::setenv,  "setenv")
+#pragma binding(libc::putenv,  "putenv")
+#pragma binding(libc::mbstowcs, "mbstowcs")
+#pragma binding(libc::wcstombs, "wcstombs")
 #pragma binding(libc::qsort,   "qsort")
 #pragma binding(libc::bsearch, "bsearch")
 #pragma binding(libc::rand,    "rand")
 #pragma binding(libc::srand,   "srand")
-// glibc doesn't export `atexit` as a regular dynamic symbol --
+// The Linux C library doesn't export `atexit` as a regular dynamic symbol --
 // it's an inline that calls per-DSO `__cxa_atexit(handler, NULL,
 // dso_handle)`, so `dlsym(libc.so.6, "atexit")` returns NULL and
 // any c5 binary that calls atexit fails at exec with
 // "undefined symbol: atexit". Bind the underlying entrypoint
 // directly and route atexit() through a header-side macro
 // (declared further down), filling in NULL for both the closure
-// arg and the dso handle. NULL as dso_handle is glibc's spelling
+// arg and the dso handle. NULL as dso_handle is the Linux C library's spelling
 // for "register on the main program's exit chain."
 #pragma binding(libc::__cxa_atexit, "__cxa_atexit")
 #pragma binding(libc::strtoul, "strtoul")
@@ -109,6 +121,12 @@
 #pragma binding(libc::mktemp,  "mktemp")
 #pragma binding(libc::random,  "random")
 #pragma binding(libc::srandom, "srandom")
+#pragma binding(libc::grantpt,   "grantpt")
+#pragma binding(libc::unlockpt,  "unlockpt")
+#pragma binding(libc::posix_openpt,"posix_openpt")
+#pragma binding(libc::ptsname,   "ptsname")
+#pragma binding(libc::ptsname_r, "ptsname_r")
+#pragma binding(libc::getloadavg,"getloadavg")
 #endif
 
 #ifdef _WIN32
@@ -144,18 +162,55 @@
 // msvcrt's `setenv` is the underscored `_putenv_s`. Same shape:
 // (name, value, overwrite) -> int.
 #pragma binding(msvcrt::setenv,    "_putenv_s")
+#pragma binding(msvcrt::_wputenv_s, "_wputenv_s")
 #pragma binding(msvcrt::qsort,     "qsort")
 #pragma binding(msvcrt::bsearch,   "bsearch")
 #pragma binding(msvcrt::rand,      "rand")
 #pragma binding(msvcrt::srand,     "srand")
 #pragma binding(msvcrt::exit,      "exit")
 // msvcrt's atexit() takes a `void (*)(void)` and registers it on
-// the CRT's exit chain. On Linux glibc doesn't export atexit as
+// the CRT's exit chain. On Linux the C library doesn't export atexit as
 // a regular dynamic symbol so the `#ifdef __linux__` branch
 // below routes through `__cxa_atexit(handler, NULL, NULL)`;
 // msvcrt exports the bare `atexit` directly so we bind it as
 // itself.
 #pragma binding(msvcrt::atexit,    "atexit")
+#pragma binding(msvcrt::_exit,     "_exit")
+#pragma binding(msvcrt::mbstowcs,  "mbstowcs")
+#pragma binding(msvcrt::wcstombs,  "wcstombs")
+// CRT data exports: the system error table and the wide / narrow
+// process environment blocks.
+#pragma binding(data msvcrt::_sys_nerr,    "_sys_nerr")
+#pragma binding(data msvcrt::_sys_errlist, "_sys_errlist")
+#if defined(__aarch64__)
+// The legacy arm64 msvcrt.dll does not export the `_wenviron` data
+// symbol; UCRT exposes the wide environment only via this accessor.
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::__p__wenviron, "__p__wenviron")
+unsigned short ***__p__wenviron(void);
+#define _wenviron (*__p__wenviron())
+#else
+#pragma binding(data msvcrt::_wenviron,    "_wenviron")
+#endif
+#pragma binding(data msvcrt::_environ,     "_environ")
+// `_doserrno` is an SDK macro over the exported accessor `__doserrno`,
+// which returns a pointer to the thread's OS error code.
+#pragma binding(msvcrt::__doserrno, "__doserrno")
+int *__doserrno(void);
+#define _doserrno (*__doserrno())
+extern int _sys_nerr;
+extern char *_sys_errlist[];
+#if !defined(__aarch64__)
+extern unsigned short **_wenviron;
+#endif
+extern char **_environ;
+// MSVC CRT size limits (_makepath / _splitpath / environment).
+#define _MAX_PATH   260
+#define _MAX_DRIVE  3
+#define _MAX_DIR    256
+#define _MAX_FNAME  256
+#define _MAX_EXT    256
+#define _MAX_ENV    32767
 #endif
 
 char *malloc(int size);
@@ -240,6 +295,11 @@ _Noreturn int exit(int status);
 int system(char *cmd);
 char *getenv(char *name);
 int setenv(char *name, char *value, int overwrite);
+int putenv(char *string);
+// Multibyte / wide-character string conversion (C99 7.20.8). `wchar_t`
+// and `size_t` come from <stddef.h>.
+unsigned long mbstowcs(wchar_t *dest, const char *src, unsigned long n);
+unsigned long wcstombs(char *dest, const wchar_t *src, unsigned long n);
 int qsort(char *base, int n, int size, int *cmp);
 char *bsearch(char *key, char *base, int n, int size, int *cmp);
 int rand();
@@ -292,6 +352,15 @@ char *mkdtemp(char *templ);
 char *mktemp(char *templ);
 int random();
 int srandom(int seed);
+// Pseudo-terminal master/slave setup (POSIX). ptsname returns the slave
+// device path for the given master descriptor.
+int posix_openpt(int flags);
+int grantpt(int fd);
+int unlockpt(int fd);
+char *ptsname(int fd);
+int ptsname_r(int fd, char *buf, unsigned long buflen);
+// System load averages over 1/5/15 minutes (BSD).
+int getloadavg(double *loadavg, int nelem);
 
 /* GCC / clang `__clear_cache(begin, end)` is the runtime hint
 ** that makes instructions newly written into [begin, end)
@@ -300,7 +369,7 @@ int srandom(int seed);
 ** so the call is effectively a no-op. Each platform exposes
 ** the flush through a different libc surface, so the wrappers
 ** below bridge the (begin, end) signature to the native
-** (start, len) shape. Linux glibc exports __clear_cache
+** (start, len) shape. The Linux C library exports __clear_cache
 ** directly. */
 #ifdef __APPLE__
 #pragma binding(libc::sys_icache_invalidate, "_sys_icache_invalidate")
@@ -311,7 +380,7 @@ static inline void __clear_cache(void *begin, void *end) {
 #endif
 
 #ifdef __linux__
-/* Linux glibc does not export `__clear_cache`; the GCC / clang
+/* The Linux C library does not export `__clear_cache`; the GCC / clang
 ** documented surface places the helper in libgcc_s.so.1. ARM
 ** ARM B2.4.4 requires explicit instruction-cache maintenance
 ** after a writer publishes new code -- AArch64 callers reach
@@ -325,7 +394,7 @@ static inline void __clear_cache(void *begin, void *end) {
 void __clear_cache(void *begin, void *end);
 /* AAPCS64 returns `long double` (IEEE binary128) in v0 as a
 ** single 128-bit Q register. c5 stores `long double` in an
-** 8-byte FP64 slot, so callers of glibc functions that return
+** 8-byte FP64 slot, so callers of Linux C library functions that return
 ** `long double` (strtold, ldexpl, ...) need an explicit
 ** truncation pass after the call -- otherwise the c5 accumulator
 ** reads the low 64 bits of v0, which are zero for every power-

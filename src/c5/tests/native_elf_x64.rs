@@ -284,6 +284,10 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_struct_arg.c", 18),
     ("variadic_struct_arg_16b.c", 51),
     ("libc_div.c", 0),
+    ("wide_string_literal_alignment.c", 0),
+    ("va_arg_through_pointer.c", 0),
+    ("pthread_key_once_width.c", 0),
+    ("dev_t_width.c", 0),
     ("libc_int_arith.c", 0),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),
@@ -300,6 +304,10 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("c99_qualifiers.c", 0),
     ("integer_suffixes.c", 0),
     ("predefined_macros.c", 0),
+    ("macro_multiline_comment_body.c", 0),
+    ("compound_literal_paren_init.c", 0),
+    ("alignof_operator.c", 0),
+    ("return_void_expression.c", 0),
     ("macro_operators.c", 0),
     ("typedef_basic.c", 0),
     ("local_init_and_block_scope.c", 0),
@@ -455,6 +463,19 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_array_init_from_lvalue.c", 0),
     ("shift_result_type_signedness.c", 0),
     ("integer_negate_shift_overflow.c", 0),
+    ("case_label_declaration.c", 0),
+    ("char_constant_signedness.c", 0),
+    ("func_name_in_initializer.c", 0),
+    ("anon_union_braced_init.c", 0),
+    ("array_2d_struct_init.c", 0),
+    ("cast_abstract_fn_ptr.c", 0),
+    ("decl_trailing_attribute.c", 0),
+    ("winsock_netdb_protoent.c", 0),
+    ("slot_coalesce_disjoint_temps.c", 0),
+    ("alloca_alignment.c", 0),
+    ("slot_coalesce_declared.c", 0),
+    ("slot_coalesce_alloca.c", 0),
+    ("fn_arg_decay_then_deref_assign.c", 0),
     ("array_range_designator.c", 0),
     ("bitfield_mixed_base_packing.c", 0),
     ("flex_array_member_sizing.c", 0),
@@ -465,10 +486,29 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("fn_ptr_float_arg.c", 0),
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
+    ("flex_array_member_static_init.c", 0),
+    ("array_compound_literal_static_init.c", 0),
+    ("const_address_cast_and_arith.c", 0),
+    ("const_conditional_address_init.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("sizeof_abstract_fn_ptr.c", 0),
     ("pragma_operator.c", 0),
     ("variadic_macro_named_rest.c", 0),
+    ("stdatomic_c11.c", 0),
+    ("atomic_rmw_ops.c", 0),
+    ("fn_ptr_typedef_multi_declarator.c", 0),
+    ("hfa_struct_return.c", 0),
+    ("bitfield_assign_value.c", 0),
+    ("struct_arg_indirect_subscript.c", 0),
+    ("out_pointer_return_float_args.c", 0),
+    ("compound_literal_tagged_address.c", 0),
+    ("function_typed_parameter.c", 0),
+    ("static_init_braced_scalar.c", 0),
+    ("paren_string_char_array_init.c", 0),
+    ("static_init_paren_relocation.c", 0),
+    ("do_while_zero_returns.c", 0),
+    ("self_referential_macro.c", 0),
+    ("logical_not_float.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),
@@ -492,6 +532,21 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("local_struct_array_runtime_init.c", 0),
     ("scanf_fscanf_binding.c", 0),
     ("builtin_bit_count.c", 0),
+    ("typeof_operator.c", 0),
+    ("attribute_packed.c", 0),
+    ("attribute_positions.c", 0),
+    ("attribute_declspec.c", 0),
+    ("attribute_c23.c", 0),
+    ("static_assert_in_struct.c", 0),
+    ("gnu_extension_keyword.c", 0),
+    ("variadic_struct_by_value_arg.c", 0),
+    ("fn_ptr_ternary_call_return.c", 0),
+    ("float_condition_negative_zero.c", 0),
+    ("tentative_array_definition.c", 0),
+    ("tentative_array_use_before_init.c", 0),
+    ("tentative_deferred_array_grows.c", 0),
+    ("directive_in_macro_argument.c", 0),
+    ("x87_control_word.c", 0),
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
@@ -553,6 +608,16 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // (tls_total - offset)) sequence on x86_64. Requires PT_TLS
     // + .tbss to exist in the ELF.
     ("thread_local_basic.c", 0),
+    ("msvc_decl_decorators.c", 0),
+    ("msvc_pragma_operator.c", 0),
+    ("thread_local_gnu.c", 0),
+    ("wmem_functions.c", 0),
+    ("posix_module_headers.c", 0),
+    ("mmap_anonymous.c", 0),
+    ("struct_tm_tm_zone_offset.c", 0),
+    ("for_init_multiple_declarators.c", 0),
+    ("compound_literal_member_operand.c", 0),
+    ("signal_nsig.c", 0),
     // See native_elf.rs for the prelude / TLS layout interaction
     // that disables thread_local_initializer on Linux ELF.
     // ("thread_local_initializer.c", 0),
@@ -569,6 +634,12 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // round-trip in -- regressions surface as `strtold` landing
     // on stale xmm0 garbage instead of the parsed value.
     ("strtold_aapcs_return.c", 0),
+    // A dynamic import binds its library's default symbol version
+    // (`.gnu.version_r`), not the oldest definition of the name. The
+    // pthread_cond_init + CLOCK_MONOTONIC sequence returns EINVAL under
+    // glibc's old @GLIBC_2.2.5 stub and 0 under the @@GLIBC_2.3.2
+    // default.
+    ("elf_symbol_version_default.c", 0),
 ];
 
 #[test]
@@ -734,5 +805,261 @@ fn original_c4_compiles_and_runs_hello_natively() {
         "c4 self-host failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Cross-unit `extern _Thread_local` on Linux/x86_64. Two translation
+/// units each define TLS storage; `main` reads its own and the other
+/// unit's thread-locals both directly (extern) and through the defining
+/// unit's accessors (local), then mutates one and re-reads it. Exercises
+/// the merged-TLS layout, the `NT_BADC_ELF_TPOFF` note round-trip, the
+/// PT_TLS alignment, and the branch-relaxation fixup bookkeeping (a TLS
+/// access gated by a prior conditional read). `main` returns a bitmask
+/// of failures, so exit 0 means every access resolved correctly.
+#[test]
+fn cross_unit_thread_local() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "\
+_Thread_local int g_a = 11;\n\
+_Thread_local int g_b = 22;\n\
+int read_a(void) { return g_a; }\n\
+int read_b(void) { return g_b; }\n\
+void set_a(int v) { g_a = v; }\n";
+
+    const UNIT_B: &str = "\
+extern _Thread_local int g_a;\n\
+extern _Thread_local int g_b;\n\
+_Thread_local int g_c = 33;\n\
+int read_a(void); int read_b(void); void set_a(int);\n\
+int main(void) {\n\
+    int f = 0;\n\
+    if (g_a != 11) f |= 1;\n\
+    if (g_b != 22) f |= 2;\n\
+    if (g_c != 33) f |= 4;\n\
+    if (read_a() != 11) f |= 8;\n\
+    if (read_b() != 22) f |= 16;\n\
+    set_a(99);\n\
+    if (g_a != 99) f |= 32;\n\
+    if (read_a() != 99) f |= 64;\n\
+    return f;\n\
+}\n";
+
+    // Both units compile as relocatable objects (`-c` semantics:
+    // no entry-point synthesis); the runtime supplies startup and calls
+    // `main` by name. `programs[0]` (UNIT_B) names the entry.
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf64-tls2", "cross_unit_tls");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "cross-unit thread-local mismatch (failure bitmask in exit code)"
+    );
+}
+
+/// An inline candidate that returns the address of an extern (cross-TU)
+/// data object must keep that symbol reference after the splice. The
+/// optimizer inlines `get_shared` into `main`; the spliced `ImmData`
+/// has to resolve to `shared_value`, not the caller's local data base.
+#[test]
+fn cross_unit_inlined_extern_data_ref() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "long shared_value = 0x12345678;\n";
+
+    const UNIT_B: &str = "\
+extern long shared_value;\n\
+static long *get_shared(void) { return &shared_value; }\n\
+long read_shared(void) { long *p = get_shared(); return *p; }\n\
+int main(void) { return (read_shared() == 0x12345678) ? 0 : 1; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxX64,
+        NativeOptions::default().with_optimize(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf64-inl-extref", "cross_unit_inline_extref");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "inlined extern-data reference resolved to the wrong symbol under -O"
+    );
+}
+
+/// Two distinct extern data symbols both lower to `Inst::ImmData(0)`.
+/// The cross-block ImmData dedup must not coalesce them: each binds to a
+/// different cross-TU symbol. `sym_a` is referenced in the entry block
+/// (the dedup canonical for the key) and `sym_b` only in a later block;
+/// coalescing makes the later reference read `sym_a`.
+#[test]
+fn cross_unit_dedup_imm_distinct_symbols() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_A: &str = "long sym_a = 100;\nlong sym_b = 7;\n";
+
+    const UNIT_B: &str = "\
+extern long sym_a;\n\
+extern long sym_b;\n\
+long combine(int c) { long r = sym_a; if (c) { r += sym_b; } return r; }\n\
+int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_b = compile(UNIT_B);
+    let prog_a = compile(UNIT_A);
+
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_b, &prog_a],
+        Target::LinuxX64,
+        NativeOptions::default().with_optimize(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf64-dedup-imm", "cross_unit_dedup_imm");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "distinct extern data symbols were coalesced by the ImmData dedup under -O"
+    );
+}
+
+/// A foreign (system-cc) caller that keeps a live value in r13 across a
+/// call into a badc-compiled callee must find it intact on return. r13
+/// is callee-saved under System V AMD64; badc borrows it as its reserved
+/// secondary scratch (`SCRATCH_R13`), so a callee that clobbers it must
+/// save and restore the caller's value. The badc callee here computes
+/// `x + <large immediate>`, which materialises the immediate through r13
+/// (`emit_binop_imm`), so without the prologue/epilogue save it would
+/// overwrite the caller's r13. The cc caller pins a sentinel in r13
+/// across the call via inline asm and checks it survives. Links a badc
+/// relocatable object with a cc-compiled `main` through the system
+/// driver, so it exercises the real ABI boundary the c5-to-c5 lanes
+/// cannot.
+#[test]
+fn foreign_caller_r13_preserved() {
+    use crate::{CompileOptions, OutputKind};
+
+    // Locate a system C driver; without one the ABI boundary can't be
+    // built, so skip rather than fail (the demos / CPython lane cover it
+    // where a compiler is present).
+    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
+        Command::new(c)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    });
+    let Some(cc) = cc else {
+        eprintln!("skipping foreign_caller_r13_preserved: no system C driver (cc/gcc/clang)");
+        return;
+    };
+
+    const CALLEE: &str = "long badc_cb(long x) { return x + 0x1234567890ABL; }\n";
+    let prog = Compiler::with_options(
+        CALLEE.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile callee: {e}"));
+    let reloc = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let obj = emit_native_with_options(&prog, Target::LinuxX64, reloc)
+        .unwrap_or_else(|e| panic!("emit callee object: {e}"));
+
+    let obj_path = unique_temp_path("badc-elf64-r13", "callee_obj");
+    let main_path = unique_temp_path("badc-elf64-r13", "caller_main").with_extension("c");
+    let exe_path = unique_temp_path("badc-elf64-r13", "r13_exe");
+    std::fs::write(&obj_path, &obj).expect("write callee object");
+    std::fs::write(
+        &main_path,
+        "extern long badc_cb(long);\n\
+         int main(void) {\n\
+         \tlong out;\n\
+         \t__asm__ volatile(\"movq $0x1122334455667788, %%r13\" ::: \"r13\");\n\
+         \tlong r = badc_cb(5);\n\
+         \t__asm__ volatile(\"movq %%r13, %0\" : \"=r\"(out));\n\
+         \treturn (out == 0x1122334455667788L && r == 5 + 0x1234567890ABL) ? 0 : 1;\n\
+         }\n",
+    )
+    .expect("write caller main");
+
+    let status = Command::new(cc)
+        .arg(&main_path)
+        .arg(&obj_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .status()
+        .expect("invoke system C driver");
+    assert!(
+        status.success(),
+        "system C driver failed to link badc object"
+    );
+
+    set_executable(&exe_path);
+    let output = exec_with_retry(&exe_path).expect("run linked binary");
+    let _ = std::fs::remove_file(&obj_path);
+    let _ = std::fs::remove_file(&main_path);
+    let _ = std::fs::remove_file(&exe_path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "foreign caller's r13 was clobbered by the badc callee (callee-save violation)"
     );
 }

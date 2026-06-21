@@ -32,8 +32,8 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
-    Terminator, ValueId,
+    AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
+    StoreKind, Terminator, ValueId,
 };
 
 /// Cached `(off, kind, value)` for a previously-pushed
@@ -162,6 +162,8 @@ impl SsaBuilder {
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            synthetic_base: 0,
+            multi_cell_slots: Vec::new(),
         };
         let mut b = Self {
             func,
@@ -184,6 +186,9 @@ impl SsaBuilder {
     /// bytes. Consumed by the per-arch emit's frame layout.
     pub(crate) fn set_locals(&mut self, n: i64) {
         self.func.locals = n;
+        // Slots reserved after this point are synthetic; `ssa_slot_coalesce`
+        // reuses only those, leaving the declared range untouched.
+        self.func.synthetic_base = n;
     }
 
     /// One-past-the-last ent_pc the source function spans.
@@ -924,6 +929,48 @@ impl SsaBuilder {
         self.push(Inst::Mcpy { dst, src, size });
     }
 
+    /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte
+    /// object at `addr` (C11 7.17.7). Returns the inst's id; its value
+    /// is the object's prior contents. Atomics are not pure and must
+    /// not be CSE'd, and they write through `addr` (which may alias an
+    /// escaped local), so the CSE cache is invalidated.
+    pub(crate) fn atomic_rmw(
+        &mut self,
+        op: AtomicRmwOp,
+        addr: ValueId,
+        value: ValueId,
+        width: u8,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicRmw {
+            op,
+            addr,
+            value,
+            width,
+        })
+    }
+
+    /// `Inst::AtomicCas` -- atomic compare-and-exchange on the
+    /// `width`-byte object at `addr` (C11 7.17.7.4). Returns the inst's
+    /// id; its value is 1 on success and 0 on failure, where a failure
+    /// stores the current `*addr` into `*expected_addr`. Writes through
+    /// both pointers, so the CSE cache is invalidated.
+    pub(crate) fn atomic_cas(
+        &mut self,
+        addr: ValueId,
+        expected_addr: ValueId,
+        desired: ValueId,
+        width: u8,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            width,
+        })
+    }
+
     /// `Inst::Intrinsic` -- compiler-builtin (alloca / setjmp /
     /// longjmp / va_*). The `kind` is the discriminant from
     /// `crate::c5::op::Intrinsic`; the per-arch SSA emit reads it
@@ -958,6 +1005,11 @@ impl SsaBuilder {
             if k == nslots - 1 {
                 base = s;
             }
+        }
+        // Record the multi-cell range so slot coalescing reserves the
+        // interior cells, which carry no instruction reference.
+        if nslots >= 1 {
+            self.func.multi_cell_slots.push((base, nslots));
         }
         base
     }

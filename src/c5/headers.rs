@@ -47,6 +47,14 @@ pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
 /// `memory.h` is omitted: it's a legacy alias for `string.h` and
 /// would just produce duplicate hits in the diagnostic.
 pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
+    (
+        "_builtins.h",
+        include_str!("../../headers/include/_builtins.h"),
+    ),
+    (
+        "stdalign.h",
+        include_str!("../../headers/include/stdalign.h"),
+    ),
     ("stddef.h", include_str!("../../headers/include/stddef.h")),
     ("stdint.h", include_str!("../../headers/include/stdint.h")),
     (
@@ -57,6 +65,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("limits.h", include_str!("../../headers/include/limits.h")),
     ("string.h", include_str!("../../headers/include/string.h")),
     ("sched.h", include_str!("../../headers/include/sched.h")),
+    ("spawn.h", include_str!("../../headers/include/spawn.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
     ("alloca.h", include_str!("../../headers/include/alloca.h")),
@@ -67,12 +76,17 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "stdnoreturn.h",
         include_str!("../../headers/include/stdnoreturn.h"),
     ),
+    (
+        "stdatomic.h",
+        include_str!("../../headers/include/stdatomic.h"),
+    ),
     ("ctype.h", include_str!("../../headers/include/ctype.h")),
     ("math.h", include_str!("../../headers/include/math.h")),
     ("float.h", include_str!("../../headers/include/float.h")),
     ("locale.h", include_str!("../../headers/include/locale.h")),
     ("signal.h", include_str!("../../headers/include/signal.h")),
     ("errno.h", include_str!("../../headers/include/errno.h")),
+    ("endian.h", include_str!("../../headers/include/endian.h")),
     ("assert.h", include_str!("../../headers/include/assert.h")),
     ("time.h", include_str!("../../headers/include/time.h")),
     ("utime.h", include_str!("../../headers/include/utime.h")),
@@ -100,11 +114,18 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("pwd.h", include_str!("../../headers/include/pwd.h")),
     ("unistd.h", include_str!("../../headers/include/unistd.h")),
     ("fcntl.h", include_str!("../../headers/include/fcntl.h")),
+    ("syslog.h", include_str!("../../headers/include/syslog.h")),
+    (
+        "execinfo.h",
+        include_str!("../../headers/include/execinfo.h"),
+    ),
     (
         "sys/types.h",
         include_str!("../../headers/include/sys/types.h"),
     ),
     ("sys/uio.h", include_str!("../../headers/include/sys/uio.h")),
+    ("sys/un.h", include_str!("../../headers/include/sys/un.h")),
+    ("net/if.h", include_str!("../../headers/include/net/if.h")),
     (
         "sys/attr.h",
         include_str!("../../headers/include/sys/attr.h"),
@@ -118,6 +139,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/sys/paths.h"),
     ),
     (
+        "sys/param.h",
+        include_str!("../../headers/include/sys/param.h"),
+    ),
+    (
         "copyfile.h",
         include_str!("../../headers/include/copyfile.h"),
     ),
@@ -126,12 +151,65 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/mach/mach_time.h"),
     ),
     (
+        "mach/mach.h",
+        include_str!("../../headers/include/mach/mach.h"),
+    ),
+    (
+        "mach-o/dyld.h",
+        include_str!("../../headers/include/mach-o/dyld.h"),
+    ),
+    (
         "sys/stat.h",
         include_str!("../../headers/include/sys/stat.h"),
     ),
     (
         "sys/mman.h",
         include_str!("../../headers/include/sys/mman.h"),
+    ),
+    (
+        "sys/random.h",
+        include_str!("../../headers/include/sys/random.h"),
+    ),
+    (
+        "sys/syscall.h",
+        include_str!("../../headers/include/sys/syscall.h"),
+    ),
+    ("libintl.h", include_str!("../../headers/include/libintl.h")),
+    ("elf.h", include_str!("../../headers/include/elf.h")),
+    ("link.h", include_str!("../../headers/include/link.h")),
+    (
+        "linux/random.h",
+        include_str!("../../headers/include/linux/random.h"),
+    ),
+    ("pty.h", include_str!("../../headers/include/pty.h")),
+    ("utmp.h", include_str!("../../headers/include/utmp.h")),
+    (
+        "sys/timerfd.h",
+        include_str!("../../headers/include/sys/timerfd.h"),
+    ),
+    (
+        "sys/sendfile.h",
+        include_str!("../../headers/include/sys/sendfile.h"),
+    ),
+    (
+        "sys/eventfd.h",
+        include_str!("../../headers/include/sys/eventfd.h"),
+    ),
+    (
+        "sys/sysmacros.h",
+        include_str!("../../headers/include/sys/sysmacros.h"),
+    ),
+    (
+        "sys/xattr.h",
+        include_str!("../../headers/include/sys/xattr.h"),
+    ),
+    (
+        "sys/mount.h",
+        include_str!("../../headers/include/sys/mount.h"),
+    ),
+    (
+        "sys/statvfs.h",
+        include_str!("../../headers/include/sys/statvfs.h"),
     ),
     (
         "sys/socket.h",
@@ -146,12 +224,21 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/sys/wait.h"),
     ),
     (
+        "sys/resource.h",
+        include_str!("../../headers/include/sys/resource.h"),
+    ),
+    ("wctype.h", include_str!("../../headers/include/wctype.h")),
+    (
         "sys/ioctl.h",
         include_str!("../../headers/include/sys/ioctl.h"),
     ),
     (
         "sys/time.h",
         include_str!("../../headers/include/sys/time.h"),
+    ),
+    (
+        "sys/times.h",
+        include_str!("../../headers/include/sys/times.h"),
     ),
     ("termios.h", include_str!("../../headers/include/termios.h")),
     ("poll.h", include_str!("../../headers/include/poll.h")),
@@ -161,10 +248,56 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("strings.h", include_str!("../../headers/include/strings.h")),
     ("libgen.h", include_str!("../../headers/include/libgen.h")),
+    ("util.h", include_str!("../../headers/include/util.h")),
     ("glob.h", include_str!("../../headers/include/glob.h")),
     ("pthread.h", include_str!("../../headers/include/pthread.h")),
+    (
+        "semaphore.h",
+        include_str!("../../headers/include/semaphore.h"),
+    ),
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
     ("windows.h", include_str!("../../headers/include/windows.h")),
+    (
+        "winapifamily.h",
+        include_str!("../../headers/include/winapifamily.h"),
+    ),
+    (
+        "sdkddkver.h",
+        include_str!("../../headers/include/sdkddkver.h"),
+    ),
+    ("cpuid.h", include_str!("../../headers/include/cpuid.h")),
+    (
+        "winerror.h",
+        include_str!("../../headers/include/winerror.h"),
+    ),
+    ("process.h", include_str!("../../headers/include/process.h")),
+    ("conio.h", include_str!("../../headers/include/conio.h")),
+    (
+        "winsock2.h",
+        include_str!("../../headers/include/winsock2.h"),
+    ),
+    (
+        "ws2tcpip.h",
+        include_str!("../../headers/include/ws2tcpip.h"),
+    ),
+    ("mstcpip.h", include_str!("../../headers/include/mstcpip.h")),
+    ("mswsock.h", include_str!("../../headers/include/mswsock.h")),
+    (
+        "iphlpapi.h",
+        include_str!("../../headers/include/iphlpapi.h"),
+    ),
+    ("ws2bth.h", include_str!("../../headers/include/ws2bth.h")),
+    ("Rpc.h", include_str!("../../headers/include/rpc.h")),
+    ("rpc.h", include_str!("../../headers/include/rpc.h")),
+    (
+        "hvsocket.h",
+        include_str!("../../headers/include/hvsocket.h"),
+    ),
+    (
+        "pshpack1.h",
+        include_str!("../../headers/include/pshpack1.h"),
+    ),
+    ("poppack.h", include_str!("../../headers/include/poppack.h")),
     (
         "winternl.h",
         include_str!("../../headers/include/winternl.h"),

@@ -1,0 +1,1838 @@
+[
+{
+"src": "Programs/python.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/getbuildinfo.c",
+"class": "core",
+"defines": [
+"GITVERSION=\"\"",
+"GITTAG=\"\"",
+"GITBRANCH=\"\""
+],
+"includes": []
+},
+{
+"src": "Parser/token.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/pegen.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/pegen_errors.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/action_helpers.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/parser.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/string_parser.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/peg_api.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/lexer/buffer.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/lexer/lexer.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/lexer/state.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/tokenizer/file_tokenizer.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/tokenizer/readline_tokenizer.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/tokenizer/string_tokenizer.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/tokenizer/utf8_tokenizer.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/tokenizer/helpers.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Parser/myreadline.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/abstract.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/boolobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/bytes_methods.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/bytearrayobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/bytesobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/call.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/capsule.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/cellobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/classobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/codeobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/complexobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/descrobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/enumobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/exceptions.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/genericaliasobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/genobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/fileobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/floatobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/frameobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/funcobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/interpolationobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/iterobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/listobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/longobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/dictobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/odictobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/memoryobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/methodobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/moduleobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/namespaceobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/object.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/obmalloc.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/picklebufobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/rangeobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/setobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/sliceobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/structseq.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/templateobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/tupleobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/typeobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/typevarobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/unicodeobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/unicodectype.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/unionobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/weakrefobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/_contextvars.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/_warnings.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/Python-ast.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/Python-tokenize.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/asdl.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/assemble.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/ast.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/ast_preprocess.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/ast_unparse.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/bltinmodule.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/brc.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/ceval.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/codecs.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/codegen.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/compile.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/context.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/critical_section.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/crossinterp.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/dynamic_annotations.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/errors.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/flowgraph.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/frame.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/frozenmain.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/future.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/gc.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/gc_free_threading.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/gc_gil.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/getargs.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/getcompiler.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/getcopyright.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/getplatform.c",
+"class": "core",
+"defines": [
+"PLATFORM=\"linux\""
+],
+"includes": []
+},
+{
+"src": "Python/getversion.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/ceval_gil.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/hamt.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/hashtable.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/import.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/importdl.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/index_pool.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/initconfig.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/interpconfig.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/instrumentation.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/instruction_sequence.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/intrinsics.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/jit.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/legacy_tracing.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/lock.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/marshal.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/modsupport.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/mysnprintf.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/mystrtoul.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/object_stack.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/optimizer.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/optimizer_analysis.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/optimizer_symbols.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/parking_lot.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pathconfig.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/preconfig.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pyarena.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pyctype.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pyfpe.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pyhash.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pylifecycle.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pymath.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pystate.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pythonrun.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pytime.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/qsbr.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/bootstrap_hash.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/specialize.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/stackrefs.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/structmember.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/symtable.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/sysmodule.c",
+"class": "core",
+"defines": [
+"ABIFLAGS=\"\"",
+"MULTIARCH=\"x86_64-linux-gnu\""
+],
+"includes": []
+},
+{
+"src": "Python/thread.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/traceback.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/tracemalloc.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/uniqueid.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/getopt.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pystrcmp.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pystrtod.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/pystrhex.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/dtoa.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/formatter_unicode.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/fileutils.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/suggestions.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/perf_trampoline.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/perf_jit_trampoline.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/remote_debugging.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/dynload_shlib.c",
+"class": "core",
+"defines": [
+"SOABI=\"cpython-314-x86_64-linux-gnu\""
+],
+"includes": []
+},
+{
+"src": "Modules/config.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/main.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/gcmodule.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/arraymodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_asynciomodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_bisectmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_csv.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_heapqmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_json.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_lsprof.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/rotatingtree.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_pickle.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_queuemodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_randommodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_remote_debugging_module.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_struct.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_interpretersmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_interpchannelsmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_interpqueuesmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_zoneinfo.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/mathmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/cmathmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_statisticsmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_decimal/_decimal.c",
+"class": "builtin",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/binascii.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/md5module.c",
+"class": "builtin",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/sha1module.c",
+"class": "builtin",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/sha2module.c",
+"class": "builtin",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/sha3module.c",
+"class": "builtin",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/blake2module.c",
+"class": "builtin",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/hmacmodule.c",
+"class": "builtin",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/pyexpat.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/expat"
+]
+},
+{
+"src": "Modules/_elementtree.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/expat"
+]
+},
+{
+"src": "Modules/cjkcodecs/_codecs_cn.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/cjkcodecs/_codecs_hk.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/cjkcodecs/_codecs_iso2022.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/cjkcodecs/_codecs_jp.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/cjkcodecs/_codecs_kr.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/cjkcodecs/_codecs_tw.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/cjkcodecs/multibytecodec.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/unicodedata.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/fcntlmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/grpmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/mmapmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_posixsubprocess.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/resource.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/selectmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/socketmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/syslogmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/termios.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_multiprocessing/posixshmem.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_multiprocessing"
+]
+},
+{
+"src": "Modules/_multiprocessing/multiprocessing.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_multiprocessing"
+]
+},
+{
+"src": "Modules/_multiprocessing/semaphore.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_multiprocessing"
+]
+},
+{
+"src": "Modules/atexitmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/faulthandler.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/posixmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/signalmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_tracemalloc.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_suggestions.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_datetimemodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_codecsmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_collectionsmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/errnomodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_io/_iomodule.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_io"
+]
+},
+{
+"src": "Modules/_io/iobase.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_io"
+]
+},
+{
+"src": "Modules/_io/fileio.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_io"
+]
+},
+{
+"src": "Modules/_io/bytesio.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_io"
+]
+},
+{
+"src": "Modules/_io/bufferedio.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_io"
+]
+},
+{
+"src": "Modules/_io/textio.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_io"
+]
+},
+{
+"src": "Modules/_io/stringio.c",
+"class": "builtin",
+"defines": [],
+"includes": [
+"Modules/_io"
+]
+},
+{
+"src": "Modules/itertoolsmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_sre/sre.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_sysconfig.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_threadmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/timemodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_typesmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_typingmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_weakref.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_abc.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_functoolsmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_localemodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_opcode.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_operator.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_stat.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/symtablemodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/pwdmodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_MD5.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_SHA1.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_SHA2.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_SHA3.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_Blake2s.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_Blake2b.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Lib_Memzero0.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_Blake2s_Simd128.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE",
+"HACL_CAN_COMPILE_VEC128"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_Blake2b_Simd256.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE",
+"HACL_CAN_COMPILE_VEC256"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_HMAC.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Streaming_HMAC.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/basearith.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/constants.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/context.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/convolute.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/crt.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/difradix2.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/fnt.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/fourstep.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/io.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/mpalloc.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/mpdecimal.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/numbertheory.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/sixstep.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/_decimal/libmpdec/transpose.c",
+"class": "core",
+"defines": [
+"CONFIG_64=1",
+"ANSI=1"
+],
+"includes": [
+"Modules/_decimal/libmpdec"
+]
+},
+{
+"src": "Modules/expat/xmlparse.c",
+"class": "core",
+"defines": [],
+"includes": [
+"Modules/expat"
+]
+},
+{
+"src": "Modules/expat/xmlrole.c",
+"class": "core",
+"defines": [],
+"includes": [
+"Modules/expat"
+]
+},
+{
+"src": "Modules/expat/xmltok.c",
+"class": "core",
+"defines": [],
+"includes": [
+"Modules/expat"
+]
+},
+{
+"src": "Modules/getpath.c",
+"class": "core",
+"includes": [],
+"defines": [
+"PREFIX=\"/usr/local\"",
+"EXEC_PREFIX=\"/usr/local\"",
+"PLATLIBDIR=\"lib\"",
+"VERSION=\"3.14\"",
+"VPATH=\"\"",
+"PYTHONPATH=\"\"",
+"PYTHONFRAMEWORK=\"\""
+]
+},
+{
+"src": "Python/frozen.c",
+"class": "core",
+"includes": [],
+"defines": []
+}
+]

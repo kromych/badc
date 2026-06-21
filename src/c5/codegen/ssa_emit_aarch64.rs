@@ -54,11 +54,12 @@ use super::aarch64::{
     enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
     enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzu_x_d, enc_fdiv_d,
     enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
-    enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm,
-    enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv,
-    enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stp_pre, enc_str_d_imm,
-    enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm,
-    enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv, load_imm64,
+    enc_ldaxr, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
+    enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
+    enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv,
+    enc_stlxr, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
+    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv,
+    load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
 
@@ -664,12 +665,14 @@ pub(super) fn emit_function(
     data_fixups: &mut Vec<DataFixup>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
     pc_to_native: &mut [usize],
     prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
@@ -691,6 +694,7 @@ pub(super) fn emit_function(
     let tls_index_fixups_snapshot = tls_index_fixups.len();
     let macho_tlv_fixups_snapshot = macho_tlv_fixups.len();
     let macho_tlv_descriptors_snapshot = macho_tlv_descriptors.len();
+    let elf_tpoff_snapshot = elf_tpoff_fixups.len();
 
     emit_prologue(code, func, alloc, frame, abi);
     super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
@@ -845,6 +849,7 @@ pub(super) fn emit_function(
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                         macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                         macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                         return false;
@@ -880,6 +885,8 @@ pub(super) fn emit_function(
                 tls_index_fixups,
                 macho_tlv_fixups,
                 macho_tlv_descriptors,
+                elf_tpoff_fixups,
+                extern_tls_names,
                 &mut current_alloca_top,
                 &emit_param_plan,
             ) {
@@ -897,6 +904,7 @@ pub(super) fn emit_function(
                 user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                 macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                 macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                 return false;
@@ -939,6 +947,7 @@ pub(super) fn emit_function(
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
             return false;
@@ -1006,6 +1015,7 @@ pub(super) fn emit_function(
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                             return false;
@@ -1076,6 +1086,7 @@ pub(super) fn emit_function(
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                             return false;
@@ -1127,6 +1138,7 @@ pub(super) fn emit_function(
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                         macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                         macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                         return false;
@@ -1150,6 +1162,7 @@ pub(super) fn emit_function(
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                         macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                         macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                         return false;
@@ -1173,6 +1186,7 @@ pub(super) fn emit_function(
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
             return false;
@@ -1193,6 +1207,7 @@ pub(super) fn emit_function(
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
+            elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
             macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
             return false;
@@ -1208,6 +1223,7 @@ pub(super) fn emit_function(
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                     macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
@@ -1224,6 +1240,7 @@ pub(super) fn emit_function(
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                     macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
@@ -1240,6 +1257,7 @@ pub(super) fn emit_function(
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                     macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
@@ -1256,6 +1274,7 @@ pub(super) fn emit_function(
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                     macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
@@ -1581,9 +1600,9 @@ fn emit_struct_param_scatter(
     }
     let placements = param_placements(func, abi);
     for (i, agg) in func.param_aggs.iter().enumerate() {
-        if agg.is_none() {
+        let Some(agg_idx) = agg else {
             continue;
-        }
+        };
         let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
             continue;
         };
@@ -1591,18 +1610,26 @@ fn emit_struct_param_scatter(
         if slot >= 0 {
             continue;
         }
-        // Materialise the body local's address into scratch.primary,
-        // then store each eightbyte at offset 8k from it. scratch
-        // (x16/x17) is never an argument register, so the source
-        // registers in `regs` are untouched.
+        // Materialise the body local's address into x16, then store each
+        // unit from its argument register. An integer eightbyte stores at
+        // offset 8k; an HFA member stores at its own offset with its
+        // natural size (d-register for 8 bytes, s-register for 4). x16/x17
+        // are never argument registers, so the source `regs` are untouched.
+        let hfa = super::abi_classify::hfa_member_layout(&func.agg_descs[*agg_idx as usize].fields);
         emit_local_addr(code, Place::IntReg(16), slot, frame);
         for (k, cr) in regs.iter().take(*n as usize).enumerate() {
-            let off = (k as u32) * 8;
             if cr.is_fp {
-                emit(code, enc_fmov_d_to_x(Reg(17), cr.reg));
-                emit(code, enc_str_imm(Reg(17), Reg(16), off));
+                let (off, msize) = hfa
+                    .as_ref()
+                    .and_then(|m| m.get(k).copied())
+                    .unwrap_or(((k as u32) * 8, 8));
+                if msize == 8 {
+                    emit(code, super::aarch64::enc_str_d_imm(cr.reg, Reg(16), off));
+                } else {
+                    emit(code, super::aarch64::enc_str_s_imm(cr.reg, Reg(16), off));
+                }
             } else {
-                emit(code, enc_str_imm(Reg(cr.reg), Reg(16), off));
+                emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
             }
         }
     }
@@ -1725,6 +1752,8 @@ fn emit_inst(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     current_alloca_top: &mut u32,
     param_plan: &[super::ArgPlacement],
 ) -> bool {
@@ -2041,6 +2070,28 @@ fn emit_inst(
             src: s,
             size,
         } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame, scratch),
+        Inst::AtomicRmw {
+            op,
+            addr,
+            value,
+            width,
+        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame, scratch),
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            width,
+        } => emit_atomic_cas(
+            code,
+            dst,
+            *addr,
+            *expected_addr,
+            *desired,
+            *width,
+            alloc,
+            frame,
+            scratch,
+        ),
         Inst::Intrinsic { kind, args } => emit_intrinsic(
             code,
             func,
@@ -2256,6 +2307,8 @@ fn emit_inst(
             tls_index_fixups,
             macho_tlv_fixups,
             macho_tlv_descriptors,
+            elf_tpoff_fixups,
+            extern_tls_names.get(&v).map(|s| s.as_str()),
         ),
         Inst::Phi { .. } => {
             // The value is materialised by the predecessor-exit
@@ -2286,6 +2339,11 @@ fn emit_tls_addr(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
+    // Set for a cross-unit `extern _Thread_local` access: the variable's
+    // name. The descriptor is keyed by symbol (the linker resolves the
+    // offset) rather than by the placeholder `offset`.
+    tls_extern_sym: Option<&str>,
 ) -> bool {
     use super::aarch64::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
     let Some(rd) = int_reg(dst) else {
@@ -2294,26 +2352,61 @@ fn emit_tls_addr(
     };
     match target {
         Target::LinuxAarch64 => {
-            let imm = (offset + 16) as u32;
+            // AAPCS64 variant-1: the static TLS block sits above the thread
+            // pointer after a 16-byte TCB reserve, so a variable at
+            // `offset` in its unit's block reads `tp + 16 + offset`. A
+            // unit-local access bakes that immediate; a cross-unit extern
+            // emits the 16-byte reserve as a placeholder. Both record an
+            // `elf_tpoff_fixups` entry so the linker rebases the immediate
+            // when more than one unit contributes TLS storage (Local) or
+            // resolves it by symbol (Extern). The 12-bit add immediate caps
+            // a single unit's TLS at 4080 bytes; a wider block would need
+            // the two-add tprel_hi12 / lo12 sequence (TODO).
+            let imm = if tls_extern_sym.is_some() {
+                16u32
+            } else {
+                (offset + 16) as u32
+            };
             if imm >= 4096 {
-                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
+                bail_msg("TlsAddr: tpoff exceeds 12-bit add immediate");
                 return false;
             }
             emit(code, enc_mrs_tpidr_el0(rd));
+            let add_off = code.len();
             emit(code, enc_add_imm(rd, rd, imm));
+            elf_tpoff_fixups.push(super::ElfTpoffFixup {
+                imm_offset: add_off,
+                target: match tls_extern_sym {
+                    Some(name) => super::ElfTpoffTarget::Extern(name.into()),
+                    None => super::ElfTpoffTarget::Local(offset as u64),
+                },
+            });
             true
         }
         Target::WindowsAarch64 => {
-            if offset >= 4096 {
-                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
-                return false;
-            }
             // Windows/aarch64 TLS: x18 is the TEB pointer per the
             // platform ABI; TEB+0x58 holds the per-thread TLS
             // array. Index by `_tls_index` (loaded into x17) and
-            // pick the slot for our module. x16 and x17 are
-            // AAPCS64 scratches outside the SSA allocator pool
-            // (callee=[20..27], caller=[9..15]).
+            // pick the slot for this module; x16 then holds the
+            // module's TLS block base. x16 and x17 are AAPCS64
+            // scratches outside the SSA allocator pool
+            // (callee=[20..27], caller=[9..15]). A unit-local
+            // access bakes the variable's offset within its own
+            // block into the final `add`. A cross-unit `extern
+            // _Thread_local` offset is unknown until the link
+            // merges the TLS blocks, so emit a 0 placeholder and
+            // record an `elf_tpoff_fixups` entry keyed by symbol;
+            // the linker resolves it against the merged TLS layout
+            // and rewrites the `add` imm12. The TEB path indexes a
+            // module-relative block, so the offset baked in is the
+            // raw block offset with no thread-pointer bias -- the
+            // linker tells this path apart from the variant-1 ELF
+            // path by the `_tls_index` fixup the TEB sequence
+            // always records.
+            if tls_extern_sym.is_none() && offset >= 4096 {
+                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
+                return false;
+            }
             emit(code, enc_ldr_imm(Reg(16), Reg(18), 0x58));
             let pair_off = code.len();
             tls_index_fixups.push(super::TlsIndexFixup {
@@ -2322,21 +2415,59 @@ fn emit_tls_addr(
             emit(code, enc_adrp(Reg(17), 0));
             emit(code, enc_ldr32_imm(Reg(17), Reg(17), 0));
             emit(code, enc_ldr_reg_lsl3(Reg(16), Reg(16), Reg(17)));
-            emit(code, enc_add_imm(rd, Reg(16), offset as u32));
+            let add_off = code.len();
+            let imm = if tls_extern_sym.is_some() {
+                0
+            } else {
+                offset as u32
+            };
+            emit(code, enc_add_imm(rd, Reg(16), imm));
+            // Both forms record a fixup so the linker rebases the imm12 to
+            // the variable's offset in the merged TLS block: a unit-local
+            // access is correct only when its defining unit sits at block
+            // base 0, and the same variable read `extern` from another unit
+            // must resolve to the identical offset.
+            elf_tpoff_fixups.push(super::ElfTpoffFixup {
+                imm_offset: add_off,
+                target: match tls_extern_sym {
+                    Some(name) => super::ElfTpoffTarget::Extern(name.into()),
+                    None => super::ElfTpoffTarget::Local(offset as u64),
+                },
+            });
             true
         }
         Target::MacOSAarch64 => {
-            let descriptor_index = match macho_tlv_descriptors
-                .iter()
-                .position(|d| d.offset_in_block == offset as u64)
-            {
-                Some(i) => i,
-                None => {
-                    macho_tlv_descriptors.push(super::MachoTlvDescriptor {
-                        offset_in_block: offset as u64,
-                    });
-                    macho_tlv_descriptors.len() - 1
-                }
+            // A unit-local access dedups by offset (one descriptor per
+            // variable). A cross-unit extern access dedups by symbol --
+            // its `offset_in_block` is a placeholder the linker fills, so
+            // distinct externs must not collapse onto one offset-0 slot.
+            let descriptor_index = match tls_extern_sym {
+                Some(name) => match macho_tlv_descriptors
+                    .iter()
+                    .position(|d| d.symbol.as_deref() == Some(name))
+                {
+                    Some(i) => i,
+                    None => {
+                        macho_tlv_descriptors.push(super::MachoTlvDescriptor {
+                            offset_in_block: 0,
+                            symbol: Some(name.into()),
+                        });
+                        macho_tlv_descriptors.len() - 1
+                    }
+                },
+                None => match macho_tlv_descriptors
+                    .iter()
+                    .position(|d| d.symbol.is_none() && d.offset_in_block == offset as u64)
+                {
+                    Some(i) => i,
+                    None => {
+                        macho_tlv_descriptors.push(super::MachoTlvDescriptor {
+                            offset_in_block: offset as u64,
+                            symbol: None,
+                        });
+                        macho_tlv_descriptors.len() - 1
+                    }
+                },
             };
             let adrp_off = code.len();
             macho_tlv_fixups.push(super::MachoTlvFixup {
@@ -3008,6 +3139,12 @@ fn emit_intrinsic(
             emit(code, 0xD503_203Fu32);
             true
         }
+        I::X87StoreControlWord | I::X87LoadControlWord => {
+            // The x87 FPU control word is x86-only; AArch64 source never
+            // reaches for it (the guarding HAVE_GCC_ASM_FOR_X87 is unset).
+            bail_msg("x87 control word intrinsic is x86-only");
+            false
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs
@@ -3091,6 +3228,21 @@ fn emit_intrinsic(
             bail_msg("intrinsic: bit builtin reached codegen");
             false
         }
+        I::AtomicLoad
+        | I::AtomicStore
+        | I::AtomicExchange
+        | I::AtomicFetchAdd
+        | I::AtomicFetchSub
+        | I::AtomicFetchAnd
+        | I::AtomicFetchOr
+        | I::AtomicFetchXor
+        | I::AtomicCompareExchangeStrong => {
+            // C11 atomic operations are lowered to load / store /
+            // read-modify-write at the call site; they never reach
+            // codegen as an `Inst::Intrinsic`.
+            bail_msg("intrinsic: atomic op reached codegen");
+            false
+        }
     }
 }
 
@@ -3141,7 +3293,9 @@ fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+    if !marshal_args(
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+    ) {
         return false;
     }
     plt_call_fixups.push(PltCallFixup {
@@ -3359,7 +3513,9 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
-        if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+        if !marshal_args(
+            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        ) {
             return false;
         }
         // A variadic callee may still return an aggregate by value; load
@@ -3408,7 +3564,9 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+    if !marshal_args(
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+    ) {
         return false;
     }
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
@@ -3450,7 +3608,10 @@ fn setup_indirect_result(
 ) {
     if let Some(ai) = ret_agg
         && agg_descs[ai as usize].size > 16
+        && super::abi_classify::hfa_member_layout(&agg_descs[ai as usize].fields).is_none()
     {
+        // An HFA larger than 16 bytes (three or four members) still returns
+        // in v-registers, not through x8.
         emit_local_addr(code, Place::IntReg(8), ret_slot_off, frame);
     }
 }
@@ -3471,8 +3632,26 @@ fn finish_call_result(
     fp_return: bool,
 ) {
     if let Some(ai) = ret_agg {
-        let size = agg_descs[ai as usize].size;
-        if size <= 16 {
+        let desc = &agg_descs[ai as usize];
+        let size = desc.size;
+        if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
+            // AAPCS64 6.9: an HFA result arrives with member k in v[k].
+            // Store each into the result temp at its byte offset.
+            emit_local_addr(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            for (k, (off, msize)) in members.iter().enumerate() {
+                if *msize == 8 {
+                    emit(
+                        code,
+                        super::aarch64::enc_str_d_imm(k as u8, scratch.primary, *off),
+                    );
+                } else {
+                    emit(
+                        code,
+                        super::aarch64::enc_str_s_imm(k as u8, scratch.primary, *off),
+                    );
+                }
+            }
+        } else if size <= 16 {
             emit_local_addr(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
             emit(code, enc_str_imm(Reg(0), scratch.primary, 0));
             if size > 8 {
@@ -3624,7 +3803,9 @@ fn emit_call_indirect(
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
-        if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+        if !marshal_args(
+            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        ) {
             return false;
         }
         setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
@@ -3810,6 +3991,222 @@ fn emit_mcpy(
         let sp_off = spill_off(frame, slot);
         emit_sp_str_x_auto(code, dst_r, sp_off);
     }
+    true
+}
+
+/// Bytes the atomic lowering reserves to save the four borrowed
+/// working registers x9..x12 (two `stp` pairs). 16-byte aligned so the
+/// `stp`/`ldp` pre/post-index forms apply.
+const ATOMIC_SAVE_BYTES: u32 = 32;
+
+/// Save x9..x12 (the borrowed working registers) onto the stack and
+/// return their reload site for [`atomic_restore_working`]. The SSA
+/// emit sees only `Place`s, not liveness past this instruction, so a
+/// value the allocator parked in any caller-pool register survives the
+/// save / restore. sp moves down by [`ATOMIC_SAVE_BYTES`].
+fn atomic_save_working(code: &mut Vec<u8>) {
+    emit(
+        code,
+        enc_stp_pre(Reg(9), Reg(10), Reg(31), -(ATOMIC_SAVE_BYTES as i32)),
+    );
+    emit(code, enc_stp_pre(Reg(11), Reg(12), Reg(31), 0));
+}
+
+/// Restore x9..x12 saved by [`atomic_save_working`]. Run after the
+/// result is held in a reserved scratch (x16 / x17), since the result
+/// must outlive the reload.
+fn atomic_restore_working(code: &mut Vec<u8>) {
+    emit(code, enc_ldp_post(Reg(11), Reg(12), Reg(31), 0));
+    emit(
+        code,
+        enc_ldp_post(Reg(9), Reg(10), Reg(31), ATOMIC_SAVE_BYTES as i32),
+    );
+}
+
+/// Materialise an operand into a designated register, copying it out
+/// of its allocator register when needed so the caller can clobber the
+/// source. `sp_shift` accounts for the working-register save area.
+fn atomic_operand_into(
+    code: &mut Vec<u8>,
+    value: super::super::ir::ValueId,
+    target: Reg,
+    frame: Frame,
+    sp_shift: u32,
+    alloc: &Allocation,
+) -> bool {
+    let place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    match materialize_int_shifted(code, place, target, frame, sp_shift) {
+        Some(r) => {
+            if r.0 != target.0 {
+                emit_mov_reg(code, target, r);
+            }
+            true
+        }
+        None => false,
+    }
+}
+
+/// Write the result `src` of an atomic op into the inst's `dst`
+/// `Place`. Run after the working registers are restored so a spilled
+/// result lands at the unshifted sp offset.
+fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != src.0 {
+            emit_mov_reg(code, rd, src);
+        }
+    } else if let Place::Spill(slot) = dst {
+        let sp_off = spill_off(frame, slot);
+        emit_sp_str_x_auto(code, src, sp_off);
+    }
+}
+
+/// C11 7.17.7.2-7.17.7.5 atomic read-modify-write via an LDAXR / STLXR
+/// retry loop (ARM ARM C6.2): load-acquire the prior value, compute the
+/// new value, store-release it exclusively, and retry while the monitor
+/// was lost. The acquire / release pair carries the
+/// sequentially-consistent ordering. The prior value is the result.
+#[allow(clippy::too_many_arguments)]
+fn emit_atomic_rmw(
+    code: &mut Vec<u8>,
+    dst: Place,
+    op: super::super::ir::AtomicRmwOp,
+    addr: super::super::ir::ValueId,
+    value: super::super::ir::ValueId,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use super::super::ir::AtomicRmwOp as Op;
+    // x9 = addr, x10 = operand (borrowed, saved); x16 = old (result,
+    // reserved so it survives the reload); x11 = new, w12 = status.
+    let a = Reg(9);
+    let operand = Reg(10);
+    let old = scratch.primary; // x16
+    let new = Reg(11);
+    let status = Reg(12);
+    atomic_save_working(code);
+    if !atomic_operand_into(code, addr, a, frame, ATOMIC_SAVE_BYTES, alloc)
+        || !atomic_operand_into(code, value, operand, frame, ATOMIC_SAVE_BYTES, alloc)
+    {
+        bail_msg("AtomicRmw: operand not int reg / spill");
+        return false;
+    }
+    let loop_start = code.len();
+    emit(code, enc_ldaxr(old, a, width));
+    let new_reg = match op {
+        Op::Xchg => operand,
+        Op::Add => {
+            emit(code, enc_add_reg(new, old, operand));
+            new
+        }
+        Op::Sub => {
+            emit(code, enc_sub_reg(new, old, operand));
+            new
+        }
+        Op::And => {
+            emit(code, enc_and_reg(new, old, operand));
+            new
+        }
+        Op::Or => {
+            emit(code, enc_orr_reg(new, old, operand));
+            new
+        }
+        Op::Xor => {
+            emit(code, enc_eor_reg(new, old, operand));
+            new
+        }
+    };
+    emit(code, enc_stlxr(status, new_reg, a, width));
+    // cbnz w12, loop -- retry while the store-exclusive failed.
+    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(code, enc_cbnz(status, back as i32));
+    atomic_restore_working(code);
+    write_atomic_result(code, dst, old, frame);
+    true
+}
+
+/// C11 7.17.7.4 atomic compare-and-exchange via an LDAXR / STLXR retry
+/// loop (ARM ARM C6.2). On a match the loop store-releases `desired`
+/// and the result is 1; on a mismatch the observed value is written
+/// back into `*expected_addr` and the result is 0.
+#[allow(clippy::too_many_arguments)]
+fn emit_atomic_cas(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: super::super::ir::ValueId,
+    expected_addr: super::super::ir::ValueId,
+    desired: super::super::ir::ValueId,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    // x9 = addr, x10 = expected_addr, x11 = desired (borrowed, saved);
+    // x16 = cur (result, reserved); x12 = expected value; w17 = status.
+    let a = Reg(9);
+    let exp_addr = Reg(10);
+    let desired_r = Reg(11);
+    let cur = scratch.primary; // x16
+    let expected = Reg(12);
+    let status = scratch.secondary; // x17
+    atomic_save_working(code);
+    if !atomic_operand_into(code, addr, a, frame, ATOMIC_SAVE_BYTES, alloc)
+        || !atomic_operand_into(
+            code,
+            expected_addr,
+            exp_addr,
+            frame,
+            ATOMIC_SAVE_BYTES,
+            alloc,
+        )
+        || !atomic_operand_into(code, desired, desired_r, frame, ATOMIC_SAVE_BYTES, alloc)
+    {
+        bail_msg("AtomicCas: operand not int reg / spill");
+        return false;
+    }
+    // Load the comparand once; `*expected_addr` is a thread-local object
+    // stable across the loop. Sub-width loads zero-extend, matching the
+    // zero-extended LDAXR result so the 64-bit compare is exact.
+    match width {
+        1 => emit(code, enc_ldrb_imm(expected, exp_addr, 0)),
+        2 => emit(code, enc_ldrh_imm(expected, exp_addr, 0)),
+        4 => emit(code, enc_ldr32_imm(expected, exp_addr, 0)),
+        _ => emit(code, enc_ldr_imm(expected, exp_addr, 0)),
+    }
+    let loop_start = code.len();
+    emit(code, enc_ldaxr(cur, a, width));
+    emit(code, enc_cmp_reg(cur, expected));
+    // b.ne fail -- patched once the failure path's offset is known.
+    emit(code, enc_b_cond(Cond::Ne, 0));
+    let to_fail = code.len() - 4;
+    emit(code, enc_stlxr(status, desired_r, a, width));
+    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(code, enc_cbnz(status, back as i32));
+    // Success: result = 1, branch past the failure path.
+    emit(code, enc_movz(cur, 1, 0));
+    emit(code, enc_b(0));
+    let to_done = code.len() - 4;
+    // Failure: write the observed value back to *expected_addr, result = 0.
+    let fail_lbl = code.len();
+    let delta = ((fail_lbl - to_fail) / 4) as i32;
+    code[to_fail..to_fail + 4].copy_from_slice(&enc_b_cond(Cond::Ne, delta).to_le_bytes());
+    match width {
+        1 => emit(code, enc_strb_imm(cur, exp_addr, 0)),
+        2 => emit(code, enc_strh_imm(cur, exp_addr, 0)),
+        4 => emit(code, enc_str32_imm(cur, exp_addr, 0)),
+        _ => emit(code, enc_str_imm(cur, exp_addr, 0)),
+    }
+    emit(code, enc_movz(cur, 0, 0));
+    let done_lbl = code.len();
+    let delta = ((done_lbl - to_done) / 4) as i32;
+    code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
+    atomic_restore_working(code);
+    write_atomic_result(code, dst, cur, frame);
     true
 }
 
@@ -5752,6 +6149,8 @@ fn marshal_args(
     alloc: &Allocation,
     scratch: &ScratchPool,
     frame: Frame,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
 ) -> bool {
     let arg_place = |i: usize| -> Place {
         alloc
@@ -5828,6 +6227,47 @@ fn marshal_args(
         }
     }
 
+    // AAPCS64 6.8.2 HFA arguments: each member passes in its own FP
+    // register, loaded from the source aggregate's address. Run after the
+    // scalar-FP moves (so any d-register source they read is consumed) and
+    // before the integer marshal (so the source address, still in an
+    // integer register, is not yet overwritten). Members are memory loads,
+    // so they join no FP move cycle; the base goes through scratch.primary,
+    // reused per aggregate. Integer-class `StructRegs` (regs[0] is a GPR)
+    // are left to the eightbyte path below.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let super::ArgPlacement::StructRegs { regs, n } = placement else {
+            continue;
+        };
+        if n == 0 || !regs[0].is_fp {
+            continue;
+        }
+        let members = arg_aggs.get(i).copied().flatten().and_then(|idx| {
+            super::abi_classify::hfa_member_layout(&agg_descs[idx as usize].fields)
+        });
+        let base = match materialize_int_shifted(
+            code,
+            arg_place(i),
+            scratch.primary,
+            frame,
+            plan.scratch_bytes,
+        ) {
+            Some(r) => r,
+            None => return false,
+        };
+        for (k, cr) in regs.iter().take(n as usize).enumerate() {
+            let (off, msize) = members
+                .as_ref()
+                .and_then(|m| m.get(k).copied())
+                .unwrap_or(((k as u32) * 8, 8));
+            if msize == 8 {
+                emit(code, super::aarch64::enc_ldr_d_imm(cr.reg, base, off));
+            } else {
+                emit(code, super::aarch64::enc_ldr_s_imm(cr.reg, base, off));
+            }
+        }
+    }
+
     // Integer-register placements plus aggregate base addresses are
     // one parallel register move. A scalar `IntReg` arg moves
     // src->target; a `StructRegs` arg positions its base address into
@@ -5849,7 +6289,8 @@ fn marshal_args(
                     int_moves.push((s, r));
                 }
             }
-            super::ArgPlacement::StructRegs { regs, n } if n > 0 => {
+            // HFA aggregates (regs[0] is an FP register) loaded above.
+            super::ArgPlacement::StructRegs { regs, n } if n > 0 && !regs[0].is_fp => {
                 let dst = regs[0].reg;
                 if let Place::IntReg(s) = arg_place(i)
                     && s != dst
@@ -5896,6 +6337,7 @@ fn marshal_args(
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::StructRegs { regs, n } = placement
             && n > 0
+            && !regs[0].is_fp
             && !matches!(arg_place(i), Place::IntReg(_))
         {
             let dst = regs[0].reg;
@@ -5922,11 +6364,9 @@ fn marshal_args(
     // so every eightbyte register is general-purpose.
     for (i, &placement) in plan.placements.iter().enumerate() {
         match placement {
-            super::ArgPlacement::StructRegs { regs, n } => {
-                debug_assert!(
-                    !regs.iter().take(n as usize).any(|c| c.is_fp),
-                    "aarch64 marshal: floating-point aggregate eightbyte not supported"
-                );
+            // Integer-class aggregate: load the eightbytes from the base in
+            // regs[0]. An HFA (regs[0] is an FP register) loaded above.
+            super::ArgPlacement::StructRegs { regs, n } if !regs[0].is_fp => {
                 let base = regs[0].reg;
                 for k in (1..n as usize).rev() {
                     emit(
@@ -6001,7 +6441,8 @@ fn emit_return(
     // supplied x8 pointer (saved to `indirect_result_slot` by the
     // prologue) and that pointer is returned in x0.
     if let Some(ai) = func.ret_agg {
-        let size = func.agg_descs[ai as usize].size;
+        let desc = &func.agg_descs[ai as usize];
+        let size = desc.size;
         let place = alloc
             .places
             .get(value as usize)
@@ -6012,7 +6453,18 @@ fn emit_return(
             emit_mov_reg(code, scratch.primary, saddr);
         }
         let base = scratch.primary;
-        if size <= 16 {
+        if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
+            // AAPCS64 6.9: a homogeneous floating-point aggregate returns
+            // member k in v[k] (d-register for an F64 member, s-register
+            // for an F32). Load each from its byte offset in the source.
+            for (k, (off, msize)) in members.iter().enumerate() {
+                if *msize == 8 {
+                    emit(code, super::aarch64::enc_ldr_d_imm(k as u8, base, *off));
+                } else {
+                    emit(code, super::aarch64::enc_ldr_s_imm(k as u8, base, *off));
+                }
+            }
+        } else if size <= 16 {
             if size > 8 {
                 emit(code, enc_ldr_imm(Reg(1), base, 8));
             }
@@ -6174,6 +6626,8 @@ mod tests {
         let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
         let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
             alloc::collections::BTreeMap::new();
+        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+            alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
@@ -6190,12 +6644,14 @@ mod tests {
             &mut data_fx,
             &mut user_data_refs,
             &extern_data_names,
+            &extern_tls_names,
             &mut pf_fx,
             &imps,
             &variadic_targets,
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
+            &mut Vec::new(),
             &mut pc_to_native,
             &mut prologue_native,
             &mut ssa_line_rows,
@@ -6331,6 +6787,8 @@ mod tests {
         let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
         let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
             alloc::collections::BTreeMap::new();
+        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+            alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
@@ -6347,12 +6805,14 @@ mod tests {
             &mut data_fx,
             &mut user_data_refs,
             &extern_data_names,
+            &extern_tls_names,
             &mut pf_fx,
             &imps,
             &variadic_targets,
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
+            &mut Vec::new(),
             &mut pc_to_native,
             &mut prologue_native,
             &mut ssa_line_rows,
@@ -6387,6 +6847,8 @@ mod tests {
         let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
         let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
             alloc::collections::BTreeMap::new();
+        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+            alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
@@ -6403,12 +6865,14 @@ mod tests {
             &mut data_fx,
             &mut user_data_refs,
             &extern_data_names,
+            &extern_tls_names,
             &mut pf_fx,
             &imps,
             &variadic_targets,
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
+            &mut Vec::new(),
             &mut pc_to_native,
             &mut prologue_native,
             &mut ssa_line_rows,

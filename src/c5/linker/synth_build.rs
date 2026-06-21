@@ -37,8 +37,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::{
-    Build, CopyRelocReq, DataFixup, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
-    ResolvedImports, Target, write_native_image,
+    Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, FuncFixup, GotFixup,
+    OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target, write_native_image,
 };
 use crate::c5::error::C5Error;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
@@ -60,6 +60,35 @@ pub fn write_native_image_from_merged(
     target: Target,
     shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
+    write_native_image_from_merged_ex(
+        merged,
+        plt,
+        entry_name,
+        subsystem,
+        output_kind,
+        target,
+        shared_lib_name,
+        false,
+        false,
+    )
+}
+
+/// As [`write_native_image_from_merged`], plus `--export-all` /
+/// `--export-data`: for an ELF executable, add every defined non-static
+/// function (`export_all`) and/or data global (`export_data`) to
+/// `.dynsym` for `dlopen` resolution.
+#[allow(clippy::too_many_arguments)]
+pub fn write_native_image_from_merged_ex(
+    merged: &MergedNative,
+    plt: &[PltTrampoline],
+    entry_name: &str,
+    subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    output_kind: OutputKind,
+    target: Target,
+    shared_lib_name: Option<&str>,
+    export_all: bool,
+    export_data: bool,
+) -> Result<Vec<u8>, C5Error> {
     let (program, build) = synth_program_and_build(
         merged,
         plt,
@@ -68,10 +97,13 @@ pub fn write_native_image_from_merged(
         output_kind,
         target,
         shared_lib_name,
+        export_all,
+        export_data,
     )?;
     write_native_image(&program, &build, target)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn synth_program_and_build(
     merged: &MergedNative,
     plt: &[PltTrampoline],
@@ -80,6 +112,8 @@ fn synth_program_and_build(
     output_kind: OutputKind,
     target: Target,
     shared_lib_name: Option<&str>,
+    export_all: bool,
+    export_data: bool,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -103,11 +137,13 @@ fn synth_program_and_build(
 
     let program = Program {
         data: Vec::new(),
+        data_object_starts: Vec::new(),
         entry_pc: 0,
         warnings: Vec::new(),
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
         data_relocs: data_relocs.clone(),
+        extern_data_relocs: Vec::new(),
         code_relocs: code_relocs.clone(),
         exports: exports.clone(),
         dylibs: Vec::new(),
@@ -181,6 +217,41 @@ fn synth_program_and_build(
         }
     }
 
+    // Per-function Win64 unwind descriptors for the x86_64 PE writer.
+    // The merged image holds the final `.text` and each function's
+    // begin offset (identity `pc_to_native`); the end is the next
+    // function's begin. The prologue layout is recovered from the
+    // emitted bytes by this backend's prologue-grammar decoder
+    // (`decode_x86_64_prologue_unwind`), keyed on the post-prologue
+    // anchor that survives the link. Other targets leave it empty.
+    let fn_unwind: Vec<crate::c5::codegen::FnUnwind> = if target == Target::WindowsX64 {
+        let mut begins: Vec<u32> = func_ent_pcs.iter().map(|&p| p as u32).collect();
+        begins.sort_unstable();
+        begins.dedup();
+        let text_len = merged.text.len() as u32;
+        begins
+            .iter()
+            .enumerate()
+            .map(|(i, &begin)| {
+                let end = begins.get(i + 1).copied().unwrap_or(text_len);
+                // No anchor (synthetic trampoline / no standard
+                // prologue) -> frameless leaf covering [begin, end).
+                let prologue_end = func_prologue_native
+                    .get(&(begin as usize))
+                    .map(|&p| p as u32)
+                    .unwrap_or(begin);
+                crate::c5::codegen::decode_x86_64_prologue_unwind(
+                    &merged.text,
+                    begin,
+                    end,
+                    prologue_end,
+                )
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     // Resolve each data-import copy relocation against the merged
     // symbol table. The local data object named in the binding must be
     // defined in the image (e.g. runtime.c's `environ`); carry its
@@ -204,10 +275,57 @@ fn synth_program_and_build(
         });
     }
 
+    // Export an executable's default-visibility global symbols so a
+    // dynamically loaded module resolves them (a Python C extension
+    // binding `PyFloat_Type` and the rest of the C-API against the
+    // interpreter executable). macOS publishes every global of every
+    // executable through the Mach-O symtab. ELF splits the same coverage
+    // across two flags matching the system toolchain's `-rdynamic`:
+    // `--export-all` adds functions (STT_FUNC), `--export-data` adds data
+    // globals (STT_OBJECT). Both gate the export because it widens the
+    // global symbol scope. Resolved from `merged.defined` at link time;
+    // shared libraries use `exports`, and the PE writer ignores the field.
+    let is_exec = output_kind == OutputKind::Executable;
+    let macos_exec = target == Target::MacOSAarch64 && is_exec;
+    let elf_exec = matches!(target, Target::LinuxX64 | Target::LinuxAarch64) && is_exec;
+    let export_funcs = macos_exec || (elf_exec && export_all);
+    let export_data_globals = macos_exec || (elf_exec && export_data);
+    let dynamic_exports: Vec<DynamicExport> = if export_funcs || export_data_globals {
+        merged
+            .defined
+            .iter()
+            .filter_map(|(name, sym)| {
+                if name.is_empty() {
+                    return None;
+                }
+                let section = match sym.section {
+                    NativeSymSection::Text if export_funcs => DynamicExportSection::Text,
+                    NativeSymSection::Data if export_data_globals => DynamicExportSection::Data,
+                    // TODO: a zero-init (Bss) global is not dynamically
+                    // exportable. Its `value` here is the pre-compaction data
+                    // offset; bss compaction (codegen) later relocates the
+                    // storage past the file image, so the export would bind to
+                    // a stale address. A fix must remap export offsets through
+                    // compaction and tag the bss section in each writer.
+                    _ => return None,
+                };
+                Some(DynamicExport {
+                    name: name.clone(),
+                    section,
+                    offset: sym.value,
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     let build = Build {
         copy_relocs,
+        dynamic_exports,
         text: merged.text.clone(),
         data: merged.data.clone(),
+        bss_size: merged.bss_size as i64,
         entry_offset,
         got_fixups,
         data_fixups,
@@ -217,6 +335,8 @@ fn synth_program_and_build(
         func_names,
         func_prologue_native,
         promoted_local_slots: alloc::collections::BTreeMap::new(),
+        coalesced_slot_remap: alloc::collections::BTreeMap::new(),
+        fn_unwind,
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),
         user_extern_data_refs: Vec::new(),
@@ -243,9 +363,18 @@ fn synth_program_and_build(
         macho_tlv_descriptors: merged
             .macho_tlv_descriptors
             .iter()
-            .map(|&offset_in_block| crate::c5::codegen::MachoTlvDescriptor { offset_in_block })
+            .map(|&offset_in_block| crate::c5::codegen::MachoTlvDescriptor {
+                offset_in_block,
+                // The merged descriptors are already resolved to final
+                // offsets; no symbol resolution remains.
+                symbol: None,
+            })
             .collect(),
+        // The linker patches each TLS access's TPOFF immediate directly
+        // in the merged `.text`, so the final-image build carries none.
+        elf_tpoff_fixups: alloc::vec![],
         data_relocs,
+        extern_data_relocs: Vec::new(),
         code_relocs,
         exports: exports.clone(),
         output_kind,
@@ -463,9 +592,13 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
         got_fixups.push(GotFixup {
             adrp_offset: tramp.text_offset,
             import_index: tramp.import_index,
+            // Trampolines are branched to via the IAT, not read as
+            // data; the writer patches them with an IAT lookup.
+            is_data_load: false,
         });
     }
 
+    let data_imports = &merged.data_import_indices;
     for reloc in &merged.pending_imports {
         match merged.machine {
             NativeMachine::Aarch64 => {
@@ -477,7 +610,13 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
                 )?;
             }
             NativeMachine::X86_64 => {
-                project_x86_64_pending(reloc, &mut got_fixups, &mut data_fixups, &mut func_fixups)?;
+                project_x86_64_pending(
+                    reloc,
+                    data_imports,
+                    &mut got_fixups,
+                    &mut data_fixups,
+                    &mut func_fixups,
+                )?;
             }
         }
     }
@@ -531,9 +670,13 @@ fn project_aarch64_pending(
                 Ok(())
             }
             NativeSymSection::Undef => {
+                // aarch64 loads the slot via adrp + ldr for both
+                // call thunks and data references, so the data-load
+                // flag is irrelevant here.
                 got_fixups.push(GotFixup {
                     adrp_offset: reloc.text_offset as usize,
                     import_index: reloc.import_index,
+                    is_data_load: false,
                 });
                 Ok(())
             }
@@ -549,6 +692,7 @@ fn project_aarch64_pending(
 
 fn project_x86_64_pending(
     reloc: &super::link::PendingImportReloc,
+    data_imports: &alloc::collections::BTreeSet<usize>,
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
@@ -605,9 +749,16 @@ fn project_x86_64_pending(
             Ok(())
         }
         NativeSymSection::Undef => {
+            // A data import re-parked by `emit_x86_64_plt` reaches
+            // here with no call thunk; its `lea reg, [rip+disp32]`
+            // must become a `mov reg, [rip+disp32]` loading the IAT
+            // slot's value. A function import flows through its
+            // trampoline GotFixup and takes the IAT-lookup form.
+            let is_data_load = data_imports.contains(&reloc.import_index);
             got_fixups.push(GotFixup {
                 adrp_offset: instr_offset,
                 import_index: reloc.import_index,
+                is_data_load,
             });
             Ok(())
         }
@@ -622,10 +773,20 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
     let mut code_relocs: Vec<CodeReloc> = Vec::new();
     for r in &merged.data_abs_relocs {
         match r.target_section {
-            NativeSymSection::Data | NativeSymSection::Bss => {
+            NativeSymSection::Data => {
                 data_relocs.push(DataReloc {
                     data_offset: r.slot_offset,
                     target_offset: r.target_offset,
+                });
+            }
+            NativeSymSection::Bss => {
+                // Bss sits past `.data` at runtime; the per-format writer
+                // maps a data offset >= data length into the zero-fill
+                // tail, so shift the bss-relative target by the merged
+                // data length (mirrors image::patch_data_abs_relocs).
+                data_relocs.push(DataReloc {
+                    data_offset: r.slot_offset,
+                    target_offset: merged.data.len() as u64 + r.target_offset,
                 });
             }
             NativeSymSection::Text => {

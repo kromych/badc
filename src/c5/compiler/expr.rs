@@ -289,6 +289,10 @@ impl Compiler {
             if !is_wide {
                 self.data.push(0);
             }
+            // Record the resolved object start (after adjacent-literal
+            // concatenation and the trailing NUL) for static DCE
+            // boundaries. Interior part starts are not recorded.
+            self.data_object_starts.push(start_offset);
             self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
             self.ty = Ty::Ptr as i64;
             // Dual-emit: capture the decayed `char *` rvalue so
@@ -312,23 +316,22 @@ impl Compiler {
             // binary op, assignment) finds the value on
             // `ast_acc`.
             self.ast_emit_int_lit(total_bytes, self.ty);
-        } else if self.lex.tk == Token::Id
-            && !self.current_function_name.is_empty()
-            && matches!(
-                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                "__func__" | "__FUNCTION__" | "__PRETTY_FUNCTION__"
-            )
-        {
+        } else if self.lex.tk == Token::Alignof {
+            // C11 6.5.3.4: `_Alignof ( type-name )`, a compile-time
+            // constant. Emit the alignment as a runtime immediate and
+            // pin the type at `int`, matching the `sizeof` site.
+            self.next()?;
+            let align = self.alignof_operand_bytes()?;
+            self.emit_imm(align);
+            self.ty = Ty::Int as i64;
+            self.ast_emit_int_lit(align, self.ty);
+        } else if self.is_func_name_ident() {
             // C99 6.4.2.2: __func__ is implicitly declared as
-            // `static const char __func__[] = "function-name";` at
-            // the start of every function body. GCC predates the
-            // standard with __FUNCTION__ / __PRETTY_FUNCTION__ as
-            // aliases. The bytes are appended to the data segment
-            // and the expression's value is the pointer to them.
-            let fn_name = self.current_function_name.clone();
-            let offset = self.data.len() as i64;
-            self.data.extend_from_slice(fn_name.as_bytes());
-            self.data.push(0);
+            // `static const char __func__[] = "function-name";` at the
+            // start of every function body; __FUNCTION__ /
+            // __PRETTY_FUNCTION__ are the GCC aliases. The bytes live in
+            // the data segment and the expression decays to a pointer.
+            let offset = self.intern_func_name();
             self.emit_data_imm(offset);
             self.next()?;
             self.ty = Ty::Char as i64 + Ty::Ptr as i64;
@@ -336,7 +339,7 @@ impl Compiler {
             // 6.4.2.2); surface that to an enclosing `sizeof` the same
             // way a decayed array does, so `sizeof(__func__)` is the
             // array size, not the decayed pointer's.
-            self.pending.last_array_decay_size = fn_name.len() as i64 + 1;
+            self.pending.last_array_decay_size = self.current_function_name.len() as i64 + 1;
             // Dual-emit the decayed `char *` value so the walker
             // sees the address on `ast_acc` (identical shape to a
             // plain string literal -- the same `Expr::StrLit`
@@ -347,24 +350,24 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == '(' {
                 self.next()?;
-                // C11 7.17 atomic operation. These are compiler
-                // builtins (the <stdatomic.h> macros forward to them),
-                // not library functions, so they are recognized by
-                // name with no declaration -- unless the name is bound
+                // C11 7.17 atomic operations and the other compiler
+                // builtins share the `#pragma intrinsic` registry
+                // (`<stdatomic.h>` declares the atomics). An atomic op is
+                // lowered at the call site to load / store /
+                // read-modify-write, but only when the name is not bound
                 // to a real function, in which case the call is left to
                 // the normal path.
+                let intrinsic_id = self.pp_intrinsics.get(&self.symbols[id_idx].name).copied();
                 let atomic_kind = if self.symbols[id_idx].class != Token::Fun as i64
                     && self.symbols[id_idx].class != Token::Sys as i64
                 {
-                    atomic_kind_from_name(&self.symbols[id_idx].name)
+                    intrinsic_id.and_then(atomic_kind_from_intrinsic)
                 } else {
                     None
                 };
                 if let Some(akind) = atomic_kind {
                     self.parse_atomic_builtin(akind, id_idx)?;
-                } else if let Some(&intrinsic_id) =
-                    self.pp_intrinsics.get(&self.symbols[id_idx].name)
-                {
+                } else if let Some(intrinsic_id) = intrinsic_id {
                     let fn_name = self.symbols[id_idx].name.clone();
                     // `__builtin_trap()` is the only nullary intrinsic;
                     // every other one needs at least one argument.
@@ -730,6 +733,9 @@ impl Compiler {
                         if self.loc_offs > self.max_loc_offs {
                             self.max_loc_offs = self.loc_offs;
                         }
+                        if slots > 1 {
+                            self.multi_cell_temps.push((-self.loc_offs, slots));
+                        }
                         -self.loc_offs
                     } else {
                         0
@@ -1026,10 +1032,12 @@ impl Compiler {
                 // `imm_code_extern` / `imm_code` emit resolves the
                 // function-pointer literal on the SSA side.
                 self.emit_imm(CODE_BASE as i64 + self.symbols[id_idx].val);
-                // Type as `int*` rather than `char*`: matches the
-                // conventional `int *fp = some_function;` idiom and
-                // keeps the type-check loose-but-not-wrong.
-                self.ty = Ty::Int as i64 + Ty::Ptr as i64;
+                // Encode the function-pointer type as the callee's return
+                // type plus one pointer level, so an inline call through
+                // the value (`(cond ? f : g)(x)`) recovers the real
+                // result type instead of defaulting to `int` and
+                // narrowing a wider return.
+                self.ty = self.symbols[id_idx].type_ + Ty::Ptr as i64;
                 // Dual-emit: an Ident node so the wrapping shape
                 // (call-arg, assignment, cast) sees the function
                 // reference on `ast_acc`. The walker's
@@ -1050,7 +1058,7 @@ impl Compiler {
                 // on aarch64), the same stub a call to the import
                 // reaches. The Sys symbol's `val` is the binding index.
                 self.emit_imm(CODE_BASE as i64);
-                self.ty = Ty::Int as i64 + Ty::Ptr as i64;
+                self.ty = self.symbols[id_idx].type_ + Ty::Ptr as i64;
                 // Dual-emit: push the Sys Ident so wrapping shapes
                 // (static-init, assign, call-arg) see the address
                 // producer on `ast_acc`. The walker's
@@ -3371,22 +3379,24 @@ impl Compiler {
     }
 }
 
-/// Map a C11 7.17 atomic generic-function name to its operation
-/// kind. Only the non-`_explicit` forms are recognized; the
-/// `_explicit` variants carry a memory-order argument c5 does not
-/// model. Returns `None` for any other name.
-fn atomic_kind_from_name(name: &str) -> Option<super::super::ast::AtomicKind> {
+/// Map an atomic-operation [`Intrinsic`](crate::c5::op::Intrinsic)
+/// discriminant to its AST [`AtomicKind`](super::super::ast::AtomicKind).
+/// Returns `None` for any non-atomic intrinsic. The `#pragma intrinsic`
+/// registry stores the atomic operations under these discriminants; the
+/// call site converts them here for `parse_atomic_builtin`.
+fn atomic_kind_from_intrinsic(id: i64) -> Option<super::super::ast::AtomicKind> {
     use super::super::ast::AtomicKind;
-    Some(match name {
-        "atomic_load" => AtomicKind::Load,
-        "atomic_store" => AtomicKind::Store,
-        "atomic_exchange" => AtomicKind::Exchange,
-        "atomic_fetch_add" => AtomicKind::FetchAdd,
-        "atomic_fetch_sub" => AtomicKind::FetchSub,
-        "atomic_fetch_and" => AtomicKind::FetchAnd,
-        "atomic_fetch_or" => AtomicKind::FetchOr,
-        "atomic_fetch_xor" => AtomicKind::FetchXor,
-        "atomic_compare_exchange_strong" => AtomicKind::CompareExchangeStrong,
+    use crate::c5::op::Intrinsic;
+    Some(match Intrinsic::from_i64(id)? {
+        Intrinsic::AtomicLoad => AtomicKind::Load,
+        Intrinsic::AtomicStore => AtomicKind::Store,
+        Intrinsic::AtomicExchange => AtomicKind::Exchange,
+        Intrinsic::AtomicFetchAdd => AtomicKind::FetchAdd,
+        Intrinsic::AtomicFetchSub => AtomicKind::FetchSub,
+        Intrinsic::AtomicFetchAnd => AtomicKind::FetchAnd,
+        Intrinsic::AtomicFetchOr => AtomicKind::FetchOr,
+        Intrinsic::AtomicFetchXor => AtomicKind::FetchXor,
+        Intrinsic::AtomicCompareExchangeStrong => AtomicKind::CompareExchangeStrong,
         _ => return None,
     })
 }

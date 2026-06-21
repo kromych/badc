@@ -28,6 +28,11 @@
 #define O_NOFOLLOW   0x0100
 #endif
 #ifdef __linux__
+// splice() flags.
+#define SPLICE_F_MOVE     1
+#define SPLICE_F_NONBLOCK 2
+#define SPLICE_F_MORE     4
+#define SPLICE_F_GIFT     8
 #define O_CREAT      0100
 #define O_EXCL       0200
 #define O_NOCTTY     0400
@@ -48,12 +53,46 @@
 #define O_DIRECTORY  0
 #define O_CLOEXEC    0
 #define O_NOFOLLOW   0
+#define O_NOINHERIT  0x0080
+// Windows CRT open() flags (ucrt corecrt_io.h), exposed under the
+// underscore-less O_* names. _open/_sopen and the temporary, text and
+// binary modes require these exact values.
+#define O_RANDOM      0x0010
+#define O_SEQUENTIAL  0x0020
+#define O_TEMPORARY   0x0040
+#define O_SHORT_LIVED 0x1000
+#define O_OBTAIN_DIR  0x2000
+#define O_TEXT        0x4000
+#define O_BINARY      0x8000
+#define O_RAW         O_BINARY
+#define O_WTEXT       0x10000
+#define O_U16TEXT     0x20000
+#define O_U8TEXT      0x40000
+#define _O_RDONLY     O_RDONLY
+#define _O_WRONLY     O_WRONLY
+#define _O_RDWR       O_RDWR
+#define _O_APPEND     O_APPEND
+#define _O_RANDOM     O_RANDOM
+#define _O_SEQUENTIAL O_SEQUENTIAL
+#define _O_TEMPORARY  O_TEMPORARY
+#define _O_NOINHERIT  O_NOINHERIT
+#define _O_CREAT      O_CREAT
+#define _O_TRUNC      O_TRUNC
+#define _O_EXCL       O_EXCL
+#define _O_SHORT_LIVED O_SHORT_LIVED
+#define _O_OBTAIN_DIR O_OBTAIN_DIR
+#define _O_TEXT       O_TEXT
+#define _O_BINARY     O_BINARY
+#define _O_RAW        O_RAW
+#define _O_WTEXT      O_WTEXT
+#define _O_U16TEXT    O_U16TEXT
+#define _O_U8TEXT     O_U8TEXT
 #endif
 
-// Most fcntl command numbers are stable across Linux glibc and
+// Most fcntl command numbers are stable across Linux and
 // macOS Darwin. The advisory-lock trio (`F_GETLK` / `F_SETLK` /
 // `F_SETLKW`) is the one that diverges:
-//   * Linux glibc:  F_GETLK=5,  F_SETLK=6,  F_SETLKW=7
+//   * Linux:        F_GETLK=5,  F_SETLK=6,  F_SETLKW=7
 //   * macOS Darwin: F_GETLK=7,  F_SETLK=8,  F_SETLKW=9
 // sqlite's unix VFS calls `fcntl(fd, F_SETLK, &flock)` to grab
 // shared/exclusive byte-range locks; using the Linux numbers on
@@ -74,11 +113,15 @@
 #define F_SETLKW 7
 #endif
 #define FD_CLOEXEC 1
+#ifdef __APPLE__
+// Darwin-only fcntl command: flush buffered data to permanent storage.
+#define F_FULLFSYNC 51
+#endif
 
 // `F_RDLCK` / `F_WRLCK` / `F_UNLCK` are the lock-type values
 // stored in `struct flock::l_type`. Their numeric values also
 // differ across platforms:
-//   * Linux glibc:  F_RDLCK=0, F_WRLCK=1, F_UNLCK=2
+//   * Linux:        F_RDLCK=0, F_WRLCK=1, F_UNLCK=2
 //   * macOS Darwin: F_RDLCK=1, F_WRLCK=3, F_UNLCK=2
 // (Darwin matches BSD; Linux follows historical SysV.)
 #ifdef __APPLE__
@@ -98,7 +141,7 @@
 //   macOS Darwin : off_t l_start, off_t l_len, pid_t l_pid,
 //                  short l_type, short l_whence;
 //                  -> l_type at offset 20.
-//   Linux glibc  : short l_type, short l_whence, off_t l_start,
+//   Linux        : short l_type, short l_whence, off_t l_start,
 //                  off_t l_len, pid_t l_pid;
 //                  -> l_type at offset 0.
 //
@@ -120,7 +163,7 @@ struct flock {
 struct flock {
     short l_type;      /* offset  0 */
     short l_whence;    /* offset  2 */
-    /* glibc inserts 4 bytes of padding so off_t l_start is 8-aligned. */
+    /* Linux inserts 4 bytes of padding so off_t l_start is 8-aligned. */
     int   __pad0;      /* offset  4 */
     long  l_start;     /* offset  8 */
     long  l_len;       /* offset 16 */
@@ -129,14 +172,48 @@ struct flock {
 };
 #endif
 
+// Flags for the *at file-operation family (POSIX). The values reach the
+// host libc, so each target uses its own numbering.
+#ifdef __APPLE__
+#define AT_FDCWD            (-2)
+#define AT_EACCESS          0x0010
+#define AT_SYMLINK_NOFOLLOW 0x0020
+#define AT_SYMLINK_FOLLOW   0x0040
+#define AT_REMOVEDIR        0x0080
+#elif defined(__linux__)
+#define AT_FDCWD            (-100)
+#define AT_SYMLINK_NOFOLLOW 0x0100
+#define AT_REMOVEDIR        0x0200
+#define AT_EACCESS          0x0200
+#define AT_SYMLINK_FOLLOW   0x0400
+#define AT_EMPTY_PATH       0x1000
+#endif
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::fcntl, "_fcntl")
+#pragma binding(libc::openat, "_openat")
 int fcntl(int fd, int cmd, ...);
+// Open relative to `dirfd` (or AT_FDCWD). The optional `mode` applies
+// when O_CREAT is set (POSIX).
+int openat(int dirfd, const char *path, int flags, ...);
 #endif
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::fcntl, "fcntl")
+#pragma binding(libc::openat, "openat")
+#pragma binding(libc::splice, "splice")
+#pragma binding(libc::posix_fadvise, "posix_fadvise")
+#pragma binding(libc::posix_fallocate, "posix_fallocate")
 int fcntl(int fd, int cmd, int arg);
+int openat(int dirfd, const char *path, int flags, ...);
+// Move data between two descriptors, one of which must be a pipe; the
+// `off_*` parameters are in/out file offsets or null.
+long splice(int fd_in, long *off_in, int fd_out, long *off_out,
+            unsigned long len, unsigned int flags);
+// Advise the kernel about a file region's expected access pattern, and
+// reserve backing store for a region (POSIX).
+int posix_fadvise(int fd, long offset, long len, int advice);
+int posix_fallocate(int fd, long offset, long len);
 #endif

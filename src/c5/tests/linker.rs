@@ -162,6 +162,295 @@ fn nested_block_externs_emit_distinct_undef_symbols() {
 }
 
 #[test]
+fn cross_tu_thread_local_resolves_by_symbol() {
+    // A `_Thread_local` defined in one unit and accessed in another via
+    // `extern _Thread_local` resolves by symbol against the merged TLS
+    // block. The accessor must not reserve its own TLS storage (a phantom
+    // per-unit copy), and its Mach-O TLV descriptor must be keyed by the
+    // variable name so the linker fills the per-thread offset from the
+    // defining unit. macOS arm64 uses the TLV descriptor model.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let unit = |src: &str| {
+        let prog = Compiler::with_options(
+            src.to_string(),
+            Target::MacOSAarch64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let bytes = emit_native_with_options(&prog, Target::MacOSAarch64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    };
+
+    // Definer: `other` sits at TLS offset 4 (after `counter` at 0).
+    let def = unit(
+        "#include <stdlib.h>\n\
+         _Thread_local int counter = 7;\n\
+         _Thread_local int other = 3;\n\
+         int read_other(void) { return other; }\n",
+    );
+    let off_other = def
+        .tls_symbols
+        .iter()
+        .find(|(n, _, _)| n == "other")
+        .map(|(_, off, _)| *off)
+        .expect("definer exports `other` as a TLS symbol");
+    assert_eq!(
+        off_other, 8,
+        "`other` follows the 8-byte-aligned `counter` slot"
+    );
+
+    // Accessor: references `other` but defines no TLS storage.
+    let acc = unit(
+        "#include <stdlib.h>\n\
+         extern _Thread_local int other;\n\
+         int get_other(void) { return other; }\n",
+    );
+    assert!(
+        acc.tls_data.is_empty() && acc.tls_bss_size == 0,
+        "an extern _Thread_local reference must not reserve storage"
+    );
+    assert!(
+        acc.macho_tlv_descriptor_syms
+            .iter()
+            .any(|(_, name)| name == "other"),
+        "the cross-unit access must be a symbol-keyed TLV descriptor"
+    );
+
+    // The link resolves the accessor's descriptor to `other`'s merged
+    // offset (4): the definer is the only TLS contributor, base 0.
+    let merged = link_native_objects(&[def, acc]).expect("link resolves cross-unit TLS");
+    assert!(
+        merged.macho_tlv_descriptors.contains(&8),
+        "the accessor's `other` descriptor must resolve to offset 8, got {:?}",
+        merged.macho_tlv_descriptors,
+    );
+}
+
+#[test]
+fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
+    // The Windows/aarch64 analogue of the cross-unit TLS resolve. The
+    // access reaches the variable through the TEB's TLS array
+    // (`ldr x16, [x18, #0x58]`, index by `_tls_index`), so the accessor
+    // records both a `_tls_index` fixup and an extern TLS-offset fixup
+    // (reusing the `elf_tpoff_fixups` channel) keyed by the variable name.
+    // The linker fills the `add x?, x16, #imm12` with the variable's raw
+    // offset in the merged TLS block -- no thread-pointer bias, unlike the
+    // variant-1 ELF path's `+16` -- so the patched immediate equals the
+    // merged offset directly.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::ElfTpoffTarget;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let unit = |src: &str| {
+        let prog = Compiler::with_options(
+            src.to_string(),
+            Target::WindowsAarch64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let bytes = emit_native_with_options(&prog, Target::WindowsAarch64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    };
+
+    let def = unit(
+        "#include <stdlib.h>\n\
+         _Thread_local int counter = 7;\n\
+         _Thread_local int other = 3;\n\
+         int read_other(void) { return other; }\n",
+    );
+    let off_other = def
+        .tls_symbols
+        .iter()
+        .find(|(n, _, _)| n == "other")
+        .map(|(_, off, _)| *off)
+        .expect("definer exports `other` as a TLS symbol");
+    assert_eq!(off_other, 8, "`other` follows the 8-byte-aligned `counter`");
+
+    let acc = unit(
+        "#include <stdlib.h>\n\
+         extern _Thread_local int other;\n\
+         int get_other(void) { return other; }\n",
+    );
+    assert!(
+        acc.tls_data.is_empty() && acc.tls_bss_size == 0,
+        "an extern _Thread_local reference must not reserve storage"
+    );
+    assert!(
+        !acc.tls_index_fixups.is_empty(),
+        "the Windows TEB access must record a `_tls_index` fixup"
+    );
+    assert!(
+        acc.elf_tpoff_fixups
+            .iter()
+            .any(|(_, t)| matches!(t, ElfTpoffTarget::Extern(name) if name == "other")),
+        "the cross-unit access must record an extern TLS-offset fixup for `other`"
+    );
+
+    let merged = link_native_objects(&[acc, def]).expect("link resolves cross-unit Windows TLS");
+
+    // Scan the merged `.text` for the TEB sequence and confirm its closing
+    // `add x?, x16, #imm12` was patched to `other`'s merged offset (8): the
+    // definer is the only TLS contributor (base 0) and `counter` precedes
+    // it. The raw offset (not `8 + 16`) proves the Windows bias.
+    const TEB_LOAD: u32 = 0xF940_2E50; // ldr x16, [x18, #0x58]
+    let text = &merged.text;
+    let mut patched = None;
+    let mut i = 0;
+    while i + 20 <= text.len() {
+        let w = u32::from_le_bytes(text[i..i + 4].try_into().unwrap());
+        if w == TEB_LOAD {
+            let a = u32::from_le_bytes(text[i + 16..i + 20].try_into().unwrap());
+            if (a & 0xFF80_0000) == 0x9100_0000 && (a >> 5) & 0x1F == 16 {
+                patched = Some((a >> 10) & 0xFFF);
+                break;
+            }
+        }
+        i += 4;
+    }
+    assert_eq!(
+        patched,
+        Some(off_other as u32),
+        "the TEB `add x?, x16, #imm12` must hold the raw merged offset {off_other} (no +16 bias)"
+    );
+}
+
+#[test]
+fn pointer_to_extern_data_resolves_cross_tu() {
+    // `int *p = &g;` / `int *p = arr;` where the target is defined in
+    // another unit must emit a `.rela.data` reloc against the named
+    // undefined data symbol, not against this unit's `.data` section, so
+    // the link resolves it to the defining unit's storage. Before the
+    // fix the slot held this unit's `.data` base.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let prog_a = Compiler::with_options(
+        "extern int g;\nextern int arr[];\nint *ps = &g;\nint *pa = &arr[1];\nint *pd = arr;\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile a");
+    let bytes_a = emit_native_with_options(&prog_a, Target::LinuxX64, opts).expect("emit a");
+    let obj_a = parse_native_elf(&bytes_a).expect("parse a");
+
+    // `g` and `arr` are undefined data symbols, and every `.rela.data`
+    // entry targets one of them by name rather than the `.data` section.
+    for name in ["g", "arr"] {
+        assert!(
+            obj_a
+                .symbols
+                .iter()
+                .any(|s| s.name == name && matches!(s.section, NativeSymSection::Undef)),
+            "`{name}` must be an undefined data symbol"
+        );
+    }
+    assert_eq!(
+        obj_a.data_relocs.len(),
+        3,
+        "three pointer-to-extern-data slots must each emit a reloc"
+    );
+    for r in &obj_a.data_relocs {
+        let target = &obj_a.symbols[r.sym_idx].name;
+        assert!(
+            target == "g" || target == "arr",
+            "extern-data reloc must target the named symbol, got `{target}`"
+        );
+    }
+
+    // The defining unit links cleanly against the references.
+    let prog_b = Compiler::with_options(
+        "int g = 77;\nint arr[3] = {11, 22, 33};\n".to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile b");
+    let bytes_b = emit_native_with_options(&prog_b, Target::LinuxX64, opts).expect("emit b");
+    let obj_b = parse_native_elf(&bytes_b).expect("parse b");
+    link_native_objects(&[obj_a, obj_b]).expect("link resolves the extern-data references");
+}
+
+#[test]
+fn extern_data_address_in_struct_initializer_resolves_cross_tu() {
+    // `&g` for a cross-unit `extern` target inside a brace-list / struct
+    // initializer must emit a named relocation against the undefined
+    // symbol, the same as the scalar `T *p = &g;` path. Before the fix
+    // it resolved against this unit's `.data` section + the extern's
+    // permissive local fallback offset, pointing into the wrong unit.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let prog_a = Compiler::with_options(
+        "struct Obj { long refcnt; struct Obj *type; };\n\
+         extern struct Obj TheType;\n\
+         struct Obj inst = { 1, &TheType };\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile a");
+    let bytes_a = emit_native_with_options(&prog_a, Target::LinuxX64, opts).expect("emit a");
+    let obj_a = parse_native_elf(&bytes_a).expect("parse a");
+
+    assert!(
+        obj_a
+            .symbols
+            .iter()
+            .any(|s| s.name == "TheType" && matches!(s.section, NativeSymSection::Undef)),
+        "`TheType` must be an undefined data symbol, not a local fallback"
+    );
+    assert!(
+        obj_a
+            .data_relocs
+            .iter()
+            .any(|r| obj_a.symbols[r.sym_idx].name == "TheType"),
+        "the struct-initializer `&TheType` must emit a named reloc against `TheType`"
+    );
+
+    let prog_b = Compiler::with_options(
+        "struct Obj { long refcnt; struct Obj *type; };\n\
+         struct Obj TheType = { 9, 0 };\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile b");
+    let bytes_b = emit_native_with_options(&prog_b, Target::LinuxX64, opts).expect("emit b");
+    let obj_b = parse_native_elf(&bytes_b).expect("parse b");
+    link_native_objects(&[obj_a, obj_b]).expect("link resolves the struct-init extern reference");
+}
+
+#[test]
 fn libc_address_trampoline_is_per_tu_local() {
     // Two translation units that each take the address of the same
     // libc function in a `.data` function-pointer table both emit a
@@ -595,6 +884,63 @@ fn export_all_executable_exposes_dynamic_symbols() {
             .iter()
             .any(|n| n == "host_api"),
         "an ordinary executable must not export host_api dynamically"
+    );
+}
+
+#[test]
+fn export_data_exposes_data_globals_in_dynsym() {
+    // `--export-data` adds an executable's defined data globals to
+    // `.dynsym` (as STT_OBJECT) so a `dlopen`'d module resolves them --
+    // the data half of `-rdynamic`, which `--export-all` (functions
+    // only) cannot reach. A `PyTypeObject`-style global is the motivating
+    // case. An executable without the flag exports no data symbol.
+    use crate::c5::linker::object::read_dynamic_symbol_names;
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged_ex,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let build_exe = |export_data: bool| -> alloc::vec::Vec<u8> {
+        let program = Compiler::new(alloc::format!(
+            "{TEST_PRELUDE}\
+             int host_data = 7;\n\
+             int main(void) {{ return host_data; }}\n"
+        ))
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let mut merged = link_native_objects(&[obj]).expect("link");
+        let plt = emit_x86_64_plt(&mut merged).expect("plt");
+        write_native_image_from_merged_ex(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            Target::LinuxX64,
+            None,
+            false,
+            export_data,
+        )
+        .expect("write executable")
+    };
+    assert!(
+        read_dynamic_symbol_names(&build_exe(true))
+            .expect("parse .dynsym")
+            .iter()
+            .any(|n| n == "host_data"),
+        "an --export-data executable must export host_data in .dynsym"
+    );
+    assert!(
+        !read_dynamic_symbol_names(&build_exe(false))
+            .expect("parse .dynsym")
+            .iter()
+            .any(|n| n == "host_data"),
+        "an executable without --export-data must not export host_data"
     );
 }
 

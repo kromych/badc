@@ -34,7 +34,10 @@ use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
-    pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
+    pub(super) fn parse_function_body_local_decl(
+        &mut self,
+        maybe_unused: bool,
+    ) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
         let mut saw_specifier = false;
@@ -61,6 +64,16 @@ impl Compiler {
         } else {
             self.parse_decl_base_type()?
         };
+        // A function-pointer typedef base type contributes its lineage to
+        // every declarator in the list (`fn_t a, b;` makes both a and b
+        // function pointers). The per-declarator symbol creation consumes
+        // these pending fields, so capture them and re-seed each iteration;
+        // otherwise only the first declarator keeps the lineage and a call
+        // through a later one defaults its result type to int.
+        let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+        let base_is_function_type = self.pending.base_is_function_type;
+        let base_typedef_fn_proto = self.pending.typedef_fn_proto;
+        let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
         // Function declaration at function-body scope (C99 6.7p1):
         // `T name(args);` or `T *name(args);` where the leading run
         // of `*` qualifies the return type. C99 6.2.2p5: with no
@@ -134,7 +147,19 @@ impl Compiler {
         // declarator to walk its own `*` chain).
         self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
+            // Re-seed the base type's function-pointer lineage for this
+            // declarator; the previous declarator's symbol creation took it.
+            self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
+            self.pending.base_is_function_type = base_is_function_type;
+            self.pending.typedef_fn_proto = base_typedef_fn_proto;
+            self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            // C23 6.7.13.5 `[[maybe_unused]]` / GNU
+            // `__attribute__((unused))` on the declaration suppresses
+            // the unused-variable diagnostic for the names it declares.
+            if maybe_unused && loc_idx != usize::MAX {
+                self.symbols[loc_idx].maybe_unused = true;
+            }
             // Function-pointer lineage carries through to local
             // bindings -- pick up the side-channel parse_declarator
             // (or the typedef base type) populated. Used by the
@@ -419,20 +444,28 @@ impl Compiler {
                 let sid = struct_id_of(ty);
                 let elem_size = self.size_of_type(ty);
                 let var_offset = self.symbols[loc_idx].val;
+                // A multi-dimensional array's element is itself an array of
+                // structs; each top-level group spans the inner dimensions.
+                let inner_dims = self.inner_dims_of(loc_idx);
+                let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
+                let group_stride = elem_size as i64 * inner_product;
+                let group_count = array_size / inner_product;
                 if self.lex.tk != '{' {
                     return Err(self.compile_err("array initializer must start with `{{`"));
                 }
                 self.next()?;
                 let mut i: i64 = 0;
                 while self.lex.tk != '}' {
-                    if i >= array_size {
+                    if i >= group_count {
                         return Err(self.compile_err(format!(
                             "too many initializers for `{}`",
                             self.symbols[loc_idx].name
                         )));
                     }
-                    let here = var_offset + i * elem_size as i64;
-                    if self.lex.tk == '{' {
+                    let here = var_offset + i * group_stride;
+                    if !inner_dims.is_empty() {
+                        self.collect_struct_array_data(sid, here, &inner_dims, elem_size as i64)?;
+                    } else if self.lex.tk == '{' {
                         self.collect_struct_initializer(sid, here)?;
                     } else {
                         self.fill_struct_fields(sid, here, false)?;
@@ -1007,6 +1040,19 @@ impl Compiler {
         self.pending_local_runtime_elements.clear();
         self.pending.init_inner_dims = alloc::vec::Vec::new();
 
+        // A compound literal yields its value through `ast_acc` (the
+        // `Expr::CompoundLiteral` built below) and its element AST
+        // through `pending_local_runtime_elements`; it must not net
+        // change the parser-side vstack. The runtime field fill uses
+        // transient `ast_psh`/`ast_assign` pairs whose dual-emit
+        // bookkeeping can leave residual entries. When the literal is
+        // parsed as a sub-expression (e.g. the right operand of a
+        // binary operator), those residual entries would otherwise sit
+        // on top of the caller's pushed left operand, so the wrapping
+        // operator would pop the wrong vstack slot. Restore the depth
+        // before returning.
+        let vstack_depth = self.ast_vstack.len();
+
         let value_ty;
         let final_array_size;
         let slot;
@@ -1081,10 +1127,14 @@ impl Compiler {
         } else if is_struct_ty(t) && struct_ptr_depth(t) == 0 {
             let sid = struct_id_of(t);
             let elem_size = self.size_of_type(t);
-            self.loc_offs += self.slots_of_type(t);
+            let cl_slots = self.slots_of_type(t);
+            self.loc_offs += cl_slots;
             slot = -self.loc_offs;
             if self.loc_offs > self.max_loc_offs {
                 self.max_loc_offs = self.loc_offs;
+            }
+            if cl_slots > 1 {
+                self.multi_cell_temps.push((slot, cl_slots));
             }
             let needs_runtime = self.struct_init_needs_runtime()?;
             let staged = self.data.len();
@@ -1144,6 +1194,7 @@ impl Compiler {
             super::super::ast::LocalInit::None
         };
 
+        self.ast_vstack.truncate(vstack_depth);
         self.ast_emit_compound_literal(slot, t, final_array_size, init);
         self.ty = value_ty;
         Ok(())
@@ -1536,6 +1587,82 @@ impl Compiler {
             // member's offset (C99 6.7.8p13). The recursion handles a
             // union the same way -- its fields share offset 0.
             self.skip_opt_compound_literal_cast()?;
+            // C11 6.7.2.1: a flattened anonymous union/struct member taking a
+            // brace-enclosed sub-initializer (`{ .member = v }`). The brace
+            // selects one group member; emit it and advance past the group.
+            if field.anon_union_group != 0 && self.lex.tk == '{' {
+                self.next()?; // consume `{`
+                let group = field.anon_union_group;
+                while self.lex.tk != '}' {
+                    let mem_idx = if self.lex.tk == Token::Dot {
+                        self.next()?;
+                        if self.lex.tk != Token::Id {
+                            return Err(self.compile_err("field name expected after `.`"));
+                        }
+                        let nm = self.symbols[self.lex.curr_id_idx].name.clone();
+                        self.next()?;
+                        if self.lex.tk != Token::Assign {
+                            return Err(
+                                self.compile_err(format!("`=` expected after `.{nm}` designator"))
+                            );
+                        }
+                        self.next()?;
+                        self.structs[sid]
+                            .fields
+                            .iter()
+                            .position(|f| f.anon_union_group == group && f.name == nm)
+                            .ok_or_else(|| {
+                                self.compile_err(format!("anonymous member {nm} not found"))
+                            })?
+                    } else {
+                        field_idx
+                    };
+                    let mem = self.structs[sid].fields[mem_idx].clone();
+                    let total = extra_offset + mem.offset as i64;
+                    if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
+                        self.emit_struct_local_init_runtime_at(
+                            local_val,
+                            total,
+                            struct_id_of(mem.ty),
+                            true,
+                        )?;
+                    } else {
+                        self.emit_lea(local_val);
+                        if total > 0 {
+                            self.ast_psh();
+                            self.emit_imm(total);
+                            self.ast_binop(crate::c5::ir::BinOp::Add);
+                        }
+                        self.ast_psh();
+                        self.expr(Token::Assign as i64)?;
+                        let v = self.ast_acc;
+                        self.ast_assign();
+                        if let Some(value) = v {
+                            self.pending_local_runtime_elements.push(
+                                super::super::ast::RuntimeInitElement {
+                                    offset: total,
+                                    value,
+                                    ty: mem.ty,
+                                },
+                            );
+                        }
+                    }
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                }
+                self.next()?; // consume `}`
+                pos = field_idx + 1;
+                while pos < self.structs[sid].fields.len()
+                    && self.structs[sid].fields[pos].anon_union_group == group
+                {
+                    pos += 1;
+                }
+                if self.lex.tk == ',' {
+                    self.next()?;
+                }
+                continue;
+            }
             if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 && self.lex.tk == '{' {
                 let nested_sid = struct_id_of(field.ty);
                 self.emit_struct_local_init_runtime_at(
@@ -1659,6 +1786,13 @@ impl Compiler {
         // Whether the previously scanned token was `&` (address-of):
         // a global read in `&global` is a constant address.
         let mut prev_was_amp = false;
+        // Per-value tracking: a bare `&global` (or `&g + const`) is a
+        // link-time constant the data path handles, but an address
+        // combined with a bitwise / shift operator (the address-tagging
+        // idiom `(uintptr_t)&g | tag`) is not, so it needs the runtime
+        // path. Both flags reset at each value boundary.
+        let mut value_has_addr = false;
+        let mut value_has_bitop = false;
         while depth > 0 && self.lex.tk != 0 {
             // Designator skip works at any depth: nested
             // `.inner = { .x = ... }` carries its own
@@ -1695,6 +1829,8 @@ impl Compiler {
                 }
                 at_entry_start = false;
                 prev_was_amp = false;
+                value_has_addr = false;
+                value_has_bitop = false;
                 continue;
             }
             if self.lex.tk == '{' {
@@ -1711,6 +1847,8 @@ impl Compiler {
                 // depth.
                 at_entry_start = true;
                 prev_was_amp = false;
+                value_has_addr = false;
+                value_has_bitop = false;
                 self.next()?;
                 continue;
             } else if self.lex.tk == Token::Id {
@@ -1718,7 +1856,12 @@ impl Compiler {
                 if class == Token::Loc as i64 {
                     needs_runtime = true;
                 }
-                if !prev_was_amp && self.glo_value_read_is_runtime(self.lex.curr_id_idx) {
+                if prev_was_amp {
+                    value_has_addr = true;
+                    if value_has_bitop {
+                        needs_runtime = true;
+                    }
+                } else if self.glo_value_read_is_runtime(self.lex.curr_id_idx) {
                     needs_runtime = true;
                 }
                 if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
@@ -1731,6 +1874,16 @@ impl Compiler {
                 needs_runtime = true;
                 at_entry_start = false;
             } else {
+                if self.lex.tk == Token::OrOp
+                    || self.lex.tk == Token::XorOp
+                    || self.lex.tk == Token::ShlOp
+                    || self.lex.tk == Token::ShrOp
+                {
+                    value_has_bitop = true;
+                    if value_has_addr {
+                        needs_runtime = true;
+                    }
+                }
                 at_entry_start = false;
             }
             prev_was_amp = self.lex.tk == Token::AndOp;

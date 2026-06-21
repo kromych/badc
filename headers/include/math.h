@@ -15,6 +15,7 @@
 #pragma binding(libc::log,   "_log")
 #pragma binding(libc::log10, "_log10")
 #pragma binding(libc::log2,  "_log2")
+#pragma binding(libc::exp2,  "_exp2")
 #pragma binding(libc::exp,   "_exp")
 #pragma binding(libc::pow,   "_pow")
 #pragma binding(libc::round, "_round")
@@ -119,6 +120,7 @@
 #pragma binding(libm::log,   "log")
 #pragma binding(libm::log10, "log10")
 #pragma binding(libm::log2,  "log2")
+#pragma binding(libm::exp2,  "exp2")
 #pragma binding(libm::exp,   "exp")
 #pragma binding(libm::pow,   "pow")
 #pragma binding(libm::round, "round")
@@ -208,9 +210,7 @@
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::log,   "log")
 #pragma binding(msvcrt::log10, "log10")
-#pragma binding(msvcrt::log2,  "log2")
 #pragma binding(msvcrt::exp,   "exp")
-#pragma binding(msvcrt::round, "round")
 #pragma binding(msvcrt::fmod,  "fmod")
 // sqrt / fabs / floor / ceil / trunc lower a direct call to a single
 // FP instruction through the `#pragma intrinsic` below; bind them so
@@ -262,6 +262,13 @@
 #pragma binding(ucrtbase::ilogb,      "ilogb")
 #pragma binding(ucrtbase::nextafterf, "nextafterf")
 #pragma binding(ucrtbase::ilogbf,     "ilogbf")
+#pragma binding(ucrtbase::exp2,  "exp2")
+#pragma binding(ucrtbase::exp2f, "exp2f")
+// C99 log2 / round only landed in the Universal CRT.
+#pragma binding(ucrtbase::log2,  "log2")
+#pragma binding(ucrtbase::round, "round")
+double exp2(double x);
+float exp2f(float x);
 #pragma binding(ucrtbase::pow,   "pow")
 #pragma binding(ucrtbase::fmin,  "fmin")
 #pragma binding(ucrtbase::fmax,  "fmax")

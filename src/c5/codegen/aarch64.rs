@@ -304,10 +304,14 @@ pub(super) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 /// result is a multiple of 16. Used by the alloca lowering to
 /// round the requested size up to the platform's stack-alignment
 /// before bumping the per-frame arena top. AArch64 logical-
-/// immediate encoding for the 64-bit mask `0xFFFFFFFFFFFFFFF0`:
-/// `sf=1`, `N=1`, `immr=0`, `imms=59` (sixty ones, no rotation).
+/// immediate encoding for the 64-bit mask `0xFFFFFFFFFFFFFFF0`
+/// (sixty ones over four low zeros): `sf=1`, `N=1`, `imms=59`
+/// (sixty-bit run), `immr=60` -- the run is rotated right by 60 so
+/// the four zero bits land at the bottom. `immr=0` encodes
+/// `0x0FFFFFFFFFFFFFFF` instead (the zeros at the top), which fails
+/// to clear the low bits and leaves the arena pointer unaligned.
 pub(super) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
-    0x9240_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    0x927C_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
@@ -1060,6 +1064,42 @@ pub(super) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     0x3900_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+// ---- Exclusive-monitor load / store (ARM ARM C6.2). Used by the
+//      atomic read-modify-write and compare-exchange lowering: a
+//      LDAXR / STLXR retry loop needs no feature detection, unlike the
+//      LSE atomics. `width` selects the access size variant
+//      (B / H / W / X). The acquire (LDAXR) / release (STLXR) ordering
+//      gives the sequentially-consistent semantics C11 7.17.3 requires
+//      for the default memory order.
+
+/// Size field (bits[31:30]) for an exclusive load / store of `width`
+/// bytes: 00 byte, 01 halfword, 10 word, 11 doubleword.
+fn excl_size(width: u8) -> u32 {
+    match width {
+        1 => 0b00,
+        2 => 0b01,
+        4 => 0b10,
+        _ => 0b11,
+    }
+}
+
+/// `LDAXR{B,H} <Wt>, [<Xn|SP>]` / `LDAXR <Wt|Xt>, [<Xn|SP>]` --
+/// load-acquire exclusive register of `width` bytes. No offset.
+pub(super) fn enc_ldaxr(rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x085F_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STLXR{B,H} <Ws>, <Wt>, [<Xn|SP>]` / `STLXR <Ws>, <Wt|Xt>,
+/// [<Xn|SP>]` -- store-release exclusive register of `width` bytes.
+/// `rs` receives 0 on success and 1 when the monitor was lost.
+pub(super) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x0800_FC00
+        | (excl_size(width) << 30)
+        | ((rs.0 as u32) << 16)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
 // ---- Loads / stores (unscaled 9-bit signed offset). Used for negative
 //      stack-frame offsets (locals at fp - N*8).
 
@@ -1386,6 +1426,11 @@ pub(super) fn lower(
     // the `_tls_index` DWORD slot and patches each fixup with the
     // displacement to it.
     let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
+    // Linux/aarch64 TLS access fixups: each `Inst::TlsAddr` records its
+    // add-immediate site so the linker resolves the variant-1 TPOFF
+    // against the merged TLS layout (extern symbols and multi-unit
+    // local accesses).
+    let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
     // macOS arm64 TLV: each unique TLS variable's offset gets a
     // descriptor index; the writer emits a 24-byte
     // `__thread_vars` descriptor per index. Each `Inst::TlsAddr`
@@ -1403,12 +1448,44 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
             super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
+    // Frame slots mem2reg promoted to registers (-O) or that slot
+    // coalescing moved onto shared storage: the debug-info emitter drops
+    // their stale frame location. Slots coalescing moved to a new exclusive
+    // offset are recorded separately so the emitter rewrites the location.
+    let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
+        alloc::collections::BTreeMap::new();
+    let mut coalesced_slot_remap: alloc::collections::BTreeMap<
+        usize,
+        alloc::collections::BTreeMap<i64, i64>,
+    > = alloc::collections::BTreeMap::new();
+    // Reuse non-overlapping synthetic stack slots. At -O, mem2reg promotes
+    // these address-free slots to SSA values; this is the default-level
+    // analog, shrinking frames built from many control-flow merges whose
+    // phi-substitute slots never overlap. The pass runs regardless of debug
+    // info so the emitted code is identical with and without -g.
+    if !native.optimize {
+        let coalesce_dwarf =
+            super::ssa_emit_common::time_pass("ssa_slot_coalesce::run (aarch64)", || {
+                super::ssa_slot_coalesce::run(&mut ssa_funcs)
+            });
+        for (ent_pc, map) in coalesce_dwarf {
+            for (orig, new) in map {
+                match new {
+                    Some(new) => {
+                        coalesced_slot_remap
+                            .entry(ent_pc)
+                            .or_default()
+                            .insert(orig, new);
+                    }
+                    None => promoted_local_slots.entry(ent_pc).or_default().push(orig),
+                }
+            }
+        }
+    }
     // -O: promote address-free local slots to SSA values before
     // register allocation, dropping their frame load / store traffic.
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
-    let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
-        alloc::collections::BTreeMap::new();
     if native.optimize {
         super::ssa_emit_common::time_pass("ssa_mem2reg::run (aarch64)", || {
             for f in &mut ssa_funcs {
@@ -1533,6 +1610,13 @@ pub(super) fn lower(
             .iter()
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
             .collect();
+        // Same pre-resolution for `tls_addr_extern` value-ids so the
+        // Mach-O TLV descriptor is keyed by the cross-unit symbol name.
+        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .extern_tls_refs
+            .iter()
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .collect();
         let ok = super::ssa_emit_aarch64::emit_function(
             func_ssa,
             alloc_for,
@@ -1543,12 +1627,14 @@ pub(super) fn lower(
             &mut data_fixups,
             &mut user_extern_data_refs,
             &extern_data_names,
+            &extern_tls_names,
             &mut pending_func_fixups,
             imports,
             &variadic_targets,
             &mut tls_index_fixups,
             &mut macho_tlv_fixups,
             &mut macho_tlv_descriptors,
+            &mut elf_tpoff_fixups,
             &mut pc_to_native,
             &mut func_prologue_native,
             &mut ssa_line_rows,
@@ -1735,6 +1821,7 @@ pub(super) fn lower(
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
+        bss_size: 0,
         entry_offset,
         got_fixups,
         data_fixups,
@@ -1744,6 +1831,10 @@ pub(super) fn lower(
         func_names,
         func_prologue_native,
         promoted_local_slots,
+        coalesced_slot_remap,
+        // x86_64-only Win64 unwind; the aarch64 PE writer uses packed
+        // RUNTIME_FUNCTIONs and consults no per-function descriptor.
+        fn_unwind: Vec::new(),
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs,
@@ -1758,13 +1849,18 @@ pub(super) fn lower(
         tls_init_size: program.tls_init_size,
         tls_index_fixups,
         data_relocs: Vec::new(),
+        extern_data_relocs: Vec::new(),
         code_relocs: Vec::new(),
         exports: Vec::new(),
+        dynamic_exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
         shared_lib_name: None,
         dllmain_pc: None,
         macho_tlv_fixups,
         macho_tlv_descriptors,
+        // macOS resolves TLS through Mach-O TLV descriptors; Linux/aarch64
+        // records add-immediate sites here for the linker to resolve.
+        elf_tpoff_fixups,
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
         merged_dwarf: None,
@@ -1893,6 +1989,7 @@ fn emit_plt_trampolines(
         got_fixups.push(GotFixup {
             adrp_offset: tramp_off,
             import_index,
+            is_data_load: false,
         });
         emit(code, enc_adrp(Reg::X16, 0));
         emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
@@ -2336,5 +2433,28 @@ mod tests {
             let off = i * 4;
             assert_eq!(&code[off..off + 4], &one(*w));
         }
+    }
+
+    // The exclusive-monitor encodings below were cross-checked against
+    // `clang -target aarch64-linux-gnu` + `objdump -d`:
+    //   ldaxr x1,[x2]=c85ffc41  ldaxr w1,[x2]=885ffc41
+    //   ldaxrh w1,[x2]=485ffc41 ldaxrb w1,[x2]=085ffc41
+    //   stlxr w0,x1,[x2]=c800fc41  stlxr w0,w1,[x2]=8800fc41
+    //   stlxrh w0,w1,[x2]=4800fc41 stlxrb w0,w1,[x2]=0800fc41
+
+    #[test]
+    fn ldaxr_all_widths() {
+        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 8), 0xC85F_FC41);
+        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 4), 0x885F_FC41);
+        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 2), 0x485F_FC41);
+        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 1), 0x085F_FC41);
+    }
+
+    #[test]
+    fn stlxr_all_widths() {
+        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 8), 0xC800_FC41);
+        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 4), 0x8800_FC41);
+        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 2), 0x4800_FC41);
+        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 1), 0x0800_FC41);
     }
 }

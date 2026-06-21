@@ -90,9 +90,19 @@ impl Compiler {
             // SSA prologue.
             let init_before = self.ast_stmts_snapshot();
             self.parse_block_local_decl(&mut for_init_symbols)?;
-            let added = self.ast.stmts.len().saturating_sub(init_before);
-            if added > 0 {
-                let id = self.ast_wrap_stmts_since(init_before);
+            let init_after = self.ast.stmts.len();
+            // C99 6.7p1: a declaration's init-declarator-list may name
+            // several declarators (`for (int i = 0, l = n; ...)`).
+            // `parse_block_local_decl` pushes one top-level `Stmt::Decl`
+            // per declarator, so every pushed id must reach the walker.
+            // `ast_wrap_stmts_since` keeps only the last arena entry
+            // (correct for a single nested statement, not for sibling
+            // decls), which drops every initializer but the last.
+            if init_after > init_before {
+                let ids: alloc::vec::Vec<super::super::ast::StmtId> = (init_before..init_after)
+                    .map(|i| i as super::super::ast::StmtId)
+                    .collect();
+                let id = self.ast_wrap_block_items(&ids);
                 init_ast = Some(super::super::ast::BlockItem::Stmt(id));
             }
         } else {
@@ -307,6 +317,13 @@ impl Compiler {
             self.next()?;
         }
         let lbt = self.parse_decl_base_type()?;
+        // A function-pointer typedef base type contributes its lineage to
+        // every declarator in the list; the per-declarator symbol creation
+        // consumes these pending fields, so capture and re-seed each one.
+        let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+        let base_is_function_type = self.pending.base_is_function_type;
+        let base_typedef_fn_proto = self.pending.typedef_fn_proto;
+        let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
         // Function declaration at block scope (C99 6.7p1):
         // `T name(args);` or `T *name(args);` where the leading run of
         // `*` qualifies the return type. C99 6.2.2p5: with no
@@ -378,6 +395,10 @@ impl Compiler {
         // sees the leading `*`s and consumes them per declarator.
         self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
+            self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
+            self.pending.base_is_function_type = base_is_function_type;
+            self.pending.typedef_fn_proto = base_typedef_fn_proto;
+            self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             // C99 6.3.2.1p4: a function-pointer rvalue auto-decays
             // through any unary `*` chain. The `Symbol::fn_ptr_indirection`
@@ -534,6 +555,20 @@ impl Compiler {
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
+            // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
+            // lead either a declaration or a statement at block scope.
+            // Consume it, then dispatch on the following token.
+            let mut leading_maybe_unused = false;
+            if self.lex.tk == Token::Attribute
+                || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+            {
+                self.pending.attr_maybe_unused = false;
+                self.skip_attribute_specifiers()?;
+                leading_maybe_unused = self.pending.attr_maybe_unused;
+                if self.lex.tk == '}' {
+                    break;
+                }
+            }
             if self.lex.tk == Token::Typedef {
                 self.parse_block_typedef(Some(&mut block_symbols))?;
             } else if self.lex.tk == Token::StaticAssert {
@@ -542,7 +577,16 @@ impl Compiler {
                 self.parse_static_assert()?;
             } else if self.lex_is_type_start() {
                 let item_before = self.ast_stmts_snapshot();
+                let sym_before = block_symbols.len();
                 self.parse_block_local_decl(&mut block_symbols)?;
+                if leading_maybe_unused {
+                    // C23 6.7.13.5: `[[maybe_unused]]` on a declaration
+                    // suppresses the unused diagnostics for the names it
+                    // introduces.
+                    for &(idx, _, _, _) in &block_symbols[sym_before..] {
+                        self.symbols[idx].maybe_unused = true;
+                    }
+                }
                 let item_after = self.ast.stmts.len();
                 // A local decl pushes one stmt-id-wrapping Decl
                 // per declarator; capture every one as a top-
@@ -591,6 +635,7 @@ impl Compiler {
                 || !sym.decl_in_main_source
                 || sym.address_escaped
                 || sym.was_read
+                || sym.maybe_unused
                 || sym.name.starts_with('_')
             {
                 continue;
@@ -674,6 +719,23 @@ impl Compiler {
         let tstart = self.lex.ival as usize;
         let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
         self.next()?; // consume the template string
+        // The x87 FPU control-word forms carry exactly one memory operand.
+        // Detect them from the template before the operand-rejection loop.
+        let tmpl_lc = core::str::from_utf8(&template)
+            .unwrap_or("")
+            .trim()
+            .trim_end_matches(';')
+            .trim()
+            .to_ascii_lowercase();
+        let x87_kind = match tmpl_lc.as_str() {
+            "fnstcw %0" => Some(super::super::op::Intrinsic::X87StoreControlWord),
+            "fldcw %0" => Some(super::super::op::Intrinsic::X87LoadControlWord),
+            _ => None,
+        };
+        if let Some(kind) = x87_kind {
+            self.data.truncate(tstart);
+            return self.parse_x87_control_word_asm(kind);
+        }
         // Optional `: outputs : inputs : clobbers`. An operand binding
         // (`"constraint"(expr)`) introduces a `(` and is rejected; bare
         // clobber strings and the separating colons are accepted.
@@ -723,12 +785,70 @@ impl Compiler {
         Err(self.compile_err(format!("inline asm instruction `{t}` is not supported")))
     }
 
+    /// `asm("fnstcw %0":"=m"(cw))` / `asm("fldcw %0"::"m"(cw))` -- the two
+    /// x87 control-word forms CPython's pymath reaches for. Parse the
+    /// single memory operand, take its address, and emit the matching
+    /// intrinsic. The constraint text is ignored: both forms reach the
+    /// op as the operand's address.
+    fn parse_x87_control_word_asm(
+        &mut self,
+        kind: super::super::op::Intrinsic,
+    ) -> Result<(), C5Error> {
+        // Skip the colons and constraint strings up to the `(operand)`.
+        while self.lex.tk != '(' as i64 && self.lex.tk != ')' as i64 {
+            if self.lex.tk == ':' as i64 || self.lex.tk == ',' as i64 || self.lex.tk == '"' as i64 {
+                self.next()?;
+            } else {
+                return Err(self.compile_err("unsupported x87 control-word asm operand"));
+            }
+        }
+        if self.lex.tk != '(' as i64 {
+            return Err(self.compile_err("x87 control-word asm expects a memory operand"));
+        }
+        self.next()?; // consume '('
+        self.ast_psh();
+        self.expr(Token::Assign as i64)?;
+        self.ty += Ty::Ptr as i64;
+        self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
+        let addr_id = self.ast_acc.take();
+        self.consume(b')', "`)` expected after x87 asm operand")?;
+        // Consume any remaining `: inputs : clobbers` up to the close.
+        while self.lex.tk != ')' as i64 {
+            self.next()?;
+        }
+        self.next()?; // consume ')'
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        let Some(addr) = addr_id else {
+            return Err(self.compile_err("x87 control-word asm operand missing"));
+        };
+        self.mark_emit_other();
+        self.ty = Ty::Int as i64;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            super::super::ast::Expr::Intrinsic {
+                kind: kind as i64,
+                args: alloc::vec![addr],
+                ty: Ty::Int as i64,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        let _ = self.ast_emit_expr_stmt();
+        Ok(())
+    }
+
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
         // Function-pointer callee parameters captured for a postfix
         // indirect call never span a statement: drop any left set by a
         // producer whose call did not consume them so they cannot reach an
         // unrelated call in a later statement.
         self.pending.indirect_callee_params = None;
+        // The function-pointer-decay depth (C99 6.3.2.1p4) is intra-
+        // expression state: a function name used as a call argument seeds
+        // it, and without this reset it leaks into the next statement's
+        // unary `*`, which would mis-apply the decay no-op and drop the
+        // load an assignment lvalue needs.
+        self.pending.fn_ptr_chain_depth = -1;
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.labels.push(name.clone());
@@ -839,7 +959,17 @@ impl Compiler {
             };
             cases.push(val);
             let body_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            // C23 6.8.1: a label may precede a declaration. badc parses
+            // block-local declarations in the enclosing block loop, where
+            // scope is tracked, so a case whose body is a declaration is
+            // given an empty body and the declaration is parsed as the
+            // next block item; a preceding case still falls through into it.
+            if !(self.lex.tk == Token::Typedef
+                || self.lex.tk == Token::StaticAssert
+                || self.lex_is_type_start())
+            {
+                self.stmt()?;
+            }
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_case(val, body_s);
         } else if self.lex.tk == Token::Default {
@@ -850,7 +980,15 @@ impl Compiler {
             };
             *def = true;
             let body_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            // C23 6.8.1: a declaration may follow the `default` label;
+            // give the label an empty body and let the enclosing block
+            // loop parse the declaration with correct scope.
+            if !(self.lex.tk == Token::Typedef
+                || self.lex.tk == Token::StaticAssert
+                || self.lex_is_type_start())
+            {
+                self.stmt()?;
+            }
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_default(body_s);
         } else if self.lex.tk == Token::Goto {
@@ -908,16 +1046,13 @@ impl Compiler {
             let mut return_value: Option<super::super::ast::ExprId> = None;
             if self.lex.tk != ';' {
                 if returns_void {
-                    // C99 6.8.6.4p1: `return <expr>;` in a function
-                    // returning `void` is a constraint violation.
-                    // Reject here rather than silently dropping
-                    // the value -- gcc and clang both diagnose this
-                    // at the strict level.
-                    return Err(
-                        self.compile_err("`return` with a value in a function returning `void`")
-                    );
-                }
-                if returns_struct {
+                    // `return <expr>;` in a void function: C allows a
+                    // void-typed expression (gcc/clang accept it); c5 has
+                    // no void type tag, so evaluate it for side effects
+                    // and return no value.
+                    self.parse_full_expr()?;
+                    return_value = self.ast_acc;
+                } else if returns_struct {
                     // Push the hidden out-pointer (loaded from
                     // val=2 -- the slot the caller pushed before
                     // the declared args) and emit Mcpy to copy

@@ -45,6 +45,7 @@ impl Compiler {
         &mut self,
         name: &str,
         is_union: bool,
+        packed: bool,
     ) -> Result<usize, C5Error> {
         // Pre-register or recycle a forward declaration so
         // self-referential pointer fields can find this aggregate
@@ -113,6 +114,13 @@ impl Compiler {
         // mis-pads any enclosing aggregate.
         let mut saw_field = false;
         while self.lex.tk != '}' {
+            // C11 6.7.2.1: a static_assert-declaration may appear in the
+            // struct-declaration-list. It declares no member, so handle
+            // it before the field-type parse and continue.
+            if self.lex.tk == Token::StaticAssert {
+                self.parse_static_assert()?;
+                continue;
+            }
             // Reset the typedef-array carrier between field groups
             // (`jmp_buf env;` then `int code;`). The aggregate
             // parser has its own inline base-type reader and does
@@ -141,7 +149,19 @@ impl Compiler {
             // (`;` next), the promotion path runs; otherwise the
             // synthesised tag stays a regular nested-struct type.
             let mut anon_aggregate_inner_id: Option<usize> = None;
+            let mut atomic_field_base: Option<i64> = None;
             while is_decl_modifier(self.lex.tk) {
+                if self.lex.tk == Token::Attribute {
+                    self.skip_attribute_specifiers()?;
+                    continue;
+                }
+                if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
+                    // C11 6.7.2.4 atomic type specifier `_Atomic(type-name)`
+                    // as a field base type (distinct from the `_Atomic`
+                    // qualifier consumed as a no-op below).
+                    atomic_field_base = self.try_parse_atomic_type_specifier()?;
+                    continue;
+                }
                 if self.lex.tk == Token::IntMod {
                     // `_Bool` is the only keyword mapped to `IntMod`.
                     saw_bool = true;
@@ -168,7 +188,13 @@ impl Compiler {
             // unsigned, so a value with the field's high bit set
             // zero-extends rather than sign-extends.
             let mut field_base_is_enum = false;
-            let field_base = if self.lex.tk == Token::Int {
+            let field_base = if let Some(inner) = atomic_field_base {
+                inner
+            } else if self.lex.tk == Token::Typeof {
+                // `typeof ( ... ) member;` (C23 6.7.2.5): the operand's
+                // type is the member's type.
+                self.parse_typeof_specifier()?
+            } else if self.lex.tk == Token::Int {
                 self.next()?;
                 let base = if saw_long_long {
                     Ty::LongLong as i64
@@ -226,6 +252,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
                 let nested_is_union = self.lex.tk == Token::Union;
                 self.next()?;
+                let nested_packed = self.skip_attribute_specifiers()?;
                 // Three shapes:
                 //   * `struct Foo { ... }` -- named definition.
                 //   * `struct Foo`         -- type use.
@@ -258,7 +285,12 @@ impl Compiler {
                     return Err(self.compile_err("aggregate name or `{{` expected in field type"));
                 };
                 let inner_id = if self.lex.tk == '{' {
-                    self.parse_aggregate_body(&inner_name, nested_is_union)?
+                    let id =
+                        self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
+                    if self.skip_attribute_specifiers()? {
+                        self.repack_struct(id);
+                    }
+                    id
                 } else {
                     self.find_or_forward_declare_struct(&inner_name)
                 };
@@ -342,6 +374,10 @@ impl Compiler {
 
             // Trailing modifiers: `int long`, `unsigned long long`, etc.
             while is_decl_modifier(self.lex.tk) {
+                if self.lex.tk == Token::Attribute {
+                    self.skip_attribute_specifiers()?;
+                    continue;
+                }
                 self.next()?;
             }
 
@@ -366,7 +402,7 @@ impl Compiler {
                     bf_active = false;
 
                     let inner_size = self.structs[inner_id].size;
-                    let pack = self.lex.current_pack();
+                    let pack = if packed { 1 } else { self.lex.current_pack() };
                     let inner_align = self.structs[inner_id].align.min(pack);
                     if inner_align > struct_align {
                         struct_align = inner_align;
@@ -438,6 +474,15 @@ impl Compiler {
             // fields (`int (*xCompare)(int, int);`) and array fields
             // (`int counts[8];`) parse with the same rules as locals
             // and globals.
+            //
+            // A function-pointer typedef base (`fn_t a, b;`) seeds its
+            // lineage once into `self.pending`; the per-declarator
+            // `.take()` below would zero it for declarators after the
+            // first. Capture and re-seed each iteration. Only the two
+            // typedef-derived fields are restored; `fn_ptr_param_types`
+            // is a per-declarator output of `parse_declarator`.
+            let base_field_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+            let base_field_is_function_type = self.pending.base_is_function_type;
             loop {
                 // Anonymous bitfield (`int :N;`) -- skips a name and
                 // just reserves bits for padding. Detected by `:`
@@ -489,8 +534,13 @@ impl Compiler {
                     break;
                 }
 
+                self.pending.fn_ptr_indirection = base_field_fn_ptr_indirection;
+                self.pending.base_is_function_type = base_field_is_function_type;
                 let (id_idx, mut field_ty, mut field_array_size) =
                     self.parse_declarator(field_base)?;
+                // A member may carry a trailing attribute
+                // (`int x __attribute__((deprecated));`).
+                self.skip_attribute_specifiers()?;
                 // A typedef whose alias is an array contributes
                 // its dimension when the declarator stayed at the
                 // typedef's element type (`jmp_buf b;` ->
@@ -614,7 +664,7 @@ impl Compiler {
                     // value via [`Lexer::current_pack`]; default is
                     // 8 (no-op) so unpacked structs lay out exactly
                     // as before.
-                    let pack = self.lex.current_pack();
+                    let pack = if packed { 1 } else { self.lex.current_pack() };
                     let elem_size = self.size_of_type(field_ty);
                     let field_storage = if field_array_size > 0 {
                         elem_size * field_array_size as usize
@@ -685,7 +735,16 @@ impl Compiler {
         // clamping above already prevents struct_align from
         // exceeding pack, but cap here too so an empty struct
         // under `pack(1)` still ends up with align=1.
-        let struct_align = struct_align.min(8).min(self.lex.current_pack());
+        // TODO: honor `_Alignas(N)` / `__attribute__((aligned(N)))`
+        // for N > 8. The attribute specifiers are parsed and consumed
+        // (`skip_attribute_specifiers`) but the requested alignment is
+        // dropped here; supporting it requires over-aligned stack
+        // slots and global placement, which the 8-wide slot model does
+        // not yet represent.
+        let struct_align =
+            struct_align
+                .min(8)
+                .min(if packed { 1 } else { self.lex.current_pack() });
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural
         // alignment. Empty structs floor at 1 byte (so a `struct
@@ -702,6 +761,41 @@ impl Compiler {
         self.structs[struct_id].size = if saw_field { total } else { total.max(1) };
         self.structs[struct_id].align = struct_align;
         Ok(struct_id)
+    }
+
+    /// Re-lay a struct's fields with `__attribute__((packed))`
+    /// semantics: no inter-member padding and an alignment of 1. Used
+    /// when the attribute marker follows the body, after the fields were
+    /// placed at their natural alignment. A union only loses its tail
+    /// padding (members already sit at offset 0). Bitfield members are
+    /// left at their computed offsets; the packed bit-layout rules are
+    /// not modeled here.
+    pub(super) fn repack_struct(&mut self, struct_id: usize) {
+        self.structs[struct_id].align = 1;
+        if self.structs[struct_id].is_union {
+            return;
+        }
+        let n = self.structs[struct_id].fields.len();
+        let mut offset = 0usize;
+        for i in 0..n {
+            let (ty, array_size, bit_width) = {
+                let f = &self.structs[struct_id].fields[i];
+                (f.ty, f.array_size, f.bit_width)
+            };
+            if bit_width > 0 {
+                continue;
+            }
+            self.structs[struct_id].fields[i].offset = offset;
+            let storage = if array_size > 0 {
+                self.size_of_type(ty) * array_size as usize
+            } else if array_size < 0 {
+                0
+            } else {
+                self.size_of_type(ty)
+            };
+            offset += storage;
+        }
+        self.structs[struct_id].size = offset.max(1);
     }
 }
 

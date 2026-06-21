@@ -904,7 +904,17 @@ fn build_debug_info(
                 let Some(type_off) = type_off else {
                     continue;
                 };
-                let fp_byte_offset = fp_byte_offset_for_slot(v.fp_slot);
+                // Slot coalescing may have moved this local onto a new
+                // exclusive frame offset; use it so the location is not
+                // stale. A local moved onto shared storage is in
+                // `promoted_local_slots` and gets an empty location below.
+                let eff = build
+                    .coalesced_slot_remap
+                    .get(&ent_pc)
+                    .and_then(|m| m.get(&v.fp_slot))
+                    .copied()
+                    .unwrap_or(v.fp_slot);
+                let fp_byte_offset = fp_byte_offset_for_slot(eff);
                 let abbrev = if v.is_parameter {
                     ABBREV_FORMAL_PARAMETER
                 } else {

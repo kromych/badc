@@ -36,6 +36,13 @@
 // reference to route through the import slot rather than a local cell.
 #ifndef __APPLE__
 char **environ;
+// POSIX `tzset` outputs. Like `environ`, the Linux bindings route these
+// through a COPY relocation against the C library's symbols so a read
+// after `tzset()` sees what the library wrote; the local slots here are
+// the relocation targets.
+char *tzname[2];
+long timezone;
+int daylight;
 #endif
 
 // msvcrt's environment-vector alias on Windows. `<stdlib.h>`'s

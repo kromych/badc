@@ -78,10 +78,14 @@ impl Compiler {
             let mut is_typedef = false;
             let mut static_seen = false;
             let mut extern_seen = false;
+            let mut atomic_base: Option<i64> = None;
             let mut m = decl_base::IntModifiers::default();
-            // `_Noreturn` scopes to this declaration; clear the carrier
-            // so it cannot leak onto the next one.
+            // `_Noreturn`, `__declspec(thread)`, and `__declspec(dllexport)`
+            // scope to this declaration; clear the carriers so they cannot leak
+            // onto the next one.
             self.pending_noreturn = false;
+            self.pending.attr_thread_local = false;
+            self.pending.attr_dllexport = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
@@ -98,6 +102,20 @@ impl Compiler {
                 } else if self.lex.tk == Token::Extern {
                     extern_seen = true;
                     self.next()?;
+                } else if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
+                    // C11 6.7.2.4 atomic type specifier `_Atomic(type-name)`:
+                    // the inner type-name names the base type (distinct from
+                    // the `_Atomic` qualifier consumed as a no-op below).
+                    atomic_base = self.try_parse_atomic_type_specifier()?;
+                } else if self.lex.tk == Token::Attribute
+                    || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+                {
+                    self.skip_attribute_specifiers()?;
+                    // `__declspec(thread)` in the specifier run -> thread-local.
+                    if self.pending.attr_thread_local {
+                        thread_local = true;
+                        self.pending.attr_thread_local = false;
+                    }
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline {
                         self.pending_is_inline = true;
@@ -110,7 +128,9 @@ impl Compiler {
                     break;
                 }
             }
-            if self.lex.tk == Token::Int {
+            if let Some(inner) = atomic_base {
+                bt = inner;
+            } else if self.lex.tk == Token::Int {
                 self.next()?;
                 bt = m.int_base();
             } else if self.lex.tk == Token::Char {
@@ -225,11 +245,43 @@ impl Compiler {
             // x`, etc. The base type is already chosen; these are
             // pure no-ops in c5 but appear in real C source.
             while is_decl_modifier(self.lex.tk) {
+                if self.lex.tk == Token::Attribute {
+                    self.skip_attribute_specifiers()?;
+                    continue;
+                }
                 self.next()?;
             }
 
+            // A function-pointer typedef base type contributes its lineage
+            // to every declarator in the list (`fn_t a, b;`). The
+            // per-declarator symbol creation consumes these pending fields,
+            // so capture them and re-seed each iteration; otherwise only the
+            // first declarator keeps the lineage and a call through a later
+            // one defaults its result type to int.
+            let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+            let base_is_function_type = self.pending.base_is_function_type;
+            let base_typedef_fn_proto = self.pending.typedef_fn_proto;
+            let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
             while self.lex.tk != ';' && self.lex.tk != '}' {
+                self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
+                self.pending.base_is_function_type = base_is_function_type;
+                self.pending.typedef_fn_proto = base_typedef_fn_proto;
+                self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
+                // `__declspec(dllexport)` on the declarator exports the name,
+                // the equivalent of `#pragma export(name)`. resolve_exports
+                // validates the name resolves to a defined function.
+                if self.pending.attr_dllexport {
+                    self.pending.attr_dllexport = false;
+                    let name = self.symbols[id_idx].name.clone();
+                    if !self.pending_exports.contains(&name) {
+                        self.pending_exports.push(name);
+                    }
+                }
+                // A declarator may carry a trailing attribute before the
+                // terminator (`name(args) __attribute__((...));`, an
+                // initializer, a comma, or a function body's `{`).
+                self.skip_attribute_specifiers()?;
                 // Capture per this declarator before any nested parse can
                 // overwrite it (a later parameter of function type would
                 // re-set it). A bare function-type declarator is a function
@@ -572,6 +624,10 @@ impl Compiler {
                         self.next()?;
                         self.parse_function_params()?
                     };
+                    // A function declarator may carry a trailing attribute
+                    // before the prototype's `;` or the body's `{`
+                    // (`RET name(args) __attribute__((noreturn));`).
+                    self.skip_attribute_specifiers()?;
 
                     // Stash the signature on the function symbol so
                     // call sites can type-check arguments later. For
@@ -821,6 +877,7 @@ impl Compiler {
 
                     self.loc_offs = 0;
                     self.max_loc_offs = 0;
+                    self.multi_cell_temps.clear();
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.uses_alloca_in_current_fn = false;
@@ -875,6 +932,9 @@ impl Compiler {
                         let local_val = -self.loc_offs;
                         if self.loc_offs > self.max_loc_offs {
                             self.max_loc_offs = self.loc_offs;
+                        }
+                        if slots > 1 {
+                            self.multi_cell_temps.push((local_val, slots));
                         }
                         // dst = &local
                         self.emit_lea(local_val);
@@ -958,6 +1018,22 @@ impl Compiler {
                     // through parse_block_stmt.
                     self.tag_scopes.push(alloc::vec::Vec::new());
                     while self.lex.tk != '}' {
+                        // C23 6.7.13 / 6.8: an attribute-specifier-
+                        // sequence may lead either a declaration or a
+                        // statement at the function-body top level.
+                        // Consume it, then dispatch on the following
+                        // token.
+                        let mut leading_maybe_unused = false;
+                        if self.lex.tk == Token::Attribute
+                            || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+                        {
+                            self.pending.attr_maybe_unused = false;
+                            self.skip_attribute_specifiers()?;
+                            leading_maybe_unused = self.pending.attr_maybe_unused;
+                            if self.lex.tk == '}' {
+                                break;
+                            }
+                        }
                         if self.lex.tk == Token::StaticAssert {
                             // C11 6.7.10 lets static_assert sit
                             // anywhere a declaration may appear,
@@ -975,7 +1051,7 @@ impl Compiler {
                             self.parse_block_typedef(None)?;
                         } else if self.lex_is_type_start() {
                             let item_before = self.ast_stmts_snapshot();
-                            self.parse_function_body_local_decl()?;
+                            self.parse_function_body_local_decl(leading_maybe_unused)?;
                             let item_after = self.ast.stmts.len();
                             for id in item_before..item_after {
                                 top_level_ids.push(id as super::super::ast::StmtId);
@@ -1062,10 +1138,10 @@ impl Compiler {
                         0
                     };
 
-                    // C99 6.9.1p12: a value-returning function must not
-                    // reach its closing brace without a `return value;`.
+                    // C99 6.9.1p12: warn when a value-returning function
+                    // may reach its closing brace without a `return value;`.
                     // Run before `ast_finish_function` moves the body AST.
-                    self.check_non_void_fall_off()?;
+                    self.check_non_void_fall_off();
                     self.ast_finish_function(
                         ent_pc,
                         n_params,
@@ -1137,6 +1213,36 @@ impl Compiler {
                         bl.function_bc_pc = ent_pc as u64;
                         self.variables.push(bl);
                     }
+                    // Record declared multi-cell locals (aggregates and
+                    // multi-cell scalars) for slot coalescing. A declared
+                    // local at frame slot `fp_slot` (most-negative cell)
+                    // occupying `cells` 8-byte cells covers
+                    // `fp_slot ..= fp_slot + cells - 1`; the interior cells
+                    // carry no direct slot reference, so the pass must
+                    // reserve them. Computed from the per-function variable
+                    // list assembled just above (`local_storage_slots`
+                    // mirrors the parser's reservation). Patches the
+                    // `FinishedFunction` pushed by `ast_finish_function`.
+                    // A struct-by-value parameter keeps its body-visible copy
+                    // in a negative slot too (C99 6.5.2.2 + the host ABI), so
+                    // `fp_slot < 0` -- not `!is_parameter` -- selects every
+                    // local that needs its interior cells reserved.
+                    let mut multi_cell: Vec<(i64, i64)> = Vec::new();
+                    for v in &self.variables {
+                        if v.function_bc_pc == ent_pc as u64 && v.fp_slot < 0 {
+                            let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
+                            if cells > 1 {
+                                multi_cell.push((v.fp_slot, cells));
+                            }
+                        }
+                    }
+                    // Multi-cell temporaries the parser allocated without a
+                    // symbol (struct call results, parameter copies, compound
+                    // literals); these never appear in the variable list.
+                    multi_cell.extend_from_slice(&self.multi_cell_temps);
+                    if let Some(ff) = self.finished_functions.last_mut() {
+                        ff.multi_cell_slots = multi_cell;
+                    }
                     // Collect unused-parameter and unused-local
                     // diagnostics for the function's top-level
                     // bindings. Inner-block locals were already
@@ -1158,6 +1264,7 @@ impl Compiler {
                             || !sym.decl_in_main_source
                             || sym.address_escaped
                             || sym.was_read
+                            || sym.maybe_unused
                             || sym.name.is_empty()
                             || sym.name.starts_with('_')
                         {
@@ -1293,10 +1400,32 @@ impl Compiler {
                                 }
                                 continue;
                             }
-                            return Err(self.compile_err(format!(
-                                "array `{}` declared with empty brackets needs an initializer",
-                                self.symbols[id_idx].name
-                            )));
+                            // C99 6.9.2: a file-scope `T x[];` with no
+                            // `extern` and no initializer is a tentative
+                            // definition. An array type left incomplete at
+                            // the end of the unit is completed to one
+                            // element, so reserve a single zero-filled
+                            // element here.
+                            self.symbols[id_idx].array_size = 1;
+                            if let Some(first) = self.symbols[id_idx].array_dims.first_mut() {
+                                *first = 1;
+                            }
+                            let elem = self.size_of_type(ty) as i64;
+                            let aligned = ((elem + 7) / 8) * 8;
+                            if self.size_of_type(ty) > 1 {
+                                self.align_data_to_8();
+                            }
+                            let off = self.data.len() as i64;
+                            self.symbols[id_idx].val = off;
+                            self.symbols[id_idx].reserved_data_bytes = aligned;
+                            for _ in 0..aligned {
+                                self.data.push(0);
+                            }
+                            self.symbols[id_idx].defined_here = true;
+                            if self.lex.tk == ',' {
+                                self.next()?;
+                            }
+                            continue;
                         }
                         if thread_local {
                             return Err(self.compile_err(
@@ -1332,12 +1461,30 @@ impl Compiler {
                                 items.div_ceil(slots) as i64
                             };
                             self.next()?;
-                            self.align_data_to_8();
-                            let off = self.data.len() as i64;
+                            // C99 6.9.2: a prior tentative definition already
+                            // reserved storage; reuse it so references emitted
+                            // before this definition -- which baked in the
+                            // tentative's offset -- observe the initialized
+                            // object, not the tentative's separate zero copy.
+                            // Reuse only when the initializer fits the reserved
+                            // bytes: a deferred-size tentative (`T x[];`)
+                            // reserves one element, so a larger initializer must
+                            // allocate fresh rather than overrun later globals.
+                            let needed = count * elem_size as i64;
+                            let off = if was_tentative_glo
+                                && needed <= self.symbols[id_idx].reserved_data_bytes
+                            {
+                                self.symbols[id_idx].val
+                            } else {
+                                self.align_data_to_8();
+                                let fresh = self.data.len() as i64;
+                                self.symbols[id_idx].reserved_data_bytes = needed;
+                                for _ in 0..needed {
+                                    self.data.push(0);
+                                }
+                                fresh
+                            };
                             self.symbols[id_idx].val = off;
-                            for _ in 0..(count * elem_size as i64) {
-                                self.data.push(0);
-                            }
                             let mut i: i64 = 0;
                             while self.lex.tk != '}' {
                                 // C99 6.7.8p7 array designator on a
@@ -1418,18 +1565,30 @@ impl Compiler {
                         }
                         let total_bytes = (self.size_of_type(ty) as i64) * final_size;
                         let aligned = ((total_bytes + 7) / 8) * 8;
-                        // On a tentative-merge path the prior
-                        // declaration would have had no `[]` either
-                        // (deferred size cannot be a re-decl), so
-                        // always allocate fresh storage here.
-                        if self.size_of_type(ty) > 1 {
-                            self.align_data_to_8();
-                        }
-                        let off = self.data.len() as i64;
+                        // C99 6.9.2: a prior tentative definition already
+                        // reserved storage; reuse it so references emitted
+                        // before this definition observe the initialized object,
+                        // not the tentative's separate zero copy. Reuse only
+                        // when the initializer fits the reserved bytes: a
+                        // deferred-size tentative (`T x[];`) reserves one
+                        // element, so a larger initializer must allocate fresh
+                        // rather than overrun later globals.
+                        let off = if was_tentative_glo
+                            && aligned <= self.symbols[id_idx].reserved_data_bytes
+                        {
+                            self.symbols[id_idx].val
+                        } else {
+                            if self.size_of_type(ty) > 1 {
+                                self.align_data_to_8();
+                            }
+                            let fresh = self.data.len() as i64;
+                            self.symbols[id_idx].reserved_data_bytes = aligned;
+                            for _ in 0..aligned {
+                                self.data.push(0);
+                            }
+                            fresh
+                        };
                         self.symbols[id_idx].val = off;
-                        for _ in 0..aligned {
-                            self.data.push(0);
-                        }
                         self.write_array_init_into_data(off, ty, &elements);
                         self.symbols[id_idx].has_initializer = true;
                         self.symbols[id_idx].defined_here = true;
@@ -1470,7 +1629,20 @@ impl Compiler {
                         // duplicate-definition check above.
                         let reuse_prior_storage = was_tentative_glo
                             || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
-                        let var_offset = if reuse_prior_storage {
+                        // `extern _Thread_local T x;` (no initializer) is a
+                        // pure reference, not a definition: it must not
+                        // reserve TLS storage. The defining unit owns the
+                        // slot; the access resolves by symbol against the
+                        // merged TLS block at link time. A local slot here
+                        // would add a phantom per-unit copy (one TLS block
+                        // per object), breaking the shared-state semantics
+                        // and the multi-object link.
+                        let extern_tls_ref = thread_local && was_extern_only_decl;
+                        let var_offset = if extern_tls_ref {
+                            self.symbols[id_idx].is_extern_decl = true;
+                            self.symbols[id_idx].defined_here = false;
+                            0
+                        } else if reuse_prior_storage {
                             self.symbols[id_idx].val
                         } else if thread_local {
                             let off = self.tls_data.len() as i64;
@@ -1485,12 +1657,15 @@ impl Compiler {
                             }
                             let off = self.data.len() as i64;
                             self.symbols[id_idx].val = off;
+                            self.symbols[id_idx].reserved_data_bytes = bytes;
                             for _ in 0..bytes {
                                 self.data.push(0);
                             }
                             off
                         };
-                        self.symbols[id_idx].defined_here = true;
+                        if !extern_tls_ref {
+                            self.symbols[id_idx].defined_here = true;
+                        }
 
                         // Optional initializer. For non-arrays, the
                         // restricted constant-expression path
@@ -1525,6 +1700,13 @@ impl Compiler {
                                 // entries stay zero-init.
                                 let elem_size = self.size_of_type(ty);
                                 let sid = struct_id_of(ty);
+                                // A multi-dimensional array (`T xs[A][B]`) has an
+                                // element that is itself an array of structs; each
+                                // top-level group spans the inner dimensions.
+                                let inner_dims = self.inner_dims_of(id_idx);
+                                let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
+                                let group_stride = elem_size as i64 * inner_product;
+                                let group_count = array_size / inner_product;
                                 if self.lex.tk != '{' {
                                     return Err(
                                         self.compile_err("array initializer must start with `{{`")
@@ -1559,18 +1741,25 @@ impl Compiler {
                                         self.next()?;
                                         idx = desig;
                                     }
-                                    if idx >= array_size {
+                                    if idx >= group_count {
                                         return Err(self.compile_err(format!(
                                             "too many initializers for `{}`",
                                             self.symbols[id_idx].name
                                         )));
                                     }
-                                    let here = var_offset + idx * elem_size as i64;
-                                    // C99 6.7.8p20: the braces around each
-                                    // struct element may be elided, in which
-                                    // case the flat list fills that element's
-                                    // fields in order.
-                                    if self.lex.tk == '{' {
+                                    let here = var_offset + idx * group_stride;
+                                    // C99 6.7.8p20: the braces around each struct
+                                    // element may be elided. A multi-dimensional
+                                    // array's element is itself an array of
+                                    // structs -- recurse into the inner dimensions.
+                                    if !inner_dims.is_empty() {
+                                        self.collect_struct_array_data(
+                                            sid,
+                                            here,
+                                            &inner_dims,
+                                            elem_size as i64,
+                                        )?;
+                                    } else if self.lex.tk == '{' {
                                         self.collect_struct_initializer(sid, here)?;
                                     } else {
                                         self.fill_struct_fields(sid, here, false)?;

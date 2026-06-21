@@ -139,7 +139,11 @@ impl Compiler {
     /// `typedef struct X X; X *p;` would otherwise misparse as
     /// `Int p;`.
     pub(super) fn lex_is_type_start(&self) -> bool {
-        is_type_start_token(self.lex.tk) || self.is_lex_typedef_name()
+        is_type_start_token(self.lex.tk)
+            || self.is_lex_typedef_name()
+            // A leading C23 `[[ ... ]]` attribute introduces a
+            // declaration (`[[noreturn]] void f(void);`).
+            || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
     }
 
     /// True when the current lexer token is an identifier bound to a
@@ -362,32 +366,40 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
     if size == 0 {
         return None;
     }
-    if matches!(target, Target::WindowsX64) {
-        // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
-        // value in a register; larger ones go by implicit reference,
-        // which keeps the by-address convention.
-        if !matches!(size, 1 | 2 | 4 | 8) {
-            return None;
-        }
-    } else if size > 16 && !matches!(target, Target::LinuxX64) {
-        // AArch64 (AAPCS64) passes a larger aggregate by reference; the
-        // c5 by-address convention already matches that on the wire, so
-        // it is not tagged. System V x86_64 passes it inline on the
-        // stack (MEMORY class), which the marshal / prologue handle, so
-        // LinuxX64 is admitted at any size.
-        return None;
-    }
+    let aarch64 = matches!(
+        target,
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
+    );
     let align = (structs[id].align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // Phase 1 routes only integer-class aggregates through the host
-    // ABI. A homogeneous floating-point aggregate (AAPCS64 HFA) would
-    // consume the FP argument bank and shift the placement of any
-    // following floating-point scalar parameter; until the callee /
-    // caller FP-bank accounting handles that, such aggregates keep the
-    // by-address convention. TODO: HFA / mixed int+FP aggregates.
-    if fields.iter().any(|f| f.kind != ScalarKind::Int) {
-        return None;
+    // AAPCS64 6.8.2: a homogeneous floating-point aggregate (1..4 members
+    // all the same FP type) passes in the FP argument bank, up to four
+    // registers -- a four-`double` HFA is 32 bytes, past the by-reference
+    // threshold. Admit it on AArch64 ahead of the size / FP-class gates.
+    let is_hfa = aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some();
+    if !is_hfa {
+        if matches!(target, Target::WindowsX64) {
+            // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
+            // value in a register; larger ones go by implicit reference,
+            // which keeps the by-address convention.
+            if !matches!(size, 1 | 2 | 4 | 8) {
+                return None;
+            }
+        } else if size > 16 && !matches!(target, Target::LinuxX64) {
+            // AArch64 passes a larger non-HFA aggregate by reference; the c5
+            // by-address convention already matches. System V x86_64 passes
+            // it inline on the stack (MEMORY class), handled by the marshal.
+            return None;
+        }
+        // System V x86_64 routes FP eightbytes to xmm (<= 16 bytes, in
+        // registers) or the stack (> 16 bytes), so an aggregate with a
+        // floating-point member is admitted there. Other non-HFA targets
+        // keep FP aggregates by-address (Windows x64 has no SSE-eightbyte
+        // struct class). TODO: Windows x64 FP-aggregate arguments.
+        if !matches!(target, Target::LinuxX64) && fields.iter().any(|f| f.kind != ScalarKind::Int) {
+            return None;
+        }
     }
     Some(AggDesc {
         size,
@@ -441,21 +453,22 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
     let align = (structs[id].align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // A <=16B aggregate whose eightbyte/HFA classification places any unit
-    // in a floating-point return register (a pure-FP eightbyte on System V,
-    // an HFA on AAPCS64) keeps the out-pointer convention: the emit path
-    // returns aggregate units only through integer registers. An eightbyte
-    // shared by integer and FP members (a union overlapping a double with an
-    // int/pointer) classifies as Integer and returns in the integer
-    // registers, bit-for-bit. TODO: FP-bank aggregate returns.
-    let returns_in_fp = matches!(
-        crate::c5::codegen::abi_classify::classify_aggregate(size, align, &fields, target.abi(), true),
-        crate::c5::codegen::abi_classify::AggClass::Regs(ref c)
-            if c.contains(&crate::c5::codegen::abi_classify::RegClass::Sse)
-    );
-    if returns_in_fp {
-        return StructReturnAbi::OutPtr;
+    // AAPCS64 6.9: a homogeneous floating-point aggregate returns in up to
+    // four consecutive FP registers (v0..v3), independent of the 16-byte
+    // integer-register threshold -- a four-`double` HFA is 32 bytes. The
+    // emit places each member by its `hfa_member_layout` offset.
+    if aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some() {
+        return StructReturnAbi::Regs(AggDesc {
+            size,
+            align,
+            fields,
+        });
     }
+    // A <=16B aggregate returns in registers: System V AMD64 3.2.3 places
+    // each eightbyte in the integer (rax/rdx) or SSE (xmm0/xmm1) bank per its
+    // classification, and the emit reads the per-eightbyte class to pick the
+    // bank. An eightbyte shared by integer and FP members classifies as
+    // Integer and returns in the integer registers bit-for-bit.
     let desc = AggDesc {
         size,
         align,

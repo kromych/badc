@@ -14,14 +14,14 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	sub	x0, x29, #0x8
-               	ldrh	w1, [x0]
+               	mov	x1, #0x3                // =3
+               	ldrh	w2, [x0]
                	mov	x17, #0xfffc            // =65532
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	mov	x2, #0x3                // =3
-               	orr	x1, x1, x2
+               	and	x2, x2, x17
+               	orr	x1, x2, x1
                	strh	w1, [x0]
                	sub	x0, x29, #0x8
                	ldrh	w1, [x0]
@@ -104,14 +104,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x10
-               	ldr	w1, [x0]
+               	mov	x1, #0x4                // =4
+               	ldr	w2, [x0]
                	mov	x17, #0xfff8            // =65528
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	mov	x2, #0x4                // =4
-               	orr	x1, x1, x2
+               	and	x2, x2, x17
+               	orr	x1, x2, x1
                	str	w1, [x0]
                	sub	x0, x29, #0x10
                	ldr	w1, [x0]
@@ -210,14 +210,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x18
-               	ldr	w1, [x0]
+               	mov	x1, #0x7                // =7
+               	ldr	w2, [x0]
                	mov	x17, #0xf000            // =61440
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	mov	x2, #0x7                // =7
-               	orr	x1, x1, x2
+               	and	x2, x2, x17
+               	orr	x1, x2, x1
                	str	w1, [x0]
                	sub	x0, x29, #0x18
                	ldrh	w1, [x0]

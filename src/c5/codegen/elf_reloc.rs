@@ -93,6 +93,26 @@ const NT_BADC_MACHO_TLV_FIXUP: u32 = 6;
 // string pairs. The final-image writer binds each local data symbol to
 // the host's data object with an `R_*_COPY` relocation.
 const NT_BADC_COPY_RELOC: u32 = 7;
+// Defined `_Thread_local` symbols. desc is a sequence of (u64 tls_offset,
+// u64 size, NUL name) entries -- one per thread-local variable this unit
+// defines, with the byte offset inside the unit's TLS block. The linker
+// builds the merged TLS symbol table from these to resolve cross-unit
+// extern accesses.
+const NT_BADC_TLS_SYM: u32 = 8;
+// Mach-O TLV descriptors keyed by a cross-unit symbol. desc is a sequence
+// of (u64 descriptor_index, NUL name) entries: the index into the
+// NT_BADC_MACHO_TLV_DESC list and the referenced `extern _Thread_local`
+// variable. The linker overwrites that descriptor's offset with the
+// variable's offset in the merged TLS block.
+const NT_BADC_MACHO_TLV_DESC_SYM: u32 = 9;
+// Linux/x86_64 TLS access fixups. desc is a sequence of entries, each:
+//   u64 imm_offset (byte offset of the `sub` imm32 in `.text`)
+//   u8  kind (0 = same-unit local, 1 = cross-unit extern)
+//   kind 0: u64 local_offset (byte offset in this unit's TLS block)
+//   kind 1: NUL name (the referenced `extern _Thread_local` symbol)
+// The linker patches each imm32 with the variable's TPOFF once the
+// units' TLS blocks are merged.
+const NT_BADC_ELF_TPOFF: u32 = 10;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -512,6 +532,11 @@ pub(super) fn write_relocatable(
     // offset within `.data`; the size comes from the symbol's type
     // (struct / union globals stay unsized).
     let mut defined_data_globals: Vec<(&str, i64, u64)> = Vec::new();
+    // Defined `_Thread_local` symbols: name, offset within this unit's
+    // TLS block, byte size. Exported through NT_BADC_TLS_SYM (not the
+    // `.data` symbol table -- their value is a TLS-block offset, not a
+    // `.data` offset, and merging them as `.data` symbols would collide).
+    let mut defined_tls_globals: Vec<(&str, i64, u64)> = Vec::new();
     {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
@@ -521,16 +546,36 @@ pub(super) fn write_relocatable(
                 && sym.linkage == Linkage::External
                 && !sym.name.is_empty()
             {
-                defined_data_globals.push((sym.name.as_str(), sym.val, data_global_byte_size(sym)));
+                if sym.is_thread_local {
+                    defined_tls_globals.push((
+                        sym.name.as_str(),
+                        sym.val,
+                        data_global_byte_size(sym),
+                    ));
+                } else {
+                    defined_data_globals.push((
+                        sym.name.as_str(),
+                        sym.val,
+                        data_global_byte_size(sym),
+                    ));
+                }
             }
         }
     }
 
     // Unique cross-TU user-data names referenced by
-    // `user_extern_data_refs`. Same dedup shape as the function
-    // case above.
+    // `user_extern_data_refs` (code references) and
+    // `extern_data_relocs` (pointer-to-extern-data initializers in the
+    // data segment). Both resolve against the same undefined-data
+    // symbols.
     let mut user_extern_data_names: Vec<&str> = Vec::new();
     for r in &build.user_extern_data_refs {
+        let s = r.symbol_name.as_str();
+        if !user_extern_data_names.contains(&s) {
+            user_extern_data_names.push(s);
+        }
+    }
+    for r in &build.extern_data_relocs {
         let s = r.symbol_name.as_str();
         if !user_extern_data_names.contains(&s) {
             user_extern_data_names.push(s);
@@ -686,15 +731,40 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // Defined data globals: STB_GLOBAL + STT_OBJECT, shndx
-    // points at `.data`. C99 6.2.2: external-linkage objects
+    // Section symbol indices follow the order they are pushed:
+    // null(0), file(1), text(2), data(3), bss(4), .debug_line(5),
+    // .debug_abbrev(6). Data + function-pointer fixups land against the
+    // matching section symbol; the `r_addend` carries the offset within
+    // the section.
+    let text_sym_idx: u64 = 2;
+    let data_sym_idx: u64 = 3;
+    let bss_sym_idx: u64 = 4;
+    let debug_line_sym_idx: u64 = 5;
+    let debug_abbrev_sym_idx: u64 = 6;
+
+    // A data offset at or past the file image names a byte in the
+    // zero-fill `.bss` section; map it to that section symbol and the
+    // offset within it. `build.data` holds only the file-backed bytes
+    // after zero-object segregation.
+    let data_file_len = build.data.len() as i64;
+    let data_section_ref = |off: i64| -> (u64, i64) {
+        if off >= data_file_len {
+            (bss_sym_idx, off - data_file_len)
+        } else {
+            (data_sym_idx, off)
+        }
+    };
+
+    // Defined data globals: STB_GLOBAL + STT_OBJECT, in `.data` or, for
+    // a wholly-zero object, `.bss`. C99 6.2.2: external-linkage objects
     // surface by name so sibling TUs can resolve `extern T x;`.
     for (i, (_, val, size)) in defined_data_globals.iter().enumerate() {
+        let (sym_sec, value) = data_section_ref(*val);
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_data_globals_start + i],
             st_info: pack_sym_info(STB_GLOBAL, STT_OBJECT),
-            st_shndx: SHIDX_DATA,
-            st_value: *val as u64,
+            st_shndx: sym_sec as u16,
+            st_value: value as u64,
             st_size: *size,
             ..Default::default()
         });
@@ -713,16 +783,6 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
-
-    // Section symbol indices follow the order we pushed them in
-    // above: null(0), file(1), then text(2), data(3), bss(4),
-    // .debug_line(5), .debug_abbrev(6). Data + function-pointer
-    // fixups land against the matching section symbol; the
-    // `r_addend` carries the offset within the section.
-    let text_sym_idx: u64 = 2;
-    let data_sym_idx: u64 = 3;
-    let debug_line_sym_idx: u64 = 5;
-    let debug_abbrev_sym_idx: u64 = 6;
 
     // Build the `.rela.text` payload now that import symbols
     // have their final indices.
@@ -809,12 +869,13 @@ pub(super) fn write_relocatable(
     // x86_64; each becomes one or two ELF relocs against the
     // `.data` section symbol with `r_addend = data_offset`.
     for fx in &build.data_fixups {
+        let (sym, addend) = data_section_ref(fx.data_offset as i64);
         emit_addr_fixup_relocs(
             machine_for_rela,
             &mut rela_bytes,
             fx.adrp_offset as u64,
-            data_sym_idx,
-            fx.data_offset as i64,
+            sym,
+            addend,
         );
     }
 
@@ -986,14 +1047,16 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
 
-    // .bss (no file bytes)
+    // .bss (no file bytes) -- zero-init data segregated past the file
+    // image; the linker zero-fills it. `sh_addralign` 16 matches the
+    // segregation's alignment.
     sh.push(Elf64Shdr {
         sh_name: shstrtab_offs[3],
         sh_type: SHT_NOBITS,
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: out.len() as u64,
-        sh_size: 0,
-        sh_addralign: 8,
+        sh_size: build.bss_size as u64,
+        sh_addralign: 16,
         ..Default::default()
     });
 
@@ -1052,10 +1115,28 @@ pub(super) fn write_relocatable(
     let mut rela_data_bytes: Vec<u8> =
         Vec::with_capacity((build.data_relocs.len() + build.code_relocs.len()) * ELF64_RELA_SIZE);
     for r in &build.data_relocs {
+        let (sym, addend) = data_section_ref(r.target_offset as i64);
         let rela = Elf64Rela {
             r_offset: r.data_offset,
-            r_info: (data_sym_idx << 32) | rtype_abs64 as u64,
-            r_addend: r.target_offset as i64,
+            r_info: (sym << 32) | rtype_abs64 as u64,
+            r_addend: addend,
+        };
+        write_struct(&mut rela_data_bytes, &rela);
+    }
+    // Pointer-to-extern-data initializers: the reloc targets the named
+    // undefined-data symbol so the linker resolves it against the
+    // defining unit's storage. The addend carries the byte offset added
+    // to the symbol (`&extern_arr[N]`).
+    for r in &build.extern_data_relocs {
+        let pos = user_extern_data_names
+            .iter()
+            .position(|n| *n == r.symbol_name.as_str())
+            .expect("user_extern_data_names contains every extern_data_reloc name");
+        let sym_idx = user_extern_data_sym_idx[pos] as u64;
+        let rela = Elf64Rela {
+            r_offset: r.data_offset,
+            r_info: (sym_idx << 32) | rtype_abs64 as u64,
+            r_addend: r.addend,
         };
         write_struct(&mut rela_data_bytes, &rela);
     }
@@ -1139,6 +1220,8 @@ pub(super) fn write_relocatable(
         &build.tls_index_fixups,
         &build.macho_tlv_descriptors,
         &build.macho_tlv_fixups,
+        &defined_tls_globals,
+        &build.elf_tpoff_fixups,
     );
     let note_off = round_up(out.len() as u64, 4);
     out.resize(note_off as usize, 0);
@@ -1328,6 +1411,8 @@ fn build_badc_note(
     tls_index_fixups: &[super::TlsIndexFixup],
     macho_tlv_descriptors: &[super::MachoTlvDescriptor],
     macho_tlv_fixups: &[super::MachoTlvFixup],
+    tls_symbols: &[(&str, i64, u64)],
+    elf_tpoff_fixups: &[super::ElfTpoffFixup],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
@@ -1427,6 +1512,75 @@ fn build_badc_note(
         out.extend_from_slice(&(name.len() as u32).to_le_bytes());
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_MACHO_TLV_FIXUP.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 8: defined `_Thread_local` symbols -- (tls_offset, size,
+    // NUL name) per variable this unit defines.
+    if !tls_symbols.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (sym_name, off, size) in tls_symbols {
+            desc.extend_from_slice(&(*off as u64).to_le_bytes());
+            desc.extend_from_slice(&size.to_le_bytes());
+            desc.extend_from_slice(sym_name.as_bytes());
+            desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_TLS_SYM.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 9: Mach-O TLV descriptors keyed by a cross-unit symbol --
+    // (descriptor_index, NUL name) per extern `_Thread_local` access.
+    let tlv_desc_syms: Vec<(usize, &str)> = macho_tlv_descriptors
+        .iter()
+        .enumerate()
+        .filter_map(|(i, d)| d.symbol.as_deref().map(|s| (i, s)))
+        .collect();
+    if !tlv_desc_syms.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (idx, sym_name) in &tlv_desc_syms {
+            desc.extend_from_slice(&(*idx as u64).to_le_bytes());
+            desc.extend_from_slice(sym_name.as_bytes());
+            desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_MACHO_TLV_DESC_SYM.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 10: Linux/x86_64 TLS access fixups -- (imm_offset, kind,
+    // local_offset | NUL name) per `Inst::TlsAddr` site.
+    if !elf_tpoff_fixups.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for f in elf_tpoff_fixups {
+            desc.extend_from_slice(&(f.imm_offset as u64).to_le_bytes());
+            match &f.target {
+                super::ElfTpoffTarget::Local(off) => {
+                    desc.push(0);
+                    desc.extend_from_slice(&off.to_le_bytes());
+                }
+                super::ElfTpoffTarget::Extern(sym_name) => {
+                    desc.push(1);
+                    desc.extend_from_slice(sym_name.as_bytes());
+                    desc.push(0);
+                }
+            }
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_ELF_TPOFF.to_le_bytes());
         out.extend_from_slice(name);
         pad_to_4(&mut out);
         out.extend_from_slice(&desc);
@@ -1580,11 +1734,13 @@ mod tests {
     fn empty_program(path: &str) -> Program {
         Program {
             data: Vec::new(),
+            data_object_starts: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
@@ -1610,6 +1766,7 @@ mod tests {
             copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),
+            bss_size: 0,
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
@@ -1619,6 +1776,8 @@ mod tests {
             func_names: Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             promoted_local_slots: alloc::collections::BTreeMap::new(),
+            coalesced_slot_remap: alloc::collections::BTreeMap::new(),
+            fn_unwind: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
             user_extern_data_refs: Vec::new(),
@@ -1628,9 +1787,12 @@ mod tests {
             tls_data: Vec::new(),
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
+            elf_tpoff_fixups: Vec::new(),
             data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),
+            dynamic_exports: Vec::new(),
             output_kind: OutputKind::Relocatable,
             shared_lib_name: None,
             dllmain_pc: None,

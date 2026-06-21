@@ -1,12 +1,11 @@
 // pwd.h -- POSIX user / password database lookups.
 //
 // `struct passwd` shape is per-platform: Darwin/BSD insert
-// pw_change/pw_class/pw_expire, Linux/glibc does not. The
+// pw_change/pw_class/pw_expire, Linux does not. The
 // offsets of pw_dir and pw_name differ accordingly, so a single
 // "any-platform" layout misses them on at least one OS.
 
-#ifndef _C5_PWD_H
-#define _C5_PWD_H
+#pragma once
 
 #include <sys/types.h>
 
@@ -25,7 +24,7 @@ struct passwd {
     char  __pad[64];
 };
 #else
-/* Linux / glibc layout: no pw_change, pw_class, pw_expire. */
+/* Linux layout: no pw_change, pw_class, pw_expire. */
 struct passwd {
     char *pw_name;     /* offset  0 */
     char *pw_passwd;   /* offset  8 */
@@ -45,6 +44,7 @@ struct passwd {
 #pragma binding(libc::getpwuid_r, "_getpwuid_r")
 #pragma binding(libc::getpwnam_r, "_getpwnam_r")
 #pragma binding(libc::getpwent, "_getpwent")
+#pragma binding(libc::setpwent, "_setpwent")
 #pragma binding(libc::endpwent, "_endpwent")
 #endif
 
@@ -55,6 +55,7 @@ struct passwd {
 #pragma binding(libc::getpwuid_r, "getpwuid_r")
 #pragma binding(libc::getpwnam_r, "getpwnam_r")
 #pragma binding(libc::getpwent, "getpwent")
+#pragma binding(libc::setpwent, "setpwent")
 #pragma binding(libc::endpwent, "endpwent")
 #endif
 
@@ -68,6 +69,5 @@ int getpwuid_r(int uid, struct passwd *pwd, char *buf, unsigned long buflen,
 int getpwnam_r(char *name, struct passwd *pwd, char *buf, unsigned long buflen,
                struct passwd **result);
 struct passwd *getpwent();
+void setpwent();
 int endpwent();
-
-#endif

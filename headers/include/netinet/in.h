@@ -10,6 +10,20 @@
 #define IPPROTO_IPV6 41
 #define IPV6_V6ONLY  26 // Linux value; macOS=27 -- set via setsockopt only
 
+// Well-known IPv4 addresses in host byte order (uniform across targets).
+#define INADDR_ANY             0x00000000U
+#define INADDR_BROADCAST       0xffffffffU
+#define INADDR_NONE            0xffffffffU
+#define INADDR_LOOPBACK        0x7f000001U
+#define INADDR_UNSPEC_GROUP    0xe0000000U
+#define INADDR_ALLHOSTS_GROUP  0xe0000001U
+#define INADDR_ALLRTRS_GROUP   0xe0000002U
+#define INADDR_MAX_LOCAL_GROUP 0xe00000ffU
+
+// Buffer sizes for the textual forms of an address (POSIX).
+#define INET_ADDRSTRLEN  16
+#define INET6_ADDRSTRLEN 46
+
 // 4-byte IPv4 address.
 struct in_addr {
     unsigned int s_addr;

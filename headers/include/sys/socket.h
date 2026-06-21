@@ -114,7 +114,25 @@ struct sockaddr_storage {
 #pragma binding(libc::getsockname, "_getsockname")
 #pragma binding(libc::recv,       "_recv")
 #pragma binding(libc::send,       "_send")
+#pragma binding(libc::recvfrom,   "_recvfrom")
+#pragma binding(libc::sendto,     "_sendto")
 #pragma binding(libc::shutdown,   "_shutdown")
+#pragma binding(libc::socketpair, "_socketpair")
+#pragma binding(libc::sendfile,   "_sendfile")
+
+// Optional header / trailer iovecs for Darwin's sendfile(). `struct
+// iovec` is from <sys/uio.h>; only a pointer to it is needed here.
+struct iovec;
+struct sf_hdtr {
+    struct iovec *headers;
+    int hdr_cnt;
+    struct iovec *trailers;
+    int trl_cnt;
+};
+// Darwin sendfile: send `*len` bytes of `fd` from `offset` to socket `s`,
+// updating `*len` with the count actually sent.
+int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
+             int flags);
 
 #define SOL_SOCKET    0xffff
 #define SO_REUSEADDR  0x0004
@@ -142,7 +160,10 @@ struct sockaddr_storage {
 #pragma binding(libc::getsockname, "getsockname")
 #pragma binding(libc::recv,       "recv")
 #pragma binding(libc::send,       "send")
+#pragma binding(libc::recvfrom,   "recvfrom")
+#pragma binding(libc::sendto,     "sendto")
 #pragma binding(libc::shutdown,   "shutdown")
+#pragma binding(libc::socketpair, "socketpair")
 
 #define SOL_SOCKET    1
 #define SO_REUSEADDR  2
@@ -170,9 +191,15 @@ struct sockaddr_storage {
 #pragma binding(ws2_32::getsockopt,  "getsockopt")
 #pragma binding(ws2_32::recv,        "recv")
 #pragma binding(ws2_32::send,        "send")
+#pragma binding(ws2_32::recvfrom,    "recvfrom")
+#pragma binding(ws2_32::sendto,      "sendto")
 #pragma binding(ws2_32::shutdown,    "shutdown")
 #pragma binding(ws2_32::closesocket, "closesocket")
 #pragma binding(ws2_32::ioctlsocket, "ioctlsocket")
+#pragma binding(ws2_32::WSAGetLastError, "WSAGetLastError")
+#pragma binding(ws2_32::WSASetLastError, "WSASetLastError")
+int  WSAGetLastError(void);
+void WSASetLastError(int err);
 
 #define SOL_SOCKET    0xffff
 #define SO_REUSEADDR  0x0004
@@ -206,5 +233,8 @@ int getsockopt(int fd, int level, int optname, char *optval, int *optlen);
 int recv(int fd, char *buf, int n, int flags);
 int send(int fd, char *buf, int n, int flags);
 int shutdown(int fd, int how);
+int socketpair(int domain, int type, int protocol, int *sv);
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
+long recvfrom(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t *addrlen);
+long sendto(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t addrlen);

@@ -59,10 +59,15 @@ pub(crate) fn compile_function_to_bytes(
             let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
             let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
                 alloc::collections::BTreeMap::new();
+            let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+                alloc::collections::BTreeMap::new();
             let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
             let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
             let mut macho_tlv_descriptors: Vec<super::MachoTlvDescriptor> = Vec::new();
+            // Single-unit in-memory emit: TLS accesses keep the baked
+            // offset, so the recorded fixups are unused here.
+            let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
             let ok = super::ssa_emit_aarch64::emit_function(
                 func,
                 &alloc,
@@ -73,12 +78,14 @@ pub(crate) fn compile_function_to_bytes(
                 &mut data_fixups,
                 &mut user_extern_data_refs,
                 &extern_data_names,
+                &extern_tls_names,
                 &mut pending_func_fixups,
                 &imports,
                 &variadic_targets,
                 &mut tls_index_fixups,
                 &mut macho_tlv_fixups,
                 &mut macho_tlv_descriptors,
+                &mut elf_tpoff_fixups,
                 &mut pc_to_native,
                 &mut prologue_native,
                 &mut ssa_line_rows,
@@ -110,8 +117,16 @@ pub(crate) fn compile_function_to_bytes(
             let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
             let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
                 alloc::collections::BTreeMap::new();
+            let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+                alloc::collections::BTreeMap::new();
             let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
+            // Single-unit in-memory emit: TLS accesses keep the baked
+            // offset, so the recorded fixups are unused here.
+            let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
+            // The JIT single-function path builds no PE; the unwind
+            // descriptor is discarded.
+            let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
             let ok = super::ssa_emit_x86_64::emit_function(
                 func,
                 &alloc,
@@ -123,18 +138,22 @@ pub(crate) fn compile_function_to_bytes(
                 &mut data_fixups,
                 &mut user_extern_data_refs,
                 &extern_data_names,
+                &extern_tls_names,
                 &mut pending_func_fixups,
                 &imports,
                 &variadic_targets,
                 &mut tls_index_fixups,
+                &mut elf_tpoff_fixups,
                 0,
                 &mut pc_to_native,
                 &mut prologue_native,
                 &mut ssa_line_rows,
+                &mut fn_unwind,
             );
             if !ok {
                 return Err("ssa_native: emit_function bailed".to_string());
             }
+            let _ = &fn_unwind;
             let outer = fixups.len()
                 + plt_call_fixups.len()
                 + got_fixups.len()

@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
-               	movl	$0x370, %esi            # imm = 0x370
+               	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
 
@@ -17,6 +17,7 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
+               	movq	%r13, 0x18(%rsp)
                	leaq	<rip>, %rdi
                	xorq	%rsi, %rsi
                	movb	$0x0, %al
@@ -31,6 +32,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
+               	movq	0x18(%rsp), %r13
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
@@ -55,7 +57,9 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
+               	movq	0x18(%rsp), %r13
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

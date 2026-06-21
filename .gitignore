@@ -170,3 +170,5 @@ tests/perf/build/
 !/tests/fixtures/c/*.c
 
 badc-*-rsync/
+
+demos/python/.cache

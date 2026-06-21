@@ -11,7 +11,7 @@
 use alloc::string::String;
 
 use super::super::codegen::Target;
-use super::super::ir::{BinOp, FunctionSsa, LoadKind, StoreKind};
+use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::{AtomicKind, Expr, ExprId, Stmt, StmtId, UnOp};
@@ -643,6 +643,25 @@ impl<'a> Walker<'a> {
                 && fallback_val == 0
                 && s.val != 0
             {
+                return GloAddr::Resolved(s.val);
+            }
+        }
+        GloAddr::Resolved(fallback_val)
+    }
+
+    /// Address class for a `_Thread_local` access. A pure extern
+    /// reference (`extern _Thread_local T x;` with no definition here)
+    /// resolves by symbol against the merged TLS block at link time;
+    /// a unit-local definition uses its byte offset within this unit's
+    /// TLS block. Mirrors `live_glo_addr` for the TLS template.
+    fn live_tls_addr(&self, sym: u32, fallback_val: i64) -> GloAddr {
+        let idx = sym as usize;
+        if idx < self.symbols.len() {
+            let s = &self.symbols[idx];
+            if s.is_extern_decl && !s.defined_here {
+                return GloAddr::Extern;
+            }
+            if s.defined_here {
                 return GloAddr::Resolved(s.val);
             }
         }
@@ -1352,6 +1371,44 @@ impl<'a> Walker<'a> {
             } => self.load_ident_rvalue(b, *sym, *ty, *class, *val, *is_thread_local, *array_size),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
+                // A comparison whose operand is a floating-point value must
+                // use the FP comparison. The parser tags the op from the
+                // operand types; when that tracking is clouded by the
+                // surrounding expression it can emit the integer variant
+                // against an operand that lowers to an FP register, which
+                // the integer paths cannot compare. Re-derive the op from
+                // the operand types so the FP path below handles it.
+                let op_remapped = {
+                    // An operand's value is floating-point when its node
+                    // carries a floating type tag -- except a comparison,
+                    // whose result is `int` even though its node may carry
+                    // the operand type. Treat a comparison operand as int.
+                    let operand_is_fp = |id: ExprId| -> bool {
+                        let e = self.ast.expr(id);
+                        if let Expr::Binary { op, .. } = e
+                            && is_comparison_op(*op)
+                        {
+                            return false;
+                        }
+                        expr_ty(e).is_some_and(is_floating_scalar)
+                    };
+                    let lhs_fp = operand_is_fp(*lhs);
+                    let rhs_fp = operand_is_fp(*rhs);
+                    if lhs_fp || rhs_fp {
+                        match *op {
+                            BinOp::Eq => BinOp::Feq,
+                            BinOp::Ne => BinOp::Fne,
+                            BinOp::Lt => BinOp::Flt,
+                            BinOp::Gt => BinOp::Fgt,
+                            BinOp::Le => BinOp::Fle,
+                            BinOp::Ge => BinOp::Fge,
+                            other => other,
+                        }
+                    } else {
+                        *op
+                    }
+                };
+                let op = &op_remapped;
                 let mask = unsigned_narrow_mask(*ty);
                 let needs_divmod_mask = mask != 0 && matches!(*op, BinOp::Divu | BinOp::Modu);
                 // Constant-rhs short-circuit: when the AST rhs is
@@ -1542,9 +1599,9 @@ impl<'a> Walker<'a> {
                 // C99 6.7.2.1: bitfield write -- load the storage
                 // unit, clear the destination slice, mask + shift
                 // the new value into place, OR the cleared old
-                // value with the shifted new, store back.
-                // Returns the combined word so an outer expression
-                // chain keeps a stable rvalue.
+                // value with the shifted new, store back. The
+                // assignment's own value (for an enclosing expression)
+                // is the masked field value, not the storage word.
                 let bf = *bitfield;
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
@@ -1576,10 +1633,14 @@ impl<'a> Walker<'a> {
                     (1i64 << bf.bit_width) - 1
                 };
                 let clear_mask: i64 = !(mask << bf.bit_offset);
-                let old = b.load(addr, load_kind);
-                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
+                // Evaluate the RHS before loading the storage unit: a
+                // chained assignment whose RHS writes the same unit
+                // (adjacent bitfields, `a.x = a.y = v`) must be observed by
+                // this read-modify-write, else its store is clobbered.
                 let rhs_v = self.walk_expr_rvalue(b, *rhs)?;
                 let masked = b.binop_imm(BinOp::And, rhs_v, mask);
+                let old = b.load(addr, load_kind);
+                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
                 let shifted = if bf.bit_offset > 0 {
                     b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
                 } else {
@@ -1587,7 +1648,17 @@ impl<'a> Walker<'a> {
                 };
                 let combined = b.binop(BinOp::Or, cleared, shifted);
                 b.store(addr, combined, store_kind);
-                Ok(combined)
+                // C99 6.5.16p3: the value of the assignment is the value
+                // stored in the bitfield converted to its declared type --
+                // the right-aligned masked field value, sign-extended for a
+                // signed field -- not the whole storage word.
+                if bf.signed && bf.bit_width < 64 {
+                    let shift = 64i64 - (bf.bit_width as i64);
+                    let up = b.binop_imm(BinOp::Shl, masked, shift);
+                    Ok(b.binop_imm(BinOp::Shr, up, shift))
+                } else {
+                    Ok(masked)
+                }
             }
             Expr::Assign { lhs, rhs, ty } => {
                 // C99 6.5.16.1p1 + the c5 address-as-value rule:
@@ -1745,7 +1816,22 @@ impl<'a> Walker<'a> {
                         alloc::vec::Vec::with_capacity(args.len() + 1);
                     all_args.push(out_arg);
                     for a in args {
-                        all_args.push(self.walk_expr_rvalue(b, *a)?);
+                        let mut v = self.walk_expr_rvalue(b, *a)?;
+                        // The all-integer cdecl carries each argument in an
+                        // 8-byte integer slot, where the callee reads a
+                        // floating-point parameter as a double. A `double`
+                        // already occupies eight bytes; a `float` must be
+                        // widened to that pattern and reloaded through an
+                        // integer slot, or the marshal moves only its 4-byte
+                        // form into the low half and the f64 read sees noise in
+                        // the high half.
+                        if expr_ty(self.ast.expr(*a)).map(is_float_ty).unwrap_or(false) {
+                            let widened = b.fp_widen_to_f64(v);
+                            let slot = b.alloc_synthetic_local();
+                            b.store_local(slot, widened, super::super::ir::StoreKind::I64);
+                            v = b.load_local(slot, super::super::ir::LoadKind::I64);
+                        }
+                        all_args.push(v);
                     }
                     let target_pc = self.live_fun_val(*sym, *val);
                     // Struct-returning callee: the result is an
@@ -1914,6 +2000,18 @@ impl<'a> Walker<'a> {
                                 let Some(ty_tag) = agg_ty else {
                                     continue;
                                 };
+                                // A variadic callee's named aggregate parameter
+                                // rides the c5 by-address convention: the callee
+                                // reads it from the passed address (its prologue
+                                // does not scatter an incoming aggregate
+                                // register pair into the parameter local). Host-
+                                // ABI by-value placement for a named aggregate
+                                // of a variadic callee is not yet lowered on the
+                                // register-save variadic ABIs, so keep both ends
+                                // on the by-address shape.
+                                if callee_variadic && i < self.symbols[*sym as usize].params.len() {
+                                    continue;
+                                }
                                 if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
                                     self.structs,
                                     self.target,
@@ -2207,6 +2305,35 @@ impl<'a> Walker<'a> {
                     None => self.walk_expr_rvalue(b, *callee)?,
                 };
                 let fp_return = is_floating_scalar(*ty);
+                // Aggregate arguments through a function pointer classify by
+                // the pointed-to prototype's parameter types (System V AMD64
+                // 3.2.3 / AAPCS64 6.4 / 6.8.2). The parser narrows each
+                // argument to its parameter type before the call, so the
+                // argument's own type is that parameter type; classify from
+                // it. A variadic aggregate keeps the by-address convention
+                // (matching the direct-call variadic handling). Inert on the
+                // ABIs / sizes / by-address aggregates the classifier
+                // declines.
+                let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+                for i in 0..arg_vals.len() {
+                    if callee_variadic && i >= callee_fixed {
+                        continue;
+                    }
+                    let Some(aty) = expr_ty(self.ast.expr(args[i])) else {
+                        continue;
+                    };
+                    if !(is_struct_ty(aty) && struct_ptr_depth(aty) == 0) {
+                        continue;
+                    }
+                    if let Some(desc) =
+                        crate::c5::compiler::host_abi_agg_desc(self.structs, self.target, aty)
+                    {
+                        if arg_aggs.is_empty() {
+                            arg_aggs = alloc::vec![None; arg_vals.len()];
+                        }
+                        arg_aggs[i] = Some(b.intern_agg_desc(desc));
+                    }
+                }
                 // Host-ABI out-pointer struct return through a function
                 // pointer (SysV x86_64 > 16 bytes, Win64 aggregates outside
                 // {1,2,4,8} bytes). Mirror the direct-call path: allocate
@@ -2232,9 +2359,32 @@ impl<'a> Walker<'a> {
                     let mut all_args: alloc::vec::Vec<super::super::ir::ValueId> =
                         alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
                     all_args.push(out_arg);
+                    // The all-integer cdecl reads a floating-point parameter as
+                    // a double from its 8-byte integer slot. A `double` already
+                    // occupies eight bytes; a `float` must be widened to that
+                    // pattern and reloaded through an integer slot so it is not
+                    // passed as its 4-byte form in the low half of the slot.
+                    for i in 0..arg_vals.len() {
+                        if expr_ty(self.ast.expr(args[i]))
+                            .map(is_float_ty)
+                            .unwrap_or(false)
+                        {
+                            let widened = b.fp_widen_to_f64(arg_vals[i]);
+                            let slot = b.alloc_synthetic_local();
+                            b.store_local(slot, widened, super::super::ir::StoreKind::I64);
+                            arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
+                        }
+                    }
                     all_args.extend_from_slice(&arg_vals);
                     let fixed = all_args.len();
-                    b.call_indirect(target, all_args, false, fixed, false, 0);
+                    let call = b.call_indirect(target, all_args, false, fixed, false, 0);
+                    if !arg_aggs.is_empty() {
+                        // `all_args` prepends the hidden out-pointer, so the
+                        // aggregate descriptors shift by one slot.
+                        let mut shifted = alloc::vec![None; arg_aggs.len() + 1];
+                        shifted[1..].clone_from_slice(&arg_aggs);
+                        b.set_call_arg_aggs(call, shifted);
+                    }
                     return Ok(b.local_addr(result_slot));
                 }
                 // Host-ABI aggregate return through a function pointer:
@@ -2280,6 +2430,9 @@ impl<'a> Walker<'a> {
                         fp_return,
                         fp_arg_mask,
                     );
+                    if !arg_aggs.is_empty() {
+                        b.set_call_arg_aggs(call, arg_aggs);
+                    }
                     if let Some((ridx, slot)) = ret_temp {
                         b.set_call_ret_agg(call, ridx, slot);
                         return Ok(b.local_addr(slot));
@@ -2320,6 +2473,9 @@ impl<'a> Walker<'a> {
                         fp_return,
                         fp_arg_mask,
                     );
+                    if !arg_aggs.is_empty() {
+                        b.set_call_arg_aggs(call, arg_aggs);
+                    }
                     if let Some((ridx, slot)) = ret_temp {
                         b.set_call_ret_agg(call, ridx, slot);
                         return Ok(b.local_addr(slot));
@@ -2384,6 +2540,9 @@ impl<'a> Walker<'a> {
                     fp_return,
                     call_fp_arg_mask,
                 );
+                if !arg_aggs.is_empty() {
+                    b.set_call_arg_aggs(call, arg_aggs);
+                }
                 if let Some((ridx, slot)) = ret_temp {
                     b.set_call_ret_agg(call, ridx, slot);
                     return Ok(b.local_addr(slot));
@@ -2787,10 +2946,38 @@ impl<'a> Walker<'a> {
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
             Expr::Intrinsic { kind, args, .. } => {
                 let intr_kind = *kind;
+                // The va_* intrinsics receive the ADDRESS of the va_list
+                // storage. The `__va_list_self(ap)` macro spells this as
+                // `(ap)` on System V / AAPCS64 (the array decays to its
+                // address) and `&(ap)` on the cursor targets. When `ap`
+                // is `*pva` (a va_list reached through a pointer) the
+                // System V form is a bare deref whose rvalue would load
+                // the list's first eightbyte; the address wanted is the
+                // pointer itself, so take the deref's lvalue. Operand
+                // positions: arg 0 for va_start / va_arg / va_end, args 0
+                // and 1 for va_copy.
+                use super::super::op::Intrinsic as VaI;
+                let va_addr_operand = |i: usize| match VaI::from_i64(intr_kind) {
+                    Some(VaI::VaStart) | Some(VaI::VaArg) | Some(VaI::VaEnd) => i == 0,
+                    Some(VaI::VaCopy) => i == 0 || i == 1,
+                    _ => false,
+                };
                 let mut arg_vals: alloc::vec::Vec<super::super::ir::ValueId> =
                     alloc::vec::Vec::with_capacity(args.len());
-                for a in args.clone() {
-                    arg_vals.push(self.walk_expr_rvalue(b, a)?);
+                for (i, a) in args.clone().into_iter().enumerate() {
+                    let v = if va_addr_operand(i)
+                        && matches!(
+                            self.ast.expr(a),
+                            Expr::Unary {
+                                op: UnOp::Deref,
+                                ..
+                            }
+                        ) {
+                        self.walk_expr_lvalue(b, a)?
+                    } else {
+                        self.walk_expr_rvalue(b, a)?
+                    };
+                    arg_vals.push(v);
                 }
                 // fma / fmaf (C99 7.12.13.1) lower to the fused node so
                 // the three operands round once. The parser has already
@@ -2864,16 +3051,14 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Lower a C11 7.17 atomic operation to ordinary load / store /
-    /// read-modify-write on the pointee width. A naturally-aligned
-    /// scalar load and store is already atomic on the supported
-    /// targets, so `atomic_load` / `atomic_store` carry full
-    /// semantics. The read-modify-write and compare-exchange forms
-    /// lower to a non-atomic load-op-store sequence: correct for a
-    /// single thread of execution but not yet inter-thread atomic.
-    // TODO: emit the target's atomic read-modify-write (x86 lock
-    // prefix / xchg / cmpxchg, AArch64 LSE or load-exclusive /
-    // store-exclusive) for the RMW and compare-exchange forms.
+    /// Lower a C11 7.17 atomic operation. A naturally-aligned scalar
+    /// load and store is already atomic on the supported targets, so
+    /// `atomic_load` / `atomic_store` lower to a plain load / store.
+    /// The read-modify-write and compare-exchange forms lower to the
+    /// dedicated `Inst::AtomicRmw` / `Inst::AtomicCas`, which the
+    /// per-arch emit turns into a genuine atomic sequence (C11
+    /// 7.17.7); `width` is the access size of the atomic object's
+    /// element type in bytes.
     fn walk_atomic(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
@@ -2883,6 +3068,7 @@ impl<'a> Walker<'a> {
     ) -> Result<super::super::ir::ValueId, WalkError> {
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
+        let width = type_size_bytes(elem_ty, self.target) as u8;
         let addr = self.walk_expr_rvalue(b, args[0])?;
         match kind {
             AtomicKind::Load => Ok(b.load(addr, load_kind)),
@@ -2899,44 +3085,60 @@ impl<'a> Walker<'a> {
             | AtomicKind::FetchOr
             | AtomicKind::FetchXor => {
                 let value = self.walk_expr_rvalue(b, args[1])?;
-                let old = b.load(addr, load_kind);
-                let new = match kind {
-                    AtomicKind::Exchange => value,
-                    AtomicKind::FetchAdd => b.binop(BinOp::Add, old, value),
-                    AtomicKind::FetchSub => b.binop(BinOp::Sub, old, value),
-                    AtomicKind::FetchAnd => b.binop(BinOp::And, old, value),
-                    AtomicKind::FetchOr => b.binop(BinOp::Or, old, value),
-                    AtomicKind::FetchXor => b.binop(BinOp::Xor, old, value),
+                let op = match kind {
+                    AtomicKind::Exchange => AtomicRmwOp::Xchg,
+                    AtomicKind::FetchAdd => AtomicRmwOp::Add,
+                    AtomicKind::FetchSub => AtomicRmwOp::Sub,
+                    AtomicKind::FetchAnd => AtomicRmwOp::And,
+                    AtomicKind::FetchOr => AtomicRmwOp::Or,
+                    AtomicKind::FetchXor => AtomicRmwOp::Xor,
                     _ => unreachable!(),
                 };
-                b.store(addr, new, store_kind);
-                // C11 7.17.7: the prior value of the object.
-                Ok(old)
+                // C11 7.17.7p2: the prior value of the object. The atomic
+                // instruction sets only the low `width` bytes; normalize
+                // to the element type's representation (C99 6.3.1.3), the
+                // same sign / zero extension a load of `elem_ty` performs.
+                let old = b.atomic_rmw(op, addr, value, width);
+                Ok(self.extend_atomic_result(b, old, elem_ty))
             }
             AtomicKind::CompareExchangeStrong => {
-                // C11 7.17.7.4. Branchless: a select via a 0/-1 mask
-                // keeps the lowering free of basic-block management.
-                // When the comparison fails the back-stores rewrite the
-                // same bytes, a no-op for a single thread.
+                // C11 7.17.7.4: yield 1 on a match (after storing
+                // `desired`), else store the current contents into
+                // `*expected` and yield 0.
                 let exp_addr = self.walk_expr_rvalue(b, args[1])?;
                 let desired = self.walk_expr_rvalue(b, args[2])?;
-                let cur = b.load(addr, load_kind);
-                let ecur = b.load(exp_addr, load_kind);
-                let eq = b.binop(BinOp::Eq, cur, ecur);
-                let zero = b.imm(0);
-                let mask = b.binop(BinOp::Sub, zero, eq); // 0 or -1
-                // *p     = eq ? desired : cur
-                let cxd = b.binop(BinOp::Xor, cur, desired);
-                let sel_p = b.binop(BinOp::And, cxd, mask);
-                let new_p = b.binop(BinOp::Xor, cur, sel_p);
-                b.store(addr, new_p, store_kind);
-                // *expected = eq ? *expected : cur
-                let cxe = b.binop(BinOp::Xor, cur, ecur);
-                let sel_e = b.binop(BinOp::And, cxe, mask);
-                let new_e = b.binop(BinOp::Xor, cur, sel_e);
-                b.store(exp_addr, new_e, store_kind);
-                Ok(eq)
+                Ok(b.atomic_cas(addr, exp_addr, desired, width))
             }
+        }
+    }
+
+    /// Normalize a sub-`int` atomic read-modify-write result to its
+    /// element type's representation (C99 6.3.1.3): zero-extend an
+    /// unsigned narrow type, sign-extend a signed one. A 4- or 8-byte
+    /// type and a pointer ride the register at full width unchanged.
+    fn extend_atomic_result(
+        &self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        v: super::super::ir::ValueId,
+        elem_ty: i64,
+    ) -> super::super::ir::ValueId {
+        if is_pointer_ty(elem_ty) {
+            return v;
+        }
+        let rs = type_size_bytes(elem_ty, self.target);
+        if rs >= 8 {
+            return v;
+        }
+        // The atomic instruction defines only the low `rs` bytes of the
+        // prior value; canonicalize the rest per C99 6.3.1.3. `int` and
+        // `long` are 4 bytes on LLP64, so every sub-8-byte width needs this.
+        if (elem_ty & UNSIGNED_BIT) != 0 {
+            let mask: i64 = (1i64 << (rs as i64 * 8)) - 1;
+            b.binop_imm(BinOp::And, v, mask)
+        } else {
+            let bits = 64i64 - (rs as i64) * 8;
+            let shifted = b.binop_imm(BinOp::Shl, v, bits);
+            b.binop_imm(BinOp::Shr, shifted, bits)
         }
     }
 
@@ -3088,6 +3290,38 @@ impl<'a> Walker<'a> {
     /// (`||` -> 1, `&&` -> 0) and `rhs != 0` on the evaluated path. In a
     /// branch condition only the truthiness is observed, so the raw
     /// operands are stored and the `!= 0` and the constant are skipped.
+    /// True when `cond` is observed for truthiness as a floating value,
+    /// i.e. the C99 controlling-expression comparison is `!= 0.0`. A
+    /// comparison's result is `int`, so it is excluded even though its
+    /// node may carry the operand type.
+    fn cond_is_float(&self, cond: ExprId) -> bool {
+        let e = self.ast.expr(cond);
+        if let Expr::Binary { op, .. } = e
+            && is_comparison_op(*op)
+        {
+            return false;
+        }
+        expr_ty(e).is_some_and(is_floating_scalar)
+    }
+
+    /// Value to test against zero for `cond`'s truthiness. A floating
+    /// operand is reduced to `cond != 0.0` (0 or 1) so `-0.0` reads as
+    /// false; an integer operand passes through and is tested directly.
+    fn cond_truthy(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        val: super::super::ir::ValueId,
+        cond: ExprId,
+    ) -> super::super::ir::ValueId {
+        if self.cond_is_float(cond) {
+            let d = b.fp_widen_to_f64(val);
+            let zero = b.imm(0);
+            b.binop(BinOp::Fne, d, zero)
+        } else {
+            val
+        }
+    }
+
     fn walk_short_circuit(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
@@ -3102,31 +3336,36 @@ impl<'a> Walker<'a> {
         let kind_l = super::super::ir::LoadKind::I64;
         let kind_s = super::super::ir::StoreKind::I64;
         let lhs_val = self.walk_expr_rvalue(b, lhs)?;
-        // On the short-circuit path the lhs already carries the deciding
-        // truth value, so in branch context its raw value suffices.
+        // The deciding value is the lhs truthiness; a floating operand
+        // compares against 0.0 so `-0.0` is false rather than a non-zero
+        // bit pattern.
+        let lhs_t = self.cond_truthy(b, lhs_val, lhs);
+        // On the short-circuit path the lhs truthiness is the result, so
+        // in branch context that value suffices.
         let short_val = if normalize {
             match op {
                 super::ShortCircuitOp::Lor => b.imm(1),
                 super::ShortCircuitOp::Lan => b.imm(0),
             }
         } else {
-            lhs_val
+            lhs_t
         };
         b.store_local(slot, short_val, kind_s);
         let rhs_blk = b.new_block();
         let after_blk = b.new_block();
         match op {
             // `a && b`: skip rhs when lhs == 0.
-            super::ShortCircuitOp::Lan => b.branch_zero(lhs_val, after_blk, rhs_blk),
+            super::ShortCircuitOp::Lan => b.branch_zero(lhs_t, after_blk, rhs_blk),
             // `a || b`: skip rhs when lhs != 0.
-            super::ShortCircuitOp::Lor => b.branch_nonzero(lhs_val, after_blk, rhs_blk),
+            super::ShortCircuitOp::Lor => b.branch_nonzero(lhs_t, after_blk, rhs_blk),
         }
         b.switch_to(rhs_blk);
         let rhs_val = self.walk_expr_rvalue(b, rhs)?;
+        let rhs_t = self.cond_truthy(b, rhs_val, rhs);
         let stored = if normalize {
-            b.binop_imm(super::super::ir::BinOp::Ne, rhs_val, 0)
+            b.binop_imm(super::super::ir::BinOp::Ne, rhs_t, 0)
         } else {
-            rhs_val
+            rhs_t
         };
         b.store_local(slot, stored, kind_s);
         b.jmp(after_blk);
@@ -3144,10 +3383,14 @@ impl<'a> Walker<'a> {
         cond: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
         if matches!(self.ast.expr(cond), Expr::ShortCircuit { .. }) {
-            self.walk_short_circuit(b, cond, false)
-        } else {
-            self.walk_expr_rvalue(b, cond)
+            return self.walk_short_circuit(b, cond, false);
         }
+        // C99 6.8.4.1 / 6.8.5: a controlling expression is compared
+        // against 0. A floating operand uses the FP comparison
+        // `v != 0.0`; testing the register bits directly would read
+        // `-0.0` (sign bit set) as true.
+        let v = self.walk_expr_rvalue(b, cond)?;
+        Ok(self.cond_truthy(b, v, cond))
     }
 
     /// Neg / BitNot / LogNot lower to a binop against an
@@ -3230,10 +3473,9 @@ impl<'a> Walker<'a> {
             Ok(b.local_addr(*val))
         } else if *class == Token::Glo as i64 {
             if *is_thread_local {
-                if *val == 0 {
-                    Ok(b.tls_addr_extern(*sym))
-                } else {
-                    Ok(b.tls_addr(*val))
+                match self.live_tls_addr(*sym, *val) {
+                    GloAddr::Extern => Ok(b.tls_addr_extern(*sym)),
+                    GloAddr::Resolved(off) => Ok(b.tls_addr(off)),
                 }
             } else {
                 match self.live_glo_addr(*sym, *val) {
@@ -3334,10 +3576,10 @@ impl<'a> Walker<'a> {
                     GloAddr::Resolved(off) => b.imm_data(off),
                 });
             } else if class == Token::Glo as i64 && is_thread_local {
-                if val == 0 {
-                    return Ok(b.tls_addr_extern(_sym));
-                }
-                return Ok(b.tls_addr(val));
+                return Ok(match self.live_tls_addr(_sym, val) {
+                    GloAddr::Extern => b.tls_addr_extern(_sym),
+                    GloAddr::Resolved(off) => b.tls_addr(off),
+                });
             }
         }
         if class == Token::Loc as i64 {
@@ -3351,10 +3593,9 @@ impl<'a> Walker<'a> {
             let kind = load_kind_for(ty, self.target);
             Ok(b.load(addr_v, kind))
         } else if class == Token::Glo as i64 && is_thread_local {
-            let addr = if val == 0 {
-                b.tls_addr_extern(_sym)
-            } else {
-                b.tls_addr(val)
+            let addr = match self.live_tls_addr(_sym, val) {
+                GloAddr::Extern => b.tls_addr_extern(_sym),
+                GloAddr::Resolved(off) => b.tls_addr(off),
             };
             let kind = load_kind_for(ty, self.target);
             Ok(b.load(addr, kind))
@@ -3544,6 +3785,31 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
     } else {
         StoreKind::I64
     }
+}
+
+/// True for a relational or equality operator (integer or
+/// floating-point). The result is `int` (C99 6.5.8 / 6.5.9) regardless
+/// of operand type.
+fn is_comparison_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::Le
+            | BinOp::Ge
+            | BinOp::Ult
+            | BinOp::Ugt
+            | BinOp::Ule
+            | BinOp::Uge
+            | BinOp::Feq
+            | BinOp::Fne
+            | BinOp::Flt
+            | BinOp::Fgt
+            | BinOp::Fle
+            | BinOp::Fge
+    )
 }
 
 /// Test for a pointer-shaped type tag. Mirrors

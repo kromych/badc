@@ -55,7 +55,7 @@
 //     / `__vr_offs` negative offsets into the general / vector
 //     register save areas. The array form decays to the struct
 //     pointer the intrinsics consume; the layout is byte-identical to
-//     glibc's, so libc `vsnprintf` / `vfprintf` take c5's `va_list`
+//     the Linux C library's, so libc `vsnprintf` / `vfprintf` take c5's `va_list`
 //     directly.
 //   * Every other target keeps the single-pointer cursor model:
 //     `va_list` is `void *` and the intrinsics walk one region at

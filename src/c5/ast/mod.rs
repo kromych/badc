@@ -530,6 +530,13 @@ pub(crate) struct FinishedFunction {
     /// the running top. Zero when `alloca` is unused, in which
     /// case codegen treats AllocaInit as a no-op.
     pub alloca_top_slot: i64,
+    /// `(base_offset, cells)` for each declared multi-cell local (aggregate
+    /// or multi-cell scalar): the local occupies `base_offset ..=
+    /// base_offset + cells - 1`. The walker seeds `FunctionSsa::multi_cell_slots`
+    /// with these so slot coalescing reserves the interior cells, which carry
+    /// no direct slot reference (reached only via the base address). Empty
+    /// when the function has no multi-cell local.
+    pub multi_cell_slots: alloc::vec::Vec<(i64, i64)>,
     pub name: alloc::string::String,
 }
 
@@ -599,42 +606,33 @@ impl Ast {
         &self.stmts[id as usize]
     }
 
-    /// Add `data_base` to every data-segment offset stored on
-    /// AST nodes. Used by the linker after each unit's data
-    /// segment is placed in the merged image: parser-time
-    /// `data_off` / `val` snapshots are unit-local; the merged
-    /// image places the unit at `data_base` bytes from the
-    /// segment's start (and beyond the leading NULL guard).
-    /// Touches:
+    /// Apply `f` to every data-segment byte offset stored on AST nodes.
+    /// One visitor backs both the linker's uniform rebase and static
+    /// DCE's compaction remap, so the two can never drift on which
+    /// offsets count as data references. Touches:
     ///   * `Expr::StrLit { data_off }`
-    ///   * `Expr::Ident { class: Glo, val }` -- `val` is the
+    ///   * `Expr::Ident { class: Glo, val }` (non-TLS) -- `val` is the
     ///     symbol's data-segment byte offset.
     ///   * `LocalInit::Aggregate { src_data_off }` and the
-    ///     `Runtime { zero_init: (src_data_off, _) }` prelude.
-    pub(crate) fn rebase_data_offsets(&mut self, data_base: i64) {
+    ///     `Runtime { zero_init: (src_data_off, _) }` prelude, on both
+    ///     `Expr::CompoundLiteral` and `Decl::Local`.
+    fn for_each_data_offset(&mut self, f: &mut impl FnMut(&mut i64)) {
         use crate::c5::token::Token;
-        if data_base == 0 {
-            return;
-        }
         for expr in &mut self.exprs {
             match expr {
-                Expr::StrLit { data_off, .. } => *data_off += data_base,
+                Expr::StrLit { data_off, .. } => f(data_off),
                 Expr::Ident {
                     class,
                     val,
                     is_thread_local,
                     ..
-                } if *class == Token::Glo as i64 && !*is_thread_local => {
-                    *val += data_base;
-                }
+                } if *class == Token::Glo as i64 && !*is_thread_local => f(val),
                 Expr::CompoundLiteral { init, .. } => match init {
-                    LocalInit::Aggregate { src_data_off, .. } => *src_data_off += data_base,
+                    LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
                     LocalInit::Runtime {
                         zero_init: Some((off, _)),
                         ..
-                    } => {
-                        *off += data_base;
-                    }
+                    } => f(off),
                     _ => {}
                 },
                 _ => {}
@@ -643,17 +641,35 @@ impl Ast {
         for decl in &mut self.decls {
             if let Decl::Local { init, .. } = decl {
                 match init {
-                    LocalInit::Aggregate { src_data_off, .. } => *src_data_off += data_base,
+                    LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
                     LocalInit::Runtime {
                         zero_init: Some((off, _)),
                         ..
-                    } => {
-                        *off += data_base;
-                    }
+                    } => f(off),
                     _ => {}
                 }
             }
         }
+    }
+
+    /// Add `data_base` to every data-segment offset stored on AST nodes.
+    /// Used by the linker after each unit's data segment is placed in the
+    /// merged image: parser-time `data_off` / `val` snapshots are
+    /// unit-local; the merged image places the unit at `data_base` bytes
+    /// from the segment's start (and beyond the leading NULL guard).
+    pub(crate) fn rebase_data_offsets(&mut self, data_base: i64) {
+        if data_base == 0 {
+            return;
+        }
+        self.for_each_data_offset(&mut |off| *off += data_base);
+    }
+
+    /// Rewrite every data-segment offset through `remap`. Used by static
+    /// DCE after `.data` is compacted: an object that survives the prune
+    /// moves to a new packed offset, and every AST reference to it must
+    /// follow. `remap` must be defined for every offset the AST holds.
+    pub(crate) fn remap_data_offsets(&mut self, remap: &impl Fn(i64) -> i64) {
+        self.for_each_data_offset(&mut |off| *off = remap(*off));
     }
 
     /// Linker-side fixup for multi-TU builds: shift every

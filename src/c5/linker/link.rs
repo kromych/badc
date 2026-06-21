@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
-use super::object::{NativeMachine, NativeObject, NativeReloc, NativeSymSection};
+use super::object::{ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection};
 
 /// AArch64 reloc-type constants. Kept in step with the writer
 /// and the reader; a future common module lifts them out of
@@ -286,21 +286,30 @@ pub fn link_native_objects_with_options(
         }
     }
 
-    // `_Thread_local` storage. A single TLS-bearing object carries
-    // its layout through verbatim: `Inst::TlsAddr` on the local-exec
-    // model bakes `tpoff = tls_total_size - offset` straight into
-    // `.text`, and the relinked PT_TLS block keeps the same size, so
-    // the baked offset stays valid (ELF gABI variant-2 TLS). Two or
-    // more TLS objects would each have baked an offset against their
-    // own block; merging the blocks shifts those offsets, so the
-    // multi-object case needs `R_X86_64_TPOFF32` / `R_AARCH64_TLSLE_*`
-    // relocations to re-derive each offset against the merged block.
-    // That isn't wired yet, so reject more than one TLS contributor.
+    // `_Thread_local` storage. The Mach-O TLV model resolves each access
+    // by a `__thread_vars` descriptor whose per-thread offset the linker
+    // fills, so multiple units' TLS blocks concatenate freely: each unit
+    // contributes [init bytes ++ zero-fill] to one merged block, and a
+    // descriptor's offset is rebased by the unit's base (a unit-local
+    // access) or set from the merged TLS symbol table (a cross-unit
+    // `extern _Thread_local`). The ELF and Windows/aarch64 paths achieve
+    // the same through `NT_BADC_ELF_TPOFF` fixups resolved in Pass 4.1
+    // below (x86_64 variant-2 `sub imm32`, Linux/aarch64 variant-1 `add
+    // imm12`, Windows/aarch64 TEB-indexed `add imm12`), so a multi-unit
+    // link rebases each access against the merged layout. A same-unit
+    // access on the Windows TEB path with no cross-unit reference carries
+    // no fixup and keeps its baked single-unit offset.
+    let uses_tlv = objs.iter().any(|o| {
+        !o.macho_tlv_descriptors.is_empty()
+            || !o.macho_tlv_fixups.is_empty()
+            || !o.macho_tlv_descriptor_syms.is_empty()
+    });
+    let elf_tpoff_resolved = matches!(machine, NativeMachine::X86_64 | NativeMachine::Aarch64);
     let tls_objs: Vec<&NativeObject> = objs
         .iter()
         .filter(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0)
         .collect();
-    if tls_objs.len() > 1 {
+    if !uses_tlv && !elf_tpoff_resolved && tls_objs.len() > 1 {
         return Err(link_err(
             "link_native_objects: more than one input object carries \
              `_Thread_local` storage -- merging multiple TLS blocks needs \
@@ -309,15 +318,41 @@ pub fn link_native_objects_with_options(
              definitions into a single translation unit.",
         ));
     }
-    let (tls_data, tls_init_size) = match tls_objs.first() {
-        Some(o) => {
-            let init = o.tls_data.len();
-            let mut buf = o.tls_data.clone();
-            buf.resize(init + o.tls_bss_size, 0);
-            (buf, init)
+    // Each unit's base in the merged TLS block (0 for units with no TLS
+    // storage, which contribute nothing).
+    let mut tls_bases: Vec<usize> = alloc::vec![0; objs.len()];
+    let mut tls_data: Vec<u8> = Vec::new();
+    let mut any_tls_init = false;
+    for (i, obj) in objs.iter().enumerate() {
+        tls_bases[i] = tls_data.len();
+        if !obj.tls_data.is_empty() {
+            any_tls_init = true;
         }
-        None => (Vec::new(), 0),
+        tls_data.extend_from_slice(&obj.tls_data);
+        tls_data.resize(tls_data.len() + obj.tls_bss_size, 0);
+    }
+    // The init boundary. Concatenating several units' [init ++ zero-fill]
+    // blocks has no single `.tdata` / `.tbss` split point, so when more
+    // than one unit contributes -- the Mach-O TLV path, or the multi-unit
+    // x86_64 ELF path resolved through `NT_BADC_ELF_TPOFF` -- the whole
+    // merged block is emitted as initialised data (the zero-fill regions
+    // are already zero bytes) when any unit carries an init template. A
+    // single TLS unit keeps the `.tdata` / `.tbss` split the writer
+    // expects, so its zero-fill stays out of the file image.
+    let multi_tls = tls_objs.len() > 1;
+    let tls_init_size = if uses_tlv || (elf_tpoff_resolved && multi_tls) {
+        if any_tls_init { tls_data.len() } else { 0 }
+    } else {
+        tls_objs.first().map(|o| o.tls_data.len()).unwrap_or(0)
     };
+    // Merged TLS symbol table: each defined `_Thread_local` resolves to
+    // its unit base plus its offset within that unit's block.
+    let mut tls_symbol_offsets: BTreeMap<String, u64> = BTreeMap::new();
+    for (i, obj) in objs.iter().enumerate() {
+        for (name, off, _size) in &obj.tls_symbols {
+            tls_symbol_offsets.insert(name.clone(), tls_bases[i] as u64 + off);
+        }
+    }
 
     // Pass 1 -- layout. Compute each unit's `.text` / `.data` /
     // `.bss` base in the merged image. 16-byte alignment for
@@ -586,7 +621,12 @@ pub fn link_native_objects_with_options(
                                 );
                             }
                             NativeSymSection::Bss => {
-                                let bss_off = def.value as i64 + reloc.addend;
+                                // `.bss` sits past the merged `.data`; park a
+                                // unified data-byte offset so the writer's
+                                // data-offset-to-vaddr map lands the reference
+                                // in the zero-fill tail. `data.len()` is final
+                                // after Pass 1.
+                                let bss_off = data.len() as i64 + def.value as i64 + reloc.addend;
                                 park_data_ref(
                                     machine,
                                     &mut pending_imports,
@@ -666,10 +706,12 @@ pub fn link_native_objects_with_options(
                     }
                 }
                 NativeSymSection::Bss => {
-                    // `.bss` sits past `.data` in the merged
-                    // image; same parking rule as Data, with
-                    // the offset taken against the bss base.
-                    let bss_off = bss_bases[i] as i64 + sym.value as i64 + reloc.addend;
+                    // `.bss` sits past `.data` in the merged image; park a
+                    // unified data-byte offset (data length + bss-relative
+                    // position) so the writer's data-offset-to-vaddr map
+                    // resolves it into the zero-fill tail.
+                    let bss_off =
+                        data.len() as i64 + bss_bases[i] as i64 + sym.value as i64 + reloc.addend;
                     park_data_ref(machine, &mut pending_imports, patch_offset, reloc, bss_off);
                 }
                 NativeSymSection::Abs => {
@@ -716,6 +758,93 @@ pub fn link_native_objects_with_options(
                         "link_native_objects: `.rela.text` reloc targets {:?} symbol",
                         sym.section,
                     )));
+                }
+            }
+        }
+    }
+
+    // Pass 4.1 -- TLS access fixups. Each unit's `elf_tpoff_fixups` marks
+    // the instruction holding a TLS variable's offset immediate; the
+    // per-unit emit baked a single-unit default (or a 0 placeholder for an
+    // extern access), so re-resolve each against the merged layout. The
+    // immediate's bias depends on the access model:
+    //   * x86_64 (Linux variant-2) places the block below the thread
+    //     pointer, so `imm32 = merged_size - merged_offset` and the access
+    //     computes `TP - imm32` (glibc puts the block at `tp -
+    //     roundup(memsz, align)`, matching the writer's PT_TLS `p_align`).
+    //   * aarch64 Linux (variant-1) places the block above the thread
+    //     pointer after a 16-byte TCB reserve, so `imm12 = 16 +
+    //     merged_offset` baked into an `add`.
+    //   * Windows (both arches) reaches the block through the TEB's TLS
+    //     array (`r10`/`x16 = tls_array[_tls_index]`), so the register
+    //     already holds the module's block base and the immediate is
+    //     `merged_offset` with no bias (an x86_64 `lea` disp32, an aarch64
+    //     `add` imm12).
+    // `machine` does not separate the Windows and ELF models; the Windows
+    // TEB sequence always records a `_tls_index` fixup, so an object
+    // carrying any such fixup uses the Windows no-bias offset.
+    let merged_tls_total = align_usize(tls_data.len(), 8) as u64;
+    for (i, obj) in objs.iter().enumerate() {
+        let win_teb = !obj.tls_index_fixups.is_empty();
+        for (text_off, target) in &obj.elf_tpoff_fixups {
+            let merged_offset = match target {
+                ElfTpoffTarget::Local(off) => tls_bases[i] as u64 + off,
+                ElfTpoffTarget::Extern(name) => match tls_symbol_offsets.get(name) {
+                    Some(o) => *o,
+                    None => {
+                        return Err(err(&format!(
+                            "link_native_objects: TLS access references undefined \
+                             `_Thread_local` symbol `{name}`",
+                        )));
+                    }
+                },
+            };
+            let patch = text_bases[i] + *text_off as usize;
+            if patch + 4 > text.len() {
+                return Err(err(&format!(
+                    "link_native_objects: TLS fixup offset 0x{text_off:x} out of range in object {i}",
+                )));
+            }
+            match machine {
+                NativeMachine::X86_64 => {
+                    // Windows: the `lea` adds disp32 to the TEB block base,
+                    // so disp32 = merged_offset (no bias). Linux variant-2:
+                    // the block sits below the thread pointer, so
+                    // imm32 = merged_size - merged_offset (a `sub` from fs:[0]).
+                    let value = if win_teb {
+                        merged_offset
+                    } else {
+                        merged_tls_total - merged_offset
+                    };
+                    if value > i32::MAX as u64 {
+                        return Err(err(&format!(
+                            "link_native_objects: TLS offset 0x{value:x} exceeds the i32 immediate",
+                        )));
+                    }
+                    text[patch..patch + 4].copy_from_slice(&(value as i32).to_le_bytes());
+                }
+                NativeMachine::Aarch64 => {
+                    let tpoff = if win_teb {
+                        merged_offset
+                    } else {
+                        merged_offset + 16
+                    };
+                    if tpoff >= 4096 {
+                        return Err(err(&format!(
+                            "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the 12-bit `add` \
+                             immediate; a TLS block past 4080 bytes needs the two-add \
+                             tprel_hi12 / lo12 sequence (TODO)",
+                        )));
+                    }
+                    // Rewrite bits 10-21 (the imm12) of the `add rd, rd, #imm`.
+                    let mut insn = u32::from_le_bytes([
+                        text[patch],
+                        text[patch + 1],
+                        text[patch + 2],
+                        text[patch + 3],
+                    ]);
+                    insn = (insn & !(0xFFF << 10)) | ((tpoff as u32 & 0xFFF) << 10);
+                    text[patch..patch + 4].copy_from_slice(&insn.to_le_bytes());
                 }
             }
         }
@@ -890,12 +1019,31 @@ pub fn link_native_objects_with_options(
     // Mach-O TLV descriptors + fixups. Descriptors concatenate in unit
     // order; each unit's fixups rebase `adrp_offset` by that unit's
     // `.text` base and shift `descriptor_index` past the descriptors
-    // contributed by earlier units.
+    // contributed by earlier units. Each descriptor's per-thread offset
+    // is resolved here: a unit-local descriptor adds the unit's TLS base
+    // to its block offset; a symbol-keyed descriptor (a cross-unit
+    // `extern _Thread_local` access) takes the variable's offset from the
+    // merged TLS symbol table.
     let mut macho_tlv_descriptors: Vec<u64> = Vec::new();
     let mut macho_tlv_fixups: Vec<(usize, usize)> = Vec::new();
     for (i, obj) in objs.iter().enumerate() {
         let desc_base = macho_tlv_descriptors.len();
-        macho_tlv_descriptors.extend_from_slice(&obj.macho_tlv_descriptors);
+        let sym_for: BTreeMap<usize, &str> = obj
+            .macho_tlv_descriptor_syms
+            .iter()
+            .map(|(idx, name)| (*idx, name.as_str()))
+            .collect();
+        for (di, &off) in obj.macho_tlv_descriptors.iter().enumerate() {
+            let resolved = match sym_for.get(&di) {
+                Some(name) => *tls_symbol_offsets.get(*name).ok_or_else(|| {
+                    link_err(&format!(
+                        "unresolved `extern _Thread_local` reference to `{name}`",
+                    ))
+                })?,
+                None => tls_bases[i] as u64 + off,
+            };
+            macho_tlv_descriptors.push(resolved);
+        }
         for &(adrp, idx) in &obj.macho_tlv_fixups {
             macho_tlv_fixups.push((text_bases[i] + adrp, desc_base + idx));
         }
@@ -1204,9 +1352,18 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
     // get put back so the writer can resolve them against its
     // own `.data` vmaddr later.
     let pending = core::mem::take(&mut merged.pending_imports);
+    let data_imports = merged.data_import_indices.clone();
     let mut parked_back: Vec<PendingImportReloc> = Vec::new();
     for reloc in &pending {
         if reloc.import_index == usize::MAX {
+            parked_back.push(reloc.clone());
+            continue;
+        }
+        // A data import takes no call stub: its reference loads the
+        // IAT slot directly. Re-park the reloc unchanged so
+        // `synth_fixups` projects it to a data-load GotFixup
+        // (lea -> mov against the slot).
+        if data_imports.contains(&reloc.import_index) {
             parked_back.push(reloc.clone());
             continue;
         }
@@ -1243,6 +1400,9 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
     // within the merged text.
     for reloc in &pending {
         if reloc.import_index == usize::MAX {
+            continue;
+        }
+        if data_imports.contains(&reloc.import_index) {
             continue;
         }
         let site = reloc.text_offset as usize;
@@ -1936,6 +2096,9 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
@@ -2002,6 +2165,9 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
@@ -2043,6 +2209,9 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
@@ -2058,6 +2227,53 @@ mod tests {
             .expect("x should resolve to the strong def");
         assert!(matches!(def.section, NativeSymSection::Data));
         assert_eq!(merged.bss_size, 0, "Common dropped, no bss slot");
+    }
+
+    // A code reference and a data initializer that both name the same
+    // wholly-zero global must resolve to the same byte in the `.bss`
+    // region. Before the fix the code reference parked a bss-relative
+    // offset tagged `Data`, aliasing a `.data` byte, while the data
+    // initializer correctly reached `.bss` -- the two diverged.
+    #[test]
+    fn code_and_data_bss_references_agree() {
+        let opts = NativeOptions {
+            bss_segregate: true,
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        // `big` (partially non-zero) inflates `.data` so a bss-relative
+        // offset is strictly smaller than the data length; `g` (wholly
+        // zero) lands in `.bss`. `readg` makes a code reference to `g`.
+        let src = "long big[16] = {1}; long g[8]; long *const gp = &g[0]; \
+                   long readg(void){ return g[0]; } \
+                   int main(void){ return (int)readg() + (gp != 0) + (int)big[0]; }";
+        let obj = compile_native(src, Target::LinuxX64, opts);
+        let merged = link_native_objects(&[obj]).expect("link");
+        assert!(merged.bss_size > 0, "the zero global must occupy bss");
+
+        // The data initializer `gp = &g[0]` reaches the bss section.
+        assert!(
+            merged
+                .data_abs_relocs
+                .iter()
+                .any(|r| matches!(r.target_section, NativeSymSection::Bss)),
+            "gp initializer must target the bss section"
+        );
+
+        // The code reference to `g` parks a unified data-byte offset in
+        // the bss region (at or past the data image); before the fix it
+        // stayed bss-relative and aliased a `.data` byte.
+        let data_len = merged.data.len() as i64;
+        let bss_end = data_len + merged.bss_size as i64;
+        assert!(
+            merged
+                .pending_imports
+                .iter()
+                .any(|p| p.import_index == usize::MAX
+                    && p.addend >= data_len
+                    && p.addend < bss_end),
+            "code reference to a bss global must resolve into the bss region [{data_len}, {bss_end})"
+        );
     }
 
     fn compile_native(src: &str, target: Target, opts: NativeOptions) -> NativeObject {

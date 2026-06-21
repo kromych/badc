@@ -64,14 +64,12 @@ impl Compiler {
             // `target_ent_pc`, not the data bytes.
             reloc.target_ent_pc = self.symbols[sym_idx].val as u64;
         }
-        // A function-pointer initializer may name an identifier that was
-        // never declared: the parser's forward-reference heuristic binds
-        // it as a `Token::Fun` on first use, assuming a definition later
-        // in the unit. One that is still undefined here, with no extern
-        // declaration, is a missing header or a typo -- the same class of
-        // mistake the call path already rejects, but reachable through a
-        // dispatch-table entry. Warn once per name with a header hint
-        // (C99 6.5.1 requires a declaration before use).
+        // A function-pointer initializer (`fp tbl[] = { name };`) may name a
+        // function that is declared (a prototype satisfies C99 6.7p7) but
+        // never defined in this unit and not marked extern. In a single-unit
+        // compile that is a missing definition; in a multi-unit build the
+        // definition may live elsewhere, so warn rather than reject, with a
+        // header hint when the name is known.
         let mut undeclared: Vec<usize> = Vec::new();
         for &sym_idx in &self.code_reloc_sym_idx {
             let s = &self.symbols[sym_idx];

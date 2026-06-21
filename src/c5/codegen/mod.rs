@@ -52,6 +52,8 @@ mod jit;
 mod mach_o;
 #[cfg(feature = "native-emit")]
 mod pe;
+#[cfg(feature = "std")]
+mod so_versions;
 pub(crate) mod ssa_alloc;
 pub(crate) mod ssa_build;
 mod ssa_constfold_branch;
@@ -71,9 +73,16 @@ mod ssa_native;
 mod ssa_phi_class;
 mod ssa_rotate;
 pub(crate) mod ssa_shadow;
+mod ssa_slot_coalesce;
 mod ssa_split_crit_edges;
 mod ssa_store_forward;
 mod x86_64;
+
+/// Re-exported for the multi-TU link path, which recovers Win64
+/// unwind descriptors from merged `.text` bytes. Only the linker
+/// (gated on `full`) consumes it.
+#[cfg(feature = "full")]
+pub(crate) use x86_64::decode_x86_64_prologue_unwind;
 
 pub use jit::{jit_run, jit_run_with_options};
 
@@ -1178,6 +1187,29 @@ pub(crate) struct CopyRelocReq {
 /// libc symbols the code wants to call; the writer arranges them into
 /// segments and patches the codegen's GOT / data / function-pointer
 /// placeholders with the actual vmaddrs.
+/// A defined global symbol exported from an executable image so a
+/// dynamically loaded module can bind against it. `offset` is the
+/// byte offset within the symbol's section; the writer adds the
+/// section's runtime base to form the symbol value.
+#[derive(Debug, Clone)]
+pub(crate) struct DynamicExport {
+    pub name: String,
+    pub section: DynamicExportSection,
+    pub offset: u64,
+}
+
+/// The image section a [`DynamicExport`] lives in. Selects the
+/// Mach-O section index and runtime base the writer applies.
+/// Uninitialized (`.bss`) globals are not exported: badc lays its
+/// program globals into the file-backed data section, so a `.bss`
+/// section symbol (a coalesced tentative definition) has no mapped
+/// data-segment address to publish.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DynamicExportSection {
+    Text,
+    Data,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Build {
     /// Machine code, ready to be placed in `__TEXT,__text`.
@@ -1193,6 +1225,12 @@ pub(crate) struct Build {
     /// segment, so a `DataFixup { data_offset: K }` resolves to
     /// byte K of this `Vec`.
     pub data: Vec<u8>,
+    /// Bytes of zero-initialised data placed past the file image, in the
+    /// `[data.len(), data.len() + bss_size)` offset range. Carries no file
+    /// storage: the loader zero-fills it (ELF `p_memsz > p_filesz`, PE
+    /// `VirtualSize > SizeOfRawData`, Mach-O `vmsize > filesize`). A data
+    /// offset at or past `data.len()` names a byte in this region.
+    pub bss_size: i64,
     /// Offset (within `text`) of the program's entry point. Becomes
     /// the entry address of `LC_MAIN`.
     pub entry_offset: usize,
@@ -1312,6 +1350,15 @@ pub(crate) struct Build {
     /// offset_in_block ]`. Empty unless the target is macOS arm64
     /// and the program declares `_Thread_local` globals.
     pub macho_tlv_descriptors: Vec<MachoTlvDescriptor>,
+    /// Linux/x86_64 TLS access fixups -- one entry per `Inst::TlsAddr`
+    /// site. The codegen emits `mov rd, fs:[0]; sub rd, imm32` with
+    /// `imm32` left 0; the linker patches it with the variable's
+    /// negative offset from the thread pointer once the units' TLS
+    /// blocks are merged. Carries the access target (a cross-unit
+    /// extern symbol, or this unit's own TLS at a byte offset) because
+    /// the per-variable offset is only known after the merge. Empty for
+    /// non-Linux/x86_64 targets and for programs with no TLS access.
+    pub elf_tpoff_fixups: Vec<ElfTpoffFixup>,
     /// Address-of-global initializers (`int *p = &x;`). Each
     /// entry pairs a 8-byte slot in `data` with the data-
     /// segment offset of the variable being pointed at. Mirror
@@ -1319,6 +1366,10 @@ pub(crate) struct Build {
     /// `Build` so the per-format writer doesn't have to plumb
     /// the program through alongside the build.
     pub data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// Pointer-to-extern-data initializers; mirror of
+    /// [`Program::extern_data_relocs`]. The per-format writer emits a
+    /// named relocation against the data symbol, resolved at link time.
+    pub extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
     /// Function-pointer initializers in the data segment. Mirror
     /// of [`Program::code_relocs`]. Each entry pairs a data-segment
     /// slot with the ent_pc of a function; the per-format
@@ -1332,6 +1383,15 @@ pub(crate) struct Build {
     /// per-format writer turns each entry into a real export
     /// record.
     pub exports: Vec<crate::c5::program::ExportedFunction>,
+    /// Defined global symbols carried as dynamic exports of an
+    /// executable image. macOS links an executable so its
+    /// default-visibility globals are exported, which lets a
+    /// dynamically loaded module (`dlopen`) bind against the
+    /// executable's symbols (a Python C extension `.so` resolving
+    /// `PyBool_Type` and the C-API). Populated only for executable
+    /// Mach-O output; empty for shared libraries (which use
+    /// `exports`) and on other targets, whose writers ignore it.
+    pub dynamic_exports: Vec<DynamicExport>,
     /// Whether this build should produce an executable or a
     /// shared library (dylib / .so / DLL). Set from
     /// [`NativeOptions::output_kind`]. The writer dispatches
@@ -1402,16 +1462,91 @@ pub(crate) struct Build {
     /// longer holds the value (a stale `DW_OP_fbreg` would make the
     /// debugger read uninitialised frame memory).
     pub promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Per-function map from a declared local's original frame slot to the
+    /// new slot it was coalesced onto, keyed by `ent_pc`. The slot-coalescing
+    /// pass compacts the frame regardless of debug info; the debug-info
+    /// emitter consults this so a surviving local's `DW_OP_fbreg` location
+    /// uses its post-coalesce offset. Slots coalesced onto shared storage are
+    /// recorded in `promoted_local_slots` (empty location) instead.
+    pub coalesced_slot_remap:
+        alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, i64>>,
+    /// Per-function x86_64 Win64 unwind descriptors, in emission
+    /// order. The PE writer turns each into a `RUNTIME_FUNCTION` +
+    /// `UNWIND_INFO` pair so `RtlVirtualUnwind` can recover the
+    /// caller's RIP/RSP/RBP at any body fault. Populated by the
+    /// x86_64 lowering (from the prologue layout it just emitted)
+    /// and by the multi-TU linker (from the merged prologue bytes).
+    /// Empty for non-x86_64 builds and for hand-built test `Build`s;
+    /// the PE writer then falls back to the coarse whole-`.text`
+    /// entry.
+    pub fn_unwind: Vec<FnUnwind>,
+}
+
+/// x86_64 Win64 prologue unwind descriptor for one function.
+///
+/// `begin` / `end` are absolute byte offsets in [`Build::text`];
+/// every `*_end` prologue boundary is relative to `begin` (the
+/// `CodeOffset` domain a Win64 `UNWIND_CODE` uses). The PE writer
+/// adds the entry-stub prologue length to `begin` / `end` to derive
+/// RVAs and synthesizes the `UNWIND_CODE` array (Win64 ABI, x64
+/// exception handling) from the recorded boundaries.
+///
+/// The c5 prologue order is (optional arg-spill group) `pop r10;
+/// sub rsp,M; <spills>; push r10`, then the standard frame `push
+/// rbp; mov rbp,rsp; [sub rsp,N]`. Each `*_end` field is the byte
+/// offset just past the matching instruction, which the unwind
+/// codes use as their `CodeOffset` (the offset of the next
+/// instruction). The net stack effect of the arg-spill group is a
+/// single `-M` decrement (the intermediate `pop`/`push` of the
+/// return address cancel), so it encodes as one `UWOP_ALLOC` of
+/// `M` whose `CodeOffset` is the end of the `push r10`.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct FnUnwind {
+    /// Byte offset of the function's first instruction in `text`.
+    pub begin: u32,
+    /// Byte offset one past the function's last instruction in
+    /// `text` (its `[begin, end)` extent).
+    pub end: u32,
+    /// `true` for a leaf-elided function with no standard frame
+    /// (no `push rbp` / `mov rbp,rsp`): the `UNWIND_INFO` carries
+    /// no codes and no frame register, and the unwinder treats it
+    /// as a frameless body returning off the top-of-stack RA.
+    pub leaf: bool,
+    /// Total bytes the arg-spill group allocates (`param_spill_bytes`).
+    /// 0 when the function takes no register/stack parameters into
+    /// c5 cdecl cells.
+    pub param_spill_bytes: u32,
+    /// Offset (from `begin`) past the arg-spill group's `push r10`.
+    /// Set only when `param_spill_bytes > 0`.
+    pub arg_spill_end: u32,
+    /// Offset (from `begin`) past `push rbp`.
+    pub push_rbp_end: u32,
+    /// Offset (from `begin`) past `mov rbp,rsp`.
+    pub set_fpreg_end: u32,
+    /// Bytes the standard frame allocation reserves (`frame_bytes`).
+    /// 0 when the function reserves no locals / spill / callee-save
+    /// area.
+    pub frame_bytes: u32,
+    /// Offset (from `begin`) past `sub rsp,frame_bytes`. Set only
+    /// when `frame_bytes > 0`.
+    pub frame_alloc_end: u32,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
 /// descriptor is emitted per entry; the codegen's
 /// [`MachoTlvFixup`]s reference these by index.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct MachoTlvDescriptor {
-    /// Byte offset within `Build::tls_data` where this variable
-    /// starts. Mirrors `Inst::TlsAddr`'s operand.
+    /// Byte offset within this unit's TLS block where the variable
+    /// starts. Mirrors `Inst::TlsAddr`'s operand. The linker rebases
+    /// it by the unit's base in the merged TLS block; for a `symbol`
+    /// descriptor it is overwritten with the resolved offset.
     pub offset_in_block: u64,
+    /// Set for a cross-unit `extern _Thread_local` access: the
+    /// referenced variable's name. The linker resolves it to the
+    /// variable's offset in the merged TLS block. `None` for a
+    /// unit-local definition (the `offset_in_block` path).
+    pub symbol: Option<alloc::string::String>,
 }
 
 /// Refer-by-index relocation between a code site and a `__got` slot.
@@ -1425,6 +1560,13 @@ pub(crate) struct GotFixup {
     pub adrp_offset: usize,
     /// Index into [`aarch64::IMPORTS`].
     pub import_index: usize,
+    /// True when the site is a data-import reference that must read
+    /// the IAT slot's value rather than branch to a call thunk. On
+    /// x86_64 the reference is a `lea reg, [rip+disp32]` the writer
+    /// rewrites to `mov reg, [rip+disp32]` against the slot RVA; a
+    /// data import emits no `jmp [IAT]` trampoline. On aarch64 the
+    /// adrp + ldr form already loads the slot, so the flag is unused.
+    pub is_data_load: bool,
 }
 
 /// Relocation for `Inst::ImmData`: the codegen emits an
@@ -1510,6 +1652,47 @@ pub(crate) struct MachoTlvFixup {
     /// Index into [`Build::macho_tlv_descriptors`]. The writer
     /// resolves this to the descriptor's vmaddr at patch time.
     pub descriptor_index: usize,
+}
+
+/// TLS access relocation whose immediate the linker resolves against
+/// the merged TLS block once every unit's `.tdata` / `.tbss` is
+/// concatenated. Three access shapes record it, distinguished by the
+/// linker (see `link_native_objects` Pass 4.1):
+///   * Linux/x86_64 -- `mov rd, fs:[0]; sub rd, imm32`: variant-2
+///     places the block below the thread pointer, so `imm32 =
+///     merged_size - merged_offset` and the access computes `TP -
+///     imm32`.
+///   * Linux/aarch64 -- `mrs rd, tpidr_el0; add rd, rd, #imm12`:
+///     variant-1 places the block above the thread pointer after a
+///     16-byte TCB reserve, so `imm12 = 16 + merged_offset`.
+///   * Windows/aarch64 -- the TEB sequence (`ldr x16, [x18, #0x58]`,
+///     index by `_tls_index`, `add rd, x16, #imm12`): x16 already
+///     holds the module's TLS block base, so `imm12 = merged_offset`
+///     with no thread-pointer bias. This shape also records a
+///     `TlsIndexFixup`, which is how the linker tells it apart from
+///     the variant-1 ELF shape on the same machine.
+/// The codegen leaves the immediate at a single-unit default (or 0 for
+/// an extern access); `target` selects how the linker finds
+/// `merged_offset`.
+#[derive(Debug, Clone)]
+pub(crate) struct ElfTpoffFixup {
+    /// Byte offset within `Build::text` of the immediate field the
+    /// linker rewrites (the `sub` imm32 / the `add` imm12 word).
+    pub imm_offset: usize,
+    pub target: ElfTpoffTarget,
+}
+
+/// How the linker resolves an [`ElfTpoffFixup`] to a byte offset in
+/// the merged TLS block.
+#[derive(Debug, Clone)]
+pub(crate) enum ElfTpoffTarget {
+    /// Cross-unit `extern _Thread_local`: the merged offset is the
+    /// named symbol's entry in the merged TLS symbol table.
+    Extern(String),
+    /// Same-unit `_Thread_local`: the merged offset is this unit's
+    /// base in the merged TLS block plus this byte offset within the
+    /// unit's own block.
+    Local(u64),
 }
 
 /// Relocatable-object call site: the byte offset of the BL / B
@@ -1644,6 +1827,10 @@ pub struct NativeOptions {
     /// Default 64, matching gcc / clang `-O2`'s
     /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
     pub inline_cap: u32,
+    /// Segregate wholly-zero data objects into a no-file-backing
+    /// `.bss` region instead of packing them into the file image.
+    /// On by default; `BADC_NO_BSS_SEGREGATE` forces it off.
+    pub bss_segregate: bool,
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -1693,6 +1880,7 @@ impl NativeOptions {
             debug_info: false,
             dump_ssa: false,
             inline_cap: 64,
+            bss_segregate: true,
         }
     }
 
@@ -1817,9 +2005,19 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
         build.got_fixups.push(GotFixup {
             adrp_offset: r.instr_offset,
             import_index: idx,
+            is_data_load: false,
         });
     }
     build.user_extern_data_refs = remaining;
+}
+
+/// Whether `BADC_NO_BSS_SEGREGATE` opts a build out of segregating
+/// wholly-zero data objects into a no-file-backing `.bss` region. The
+/// opt-out exists for debugging and for diffing against the pre-`.bss`
+/// file image; segregation is otherwise on by default.
+#[cfg(feature = "native-emit")]
+fn bss_segregation_disabled() -> bool {
+    std::env::var("BADC_NO_BSS_SEGREGATE").is_ok()
 }
 
 /// Variant of [`emit_native_with_options`] that records the shared
@@ -1835,7 +2033,20 @@ pub fn emit_native_with_options_named(
     options: NativeOptions,
     shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
+    // C99 6.2.2 / 6.7.8: drop static data no surviving function or
+    // relocation references, repacking `.data` and rewriting every offset
+    // surface (symbol values, AST data offsets, relocation slots). The one
+    // compaction feeds both the backend lowering (which bakes data-relative
+    // fixups) and the container writer (which emits the symbol table), so
+    // the emitted `.data` and its symbols stay consistent.
+    let (compacted, bss_size) = crate::c5::codegen::ssa_shadow::compact_program_data(
+        program,
+        target,
+        options.bss_segregate && !bss_segregation_disabled(),
+    )?;
+    let program = &compacted;
     let mut build = lower_for(program, target, options)?;
+    build.bss_size = bss_size;
     route_single_tu_data_imports(&mut build, target);
     if options.output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
@@ -1855,7 +2066,14 @@ pub(crate) fn emit_native_single_tu_for_test(
     target: Target,
     options: NativeOptions,
 ) -> Result<alloc::vec::Vec<u8>, C5Error> {
+    let (compacted, bss_size) = crate::c5::codegen::ssa_shadow::compact_program_data(
+        program,
+        target,
+        options.bss_segregate && !bss_segregation_disabled(),
+    )?;
+    let program = &compacted;
     let mut build = lower_for(program, target, options)?;
+    build.bss_size = bss_size;
     let pc = build.pc_to_native.len();
     build.pc_to_native.push(build.entry_offset);
     // The entry adapter targets `__c5_entry`; the real link path
@@ -1949,6 +2167,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     build.imports = imports;
     build.abi = target.abi();
     build.data_relocs = program.data_relocs.clone();
+    build.extern_data_relocs = program.extern_data_relocs.clone();
     build.code_relocs = program.code_relocs.clone();
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;

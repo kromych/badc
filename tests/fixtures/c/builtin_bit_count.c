@@ -42,5 +42,18 @@ int main(void) {
     if (!eq(__builtin_popcount(r), 16)) return 21;
     if (!eq(__builtin_clz(r), 8)) return 22;
     if (!eq(__builtin_ctz(r), 0)) return 23;
+
+    // The `l` (long) forms operate on `unsigned long`: 64-bit on LP64,
+    // 32-bit on LLP64. The leading-zero count therefore depends on the
+    // target's `long` width, so only width-independent cases are
+    // asserted (trailing-zero and set-bit counts of operands within the
+    // 32-bit range).
+    if (!eq(__builtin_ctzl(1ul), 0)) return 24;
+    if (!eq(__builtin_ctzl(0x10000ul), 16)) return 25;
+    if (!eq(__builtin_popcountl(0x7ul), 3)) return 26;
+    if (!eq(__builtin_popcountl(0x0f0f0f0ful), 16)) return 27;
+    volatile unsigned long rl = 0x00ff00fful;
+    if (!eq(__builtin_popcountl(rl), 16)) return 28;
+    if (!eq(__builtin_ctzl(rl), 0)) return 29;
     return 0;
 }

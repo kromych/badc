@@ -207,6 +207,11 @@ const NO_SECT: u8 = 0;
 /// all segments in declaration order; `__text` is the first
 /// section we emit (`__TEXT`'s sole section), hence index 1.
 const SECT_INDEX_TEXT: u8 = 1;
+/// 1-based index of `__DATA,__data`. `__DATA` always declares
+/// `__got` first (section 2, even when empty) followed by `__data`
+/// (section 3); the `__thread_*` sections, when present, come after.
+/// Used as `n_sect` for an exported data symbol.
+const SECT_INDEX_DATA: u8 = 3;
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
 /// commands. Bind opcodes refer to segments by this index.
@@ -232,6 +237,7 @@ const S_ATTR_DEBUG: u32 = 0x0200_0000;
 /// `__thread_data` (S_THREAD_LOCAL_REGULAR = 0x11) would be
 /// emitted alongside if we ever support TLS initialisers.
 #[allow(dead_code)]
+const S_ZEROFILL: u32 = 0x1; // __bss (zero-fill, no file backing)
 const S_THREAD_LOCAL_REGULAR: u32 = 0x11; // __thread_data (init data)
 const S_THREAD_LOCAL_ZEROFILL: u32 = 0x12; // __thread_bss (zero-fill)
 const S_THREAD_LOCAL_VARIABLES: u32 = 0x13; // __thread_vars (descriptors)
@@ -636,14 +642,17 @@ fn segment_data_with_tlv(
     thread_storage_size: u64,
     thread_storage_offset: u32,
     thread_storage_initialised: bool,
+    bss_addr: u64,
+    bss_size: u64,
 ) -> Vec<u8> {
-    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(TOTAL);
+    let nsects: u32 = if bss_size > 0 { 5 } else { 4 };
+    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
         &SegmentCommand64 {
             cmd: LC_SEGMENT_64,
-            cmdsize: TOTAL as u32,
+            cmdsize: total as u32,
             segname: pack_name16("__DATA"),
             vmaddr,
             vmsize,
@@ -651,7 +660,7 @@ fn segment_data_with_tlv(
             filesize,
             maxprot: VM_PROT_READ | VM_PROT_WRITE,
             initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects: 4,
+            nsects,
             flags: 0,
         },
     );
@@ -754,7 +763,28 @@ fn segment_data_with_tlv(
             reserved3: 0,
         },
     );
-    debug_assert_eq!(out.len(), TOTAL);
+    // __bss -- regular zero-init storage at the segment tail, past the
+    // thread storage. Present only when segregation produced it.
+    if bss_size > 0 {
+        write_struct(
+            &mut out,
+            &Section64 {
+                sectname: pack_name16("__bss"),
+                segname: pack_name16("__DATA"),
+                addr: bss_addr,
+                size: bss_size,
+                offset: 0, // S_ZEROFILL: zero-filled by the loader
+                align: 3,
+                reloff: 0,
+                nreloc: 0,
+                flags: S_ZEROFILL,
+                reserved1: 0,
+                reserved2: 0,
+                reserved3: 0,
+            },
+        );
+    }
+    debug_assert_eq!(out.len(), total);
     out
 }
 
@@ -776,14 +806,17 @@ fn segment_data(
     data_addr: u64,
     data_size: u64,
     data_offset: u32,
+    bss_addr: u64,
+    bss_size: u64,
 ) -> Vec<u8> {
-    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(TOTAL);
+    let nsects: u32 = if bss_size > 0 { 3 } else { 2 };
+    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
         &SegmentCommand64 {
             cmd: LC_SEGMENT_64,
-            cmdsize: TOTAL as u32,
+            cmdsize: total as u32,
             segname: pack_name16("__DATA"),
             vmaddr,
             vmsize,
@@ -791,7 +824,7 @@ fn segment_data(
             filesize,
             maxprot: VM_PROT_READ | VM_PROT_WRITE,
             initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects: 2,
+            nsects,
             flags: 0,
         },
     );
@@ -817,8 +850,9 @@ fn segment_data(
         },
     );
     // __data section. Holds the program's static data segment --
-    // string literals + zero-initialised globals. Copied into the
-    // file at write time; dyld maps it RW alongside __got.
+    // string literals + initialised globals. Copied into the file at
+    // write time; dyld maps it RW alongside __got. Wholly-zero globals
+    // move to __bss below.
     write_struct(
         &mut out,
         &Section64 {
@@ -836,7 +870,28 @@ fn segment_data(
             reserved3: 0,
         },
     );
-    debug_assert_eq!(out.len(), TOTAL);
+    // __bss section (zero-fill, no file backing). Present only when
+    // segregation produced zero-init storage; sizers read its size.
+    if bss_size > 0 {
+        write_struct(
+            &mut out,
+            &Section64 {
+                sectname: pack_name16("__bss"),
+                segname: pack_name16("__DATA"),
+                addr: bss_addr,
+                size: bss_size,
+                offset: 0, // S_ZEROFILL: zero-filled by the loader
+                align: 3,
+                reloff: 0,
+                nreloc: 0,
+                flags: S_ZEROFILL,
+                reserved1: 0,
+                reserved2: 0,
+                reserved3: 0,
+            },
+        );
+    }
+    debug_assert_eq!(out.len(), total);
     out
 }
 
@@ -1321,17 +1376,17 @@ fn patch_adrp_add(
     Ok(())
 }
 
-/// Patch each `Inst::ImmData` lowering site. The target is
-/// `data_section_vmaddr + data_offset`.
+/// Patch each `Inst::ImmData` lowering site. `data_off_to_vaddr` maps
+/// the data byte offset to its runtime VA (`.data` or the `.bss` tail).
 fn apply_data_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
     code_vmaddr_base: u64,
-    data_section_vmaddr: u64,
+    data_off_to_vaddr: &dyn Fn(u64) -> u64,
     fixups: &[super::DataFixup],
 ) -> Result<(), C5Error> {
     for fx in fixups {
-        let target = data_section_vmaddr + fx.data_offset;
+        let target = data_off_to_vaddr(fx.data_offset);
         patch_adrp_add(
             out,
             code_base_in_file,
@@ -1672,10 +1727,12 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let mh_size = MACH_HEADER_64_SIZE as u64;
     let pagezero_size = SEGMENT_COMMAND_64_SIZE as u64;
     let text_seg_size = (SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE) as u64;
-    // __DATA carries 2 sections normally (__got, __data) and 4
-    // when the program has `_Thread_local` globals (+__thread_vars,
-    // __thread_bss).
-    let data_seg_section_count: u64 = if tls_present { 4 } else { 2 };
+    // __DATA carries 2 sections normally (__got, __data), 4 when the
+    // program has `_Thread_local` globals (+__thread_vars, __thread_bss),
+    // and one more (__bss) when segregation produced zero-init storage.
+    let has_bss_section = build.bss_size > 0;
+    let data_seg_section_count: u64 =
+        (if tls_present { 4 } else { 2 }) + if has_bss_section { 1 } else { 0 };
     let data_seg_size: u64 =
         SEGMENT_COMMAND_64_SIZE as u64 + data_seg_section_count * SECTION_64_SIZE as u64;
     let linkedit_seg_size = SEGMENT_COMMAND_64_SIZE as u64;
@@ -1819,10 +1876,15 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     } else {
         data_section_offset_in_segment + program_data_size
     };
+    // Regular zero-init `.bss` sits past `__data` with no file backing;
+    // the loader zero-fills the segment's `[filesize, vmsize)` tail. Only
+    // the vm size grows -- the bytes never reach disk. With TLS storage
+    // the bss follows it (both are tail zero-fill); without, it follows
+    // `__data` directly.
     let data_segment_vm_used: u64 = if tls_present {
-        thread_storage_offset_in_segment + thread_storage_size
+        thread_storage_offset_in_segment + thread_storage_size + build.bss_size as u64
     } else {
-        data_segment_file_used
+        data_segment_file_used + build.bss_size as u64
     };
     let data_filesize = round_up(data_segment_file_used.max(PAGE_SIZE), PAGE_SIZE);
     let data_vmsize = round_up(data_segment_vm_used.max(PAGE_SIZE), PAGE_SIZE);
@@ -1832,6 +1894,22 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let thread_vars_fileoff = data_fileoff + thread_vars_offset_in_segment;
     let thread_storage_vmaddr = data_vmaddr + thread_storage_offset_in_segment;
     let thread_storage_fileoff = data_fileoff + thread_storage_offset_in_segment;
+
+    // A data offset past `program_data_size` names a byte in the
+    // zero-fill `.bss` region at the segment tail: past the thread
+    // storage when TLS is present, else directly past `__data`.
+    let bss_base_vmaddr = if tls_present {
+        thread_storage_vmaddr + thread_storage_size
+    } else {
+        data_section_vmaddr + program_data_size
+    };
+    let data_off_to_vaddr = |off: u64| -> u64 {
+        if off < program_data_size {
+            data_section_vmaddr + off
+        } else {
+            bss_base_vmaddr + (off - program_data_size)
+        }
+    };
 
     // ---- bind + rebase opcode streams ----
     //
@@ -1910,8 +1988,27 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     } else {
         Vec::new()
     };
+    // Executable dynamic exports: every defined global symbol, so a
+    // dlopen'd module binds the program's symbols. `#pragma export`
+    // populates `build.exports` for shared libraries instead, so the
+    // two sets do not overlap; skip any name already exported above.
+    let pragma_export_names: alloc::collections::BTreeSet<&str> =
+        build.exports.iter().map(|e| e.name.as_str()).collect();
+    let dyn_exports_emit: Vec<&crate::c5::codegen::DynamicExport> = build
+        .dynamic_exports
+        .iter()
+        .filter(|d| !pragma_export_names.contains(d.name.as_str()))
+        .collect();
+    let dyn_export_disk_names: Vec<String> = dyn_exports_emit
+        .iter()
+        .map(|d| format!("_{}", d.name))
+        .collect();
+
     let n_locals = symbol_names.len();
     for s in export_disk_names.iter() {
+        symbol_names.push(s.as_str());
+    }
+    for s in dyn_export_disk_names.iter() {
         symbol_names.push(s.as_str());
     }
     let n_exports = symbol_names.len() - n_locals;
@@ -1962,6 +2059,29 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         }
         let n_value = code_vmaddr_base + native_off as u64;
         symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT));
+    }
+
+    // [Defined dynamic exports] (N_EXT | N_SECT) -- the program's
+    // global symbols, so a dlopen'd module binds against them. A text
+    // symbol's value is the code base plus its byte offset within
+    // `build.text`; a data symbol's value is the `__data` section
+    // vmaddr plus its byte offset within `build.data`.
+    let dyn_export_str_base = n_locals + export_disk_names.len();
+    for (i, d) in dyn_exports_emit.iter().enumerate() {
+        let n_strx = str_indices[dyn_export_str_base + i];
+        let (n_value, n_sect) = match d.section {
+            crate::c5::codegen::DynamicExportSection::Text => {
+                (code_vmaddr_base + d.offset, SECT_INDEX_TEXT)
+            }
+            crate::c5::codegen::DynamicExportSection::Data => {
+                // Data exports are never bss-resident today (synth_build drops
+                // zero-init globals from the export set). When that is wired
+                // up, a `d.offset >= program_data_size` export needs n_sect =
+                // __DATA,__bss, not __data.
+                (data_off_to_vaddr(d.offset), SECT_INDEX_DATA)
+            }
+        };
+        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect));
     }
     // [Undefined imports] (N_EXT | N_UNDF). Indices in
     // `str_indices` are shifted past the locals + exports.
@@ -2154,6 +2274,8 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             thread_storage_size,
             thread_storage_fileoff as u32,
             thread_storage_initialised,
+            bss_base_vmaddr,
+            build.bss_size as u64,
         )
     } else {
         segment_data(
@@ -2167,6 +2289,8 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             data_section_vmaddr,
             program_data_size,
             data_section_fileoff as u32,
+            bss_base_vmaddr,
+            build.bss_size as u64,
         )
     };
     let linkedit = segment_no_sections(
@@ -2321,7 +2445,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         &mut out,
         code_file_offset,
         code_vmaddr_base,
-        data_section_vmaddr,
+        &data_off_to_vaddr,
         &build.data_fixups,
     )?;
     apply_func_fixups(
@@ -2358,7 +2482,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     out.resize(data_section_fileoff as usize, 0);
     let mut data_with_relocs = build.data.clone();
     for r in &build.data_relocs {
-        let preferred_va = data_section_vmaddr + r.target_offset;
+        let preferred_va = data_off_to_vaddr(r.target_offset);
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -2501,11 +2625,13 @@ mod tests {
     fn tiny_program() -> Program {
         Program {
             data: Vec::new(),
+            data_object_starts: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
@@ -2532,6 +2658,7 @@ mod tests {
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
+            bss_size: 0,
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
@@ -2541,6 +2668,8 @@ mod tests {
             func_names: Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             promoted_local_slots: alloc::collections::BTreeMap::new(),
+            coalesced_slot_remap: alloc::collections::BTreeMap::new(),
+            fn_unwind: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
             user_extern_data_refs: Vec::new(),
@@ -2568,9 +2697,12 @@ mod tests {
             tls_data: Vec::new(),
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
+            elf_tpoff_fixups: Vec::new(),
             data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),
+            dynamic_exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
             shared_lib_name: None,
             dllmain_pc: None,
@@ -2713,6 +2845,71 @@ mod tests {
             p += cmdsize;
         }
         panic!("LC_DYLD_INFO_ONLY not found in load commands");
+    }
+
+    #[test]
+    fn dynamic_exports_emitted_as_external_defined() {
+        // A text and a data global carried as dynamic exports must
+        // appear in the symbol table as N_EXT | N_SECT entries with
+        // the right section index, so a dlopen'd module can bind them.
+        let mut build = tiny_build();
+        build.dynamic_exports = vec![
+            super::super::DynamicExport {
+                name: "myfunc".into(),
+                section: super::super::DynamicExportSection::Text,
+                offset: 0,
+            },
+            super::super::DynamicExport {
+                name: "myglobal".into(),
+                section: super::super::DynamicExportSection::Data,
+                offset: 8,
+            },
+        ];
+        let bytes = write(&tiny_program(), &build).unwrap();
+
+        let sizeofcmds = read_u32(&bytes, 20) as usize;
+        let mut p = 32usize;
+        let lc_end = 32 + sizeofcmds;
+        let mut found: Vec<(String, u8, u8)> = Vec::new();
+        while p < lc_end {
+            let cmd = read_u32(&bytes, p);
+            let cmdsize = read_u32(&bytes, p + 4) as usize;
+            if cmd == LC_SYMTAB {
+                let symoff = read_u32(&bytes, p + 8) as usize;
+                let nsyms = read_u32(&bytes, p + 12) as usize;
+                let stroff = read_u32(&bytes, p + 16) as usize;
+                for k in 0..nsyms {
+                    let e = symoff + k * NLIST_64_SIZE;
+                    let n_strx = read_u32(&bytes, e) as usize;
+                    let n_type = bytes[e + 4];
+                    let n_sect = bytes[e + 5];
+                    let start = stroff + n_strx;
+                    let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
+                    let name = String::from_utf8_lossy(&bytes[start..start + len]).into_owned();
+                    if name == "_myfunc" || name == "_myglobal" {
+                        found.push((name, n_type, n_sect));
+                    }
+                }
+                break;
+            }
+            p += cmdsize;
+        }
+
+        let func = found
+            .iter()
+            .find(|(n, _, _)| n == "_myfunc")
+            .expect("_myfunc export");
+        assert_eq!(func.1 & N_EXT, N_EXT, "text export must be external");
+        assert_eq!(func.1 & N_SECT, N_SECT, "text export must be N_SECT");
+        assert_eq!(func.2, SECT_INDEX_TEXT, "text export n_sect");
+
+        let data = found
+            .iter()
+            .find(|(n, _, _)| n == "_myglobal")
+            .expect("_myglobal export");
+        assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
+        assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
+        assert_eq!(data.2, SECT_INDEX_DATA, "data export n_sect");
     }
 
     #[test]
@@ -2969,6 +3166,53 @@ mod tests {
         assert!(
             stdout.contains("U _write"),
             "nm didn't show `U _write`.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+        );
+    }
+
+    /// A segregated zero global produces a `__DATA,__bss` S_ZEROFILL
+    /// section whose size equals `build.bss_size`, so sizers report bss.
+    #[test]
+    fn segregated_bss_emits_zerofill_section() {
+        use crate::Compiler;
+        let target = super::super::Target::MacOSAarch64;
+        let src = "static long zeros[512]; long *const p = &zeros[3]; \
+                   int main() { zeros[3] = 1; return (int)zeros[3] + (p == &zeros[3]); }";
+        let program = Compiler::with_target(super::super::super::tests::with_prelude(src), target)
+            .compile()
+            .expect("compile");
+        let (compacted, bss_size) =
+            super::super::ssa_shadow::compact_program_data(&program, target, true)
+                .expect("compact");
+        let mut build =
+            super::super::lower_for(&compacted, target, super::super::NativeOptions::default())
+                .expect("lower");
+        build.bss_size = bss_size;
+        assert!(build.bss_size > 0, "the zero array must occupy bss");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
+
+        let read_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+        let lc_end = 32 + read_u32(&bytes, 20) as usize;
+        let mut p = 32usize;
+        let mut bss = None;
+        while p < lc_end {
+            let cmdsize = read_u32(&bytes, p + 4) as usize;
+            if read_u32(&bytes, p) == LC_SEGMENT_64 && bytes[p + 8..p + 24].starts_with(b"__DATA\0")
+            {
+                let mut sp = p + 72;
+                for _ in 0..read_u32(&bytes, p + 64) {
+                    if bytes[sp..sp + 16].starts_with(b"__bss\0") {
+                        bss = Some((read_u64(sp + 40), read_u32(&bytes, sp + 64) & 0xFF));
+                    }
+                    sp += SECTION_64_SIZE;
+                }
+            }
+            p += cmdsize;
+        }
+        let (size, sect_type) = bss.expect("__DATA,__bss section must be present");
+        assert_eq!(sect_type, S_ZEROFILL, "__bss must be S_ZEROFILL");
+        assert_eq!(
+            size, build.bss_size as u64,
+            "__bss size must equal bss_size"
         );
     }
 }

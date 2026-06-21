@@ -59,6 +59,10 @@
  * test-signing, a code-signing certificate, and a host willing to
  * reboot. */
 
+/* 
+    No support for the PAGED, etc section attributes yet.
+*/
+
 #pragma subsystem(driver)
 #pragma entrypoint(DriverEntry)
 

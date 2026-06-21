@@ -1829,7 +1829,7 @@ pub struct NativeOptions {
     pub inline_cap: u32,
     /// Segregate wholly-zero data objects into a no-file-backing
     /// `.bss` region instead of packing them into the file image.
-    /// Off by default; opt in per build while the writers are exercised.
+    /// On by default; `BADC_NO_BSS_SEGREGATE` forces it off.
     pub bss_segregate: bool,
 }
 
@@ -1880,7 +1880,7 @@ impl NativeOptions {
             debug_info: false,
             dump_ssa: false,
             inline_cap: 64,
-            bss_segregate: false,
+            bss_segregate: true,
         }
     }
 
@@ -2011,6 +2011,15 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
     build.user_extern_data_refs = remaining;
 }
 
+/// Whether `BADC_NO_BSS_SEGREGATE` opts a build out of segregating
+/// wholly-zero data objects into a no-file-backing `.bss` region. The
+/// opt-out exists for debugging and for diffing against the pre-`.bss`
+/// file image; segregation is otherwise on by default.
+#[cfg(feature = "native-emit")]
+fn bss_segregation_disabled() -> bool {
+    std::env::var("BADC_NO_BSS_SEGREGATE").is_ok()
+}
+
 /// Variant of [`emit_native_with_options`] that records the shared
 /// library's own name in the image (PE export-directory Name, Mach-O
 /// `LC_ID_DYLIB` install name) so a consumer linking against it by name
@@ -2033,7 +2042,7 @@ pub fn emit_native_with_options_named(
     let (compacted, bss_size) = crate::c5::codegen::ssa_shadow::compact_program_data(
         program,
         target,
-        options.bss_segregate,
+        options.bss_segregate && !bss_segregation_disabled(),
     )?;
     let program = &compacted;
     let mut build = lower_for(program, target, options)?;
@@ -2060,7 +2069,7 @@ pub(crate) fn emit_native_single_tu_for_test(
     let (compacted, bss_size) = crate::c5::codegen::ssa_shadow::compact_program_data(
         program,
         target,
-        options.bss_segregate,
+        options.bss_segregate && !bss_segregation_disabled(),
     )?;
     let program = &compacted;
     let mut build = lower_for(program, target, options)?;

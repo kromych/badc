@@ -483,9 +483,10 @@ pub(crate) fn compact_program_data(
     // bytes and moves to the `.bss` region past the file image, which the
     // loader zero-fills. A partly-non-zero object keeps its interior zeros
     // in the file -- only wholly-zero objects can move.
-    // Segregation is opt-in per build; with it off (`segregate == false`),
-    // every live object (zero or not) is packed into the file image as
-    // before and `bss_size` stays 0. The caller sets the policy.
+    // Segregation is on by default; with it off (`segregate == false`,
+    // the `BADC_NO_BSS_SEGREGATE` opt-out or a target whose writer does
+    // not support it), every live object (zero or not) is packed into the
+    // file image as before and `bss_size` stays 0. The caller sets it.
     let is_bss = |i: usize| -> bool {
         segregate
             && i != 0

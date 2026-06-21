@@ -25,16 +25,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[3, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(16)                                      -> x0
+    v1   ImmData(48)                                      -> x0
     v2   Imm(7)                                           -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I32 }    -> -
-    v4   ImmData(24)                                      -> x1
+    v4   ImmData(56)                                      -> x1
     v5   Imm(35)                                          -> x2
     v6   Store { addr=v4, disp=0, value=v5, kind=I32 }    -> -
-    v7   ImmData(8)                                       -> x3
+    v7   ImmData(40)                                      -> x3
     v8   Load { addr=v1, disp=0, kind=I32 }               -> x6
     v9   Extend { value=v5, kind=I32 }                    -> x2
-    v10  ImmData(32)                                      -> x0
+    v10  ImmData(16)                                      -> x0
     v11  Load { addr=v10, disp=0, kind=I64 }              -> x0
     v12  CallIndirect { target=v11, args=[v7, v8, v9], callee_variadic=false, fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x0
@@ -84,7 +84,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v15  Imm(8)                                           -> x1
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
     v17  Imm(0)                                           -> x1
-    v18  ImmData(8)                                       -> x1
+    v18  ImmData(24)                                      -> x1
     v19  LoadLocal { off=-3, kind=I64 }                   -> x2
     v20  Extend { value=v13, kind=I32 }                   -> x2
     v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x2

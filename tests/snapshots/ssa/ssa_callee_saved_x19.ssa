@@ -4,11 +4,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(24)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I32 }               -> x1
     terminator Bz { cond=v2, target=b2, fall=b1 }   (exit_acc=v2)
   block 1  start_pc=0
-    v3   ImmData(8)                                       -> x1
+    v3   ImmData(24)                                      -> x1
     v4   Imm(2)                                           -> x1
     v5   Store { addr=v1, disp=0, value=v4, kind=I32 }    -> -
     terminator Jmp(b2)   (exit_acc=v5)
@@ -60,7 +60,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v15  Imm(8)                                           -> x1
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
     v17  Imm(0)                                           -> x1
-    v18  ImmData(8)                                       -> x1
+    v18  ImmData(24)                                      -> x1
     v19  LoadLocal { off=-3, kind=I64 }                   -> x2
     v20  Extend { value=v13, kind=I32 }                   -> x2
     v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x2

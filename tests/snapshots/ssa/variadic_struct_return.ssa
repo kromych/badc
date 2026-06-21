@@ -194,7 +194,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v15  Imm(8)                                           -> x1
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
     v17  Imm(0)                                           -> x1
-    v18  ImmData(8)                                       -> x1
+    v18  ImmData(24)                                      -> x1
     v19  LoadLocal { off=-3, kind=I64 }                   -> x2
     v20  Extend { value=v13, kind=I32 }                   -> x2
     v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x2

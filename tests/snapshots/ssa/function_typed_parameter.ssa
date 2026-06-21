@@ -65,7 +65,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   ImmData(8)                                       -> x0
+    v3   ImmData(24)                                      -> x0
     v4   LoadLocal { off=2, kind=I32 }                    -> x1
     v5   BinopI { op=shl, lhs=v1, rhs_imm=2 }             -> x1
     v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x0
@@ -110,7 +110,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v11  ImmCode(ent_pc=4)                                -> x7
     v12  Imm(3)                                           -> x6
     v13  Call { target_pc=2, args=[v11, v12], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v14  ImmData(8)                                       -> x1
+    v14  ImmData(24)                                      -> x1
     v15  Imm(12)                                          -> x2
     v16  BinopI { op=add, lhs=v14, rhs_imm=12 }           -> x1
     v17  Binop { op=ne, lhs=v13, rhs=v16 }                -> x0
@@ -165,7 +165,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v15  Imm(8)                                           -> x1
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
     v17  Imm(0)                                           -> x1
-    v18  ImmData(8)                                       -> x1
+    v18  ImmData(24)                                      -> x1
     v19  LoadLocal { off=-3, kind=I64 }                   -> x2
     v20  Extend { value=v13, kind=I32 }                   -> x2
     v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x2

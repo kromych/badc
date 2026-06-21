@@ -4,7 +4,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(36)                                      -> x0
+    v1   ImmData(100)                                     -> x0
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
@@ -14,7 +14,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x12
     v2   Imm(0)                                           -> x0
-    v3   ImmData(36)                                      -> x3
+    v3   ImmData(100)                                     -> x3
     v4   Load { addr=v3, disp=0, kind=I8 }                -> x0
     v5   BinopI { op=ne, lhs=v4, rhs_imm=0 }              -> x0
     terminator Bz { cond=v5, target=b15, fall=b1 }   (exit_acc=v5)
@@ -27,7 +27,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
   block 2  start_pc=0
     v10  Phi { incoming=[b15:v1, b1:v7], kind=I64 }       -> x12
     v11  Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v12  ImmData(36)                                      -> x1
+    v12  ImmData(100)                                     -> x1
     v13  Binop { op=ne, lhs=v11, rhs=v3 }                 -> x0
     terminator Bz { cond=v13, target=b16, fall=b3 }   (exit_acc=v13)
   block 3  start_pc=0
@@ -143,7 +143,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v15  Imm(8)                                           -> x1
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
     v17  Imm(0)                                           -> x1
-    v18  ImmData(8)                                       -> x1
+    v18  ImmData(24)                                      -> x1
     v19  LoadLocal { off=-3, kind=I64 }                   -> x2
     v20  Extend { value=v13, kind=I32 }                   -> x2
     v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x2

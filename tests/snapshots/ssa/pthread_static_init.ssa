@@ -4,7 +4,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[3, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x3
+    v1   ImmData(24)                                      -> x3
     v2   CallExt { binding_idx=14, args=[v1], fp_arg_mask=0x0 } -> x0
     v3   BinopI { op=ne, lhs=v2, rhs_imm=0 }              -> x0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
@@ -12,7 +12,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v4   Imm(1)                                           -> x0
     terminator Return(v4)   (exit_acc=v4)
   block 2  start_pc=0
-    v5   ImmData(8)                                       -> x0
+    v5   ImmData(24)                                      -> x0
     v6   CallExt { binding_idx=16, args=[v1], fp_arg_mask=0x0 } -> x0
     v7   BinopI { op=ne, lhs=v6, rhs_imm=0 }              -> x0
     terminator Bz { cond=v7, target=b4, fall=b3 }   (exit_acc=v7)
@@ -20,7 +20,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v8   Imm(2)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
   block 4  start_pc=0
-    v9   ImmData(48)                                      -> x7
+    v9   ImmData(64)                                      -> x7
     v10  CallExt { binding_idx=25, args=[v9], fp_arg_mask=0x0 } -> x0
     v11  BinopI { op=ne, lhs=v10, rhs_imm=0 }             -> x0
     terminator Bz { cond=v11, target=b6, fall=b5 }   (exit_acc=v11)
@@ -65,7 +65,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v15  Imm(8)                                           -> x1
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
     v17  Imm(0)                                           -> x1
-    v18  ImmData(8)                                       -> x1
+    v18  ImmData(24)                                      -> x1
     v19  LoadLocal { off=-3, kind=I64 }                   -> x2
     v20  Extend { value=v13, kind=I32 }                   -> x2
     v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x2

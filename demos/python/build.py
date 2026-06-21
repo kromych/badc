@@ -176,8 +176,12 @@ TARGETS = {
     # complex arithmetic is wrong on the Windows build, see _WIN_EXCLUDE).
     "windows-x64": {"windows": True, "tier2_skip": ["test_math", "test_cmath"],
                     "tier2_ignore": ["test_strftime_y2k", "test_strftime_y2k_c99"]},
+    # arm64 also ignores test_gh_120161: it spawns a child interpreter whose
+    # socket startup fails with WinError 10106 (WSASYSNOTREADY) on Windows arm64
+    # only -- a TODO socket/WSAStartup gap on that target, not in this test.
     "windows-arm64": {"windows": True, "tier2_skip": ["test_math", "test_cmath"],
-                      "tier2_ignore": ["test_strftime_y2k", "test_strftime_y2k_c99"]},
+                      "tier2_ignore": ["test_strftime_y2k", "test_strftime_y2k_c99",
+                                       "test_gh_120161"]},
 }
 
 

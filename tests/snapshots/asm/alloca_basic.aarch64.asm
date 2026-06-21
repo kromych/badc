@@ -23,6 +23,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x28
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
@@ -81,6 +85,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x20
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x8]
                	mov	x0, #0x0                // =0
@@ -144,6 +152,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x30
                	ldr	x1, [x16]
                	sub	x1, x1, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x1, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x1, [x16]
                	stur	x1, [x29, #-0x8]
                	add	x17, x0, #0xf
@@ -151,6 +163,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x30
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x10]
                	ldur	x0, [x29, #-0x8]
@@ -274,6 +290,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x20
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x18]
                	ldur	x0, [x29, #-0x18]
@@ -311,6 +331,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x28
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]

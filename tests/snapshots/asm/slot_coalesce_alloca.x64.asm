@@ -112,6 +112,10 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x70(%rbp)
                	xorq	%rax, %rax
@@ -177,3 +181,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)

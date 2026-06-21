@@ -26,6 +26,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x30
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x8]
                	mov	x0, #0x7                // =7
@@ -34,6 +38,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x30
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x10]
                	mov	x0, #0x21               // =33
@@ -42,6 +50,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x30
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x18]
                	mov	x0, #0x64               // =100
@@ -50,6 +62,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x30
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x20]
                	ldur	x0, [x29, #-0x8]

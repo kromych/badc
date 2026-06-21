@@ -6710,6 +6710,17 @@ fn emit_intrinsic(
             emit_lea_r_mem(code, addr_reg, Reg::RBP, disp);
             emit_mov_r_mem(code, rd_phys, addr_reg, 0);
             super::x86_64::emit_sub_rr(code, rd_phys, size_reg);
+            // Trap on arena underflow: a bumped pointer below the
+            // per-frame arena floor (addr_reg - ALLOCA_ARENA_SLOTS*8)
+            // would scribble the saved-register area, so fault
+            // deterministically rather than corrupt the stack. TODO:
+            // lower alloca to a real SP decrement for unbounded sizes.
+            let arena_bytes = (crate::c5::op::ALLOCA_ARENA_SLOTS * 8) as i32;
+            emit_lea_r_mem(code, size_reg, addr_reg, -arena_bytes);
+            super::x86_64::emit_cmp_rr(code, rd_phys, size_reg);
+            super::x86_64::emit_jcc_rel8(code, super::x86_64::Cc::Ae, 2);
+            code.push(0x0F);
+            code.push(0x0B); // ud2
             emit_mov_mem_r(code, addr_reg, 0, rd_phys);
             if preserve_size_reg {
                 emit_pop_r(code, size_reg);

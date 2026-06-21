@@ -1757,6 +1757,13 @@ fn ternary_arith_conversion() {
 }
 
 #[test]
+fn alloca_arena_in_bounds() {
+    // The alloca underflow trap fires only past the per-frame arena
+    // floor; an allocation just under the arena size still succeeds.
+    assert_eq!(run_fixture("alloca_arena_in_bounds.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec

@@ -3016,6 +3016,26 @@ fn emit_intrinsic(
             // *x16 -= aligned_size; rd = new top.
             emit(code, enc_ldr_imm(rd, scratch.primary, 0));
             emit(code, enc_sub_reg(rd, rd, scratch.secondary));
+            // Trap on arena underflow: a bumped pointer below the
+            // per-frame arena floor (x16 - ALLOCA_ARENA_SLOTS*8) would
+            // scribble the saved-register area, so fault deterministically
+            // rather than corrupt the stack. TODO: lower alloca to a real
+            // SP decrement for unbounded sizes.
+            let arena_bytes = (crate::c5::op::ALLOCA_ARENA_SLOTS * 8) as u32;
+            emit(
+                code,
+                super::aarch64::enc_sub_imm_lsl12(
+                    scratch.secondary,
+                    scratch.primary,
+                    arena_bytes >> 12,
+                ),
+            );
+            emit(code, super::aarch64::enc_cmp_reg(rd, scratch.secondary));
+            emit(
+                code,
+                super::aarch64::enc_b_cond(super::aarch64::Cond::Hs, 2),
+            );
+            emit(code, 0xD420_0020); // brk #1
             emit(code, enc_str_imm(rd, scratch.primary, 0));
             true
         }

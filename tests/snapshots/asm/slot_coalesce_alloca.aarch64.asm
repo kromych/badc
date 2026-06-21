@@ -106,6 +106,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x90
                	ldr	x0, [x16]
                	sub	x0, x0, x17
+               	sub	x17, x16, #0x2, lsl #12 // =0x2000
+               	cmp	x0, x17
+               	b.hs	<addr>
+               	brk	#0x1
                	str	x0, [x16]
                	stur	x0, [x29, #-0x70]
                	mov	x0, #0x0                // =0

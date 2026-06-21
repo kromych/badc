@@ -1741,6 +1741,22 @@ fn bitfields_basic() {
 }
 
 #[test]
+fn union_bitfield_layout() {
+    // C99 6.7.2.1: a union with a named bitfield member sizes and aligns
+    // to that member's storage unit (a union of only bitfields is not
+    // zero-sized), so a bitfield store stays in bounds.
+    assert_eq!(run_fixture("union_bitfield_layout.c"), 0);
+}
+
+#[test]
+fn ternary_arith_conversion() {
+    // C99 6.5.15p5: a conditional with arithmetic arms converts both to
+    // their usual-arithmetic-conversions common type; a mixed int /
+    // floating ternary must not read one arm through the other's width.
+    assert_eq!(run_fixture("ternary_arith_conversion.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec

@@ -377,6 +377,8 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
+    ("union_bitfield_layout.c", 0),
+    ("ternary_arith_conversion.c", 0),
     ("struct_layout.c", 0),
     ("const_expr_conditional.c", 27),
     ("comma_operator_in_loops.c", 3),

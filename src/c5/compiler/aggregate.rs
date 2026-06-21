@@ -618,9 +618,19 @@ impl Compiler {
                         field_ty |= UNSIGNED_BIT;
                     }
                     if is_union {
+                        // C99 6.7.2.1: a union bitfield occupies one
+                        // storage unit of its declared type; size and
+                        // align the union to it, as the non-bitfield path does.
                         field_offset = 0;
                         bit_offset = 0;
                         bit_unit = self.size_of_type(field_ty).max(1);
+                        if bit_unit > offset {
+                            offset = bit_unit;
+                        }
+                        let a = bit_unit.min(8);
+                        if a > struct_align {
+                            struct_align = a;
+                        }
                     } else {
                         // C99 6.7.2.1p11 / p13: the bitfield's
                         // addressable storage unit is implementation

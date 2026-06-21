@@ -2393,6 +2393,7 @@ impl Compiler {
                         then_ast = self.ast_acc;
                     }
                 }
+                let then_ty = self.ty;
                 if self.lex.tk == ':' {
                     self.next()?;
                 } else {
@@ -2400,24 +2401,60 @@ impl Compiler {
                 }
                 self.flush_pending_stores();
                 self.expr(Token::Cond as i64)?;
-                let else_ast = self.ast_acc;
-                // Build Expr::Ternary so the walker lowers the
-                // three sub-expressions with branch + phi-like
-                // join.
+                let mut else_ast = self.ast_acc;
+                let else_ty = self.ty;
+                // C99 6.5.15p5: when both arms have arithmetic type the
+                // conditional's type is their usual-arithmetic-conversions
+                // common type and each arm converts to it. Without the cast a
+                // mixed int / floating ternary stores one arm through the
+                // other arm's store kind (integer bits read as a double). Pure
+                // integer arms already lower correctly on the I64 path, so
+                // only the floating-involved case needs the conversion here.
+                let mut result_ty = self.ty;
+                let arith = |t: i64| !is_pointer_ty(t) && !is_struct_ty(t);
+                if (is_floating_scalar(then_ty) || is_floating_scalar(else_ty))
+                    && arith(then_ty)
+                    && arith(else_ty)
+                {
+                    let common = fp_result_ty(then_ty, else_ty);
+                    result_ty = common;
+                    if then_ty != common && then_ast.is_some() {
+                        let pos = self.ast_src_pos();
+                        then_ast = Some(self.ast.push_expr(
+                            super::super::ast::Expr::Cast {
+                                child: then_ast.unwrap(),
+                                to_ty: common,
+                            },
+                            pos,
+                        ));
+                    }
+                    if else_ty != common && else_ast.is_some() {
+                        let pos = self.ast_src_pos();
+                        else_ast = Some(self.ast.push_expr(
+                            super::super::ast::Expr::Cast {
+                                child: else_ast.unwrap(),
+                                to_ty: common,
+                            },
+                            pos,
+                        ));
+                    }
+                }
+                // Build Expr::Ternary so the walker lowers the three
+                // sub-expressions with a branch + phi-like join.
                 if let (Some(cond), Some(then_e), Some(else_e)) = (cond_ast, then_ast, else_ast) {
                     let pos = self.ast_src_pos();
-                    let ty = self.ty;
                     let id = self.ast.push_expr(
                         super::super::ast::Expr::Ternary {
                             cond,
                             then_e,
                             else_e,
-                            ty,
+                            ty: result_ty,
                         },
                         pos,
                     );
                     self.ast_acc = Some(id);
                 }
+                self.ty = result_ty;
             } else if self.lex.tk == Token::Lor {
                 let lhs_ast = self.ast_acc;
                 self.next()?;

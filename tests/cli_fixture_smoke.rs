@@ -212,3 +212,132 @@ fn opt_level_flags_map_to_the_single_level() {
     assert_eq!(o3, o, "-O3 should match -O");
     assert_eq!(os, o, "-Os should match -O");
 }
+
+// `--install <dir>` writes every embedded header under <dir>/include
+// (recreating subdirectories) and the runtime source under <dir>/lib.
+#[test]
+fn install_writes_header_and_runtime_tree() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-install-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let out = Command::new(badc)
+        .arg("--install")
+        .arg(&dir)
+        .output()
+        .expect("run badc --install");
+    assert!(
+        out.status.success(),
+        "--install failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // A flat header, a nested header (subdirectory recreated), and the
+    // runtime source must all land on disk.
+    for rel in ["include/stdio.h", "include/sys/socket.h", "lib/runtime.c"] {
+        let p = dir.join(rel);
+        assert!(p.is_file(), "missing installed file {}", p.display());
+        assert!(
+            !std::fs::read_to_string(&p).unwrap().is_empty(),
+            "installed file {} is empty",
+            p.display()
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// The installed overlay under $BADC_HOME takes precedence over the
+// embedded headers and runtime: editing an installed copy changes the
+// build without rebuilding badc, and removing the override falls back
+// to the embedded copy.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn installed_overlay_overrides_embedded() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-overlay-{}", std::process::id()));
+    let home = dir.join("home");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    // Install the embedded set under `home`.
+    let out = Command::new(badc)
+        .arg("--install")
+        .arg(&home)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc --install");
+    assert!(out.status.success(), "--install failed");
+
+    // Stamp a marker into the installed <stdbool.h>; the embedded copy
+    // does not define it.
+    std::fs::write(
+        home.join("include/stdbool.h"),
+        "#define bool _Bool\n#define true 1\n#define false 0\n#define BADC_OVERLAY_OK 1\n",
+    )
+    .expect("overwrite installed stdbool.h");
+    std::fs::write(
+        dir.join("m.c"),
+        "#include <stdbool.h>\nint main(void){ return BADC_OVERLAY_OK ? 0 : 1; }\n",
+    )
+    .expect("write source");
+
+    // With BADC_HOME set the overlay header is used, so the marker is
+    // defined and the program builds and exits 0. The temp cwd has no
+    // ./include or ./headers/include, so the overlay is the only one.
+    let exe = dir.join("m");
+    let built = Command::new(badc)
+        .env("BADC_HOME", &home)
+        .arg(dir.join("m.c"))
+        .arg("-o")
+        .arg(&exe)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        built.status.success(),
+        "overlay build failed: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    assert_eq!(
+        Command::new(&exe).output().expect("run prog").status.code(),
+        Some(0),
+        "overlay program returned non-zero"
+    );
+
+    // Without BADC_HOME the embedded <stdbool.h> (no marker) is used, so
+    // the same source fails to compile -- the fallback path.
+    let fallback = Command::new(badc)
+        .arg(dir.join("m.c"))
+        .arg("-o")
+        .arg(dir.join("m-fallback"))
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        !fallback.status.success(),
+        "expected the embedded stdbool.h (no marker) to fail compilation"
+    );
+
+    // A broken installed runtime is compiled in place of the embedded
+    // one: a normal program that links the runtime then fails to build,
+    // naming the installed runtime.c.
+    std::fs::write(home.join("lib/runtime.c"), "this is not valid C @@@\n")
+        .expect("overwrite installed runtime.c");
+    std::fs::write(dir.join("h.c"), "int main(void){ return 0; }\n").expect("write source");
+    let broken = Command::new(badc)
+        .env("BADC_HOME", &home)
+        .arg(dir.join("h.c"))
+        .arg("-o")
+        .arg(dir.join("h"))
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        !broken.status.success(),
+        "expected the broken installed runtime to fail the build"
+    );
+    assert!(
+        String::from_utf8_lossy(&broken.stderr).contains("runtime.c"),
+        "build error should name the installed runtime.c: {}",
+        String::from_utf8_lossy(&broken.stderr)
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

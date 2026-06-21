@@ -463,6 +463,39 @@ def build(target: str, do_link: bool, log) -> Path | None:
     return py
 
 
+def _xcrun(tool: str):
+    if sys.platform != "darwin":
+        return None
+    r = subprocess.run(["xcrun", "--find", tool], capture_output=True, text=True)
+    return r.stdout.strip() or None
+
+
+def section_sizes(py: Path) -> dict:
+    """text / data / bss / file bytes of a built binary via `llvm-size
+    --format=sysv` (uniform across ELF / Mach-O / PE), falling back to the
+    file size when no sizer is found."""
+    sizer = shutil.which("llvm-size") or _xcrun("llvm-size")
+    out = {"text": 0, "data": 0, "bss": 0, "file": py.stat().st_size}
+    if not sizer:
+        return out
+    r = subprocess.run([sizer, "--format=sysv", str(py)], capture_output=True, text=True)
+    if r.returncode != 0:
+        return out
+    for line in r.stdout.splitlines():
+        f = line.split()
+        if len(f) < 2 or not f[-1].lstrip("-").isdigit():
+            continue
+        name, val = f[0], int(f[1])
+        low = name.lower()
+        if low in ("__text", ".text") or low.endswith("text"):
+            out["text"] += val
+        elif "bss" in low:
+            out["bss"] += val
+        elif low in ("__data", ".data", ".rodata", "__const") or "data" in low or "const" in low:
+            out["data"] += val
+    return out
+
+
 def run_tests(target: str, py: Path, log, tier2: bool = False) -> int:
     # The suite spawns isolated child interpreters (-I) that ignore PYTHONHOME;
     # getpath locates Lib relative to the executable, so the interpreter runs
@@ -490,6 +523,11 @@ def run_tests(target: str, py: Path, log, tier2: bool = False) -> int:
         print("build: interpreter failed the `print(2 + 2)` check")
         return 1
     print("build: interpreter runs `print(2 + 2)`")
+    sz = section_sizes(py)
+    print(
+        f"build: sections text={sz['text'] // 1024}K data={sz['data'] // 1024}K "
+        f"bss={sz['bss'] // 1024}K file={sz['file'] // 1024}K"
+    )
     if cfg.get("windows"):
         # A Windows socket fd is a SOCKET handle whose value is unrelated to
         # FD_SETSIZE, so select() must accept it regardless of magnitude. Open

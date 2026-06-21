@@ -96,38 +96,6 @@ def _link_cmd(cc_kind, cc, target, objs, py, opt):
     raise SystemExit(f"compare: unsupported compiler {cc_kind}")
 
 
-def _section_sizes(py: Path) -> dict:
-    """text / data / bss in bytes via llvm-size --format=sysv (uniform across
-    ELF / Mach-O / PE), falling back to the file size."""
-    sizer = shutil.which("llvm-size") or _xcrun("llvm-size")
-    out = {"text": 0, "data": 0, "bss": 0, "file": py.stat().st_size}
-    if not sizer:
-        return out
-    r = subprocess.run([sizer, "--format=sysv", str(py)], capture_output=True, text=True)
-    if r.returncode != 0:
-        return out
-    for line in r.stdout.splitlines():
-        f = line.split()
-        if len(f) < 2 or not f[-1].lstrip("-").isdigit():
-            continue
-        name, val = f[0], int(f[1])
-        low = name.lower()
-        if low in ("__text", ".text") or low.endswith("text"):
-            out["text"] += val
-        elif "bss" in low:
-            out["bss"] += val
-        elif low in ("__data", ".data", ".rodata", "__const") or "data" in low or "const" in low:
-            out["data"] += val
-    return out
-
-
-def _xcrun(tool: str):
-    if sys.platform != "darwin":
-        return None
-    r = subprocess.run(["xcrun", "--find", tool], capture_output=True, text=True)
-    return r.stdout.strip() or None
-
-
 def _bench(py: Path, env: dict, runs: int = 5):
     times = []
     for _ in range(runs):
@@ -202,7 +170,7 @@ def main(argv=None) -> int:
             if not res:
                 rows.append((tag, None, None, None)); continue
             shutil.copy2(res["py"], SRC / res["py"].name)
-            sizes = _section_sizes(res["py"])
+            sizes = build.section_sizes(res["py"])
             ms = _bench(SRC / res["py"].name, env)
             rows.append((tag, res["compile_s"], sizes, ms))
             log(f"  {tag}: compile {res['compile_s']:.1f}s  text {sizes['text']//1024}K  "

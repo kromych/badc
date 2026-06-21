@@ -907,8 +907,9 @@ jobs:
           - ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
     # quickjs_bench builds the full engine four times (badc, badc -O,
-    # clang -O0, clang -O2); allow headroom over the lighter fixtures.
-    timeout-minutes: 15
+    # clang -O0, clang -O2) and the CPython comparison builds the
+    # interpreter four more times; allow headroom over the lighter fixtures.
+    timeout-minutes: 30
     # Don't gate CI on perf numbers -- a regression should surface in
     # the job summary but not block the merge. Hard failures from the
     # harness (no compilers found, fixture missing) still fail the job.
@@ -948,6 +949,15 @@ jobs:
             echo ""
             cat /tmp/perf.md
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: cpython build comparison (badc/clang, -O0/-O)
+        # Builds the interpreter four times (badc and clang, each at -O0 and
+        # -O) and reports per-binary section sizes plus a runtime
+        # microbenchmark. continue-on-error so a build/bench hiccup leaves the
+        # fib/qsort table intact in the summary.
+        continue-on-error: true
+        run: |
+          python3 demos/python/compare_compilers.py | tee /tmp/cpython_cmp.md
+          cat /tmp/cpython_cmp.md >> "$GITHUB_STEP_SUMMARY"
 
   # Build the Tcl 8.6.14 interpreter with badc and run the upstream
   # test suite (tests/all.tcl). Isolated from the `test` job because the

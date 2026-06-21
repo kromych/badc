@@ -6,23 +6,22 @@
 [![OS](https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-informational)](#native-compilation)
 [![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64-informational)](#native-compilation)
 
-`badc` is a rather small cross-platform compiler of the C language as
-defined in the C99 standard, plus some C11 and later. `badc` used to be a
-bad one for some time when the projects just started out, and the name stuck.
+`badc` is a rather small cross-platform optimizing compiler of the C language.
+It had appeared out of necessity to quickly tweak how and what a C compiler emits,
+and then it was just interesting to me to embark on the journey of making it being
+able to become a nimble practical tool for everyday use rather than a niche hack.
+Modern approaches to coding would make building a compiler easier it seemed :)
 
-> There is some compiler-building jargon in this document, you can safely skip it,
-> and jump to the usage section right away.
+Now `badc` implements a very large portion of the C99, C11 standards and some
+popular idioms from the later standards as well as few extensions. All of that is
+enough to build and test Python 3.14 on all of the five supported targets (and
+there are more [`demos`](./demos/) included, read on!).
 
-`badc`'s small footprint and embedded headers (which you can override) give
-a fun one-executable experience. Its codebase of moderate size can be
-a good pedagogical material. It lowers through an SSA intermediate
-representation and a graph-coloring register allocator, but doesn't go for
-the exquisite optimization passes a titan toolchain like clang, gcc or msvc
-run. All told, to stay slim, it's unlikely to surpass the ability of
-multi-gigabyte compiler suites to squeeze the last drop of perf from the
-machine, and that's fine. `badc` tries hard not to get in the way with
-assumptions on the runtime library, and `--freestanding` as available
-should you need that.
+`badc`'s small footprint and embedded headers (which you can override or install
+to some path for tweaking) give a one-executable experience of the portable tools.
+The compiler's codebase of moderate size can be used as a small self-sufficient
+toolchain or can be used as a library giving _your project_ the ability to build C
+code or just run it (the default when using as a library).
 
 A fun extension is that `badc` can automatically add the header(s)
 for the standard library so the bare `hello.c` with
@@ -46,24 +45,24 @@ can be debugged and/or their performance can be profiled (use `-g`).
 
 `badc` optimizes when you specify `-O` and can produce code that's faster
 than `clang -O0`, especially on ARM64. To get an idea of the codegen
-quality, take a look at `./tests/snapshots` with assembly and SSA snapshots
-of the test fixtures. The optimized binary is supported on any modern ARM64
-processor, and on x86_64 processors not older than Intel Hasswell and AMD Zen
+quality, take a look at [`./tests/snapshots`](./tests/snapshots/) with assembly and
+SSA snapshots of the test fixtures. The optimized binaries will run on any modern
+ARM64 processor, and on x86_64 processors not older than Intel Hasswell and AMD Zen
 (circa 2013, the optimizer uses FMA3 instructions).
 
-`badc` produces real native binaries (macOS Mach-O, Linux ELF, or
-Windows PE32+), on any of five targets, from any host - macOS (ARM64), Linux
-(ARM64, x86_64), Windows ({ARM64,x86_64} x {console, GUI, NT}). It supports
-separate translation units and has a small linker (i.e. no relaxations or LTO)
-inside it as well.
+`badc` emits position-independent code and the real native binaries (macOS Mach-O,
+Linux ELF, or Windows PE32+), on any of five targets, from any host:
+* macOS (`ARM64`),
+* Linux (`ARM64`, `x86_64`),
+* Windows ({`ARM64`, `x86_64`} `x` {`console`, `GUI`, `NT`, `driver`}).
+It supports also separate translation units (always translated to ELF) and has a small
+linker (so no relaxations or LTO).  `badc` tries hard not to get in the way with assumptions
+on the runtime library, and `--freestanding` as available should you need that. `EFI`
+is supported as well.
 
 `badc` can also JIT-compile into the machine code in-process so no binary is written
 to the disk. Finally, it recognizes being used as `#!` so that C source code becomes
 a (fast) script.
-
-For the _true_ compiler heads there is the `--dump-ssa` option which prints each
-function's SSA IR plus the register allocator's per-value placement to stderr before
-lowering.
 
 There are various demo's under [`demos`](./demos/):
 
@@ -90,19 +89,27 @@ Besides these, there are some fun test fixtures implementing Horner scheme, RK4,
 Finally, there's an option to run the IR (intermediate representation) with
 tracking pointer access and bounds to catch memory issues.
 
+> * `badc` used to be bad when the projects just started out and the name stuck.
+>
+> * There is some compiler-building jargon in this document here and there. You can
+> safely skip it, and jump to the usage section right away.
+>
+> * For the _true_ compiler heads there is the `--dump-ssa` option which prints each
+> function's SSA IR plus the register allocator's per-value placement to stderr before
+> lowering.
+
 ## Lineage
 
-It started out as a Rust port of Robert Swierczek's C compiler in 4 functions
-[c4](https://github.com/rswier/c4) and grew from there. There has been
-enough divergence from the original to call the dialect **c5**. Due to
-that facetious naming the source tree spells that out as the `c5` module
-and `C5Error` type.
+It started out as a Rust port of Robert Swierczek's teeny-tiny C compiler in 4 functions
+[c4](https://github.com/rswier/c4) and grew from there. There then has been enough divergence
+from the original to call the dialect **c5**. Due to that facetious naming the source tree
+spells that out as the `c5` module and `C5Error` type.
 
 The venerable 4-function `c4.c` compiler ships as a test fixture and self-hosts:
 
 ```sh
-badc tests/fixtures/c/c4.c -o c4  # compile c4 to a native binary
-./c4 hello.c                      # which then runs hello.c
+badc -O -o c4 tests/fixtures/c/c4.c   # compile c4 to a native binary
+./c4 hello.c                          # which then runs hello.c
 ```
 
 And you can really crank the fun up with something like
@@ -113,8 +120,15 @@ badc -O --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c 
 
 to run it quadro-nested :)
 
-During the development, the `badc` compiler was "spiraling" out from the stack IR execution
-and evolving frontend to the 3-operand IR and SSA IR and the optimizing backend.
+During the development, the `badc` compiler was "spiraling" out from the stack
+IR execution and evolving frontend to the 3-operand IR and SSA IR and the optimizing
+backend.
+
+It lowers through an SSA intermediate representation and a graph-coloring
+register allocator, but doesn't go for the exquisite optimization passes a
+titan toolchain like clang, gcc or msvc run. All told, to stay slim,
+it's unlikely to surpass the ability of multi-gigabyte compiler suites to
+squeeze the last drop of perf from the machine, and that's fine.
 
 ## How to install and first steps
 

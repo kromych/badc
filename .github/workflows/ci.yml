@@ -995,11 +995,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-latest, target: macos-aarch64, label: macos-arm64 }
-          - { os: ubuntu-latest, target: linux-x64, label: ubuntu-x64 }
-          - { os: ubuntu-24.04-arm, target: linux-aarch64, label: ubuntu-arm64 }
-          - { os: windows-latest, target: windows-x64, label: windows-x64 }
-          - { os: windows-11-arm, target: windows-arm64, label: windows-arm64 }
+          - { os: macos-latest, target: macos-aarch64, label: macos-arm64, test_flag: --tier2 }
+          - { os: ubuntu-latest, target: linux-x64, label: ubuntu-x64, test_flag: --tier2 }
+          - { os: ubuntu-24.04-arm, target: linux-aarch64, label: ubuntu-arm64, test_flag: --tier2 }
+          - { os: windows-latest, target: windows-x64, label: windows-x64, test_flag: --test }
+          - { os: windows-11-arm, target: windows-arm64, label: windows-arm64, test_flag: --test }
     runs-on: ${{ matrix.os }}
     # Hang guard for a cold rust-cache; a warm build + slice runs well under it.
     timeout-minutes: 40
@@ -1014,5 +1014,5 @@ jobs:
           key: cpython-${{ matrix.target }}
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
-      - name: cpython no-make build + tier-1 test slice
-        run: python demos/python/build.py --target=${{ matrix.target }} --test
+      - name: cpython no-make build + test slice
+        run: python demos/python/build.py --target=${{ matrix.target }} ${{ matrix.test_flag }}

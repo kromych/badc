@@ -420,6 +420,7 @@ fn remap_data_off(off: i64, starts: &[i64], new_base: &[i64], data_len: i64) -> 
 pub(crate) fn compact_program_data(
     program: &Program,
     target: Target,
+    segregate: bool,
 ) -> Result<(Program, i64), C5Error> {
     use crate::c5::token::Token;
 
@@ -447,6 +448,34 @@ pub(crate) fn compact_program_data(
     // wider scalar without measurable padding cost.
     const ALIGN: i64 = 16;
     let obj_end = |i: usize| -> i64 { if i + 1 < n { starts[i + 1] } else { data_len } };
+    // A relocation writes a (generally non-zero) value into its slot at
+    // link/write time, so the slot's object is initialised data even when
+    // its bytes are zero in `program.data` (a function-pointer slot, or a
+    // pointer whose stored placeholder is its target offset). Such objects
+    // stay file-backed: the writer patches the slot in the file image.
+    let interval_of = |off: i64| -> usize {
+        match starts.binary_search(&off) {
+            Ok(i) => i,
+            Err(i) => i.saturating_sub(1),
+        }
+    };
+    let mut has_reloc_slot = alloc::vec![false; n];
+    for off in program
+        .data_relocs
+        .iter()
+        .map(|r| r.data_offset as i64)
+        .chain(program.code_relocs.iter().map(|r| r.data_offset as i64))
+        .chain(
+            program
+                .extern_data_relocs
+                .iter()
+                .map(|r| r.data_offset as i64),
+        )
+    {
+        if (0..data_len).contains(&off) {
+            has_reloc_slot[interval_of(off)] = true;
+        }
+    }
     // Object 0 spans the leading NULL guard and must stay file-backed at
     // offset 0 so `remap(0) == 0` (the extern `ImmData(0)` sentinel and
     // VM NULL-distinctness both depend on it). Every other live object
@@ -454,17 +483,14 @@ pub(crate) fn compact_program_data(
     // bytes and moves to the `.bss` region past the file image, which the
     // loader zero-fills. A partly-non-zero object keeps its interior zeros
     // in the file -- only wholly-zero objects can move.
-    // Segregation is opt-in while the per-format writers are brought up;
-    // with it off, every live object (zero or not) is packed into the
-    // file image exactly as before and `bss_size` stays 0.
-    #[cfg(feature = "std")]
-    let segregate = std::env::var("BADC_BSS_SEGREGATE").is_ok();
-    #[cfg(not(feature = "std"))]
-    let segregate = false;
+    // Segregation is opt-in per build; with it off (`segregate == false`),
+    // every live object (zero or not) is packed into the file image as
+    // before and `bss_size` stays 0. The caller sets the policy.
     let is_bss = |i: usize| -> bool {
         segregate
             && i != 0
             && live[i]
+            && !has_reloc_slot[i]
             && program.data[starts[i] as usize..obj_end(i) as usize]
                 .iter()
                 .all(|&b| b == 0)
@@ -485,7 +511,15 @@ pub(crate) fn compact_program_data(
     // The `.bss` region begins immediately past the file image; an offset
     // into it is `>= new_data.len()`, which each writer maps to a vaddr the
     // loader zero-fills (p_memsz > p_filesz / VirtualSize > SizeOfRawData /
-    // vmsize > filesize).
+    // vmsize > filesize). Align its base to `ALIGN`: the linker and the
+    // per-format writers address `.bss` relative to its own base, so each
+    // object's bss-relative offset must carry the same alignment residue
+    // as its `.data` offset, which only holds when the base is aligned.
+    if (0..n).any(&is_bss) {
+        while (new_data.len() as i64).rem_euclid(ALIGN) != 0 {
+            new_data.push(0);
+        }
+    }
     let bss_base = new_data.len() as i64;
     let mut bss_cursor = bss_base;
     for i in 0..n {
@@ -506,7 +540,14 @@ pub(crate) fn compact_program_data(
     out.finished_functions
         .retain(|f| live_func_pcs.contains(&f.ent_pc));
     for sym in &mut out.symbols {
-        if sym.class == Token::Glo as i64 && sym.defined_here && (0..data_len).contains(&sym.val) {
+        // A `_Thread_local` symbol's `val` is an offset into the separate
+        // TLS image, not `.data`, so it must not pass through the `.data`
+        // remap (mirrors `for_each_data_offset`, which skips them).
+        if sym.class == Token::Glo as i64
+            && sym.defined_here
+            && !sym.is_thread_local
+            && (0..data_len).contains(&sym.val)
+        {
             sym.val = map(sym.val);
         }
     }
@@ -617,5 +658,51 @@ fn walker_param_count(func: &FunctionSsa) -> usize {
     match max_seen {
         Some(s) => (s - 1).max(0) as usize,
         None => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Compiler;
+    use crate::c5::program::Program;
+    use crate::c5::tests::with_prelude;
+
+    fn compile(src: &str, target: Target) -> Program {
+        Compiler::with_target(with_prelude(src), target)
+            .compile()
+            .expect("compile")
+    }
+
+    // A wholly-zero global referenced by a pointer initializer moves to
+    // the `.bss` region under segregation, dropping its file bytes. The
+    // region base (the file-image length) is ALIGN-aligned so each
+    // object's bss-relative offset keeps the alignment residue of its
+    // `.data` offset.
+    #[test]
+    fn segregate_moves_zero_global_to_aligned_bss() {
+        let target = Target::LinuxX64;
+        let src = "static long g[8]; long *const gp = &g[3]; \
+                   int main(void) { return gp == &g[3] ? 0 : 1; }";
+        let program = compile(src, target);
+
+        let (_, bss_off) = compact_program_data(&program, target, false).expect("compact");
+        assert_eq!(bss_off, 0, "no bss region when segregation is off");
+
+        let (compacted, bss_size) = compact_program_data(&program, target, true).expect("compact");
+        assert!(bss_size > 0, "the zero global must occupy the bss region");
+        assert_eq!(
+            compacted.data.len() % 16,
+            0,
+            "bss base (= file image length) must be 16-aligned"
+        );
+        let data_len = compacted.data.len() as u64;
+        assert!(
+            compacted
+                .data_relocs
+                .iter()
+                .any(|r| r.target_offset >= data_len),
+            "the &g[3] initializer must target a byte in the bss region"
+        );
     }
 }

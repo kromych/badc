@@ -621,7 +621,12 @@ pub fn link_native_objects_with_options(
                                 );
                             }
                             NativeSymSection::Bss => {
-                                let bss_off = def.value as i64 + reloc.addend;
+                                // `.bss` sits past the merged `.data`; park a
+                                // unified data-byte offset so the writer's
+                                // data-offset-to-vaddr map lands the reference
+                                // in the zero-fill tail. `data.len()` is final
+                                // after Pass 1.
+                                let bss_off = data.len() as i64 + def.value as i64 + reloc.addend;
                                 park_data_ref(
                                     machine,
                                     &mut pending_imports,
@@ -701,10 +706,12 @@ pub fn link_native_objects_with_options(
                     }
                 }
                 NativeSymSection::Bss => {
-                    // `.bss` sits past `.data` in the merged
-                    // image; same parking rule as Data, with
-                    // the offset taken against the bss base.
-                    let bss_off = bss_bases[i] as i64 + sym.value as i64 + reloc.addend;
+                    // `.bss` sits past `.data` in the merged image; park a
+                    // unified data-byte offset (data length + bss-relative
+                    // position) so the writer's data-offset-to-vaddr map
+                    // resolves it into the zero-fill tail.
+                    let bss_off =
+                        data.len() as i64 + bss_bases[i] as i64 + sym.value as i64 + reloc.addend;
                     park_data_ref(machine, &mut pending_imports, patch_offset, reloc, bss_off);
                 }
                 NativeSymSection::Abs => {
@@ -2220,6 +2227,53 @@ mod tests {
             .expect("x should resolve to the strong def");
         assert!(matches!(def.section, NativeSymSection::Data));
         assert_eq!(merged.bss_size, 0, "Common dropped, no bss slot");
+    }
+
+    // A code reference and a data initializer that both name the same
+    // wholly-zero global must resolve to the same byte in the `.bss`
+    // region. Before the fix the code reference parked a bss-relative
+    // offset tagged `Data`, aliasing a `.data` byte, while the data
+    // initializer correctly reached `.bss` -- the two diverged.
+    #[test]
+    fn code_and_data_bss_references_agree() {
+        let opts = NativeOptions {
+            bss_segregate: true,
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        // `big` (partially non-zero) inflates `.data` so a bss-relative
+        // offset is strictly smaller than the data length; `g` (wholly
+        // zero) lands in `.bss`. `readg` makes a code reference to `g`.
+        let src = "long big[16] = {1}; long g[8]; long *const gp = &g[0]; \
+                   long readg(void){ return g[0]; } \
+                   int main(void){ return (int)readg() + (gp != 0) + (int)big[0]; }";
+        let obj = compile_native(src, Target::LinuxX64, opts);
+        let merged = link_native_objects(&[obj]).expect("link");
+        assert!(merged.bss_size > 0, "the zero global must occupy bss");
+
+        // The data initializer `gp = &g[0]` reaches the bss section.
+        assert!(
+            merged
+                .data_abs_relocs
+                .iter()
+                .any(|r| matches!(r.target_section, NativeSymSection::Bss)),
+            "gp initializer must target the bss section"
+        );
+
+        // The code reference to `g` parks a unified data-byte offset in
+        // the bss region (at or past the data image); before the fix it
+        // stayed bss-relative and aliased a `.data` byte.
+        let data_len = merged.data.len() as i64;
+        let bss_end = data_len + merged.bss_size as i64;
+        assert!(
+            merged
+                .pending_imports
+                .iter()
+                .any(|p| p.import_index == usize::MAX
+                    && p.addend >= data_len
+                    && p.addend < bss_end),
+            "code reference to a bss global must resolve into the bss region [{data_len}, {bss_end})"
+        );
     }
 
     fn compile_native(src: &str, target: Target, opts: NativeOptions) -> NativeObject {

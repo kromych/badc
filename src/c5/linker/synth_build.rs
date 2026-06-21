@@ -767,10 +767,20 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
     let mut code_relocs: Vec<CodeReloc> = Vec::new();
     for r in &merged.data_abs_relocs {
         match r.target_section {
-            NativeSymSection::Data | NativeSymSection::Bss => {
+            NativeSymSection::Data => {
                 data_relocs.push(DataReloc {
                     data_offset: r.slot_offset,
                     target_offset: r.target_offset,
+                });
+            }
+            NativeSymSection::Bss => {
+                // Bss sits past `.data` at runtime; the per-format writer
+                // maps a data offset >= data length into the zero-fill
+                // tail, so shift the bss-relative target by the merged
+                // data length (mirrors image::patch_data_abs_relocs).
+                data_relocs.push(DataReloc {
+                    data_offset: r.slot_offset,
+                    target_offset: merged.data.len() as u64 + r.target_offset,
                 });
             }
             NativeSymSection::Text => {

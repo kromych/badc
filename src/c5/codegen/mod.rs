@@ -1827,6 +1827,10 @@ pub struct NativeOptions {
     /// Default 64, matching gcc / clang `-O2`'s
     /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
     pub inline_cap: u32,
+    /// Segregate wholly-zero data objects into a no-file-backing
+    /// `.bss` region instead of packing them into the file image.
+    /// Off by default; opt in per build while the writers are exercised.
+    pub bss_segregate: bool,
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -1876,6 +1880,7 @@ impl NativeOptions {
             debug_info: false,
             dump_ssa: false,
             inline_cap: 64,
+            bss_segregate: false,
         }
     }
 
@@ -2025,8 +2030,11 @@ pub fn emit_native_with_options_named(
     // compaction feeds both the backend lowering (which bakes data-relative
     // fixups) and the container writer (which emits the symbol table), so
     // the emitted `.data` and its symbols stay consistent.
-    let (compacted, bss_size) =
-        crate::c5::codegen::ssa_shadow::compact_program_data(program, target)?;
+    let (compacted, bss_size) = crate::c5::codegen::ssa_shadow::compact_program_data(
+        program,
+        target,
+        options.bss_segregate,
+    )?;
     let program = &compacted;
     let mut build = lower_for(program, target, options)?;
     build.bss_size = bss_size;
@@ -2049,8 +2057,11 @@ pub(crate) fn emit_native_single_tu_for_test(
     target: Target,
     options: NativeOptions,
 ) -> Result<alloc::vec::Vec<u8>, C5Error> {
-    let (compacted, bss_size) =
-        crate::c5::codegen::ssa_shadow::compact_program_data(program, target)?;
+    let (compacted, bss_size) = crate::c5::codegen::ssa_shadow::compact_program_data(
+        program,
+        target,
+        options.bss_segregate,
+    )?;
     let program = &compacted;
     let mut build = lower_for(program, target, options)?;
     build.bss_size = bss_size;

@@ -6,11 +6,13 @@
 [![OS](https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-informational)](#native-compilation)
 [![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64-informational)](#native-compilation)
 
-`badc` is a rather small cross-platform optimizing compiler of the C language.
-It had appeared out of necessity to quickly tweak how and what a C compiler emits,
-and then it was just interesting to me to embark on the journey of making it being
-able to become a nimble practical tool for everyday use rather than a niche hack.
-Modern approaches to coding would make building a compiler easier it seemed :)
+`badc` is a rather small cross-platform optimizing compiler (also a compiler-as-library)
+of the C language.
+
+It had appeared out of necessity to quickly tweak how and what a C compiler emits.
+Then it was captivating making it being able to become a nimble practical tool
+for everyday use rather than a niche hack. Modern approaches to coding would make
+building a compiler easier than that had been before I thought :)
 
 Now `badc` implements a very large portion of the C99, C11 standards and some
 popular idioms from the later standards as well as few extensions. All of that is

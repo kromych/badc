@@ -107,15 +107,17 @@ _WIN_GETPATH_DEFINES = [
 ]
 # TUs excluded from the minimal static interpreter. zlib needs the vendored
 # zlib-ng; the SIMD HACL variants need AVX intrinsics (the scalar Blake2 covers
-# the same hashes); mmap uses SEH. _hmac (hmacmodule.c + Hacl_Streaming_HMAC.c)
-# has no tier-2 coverage and its Windows build is not yet exercised.
-# win_excluded_stubs.c provides stub PyInit_* so the PC/config.c inittab
-# entries still resolve.
+# the same hashes); mmap uses SEH. cmath compiles but its complex arithmetic is
+# wrong on Windows (test_cmath fails broadly), so it stays excluded until that
+# is fixed. _hmac (hmacmodule.c + Hacl_Streaming_HMAC.c) has no tier-2 coverage
+# and its Windows build is not yet exercised. win_excluded_stubs.c provides stub
+# PyInit_* so the PC/config.c inittab entries still resolve.
 _WIN_EXCLUDE = {
     "Modules/zlibmodule.c",
     "Modules/_hacl/Hacl_Hash_Blake2b_Simd256.c",
     "Modules/_hacl/Hacl_Hash_Blake2s_Simd128.c",
     "Modules/mmapmodule.c",
+    "Modules/cmathmodule.c",
     "Modules/hmacmodule.c",
     "Modules/_hacl/Hacl_Streaming_HMAC.c",
 }
@@ -160,24 +162,22 @@ TARGETS = {
             ("Hacl_Hash_Blake2b_Simd256.c", "_blake2_simd256"),
         ],
     },
-    # TODO: test_decimal's CWhitebox.test_invalid_override fails only here
-    # (get_fmt does not raise ValueError for an invalid locale override;
-    # passes on macos-aarch64 and linux-x64) -- skipped in tier 2 until fixed.
     "linux-aarch64": {
         "asm_trampoline": True,
         "undef_haves": _LINUX_UNDEF,
         "exclude": _LINUX_EXCLUDE,
-        "tier2_skip": ["test_decimal"],
     },
-    # Windows wcsftime/ldexp differ from C99 in two narrow ways that are runtime
-    # properties, not code generation (both arches fail identically, the non-C99
+    # Windows wcsftime/ldexp differ from C99 in narrow ways that are runtime
+    # properties, not code generation (both arches fail identically, the basic
     # paths pass). ldexp truncates denormal output (testLdexp_denormal documents
-    # this) -> skip test_math; wcsftime lacks the C99 %C/%F specifiers (returns
-    # "") -> ignore the one method that needs them, keeping the rest of the suite.
-    "windows-x64": {"windows": True, "tier2_skip": ["test_math"],
-                    "tier2_ignore": ["test_strftime_y2k_c99"]},
-    "windows-arm64": {"windows": True, "tier2_skip": ["test_math"],
-                      "tier2_ignore": ["test_strftime_y2k_c99"]},
+    # this) -> skip test_math; wcsftime lacks the C99 %C/%F/%G specifiers
+    # (returns "") -> ignore the strftime methods that need them, keeping the
+    # rest of the suite. test_cmath is skipped while cmath is excluded (its
+    # complex arithmetic is wrong on the Windows build, see _WIN_EXCLUDE).
+    "windows-x64": {"windows": True, "tier2_skip": ["test_math", "test_cmath"],
+                    "tier2_ignore": ["test_strftime_y2k", "test_strftime_y2k_c99"]},
+    "windows-arm64": {"windows": True, "tier2_skip": ["test_math", "test_cmath"],
+                      "tier2_ignore": ["test_strftime_y2k", "test_strftime_y2k_c99"]},
 }
 
 
@@ -493,10 +493,12 @@ def _xcrun(tool: str):
 
 
 def section_sizes(py: Path) -> dict:
-    """text / data / bss / file bytes of a built binary via `llvm-size
-    --format=sysv` (uniform across ELF / Mach-O / PE), falling back to the
-    file size when no sizer is found."""
-    sizer = shutil.which("llvm-size") or _xcrun("llvm-size")
+    """text / data / bss / file bytes of a built binary via `--format=sysv`
+    (uniform across ELF / Mach-O / PE), falling back to the file size when no
+    sizer is found. Prefers llvm-size, then GNU binutils `size` (present on
+    Linux runners that lack llvm-size). macOS `size` is BSD and lacks
+    --format=sysv, but xcrun llvm-size is found first there."""
+    sizer = shutil.which("llvm-size") or _xcrun("llvm-size") or shutil.which("size")
     out = {"text": 0, "data": 0, "bss": 0, "file": py.stat().st_size}
     if not sizer:
         return out

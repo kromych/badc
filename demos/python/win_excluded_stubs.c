@@ -3,11 +3,12 @@
 // definition the link fails. Returning NULL makes `import <mod>` raise
 // rather than link-fail. None of these modules are used by the test slice.
 //
-// Excluded (see build.py): mmap, _hmac.
+// Excluded (see build.py): mmap, cmath, _hmac.
 
 typedef void PyObject;
 
 PyObject *PyInit_mmap(void)   { return 0; }
+PyObject *PyInit_cmath(void)  { return 0; }
 PyObject *PyInit__hmac(void)  { return 0; }
 
 // PC/dl_nt.c defines these globals only for the DLL build (Py_ENABLE_SHARED).

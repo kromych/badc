@@ -1771,6 +1771,13 @@ fn init_float_to_int() {
 }
 
 #[test]
+fn global_init_midexpr_cast_narrow() {
+    // C99 6.3.1.3: a narrowing cast that is a sub-operand of a file-scope
+    // constant initializer narrows the operand; reloc casts still resolve.
+    assert_eq!(run_fixture("global_init_midexpr_cast_narrow.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec

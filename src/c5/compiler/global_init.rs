@@ -24,6 +24,44 @@ use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of};
 
 impl Compiler {
+    /// After a leading `(TYPE)` cast in a global initializer, returns
+    /// true when the cast applies to a relocation-bearing leaf (`&x`, a
+    /// string literal, or a function / global-array name) rather than an
+    /// arithmetic value. Reloc leaves keep the address-folding path; an
+    /// arithmetic cast must instead reach the const-expr evaluator, which
+    /// narrows per C99 6.3.1.3. Entry is positioned just inside the cast
+    /// paren (depth 1); the lexer is restored before returning.
+    fn post_cast_is_reloc_leaf(&mut self) -> Result<bool, C5Error> {
+        let snap = self.lex.snapshot();
+        let mut depth: i64 = 1;
+        while depth > 0 && self.lex.tk != 0 {
+            if self.lex.tk == '(' {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                depth -= 1;
+                if depth == 0 {
+                    self.next()?;
+                    break;
+                }
+            }
+            self.next()?;
+        }
+        while self.lex.tk == '(' {
+            self.next()?;
+        }
+        let reloc = self.lex.tk == Token::AndOp
+            || self.lex.tk == '"'
+            || (self.lex.tk == Token::Id && {
+                let c = self.symbols[self.lex.curr_id_idx].class;
+                c == Token::Fun as i64
+                    || c == Token::Sys as i64
+                    || (c == Token::Glo as i64
+                        && self.symbols[self.lex.curr_id_idx].array_size != 0)
+            });
+        self.lex.restore(snap);
+        Ok(reloc)
+    }
+
     /// Parse a global / TLS initializer's right-hand side and
     /// stash the bytes into [`Self::data`] / [`Self::tls_data`]
     /// at `var_offset`. The grammar is intentionally narrow --
@@ -72,69 +110,67 @@ impl Compiler {
             let pre_paren = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
-                // Discard the cast destination type. Counted-paren
-                // skip handles abstract function-pointer declarators
-                // (`(SYSCALL)`, `(int (*)(int))`, etc.) without us
-                // having to model the declarator grammar twice.
-                //
-                // TODO: discarding the cast type drops the C99 6.3.1.3
-                // width narrowing for a narrowing integer cast that is a
-                // sub-operand of a file-scope scalar initializer (e.g.
-                // `int a = ((int)UINT_MAX == -1);` folds the comparison
-                // on the un-narrowed operand). The final store narrows to
-                // the variable's type, so a top-level cast is unaffected;
-                // only mid-expression casts diverge. The fix is to route
-                // scalar global initializers through the const_expr.rs
-                // evaluator (which applies the narrowing) rather than this
-                // local mini-grammar.
+                // A leading `(TYPE)` cast. When it applies to a
+                // relocation leaf (`&x`, a string, a function or
+                // global-array name) the value is the leaf's address and
+                // the cast type is irrelevant, so skip the cast tokens and
+                // recurse (the abstract-declarator grammar need not be
+                // modelled twice). When it casts an arithmetic operand the
+                // cast narrows (C99 6.3.1.3), so route the whole expression
+                // through the const-expr evaluator below, which applies the
+                // narrowing, instead of discarding the cast.
+                if self.post_cast_is_reloc_leaf()? {
+                    let mut depth: i64 = 1;
+                    while depth > 0 && self.lex.tk != 0 {
+                        if self.lex.tk == '(' {
+                            depth += 1;
+                        } else if self.lex.tk == ')' {
+                            depth -= 1;
+                            if depth == 0 {
+                                self.next()?;
+                                break;
+                            }
+                        }
+                        self.next()?;
+                    }
+                    return self.parse_global_initializer(var_ty, var_offset, is_thread_local);
+                }
+                self.lex.restore(pre_paren);
+            } else {
+                // Parenthesised expression. Peek past the matching `)`: a
+                // trailing operator means the parentheses wrap a sub-operand of a
+                // larger constant expression (`(1) << 5`), which the
+                // constant-expression evaluator below folds with full operator
+                // precedence. A complete value -- `(&x)`, `(func)`, `(123)`, with
+                // `,` / `;` / `}` next -- keeps the local recursion that handles
+                // address and function-reference constants.
+                let after_open = self.lex.snapshot();
                 let mut depth: i64 = 1;
                 while depth > 0 && self.lex.tk != 0 {
                     if self.lex.tk == '(' {
                         depth += 1;
                     } else if self.lex.tk == ')' {
                         depth -= 1;
-                        if depth == 0 {
-                            self.next()?;
-                            break;
-                        }
                     }
                     self.next()?;
                 }
-                return self.parse_global_initializer(var_ty, var_offset, is_thread_local);
-            }
-            // Parenthesised expression. Peek past the matching `)`: a
-            // trailing operator means the parentheses wrap a sub-operand of a
-            // larger constant expression (`(1) << 5`), which the
-            // constant-expression evaluator below folds with full operator
-            // precedence. A complete value -- `(&x)`, `(func)`, `(123)`, with
-            // `,` / `;` / `}` next -- keeps the local recursion that handles
-            // address and function-reference constants.
-            let after_open = self.lex.snapshot();
-            let mut depth: i64 = 1;
-            while depth > 0 && self.lex.tk != 0 {
-                if self.lex.tk == '(' {
-                    depth += 1;
-                } else if self.lex.tk == ')' {
-                    depth -= 1;
+                let trailing_operator = !(self.lex.tk == ','
+                    || self.lex.tk == ';'
+                    || self.lex.tk == '}'
+                    || self.lex.tk == ')'
+                    || self.lex.tk == 0);
+                if trailing_operator {
+                    // Re-parse the whole initializer through the float / integer
+                    // constant-expression path below.
+                    self.lex.restore(pre_paren);
+                } else {
+                    self.lex.restore(after_open);
+                    self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+                    if self.lex.tk == ')' {
+                        self.next()?;
+                    }
+                    return Ok(());
                 }
-                self.next()?;
-            }
-            let trailing_operator = !(self.lex.tk == ','
-                || self.lex.tk == ';'
-                || self.lex.tk == '}'
-                || self.lex.tk == ')'
-                || self.lex.tk == 0);
-            if trailing_operator {
-                // Re-parse the whole initializer through the float / integer
-                // constant-expression path below.
-                self.lex.restore(pre_paren);
-            } else {
-                self.lex.restore(after_open);
-                self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
-                if self.lex.tk == ')' {
-                    self.next()?;
-                }
-                return Ok(());
             }
         }
         // Bare function reference in a global initializer:

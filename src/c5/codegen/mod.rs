@@ -480,10 +480,20 @@ pub(super) fn plan_call_args_aggs(
                         }
                         ArgPlacement::StructRegs { regs, n }
                     } else {
-                        // AAPCS64 6.4.2: once an aggregate spills to
-                        // the stack the integer register file is
-                        // exhausted for the rest of the call.
-                        int_idx = int_max;
+                        // The aggregate spills to the stack. AAPCS64
+                        // 6.8.2 then exhausts the matching register file
+                        // for the rest of the call: a general (GP)
+                        // composite sets NGRN = 8 (C.13), an HFA/HVA sets
+                        // NSRN = 8 (C.5). System V AMD64 3.2.3 exhausts
+                        // nothing -- only this argument goes to memory and
+                        // later arguments keep filling free registers.
+                        if matches!(abi.arch, Arch::Aarch64) {
+                            if need_fp > 0 && need_int == 0 {
+                                fp_idx = 8;
+                            } else {
+                                int_idx = int_max;
+                            }
+                        }
                         let off = stack_used;
                         stack_used += aligned;
                         ArgPlacement::StructStack {
@@ -2469,5 +2479,58 @@ impl Target {
             Target::WindowsX64 | Target::WindowsAarch64 => 4,
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::LinuxX64 => 8,
         }
+    }
+}
+
+#[cfg(test)]
+mod abi_plan_tests {
+    use super::abi_classify::{AggClass, RegClass};
+    use super::{ArgAgg, ArgPlacement, Target, plan_call_args_aggs};
+
+    // A register-passed aggregate that spills must exhaust the correct
+    // register file: nothing on System V (only the aggregate goes to
+    // memory), the matching file on AAPCS64 (NGRN for a GP composite,
+    // NSRN for an HFA). Earlier code unconditionally pinned the integer
+    // file, stranding trailing scalars at the FFI boundary.
+    #[test]
+    fn sysv_spilled_aggregate_keeps_int_reg_for_trailing_scalar() {
+        let abi = Target::LinuxX64.abi();
+        let gp = ArgAgg {
+            class: AggClass::Regs(alloc::vec![RegClass::Integer, RegClass::Integer]),
+            size: 16,
+        };
+        // five int scalars, a 2-eightbyte GP aggregate that can't fit the
+        // one remaining int reg, then one int scalar.
+        let aggs = [None, None, None, None, None, Some(gp), None];
+        let plan = plan_call_args_aggs(7, 7, 0, abi, &aggs, false);
+        assert!(matches!(
+            plan.placements[5],
+            ArgPlacement::StructStack { .. }
+        ));
+        assert_eq!(
+            plan.placements[6],
+            ArgPlacement::IntReg(abi.int_arg_regs[5])
+        );
+    }
+
+    #[test]
+    fn aapcs64_spilled_hfa_exhausts_fp_not_int_file() {
+        let abi = Target::LinuxAarch64.abi();
+        let hfa = ArgAgg {
+            class: AggClass::Regs(alloc::vec![RegClass::Sse; 4]),
+            size: 16,
+        };
+        // five FP scalars, a 4-float HFA that can't fit the remaining FP
+        // regs, then one int scalar that the integer file must still hold.
+        let aggs = [None, None, None, None, None, Some(hfa), None];
+        let plan = plan_call_args_aggs(7, 7, 0b1_1111, abi, &aggs, false);
+        assert!(matches!(
+            plan.placements[5],
+            ArgPlacement::StructStack { .. }
+        ));
+        assert_eq!(
+            plan.placements[6],
+            ArgPlacement::IntReg(abi.int_arg_regs[0])
+        );
     }
 }

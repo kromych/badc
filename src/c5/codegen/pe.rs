@@ -541,8 +541,22 @@ pub(super) fn write(
     // in `IMAGE_TLS_DIRECTORY64.SizeOfZeroFill`; the loader
     // zero-fills them per-thread.
     let tls_layout = compute_tls_layout(build);
+    // File-backed content of `.data` (program data + the TLS blob);
+    // `data_vsize` adds the no-file zero-init `.bss` tail past it.
     let data_size: u32 = build.data.len() as u32 + tls_layout.tls_blob_size;
+    let data_vsize: u32 = data_size + build.bss_size as u32;
     let data_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
+    // A data offset past the program data (`build.data`) names a byte in
+    // the zero-fill `.bss` region, which sits at the `.data` section
+    // tail past both the program data and the TLS blob.
+    let data_off_to_rva = |off: u32| -> u32 {
+        let file_len = build.data.len() as u32;
+        if off < file_len {
+            data_rva + off
+        } else {
+            data_rva + data_size + (off - file_len)
+        }
+    };
     let data_file_off: u32 = idata_file_off + idata_raw_size;
     let data_raw_size: u32 = if data_section_present {
         round_up(data_size, FILE_ALIGNMENT)
@@ -559,7 +573,7 @@ pub(super) fn write(
     // here so we can size the file image; the actual on-disk
     // emission happens after `.data`.
     let reloc_rva: u32 = if reloc_section_present {
-        round_up(data_rva + data_size, SECTION_ALIGNMENT)
+        round_up(data_rva + data_vsize, SECTION_ALIGNMENT)
     } else {
         0
     };
@@ -598,7 +612,7 @@ pub(super) fn write(
             if reloc_section_present {
                 reloc_rva + reloc_size
             } else if data_section_present {
-                data_rva + data_size
+                data_rva + data_vsize
             } else {
                 idata_rva + idata_size
             },
@@ -654,7 +668,7 @@ pub(super) fn write(
     } else if reloc_section_present {
         reloc_rva + reloc_size
     } else if data_section_present {
-        data_rva + data_size
+        data_rva + data_vsize
     } else {
         idata_rva + idata_size
     };
@@ -823,7 +837,7 @@ pub(super) fn write(
     } else if reloc_section_present {
         round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT)
     } else if data_section_present {
-        round_up(data_rva + data_size, SECTION_ALIGNMENT)
+        round_up(data_rva + data_vsize, SECTION_ALIGNMENT)
     } else {
         round_up(idata_rva + idata_size, SECTION_ALIGNMENT)
     };
@@ -890,7 +904,7 @@ pub(super) fn write(
             &mut text_bytes,
             instr_off,
             text_rva,
-            data_rva + f.data_offset as u32,
+            data_off_to_rva(f.data_offset as u32),
         )?;
     }
     for f in &build.func_fixups {
@@ -1028,7 +1042,7 @@ pub(super) fn write(
     if data_section_present {
         sections.push(SectionHeader {
             name: *b".data\0\0\0",
-            virtual_size: data_size,
+            virtual_size: data_vsize,
             virtual_address: data_rva,
             size_of_raw_data: data_raw_size,
             pointer_to_raw_data: data_file_off,
@@ -1091,7 +1105,7 @@ pub(super) fn write(
         // the slide delta after mapping.
         let mut data_with_relocs = build.data.clone();
         for r in &build.data_relocs {
-            let preferred_va = IMAGE_BASE + (data_rva + r.target_offset as u32) as u64;
+            let preferred_va = IMAGE_BASE + data_off_to_rva(r.target_offset as u32) as u64;
             let off = r.data_offset as usize;
             if off + 8 > data_with_relocs.len() {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(

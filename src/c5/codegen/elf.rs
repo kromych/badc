@@ -1784,40 +1784,36 @@ pub(super) fn write(
         // matching the pre-#61 layout.
         (post_dwarf_off, post_dwarf_off, post_dwarf_off)
     };
-    // .shstrtab content: NUL + section names. Index 0 is the
-    // empty name (SHT_NULL sentinel uses sh_name=0). Names cover
-    // the full set of sections in the section-header table:
-    // loaded segments (.interp, .dynsym, ..., .text, .data) plus
-    // the debug-only metadata sections.
-    //
-    // Indices 0..=11 are stable; 12..=16 are the DWARF names,
-    // present only when `emit_dwarf` is true (when the
-    // user passed `--no-debug`, these names don't go into the
-    // string table at all). The `.shstrtab` self-name is always
-    // last; callers reach it via `shstrtab_idx_self` rather than
-    // a fixed numeric index.
-    let mut shstrtab_names: Vec<&str> = Vec::with_capacity(18);
+    // .shstrtab content: NUL + section names. The empty name at the
+    // front backs the SHT_NULL sentinel (sh_name=0). The catalog lists
+    // every name a section header may carry; a name is present whether
+    // or not its section is emitted. Section-header writers resolve
+    // names through `name_off` (below) rather than by position, so an
+    // optional section (.tdata/.data/.tbss/.bss/DWARF) being absent --
+    // or a new name being inserted -- shifts no other lookup.
+    let mut shstrtab_names: Vec<&str> = Vec::with_capacity(19);
     shstrtab_names.extend_from_slice(&[
-        "",          // 0
-        ".interp",   // 1
-        ".dynsym",   // 2
-        ".dynstr",   // 3
-        ".hash",     // 4
-        ".rela.dyn", // 5
-        ".text",     // 6
-        ".tdata",    // 7  (only present when has_tls)
-        ".dynamic",  // 8
-        ".got",      // 9
-        ".data",     // 10
-        ".tbss",     // 11 (only present when has_tls)
+        "",
+        ".interp",
+        ".dynsym",
+        ".dynstr",
+        ".hash",
+        ".rela.dyn",
+        ".text",
+        ".tdata",
+        ".dynamic",
+        ".got",
+        ".data",
+        ".tbss",
+        ".bss",
     ]);
     if emit_dwarf {
         shstrtab_names.extend_from_slice(&[
-            ".debug_info",   // 12
-            ".debug_abbrev", // 13
-            ".debug_line",   // 14
-            ".debug_str",    // 15
-            ".debug_frame",  // 16
+            ".debug_info",
+            ".debug_abbrev",
+            ".debug_line",
+            ".debug_str",
+            ".debug_frame",
         ]);
     }
     // `.symtab` + `.strtab` for the PLT-trampoline pool.
@@ -1842,13 +1838,23 @@ pub(super) fn write(
     }
     let shstrtab_size = shstrtab.len() as u64;
     let shdr_off = round_up(shstrtab_off + shstrtab_size, 8);
+    // Resolve a section name to its `.shstrtab` byte offset by catalog
+    // position; keeps the header writers independent of catalog order.
+    let name_off = |name: &str| -> u32 {
+        let i = shstrtab_names
+            .iter()
+            .position(|&s| s == name)
+            .expect("section name in catalog");
+        shstrtab_offsets[i]
+    };
     // Section count: 1 NULL + .interp + .dynsym + .dynstr +
     // .hash + .rela.dyn + .text + (optional .tdata) +
     // .dynamic + .got + (optional .data) + (optional .tbss) +
-    // 4 .debug_* + .shstrtab. Counted dynamically.
+    // (optional .bss) + 5 .debug_* + .shstrtab. Counted dynamically.
     let has_data = !build.data.is_empty();
     let has_tdata = has_tls && tdata_size > 0;
     let has_tbss = has_tls && tbss_size > 0;
+    let has_bss = build.bss_size > 0;
     let n_section_headers: u64 = 1 // NULL
         + 1 // .interp
         + 1 // .dynsym
@@ -1861,7 +1867,8 @@ pub(super) fn write(
         + 1 // .got
         + (if has_data { 1 } else { 0 }) // .data
         + (if has_tbss { 1 } else { 0 }) // .tbss
-        + (if emit_dwarf { 5 } else { 0 }) // .debug_* x 5 (info, abbrev, line, str, frame); 
+        + (if has_bss { 1 } else { 0 }) // .bss
+        + (if emit_dwarf { 5 } else { 0 }) // .debug_* x 5 (info, abbrev, line, str, frame);
         + (if emit_plt_symtab { 2 } else { 0 }) // .symtab + .strtab; 
         + 1; // .shstrtab
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
@@ -2292,7 +2299,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[0],
+            sh_name: name_off(""),
             sh_type: SHT_NULL,
             sh_flags: 0,
             sh_addr: 0,
@@ -2309,7 +2316,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[1],
+            sh_name: name_off(".interp"),
             sh_type: SHT_PROGBITS,
             sh_flags: SHF_ALLOC,
             sh_addr: interp_vmaddr,
@@ -2329,7 +2336,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[2],
+            sh_name: name_off(".dynsym"),
             sh_type: SHT_DYNSYM,
             sh_flags: SHF_ALLOC,
             sh_addr: dynsym_vmaddr,
@@ -2346,7 +2353,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[3],
+            sh_name: name_off(".dynstr"),
             sh_type: SHT_STRTAB,
             sh_flags: SHF_ALLOC,
             sh_addr: dynstr_vmaddr,
@@ -2364,7 +2371,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[4],
+            sh_name: name_off(".hash"),
             sh_type: SHT_HASH,
             sh_flags: SHF_ALLOC,
             sh_addr: hash_vmaddr,
@@ -2381,7 +2388,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[5],
+            sh_name: name_off(".rela.dyn"),
             sh_type: SHT_RELA,
             sh_flags: SHF_ALLOC,
             sh_addr: rela_vmaddr,
@@ -2399,7 +2406,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[6],
+            sh_name: name_off(".text"),
             sh_type: SHT_PROGBITS,
             sh_flags: SHF_ALLOC | SHF_EXECINSTR,
             sh_addr: code_vmaddr,
@@ -2417,7 +2424,7 @@ pub(super) fn write(
         write_struct(
             &mut out,
             &Elf64Shdr {
-                sh_name: shstrtab_offsets[7],
+                sh_name: name_off(".tdata"),
                 sh_type: SHT_PROGBITS,
                 sh_flags: SHF_ALLOC | SHF_WRITE | 0x400, // SHF_TLS
                 sh_addr: tdata_vmaddr,
@@ -2435,7 +2442,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[8],
+            sh_name: name_off(".dynamic"),
             sh_type: SHT_DYNAMIC,
             sh_flags: SHF_ALLOC | SHF_WRITE,
             sh_addr: dynamic_vmaddr,
@@ -2452,7 +2459,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[9],
+            sh_name: name_off(".got"),
             sh_type: SHT_PROGBITS,
             sh_flags: SHF_ALLOC | SHF_WRITE,
             sh_addr: got_vmaddr,
@@ -2470,7 +2477,7 @@ pub(super) fn write(
         write_struct(
             &mut out,
             &Elf64Shdr {
-                sh_name: shstrtab_offsets[10],
+                sh_name: name_off(".data"),
                 sh_type: SHT_PROGBITS,
                 sh_flags: SHF_ALLOC | SHF_WRITE,
                 sh_addr: data_vmaddr,
@@ -2492,7 +2499,7 @@ pub(super) fn write(
         write_struct(
             &mut out,
             &Elf64Shdr {
-                sh_name: shstrtab_offsets[11],
+                sh_name: name_off(".tbss"),
                 sh_type: 8,                              // SHT_NOBITS
                 sh_flags: SHF_ALLOC | SHF_WRITE | 0x400, // SHF_TLS
                 sh_addr: tdata_vmaddr + tdata_size,
@@ -2501,6 +2508,29 @@ pub(super) fn write(
                 sh_link: 0,
                 sh_info: 0,
                 sh_addralign: 8,
+                sh_entsize: 0,
+            },
+        );
+    }
+
+    // [optional] .bss -- regular zero-init data (no file backing). The
+    // PT_LOAD p_memsz tail reserves these bytes; the header lets size /
+    // llvm-size attribute them to bss rather than reading zero.
+    if has_bss {
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: name_off(".bss"),
+                sh_type: 8, // SHT_NOBITS
+                sh_flags: SHF_ALLOC | SHF_WRITE,
+                sh_addr: bss_vmaddr,
+                sh_offset: bss_vmaddr - TEXT_VMADDR_BASE,
+                sh_size: build.bss_size as u64,
+                sh_link: 0,
+                sh_info: 0,
+                // Report bss_vmaddr's own 2-adic alignment (<=16) so
+                // sh_addr stays congruent to sh_addralign.
+                sh_addralign: 1u64 << bss_vmaddr.trailing_zeros().min(4),
                 sh_entsize: 0,
             },
         );
@@ -2516,36 +2546,36 @@ pub(super) fn write(
     if emit_dwarf {
         let dwarf_section_specs: &[(u32, u64, u64)] = &[
             (
-                shstrtab_offsets[12],
+                name_off(".debug_info"),
                 dwarf_info_off,
                 dwarf_sections.debug_info.len() as u64,
             ),
             (
-                shstrtab_offsets[13],
+                name_off(".debug_abbrev"),
                 dwarf_abbrev_off,
                 dwarf_sections.debug_abbrev.len() as u64,
             ),
             (
-                shstrtab_offsets[14],
+                name_off(".debug_line"),
                 dwarf_line_off,
                 dwarf_sections.debug_line.len() as u64,
             ),
             (
-                shstrtab_offsets[15],
+                name_off(".debug_str"),
                 dwarf_str_off,
                 dwarf_sections.debug_str.len() as u64,
             ),
             (
-                shstrtab_offsets[16],
+                name_off(".debug_frame"),
                 dwarf_frame_off,
                 dwarf_sections.debug_frame.len() as u64,
             ),
         ];
-        for &(name_off, off, sz) in dwarf_section_specs {
+        for &(name_offset, off, sz) in dwarf_section_specs {
             write_struct(
                 &mut out,
                 &Elf64Shdr {
-                    sh_name: name_off,
+                    sh_name: name_offset,
                     sh_type: SHT_PROGBITS,
                     sh_flags: 0,
                     sh_addr: 0,
@@ -3337,5 +3367,80 @@ mod tests {
                 "{machine:?}: export st_value must be the function VA"
             );
         }
+    }
+
+    // Returns (sh_type, sh_flags, sh_addr, sh_size, sh_addralign) of the
+    // first section header named `want`, resolving names through the
+    // section-header string table (e_shstrndx).
+    fn find_section(bytes: &[u8], want: &str) -> Option<(u32, u64, u64, u64, u64)> {
+        let e_shoff = read_u64(bytes, 40);
+        let e_shentsize = u16::from_le_bytes(bytes[58..60].try_into().unwrap()) as u64;
+        let e_shnum = u16::from_le_bytes(bytes[60..62].try_into().unwrap()) as u64;
+        let e_shstrndx = u16::from_le_bytes(bytes[62..64].try_into().unwrap()) as u64;
+        let strtab_off =
+            read_u64(bytes, (e_shoff + e_shstrndx * e_shentsize) as usize + 24) as usize;
+        for i in 0..e_shnum {
+            let h = (e_shoff + i * e_shentsize) as usize;
+            let name_start = strtab_off + read_u32(bytes, h) as usize;
+            let len = bytes[name_start..].iter().position(|&b| b == 0).unwrap();
+            if core::str::from_utf8(&bytes[name_start..name_start + len]).unwrap() == want {
+                return Some((
+                    read_u32(bytes, h + 4),
+                    read_u64(bytes, h + 8),
+                    read_u64(bytes, h + 16),
+                    read_u64(bytes, h + 32),
+                    read_u64(bytes, h + 48),
+                ));
+            }
+        }
+        None
+    }
+
+    // The `.bss` writer path is arch-independent; tiny_build carries
+    // an aarch64 text fixture, so the structural assertions run on
+    // aarch64 like the other tiny_build writer tests.
+    #[test]
+    fn bss_section_header_present_and_memsz_reserved() {
+        const SHT_NOBITS: u32 = 8;
+        let mut build = tiny_build();
+        build.data = vec![1u8, 2, 3, 4, 5, 6, 7, 8];
+        build.bss_size = 4096;
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64).unwrap();
+        let (sh_type, sh_flags, sh_addr, sh_size, sh_align) =
+            find_section(&bytes, ".bss").expect("`.bss` section header");
+        assert_eq!(sh_type, SHT_NOBITS, ".bss must be SHT_NOBITS");
+        assert_eq!(sh_flags & SHF_ALLOC, SHF_ALLOC, ".bss SHF_ALLOC");
+        assert_eq!(sh_flags & SHF_WRITE, SHF_WRITE, ".bss SHF_WRITE");
+        assert_eq!(sh_size, build.bss_size as u64, ".bss sh_size");
+        assert!(
+            sh_align > 0 && sh_addr % sh_align == 0,
+            ".bss sh_addr {sh_addr:#x} not congruent to align {sh_align}"
+        );
+
+        // The rw PT_LOAD reserves the bss bytes past its file image
+        // (p_memsz > p_filesz); no TLS here, so the tail equals bss.
+        let phoff = read_u64(&bytes, 32);
+        let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
+        let mut reserved = None;
+        for i in 0..phnum {
+            let off = (phoff + i * PROGRAM_HEADER_SIZE) as usize;
+            if read_u32(&bytes, off) == PT_LOAD && read_u32(&bytes, off + 4) & PF_W != 0 {
+                reserved = Some(read_u64(&bytes, off + 40) - read_u64(&bytes, off + 32));
+            }
+        }
+        assert_eq!(
+            reserved,
+            Some(build.bss_size as u64),
+            "rw PT_LOAD memsz tail must equal bss_size"
+        );
+    }
+
+    #[test]
+    fn no_bss_section_header_when_bss_empty() {
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        assert!(
+            find_section(&bytes, ".bss").is_none(),
+            "no .bss section header when bss_size == 0"
+        );
     }
 }

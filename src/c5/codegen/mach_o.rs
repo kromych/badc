@@ -1326,17 +1326,17 @@ fn patch_adrp_add(
     Ok(())
 }
 
-/// Patch each `Inst::ImmData` lowering site. The target is
-/// `data_section_vmaddr + data_offset`.
+/// Patch each `Inst::ImmData` lowering site. `data_off_to_vaddr` maps
+/// the data byte offset to its runtime VA (`.data` or the `.bss` tail).
 fn apply_data_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
     code_vmaddr_base: u64,
-    data_section_vmaddr: u64,
+    data_off_to_vaddr: &dyn Fn(u64) -> u64,
     fixups: &[super::DataFixup],
 ) -> Result<(), C5Error> {
     for fx in fixups {
-        let target = data_section_vmaddr + fx.data_offset;
+        let target = data_off_to_vaddr(fx.data_offset);
         patch_adrp_add(
             out,
             code_base_in_file,
@@ -1824,10 +1824,15 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     } else {
         data_section_offset_in_segment + program_data_size
     };
+    // Regular zero-init `.bss` sits past `__data` with no file backing;
+    // the loader zero-fills the segment's `[filesize, vmsize)` tail. Only
+    // the vm size grows -- the bytes never reach disk. With TLS storage
+    // the bss follows it (both are tail zero-fill); without, it follows
+    // `__data` directly.
     let data_segment_vm_used: u64 = if tls_present {
-        thread_storage_offset_in_segment + thread_storage_size
+        thread_storage_offset_in_segment + thread_storage_size + build.bss_size as u64
     } else {
-        data_segment_file_used
+        data_segment_file_used + build.bss_size as u64
     };
     let data_filesize = round_up(data_segment_file_used.max(PAGE_SIZE), PAGE_SIZE);
     let data_vmsize = round_up(data_segment_vm_used.max(PAGE_SIZE), PAGE_SIZE);
@@ -1837,6 +1842,22 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let thread_vars_fileoff = data_fileoff + thread_vars_offset_in_segment;
     let thread_storage_vmaddr = data_vmaddr + thread_storage_offset_in_segment;
     let thread_storage_fileoff = data_fileoff + thread_storage_offset_in_segment;
+
+    // A data offset past `program_data_size` names a byte in the
+    // zero-fill `.bss` region at the segment tail: past the thread
+    // storage when TLS is present, else directly past `__data`.
+    let bss_base_vmaddr = if tls_present {
+        thread_storage_vmaddr + thread_storage_size
+    } else {
+        data_section_vmaddr + program_data_size
+    };
+    let data_off_to_vaddr = |off: u64| -> u64 {
+        if off < program_data_size {
+            data_section_vmaddr + off
+        } else {
+            bss_base_vmaddr + (off - program_data_size)
+        }
+    };
 
     // ---- bind + rebase opcode streams ----
     //
@@ -2001,7 +2022,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
                 (code_vmaddr_base + d.offset, SECT_INDEX_TEXT)
             }
             crate::c5::codegen::DynamicExportSection::Data => {
-                (data_section_vmaddr + d.offset, SECT_INDEX_DATA)
+                (data_off_to_vaddr(d.offset), SECT_INDEX_DATA)
             }
         };
         symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect));
@@ -2364,7 +2385,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         &mut out,
         code_file_offset,
         code_vmaddr_base,
-        data_section_vmaddr,
+        &data_off_to_vaddr,
         &build.data_fixups,
     )?;
     apply_func_fixups(
@@ -2401,7 +2422,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     out.resize(data_section_fileoff as usize, 0);
     let mut data_with_relocs = build.data.clone();
     for r in &build.data_relocs {
-        let preferred_va = data_section_vmaddr + r.target_offset;
+        let preferred_va = data_off_to_vaddr(r.target_offset);
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(

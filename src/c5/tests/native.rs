@@ -124,6 +124,55 @@ fn return_value_truncates_to_byte() {
     assert_eq!(build_and_run("int main() { return 257; }", "ret257"), 1);
 }
 
+#[test]
+fn bss_segregation_maps_and_zero_fills() {
+    // With segregation on, wholly-zero globals leave `__data` for the
+    // `__DATA` segment's `vmsize > filesize` zero-fill tail. The array
+    // is larger than the page padding, so without the vmsize tail its
+    // trailing reads fault; the pointer initializer must also resolve
+    // to the global's runtime address in the tail.
+    let opts = NativeOptions {
+        bss_segregate: true,
+        ..NativeOptions::default()
+    };
+    let src = "static long zeros[4096]; long *const p = &zeros[3000]; \
+               int main(void){ int ok = 1; \
+               for (int i = 0; i < 4096; i++) ok &= (zeros[i] == 0); \
+               zeros[3000] = 99; ok &= (zeros[3000] == 99); \
+               ok &= (p == &zeros[3000]); ok &= (*p == 99); \
+               return ok ? 0 : 1; }";
+    match build_and_run_outcome_with_options(src, "bss_segregate", opts) {
+        RunOutcome::Exit(0) => {}
+        other => panic!("segregated .bss program must exit 0, got {other:?}"),
+    }
+}
+
+#[test]
+fn bss_segregation_coexists_with_thread_local() {
+    // Zero-fill must be the segment's tail. `__thread_bss`/thread storage
+    // already sits past `__data`, so regular bss is laid out past the
+    // thread storage and addressed through `data_off_to_vaddr`. The second
+    // `_Thread_local` has a non-zero block offset: the `.data` compaction
+    // must not remap a TLS symbol's tls-image offset, or the TLV
+    // descriptor points past the per-thread block and dyld aborts.
+    let opts = NativeOptions {
+        bss_segregate: true,
+        ..NativeOptions::default()
+    };
+    let src = "_Thread_local int t0; _Thread_local int t1; \
+               static long zeros[4096]; long *const p = &zeros[3000]; \
+               int main(void){ int ok = 1; \
+               for (int i = 0; i < 4096; i++) ok &= (zeros[i] == 0); \
+               t0 = 5; t1 = 6; zeros[3000] = 9; \
+               ok &= (t0 == 5); ok &= (t1 == 6); ok &= (zeros[3000] == 9); \
+               ok &= (p == &zeros[3000]); ok &= (*p == 9); \
+               return ok ? 0 : 1; }";
+    match build_and_run_outcome_with_options(src, "bss_tls", opts) {
+        RunOutcome::Exit(0) => {}
+        other => panic!("segregated .bss with _Thread_local must exit 0, got {other:?}"),
+    }
+}
+
 // ---- Every non-intrinsic op exercised end-to-end. ----
 
 #[test]

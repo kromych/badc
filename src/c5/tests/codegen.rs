@@ -344,6 +344,58 @@ fn pe_text_section(image: &[u8]) -> Option<(u32, &[u8])> {
     None
 }
 
+/// `(virtual_size, virtual_address, size_of_raw_data)` of the named PE
+/// section (an 8-byte NUL-padded name).
+fn pe_section_dims(image: &[u8], name: &[u8; 8]) -> Option<(u32, u32, u32)> {
+    let u16a = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let pe = u32a(0x3c) as usize;
+    let num_sections = u16a(pe + 6) as usize;
+    let opt_size = u16a(pe + 20) as usize;
+    let sec_table = pe + 24 + opt_size;
+    (0..num_sections)
+        .map(|s| sec_table + s * 40)
+        .find(|&sh| &image[sh..sh + 8] == name)
+        .map(|sh| (u32a(sh + 8), u32a(sh + 12), u32a(sh + 16)))
+}
+
+/// Under segregation a wholly-zero global enlarges `.data`'s VirtualSize
+/// past its SizeOfRawData -- the loader zero-fills the tail and the
+/// bytes never reach disk. Every other section's RVA must clear the
+/// enlarged `.data` extent so the bss tail does not overlap it.
+#[test]
+fn bss_segregation_extends_pe_data_virtual_size() {
+    use crate::{NativeOptions, Target};
+    let opts = NativeOptions {
+        bss_segregate: true,
+        ..NativeOptions::new()
+    };
+    let program = super::compile_str_bare(
+        "static long zeros[4096]; long *const p = &zeros[3000]; \
+         int main(void){ return (p == &zeros[3000]) ? 0 : 1; }",
+    );
+    let bytes = super::link_executable_with_runtime(&program, Target::WindowsX64, opts)
+        .expect("link WindowsX64");
+    let (vsize, va, raw) = pe_section_dims(&bytes, b".data\0\0\0").expect(".data section");
+    assert!(
+        vsize > raw,
+        ".data VirtualSize {vsize:#x} must exceed SizeOfRawData {raw:#x} for the bss tail"
+    );
+    // No section starts inside `.data`'s [va, va + vsize) virtual extent.
+    let u16a = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let pe = u32a(0x3c) as usize;
+    let sec_table = pe + 24 + u16a(pe + 20) as usize;
+    for s in 0..u16a(pe + 6) as usize {
+        let other_va = u32a(sec_table + s * 40 + 12);
+        assert!(
+            other_va <= va || other_va >= va + vsize,
+            "section at RVA {other_va:#x} overlaps the .data bss extent [{va:#x}, {:#x})",
+            va + vsize
+        );
+    }
+}
+
 /// Walk a PE32+ import table and return the RVA of the IAT slot for
 /// the named import. Follows the format: data directory 1 -> import
 /// descriptors; each descriptor's OriginalFirstThunk (ILT) entries
@@ -964,6 +1016,65 @@ fn elf64_section<'a>(obj: &'a [u8], name: &str) -> Option<&'a [u8]> {
             let size = rd_u64(hdr + 0x20);
             &obj[off..off + size]
         })
+}
+
+/// `(sh_addr, sh_size)` of the named section. Unlike [`elf64_section`]
+/// this works for `SHT_NOBITS` (`.bss`), which carries an address and
+/// size but no file bytes.
+fn elf64_section_addr_size(obj: &[u8], name: &str) -> Option<(u64, u64)> {
+    let rd_u16 = |off: usize| u16::from_le_bytes(obj[off..off + 2].try_into().unwrap()) as usize;
+    let rd_u32 = |off: usize| u32::from_le_bytes(obj[off..off + 4].try_into().unwrap()) as usize;
+    let rd_u64 = |off: usize| u64::from_le_bytes(obj[off..off + 8].try_into().unwrap());
+    let e_shoff = rd_u64(0x28) as usize;
+    let e_shentsize = rd_u16(0x3a);
+    let e_shnum = rd_u16(0x3c);
+    let e_shstrndx = rd_u16(0x3e);
+    let sh = |i: usize| e_shoff + i * e_shentsize;
+    let shstr_off = rd_u64(sh(e_shstrndx) + 0x18) as usize;
+    let sh_name_str = |hdr: usize| {
+        let n = rd_u32(hdr);
+        let start = shstr_off + n;
+        let end = start + obj[start..].iter().position(|&b| b == 0).unwrap();
+        &obj[start..end]
+    };
+    (0..e_shnum)
+        .map(sh)
+        .find(|&hdr| sh_name_str(hdr) == name.as_bytes())
+        .map(|hdr| (rd_u64(hdr + 0x10), rd_u64(hdr + 0x20)))
+}
+
+/// A wholly-zero global moved to `.bss` under segregation, plus a
+/// pointer initializer into it, must resolve to the global's `.bss`
+/// address through a full link. Locks the synth + ELF-writer bss path
+/// and the `.bss` section header in a linked executable.
+#[test]
+fn bss_segregation_resolves_data_pointer_into_bss() {
+    use crate::{NativeOptions, Target};
+    let opts = NativeOptions {
+        bss_segregate: true,
+        ..NativeOptions::new()
+    };
+    let program = super::compile_str_bare(
+        "long g[8]; long *const gp = &g[3]; \
+         int main(void){ return gp == &g[3] ? 0 : 1; }",
+    );
+    let bytes = super::link_executable_with_runtime(&program, Target::LinuxX64, opts)
+        .expect("link LinuxX64");
+    let (bss_addr, bss_size) =
+        elf64_section_addr_size(&bytes, ".bss").expect(".bss section must be present");
+    assert!(bss_size > 0, ".bss must be non-empty");
+    let data = elf64_section(&bytes, ".data").expect(".data bytes");
+    // Some 8-byte data word holds `gp = &g[3]`, a pointer into `.bss`.
+    // Before the fix it pointed into `.data` and nothing reached `.bss`.
+    let into_bss = data
+        .chunks_exact(8)
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .any(|v| v >= bss_addr && v < bss_addr + bss_size);
+    assert!(
+        into_bss,
+        ".data must hold a pointer into .bss [{bss_addr:#x}, {:#x})",
+        bss_addr + bss_size
+    );
 }
 
 /// `-g` must not change emitted machine code: DWARF tables are

@@ -629,20 +629,25 @@ def _macho_section_sizes(d: bytes) -> dict | None:
         if cmd == 0x19:  # LC_SEGMENT_64
             segname = d[off + 8 : off + 24].split(b"\0", 1)[0].decode("ascii", "replace")
             vmsize, _fileoff, filesize = struct.unpack_from("<QQQ", d, off + 32)
-            if segname not in ("__PAGEZERO", "__TEXT", "__LINKEDIT") and vmsize > filesize:
-                out["bss"] += vmsize - filesize
             nsects = struct.unpack_from("<I", d, off + 64)[0]
+            seg_bss = 0
             for s in range(nsects):
                 sbase = off + 72 + s * 80
                 sectname = d[sbase : sbase + 16].split(b"\0", 1)[0].decode("ascii", "replace")
                 size = struct.unpack_from("<Q", d, sbase + 40)[0]
                 flags = struct.unpack_from("<I", d, sbase + 64)[0]
-                if flags & 0xFF in (0x1, 0xC):  # S_ZEROFILL -- counted in the segment tail
-                    continue
-                if sectname.startswith("__text"):
+                if flags & 0xFF in (0x1, 0xC):  # S_ZEROFILL / S_GB_ZEROFILL
+                    seg_bss += size
+                elif sectname.startswith("__text"):
                     out["text"] += size
                 elif sectname.startswith(("__data", "__const", "__cstring", "__rodata")):
                     out["data"] += size
+            # Exact bss from the zero-fill section(s); otherwise recover a
+            # folded tail from the segment's virtual-minus-file size.
+            if seg_bss:
+                out["bss"] += seg_bss
+            elif segname not in ("__PAGEZERO", "__TEXT", "__LINKEDIT") and vmsize > filesize:
+                out["bss"] += vmsize - filesize
         off += cmdsize
     return out
 

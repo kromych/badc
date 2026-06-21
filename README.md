@@ -17,11 +17,11 @@ popular idioms from the later standards as well as few extensions. All of that i
 enough to build and test Python 3.14 on all of the five supported targets (and
 there are more [`demos`](./demos/) included, read on!).
 
-`badc`'s small footprint and embedded headers (which you can override or install
-to some path for tweaking) give a one-executable experience of the portable tools.
-The compiler's codebase of moderate size can be used as a small self-sufficient
-toolchain or can be used as a library giving _your project_ the ability to build C
-code or just run it (the default when using as a library).
+`badc`'s small footprint and embedded headers (which you can override or `--install`
+to some path for tweaking or inspecting) give a one-executable experience of the
+portable tools. The compiler's codebase of moderate size can be used as a small
+self-sufficient toolchain or can be used as a library giving _your project_ the
+ability to build C code or just run it (the default when using as a library).
 
 A fun extension is that `badc` can automatically add the header(s)
 for the standard library so the bare `hello.c` with

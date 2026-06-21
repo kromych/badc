@@ -107,15 +107,15 @@ _WIN_GETPATH_DEFINES = [
 ]
 # TUs excluded from the minimal static interpreter. zlib needs the vendored
 # zlib-ng; the SIMD HACL variants need AVX intrinsics (the scalar Blake2 covers
-# the same hashes); mmap uses SEH and cmath/_hmac use initializer forms badc does
-# not yet accept. win_excluded_stubs.c provides stub PyInit_* so the PC/config.c
-# inittab entries still resolve. None are in the Windows test slice.
+# the same hashes); mmap uses SEH. _hmac (hmacmodule.c + Hacl_Streaming_HMAC.c)
+# has no tier-2 coverage and its Windows build is not yet exercised.
+# win_excluded_stubs.c provides stub PyInit_* so the PC/config.c inittab
+# entries still resolve.
 _WIN_EXCLUDE = {
     "Modules/zlibmodule.c",
     "Modules/_hacl/Hacl_Hash_Blake2b_Simd256.c",
     "Modules/_hacl/Hacl_Hash_Blake2s_Simd128.c",
     "Modules/mmapmodule.c",
-    "Modules/cmathmodule.c",
     "Modules/hmacmodule.c",
     "Modules/_hacl/Hacl_Streaming_HMAC.c",
 }
@@ -169,14 +169,11 @@ TARGETS = {
         "exclude": _LINUX_EXCLUDE,
         "tier2_skip": ["test_decimal"],
     },
-    # cmathmodule.c is in _WIN_EXCLUDE (an initializer form badc does not yet
-    # accept), so cmath is not built into the Windows interpreter and
-    # test_cmath cannot import; skipped in tier 2 until cmath builds.
     # test_math: the Windows C runtime truncates rather than rounds denormal
     # ldexp output (testLdexp_denormal documents this in the suite itself); the
     # result is independent of code generation (both arches fail identically).
-    "windows-x64": {"windows": True, "tier2_skip": ["test_cmath", "test_math"]},
-    "windows-arm64": {"windows": True, "tier2_skip": ["test_cmath", "test_math"]},
+    "windows-x64": {"windows": True, "tier2_skip": ["test_math"]},
+    "windows-arm64": {"windows": True, "tier2_skip": ["test_math"]},
 }
 
 

@@ -510,11 +510,10 @@ pub(super) fn enc_frintz_s(sd: u8, sn: u8) -> u32 {
 }
 
 /// `FCMP <Dn>, <Dm>` -- set NZCV per the IEEE comparison of `Dn`
-/// and `Dm`. Used in the comparison lowering before `CSET`. Note:
-/// for unordered (NaN) operands the result is the IEEE "unordered"
-/// state; the C-level comparisons we lower (`<`, `>=`, etc.) match
-/// the ordered cases and accept NaN-edge divergence (NaN compares
-/// equal under EQ here, where C says `NaN == NaN` is false).
+/// and `Dm`. Used in the comparison lowering before `CSET`. An
+/// unordered (NaN) operand sets N=0, Z=0, C=1, V=1; the condition
+/// codes `fp_compare_cond` selects yield the C99 result for that
+/// state (`==` false, `!=` true, every relational form false).
 pub(super) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
     debug_assert!(dn < 32 && dm < 32);
     0x1E60_2000 | ((dm as u32) << 16) | ((dn as u32) << 5)

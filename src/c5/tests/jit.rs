@@ -1623,3 +1623,17 @@ fn dead_strip_drops_unused_static_function() {
         "unused static must be dead-stripped: {names:?}"
     );
 }
+
+// A pointer-to-extern-data initializer (`&extern_g`) must resolve to the
+// symbol's runtime address under --jit, not be left NULL. `environ` is a
+// libc data export reachable via dlsym in the host process. POSIX-only:
+// the Windows resolver is best-effort and msvcrt's environ export is not
+// uniform.
+#[cfg(unix)]
+#[test]
+fn jit_resolves_pointer_to_extern_data() {
+    let src = "extern char **environ;\n\
+               char ***p = &environ;\n\
+               int main(void) { return (*p == 0) ? 1 : 0; }\n";
+    assert_eq!(jit_exit(src, &[]), 0);
+}

@@ -349,6 +349,36 @@ mod jit_impl {
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
             }
         }
+        // Pointer-to-extern-data initializers (`int *p = &extern_g;`).
+        // Resolve each symbol's runtime address through the same loader
+        // handles the GOT uses and write it into the data slot. Unlike a
+        // missing function import (a 0 GOT slot that faults only if
+        // called), a NULL data pointer is the defect being fixed, so an
+        // unresolved symbol is a hard error.
+        if !build.extern_data_relocs.is_empty()
+            && let Some(region) = &mut data_region
+        {
+            let bytes = region.as_mut_slice(build.data.len());
+            for r in &build.extern_data_relocs {
+                let addr = got_region.resolve_symbol(&r.symbol_name);
+                if addr == 0 {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!("JIT: unresolved extern data symbol `{}`", r.symbol_name),
+                    )));
+                }
+                let off = r.data_offset as usize;
+                if off + 8 > bytes.len() {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "JIT: extern data reloc offset {off:#x} past end of data region ({})",
+                            bytes.len()
+                        ),
+                    )));
+                }
+                let value = (addr as i64 + r.addend) as u64;
+                bytes[off..off + 8].copy_from_slice(&value.to_le_bytes());
+            }
+        }
         apply_jit_fixups(
             target,
             unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), build.text.len()) },
@@ -581,6 +611,7 @@ mod jit_impl {
         build.abi = target.abi();
         build.data_relocs = program.data_relocs.clone();
         build.code_relocs = program.code_relocs.clone();
+        build.extern_data_relocs = program.extern_data_relocs.clone();
         Ok(build)
     }
 
@@ -1217,6 +1248,53 @@ mod jit_impl {
 
         fn as_ptr(&self) -> *const u8 {
             self.ptr
+        }
+
+        /// Resolve a symbol name to its runtime address through the
+        /// loader handles bound by `bind_imports`. Used for
+        /// pointer-to-extern-data initializers; 0 means unresolved.
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        fn resolve_symbol(&self, name: &str) -> u64 {
+            unsafe extern "C" {
+                fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+            }
+            // macOS dlsym wants the underscoreless C name; data symbols
+            // carry no leading underscore, so the strip is a no-op there
+            // and a guard for any decorated name.
+            let lookup = if cfg!(target_os = "macos") {
+                name.strip_prefix('_').unwrap_or(name)
+            } else {
+                name
+            };
+            let cs = match CString::new(lookup) {
+                Ok(cs) => cs,
+                Err(_) => return 0,
+            };
+            for &h in &self.lib_handles {
+                let a = unsafe { dlsym(h, cs.as_ptr()) } as u64;
+                if a != 0 {
+                    return a;
+                }
+            }
+            0
+        }
+
+        /// Windows resolver: best-effort over the handles opened for
+        /// imports (`LoadLibraryA`). A data symbol in a module that was
+        /// not an import target won't resolve and the caller errors.
+        #[cfg(target_os = "windows")]
+        fn resolve_symbol(&self, name: &str) -> u64 {
+            let cs = match CString::new(name) {
+                Ok(cs) => cs,
+                Err(_) => return 0,
+            };
+            for &h in &self.lib_handles {
+                let a = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                if a != 0 {
+                    return a;
+                }
+            }
+            0
         }
     }
 

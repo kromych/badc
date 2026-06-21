@@ -169,11 +169,15 @@ TARGETS = {
         "exclude": _LINUX_EXCLUDE,
         "tier2_skip": ["test_decimal"],
     },
-    # test_math: the Windows C runtime truncates rather than rounds denormal
-    # ldexp output (testLdexp_denormal documents this in the suite itself); the
-    # result is independent of code generation (both arches fail identically).
-    "windows-x64": {"windows": True, "tier2_skip": ["test_math"]},
-    "windows-arm64": {"windows": True, "tier2_skip": ["test_math"]},
+    # Windows wcsftime/ldexp differ from C99 in two narrow ways that are runtime
+    # properties, not code generation (both arches fail identically, the non-C99
+    # paths pass). ldexp truncates denormal output (testLdexp_denormal documents
+    # this) -> skip test_math; wcsftime lacks the C99 %C/%F specifiers (returns
+    # "") -> ignore the one method that needs them, keeping the rest of the suite.
+    "windows-x64": {"windows": True, "tier2_skip": ["test_math"],
+                    "tier2_ignore": ["test_strftime_y2k_c99"]},
+    "windows-arm64": {"windows": True, "tier2_skip": ["test_math"],
+                      "tier2_ignore": ["test_strftime_y2k_c99"]},
 }
 
 
@@ -402,6 +406,24 @@ def _entries(target: str) -> list[tuple[str, list[str], list[str]]]:
     return out
 
 
+def compile_trampoline_obj(target: str, cc_kind: str, cc: str, out: Path):
+    """Compile the perf-trampoline TU for targets that need it. Returns
+    (object_path, error); both None when the target has no trampoline.
+    perf_trampoline.c references _Py_trampoline_func_start, which lives in no
+    manifest TU, so every linker of this image must add this object."""
+    if not TARGETS[target].get("asm_trampoline"):
+        return None, None
+    tobj = out / "asm_trampoline.o"
+    src = str(PY_DIR / "asm_trampoline.c")
+    cmd = [cc, "-c", src, "-o", str(tobj)]
+    if cc_kind == "badc":
+        cmd[1:1] = [f"--target={target}"]
+    r = run(cmd, timeout=120)
+    if r.returncode != 0:
+        return None, (r.stderr or r.stdout)
+    return str(tobj), None
+
+
 def build(target: str, do_link: bool, log) -> Path | None:
     cfg = TARGETS[target]
     win = bool(cfg.get("windows"))
@@ -443,13 +465,13 @@ def build(target: str, do_link: bool, log) -> Path | None:
                 sys.stderr.write((r.stderr or r.stdout)[-2000:])
                 sys.exit(f"build: {helper} failed to compile")
             objs.append(str(hobj))
-    elif cfg.get("asm_trampoline"):
-        tobj = out / "asm_trampoline.o"
-        r = run([badc, "-c", f"--target={target}", str(PY_DIR / "asm_trampoline.c"), "-o", str(tobj)], timeout=120)
-        if r.returncode != 0:
-            sys.stderr.write(r.stderr or r.stdout)
+    else:
+        tobj, err = compile_trampoline_obj(target, "badc", badc, out)
+        if err:
+            sys.stderr.write(err)
             sys.exit("build: asm_trampoline compile failed")
-        objs.append(str(tobj))
+        if tobj:
+            objs.append(tobj)
 
     py = out / ("python.exe" if win else "python")
     log(f"link -> {py}")
@@ -506,6 +528,10 @@ def run_tests(target: str, py: Path, log, tier2: bool = False) -> int:
     slice_ = TEST_SLICE + TEST_TIER2 if tier2 else TEST_SLICE
     skip = set(cfg.get("tier2_skip", []))
     slice_ = [t for t in slice_ if t not in skip]
+    # -i/--ignore deselects individual test methods by name (regrtest matches the
+    # pattern against test ids), used for narrow platform gaps where skipping the
+    # whole module would lose unrelated coverage.
+    ignore = [a for pat in cfg.get("tier2_ignore", []) for a in ("--ignore", pat)]
     if cfg.get("run_from_tempdir"):
         rundir = Path(tempfile.mkdtemp(prefix="badc-cpython-"))
         exe = rundir / py.name
@@ -559,7 +585,7 @@ def run_tests(target: str, py: Path, log, tier2: bool = False) -> int:
         print(f"build: {r.stdout.strip()}")
     # -w re-runs any failed test file in verbose mode, so a failure carries
     # its tracebacks into the log instead of "multiple errors occurred".
-    r = run([str(exe), "-m", "test", "-q", "-w", *slice_], cwd=str(cwd), env=env, timeout=1800)
+    r = run([str(exe), "-m", "test", "-q", "-w", *ignore, *slice_], cwd=str(cwd), env=env, timeout=1800)
     print(f"build: test slice {' '.join(slice_)} exit={r.returncode}")
     if r.returncode != 0:
         sys.stderr.write((r.stdout + r.stderr)[-3000:])

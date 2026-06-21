@@ -112,7 +112,10 @@ def _bench(py: Path, env: dict, runs: int = 5):
 
 def build_with(cc_kind: str, cc: str, target: str, entries, opt: bool, out: Path, log):
     out.mkdir(parents=True, exist_ok=True)
-    reenable = build.TARGETS[target].get("undef_haves", [])
+    # Re-enable only HAVE_* header-presence macros badc undefines for lack of a
+    # header; capability macros like _Py_HACL_CAN_COMPILE_VEC* gate SIMD TUs
+    # excluded from this module set, so they stay undefined for both compilers.
+    reenable = [m for m in build.TARGETS[target].get("undef_haves", []) if m.startswith("HAVE_")]
     jobs = []
     for src, defs, incs in entries:
         obj = str(out / (src.replace("/", "_")[:-2] + ".o"))
@@ -130,6 +133,12 @@ def build_with(cc_kind: str, cc: str, target: str, entries, opt: bool, out: Path
         for obj, err in fails[:5]:
             log(f"    {Path(obj).name}: {err}")
         return None
+    tobj, terr = build.compile_trampoline_obj(target, cc_kind, cc, out)
+    if terr:
+        log(f"  {cc_kind} {'O2' if opt else 'O0'}: trampoline compile failed: {terr[-200:]}")
+        return None
+    if tobj:
+        objs.append(tobj)
     py = out / ("python.exe" if WIN else "python")
     lr = subprocess.run(_link_cmd(cc_kind, cc, target, objs, py, opt),
                         capture_output=True, text=True, timeout=900)

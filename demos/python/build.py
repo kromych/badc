@@ -107,17 +107,15 @@ _WIN_GETPATH_DEFINES = [
 ]
 # TUs excluded from the minimal static interpreter. zlib needs the vendored
 # zlib-ng; the SIMD HACL variants need AVX intrinsics (the scalar Blake2 covers
-# the same hashes); mmap uses SEH. cmath compiles but its complex arithmetic is
-# wrong on Windows (test_cmath fails broadly), so it stays excluded until that
-# is fixed. _hmac (hmacmodule.c + Hacl_Streaming_HMAC.c) has no tier-2 coverage
-# and its Windows build is not yet exercised. win_excluded_stubs.c provides stub
-# PyInit_* so the PC/config.c inittab entries still resolve.
+# the same hashes); mmap uses SEH. _hmac (hmacmodule.c + Hacl_Streaming_HMAC.c)
+# has no tier-2 coverage and its Windows build is not yet exercised.
+# win_excluded_stubs.c provides stub PyInit_* so the PC/config.c inittab entries
+# still resolve.
 _WIN_EXCLUDE = {
     "Modules/zlibmodule.c",
     "Modules/_hacl/Hacl_Hash_Blake2b_Simd256.c",
     "Modules/_hacl/Hacl_Hash_Blake2s_Simd128.c",
     "Modules/mmapmodule.c",
-    "Modules/cmathmodule.c",
     "Modules/hmacmodule.c",
     "Modules/_hacl/Hacl_Streaming_HMAC.c",
 }
@@ -133,6 +131,15 @@ _WIN_ADDITIONAL_TUS = [
 # Harness sources: the console entry shim (main over the wide command line) and
 # stub PyInit_* for the excluded builtins.
 _WIN_HELPERS = ["win_entry.c", "win_excluded_stubs.c"]
+
+# tier-2 test methods that fail only on the legacy-CRT gaps described at the
+# Windows TARGETS entries; -i deselects each by name while the rest of its
+# module runs. Shared by both Windows arches.
+_WIN_CRT_IGNORE = [
+    "testLdexp_denormal",
+    "test_phase", "test_polar", "test_specific_values",
+    "test_strftime_y2k", "test_strftime_y2k_c99",
+]
 
 TARGETS = {
     "macos-aarch64": {
@@ -167,25 +174,33 @@ TARGETS = {
         "undef_haves": _LINUX_UNDEF,
         "exclude": _LINUX_EXCLUDE,
     },
-    # Windows wcsftime/ldexp differ from C99 in narrow ways that are runtime
-    # properties of the legacy msvcrt CRT, not code generation (both arches behave
-    # identically, the rest of each module passes). ldexp rounds a denormal result
-    # toward zero, not to nearest (testLdexp_denormal: ldexp(6993274598585239,
-    # -1126) gives 5e-324, not 1e-323); mathmodule.c recomputes errno from the
-    # operands, so the rest of test_math is unaffected -> ignore just that method.
-    # wcsftime lacks the C99 %C/%F/%G specifiers (returns "") -> ignore the
-    # strftime methods that need them. test_cmath is skipped while cmath is
-    # excluded (see _WIN_EXCLUDE).
-    "windows-x64": {"windows": True, "tier2_skip": ["test_cmath"],
-                    "tier2_ignore": ["testLdexp_denormal",
-                                     "test_strftime_y2k", "test_strftime_y2k_c99"]},
-    # arm64 also ignores test_gh_120161: it spawns a child interpreter whose
-    # socket startup fails with WinError 10106 (WSASYSNOTREADY) on Windows arm64
-    # only -- a TODO socket/WSAStartup gap on that target, not in this test.
-    "windows-arm64": {"windows": True, "tier2_skip": ["test_cmath"],
-                      "tier2_ignore": ["testLdexp_denormal",
-                                       "test_strftime_y2k", "test_strftime_y2k_c99",
-                                       "test_gh_120161"]},
+    # The Windows interpreter links the legacy msvcrt.dll CRT, several of whose
+    # math/time functions deviate from C99 in narrow ways. These are runtime
+    # properties of the CRT, not code generation: both arches behave identically
+    # and the rest of each module passes, so ignore the individual methods rather
+    # than skipping whole modules.
+    #   - ldexp rounds a denormal result toward zero, not to nearest
+    #     (testLdexp_denormal: ldexp(6993274598585239, -1126) gives 5e-324, not
+    #     1e-323). mathmodule.c recomputes errno from the operands, so the rest of
+    #     test_math is unaffected.
+    #   - atan2 reports EDOM for a NaN argument, contrary to C99 F.10.1.4 (the
+    #     cmath source notes it "should not cause any exception"), so cmath.phase
+    #     and cmath.polar raise a spurious math domain error on non-finite input
+    #     (test_phase, test_polar, and test_specific_values via polar_complex).
+    #   - wcsftime lacks the C99 %C/%F/%G conversion specifiers and returns ""
+    #     (test_strftime_y2k, test_strftime_y2k_c99).
+    # TODO: a C99-conforming CRT or a math/time shim removes every entry here.
+    "windows-x64": {"windows": True, "tier2_ignore": _WIN_CRT_IGNORE},
+    # arm64 also ignores test_gh_120161. The test helper spawns the interpreter
+    # as a child with a sanitized environment block (neither PATH nor SystemRoot
+    # present); the child's `import asyncio` then loads _overlapped, whose
+    # WSAStartup initializes the Winsock provider catalog. On Windows arm64 that
+    # init fails with WinError 10106 (WSAEPROVIDERFAILEDINIT) under the stripped
+    # environment, while x64 tolerates it. The byte-identical interpreter imports
+    # _overlapped in every normal invocation, so this is an arm64 Winsock-startup
+    # property of the spawn environment, not a code-generation defect.
+    "windows-arm64": {"windows": True,
+                      "tier2_ignore": _WIN_CRT_IGNORE + ["test_gh_120161"]},
 }
 
 

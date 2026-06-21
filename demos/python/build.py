@@ -517,12 +517,17 @@ def _xcrun(tool: str):
 
 
 def section_sizes(py: Path) -> dict:
-    """text / data / bss / file bytes of a built binary. Prefers an external
-    sizer (llvm-size, then GNU binutils `size`) with `--format=sysv` (uniform
-    across ELF / Mach-O / PE); when none is on PATH (the Windows runners ship
-    neither) or it matched no section, reads the binary's own section table.
-    Falls back to the file size alone if that also fails."""
+    """text / data / bss / file bytes of a built binary. Reads the binary's own
+    section / segment tables first: dependency-free and the only way to see bss
+    the linker folds into a segment's virtual tail (PE `.data` VirtualSize,
+    Mach-O `__DATA` vmsize), which `size` reports as data or omits. Falls back
+    to an external sizer (llvm-size, then GNU `size`) for any format the reader
+    rejects, then to the file size alone."""
     out = {"text": 0, "data": 0, "bss": 0, "file": py.stat().st_size}
+    native = _native_section_sizes(py)
+    if native and (native["text"] or native["data"] or native["bss"]):
+        out.update(native)
+        return out
     sizer = shutil.which("llvm-size") or _xcrun("llvm-size") or shutil.which("size")
     if sizer:
         r = subprocess.run([sizer, "--format=sysv", str(py)], capture_output=True, text=True)
@@ -539,11 +544,6 @@ def section_sizes(py: Path) -> dict:
                     out["bss"] += val
                 elif low in ("__data", ".data", ".rodata", "__const") or "data" in low or "const" in low:
                     out["data"] += val
-            if out["text"] or out["data"] or out["bss"]:
-                return out
-    native = _native_section_sizes(py)
-    if native:
-        out.update(native)
     return out
 
 
@@ -592,9 +592,10 @@ def _elf_section_sizes(d: bytes) -> dict | None:
 
 
 def _pe_section_sizes(d: bytes) -> dict | None:
-    # PE: the COFF header at e_lfanew lists the section table. Classify by the
-    # section characteristics and sum VirtualSize (the in-memory content size,
-    # what `size` reports), falling back to SizeOfRawData when VirtualSize is 0.
+    # PE: the COFF header at e_lfanew lists the section table. A section's
+    # on-disk SizeOfRawData is its initialised bytes; VirtualSize beyond that
+    # is the zero-fill (bss) tail the linker folds into the section, since a
+    # PE image carries no separate .bss section.
     e_lfanew = struct.unpack_from("<I", d, 0x3C)[0]
     if d[e_lfanew : e_lfanew + 4] != b"PE\x00\x00":
         return None
@@ -606,34 +607,39 @@ def _pe_section_sizes(d: bytes) -> dict | None:
         base = table + i * 40
         vsize, _vaddr, rawsize = struct.unpack_from("<III", d, base + 8)
         chars = struct.unpack_from("<I", d, base + 36)[0]
-        size = vsize or rawsize
+        vsize = vsize or rawsize
         if chars & 0x20:  # IMAGE_SCN_CNT_CODE
-            out["text"] += size
-        elif chars & 0x80:  # IMAGE_SCN_CNT_UNINITIALIZED_DATA
-            out["bss"] += size
-        elif chars & 0x40:  # IMAGE_SCN_CNT_INITIALIZED_DATA
-            out["data"] += size
+            out["text"] += vsize
+        elif chars & (0x40 | 0x80):  # INITIALIZED / UNINITIALIZED data
+            out["data"] += min(vsize, rawsize)
+            out["bss"] += max(0, vsize - rawsize)
     return out
 
 
 def _macho_section_sizes(d: bytes) -> dict | None:
-    # Mach-O 64: walk the LC_SEGMENT_64 (0x19) load commands and their sections;
-    # S_ZEROFILL / S_GB_ZEROFILL section types (0x1 / 0xc) mark .bss.
+    # Mach-O 64: walk the LC_SEGMENT_64 (0x19) load commands. A data segment's
+    # vmsize beyond its filesize is zero-fill (bss). That covers both a folded
+    # tail (no section) and any S_ZEROFILL section (type 0x1 / 0xc) that lives
+    # inside it, so count it once per segment rather than per section.
     ncmds = struct.unpack_from("<I", d, 16)[0]
     off = 32
     out = {"text": 0, "data": 0, "bss": 0}
     for _ in range(ncmds):
         cmd, cmdsize = struct.unpack_from("<II", d, off)
         if cmd == 0x19:  # LC_SEGMENT_64
+            segname = d[off + 8 : off + 24].split(b"\0", 1)[0].decode("ascii", "replace")
+            vmsize, _fileoff, filesize = struct.unpack_from("<QQQ", d, off + 32)
+            if segname not in ("__PAGEZERO", "__TEXT", "__LINKEDIT") and vmsize > filesize:
+                out["bss"] += vmsize - filesize
             nsects = struct.unpack_from("<I", d, off + 64)[0]
             for s in range(nsects):
                 sbase = off + 72 + s * 80
                 sectname = d[sbase : sbase + 16].split(b"\0", 1)[0].decode("ascii", "replace")
                 size = struct.unpack_from("<Q", d, sbase + 40)[0]
                 flags = struct.unpack_from("<I", d, sbase + 64)[0]
-                if flags & 0xFF in (0x1, 0xC):
-                    out["bss"] += size
-                elif sectname.startswith("__text"):
+                if flags & 0xFF in (0x1, 0xC):  # S_ZEROFILL -- counted in the segment tail
+                    continue
+                if sectname.startswith("__text"):
                     out["text"] += size
                 elif sectname.startswith(("__data", "__const", "__cstring", "__rodata")):
                     out["data"] += size

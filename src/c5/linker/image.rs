@@ -870,6 +870,15 @@ fn patch_data_refs(
         };
         let target_vaddr = target_base + r.addend;
         let site = r.text_offset as usize;
+        // `text_offset` derives from an untrusted object's r_offset; each
+        // arm writes a 4-byte instruction word, so validate the site is in
+        // bounds before indexing rather than panicking on the slice bound.
+        if site.checked_add(4).is_none_or(|end| end > text.len()) {
+            return Err(err(&format!(
+                "data-ref reloc patch offset {site:#x} past end of text (len {})",
+                text.len(),
+            )));
+        }
         match (machine, r.rtype) {
             (NativeMachine::X86_64, R_X86_64_PC32) | (NativeMachine::X86_64, R_X86_64_PLT32) => {
                 let disp = target_vaddr - site_vaddr as i64;

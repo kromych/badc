@@ -1303,3 +1303,88 @@ fn cross_tu_call_into_secondary_dylib_keeps_routing() {
         "shared-dylib import `printf` must route to libc"
     );
 }
+
+#[test]
+fn out_of_range_text_reloc_offset_is_diagnostic_not_panic() {
+    // .o / .a files are untrusted linker input read from disk. A corrupt
+    // r_offset must yield a diagnostic, not a slice-index panic. x86_64
+    // PC32/PLT32 is the path whose only prior guard was the displacement
+    // fit check, which an out-of-bounds offset passes.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let reloc = || NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let compile = |src: &str| {
+        Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile")
+    };
+    let caller = compile("extern int f(void);\nint main(void){ return f(); }\n");
+    let callee = compile("int f(void){ return 7; }\n");
+    let a_bytes = emit_native_with_options(&caller, Target::LinuxX64, reloc()).expect("emit a");
+    let b_bytes = emit_native_with_options(&callee, Target::LinuxX64, reloc()).expect("emit b");
+    let mut a = parse_native_elf(&a_bytes).expect("parse a");
+    let b = parse_native_elf(&b_bytes).expect("parse b");
+    assert!(!a.text_relocs.is_empty(), "caller must carry a text reloc");
+    // Past the end of the merged text (well beyond any object's size).
+    for r in &mut a.text_relocs {
+        r.offset = 0x4000_0000;
+    }
+    assert!(
+        link_native_objects(&[a, b]).is_err(),
+        "out-of-range text reloc offset must be a diagnostic, not a panic"
+    );
+}
+
+#[test]
+fn wrapping_section_size_is_diagnostic_not_panic() {
+    // A malformed object whose section sh_offset + sh_size wraps must be
+    // rejected, not abort the linker on the slice bound.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new("int g = 5;\nint main(void){ return g; }\n".to_string())
+        .compile()
+        .expect("compile");
+    let mut bytes = emit_native_with_options(
+        &program,
+        Target::LinuxX64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        },
+    )
+    .expect("emit");
+    // Elf64_Ehdr: e_shoff @40, e_shentsize @58, e_shnum @60.
+    let e_shoff = u64::from_le_bytes(bytes[40..48].try_into().unwrap()) as usize;
+    let e_shentsize = u16::from_le_bytes(bytes[58..60].try_into().unwrap()) as usize;
+    let e_shnum = u16::from_le_bytes(bytes[60..62].try_into().unwrap()) as usize;
+    assert!(
+        e_shoff != 0 && e_shnum > 1,
+        "expected a section header table"
+    );
+    // Set the first SHT_PROGBITS section's sh_size (Elf64_Shdr @32) to the
+    // max so section_slice's off + size wraps when it reads that section.
+    let mut patched = false;
+    for i in 1..e_shnum {
+        let shdr = e_shoff + i * e_shentsize;
+        let sh_type = u32::from_le_bytes(bytes[shdr + 4..shdr + 8].try_into().unwrap());
+        if sh_type == 1 {
+            let at = shdr + 32;
+            bytes[at..at + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+            patched = true;
+            break;
+        }
+    }
+    assert!(patched, "expected a SHT_PROGBITS section to corrupt");
+    assert!(
+        parse_native_elf(&bytes).is_err(),
+        "a wrapping sh_offset + sh_size must be a diagnostic, not a panic"
+    );
+}

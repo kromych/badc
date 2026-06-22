@@ -341,3 +341,40 @@ fn installed_overlay_overrides_embedded() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// An unrecognised dash-prefixed option must be rejected with a clear
+// "unknown option" diagnostic, not silently reinterpreted as a source
+// file (which produces a misleading `cannot read` error or, worse,
+// compiles a same-named file).
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn unknown_option_is_rejected() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-unkopt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    std::fs::write(&src, "int main(void) { return 0; }\n").expect("write main");
+    let out = Command::new(badc)
+        .arg("-Wall")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("prog"))
+        .output()
+        .expect("run badc");
+    assert!(!out.status.success(), "unknown option must fail the build");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("unknown option"),
+        "expected an 'unknown option' diagnostic, got: {stderr}"
+    );
+    // A valid build of the same source still succeeds.
+    let ok = Command::new(badc)
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("prog2"))
+        .output()
+        .expect("run badc");
+    assert!(ok.status.success(), "valid build must still succeed");
+    let _ = std::fs::remove_dir_all(&dir);
+}

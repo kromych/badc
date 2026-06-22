@@ -469,6 +469,16 @@ fn main() {
             s if s.starts_with("--target=") => {
                 target_spec = Some(s["--target=".len()..].to_string());
             }
+            // An unrecognised dash-prefixed token is an unknown option, not
+            // a source file. Without this guard it falls through to `args`
+            // and is classified by extension, becoming a phantom input path
+            // (a misleading `cannot read` error, or -- worse -- silently
+            // compiled if its text names an existing file). `-` alone is
+            // the stdin source and is handled above.
+            s if s.starts_with('-') && s != "-" => {
+                eprint_diagnostic(format!("badc: error: unknown option `{s}`"));
+                std::process::exit(1);
+            }
             _ => args.push(arg),
         }
     }

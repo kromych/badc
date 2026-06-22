@@ -2065,3 +2065,28 @@ fn float_is_four_bytes() {
     // the f64-shaped call ABI.
     assert_eq!(run_fixture("float_is_four_bytes.c"), 0);
 }
+
+#[test]
+fn long_double_advertised_as_fp64() {
+    // c5 stores `long double` as 8-byte IEEE binary64 on every target, so
+    // float.h must advertise the binary64 characteristics. The previous
+    // x86_64-ELF 80-bit row let LDBL_MAX overflow to +inf and LDBL_EPSILON
+    // drop below the real machine epsilon.
+    let src = "#include <float.h>\n\
+               int main(void){ return (sizeof(long double)==8 && LDBL_MANT_DIG==53\n\
+               && LDBL_MAX==DBL_MAX && LDBL_EPSILON==DBL_EPSILON\n\
+               && LDBL_MIN==DBL_MIN) ? 0 : 1; }";
+    assert_eq!(super::run_str(src), 0);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn darwin_enotsup_is_distinct_from_eopnotsupp() {
+    // On Darwin ENOTSUP is 45 and EOPNOTSUPP the legacy socket value 102;
+    // aliasing ENOTSUP to EOPNOTSUPP made `errno == ENOTSUP` silently
+    // false for a libc call that set errno to 45.
+    let src = "#include <errno.h>\n\
+               int main(void){ return (ENOTSUP==45 && EOPNOTSUPP==102\n\
+               && ENOTSUP!=EOPNOTSUPP) ? 0 : 1; }";
+    assert_eq!(super::run_str(src), 0);
+}

@@ -931,6 +931,29 @@ impl Lexer {
         items
     }
 
+    /// Finalise a numeric constant: a digit/suffix run must not be
+    /// immediately followed by an identifier character. `1_000`,
+    /// `0x1_0000`, `1.0q` are invalid preprocessing numbers (C99 6.4.8)
+    /// and require a diagnostic rather than splitting into a number plus
+    /// a stray identifier (which the parser would silently misread as a
+    /// new declarator, compiling to a truncated value).
+    fn end_number(&self) -> Result<(), C5Error> {
+        if self.pos < self.src.len() {
+            let c = self.src[self.pos];
+            if c == b'_' || c.is_ascii_alphabetic() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                    &self.file,
+                    self.line,
+                    &format!(
+                        "invalid numeric constant: unexpected `{}` after the number",
+                        c as char
+                    ),
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.
@@ -1048,7 +1071,7 @@ impl Lexer {
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
-                    return Ok(());
+                    return self.end_number();
                 }
                 if val == 0
                     && self.pos < self.src.len()
@@ -1089,7 +1112,7 @@ impl Lexer {
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
-                    return Ok(());
+                    return self.end_number();
                 }
                 if val == 0
                     && self.pos < self.src.len()
@@ -1130,7 +1153,7 @@ impl Lexer {
                         let f = self.lex_hex_float(hex_body_start)?;
                         self.ival = f.to_bits() as i64;
                         self.tk = Tok(Token::FloatNum as i64);
-                        return Ok(());
+                        return self.end_number();
                     }
                     // Hex literals can carry the standard integer suffix
                     // letters (u/U/l/L plus ll/LL combinations such as
@@ -1157,7 +1180,7 @@ impl Lexer {
                     self.int_suffix_long = l_count.min(2);
                     self.int_suffix_unsigned = u_seen;
                     self.int_is_decimal = false;
-                    return Ok(());
+                    return self.end_number();
                 }
 
                 while self.pos < self.src.len() {
@@ -1204,7 +1227,7 @@ impl Lexer {
                     self.tk = Tok(Token::Num as i64);
                     self.int_suffix_long = l_count.min(2);
                     self.int_suffix_unsigned = u_seen;
-                    return Ok(());
+                    return self.end_number();
                 }
 
                 // Float literal: integer body followed by a `.`,
@@ -1268,12 +1291,12 @@ impl Lexer {
                     })?;
                     self.ival = f.to_bits() as i64;
                     self.tk = Tok(Token::FloatNum as i64);
-                    return Ok(());
+                    return self.end_number();
                 }
 
                 self.ival = val;
                 self.tk = Tok(Token::Num as i64);
-                return Ok(());
+                return self.end_number();
             } else if c == '/' {
                 if self.pos < self.src.len() && self.src[self.pos] as char == '/' {
                     self.pos += 1;

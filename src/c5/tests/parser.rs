@@ -703,3 +703,36 @@ fn distinct_cases_default_and_per_function_labels_compile() {
     let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 2);
 }
+
+#[test]
+fn invalid_numeric_literal_with_embedded_underscore_is_rejected() {
+    // C99 6.4.8: `1_000` is a single invalid preprocessing number, not a
+    // number plus an identifier. Pre-fix it lexed as `1` followed by
+    // `_000` and silently set the variable to 1.
+    expect_compile_error(
+        "int main(){ int a = 1_000; return a; }",
+        "invalid numeric constant",
+    );
+    expect_compile_error(
+        "int main(){ long long c = 0x1_0000_0005LL; return (int)c; }",
+        "invalid numeric constant",
+    );
+    expect_compile_error(
+        "int main(){ int b = 0b1_01; return b; }",
+        "invalid numeric constant",
+    );
+    expect_compile_error(
+        "int main(){ int a = 1abc; return a; }",
+        "invalid numeric constant",
+    );
+}
+
+#[test]
+fn valid_numeric_literals_still_compile() {
+    // No false positive: every well-formed integer / float form compiles.
+    let src = "int main(){ int d=1000; unsigned u=0xFFu; long l=5L; long long e=1ULL;\n\
+               int o=010; int b=0b101; double f=1.5e3; float g=2.5f; double h=0x1.8p1;\n\
+               return (d==1000 && o==8 && b==5 && f==1500.0 && h==3.0 && u==255) ? 0 : 1; }";
+    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}

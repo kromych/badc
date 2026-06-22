@@ -37,6 +37,10 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x8(%rbp)
                	movl	$0x7, %eax
@@ -46,6 +50,10 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x10(%rbp)
                	movl	$0x21, %eax
@@ -55,6 +63,10 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x18(%rbp)
                	movl	$0x64, %eax
@@ -64,6 +76,10 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x20(%rbp)
                	movq	-0x8(%rbp), %rax

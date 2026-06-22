@@ -181,10 +181,16 @@
 #define EWOULDBLOCK     140
 #endif
 
-// macOS and Linux spell these as aliases; Windows assigns them distinct
-// numbers (defined above), so the aliases are non-Windows only.
+// Windows assigns these distinct numbers (defined above), so the
+// aliases are non-Windows only. On Linux ENOTSUP and EOPNOTSUPP share
+// one number; on Darwin they are distinct (ENOTSUP is 45, EOPNOTSUPP
+// the legacy socket value 102), so ENOTSUP gets its own number there.
 #ifndef _WIN32
+#ifdef __APPLE__
+#define ENOTSUP     45
+#else
 #define ENOTSUP     EOPNOTSUPP
+#endif
 #define EWOULDBLOCK EAGAIN
 #endif
 

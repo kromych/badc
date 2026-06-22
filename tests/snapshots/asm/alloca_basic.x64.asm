@@ -24,6 +24,10 @@ Disassembly of section .text:
                	leaq	-0x28(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rdi
@@ -85,6 +89,10 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x8(%rbp)
                	xorq	%rax, %rax
@@ -150,6 +158,10 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %r13
                	movq	(%r13), %rcx
                	subq	%r10, %rcx
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rcx
+               	jae	<addr>
+               	ud2
                	movq	%rcx, (%r13)
                	movq	%rcx, -0x8(%rbp)
                	movq	%rax, %r10
@@ -158,6 +170,10 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x10(%rbp)
                	movq	-0x8(%rbp), %rax
@@ -274,6 +290,10 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x18(%rbp)
                	movq	-0x18(%rbp), %rax
@@ -317,6 +337,10 @@ Disassembly of section .text:
                	leaq	-0x28(%rbp), %r13
                	movq	(%r13), %rax
                	subq	%r10, %rax
+               	leaq	-0x2000(%r13), %r10
+               	cmpq	%r10, %rax
+               	jae	<addr>
+               	ud2
                	movq	%rax, (%r13)
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rdi

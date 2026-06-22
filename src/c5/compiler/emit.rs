@@ -706,6 +706,11 @@ impl Compiler {
         let val = s.val;
         let is_thread_local = s.is_thread_local;
         let array_size = s.array_size;
+        // A reference to a block-scope `extern` that shadows a bound name
+        // (the slot is `Glo` and marked `block_extern_active`) must resolve
+        // by name / same-TU offset regardless of the class restored at
+        // block exit. Record it for the walker.
+        let block_extern = class == Token::Glo as i64 && s.block_extern_active;
         let id = self.ast.push_expr(
             Expr::Ident {
                 sym,
@@ -717,6 +722,9 @@ impl Compiler {
             },
             pos,
         );
+        if block_extern {
+            self.ast.block_extern_refs.push(id);
+        }
         self.ast_acc = Some(id);
         id
     }

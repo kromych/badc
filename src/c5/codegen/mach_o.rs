@@ -18,7 +18,7 @@
 //!   0x0000   mach_header_64                                \
 //!            LC_SEGMENT_64 __PAGEZERO                      |
 //!            LC_SEGMENT_64 __TEXT (1 sect: __text)         |
-//!            LC_SEGMENT_64 __DATA (2 sects: __got, __data) | __TEXT
+//!            LC_SEGMENT_64 __DATA (__got, __data, [__bss]) | __TEXT
 //!            LC_SEGMENT_64 __LINKEDIT                      |
 //!            LC_DYLD_INFO_ONLY                             |
 //!            LC_SYMTAB                                     |
@@ -26,6 +26,7 @@
 //!            LC_LOAD_DYLINKER /usr/lib/dyld                |
 //!            LC_LOAD_DYLIB   /usr/lib/libSystem...         |
 //!            LC_BUILD_VERSION                              |
+//!            LC_UUID                                       |
 //!            LC_MAIN entry_off=...                         |
 //!            <padding>                                     |
 //!            <machine code from build.text>                |
@@ -2119,9 +2120,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // `codesign --sign -` appends `LC_CODE_SIGNATURE` and grows
     // __LINKEDIT's filesize to cover the signature blob; any
     // bytes past __LINKEDIT would get clobbered. The segment
-    // declares `vmsize = 0` so dyld skips the mmap -- the bytes
-    // are file-only metadata that lldb / gdb pick up via the
-    // LC_SEGMENT_64. Sections are packed back-to-back -- DWARF
+    // declares a real, page-sized `vmsize` (>= filesize) --
+    // Xcode 15+ `dyld_info` rejects `vmsize < filesize`. It
+    // maps with `prot = 0` and is never accessed at runtime;
+    // lldb / gdb read the debug sections from the file image.
+    // Sections are packed back-to-back -- DWARF
     // readers don't require any alignment between them, and
     // the per-section `size` field stops them at the last real
     // byte regardless of the segment's tail pad.

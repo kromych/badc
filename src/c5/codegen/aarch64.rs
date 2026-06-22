@@ -172,6 +172,38 @@ pub(super) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
         | (rt.0 as u32)
 }
 
+/// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset
+/// (no writeback). Same scaling / range as [`enc_stp_pre`].
+pub(super) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
+    let imm7 = imm / 8;
+    debug_assert!(
+        (-64..64).contains(&imm7),
+        "stp: offset {imm} (scaled {imm7}) out of range"
+    );
+    0xA900_0000
+        | (((imm7 as u32) & 0x7F) << 15)
+        | ((rt2.0 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
+/// `LDP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset
+/// (no writeback). Mirror of [`enc_stp_off`].
+pub(super) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
+    let imm7 = imm / 8;
+    debug_assert!(
+        (-64..64).contains(&imm7),
+        "ldp: offset {imm} (scaled {imm7}) out of range"
+    );
+    0xA940_0000
+        | (((imm7 as u32) & 0x7F) << 15)
+        | ((rt2.0 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
 /// `MOV <Xd>, <Xn>` -- alias for `ORR <Xd>, XZR, <Xn>`. Note that ARM
 /// uses two distinct mov forms: this one (register-to-register, where
 /// `Rn` field 31 means XZR) and `add xd, sp, #0` (which is what you
@@ -510,11 +542,10 @@ pub(super) fn enc_frintz_s(sd: u8, sn: u8) -> u32 {
 }
 
 /// `FCMP <Dn>, <Dm>` -- set NZCV per the IEEE comparison of `Dn`
-/// and `Dm`. Used in the comparison lowering before `CSET`. Note:
-/// for unordered (NaN) operands the result is the IEEE "unordered"
-/// state; the C-level comparisons we lower (`<`, `>=`, etc.) match
-/// the ordered cases and accept NaN-edge divergence (NaN compares
-/// equal under EQ here, where C says `NaN == NaN` is false).
+/// and `Dm`. Used in the comparison lowering before `CSET`. An
+/// unordered (NaN) operand sets N=0, Z=0, C=1, V=1; the condition
+/// codes `fp_compare_cond` selects yield the C99 result for that
+/// state (`==` false, `!=` true, every relational form false).
 pub(super) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
     debug_assert!(dn < 32 && dm < 32);
     0x1E60_2000 | ((dm as u32) << 16) | ((dn as u32) << 5)

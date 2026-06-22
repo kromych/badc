@@ -49,7 +49,7 @@ can be debugged and/or their performance can be profiled (use `-g`).
 than `clang -O0`, especially on ARM64. To get an idea of the codegen
 quality, take a look at [`./tests/snapshots`](./tests/snapshots/) with assembly and
 SSA snapshots of the test fixtures. The optimized binaries will run on any modern
-ARM64 processor, and on x86_64 processors not older than Intel Hasswell and AMD Zen
+ARM64 processor, and on x86_64 processors not older than Intel Haswell and AMD Zen
 (circa 2013, the optimizer uses FMA3 instructions).
 
 `badc` emits position-independent code and the real native binaries (macOS Mach-O,
@@ -84,7 +84,7 @@ There are various demo's under [`demos`](./demos/):
   It really stresses all of the compiler.
 * `chibicc` - a small C compiler
 * `tinycc` - a cool and small C toolchain
-* `tweetNacCl`, `MonoCypher`, `BearSSL` - cryptography
+* `TweetNaCl`, `Monocypher`, `BearSSL` - cryptography
 * `Lua` - the embeddable scripting language
 * `quickjs` - JavaScript interpreter
 * [`TCL`](https://en.wikipedia.org/wiki/Tcl_(programming_language)) - Tool command language
@@ -323,7 +323,7 @@ wrapped in the gcc / clang / msvc convention so they don't collide
 with user identifiers:
 
 ```c
-    __BADC_VERSION__   "0.0.8"           // crate version (string literal)
+    __BADC_VERSION__   <crate version>   // string literal from Cargo.toml, e.g. "0.0.9"
     __BADC_TARGET__    "macos-aarch64"   // canonical target id (string literal)
     __aarch64__ / __arm64__              // AArch64 targets
     __x86_64__ / __amd64__               // x86_64 targets
@@ -378,18 +378,22 @@ so the source carries enough context to build with a bare
 #pragma export(my_api)             // promote a function to a shared-object export.
 #pragma pack(N) / pop / push       // override the default 8-byte struct alignment.
 #pragma entrypoint(WinMain)        // override the default `main` entry point.
-#pragma subsystem(windows)         // pick the Windows PE subsystem (windows | console).
+#pragma subsystem(windows)         // pick the PE subsystem (console | windows | native | efi_*).
 ```
 
 `#pragma entrypoint(<name>)` lets the source declare a
 non-`main` entry without a build-driver flag; the compiler
 resolves the name through the same symbol-table lookup it uses
 for `main`. `#pragma subsystem(<kind>)` drives the
-PE optional-header `Subsystem` byte -- `console` (default,
-`IMAGE_SUBSYSTEM_WINDOWS_CUI = 3`) or `windows`
-(`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`); together with
-`entrypoint(WinMain)` the pair is what a Win32 GUI app needs
-to skip the loader's auto-attach to a console window. Non-PE
+PE optional-header `Subsystem` byte. The accepted kinds are
+`console` (default, `IMAGE_SUBSYSTEM_WINDOWS_CUI = 3`),
+`windows` (`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`), `native`
+(`IMAGE_SUBSYSTEM_NATIVE = 1`, with `nt` / `driver` as
+aliases), and the EFI variants `efi_application`,
+`efi_boot_service_driver`, `efi_runtime_driver`, and
+`efi_rom`. With `console` / `windows`, `entrypoint(WinMain)`
+plus `subsystem(windows)` is what a Win32 GUI app needs to
+skip the loader's auto-attach to a console window. Non-PE
 targets keep the default and ignore the directive, so the
 same source builds for every OS.
 
@@ -489,7 +493,7 @@ cargo run --release --example bench -- --iter 10
 instead of compiling to native:
 
 ```sh
-$ cargo run --quiet -- --interp hello.c
+$ cargo run --quiet --features full -- --interp hello.c
 
 Hello 123
 exit(0)
@@ -608,3 +612,11 @@ when a higher-level debugger path is blocked. Modes:
 * `--list-segments`: list every PT_LOAD in the core file with
   its vaddr range. Useful for understanding where the stack and
   the emulator's mappings ended up after a corruption.
+
+## Disclaimer for those legally enlightened
+
+This is a personal educational/research project, it has not been
+sponsored or suggested by anyone, i.e. it is a product of my own
+volition. That said, in no event I'll be responsible for how you
+use this project or what happens due to that. See [LICENSE](./LICENSE)
+for the exact terms.

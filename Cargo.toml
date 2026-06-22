@@ -1,6 +1,6 @@
 [package]
 name = "badc"
-version = "0.0.9"
+version = "0.1.0"
 edition = "2024"
 license = "MIT"
 description = "A quick, slim cross-platform C compiler (also a compiler-as-library) (C99, C11, and more) with a JIT and native ELF / PE / Mach-O backends."
@@ -105,13 +105,17 @@ rustc-hash = { version = "2", default-features = false }
 libm = { version = "0.2", default-features = false }
 
 [lints.rust]
-# Promote the default-warn unused lints to deny so dead state can't
-# accumulate across refactors. CI already runs `-D warnings`, but
-# pinning the floor in Cargo.toml means a local `cargo build`
-# matches CI behaviour without RUSTFLAGS plumbing.
-unused_variables = "deny"
-unused_assignments = "deny"
-unused_imports = "deny"
-unused_must_use = "deny"
-unused_mut = "deny"
-dead_code = "deny"
+# Keep the unused lints at their default `warn` level in the shipped
+# manifest. CI and the pre-push hook run `-D warnings` (RUSTFLAGS +
+# clippy), so dead state is still rejected before merge; baking `deny`
+# into the published crate would instead turn any of these into a hard
+# error under a different rustc version when built as the root crate
+# (`cargo install badc`), where Cargo's registry-dependency lint cap
+# does not apply. rustc lint coverage is not stable across versions, so
+# the floor stays at `warn` for end users.
+unused_variables = "warn"
+unused_assignments = "warn"
+unused_imports = "warn"
+unused_must_use = "warn"
+unused_mut = "warn"
+dead_code = "warn"

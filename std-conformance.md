@@ -80,9 +80,10 @@ trigraphs (6.4.6 / 5.2.1.1), and K&R identifier-list function declarators
 `_Noreturn` function does not reach its continuation in the fall-through
 reachability analysis (which also errors on a non-`void`, non-`main`
 function that can fall off its end without returning a value).
-`__STDC__`, `__STDC_HOSTED__`, `__DATE__`, and `__TIME__` are predefined;
-`__STDC_VERSION__` is deliberately omitted because predefining `199901L`
-might invite code to enable the unsupported C99 features above.
+`__STDC__`, `__STDC_HOSTED__`, `__DATE__`, and `__TIME__` are predefined.
+`__STDC_VERSION__` is defined as `201112L` (C11): the implemented surface
+is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
+`_Noreturn`, `_Atomic`, `_Thread_local`, anonymous members, `<stdatomic.h>`).
 
 ## Extensions implemented
 

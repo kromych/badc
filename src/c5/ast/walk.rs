@@ -572,6 +572,18 @@ impl<'a> Walker<'a> {
     /// non-variadic with every argument fixed (`arg_count`), which
     /// keeps the host-ABI placement identical to a plain call.
     fn indirect_callee_proto(&self, callee: super::ExprId, arg_count: usize) -> (bool, usize) {
+        // A variadic callee whose prototype was not recoverable from its
+        // symbol -- a struct-field, array-element, or dereferenced
+        // function pointer -- is recorded at parse time with its fixed
+        // (pre-ellipsis) parameter count, keyed by the callee ExprId.
+        if let Some(&(_, fixed)) = self
+            .ast
+            .variadic_indirect_callees
+            .iter()
+            .find(|(c, _)| *c == callee)
+        {
+            return (true, fixed as usize);
+        }
         match self.ast.expr(callee) {
             Expr::Ident { sym, .. } => {
                 let idx = *sym as usize;
@@ -647,6 +659,25 @@ impl<'a> Walker<'a> {
             }
         }
         GloAddr::Resolved(fallback_val)
+    }
+
+    /// Resolve a block-scope `extern` reference that shadowed a bound
+    /// name (recorded in `Ast::block_extern_refs`). The slot's class was
+    /// restored to the shadowed binding at block exit, so its live state
+    /// no longer reflects the external reference. When the name has a
+    /// same-TU file-scope definition the shared slot carries its offset
+    /// after all scope-exit restores (the definition is the slot's final
+    /// writer); use it. Otherwise the reference is cross-TU and resolves
+    /// by name through `extern_imm_data_refs`.
+    fn block_extern_glo_addr(&self, sym: u32) -> GloAddr {
+        let idx = sym as usize;
+        if idx < self.symbols.len() {
+            let s = &self.symbols[idx];
+            if s.class == Token::Glo as i64 && s.defined_here {
+                return GloAddr::Resolved(s.val);
+            }
+        }
+        GloAddr::Extern
     }
 
     /// Address class for a `_Thread_local` access. A pure extern
@@ -1368,7 +1399,16 @@ impl<'a> Walker<'a> {
                 val,
                 is_thread_local,
                 array_size,
-            } => self.load_ident_rvalue(b, *sym, *ty, *class, *val, *is_thread_local, *array_size),
+            } => self.load_ident_rvalue(
+                b,
+                id,
+                *sym,
+                *ty,
+                *class,
+                *val,
+                *is_thread_local,
+                *array_size,
+            ),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
                 // A comparison whose operand is a floating-point value must
@@ -3478,7 +3518,12 @@ impl<'a> Walker<'a> {
                     GloAddr::Resolved(off) => Ok(b.tls_addr(off)),
                 }
             } else {
-                match self.live_glo_addr(*sym, *val) {
+                let addr = if self.ast.block_extern_refs.contains(&id) {
+                    self.block_extern_glo_addr(*sym)
+                } else {
+                    self.live_glo_addr(*sym, *val)
+                };
+                match addr {
                     GloAddr::Extern => Ok(b.imm_data_extern(*sym)),
                     GloAddr::Resolved(off) => Ok(b.imm_data(off)),
                 }
@@ -3528,6 +3573,7 @@ impl<'a> Walker<'a> {
     fn load_ident_rvalue(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        id: ExprId,
         _sym: u32,
         ty: i64,
         class: i64,
@@ -3546,7 +3592,11 @@ impl<'a> Walker<'a> {
         // from an
         // intra-unit data offset without a 0 sentinel.
         let glo_addr = if class == Token::Glo as i64 && !is_thread_local {
-            Some(self.live_glo_addr(_sym, val))
+            Some(if self.ast.block_extern_refs.contains(&id) {
+                self.block_extern_glo_addr(_sym)
+            } else {
+                self.live_glo_addr(_sym, val)
+            })
         } else {
             None
         };

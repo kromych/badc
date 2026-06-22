@@ -766,6 +766,12 @@ fn build_dynsym(
     copy_name_offsets: &[u32],
     copy_addrs: &[u64],
     copy_sizes: &[u64],
+    copy_is_bss: &[bool],
+    // Section-header indices a defined symbol resides in, so `nm` /
+    // `readelf -s` attribute each export to its real section.
+    text_shndx: u16,
+    data_shndx: u16,
+    bss_shndx: u16,
 ) -> Vec<u8> {
     debug_assert_eq!(export_name_offsets.len(), export_addrs.len());
     debug_assert_eq!(export_name_offsets.len(), export_is_data.len());
@@ -833,11 +839,10 @@ fn build_dynsym(
                 st_name: name_off,
                 st_info: (STB_GLOBAL << 4) | st_type,
                 st_other: 0,
-                // Non-zero placeholder section index -- we
-                // don't emit section headers, but dlsym
-                // treats `SHN_UNDEF` as "to be resolved" and
-                // anything non-zero as defined.
-                st_shndx: 1,
+                // The export resides in .data (a data global) or .text
+                // (a code export). dlsym resolves by name regardless,
+                // but section-attributing consumers need the real index.
+                st_shndx: if is_data { data_shndx } else { text_shndx },
                 st_value: addr,
                 st_size: 0,
             },
@@ -847,10 +852,11 @@ fn build_dynsym(
     // The loader resolves the matching `R_*_COPY` by copying the host
     // object's initial value here and binding the host symbol to this
     // address, so every other module's reference reaches this slot.
-    for ((&name_off, &addr), &size) in copy_name_offsets
+    for (((&name_off, &addr), &size), &is_bss) in copy_name_offsets
         .iter()
         .zip(copy_addrs.iter())
         .zip(copy_sizes.iter())
+        .zip(copy_is_bss.iter())
     {
         write_struct(
             &mut out,
@@ -858,7 +864,8 @@ fn build_dynsym(
                 st_name: name_off,
                 st_info: (STB_GLOBAL << 4) | STT_OBJECT,
                 st_other: 0,
-                st_shndx: 1,
+                // The target slot is in .bss (zero-fill tail) or .data.
+                st_shndx: if is_bss { bss_shndx } else { data_shndx },
                 st_value: addr,
                 st_size: size,
             },
@@ -1369,12 +1376,15 @@ pub(super) fn write(
     let (mut dynstr, name_offsets, lib_strtab_offsets, export_name_offsets, copy_name_offsets) =
         build_dynstr(&build.imports, &export_names, &build.copy_relocs);
     let copy_sizes: Vec<u64> = build.copy_relocs.iter().map(|cr| cr.size).collect();
+    let copy_is_bss: Vec<bool> = build.copy_relocs.iter().map(|cr| cr.is_bss).collect();
     let n_copy = build.copy_relocs.len();
     // Compute each export's and copy target's runtime VA. We fill in the
     // real values after layout is fixed and `code_vmaddr` is known; here
     // we just reserve the slots.
     let export_addrs_placeholder: Vec<u64> = vec![0; elf_exports.len()];
     let copy_addrs_placeholder: Vec<u64> = vec![0; n_copy];
+    // Size-only placeholder build (zero addresses); the section indices
+    // here are irrelevant because only the final build below is written.
     let dynsym = build_dynsym(
         &name_offsets,
         &export_name_offsets,
@@ -1383,6 +1393,10 @@ pub(super) fn write(
         &copy_name_offsets,
         &copy_addrs_placeholder,
         &copy_sizes,
+        &copy_is_bss,
+        0,
+        0,
+        0,
     );
     // The hash table must cover every `.dynsym` entry, in dynsym
     // order: imports occupy indices [1, 1+n_imports), exports the
@@ -1855,6 +1869,13 @@ pub(super) fn write(
     let has_tdata = has_tls && tdata_size > 0;
     let has_tbss = has_tls && tbss_size > 0;
     let has_bss = build.bss_size > 0;
+    // Section-header indices of the allocated sections, in the order
+    // emitted below: .text=6, then optional .tdata, .dynamic, .got, then
+    // optional .data, .tbss, .bss. Used to attribute each .dynsym export
+    // to its real section.
+    const TEXT_SHNDX: u16 = 6;
+    let data_shndx: u16 = 9 + has_tdata as u16;
+    let bss_shndx: u16 = 9 + has_tdata as u16 + has_data as u16 + has_tbss as u16;
     let n_section_headers: u64 = 1 // NULL
         + 1 // .interp
         + 1 // .dynsym
@@ -2042,6 +2063,10 @@ pub(super) fn write(
         &copy_name_offsets,
         &copy_addrs,
         &copy_sizes,
+        &copy_is_bss,
+        TEXT_SHNDX,
+        data_shndx,
+        bss_shndx,
     );
     debug_assert_eq!(final_dynsym.len(), dynsym.len());
     out.extend_from_slice(&final_dynsym);
@@ -2884,6 +2909,16 @@ mod tests {
     fn read_u64(buf: &[u8], off: usize) -> u64 {
         u64::from_le_bytes(buf[off..off + 8].try_into().unwrap())
     }
+    /// Read a `#[repr(C)]` record back from the emitted image, the
+    /// inverse of `write_struct`, so a test reads named fields instead of
+    /// hand-computed byte offsets.
+    fn read_struct<T: Copy>(buf: &[u8], off: usize) -> T {
+        assert!(off + core::mem::size_of::<T>() <= buf.len());
+        // SAFETY: `T` is `Copy + #[repr(C)]` at every call site, the
+        // bound is checked above, and the little-endian field order
+        // matches the host (asserted in `write_struct`).
+        unsafe { core::ptr::read_unaligned(buf.as_ptr().add(off) as *const T) }
+    }
 
     #[test]
     fn writes_elf_magic() {
@@ -3355,16 +3390,30 @@ mod tests {
             let dynsym_file_off = (dynsym_vmaddr - load_min) as usize;
             let last_sym_off =
                 dynsym_file_off + (1 + build.imports.imports.len()) * ELF64_SYM_SIZE as usize;
-            let st_info = bytes[last_sym_off + 4];
-            let st_value = read_u64(&bytes, last_sym_off + 8);
+            let sym: super::Elf64Sym = read_struct(&bytes, last_sym_off);
             assert_eq!(
-                st_info,
+                sym.st_info,
                 (STB_GLOBAL << 4) | STT_FUNC,
                 "{machine:?}: export symbol must be STB_GLOBAL | STT_FUNC"
             );
             assert!(
-                st_value > 0,
+                sym.st_value > 0,
                 "{machine:?}: export st_value must be the function VA"
+            );
+            // A code export must name its real section (.text), not the
+            // .interp placeholder, so section-attributing tools classify
+            // it correctly. Resolve st_shndx through the section-header
+            // string table.
+            let eh: super::Elf64Ehdr = read_struct(&bytes, 0);
+            let shdr_at = |idx: u16| eh.e_shoff as usize + idx as usize * eh.e_shentsize as usize;
+            let shstrtab: super::Elf64Shdr = read_struct(&bytes, shdr_at(eh.e_shstrndx));
+            let sec: super::Elf64Shdr = read_struct(&bytes, shdr_at(sym.st_shndx));
+            let name_start = shstrtab.sh_offset as usize + sec.sh_name as usize;
+            let name_len = bytes[name_start..].iter().position(|&b| b == 0).unwrap();
+            let sec_name = core::str::from_utf8(&bytes[name_start..name_start + name_len]).unwrap();
+            assert_eq!(
+                sec_name, ".text",
+                "{machine:?}: code export st_shndx must name .text, got `{sec_name}`"
             );
         }
     }
@@ -3373,23 +3422,20 @@ mod tests {
     // first section header named `want`, resolving names through the
     // section-header string table (e_shstrndx).
     fn find_section(bytes: &[u8], want: &str) -> Option<(u32, u64, u64, u64, u64)> {
-        let e_shoff = read_u64(bytes, 40);
-        let e_shentsize = u16::from_le_bytes(bytes[58..60].try_into().unwrap()) as u64;
-        let e_shnum = u16::from_le_bytes(bytes[60..62].try_into().unwrap()) as u64;
-        let e_shstrndx = u16::from_le_bytes(bytes[62..64].try_into().unwrap()) as u64;
-        let strtab_off =
-            read_u64(bytes, (e_shoff + e_shstrndx * e_shentsize) as usize + 24) as usize;
-        for i in 0..e_shnum {
-            let h = (e_shoff + i * e_shentsize) as usize;
-            let name_start = strtab_off + read_u32(bytes, h) as usize;
+        let eh: super::Elf64Ehdr = read_struct(bytes, 0);
+        let shdr_at = |idx: u64| eh.e_shoff as usize + idx as usize * eh.e_shentsize as usize;
+        let strtab: super::Elf64Shdr = read_struct(bytes, shdr_at(eh.e_shstrndx as u64));
+        for i in 0..eh.e_shnum as u64 {
+            let sh: super::Elf64Shdr = read_struct(bytes, shdr_at(i));
+            let name_start = strtab.sh_offset as usize + sh.sh_name as usize;
             let len = bytes[name_start..].iter().position(|&b| b == 0).unwrap();
             if core::str::from_utf8(&bytes[name_start..name_start + len]).unwrap() == want {
                 return Some((
-                    read_u32(bytes, h + 4),
-                    read_u64(bytes, h + 8),
-                    read_u64(bytes, h + 16),
-                    read_u64(bytes, h + 32),
-                    read_u64(bytes, h + 48),
+                    sh.sh_type,
+                    sh.sh_flags,
+                    sh.sh_addr,
+                    sh.sh_size,
+                    sh.sh_addralign,
                 ));
             }
         }

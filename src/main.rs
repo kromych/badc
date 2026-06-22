@@ -76,9 +76,9 @@ Compile knobs:
                            (those always target the host).
   -o <path>                Output path. Default depends on output
                            mode and target (.exe / .dylib / .so /
-                           .dll suffixes added as appropriate).
-                           Pass `-` (or omit -o when stdout is a
-                           pipe) to write the binary to stdout.
+                           .dll suffixes added as appropriate). A
+                           stdin source defaults to `a.bin`
+                           (`a.exe` on Windows targets).
   -D NAME[=VALUE]          Predefine an object-like macro
                            (`-D X` <=> `-D X=1`).
   -U NAME                  Drop a predefine, including any
@@ -468,6 +468,16 @@ fn main() {
             }
             s if s.starts_with("--target=") => {
                 target_spec = Some(s["--target=".len()..].to_string());
+            }
+            // An unrecognised dash-prefixed token is an unknown option, not
+            // a source file. Without this guard it falls through to `args`
+            // and is classified by extension, becoming a phantom input path
+            // (a misleading `cannot read` error, or -- worse -- silently
+            // compiled if its text names an existing file). `-` alone is
+            // the stdin source and is handled above.
+            s if s.starts_with('-') && s != "-" => {
+                eprint_diagnostic(format!("badc: error: unknown option `{s}`"));
+                std::process::exit(1);
             }
             _ => args.push(arg),
         }
@@ -1546,6 +1556,10 @@ fn colorize_diagnostic(line: &str, is_tty: bool) -> std::borrow::Cow<'_, str> {
 /// | shared   | linux-*           | `.so`     |
 /// | shared   | windows-*         | `.dll`    |
 fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
+    // A stdin source ("-") has no usable base name; a literal `-.bin`
+    // both reads as a leading-dash path to downstream tools (codesign)
+    // and is opaque, so fall back to the conventional `a` base.
+    let source = if source == "-" { "a" } else { source };
     let p = PathBuf::from(source);
     let is_windows = matches!(target, Target::WindowsX64 | Target::WindowsAarch64);
     let is_macos = matches!(target, Target::MacOSAarch64);
@@ -1662,19 +1676,25 @@ fn set_executable(_path: &std::path::Path) {
 
 #[cfg(target_os = "macos")]
 fn codesign(path: &std::path::Path) {
+    // `--` terminates option parsing so an output path that begins with
+    // `-` is treated as a path, not a flag. A signing failure is fatal:
+    // an unsigned Mach-O is rejected by dyld, so reporting success would
+    // hand back an unrunnable binary.
     let status = std::process::Command::new(CODESIGN)
-        .args(["--sign", "-", "--force"])
+        .args(["--sign", "-", "--force", "--"])
         .arg(path)
         .status();
     match status {
         Ok(s) if s.success() => {}
         Ok(s) => {
             eprint_diagnostic(format!(
-                "badc: warning: codesign exited with status {s}; the binary may not run"
+                "badc: error: codesign exited with status {s}; the macOS binary won't run"
             ));
+            std::process::exit(1);
         }
         Err(e) => {
             eprint_diagnostic(format!("badc: error: failed to invoke {CODESIGN}: {e}"));
+            std::process::exit(1);
         }
     }
 }
@@ -1873,5 +1893,29 @@ fn print_predefined_symbols() {
     println!("\nConstants:");
     for (name, value) in consts {
         println!("  {name:<max_name_width$} = {value}");
+    }
+}
+
+#[cfg(test)]
+mod output_path_tests {
+    use super::{Mode, Target, default_output_path};
+    use std::path::PathBuf;
+
+    // A stdin source ("-") must not produce a leading-dash output path
+    // (e.g. "-.bin"): codesign reads it as a flag and it is opaque.
+    #[test]
+    fn stdin_source_falls_back_to_a_base() {
+        assert_eq!(
+            default_output_path("-", Target::MacOSAarch64, Mode::NativeExecutable),
+            PathBuf::from("a.bin")
+        );
+        assert_eq!(
+            default_output_path("-", Target::LinuxX64, Mode::NativeExecutable),
+            PathBuf::from("a.bin")
+        );
+        assert_eq!(
+            default_output_path("-", Target::WindowsX64, Mode::NativeExecutable),
+            PathBuf::from("a.exe")
+        );
     }
 }

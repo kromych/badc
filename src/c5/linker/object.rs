@@ -491,7 +491,15 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             "section header entry size is {e_shentsize}, expected {ELF64_SHDR_SIZE}",
         )));
     }
-    if e_shoff + e_shnum * e_shentsize > bytes.len() {
+    // e_shoff / e_shnum are attacker-controlled; compute the table end
+    // with checked arithmetic so a wrapping product cannot slip past the
+    // bound. The per-record reads below go through read_struct, which
+    // also bounds-checks.
+    if e_shnum
+        .checked_mul(e_shentsize)
+        .and_then(|tbl| e_shoff.checked_add(tbl))
+        .is_none_or(|end| end > bytes.len())
+    {
         return Err(err("section header table runs past end of file"));
     }
 
@@ -1093,7 +1101,10 @@ fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Erro
     }
     let off = sh.sh_offset as usize;
     let size = sh.sh_size as usize;
-    if off + size > bytes.len() {
+    // sh_offset / sh_size are attacker-controlled u64s; a crafted pair
+    // whose sum wraps would pass a plain `off + size > len` check and then
+    // panic on the slice bound. Compute the end with checked arithmetic.
+    if off.checked_add(size).is_none_or(|end| end > bytes.len()) {
         return Err(err(&format!(
             "section runs past end of file (offset 0x{off:x} + size 0x{size:x} > len {})",
             bytes.len(),

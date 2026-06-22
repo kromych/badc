@@ -196,6 +196,17 @@ pub(crate) struct Symbol {
     /// waiting to resolve.
     pub is_extern_decl: bool,
 
+    /// True while a block-scope `extern` declaration that shadows an
+    /// enclosing local (or other bound name) holds this slot. The slot
+    /// is converted to `Glo` for the block so in-block references take
+    /// the global path, but the prior binding is saved and restored at
+    /// block exit (C99 6.2.1p4). Set on conversion, cleared on the
+    /// block-exit restore. A reference emitted while it is set is
+    /// recorded in `Ast::block_extern_refs` so the walker resolves it
+    /// against the same-TU definition (if any) or a name-keyed extern,
+    /// independent of the slot's restored class at walk time.
+    pub block_extern_active: bool,
+
     /// True for a block-scope `static` local that shadowed an outer
     /// binding (a file-scope object of the same name). The local is
     /// promoted to `Glo` class for its data-segment storage but keeps

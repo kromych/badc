@@ -652,3 +652,120 @@ fn float_int_mixed_addition_auto_promotes() {
     let vm_result = crate::c5::Vm::new(prog).run().unwrap();
     assert_eq!(vm_result, 4);
 }
+
+#[test]
+fn duplicate_case_value_is_rejected() {
+    // C99 6.8.4.2p3: case constant expressions in one switch must be
+    // distinct. Pre-fix this deduped to one block and re-terminated it
+    // (debug panic / release silent miscompile).
+    expect_compile_error(
+        "int main(){ switch(1){ case 1: return 1; case 1: return 2; } return 0; }",
+        "duplicate case value",
+    );
+}
+
+#[test]
+fn duplicate_case_value_in_inner_switch_only() {
+    // Distinct values across nested switches are fine; the duplicate is
+    // detected per switch.
+    let src = "int main(){ switch(1){ case 1: switch(2){ case 1: return 1; } return 2; \
+               case 1: return 3; } return 0; }";
+    expect_compile_error(src, "duplicate case value");
+}
+
+#[test]
+fn multiple_default_labels_rejected() {
+    // C99 6.8.4.2p3: at most one default per switch.
+    expect_compile_error(
+        "int main(){ switch(1){ default: return 1; default: return 2; } }",
+        "multiple default labels",
+    );
+}
+
+#[test]
+fn redefined_goto_label_is_rejected() {
+    // C99 6.8.1p3: a label name is unique within its function.
+    expect_compile_error(
+        "int main(){ goto a; a: a: return 0; }",
+        "redefinition of label",
+    );
+}
+
+#[test]
+fn distinct_cases_default_and_per_function_labels_compile() {
+    // No false positive: distinct case values, a single default, and the
+    // same label name reused in separate functions are all valid.
+    let src = "int f(int x){ if(x) goto a; b: return 1; a: goto b; }\n\
+               int g(int x){ a: return x; }\n\
+               int main(){ int x = 2;\n\
+               switch(x){ case 1: return 1; case 2: return 2; default: return 9; }\n\
+               return f(0) + g(0); }";
+    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 2);
+}
+
+#[test]
+fn invalid_numeric_literal_with_embedded_underscore_is_rejected() {
+    // C99 6.4.8: `1_000` is a single invalid preprocessing number, not a
+    // number plus an identifier. Pre-fix it lexed as `1` followed by
+    // `_000` and silently set the variable to 1.
+    expect_compile_error(
+        "int main(){ int a = 1_000; return a; }",
+        "invalid numeric constant",
+    );
+    expect_compile_error(
+        "int main(){ long long c = 0x1_0000_0005LL; return (int)c; }",
+        "invalid numeric constant",
+    );
+    expect_compile_error(
+        "int main(){ int b = 0b1_01; return b; }",
+        "invalid numeric constant",
+    );
+    expect_compile_error(
+        "int main(){ int a = 1abc; return a; }",
+        "invalid numeric constant",
+    );
+}
+
+#[test]
+fn valid_numeric_literals_still_compile() {
+    // No false positive: every well-formed integer / float form compiles.
+    let src = "int main(){ int d=1000; unsigned u=0xFFu; long l=5L; long long e=1ULL;\n\
+               int o=010; int b=0b101; double f=1.5e3; float g=2.5f; double h=0x1.8p1;\n\
+               return (d==1000 && o==8 && b==5 && f==1500.0 && h==3.0 && u==255) ? 0 : 1; }";
+    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn deeply_nested_if_expression_is_rejected_not_a_stack_overflow() {
+    // A deeply nested `#if` controlling expression must yield a
+    // diagnostic, not overflow the native stack (SIGABRT). The bound is
+    // checked in parse_unary, the choke point of every recursive cycle.
+    let deep = format!(
+        "#if {}1{}\nint x;\n#endif\nint main(void){{ return 0; }}\n",
+        "(".repeat(5000),
+        ")".repeat(5000),
+    );
+    expect_compile_error(&deep, "nested too deeply");
+    let deep_unary = format!(
+        "#if {}1\nint x;\n#endif\nint main(void){{ return 0; }}\n",
+        "!".repeat(5000),
+    );
+    expect_compile_error(&deep_unary, "nested too deeply");
+}
+
+#[test]
+fn deeply_nested_macro_expansion_does_not_overflow_the_stack() {
+    // A chain of macros each referencing the previous expands to a depth
+    // proportional to the chain length. The substitution bound must keep
+    // it from overflowing the stack; the result terminates (the
+    // over-deep tail is left unexpanded) rather than aborting.
+    let mut src = String::from("#define A0 1\n");
+    for i in 1..3000 {
+        src.push_str(&format!("#define A{i} (A{}+1)\n", i - 1));
+    }
+    src.push_str("int main(void){ return 0; }\n");
+    // Must return (Ok or Err), not crash the test process.
+    let _ = crate::c5::Compiler::new(src).compile();
+}

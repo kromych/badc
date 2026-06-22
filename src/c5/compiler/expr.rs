@@ -673,6 +673,14 @@ impl Compiler {
                     let expected_params = self.symbols[id_idx].params.clone();
                     let is_variadic = self.symbols[id_idx].is_variadic;
                     let fn_name_for_warn = self.symbols[id_idx].name.clone();
+                    // A Token::Sys callee is a libc import: it reads each
+                    // argument at the platform-ABI register width and never
+                    // re-narrows to its declared parameter type. A c5
+                    // (Token::Fun) callee instead truncates each argument in
+                    // its prologue via the typed parameter load, so the
+                    // caller-side narrowing below is needed only for Sys
+                    // calls to satisfy the C99 6.5.2.2p4 conversion.
+                    let is_sys_call = self.symbols[id_idx].class == Token::Sys as i64;
                     // Struct-returning callees use a hidden out-pointer
                     // arg at val=2: the caller pre-allocates a temp for
                     // the result and passes its address as arg 0; the
@@ -776,6 +784,7 @@ impl Compiler {
                         // Type-check before the Si overwrites self.ty.
                         if (nargs as usize) < expected_params.len() {
                             let want = expected_params[nargs as usize];
+                            let arg_ty = self.ty;
                             let zero = self.last_emit_is_zero();
                             let untyped = self.last_emit_was_indirect_call();
                             if let Some(reason) =
@@ -805,6 +814,22 @@ impl Compiler {
                             // lands in the GPR-arg register and libm
                             // reads garbage out of the FP register.
                             self.convert_assign_rhs(want);
+                            // C99 6.5.2.2p4: the argument is converted to the
+                            // declared parameter type. For a Sys (libc) callee
+                            // the conversion must happen here -- the import
+                            // reads the argument at the full register width and
+                            // never re-narrows. A c5 callee truncates in its
+                            // typed parameter load, so this is Sys-only, and
+                            // only when the argument is wider than the integer
+                            // parameter (an in-width argument needs no mask).
+                            if is_sys_call
+                                && !is_pointer_ty(want)
+                                && !is_floating_scalar(want)
+                                && !is_struct_ty(want)
+                                && self.size_of_type(arg_ty) > self.size_of_type(want)
+                            {
+                                self.renormalize_to_width(want);
+                            }
                         } else {
                             if !expected_params.is_empty() && !is_variadic {
                                 self.warn_at(
@@ -1101,6 +1126,7 @@ impl Compiler {
                 // symbol; the array case is handled at its decay below.
                 if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
                     self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
+                    self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
                 }
                 // Array variables decay to a pointer to the first
                 // element: the symbol's address IS its value, no
@@ -1168,6 +1194,7 @@ impl Compiler {
                     if !self.symbols[id_idx].params.is_empty() {
                         self.pending.indirect_callee_params =
                             Some(self.symbols[id_idx].params.clone());
+                        self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
                     }
                 } else if is_struct_value {
                     if identifier_is_local {
@@ -2026,6 +2053,12 @@ impl Compiler {
                 // parameter unconverted and the callee reads the wrong
                 // half of the FP register.
                 let callee_params = self.pending.indirect_callee_params.take();
+                // Recover the variadic prototype alongside the parameter
+                // types so the call node records the fixed-argument count
+                // for the walker's host-ABI tail placement.
+                let callee_is_variadic =
+                    core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
                 let mut arg_idx: usize = 0;
                 while self.lex.tk != ')' {
                     self.loc_offs += 1;
@@ -2078,6 +2111,16 @@ impl Compiler {
                         }
                     }
                     if all_some {
+                        // Record a variadic indirect callee so the walker
+                        // splits the argument list at the fixed count even
+                        // when the callee's prototype is not recoverable
+                        // from its symbol (a struct-field, array-element, or
+                        // dereferenced function pointer).
+                        if callee_is_variadic {
+                            self.ast
+                                .variadic_indirect_callees
+                                .push((callee_id, callee_fixed));
+                        }
                         let id = self.ast.push_expr(
                             super::super::ast::Expr::Call {
                                 callee: callee_id,
@@ -2393,6 +2436,7 @@ impl Compiler {
                         then_ast = self.ast_acc;
                     }
                 }
+                let then_ty = self.ty;
                 if self.lex.tk == ':' {
                     self.next()?;
                 } else {
@@ -2400,24 +2444,60 @@ impl Compiler {
                 }
                 self.flush_pending_stores();
                 self.expr(Token::Cond as i64)?;
-                let else_ast = self.ast_acc;
-                // Build Expr::Ternary so the walker lowers the
-                // three sub-expressions with branch + phi-like
-                // join.
+                let mut else_ast = self.ast_acc;
+                let else_ty = self.ty;
+                // C99 6.5.15p5: when both arms have arithmetic type the
+                // conditional's type is their usual-arithmetic-conversions
+                // common type and each arm converts to it. Without the cast a
+                // mixed int / floating ternary stores one arm through the
+                // other arm's store kind (integer bits read as a double). Pure
+                // integer arms already lower correctly on the I64 path, so
+                // only the floating-involved case needs the conversion here.
+                let mut result_ty = self.ty;
+                let arith = |t: i64| !is_pointer_ty(t) && !is_struct_ty(t);
+                if (is_floating_scalar(then_ty) || is_floating_scalar(else_ty))
+                    && arith(then_ty)
+                    && arith(else_ty)
+                {
+                    let common = fp_result_ty(then_ty, else_ty);
+                    result_ty = common;
+                    if then_ty != common && then_ast.is_some() {
+                        let pos = self.ast_src_pos();
+                        then_ast = Some(self.ast.push_expr(
+                            super::super::ast::Expr::Cast {
+                                child: then_ast.unwrap(),
+                                to_ty: common,
+                            },
+                            pos,
+                        ));
+                    }
+                    if else_ty != common && else_ast.is_some() {
+                        let pos = self.ast_src_pos();
+                        else_ast = Some(self.ast.push_expr(
+                            super::super::ast::Expr::Cast {
+                                child: else_ast.unwrap(),
+                                to_ty: common,
+                            },
+                            pos,
+                        ));
+                    }
+                }
+                // Build Expr::Ternary so the walker lowers the three
+                // sub-expressions with a branch + phi-like join.
                 if let (Some(cond), Some(then_e), Some(else_e)) = (cond_ast, then_ast, else_ast) {
                     let pos = self.ast_src_pos();
-                    let ty = self.ty;
                     let id = self.ast.push_expr(
                         super::super::ast::Expr::Ternary {
                             cond,
                             then_e,
                             else_e,
-                            ty,
+                            ty: result_ty,
                         },
                         pos,
                     );
                     self.ast_acc = Some(id);
                 }
+                self.ty = result_ty;
             } else if self.lex.tk == Token::Lor {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
@@ -2944,10 +3024,13 @@ impl Compiler {
                 // the index expression is a separate evaluation that must
                 // not consume or clear them. Park them across the parse.
                 let saved_callee_params = self.pending.indirect_callee_params.take();
+                let saved_callee_variadic =
+                    core::mem::take(&mut self.pending.indirect_callee_is_variadic);
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
                 let idx_ast = self.ast_acc;
                 self.pending.indirect_callee_params = saved_callee_params;
+                self.pending.indirect_callee_is_variadic = saved_callee_variadic;
                 // Restore the queue and shift one level down so
                 // the next `[i]` sees the stride for that level
                 // in `pending_index_stride` and the rest in the
@@ -3088,6 +3171,8 @@ impl Compiler {
                 } else {
                     Some(field.params.clone())
                 };
+                self.pending.indirect_callee_is_variadic =
+                    !field.params.is_empty() && field.is_variadic;
 
                 if field.offset > 0 {
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Add, field.offset as i64);

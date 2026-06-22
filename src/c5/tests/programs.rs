@@ -1545,6 +1545,38 @@ fn variadic_call_through_fnptr_delivers_all_args() {
 }
 
 #[test]
+fn variadic_fnptr_proto_erased() {
+    // C99 6.5.2.2: a variadic call through a function pointer whose
+    // prototype is not recoverable from a bare identifier symbol (a
+    // struct field, an array element, or an inline-declared field) must
+    // still split the argument list at the fixed-parameter count so the
+    // host variadic ABI (macOS/AAPCS64 places the tail on the stack)
+    // delivers the variadic tail where the callee's va_arg walks it.
+    assert_eq!(run_fixture("variadic_fnptr_proto_erased.c"), 0);
+}
+
+#[test]
+fn block_extern_shadows_local() {
+    // C99 6.2.1p4 / 6.2.2p4: a block-scope `extern` that shadows an
+    // enclosing local or parameter refers to the file-scope object for
+    // the block and restores the enclosing binding at block exit; an
+    // in-block reference resolves to the same-TU definition (including a
+    // forward reference) rather than clobbering the outer object.
+    assert_eq!(run_fixture("block_extern_shadows_local.c"), 0);
+}
+
+#[test]
+fn win64_xmm_scratch_callee_save() {
+    // The x86_64 emit pass uses xmm13/14/15 as fixed FP scratch, which
+    // Win64 marks non-volatile. An FP function that returns a small
+    // struct by value (the register-aggregate return path) must save and
+    // restore those registers at offsets that match the prologue, or the
+    // epilogue restores callee-saved GPRs from the wrong slot and leaves
+    // the caller's xmm clobbered. Correctness check on every target.
+    assert_eq!(run_fixture("win64_xmm_scratch_callee_save.c"), 0);
+}
+
+#[test]
 #[ignore = "TODO: c5 VM has no shim for strtold / ldexpl; the fixture verifies the SysV x86_64 long-double libc-return convention through the native lane via NATIVE_FIXTURES"]
 fn long_double_libc_return_round_trips() {
     // SysV x86_64 ABI: `long double` libc returns ride in
@@ -1738,6 +1770,43 @@ fn bitfields_basic() {
     // Pins both single-bit flags and wider bitfields, plus
     // mutation that must not disturb adjacent bits.
     assert_eq!(run_fixture("bitfields.c"), 0);
+}
+
+#[test]
+fn union_bitfield_layout() {
+    // C99 6.7.2.1: a union with a named bitfield member sizes and aligns
+    // to that member's storage unit (a union of only bitfields is not
+    // zero-sized), so a bitfield store stays in bounds.
+    assert_eq!(run_fixture("union_bitfield_layout.c"), 0);
+}
+
+#[test]
+fn ternary_arith_conversion() {
+    // C99 6.5.15p5: a conditional with arithmetic arms converts both to
+    // their usual-arithmetic-conversions common type; a mixed int /
+    // floating ternary must not read one arm through the other's width.
+    assert_eq!(run_fixture("ternary_arith_conversion.c"), 0);
+}
+
+#[test]
+fn alloca_arena_in_bounds() {
+    // The alloca underflow trap fires only past the per-frame arena
+    // floor; an allocation just under the arena size still succeeds.
+    assert_eq!(run_fixture("alloca_arena_in_bounds.c"), 0);
+}
+
+#[test]
+fn init_float_to_int() {
+    // C99 6.3.1.4: a floating constant initializing an integer aggregate
+    // element converts (truncates), not a raw IEEE-754 bit copy.
+    assert_eq!(run_fixture("init_float_to_int.c"), 0);
+}
+
+#[test]
+fn global_init_midexpr_cast_narrow() {
+    // C99 6.3.1.3: a narrowing cast that is a sub-operand of a file-scope
+    // constant initializer narrows the operand; reloc casts still resolve.
+    assert_eq!(run_fixture("global_init_midexpr_cast_narrow.c"), 0);
 }
 
 #[test]
@@ -1995,4 +2064,38 @@ fn float_is_four_bytes() {
     // entry so the body's narrow load/store stays consistent with
     // the f64-shaped call ABI.
     assert_eq!(run_fixture("float_is_four_bytes.c"), 0);
+}
+
+#[test]
+fn bound_import_arg_narrowing() {
+    // C99 6.5.2.2p4: a bound-import (libc) call argument is converted to
+    // the declared parameter type, matching a user-defined callee. memcmp
+    // with a count > 2^32 narrows to the declared `int`, comparing the
+    // in-range prefix instead of walking past the buffers.
+    assert_eq!(run_fixture("bound_import_arg_narrowing.c"), 0);
+}
+
+#[test]
+fn long_double_advertised_as_fp64() {
+    // c5 stores `long double` as 8-byte IEEE binary64 on every target, so
+    // float.h must advertise the binary64 characteristics. The previous
+    // x86_64-ELF 80-bit row let LDBL_MAX overflow to +inf and LDBL_EPSILON
+    // drop below the real machine epsilon.
+    let src = "#include <float.h>\n\
+               int main(void){ return (sizeof(long double)==8 && LDBL_MANT_DIG==53\n\
+               && LDBL_MAX==DBL_MAX && LDBL_EPSILON==DBL_EPSILON\n\
+               && LDBL_MIN==DBL_MIN) ? 0 : 1; }";
+    assert_eq!(super::run_str(src), 0);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn darwin_enotsup_is_distinct_from_eopnotsupp() {
+    // On Darwin ENOTSUP is 45 and EOPNOTSUPP the legacy socket value 102;
+    // aliasing ENOTSUP to EOPNOTSUPP made `errno == ENOTSUP` silently
+    // false for a libc call that set errno to 45.
+    let src = "#include <errno.h>\n\
+               int main(void){ return (ENOTSUP==45 && EOPNOTSUPP==102\n\
+               && ENOTSUP!=EOPNOTSUPP) ? 0 : 1; }";
+    assert_eq!(super::run_str(src), 0);
 }

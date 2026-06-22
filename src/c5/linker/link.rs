@@ -1555,6 +1555,19 @@ fn apply_reloc(
     reloc: &NativeReloc,
     target: i64,
 ) -> Result<(), C5Error> {
+    // `patch_offset` derives from the object's r_offset, which is
+    // untrusted input. Every patch below writes a 4-byte instruction
+    // word; validate the site is in bounds before indexing so a
+    // malformed object yields a diagnostic, not a slice-index panic.
+    if patch_offset
+        .checked_add(4)
+        .is_none_or(|end| end > text.len())
+    {
+        return Err(err(&format!(
+            "relocation patch offset 0x{patch_offset:x} past end of text (len {})",
+            text.len(),
+        )));
+    }
     match (machine, reloc.rtype) {
         (NativeMachine::Aarch64, R_AARCH64_CALL26) => {
             patch_aarch64_call26(text, patch_offset, target)

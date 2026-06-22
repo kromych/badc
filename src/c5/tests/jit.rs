@@ -1081,6 +1081,14 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
+    ("bound_import_arg_narrowing.c", 0),
+    ("block_extern_shadows_local.c", 0),
+    ("win64_xmm_scratch_callee_save.c", 0),
+    ("variadic_fnptr_proto_erased.c", 0),
+    ("union_bitfield_layout.c", 0),
+    ("init_float_to_int.c", 0),
+    ("global_init_midexpr_cast_narrow.c", 0),
+    ("ternary_arith_conversion.c", 0),
     ("struct_layout.c", 0),
     ("const_expr_conditional.c", 27),
     ("comma_operator_in_loops.c", 3),
@@ -1216,6 +1224,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("winsock_netdb_protoent.c", 0),
     ("slot_coalesce_disjoint_temps.c", 0),
     ("alloca_alignment.c", 0),
+    ("alloca_arena_in_bounds.c", 0),
     ("slot_coalesce_declared.c", 0),
     ("slot_coalesce_alloca.c", 0),
     ("fn_arg_decay_then_deref_assign.c", 0),
@@ -1617,4 +1626,18 @@ fn dead_strip_drops_unused_static_function() {
         !names.contains(&"never_called"),
         "unused static must be dead-stripped: {names:?}"
     );
+}
+
+// A pointer-to-extern-data initializer (`&extern_g`) must resolve to the
+// symbol's runtime address under --jit, not be left NULL. `environ` is a
+// libc data export reachable via dlsym in the host process. POSIX-only:
+// the Windows resolver is best-effort and msvcrt's environ export is not
+// uniform.
+#[cfg(unix)]
+#[test]
+fn jit_resolves_pointer_to_extern_data() {
+    let src = "extern char **environ;\n\
+               char ***p = &environ;\n\
+               int main(void) { return (*p == 0) ? 1 : 0; }\n";
+    assert_eq!(jit_exit(src, &[]), 0);
 }

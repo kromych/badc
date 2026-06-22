@@ -39,24 +39,11 @@
 #define DBL_HAS_SUBNORM 1
 #define DBL_DECIMAL_DIG 17
 
-// `long double` width is target-dependent. AArch64 (macOS, Linux,
-// Windows) maps it to 64-bit binary64; x86_64 ELF uses 80-bit
-// extended; x86_64 Windows MSVC maps it to 64-bit binary64. The
-// 80-bit row matches the System V x86_64 ABI's `long double`.
-#if defined(__x86_64__) && !defined(_WIN32)
-#define LDBL_MANT_DIG    64
-#define LDBL_DIG         18
-#define LDBL_MIN_EXP     (-16381)
-#define LDBL_MIN_10_EXP  (-4931)
-#define LDBL_MAX_EXP     16384
-#define LDBL_MAX_10_EXP  4932
-#define LDBL_EPSILON     1.0842021724855044340075E-19L
-#define LDBL_MIN         3.3621031431120935063E-4932L
-#define LDBL_MAX         1.1897314953572317650E+4932L
-#define LDBL_TRUE_MIN    3.6451995318824746025E-4951L
-#define LDBL_HAS_SUBNORM 1
-#define LDBL_DECIMAL_DIG 21
-#else
+// c5 stores `long double` as an 8-byte IEEE binary64 on every target
+// (see std-conformance.md), so its characteristics equal `double`'s.
+// Advertising the System V x86_64 80-bit row here would let a program
+// load LDBL_MAX (1.18e4932, unrepresentable in binary64 -> +inf) or
+// iterate to LDBL_EPSILON (1e-19, below the real binary64 epsilon).
 #define LDBL_MANT_DIG    DBL_MANT_DIG
 #define LDBL_DIG         DBL_DIG
 #define LDBL_MIN_EXP     DBL_MIN_EXP
@@ -69,7 +56,6 @@
 #define LDBL_TRUE_MIN    DBL_TRUE_MIN
 #define LDBL_HAS_SUBNORM DBL_HAS_SUBNORM
 #define LDBL_DECIMAL_DIG DBL_DECIMAL_DIG
-#endif
 
 // C99 5.2.4.2.2: evaluation method used for float expressions.
 //   0 = evaluate at operand type

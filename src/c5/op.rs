@@ -2,9 +2,11 @@
 /// cover the FFT-class scratch buffer (~4 KB of float
 /// temporaries) and smaller block-array workspaces with
 /// headroom, without bloating every alloca-using frame to a
-/// megabyte. Functions that need more than this end up
-/// corrupting the saved-x19 / pool area below the arena.
-/// TODO: bounds-check the alloca cursor against the arena.
+/// megabyte. A function that allocates past the arena traps at
+/// runtime: the emit bounds-checks the bumped cursor against the
+/// arena floor instead of letting it scribble the saved-register /
+/// pool area below. TODO: lower alloca to a real stack-pointer
+/// decrement to support arbitrarily large allocations.
 pub const ALLOCA_ARENA_SLOTS: i64 = 1024;
 
 /// Compiler-builtin intrinsic discriminant. Each lowering target

@@ -874,6 +874,13 @@ impl Compiler {
         self.pending.fn_ptr_chain_depth = -1;
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            // C99 6.8.1p3: a label name must be unique within its
+            // function (constraint). Two labeled statements with the same
+            // name would intern one SSA block and re-terminate it in the
+            // walker.
+            if self.labels.iter().any(|n| n == &name) {
+                return Err(self.compile_err(format!("redefinition of label `{name}`")));
+            }
             self.labels.push(name.clone());
             let label = self.ast_label_by_name(&name);
             self.next()?; // consume Id
@@ -977,10 +984,24 @@ impl Compiler {
             // expression chain (`a ? b : c`), so we go in at the top.
             let val = self.parse_constant_int()?;
             self.consume(b':', "expected colon after case")?;
-            let Some(cases) = self.switch_cases.last_mut() else {
-                return Err(self.compile_err("case outside switch"));
+            // C99 6.8.4.2p3: the case constant expressions in one switch
+            // must be distinct (constraint). Reject a duplicate rather
+            // than dedup it into the first case's block, which would
+            // re-terminate that block in the walker.
+            let dup_case = match self.switch_cases.last_mut() {
+                Some(cases) => {
+                    if cases.contains(&val) {
+                        true
+                    } else {
+                        cases.push(val);
+                        false
+                    }
+                }
+                None => return Err(self.compile_err("case outside switch")),
             };
-            cases.push(val);
+            if dup_case {
+                return Err(self.compile_err(format!("duplicate case value {val} in switch")));
+            }
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a label may precede a declaration. badc parses
             // block-local declarations in the enclosing block loop, where
@@ -998,10 +1019,20 @@ impl Compiler {
         } else if self.lex.tk == Token::Default {
             self.next()?;
             self.consume(b':', "expected colon after default")?;
-            let Some(def) = self.switch_defaults.last_mut() else {
-                return Err(self.compile_err("default outside switch"));
+            // C99 6.8.4.2p3: at most one default label per switch
+            // (constraint). A second default would resolve to the first's
+            // block and re-terminate it in the walker.
+            let dup_default = match self.switch_defaults.last_mut() {
+                Some(def) => {
+                    let seen = *def;
+                    *def = true;
+                    seen
+                }
+                None => return Err(self.compile_err("default outside switch")),
             };
-            *def = true;
+            if dup_default {
+                return Err(self.compile_err("multiple default labels in one switch"));
+            }
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a declaration may follow the `default` label;
             // give the label an empty body and let the enclosing block

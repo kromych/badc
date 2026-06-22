@@ -652,3 +652,54 @@ fn float_int_mixed_addition_auto_promotes() {
     let vm_result = crate::c5::Vm::new(prog).run().unwrap();
     assert_eq!(vm_result, 4);
 }
+
+#[test]
+fn duplicate_case_value_is_rejected() {
+    // C99 6.8.4.2p3: case constant expressions in one switch must be
+    // distinct. Pre-fix this deduped to one block and re-terminated it
+    // (debug panic / release silent miscompile).
+    expect_compile_error(
+        "int main(){ switch(1){ case 1: return 1; case 1: return 2; } return 0; }",
+        "duplicate case value",
+    );
+}
+
+#[test]
+fn duplicate_case_value_in_inner_switch_only() {
+    // Distinct values across nested switches are fine; the duplicate is
+    // detected per switch.
+    let src = "int main(){ switch(1){ case 1: switch(2){ case 1: return 1; } return 2; \
+               case 1: return 3; } return 0; }";
+    expect_compile_error(src, "duplicate case value");
+}
+
+#[test]
+fn multiple_default_labels_rejected() {
+    // C99 6.8.4.2p3: at most one default per switch.
+    expect_compile_error(
+        "int main(){ switch(1){ default: return 1; default: return 2; } }",
+        "multiple default labels",
+    );
+}
+
+#[test]
+fn redefined_goto_label_is_rejected() {
+    // C99 6.8.1p3: a label name is unique within its function.
+    expect_compile_error(
+        "int main(){ goto a; a: a: return 0; }",
+        "redefinition of label",
+    );
+}
+
+#[test]
+fn distinct_cases_default_and_per_function_labels_compile() {
+    // No false positive: distinct case values, a single default, and the
+    // same label name reused in separate functions are all valid.
+    let src = "int f(int x){ if(x) goto a; b: return 1; a: goto b; }\n\
+               int g(int x){ a: return x; }\n\
+               int main(){ int x = 2;\n\
+               switch(x){ case 1: return 1; case 2: return 2; default: return 9; }\n\
+               return f(0) + g(0); }";
+    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 2);
+}

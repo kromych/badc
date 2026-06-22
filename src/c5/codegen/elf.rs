@@ -2909,6 +2909,16 @@ mod tests {
     fn read_u64(buf: &[u8], off: usize) -> u64 {
         u64::from_le_bytes(buf[off..off + 8].try_into().unwrap())
     }
+    /// Read a `#[repr(C)]` record back from the emitted image, the
+    /// inverse of `write_struct`, so a test reads named fields instead of
+    /// hand-computed byte offsets.
+    fn read_struct<T: Copy>(buf: &[u8], off: usize) -> T {
+        assert!(off + core::mem::size_of::<T>() <= buf.len());
+        // SAFETY: `T` is `Copy + #[repr(C)]` at every call site, the
+        // bound is checked above, and the little-endian field order
+        // matches the host (asserted in `write_struct`).
+        unsafe { core::ptr::read_unaligned(buf.as_ptr().add(off) as *const T) }
+    }
 
     #[test]
     fn writes_elf_magic() {
@@ -3380,32 +3390,25 @@ mod tests {
             let dynsym_file_off = (dynsym_vmaddr - load_min) as usize;
             let last_sym_off =
                 dynsym_file_off + (1 + build.imports.imports.len()) * ELF64_SYM_SIZE as usize;
-            let st_info = bytes[last_sym_off + 4];
-            let st_value = read_u64(&bytes, last_sym_off + 8);
+            let sym: super::Elf64Sym = read_struct(&bytes, last_sym_off);
             assert_eq!(
-                st_info,
+                sym.st_info,
                 (STB_GLOBAL << 4) | STT_FUNC,
                 "{machine:?}: export symbol must be STB_GLOBAL | STT_FUNC"
             );
             assert!(
-                st_value > 0,
+                sym.st_value > 0,
                 "{machine:?}: export st_value must be the function VA"
             );
             // A code export must name its real section (.text), not the
             // .interp placeholder, so section-attributing tools classify
-            // it correctly.
-            let st_shndx = u16::from_le_bytes(
-                bytes[last_sym_off + 6..last_sym_off + 8]
-                    .try_into()
-                    .unwrap(),
-            );
-            let e_shoff = read_u64(&bytes, 40);
-            let e_shentsize = u16::from_le_bytes(bytes[58..60].try_into().unwrap()) as u64;
-            let e_shstrndx = u16::from_le_bytes(bytes[62..64].try_into().unwrap()) as u64;
-            let shstr_off =
-                read_u64(&bytes, (e_shoff + e_shstrndx * e_shentsize) as usize + 24) as usize;
-            let sh = (e_shoff + st_shndx as u64 * e_shentsize) as usize;
-            let name_start = shstr_off + read_u32(&bytes, sh) as usize;
+            // it correctly. Resolve st_shndx through the section-header
+            // string table.
+            let eh: super::Elf64Ehdr = read_struct(&bytes, 0);
+            let shdr_at = |idx: u16| eh.e_shoff as usize + idx as usize * eh.e_shentsize as usize;
+            let shstrtab: super::Elf64Shdr = read_struct(&bytes, shdr_at(eh.e_shstrndx));
+            let sec: super::Elf64Shdr = read_struct(&bytes, shdr_at(sym.st_shndx));
+            let name_start = shstrtab.sh_offset as usize + sec.sh_name as usize;
             let name_len = bytes[name_start..].iter().position(|&b| b == 0).unwrap();
             let sec_name = core::str::from_utf8(&bytes[name_start..name_start + name_len]).unwrap();
             assert_eq!(
@@ -3419,23 +3422,20 @@ mod tests {
     // first section header named `want`, resolving names through the
     // section-header string table (e_shstrndx).
     fn find_section(bytes: &[u8], want: &str) -> Option<(u32, u64, u64, u64, u64)> {
-        let e_shoff = read_u64(bytes, 40);
-        let e_shentsize = u16::from_le_bytes(bytes[58..60].try_into().unwrap()) as u64;
-        let e_shnum = u16::from_le_bytes(bytes[60..62].try_into().unwrap()) as u64;
-        let e_shstrndx = u16::from_le_bytes(bytes[62..64].try_into().unwrap()) as u64;
-        let strtab_off =
-            read_u64(bytes, (e_shoff + e_shstrndx * e_shentsize) as usize + 24) as usize;
-        for i in 0..e_shnum {
-            let h = (e_shoff + i * e_shentsize) as usize;
-            let name_start = strtab_off + read_u32(bytes, h) as usize;
+        let eh: super::Elf64Ehdr = read_struct(bytes, 0);
+        let shdr_at = |idx: u64| eh.e_shoff as usize + idx as usize * eh.e_shentsize as usize;
+        let strtab: super::Elf64Shdr = read_struct(bytes, shdr_at(eh.e_shstrndx as u64));
+        for i in 0..eh.e_shnum as u64 {
+            let sh: super::Elf64Shdr = read_struct(bytes, shdr_at(i));
+            let name_start = strtab.sh_offset as usize + sh.sh_name as usize;
             let len = bytes[name_start..].iter().position(|&b| b == 0).unwrap();
             if core::str::from_utf8(&bytes[name_start..name_start + len]).unwrap() == want {
                 return Some((
-                    read_u32(bytes, h + 4),
-                    read_u64(bytes, h + 8),
-                    read_u64(bytes, h + 16),
-                    read_u64(bytes, h + 32),
-                    read_u64(bytes, h + 48),
+                    sh.sh_type,
+                    sh.sh_flags,
+                    sh.sh_addr,
+                    sh.sh_size,
+                    sh.sh_addralign,
                 ));
             }
         }

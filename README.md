@@ -612,3 +612,11 @@ when a higher-level debugger path is blocked. Modes:
 * `--list-segments`: list every PT_LOAD in the core file with
   its vaddr range. Useful for understanding where the stack and
   the emulator's mappings ended up after a corruption.
+
+## Disclaimer for those legally enlightened
+
+This is a personal educational/research project, it has not been
+sponsored or suggested by anyone, i.e. it is a product of my own
+volition. That said, in no event I'll be responsible for how you
+use this project or what happens due to that. See [LICENSE](./LICENSE)
+for the exact terms.

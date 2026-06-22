@@ -1167,13 +1167,11 @@ fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
             },
         }
     } else if bare == Ty::Float as i64 {
-        // c5 keeps `float` at 8 bytes today (no f32 narrowing,
-        // see `pointee_size_no_struct`); the DIE's byte_size
-        // describes the wire layout, so 8 it is until the
-        // narrowing lands.
+        // A scalar `float` is a 4-byte IEEE-754 single (sizeof(float)==4,
+        // LoadKind::F32 reads 4 bytes); the relocatable DWARF path agrees.
         BaseTypeKey {
             name: "float",
-            byte_size: 8,
+            byte_size: 4,
             encoding: DW_ATE_FLOAT,
         }
     } else if bare == Ty::Double as i64 {
@@ -2848,6 +2846,18 @@ mod tests {
         let llp64 = base_of(Ty::Long as i64, Target::WindowsX64);
         assert_eq!(lp64.byte_size, 8);
         assert_eq!(llp64.byte_size, 4);
+    }
+
+    #[test]
+    fn classify_float_is_four_bytes() {
+        // A scalar `float` is a 4-byte IEEE single; the executable and
+        // relocatable DWARF paths must agree (a debugger reading 8 bytes
+        // would mix in adjacent frame memory).
+        let f = base_of(Ty::Float as i64, Target::LinuxX64);
+        assert_eq!(f.byte_size, 4);
+        assert_eq!(f.encoding, DW_ATE_FLOAT);
+        let d = base_of(Ty::Double as i64, Target::LinuxX64);
+        assert_eq!(d.byte_size, 8);
     }
 
     #[test]

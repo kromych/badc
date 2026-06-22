@@ -62,15 +62,12 @@ Disassembly of section .text:
                	incq	%rsi
                	movslq	%esi, %r8
                	movslq	%r8d, %rsi
-               	movl	$0x2, %r9d
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rsi, %rax
-               	cqto
-               	idivq	%r9
-               	movq	%rdx, %rsi
-               	popq	%rdx
-               	popq	%rax
+               	movq	%rsi, %r9
+               	sarq	$0x3f, %r9
+               	shrq	$0x3f, %r9
+               	addq	%r9, %rsi
+               	andq	$0x1, %rsi
+               	subq	%r9, %rsi
                	testq	%rsi, %rsi
                	sete	%r9b
                	movzbq	%r9b, %r9
@@ -124,15 +121,12 @@ Disassembly of section .text:
                	decq	%rsi
                	movslq	%esi, %r8
                	movslq	%r8d, %rsi
-               	movl	$0x2, %r9d
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rsi, %rax
-               	cqto
-               	idivq	%r9
-               	movq	%rdx, %rsi
-               	popq	%rdx
-               	popq	%rax
+               	movq	%rsi, %r9
+               	sarq	$0x3f, %r9
+               	shrq	$0x3f, %r9
+               	addq	%r9, %rsi
+               	andq	$0x1, %rsi
+               	subq	%r9, %rsi
                	testq	%rsi, %rsi
                	sete	%r9b
                	movzbq	%r9b, %r9
@@ -176,4 +170,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

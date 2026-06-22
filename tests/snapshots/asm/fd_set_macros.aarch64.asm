@@ -53,8 +53,8 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x0, x29, #0x80
                	mov	x1, #0x0                // =0
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	add	x1, x1, x1
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w1, [x0]
                	mov	x17, #0x1               // =1
@@ -62,8 +62,9 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	sub	x0, x29, #0x80
                	mov	x1, #0x7                // =7
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w1, [x0]
                	mov	x17, #0x80              // =128
@@ -71,7 +72,9 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	sub	x0, x29, #0x80
                	mov	x1, #0x8                // =8
-               	sdiv	x1, x1, x1
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w1, [x0]
                	mov	x17, #0x1               // =1
@@ -79,8 +82,9 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	sub	x0, x29, #0x80
                	mov	x1, #0x64               // =100
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w1, [x0]
                	mov	x17, #0x10              // =16
@@ -88,8 +92,8 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	sub	x0, x29, #0x80
                	mov	x1, #0x0                // =0
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	add	x1, x1, x1
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x1               // =1
@@ -103,8 +107,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x7                // =7
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x80              // =128
@@ -118,7 +123,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x8                // =8
-               	sdiv	x1, x1, x1
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x1               // =1
@@ -132,8 +139,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x64               // =100
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x10              // =16
@@ -147,8 +155,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x1                // =1
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x2               // =2
@@ -161,8 +170,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x32               // =50
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x4               // =4
@@ -209,8 +219,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x7                // =7
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w1, [x0]
                	mov	x17, #0xff7f            // =65407
@@ -221,8 +232,9 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	sub	x0, x29, #0x80
                	mov	x1, #0x7                // =7
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x80              // =128
@@ -235,8 +247,8 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x0                // =0
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	add	x1, x1, x1
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x1               // =1
@@ -250,7 +262,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x8                // =8
-               	sdiv	x1, x1, x1
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x1               // =1
@@ -264,8 +278,8 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x0                // =0
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	add	x1, x1, x1
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w1, [x0]
                	mov	x17, #0x1               // =1
@@ -273,8 +287,8 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	sub	x0, x29, #0x80
                	mov	x1, #0x0                // =0
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	add	x1, x1, x1
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x1               // =1
@@ -291,8 +305,8 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x0, x29, #0x80
                	mov	x1, #0x0                // =0
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	add	x1, x1, x1
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x1               // =1
@@ -318,8 +332,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	mov	x1, #0x64               // =100
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	mov	x2, #0x0                // =0
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	add	x0, x0, x1
                	ldrb	w0, [x0]
                	mov	x17, #0x10              // =16

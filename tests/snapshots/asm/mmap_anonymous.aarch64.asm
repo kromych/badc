@@ -51,8 +51,7 @@ Disassembly of section .text:
                	add	x1, x1, x17
                	b	<addr>
                	add	x0, x21, x1
-               	mov	x2, #0x1000             // =4096
-               	udiv	x2, x1, x2
+               	lsr	x2, x1, #12
                	add	x2, x2, #0x1
                	mov	x17, #0xff              // =255
                	and	x2, x2, x17
@@ -67,8 +66,7 @@ Disassembly of section .text:
                	b	<addr>
                	add	x0, x21, x22
                	ldrb	w0, [x0]
-               	mov	x1, #0x1000             // =4096
-               	udiv	x1, x22, x1
+               	lsr	x1, x22, #12
                	add	x1, x1, #0x1
                	mov	x17, #0xff              // =255
                	and	x1, x1, x17

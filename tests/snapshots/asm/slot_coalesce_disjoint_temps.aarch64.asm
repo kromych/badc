@@ -57,9 +57,12 @@ Disassembly of section .text:
                	add	x3, x3, #0x1
                	sxtw	x5, w3
                	sxtw	x3, w5
-               	mov	x6, #0x2                // =2
-               	sdiv	x17, x3, x6
-               	msub	x3, x17, x6, x3
+               	asr	x6, x3, #63
+               	lsr	x6, x6, #63
+               	add	x3, x3, x6
+               	mov	x17, #0x1               // =1
+               	and	x3, x3, x17
+               	sub	x3, x3, x6
                	cmp	x3, #0x0
                	cset	x6, eq
                	cbnz	x6, <addr>
@@ -106,9 +109,12 @@ Disassembly of section .text:
                	sub	x3, x3, #0x1
                	sxtw	x5, w3
                	sxtw	x3, w5
-               	mov	x6, #0x2                // =2
-               	sdiv	x17, x3, x6
-               	msub	x3, x17, x6, x3
+               	asr	x6, x3, #63
+               	lsr	x6, x6, #63
+               	add	x3, x3, x6
+               	mov	x17, #0x1               // =1
+               	and	x3, x3, x17
+               	sub	x3, x3, x6
                	cmp	x3, #0x0
                	cset	x6, eq
                	cbnz	x6, <addr>

@@ -244,9 +244,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v198 BinopI { op=shr, lhs=v197, rhs_imm=8 }           -> x0
     v199 BinopI { op=and, lhs=v198, rhs_imm=255 }         -> x0
     v200 Imm(400)                                         -> x1
-    v201 Imm(256)                                         -> x2
-    v202 Binop { op=modu, lhs=v200, rhs=v201 }            -> x1
-    v203 Binop { op=xor, lhs=v199, rhs=v202 }             -> x0
+    v201 Imm(256)                                         -> x1
+    v202 Imm(144)                                         -> x1
+    v203 BinopI { op=xor, lhs=v199, rhs_imm=144 }         -> x0
     v204 BinopI { op=and, lhs=v203, rhs_imm=4294967295 }  -> x0
     v205 BinopI { op=ne, lhs=v204, rhs_imm=0 }            -> x0
     terminator Bz { cond=v205, target=b22, fall=b21 }   (exit_acc=v205)

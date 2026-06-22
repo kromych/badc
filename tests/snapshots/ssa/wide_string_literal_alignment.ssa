@@ -10,7 +10,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=-2, kind=I64 }                   -> x0
     v6   Imm(4)                                           -> x0
-    v7   Binop { op=modu, lhs=v3, rhs=v6 }                -> x0
+    v7   BinopI { op=and, lhs=v3, rhs_imm=3 }             -> x0
     v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> x0
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0

@@ -20,7 +20,7 @@ Disassembly of section .text:
                	movl	$0x32, %ecx
                	movl	$0x19, %edx
                	movl	$0xc, %esi
-               	movl	$0x8, %edi
+               	movl	$0x7, %edi
                	pushq	%rax
                	pushq	%rdx
                	cqto
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movslq	%ebx, %rax
-               	cmpq	$0xd1, %rax
+               	cmpq	$0xd4, %rax
                	jne	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>

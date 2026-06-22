@@ -53,12 +53,12 @@ Disassembly of section .text:
                	incq	%rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movl	$0x2, %esi
-               	pushq	%rdx
-               	cqto
-               	idivq	%rsi
-               	movq	%rdx, %rax
-               	popq	%rdx
+               	movq	%rax, %rsi
+               	sarq	$0x3f, %rsi
+               	shrq	$0x3f, %rsi
+               	addq	%rsi, %rax
+               	andq	$0x1, %rax
+               	subq	%rsi, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	jmp	<addr>

@@ -37,15 +37,11 @@ Disassembly of section .text:
                	addq	$0x20, %rdx
                	movq	%rdx, %rsi
                	subq	%rax, %rsi
-               	movl	$0x10, %edi
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rsi, %rax
-               	cqto
-               	idivq	%rdi
-               	movq	%rax, %rsi
-               	popq	%rdx
-               	popq	%rax
+               	movq	%rsi, %rdi
+               	sarq	$0x3f, %rdi
+               	shrq	$0x3c, %rdi
+               	addq	%rdi, %rsi
+               	sarq	$0x4, %rsi
                	shlq	$0x4, %rsi
                	addq	%rcx, %rsi
                	leaq	-0x30(%rbp), %rdi
@@ -62,12 +58,11 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	%rdx, %rax
                	subq	%r10, %rax
-               	movl	$0x10, %edx
-               	movq	%rdx, %r10
-               	pushq	%rdx
-               	cqto
-               	idivq	%r10
-               	popq	%rdx
+               	movq	%rax, %rdx
+               	sarq	$0x3f, %rdx
+               	shrq	$0x3c, %rdx
+               	addq	%rdx, %rax
+               	sarq	$0x4, %rax
                	shlq	$0x4, %rax
                	movq	%rcx, %rdx
                	addq	$0x10, %rdx
@@ -104,4 +99,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

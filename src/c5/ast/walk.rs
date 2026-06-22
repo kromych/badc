@@ -1619,6 +1619,14 @@ impl<'a> Walker<'a> {
                     lv = b.binop_imm(BinOp::And, lv, mask);
                     rv = b.binop_imm(BinOp::And, rv, mask);
                 }
+                // Strength-reduce divide / modulo by a constant power of
+                // two to shifts / masks. This is the only constant-
+                // divisor fast path: the per-arch `BinopI` emit does not
+                // lower Div / Mod, so they are otherwise excluded from
+                // `imm_safe_op` and divide through the register path.
+                if let Some(reduced) = b.divmod_pow2(*op, lv, rv) {
+                    return Ok(reduced);
+                }
                 // The parser's `maybe_mask_to_unsigned_width`
                 // already pushes the explicit narrow mask /
                 // signed `Shl K; Shr K` pair as additional

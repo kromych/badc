@@ -39,7 +39,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v23  LoadLocal { off=-3, kind=I64 }                   -> x0
     v24  Binop { op=add, lhs=v8, rhs=v15 }                -> x0
     v25  Imm(4096)                                        -> x2
-    v26  Binop { op=divu, lhs=v15, rhs=v25 }              -> x2
+    v26  BinopI { op=shru, lhs=v15, rhs_imm=12 }          -> x2
     v27  BinopI { op=add, lhs=v26, rhs_imm=1 }            -> x2
     v28  BinopI { op=shl, lhs=v27, rhs_imm=56 }           -> x6
     v29  BinopI { op=shr, lhs=v28, rhs_imm=56 }           -> x6
@@ -66,7 +66,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v42  Binop { op=add, lhs=v8, rhs=v33 }                -> x0
     v43  Load { addr=v42, disp=0, kind=I8 }               -> x0
     v44  Imm(4096)                                        -> x1
-    v45  Binop { op=divu, lhs=v33, rhs=v44 }              -> x1
+    v45  BinopI { op=shru, lhs=v33, rhs_imm=12 }          -> x1
     v46  BinopI { op=add, lhs=v45, rhs_imm=1 }            -> x1
     v47  BinopI { op=shl, lhs=v46, rhs_imm=56 }           -> x1
     v48  BinopI { op=shr, lhs=v47, rhs_imm=56 }           -> x1

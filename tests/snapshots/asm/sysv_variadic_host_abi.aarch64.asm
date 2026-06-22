@@ -63,9 +63,12 @@ Disassembly of section .text:
                	add	x1, x0, #0x1
                	b	<addr>
                	sxtw	x0, w1
-               	mov	x3, #0x2                // =2
-               	sdiv	x17, x0, x3
-               	msub	x0, x17, x3, x0
+               	asr	x3, x0, #63
+               	lsr	x3, x3, #63
+               	add	x0, x0, x3
+               	mov	x17, #0x1               // =1
+               	and	x0, x0, x17
+               	sub	x0, x0, x3
                	cmp	x0, #0x0
                	b.ne	<addr>
                	b	<addr>

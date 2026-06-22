@@ -52,8 +52,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x1, x0
-               	mov	x2, #0x8                // =8
-               	sdiv	x1, x1, x2
+               	asr	x2, x1, #63
+               	lsr	x2, x2, #61
+               	add	x1, x1, x2
+               	asr	x1, x1, #3
                	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

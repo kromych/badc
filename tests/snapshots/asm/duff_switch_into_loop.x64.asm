@@ -20,20 +20,21 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	addq	$0x7, %rax
                	movslq	%eax, %rax
-               	movl	$0x8, %ecx
-               	pushq	%rax
-               	pushq	%rdx
-               	cqto
-               	idivq	%rcx
+               	movq	%rax, %rcx
+               	sarq	$0x3f, %rcx
+               	shrq	$0x3d, %rcx
+               	addq	%rcx, %rax
                	movq	%rax, %rsi
-               	popq	%rdx
-               	popq	%rax
-               	pushq	%rdx
+               	sarq	$0x3, %rsi
                	movq	%rdx, %rax
-               	cqto
-               	idivq	%rcx
-               	movq	%rdx, %rax
-               	popq	%rdx
+               	sarq	$0x3f, %rax
+               	shrq	$0x3d, %rax
+               	movq	%rdx, %rcx
+               	addq	%rax, %rcx
+               	andq	$0x7, %rcx
+               	movq	%rax, %r10
+               	movq	%rcx, %rax
+               	subq	%r10, %rax
                	cmpq	$0x4, %rax
                	jl	<addr>
                	jmp	<addr>

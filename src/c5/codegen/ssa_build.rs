@@ -615,6 +615,53 @@ impl SsaBuilder {
         id
     }
 
+    /// Strength-reduce `Div` / `Divu` / `Mod` / `Modu` by a constant
+    /// positive power of two to shifts / masks; the hardware divide is
+    /// multi-cycle. Returns `None` when `op` is not a divide / modulo
+    /// or `rhs` is not a power-of-two immediate, leaving the caller on
+    /// the register-rhs divide path (the per-arch `BinopI` emit does
+    /// not lower Div / Mod). The divmod emit divides the 64-bit operand
+    /// -- narrow types are sign/zero-extended first -- so the rewrites
+    /// are evaluated at the same width.
+    pub(crate) fn divmod_pow2(&mut self, op: BinOp, lhs: ValueId, rhs: ValueId) -> Option<ValueId> {
+        let d = self.peek_imm(rhs)?;
+        if d <= 0 || !(d as u64).is_power_of_two() {
+            return None;
+        }
+        let k = d.trailing_zeros() as i64; // 0..=62 (d > 0 fits i64)
+        let mask = d - 1; // 2^k - 1
+        Some(match op {
+            // Unsigned: `x / 2^k == x >>u k`, `x % 2^k == x & (2^k-1)`.
+            // The k == 0 (divisor 1) forms fold to the shift / mask
+            // identities in `binop_imm`.
+            BinOp::Divu => self.binop_imm(BinOp::Shru, lhs, k),
+            BinOp::Modu => self.binop_imm(BinOp::And, lhs, mask),
+            // Signed division truncates toward zero (C99 6.5.5p6), so a
+            // negative dividend takes a bias of 2^k - 1 before the
+            // arithmetic shift. `bias = (x >>s 63) >>u (64 - k)`: all
+            // ones masked to 2^k - 1 when x < 0, else 0.
+            BinOp::Div if k >= 1 => {
+                let sign = self.binop_imm(BinOp::Shr, lhs, 63);
+                let bias = self.binop_imm(BinOp::Shru, sign, 64 - k);
+                let adj = self.binop(BinOp::Add, lhs, bias);
+                self.binop_imm(BinOp::Shr, adj, k)
+            }
+            // Signed `x % 2^k == ((x + bias) & (2^k-1)) - bias` with the
+            // same bias, giving a remainder with the sign of x.
+            BinOp::Mod if k >= 1 => {
+                let sign = self.binop_imm(BinOp::Shr, lhs, 63);
+                let bias = self.binop_imm(BinOp::Shru, sign, 64 - k);
+                let adj = self.binop(BinOp::Add, lhs, bias);
+                let masked = self.binop_imm(BinOp::And, adj, mask);
+                self.binop(BinOp::Sub, masked, bias)
+            }
+            // Divisor 1 (k == 0): division is identity, modulo is 0.
+            BinOp::Div => lhs,
+            BinOp::Mod => self.imm(0),
+            _ => return None,
+        })
+    }
+
     /// If `v` names an `Inst::Imm` in the current function, return
     /// its constant value. Callers in the walker use this to fold
     /// `Binop(op, X, Imm_value)` into `BinopI` when the rhs walked

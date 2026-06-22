@@ -17,8 +17,9 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0xb8               // =184
-               	mov	x1, #0x8                // =8
-               	sdiv	x0, x0, x1
+               	mov	x1, #0x0                // =0
+               	add	x0, x0, x1
+               	asr	x0, x0, #3
                	cmp	x0, #0x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

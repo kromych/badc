@@ -19,7 +19,7 @@ Disassembly of section .text:
                	mov	x1, #0x32               // =50
                	mov	x2, #0x19               // =25
                	mov	x3, #0xc                // =12
-               	mov	x4, #0x8                // =8
+               	mov	x4, #0x7                // =7
                	sdiv	x5, x0, x4
                	sdiv	x6, x1, x4
                	sdiv	x7, x2, x4
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	sxtw	x0, w20
-               	cmp	x0, #0xd1
+               	cmp	x0, #0xd4
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
                	b	<addr>

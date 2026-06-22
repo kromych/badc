@@ -18,14 +18,8 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	leaq	<rip>, %r12
-               	movl	$0x4, %eax
-               	movq	%rax, %r10
-               	pushq	%rdx
                	movq	%r12, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	movq	%rdx, %rax
-               	popq	%rdx
+               	andq	$0x3, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax

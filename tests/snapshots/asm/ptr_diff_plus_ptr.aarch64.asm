@@ -35,8 +35,10 @@ Disassembly of section .text:
                	sub	x2, x29, #0x30
                	add	x2, x2, #0x20
                	sub	x3, x2, x0
-               	mov	x4, #0x10               // =16
-               	sdiv	x3, x3, x4
+               	asr	x4, x3, #63
+               	lsr	x4, x4, #60
+               	add	x3, x3, x4
+               	asr	x3, x3, #4
                	lsl	x3, x3, #4
                	add	x3, x3, x1
                	sub	x4, x29, #0x30
@@ -48,8 +50,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x2, x0
-               	mov	x2, #0x10               // =16
-               	sdiv	x0, x0, x2
+               	asr	x2, x0, #63
+               	lsr	x2, x2, #60
+               	add	x0, x0, x2
+               	asr	x0, x0, #4
                	lsl	x0, x0, #4
                	add	x2, x1, #0x10
                	add	x0, x0, x2

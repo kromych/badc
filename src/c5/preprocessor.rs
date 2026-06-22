@@ -1482,6 +1482,13 @@ impl Preprocessor {
         line_no: usize,
         blocklist: &Blocklist,
     ) -> String {
+        // Bound the expansion nesting so a pathologically deep (but
+        // blocklist-terminating) macro does not overflow the native
+        // stack. Past the bound the current text is left unexpanded
+        // rather than recursing further.
+        if blocklist.depth() > MAX_MACRO_DEPTH {
+            return line.to_string();
+        }
         let bytes = line.as_bytes();
         let mut out = String::with_capacity(line.len());
         let mut i = 0;
@@ -2752,6 +2759,22 @@ impl Blocklist<'_> {
             }
         }
     }
+
+    /// Number of active expansion frames. Each nested macro expansion
+    /// pushes one, so this is the substitution recursion depth.
+    fn depth(&self) -> usize {
+        let mut cur = self;
+        let mut n = 0;
+        loop {
+            match cur {
+                Blocklist::Nil => return n,
+                Blocklist::Cons(_, parent) | Blocklist::Many(_, parent) => {
+                    n += 1;
+                    cur = parent;
+                }
+            }
+        }
+    }
 }
 
 /// Strip C-style `/* ... */` block comments and `// ...` line
@@ -3733,15 +3756,38 @@ impl IfValue {
 /// (resolved through the macro table -- undefined names evaluate to
 /// 0), parenthesised sub-expressions, and string literals (preserved
 /// for the c5-extension `==`/`!=` shape).
+/// Recursion bound for the `#if` controlling-expression parser. Each
+/// level descends the full precedence cascade (a dozen frames), so the
+/// bound is conservative enough to hold within a 1 MiB stack (the
+/// Windows main-thread default). Real `#if` expressions nest only a few
+/// parentheses deep; past the bound, deeply nested or generator-produced
+/// input yields a diagnostic instead of a stack-overflow abort.
+const MAX_IF_EXPR_DEPTH: usize = 100;
+
+/// Recursion bound for macro substitution. Each expansion frame is
+/// cheap, so this can sit higher than the `#if`-expression bound while
+/// still keeping a pathologically deep (but blocklist-terminating)
+/// expansion from overflowing the stack.
+const MAX_MACRO_DEPTH: usize = 200;
+
 struct IfExprParser<'a> {
     src: &'a str,
     pos: usize,
     pp: &'a Preprocessor,
+    /// Recursion depth, bounded by [`MAX_IF_EXPR_DEPTH`]. Every recursive
+    /// cycle in the grammar passes through `parse_unary`, so the bound is
+    /// checked there.
+    depth: usize,
 }
 
 impl<'a> IfExprParser<'a> {
     fn new(src: &'a str, pp: &'a Preprocessor) -> Self {
-        Self { src, pos: 0, pp }
+        Self {
+            src,
+            pos: 0,
+            pp,
+            depth: 0,
+        }
     }
     fn at_end(&self) -> bool {
         self.pos >= self.src.len()
@@ -4004,6 +4050,22 @@ impl<'a> IfExprParser<'a> {
     }
 
     fn parse_unary(&mut self) -> Result<IfValue, C5Error> {
+        // Every recursive cycle (parentheses through the precedence
+        // cascade, ternary arms, and unary chains) reaches `parse_unary`,
+        // so bounding its depth bounds the whole grammar.
+        self.depth += 1;
+        if self.depth > MAX_IF_EXPR_DEPTH {
+            self.depth -= 1;
+            return Err(C5Error::Compile(
+                "preprocessor: `#if` expression nested too deeply".to_string(),
+            ));
+        }
+        let r = self.parse_unary_inner();
+        self.depth -= 1;
+        r
+    }
+
+    fn parse_unary_inner(&mut self) -> Result<IfValue, C5Error> {
         self.skip_ws();
         if self.eat_byte(b'!') {
             let v = self.parse_unary()?;

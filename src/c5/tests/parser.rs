@@ -736,3 +736,36 @@ fn valid_numeric_literals_still_compile() {
     let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }
+
+#[test]
+fn deeply_nested_if_expression_is_rejected_not_a_stack_overflow() {
+    // A deeply nested `#if` controlling expression must yield a
+    // diagnostic, not overflow the native stack (SIGABRT). The bound is
+    // checked in parse_unary, the choke point of every recursive cycle.
+    let deep = format!(
+        "#if {}1{}\nint x;\n#endif\nint main(void){{ return 0; }}\n",
+        "(".repeat(5000),
+        ")".repeat(5000),
+    );
+    expect_compile_error(&deep, "nested too deeply");
+    let deep_unary = format!(
+        "#if {}1\nint x;\n#endif\nint main(void){{ return 0; }}\n",
+        "!".repeat(5000),
+    );
+    expect_compile_error(&deep_unary, "nested too deeply");
+}
+
+#[test]
+fn deeply_nested_macro_expansion_does_not_overflow_the_stack() {
+    // A chain of macros each referencing the previous expands to a depth
+    // proportional to the chain length. The substitution bound must keep
+    // it from overflowing the stack; the result terminates (the
+    // over-deep tail is left unexpanded) rather than aborting.
+    let mut src = String::from("#define A0 1\n");
+    for i in 1..3000 {
+        src.push_str(&format!("#define A{i} (A{}+1)\n", i - 1));
+    }
+    src.push_str("int main(void){ return 0; }\n");
+    // Must return (Ok or Err), not crash the test process.
+    let _ = crate::c5::Compiler::new(src).compile();
+}

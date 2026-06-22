@@ -72,11 +72,7 @@ Disassembly of section .text:
                	cbz	x3, <addr>
                	b	<addr>
                	sxtw	x1, w2
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x2, x1, x17
+               	sub	x2, x1, #0x1
                	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0x0

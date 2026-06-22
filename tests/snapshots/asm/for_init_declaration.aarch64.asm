@@ -38,11 +38,7 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	add	x2, x2, #0x1
                	sxtw	x1, w1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x1, x1, x17
+               	sub	x1, x1, #0x1
                	b	<addr>
                	sxtw	x0, w0
                	sxtw	x3, w2

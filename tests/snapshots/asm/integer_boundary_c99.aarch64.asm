@@ -220,11 +220,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x17, #0xff              // =255
                	and	x0, x20, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x0, x0, x17
+               	sub	x0, x0, #0x1
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -296,11 +292,7 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	b	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x0, x20, x17
+               	sub	x0, x20, #0x1
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -372,11 +364,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	b	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x0, x0, x17
+               	sub	x0, x0, #0x1
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -616,11 +604,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	b	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x0, x0, x17
+               	sub	x0, x0, #0x1
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -781,11 +765,7 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	b	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x0, x20, x17
+               	sub	x0, x20, #0x1
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

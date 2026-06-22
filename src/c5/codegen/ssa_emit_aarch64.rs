@@ -5562,14 +5562,33 @@ fn emit_binop_imm(
         None
     };
     let imm12 = u32::try_from(rhs_imm).ok().filter(|v| *v < (1u32 << 12));
+    // Magnitude of a negative immediate that fits the 12-bit field.
+    // `x + (-k) == x - k` and `x - (-k) == x + k` in two's complement,
+    // so an Add / Sub with a small negative immediate swaps to the
+    // other form's direct encoding instead of materialising the
+    // sign-extended constant (movz + 3x movk) into a scratch register.
+    let imm12_neg = if rhs_imm < 0 {
+        let m = rhs_imm.unsigned_abs();
+        if m < (1u64 << 12) {
+            u32::try_from(m).ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let used_peephole = match op {
         BinOp::Shl => shift_amount.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
         BinOp::Shr => shift_amount.map(|s| super::aarch64::enc_asr_imm(rd, rn, s)),
         BinOp::Shru => shift_amount.map(|s| super::aarch64::enc_lsr_imm(rd, rn, s)),
         BinOp::Ror => shift_amount.map(|s| super::aarch64::enc_ror_imm(rd, rn, s)),
         BinOp::Mul => imm_pow2_shift.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
-        BinOp::Add => imm12.map(|v| enc_add_imm(rd, rn, v)),
-        BinOp::Sub => imm12.map(|v| enc_sub_imm(rd, rn, v)),
+        BinOp::Add => imm12
+            .map(|v| enc_add_imm(rd, rn, v))
+            .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v))),
+        BinOp::Sub => imm12
+            .map(|v| enc_sub_imm(rd, rn, v))
+            .or_else(|| imm12_neg.map(|v| enc_add_imm(rd, rn, v))),
         // `x & 0xffffffff` zero-extends the low word; a 32-bit move does
         // it in one instruction, avoiding the load-imm64 + and-register
         // pair (the immediate has no logical-immediate-AND short form

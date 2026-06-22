@@ -111,11 +111,7 @@ Disassembly of section .text:
                	strb	w0, [x1]
                	b	<addr>
                	sxtw	x0, w3
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x3, x0, x17
+               	sub	x3, x0, #0x1
                	sxtw	x0, w3
                	cmp	x0, #0x0
                	b.gt	<addr>

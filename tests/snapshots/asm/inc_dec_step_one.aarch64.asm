@@ -26,11 +26,7 @@ Disassembly of section .text:
                	ret
 
 <minus_neg_one>:
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	sub	x0, x0, x17
+               	add	x0, x0, #0x1
                	ret
 
 <count_up>:
@@ -89,11 +85,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x29               // =41
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	sub	x0, x0, x17
+               	add	x0, x0, #0x1
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

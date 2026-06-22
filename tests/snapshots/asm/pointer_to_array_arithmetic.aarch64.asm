@@ -76,11 +76,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x1, x0, #0x20
-               	mov	x17, #0xfff8            // =65528
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x1, x1, x17
+               	sub	x1, x1, #0x8
                	sub	x0, x1, x0
                	cmp	x0, #0x18
                	b.eq	<addr>

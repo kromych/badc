@@ -20,9 +20,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -37,9 +35,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -54,9 +50,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -75,9 +69,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

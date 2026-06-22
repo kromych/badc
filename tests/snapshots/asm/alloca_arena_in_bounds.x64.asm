@@ -62,10 +62,9 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movq	%rax, -0x2030(%rbp)
                	movq	-0x2030(%rbp), %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x2040, %rsp           # imm = 0x2040
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

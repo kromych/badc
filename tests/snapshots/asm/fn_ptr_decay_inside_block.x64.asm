@@ -19,9 +19,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	addq	$0x64, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -38,11 +36,9 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq

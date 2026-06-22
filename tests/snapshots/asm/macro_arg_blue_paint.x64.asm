@@ -17,9 +17,7 @@ Disassembly of section .text:
                	movq	%r13, (%rsp)
                	movq	%rsi, (%rdi)
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -31,9 +29,7 @@ Disassembly of section .text:
                	movq	%r13, (%rsp)
                	movq	(%rdi), %rax
                	movslq	(%rax), %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -45,9 +41,7 @@ Disassembly of section .text:
                	movq	%r13, (%rsp)
                	movq	(%rdi), %rax
                	movslq	(%rax), %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -61,9 +55,7 @@ Disassembly of section .text:
                	movslq	(%rax), %rax
                	addq	$0x7, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -85,9 +77,7 @@ Disassembly of section .text:
                	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0xb, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
@@ -97,9 +87,7 @@ Disassembly of section .text:
                	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0xc, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
@@ -111,16 +99,12 @@ Disassembly of section .text:
                	cmpq	$0x6b, %rax
                	je	<addr>
                	movl	$0xd, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq

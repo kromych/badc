@@ -24,10 +24,9 @@ Disassembly of section .text:
                	cmpq	$0x2, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

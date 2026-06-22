@@ -21,9 +21,7 @@ Disassembly of section .text:
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -40,9 +38,7 @@ Disassembly of section .text:
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq

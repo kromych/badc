@@ -23,9 +23,7 @@ Disassembly of section .text:
                	movzwq	0x2(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -45,9 +43,7 @@ Disassembly of section .text:
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -71,9 +67,7 @@ Disassembly of section .text:
                	movsbq	0x3(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -117,10 +111,8 @@ Disassembly of section .text:
                	cmpq	$0x1244, %rax           # imm = 0x1244
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x4d0, %rsp            # imm = 0x4D0
                	popq	%rbp
                	retq
@@ -161,10 +153,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movl	$0x2, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x4d0, %rsp            # imm = 0x4D0
                	popq	%rbp
                	retq
@@ -208,19 +198,14 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movl	$0x3, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x4d0, %rsp            # imm = 0x4D0
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x4d0, %rsp            # imm = 0x4D0
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

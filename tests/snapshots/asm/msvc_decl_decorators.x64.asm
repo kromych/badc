@@ -19,9 +19,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	incq	%rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -32,9 +30,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%r13, (%rsp)
                	movl	$0x3, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -48,9 +44,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -73,9 +67,7 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

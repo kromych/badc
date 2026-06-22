@@ -31,9 +31,7 @@ Disassembly of section .text:
                	shrq	%cl, %rax
                	popq	%rcx
                	orq	%rcx, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -700,13 +698,11 @@ Disassembly of section .text:
                	shrq	$0x6, %rax
                	orq	%rcx, %rax
                	movl	%eax, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
                	movq	0x18(%rsp), %r15
                	movq	0x20(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x600, %rsp            # imm = 0x600
                	popq	%rbp
                	retq
@@ -752,13 +748,10 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	andq	$0xff, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
                	movq	0x18(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

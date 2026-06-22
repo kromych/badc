@@ -473,6 +473,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("switch_label_after_terminator.c", 0),
     ("unsigned_div_in_assign.c", 0),
     ("strength_reduce_pow2_divmod.c", 0),
+    ("return_callee_saved_value.c", 0),
     ("fp_param_ternary.c", 0),
     ("hex_float_literal.c", 0),
     ("bool_normalize_c99.c", 0),

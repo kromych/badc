@@ -20,9 +20,7 @@ Disassembly of section .text:
                	movsbq	(%rsi), %rdx
                	addq	%rdx, %rcx
                	movl	%ecx, (%r8)
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -38,9 +36,7 @@ Disassembly of section .text:
                	movq	%rax, %r11
                	callq	*%r11
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

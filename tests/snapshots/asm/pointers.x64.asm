@@ -21,11 +21,8 @@ Disassembly of section .text:
                	movl	$0xc8, %ecx
                	movl	%ecx, (%rax)
                	movslq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

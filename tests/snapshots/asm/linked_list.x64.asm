@@ -47,13 +47,10 @@ Disassembly of section .text:
                	movq	0x8(%r14), %r14
                	jmp	<addr>
                	movslq	%r12d, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
                	movq	0x18(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

@@ -17,10 +17,7 @@ Disassembly of section .text:
                	movq	%r13, (%rsp)
                	leaq	<rip>, %rax
                	movsbq	0x5(%rax), %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

@@ -20,9 +20,7 @@ Disassembly of section .text:
                	jl	<addr>
                	jmp	<addr>
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -39,4 +37,3 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

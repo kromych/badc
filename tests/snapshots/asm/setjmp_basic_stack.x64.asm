@@ -20,10 +20,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x220, %rsp            # imm = 0x220
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

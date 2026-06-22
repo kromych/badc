@@ -60,10 +60,9 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm14
                	cvtss2sd	%xmm14, %xmm0
                	cvttsd2si	%xmm0, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

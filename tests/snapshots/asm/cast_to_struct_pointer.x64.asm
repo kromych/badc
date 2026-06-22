@@ -23,10 +23,9 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	movq	%rdx, 0x8(%rax)
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

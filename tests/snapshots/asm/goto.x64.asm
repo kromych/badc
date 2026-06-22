@@ -24,9 +24,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -35,4 +33,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movl	%eax, -0x8(%rbp)
                	jmp	<addr>
-               	addb	%al, (%rax)

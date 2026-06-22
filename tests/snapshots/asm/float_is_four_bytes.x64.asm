@@ -351,11 +351,9 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movl	$0x10, %ebx
                	movslq	%ebx, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
@@ -372,4 +370,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

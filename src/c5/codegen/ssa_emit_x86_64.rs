@@ -7406,16 +7406,16 @@ fn emit_return(
     func: &FunctionSsa,
     abi: super::Abi,
 ) {
-    // The integer return value may live in a callee-saved
-    // register that the prologue saved and the epilogue is about
-    // to restore (e.g. rbx, r12). When the function has any such
-    // register the restore loop writes them, so stage the value
-    // through rcx (caller-saved, never in `gpr_used`) before the
-    // restore overwrites the source and move rcx into rax after.
-    // Functions with no callee-saved GPRs to restore (the common
-    // case after frame elision lands on leaf-shaped bodies) take
-    // the direct path: a single `mov rax, src` -- or nothing when
-    // src already lives in rax. FP returns ride xmm0 directly;
+    // Staging through rcx is needed only when the return value
+    // itself lives in a callee-saved register the epilogue is about
+    // to restore (e.g. rbx, r12): the restore would overwrite the
+    // source before it reaches rax. rcx is caller-saved and never in
+    // `gpr_used`, so it survives the restore. In every other case --
+    // the value already in rax, in a caller-saved register, or in a
+    // spill slot the restore does not touch -- the epilogue restores
+    // first, then places the value into rax directly (`mov rax, src`,
+    // or nothing when src already lives in rax). FP returns ride xmm0
+    // directly;
     // xmm0 is outside the GPR restore loop, but the integer
     // mirror into rax happens after the restore so the bit
     // pattern is available to int-shaped callers.
@@ -7513,7 +7513,7 @@ fn emit_return(
         || (value != super::super::ir::NO_VALUE
             && (value as usize) < func.insts.len()
             && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));
-    let needs_staging = !alloc.gpr_used.is_empty();
+    let needs_staging = matches!(return_place, Place::IntReg(r) if alloc.gpr_used.contains(&r));
     let staged_int = if needs_staging {
         match return_place {
             Place::IntReg(r) if r != Reg::RCX.0 => {

@@ -792,6 +792,36 @@ pub(super) fn emit_movsd_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: 
     emit_i32(code, disp);
 }
 
+/// `MOVUPS m128, xmm` -- store a full 128-bit xmm to memory with no
+/// alignment requirement. Preserves a Win64 non-volatile xmm
+/// (xmm6..xmm15) the emit pass uses as FP scratch; the whole 128 bits
+/// are saved because the caller's value may occupy the upper lanes.
+/// Encoding: `0F 11 /r` with a `[base + disp32]` SIB operand.
+pub(super) fn emit_movups_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x11);
+    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
+    emit_byte(code, sib(0, 0b100, base.lo()));
+    emit_i32(code, disp);
+}
+
+/// `MOVUPS xmm, m128` -- load a full 128-bit xmm from memory with no
+/// alignment requirement. Restores a saved Win64 non-volatile xmm.
+/// Encoding: `0F 10 /r` with a `[base + disp32]` SIB operand.
+pub(super) fn emit_movups_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x10);
+    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
+    emit_byte(code, sib(0, 0b100, base.lo()));
+    emit_i32(code, disp);
+}
+
 /// `MOVAPD xmm, xmm` -- register-to-register copy of a 128-bit
 /// SSE2 packed-double. The scalar form is overkill but
 /// instruction-size identical to MOVSD and avoids the

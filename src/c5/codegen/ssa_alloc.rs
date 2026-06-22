@@ -302,6 +302,39 @@ fn function_clobbers_r13(func: &FunctionSsa, spill_count: u32) -> bool {
     })
 }
 
+/// Win64 non-volatile xmm registers the x86_64 emit pass uses as fixed
+/// FP scratch and must preserve. The handlers stage spilled FP
+/// destinations and materialised operands through xmm14, break FP move
+/// cycles / build fneg-fabs sign masks / narrow f64->f32 through xmm15,
+/// and the FMA lowering uses xmm13 as a third operand slot. All three
+/// sit in the Win64 callee-saved range (xmm6..xmm15), so a function that
+/// performs any FP work must save and restore the caller's value -- a
+/// foreign (clang/cl) caller holding a live value there across a call
+/// into c5 code would otherwise see it corrupted. The check keys on the
+/// presence of any FP-classed value: every xmm14/15 use materialises or
+/// produces an FP value, so an FP scratch use implies such an
+/// instruction. SysV marks every xmm volatile, so this applies to Win64
+/// only.
+fn function_clobbers_xmm_scratch(func: &FunctionSsa) -> Vec<u8> {
+    // Tail-call forwarders jmp out with no epilogue, so a saved xmm could
+    // never be restored; they touch no FP scratch either.
+    if func
+        .blocks
+        .iter()
+        .any(|b| matches!(b.terminator, Terminator::TailExt(_)))
+    {
+        return Vec::new();
+    }
+    if !func.insts.iter().any(produces_fp_result) {
+        return Vec::new();
+    }
+    let mut regs = alloc::vec![14u8, 15u8];
+    if func.insts.iter().any(|i| matches!(i, Inst::Fma { .. })) {
+        regs.push(13);
+    }
+    regs
+}
+
 pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
@@ -444,10 +477,24 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     {
         gpr_used_callee.push(13);
     }
-    let fp_used_callee: Vec<u8> = fp_used
+    let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r))
         .collect();
+    // The x86_64 writer borrows xmm13/14/15 as fixed FP scratch. They are
+    // volatile under System V but callee-saved under Win64, so a Win64
+    // function that performs FP work must preserve the caller's value.
+    // They sit outside `callee_fprs` (never allocator values), so the
+    // filter above drops them; list the ones the body touches here so the
+    // prologue / epilogue's FP-save loop preserves them, mirroring the
+    // r13 GPR handling above.
+    if matches!(target, Target::WindowsX64) {
+        for r in function_clobbers_xmm_scratch(func) {
+            if !fp_used_callee.contains(&r) {
+                fp_used_callee.push(r);
+            }
+        }
+    }
     let mut use_counts = compute_use_counts(func);
     // Recognise the c5 sign-narrow shape:
     //   Shl(X, K) ; Shr(_, K)   with K in {32, 48, 56}
@@ -1945,14 +1992,63 @@ int main(void) { return 0; }
                     );
                 }
             }
-            assert!(
-                alloc.fp_used.is_empty(),
-                "Win64 allocation reported callee-saved FP regs {:?} in {}; \
-                 nothing in the x86_64 emit saves them",
-                alloc.fp_used,
-                func.name
+            // `fp_used` may now list the emit pass's fixed FP scratch
+            // (xmm13/14/15), which the prologue/epilogue save and restore
+            // on Win64. No other non-volatile xmm may appear: a value
+            // parked outside the scratch set would not be saved.
+            for &r in &alloc.fp_used {
+                assert!(
+                    matches!(r, 13..=15),
+                    "Win64 fp_used in {} lists xmm{r}, not a saved scratch reg",
+                    func.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn win64_fp_function_saves_nonvolatile_xmm_scratch() {
+        // The x86_64 emit pass uses xmm14/15 (and xmm13 for FMA) as fixed
+        // FP scratch; they are non-volatile under Win64, so a function
+        // that performs FP work must report them in `fp_used` for the
+        // prologue/epilogue to preserve. System V marks every xmm
+        // volatile, so the same body reports none.
+        let fp_src = r#"
+double f(double a, double b, double c, double d, double e, double h) {
+    double s = a * b + c * d;
+    s = s * e + h;
+    return s + a * c + b * d;
+}
+int main(void) { return 0; }
+"#;
+        let program = Compiler::new(fp_src.to_string())
+            .compile()
+            .expect("compile");
+        for (target, want_scratch) in [(Target::WindowsX64, true), (Target::LinuxX64, false)] {
+            let funcs =
+                crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target).expect("ssa");
+            let f = funcs.iter().find(|f| f.name == "f").expect("f");
+            let alloc = allocate(f, target);
+            let saves_14_15 = alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15);
+            assert_eq!(
+                saves_14_15, want_scratch,
+                "{target:?}: fp_used = {:?}, expected scratch-saved = {want_scratch}",
+                alloc.fp_used
             );
         }
+
+        // A non-FP function reports no FP scratch even on Win64.
+        let int_src = "int g(int a, int b) { return a * b + a; }\nint main(void){return 0;}";
+        let program = Compiler::new(int_src.to_string())
+            .compile()
+            .expect("compile");
+        let funcs = crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, Target::WindowsX64)
+            .expect("ssa");
+        let g = funcs.iter().find(|f| f.name == "g").expect("g");
+        assert!(
+            allocate(g, Target::WindowsX64).fp_used.is_empty(),
+            "a non-FP Win64 function must save no FP scratch"
+        );
     }
 
     #[test]

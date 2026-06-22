@@ -53,12 +53,13 @@ use super::x86_64::{
     emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r, emit_mov_mem_r, emit_mov_r_imm64,
     emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r, emit_movsd_mem_xmm,
     emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16,
-    emit_movsxd_r_mem, emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_neg_r,
-    emit_or_r_mem, emit_or_rr, emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8,
-    emit_shl_r_cl, emit_shr_r_cl, emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32,
-    emit_subsd, emit_subss, emit_test_rr, emit_ucomisd, emit_ucomiss, emit_vfmadd231sd,
-    emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss,
-    emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xchg_mem_r, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
+    emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem, emit_movzx_r_mem16,
+    emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_neg_r, emit_or_r_mem, emit_or_rr, emit_pop_r,
+    emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl,
+    emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd, emit_subss,
+    emit_test_rr, emit_ucomisd, emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd,
+    emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
+    emit_xchg_mem_r, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
 };
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -93,6 +94,13 @@ pub(super) struct Frame {
     /// stores it as `reg_save_area`; `va_arg` reads from it. 0 when the
     /// callee is not a System V variadic callee.
     pub va_reg_save_off: i32,
+    /// Bytes reserved at the bottom of the frame (lowest addresses, just
+    /// above rsp) for saved non-volatile xmm scratch registers: 16 per
+    /// register in `alloc.fp_used`, 0 on System V (where every xmm is
+    /// volatile). The saved-GPR region sits directly above it, so the
+    /// GPR save/restore offsets shift up by this amount. The values are
+    /// stored with `movups` (no alignment requirement).
+    pub saved_fpr_bytes: u32,
 }
 
 impl Frame {
@@ -139,7 +147,11 @@ impl Frame {
         } else {
             0
         };
-        let frame_bytes = locals_bytes + alloc_spill_bytes + saved_gpr_bytes + va_save_bytes;
+        // Saved non-volatile xmm scratch (Win64): 16 bytes per register,
+        // placed at the bottom of the frame below the saved-GPR region.
+        let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
+        let frame_bytes =
+            locals_bytes + alloc_spill_bytes + saved_gpr_bytes + va_save_bytes + saved_fpr_bytes;
         let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
         // A Win64 variadic callee receives every argument (named and
         // variadic) in a contiguous 8-byte-per-argument region: the
@@ -162,6 +174,7 @@ impl Frame {
             param_cell_stride,
             va_save_bytes,
             va_reg_save_off,
+            saved_fpr_bytes,
         }
     }
 }
@@ -318,6 +331,11 @@ fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation, abi: super
         return false;
     }
     if !alloc.gpr_used.is_empty() {
+        return false;
+    }
+    // A saved non-volatile xmm scratch (Win64) needs a frame to hold it
+    // and an epilogue to restore it.
+    if !alloc.fp_used.is_empty() {
         return false;
     }
     !func.insts.iter().any(|inst| {
@@ -2645,23 +2663,23 @@ fn emit_prologue(
         let rel = (code.len() - fp_save_start) as i32;
         code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
     }
-    // The x86_64 prologue/epilogue and `Frame` reserve no space for
-    // FP-register saves, so the allocator must never hand back a
-    // callee-saved (non-volatile) xmm in `fp_used`: `RegBanks` for
-    // both SysV and Win64 leave `callee_fprs` empty. A non-empty
-    // `fp_used` here would mean an unsaved non-volatile xmm and a
-    // silent caller-state corruption on return (Win64 xmm6..xmm15).
-    debug_assert!(
-        alloc.fp_used.is_empty(),
-        "ICE: x86_64 allocator assigned callee-saved FP registers ({:?}) \
-         but the prologue/epilogue emit no FP save/restore",
-        alloc.fp_used
-    );
-    // Save callee-saved GPRs the allocator reported as used. We
-    // keep them at the bottom of the frame at sp + saved_fpr_bytes
-    // (= 0 on x86_64 since the allocator's fp pool is xmm-only).
+    // The allocator's FP register pool (`callee_fprs`) is empty for both
+    // SysV and Win64, so it never assigns an SSA value to a non-volatile
+    // xmm. The only non-volatile xmm exposure is the emit pass's fixed
+    // FP scratch (xmm13/14/15), which the allocator lists in `fp_used`
+    // for Win64 functions that perform FP work. Save those at the bottom
+    // of the frame (lowest addresses) with the full 128-bit `movups`,
+    // since the caller's value may occupy the upper lanes. SysV leaves
+    // `fp_used` empty.
+    for (i, &r) in alloc.fp_used.iter().enumerate() {
+        let off = (i as i32) * 16;
+        emit_movups_mem_xmm(code, Reg::RSP, off, Reg(r));
+    }
+    // Save callee-saved GPRs the allocator reported as used, directly
+    // above the saved-xmm region at sp + saved_fpr_bytes.
+    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = (i as i32) * 8;
+        let off = saved_fpr_bytes + (i as i32) * 8;
         super::x86_64::emit_mov_mem_r(code, Reg::RSP, off, Reg(r));
     }
     emit_struct_param_scatter(code, func, frame, abi);
@@ -7345,10 +7363,16 @@ fn emit_tail_call(
         return false;
     }
     // Mirror emit_return's epilogue, omitting the return-value
-    // staging (the callee's own `ret` carries the value back).
+    // staging (the callee's own `ret` carries the value back). The
+    // marshalled args ride caller-saved arg registers, disjoint from the
+    // callee-saved GPRs and the non-volatile xmm scratch restored here.
+    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = (i as i32) * 8;
+        let off = saved_fpr_bytes + (i as i32) * 8;
         super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
+    }
+    for (i, &r) in alloc.fp_used.iter().enumerate() {
+        emit_movups_xmm_mem(code, Reg(r), Reg::RSP, (i as i32) * 16);
     }
     if !is_full_leaf(func, frame, alloc, abi) {
         if frame.frame_bytes > 0 {
@@ -7435,8 +7459,17 @@ fn emit_return(
             }
             _ => {}
         }
+        // Restore callee-saved GPRs and saved non-volatile xmm scratch
+        // (the prologue places xmm at the bottom, GPRs above by
+        // saved_fpr_bytes). rcx already holds the struct address and is
+        // caller-saved, so the restore does not disturb it; the return
+        // eightbytes load into the volatile rax/rdx/xmm0/xmm1 below.
+        let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
         for (i, &r) in alloc.gpr_used.iter().enumerate() {
-            super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, (i as i32) * 8);
+            super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, saved_fpr_bytes + (i as i32) * 8);
+        }
+        for (i, &r) in alloc.fp_used.iter().enumerate() {
+            emit_movups_xmm_mem(code, Reg(r), Reg::RSP, (i as i32) * 16);
         }
         // Place each eightbyte in its bank: System V returns SSE eightbytes
         // in xmm0/xmm1 and INTEGER eightbytes in rax/rdx, each in order.
@@ -7508,10 +7541,16 @@ fn emit_return(
             emit_movapd_xmm_xmm(code, Reg::XMM0, dn);
         }
     }
-    // Restore callee-saved GPRs (mirror of the prologue's saves).
+    // Restore callee-saved GPRs and saved non-volatile xmm scratch
+    // (mirror of the prologue's saves: xmm at the bottom, GPRs above).
+    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = (i as i32) * 8;
+        let off = saved_fpr_bytes + (i as i32) * 8;
         super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
+    }
+    for (i, &r) in alloc.fp_used.iter().enumerate() {
+        let off = (i as i32) * 16;
+        emit_movups_xmm_mem(code, Reg(r), Reg::RSP, off);
     }
     if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);

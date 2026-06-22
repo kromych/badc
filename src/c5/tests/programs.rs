@@ -1545,6 +1545,38 @@ fn variadic_call_through_fnptr_delivers_all_args() {
 }
 
 #[test]
+fn variadic_fnptr_proto_erased() {
+    // C99 6.5.2.2: a variadic call through a function pointer whose
+    // prototype is not recoverable from a bare identifier symbol (a
+    // struct field, an array element, or an inline-declared field) must
+    // still split the argument list at the fixed-parameter count so the
+    // host variadic ABI (macOS/AAPCS64 places the tail on the stack)
+    // delivers the variadic tail where the callee's va_arg walks it.
+    assert_eq!(run_fixture("variadic_fnptr_proto_erased.c"), 0);
+}
+
+#[test]
+fn block_extern_shadows_local() {
+    // C99 6.2.1p4 / 6.2.2p4: a block-scope `extern` that shadows an
+    // enclosing local or parameter refers to the file-scope object for
+    // the block and restores the enclosing binding at block exit; an
+    // in-block reference resolves to the same-TU definition (including a
+    // forward reference) rather than clobbering the outer object.
+    assert_eq!(run_fixture("block_extern_shadows_local.c"), 0);
+}
+
+#[test]
+fn win64_xmm_scratch_callee_save() {
+    // The x86_64 emit pass uses xmm13/14/15 as fixed FP scratch, which
+    // Win64 marks non-volatile. An FP function that returns a small
+    // struct by value (the register-aggregate return path) must save and
+    // restore those registers at offsets that match the prologue, or the
+    // epilogue restores callee-saved GPRs from the wrong slot and leaves
+    // the caller's xmm clobbered. Correctness check on every target.
+    assert_eq!(run_fixture("win64_xmm_scratch_callee_save.c"), 0);
+}
+
+#[test]
 #[ignore = "TODO: c5 VM has no shim for strtold / ldexpl; the fixture verifies the SysV x86_64 long-double libc-return convention through the native lane via NATIVE_FIXTURES"]
 fn long_double_libc_return_round_trips() {
     // SysV x86_64 ABI: `long double` libc returns ride in

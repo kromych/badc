@@ -346,6 +346,17 @@ impl Compiler {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
                     self.pending.base_is_function_type =
                         self.symbols[self.lex.curr_id_idx].is_function_type;
+                    // Carry the typedef's pointed-to prototype (parameter
+                    // types + variadic flag) so `s.cb(args)` narrows each
+                    // argument to its declared type and splits fixed vs
+                    // variadic arguments per the host variadic ABI. Mirrors
+                    // the non-aggregate path in `decl_base.rs`.
+                    self.pending.typedef_fn_proto = Some((
+                        self.symbols[self.lex.curr_id_idx].params.len(),
+                        self.symbols[self.lex.curr_id_idx].is_variadic,
+                    ));
+                    self.pending.fn_ptr_param_types =
+                        Some(self.symbols[self.lex.curr_id_idx].params.clone());
                 }
                 self.next()?;
                 aliased
@@ -460,6 +471,7 @@ impl Compiler {
                             bit_unit_size: inner_field.bit_unit_size,
                             fn_ptr_indirection: inner_field.fn_ptr_indirection,
                             params: inner_field.params,
+                            is_variadic: inner_field.is_variadic,
                             anon_union_group: group,
                         });
                     }
@@ -483,6 +495,15 @@ impl Compiler {
             // is a per-declarator output of `parse_declarator`.
             let base_field_fn_ptr_indirection = self.pending.fn_ptr_indirection;
             let base_field_is_function_type = self.pending.base_is_function_type;
+            // A function-pointer typedef base (`fn_t cb;`) seeds its
+            // prototype (parameter types + variadic flag) once; a nested
+            // base-type parse inside `parse_declarator` would clear it, and
+            // the per-declarator `.take()` zeros it for declarators after
+            // the first. Capture and re-seed each iteration so a typedef'd
+            // fn-pointer field inherits the prototype the same way a local
+            // does (an inline declarator prototype still overrides it).
+            let base_field_typedef_fn_proto = self.pending.typedef_fn_proto;
+            let base_field_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
             loop {
                 // Anonymous bitfield (`int :N;`) -- skips a name and
                 // just reserves bits for padding. Detected by `:`
@@ -536,6 +557,8 @@ impl Compiler {
 
                 self.pending.fn_ptr_indirection = base_field_fn_ptr_indirection;
                 self.pending.base_is_function_type = base_field_is_function_type;
+                self.pending.typedef_fn_proto = base_field_typedef_fn_proto;
+                self.pending.fn_ptr_param_types = base_field_fn_ptr_param_types.clone();
                 let (id_idx, mut field_ty, mut field_array_size) =
                     self.parse_declarator(field_base)?;
                 // A member may carry a trailing attribute
@@ -571,6 +594,13 @@ impl Compiler {
                 // `s.fp(args)` narrows its arguments. Always consume the
                 // side-channel so it cannot leak to the next field.
                 let field_params = self.pending.fn_ptr_param_types.take().unwrap_or_default();
+                // A variadic function-pointer field carries the variadic
+                // flag from the same prototype (the inline declarator or
+                // the re-seeded typedef base) so `s.fp(args)` splits its
+                // arguments at the fixed-parameter count. Consume the
+                // side-channel so it cannot leak to the next field.
+                let field_is_variadic = !field_params.is_empty()
+                    && matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
                 if is_aggregate_value
                     && field_array_size == 0
@@ -719,6 +749,7 @@ impl Compiler {
                     bit_unit_size: if bit_width > 0 { bit_unit as u8 } else { 0 },
                     fn_ptr_indirection: field_fn_ptr_indirection,
                     params: field_params,
+                    is_variadic: field_is_variadic,
                     anon_union_group: 0,
                 });
 

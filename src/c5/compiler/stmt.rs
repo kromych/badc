@@ -433,18 +433,28 @@ impl Compiler {
             }
             self.ty = ty;
 
-            // A block-scope `extern` of a fresh name becomes a Glo
-            // external reference that must persist past the block: the
-            // walker's `live_glo_addr` reads the symbol's class at walk
-            // time, and a `block_symbols` restore back to the unbound
-            // `Id` class would erase the `Glo` before `&name` resolves.
-            // Skipping the restore mirrors the body-top extern path,
-            // which never shadows. An extern that names an existing Glo
-            // or function binding restores normally (nothing converted).
-            let convert_extern = is_extern
-                && self.symbols[loc_idx].class != Token::Glo as i64
-                && self.symbols[loc_idx].class != Token::Fun as i64;
-            if !convert_extern {
+            // A block-scope `extern` converts the slot to a Glo external
+            // reference for the block. Three prior states differ (C99
+            // 6.2.1p4 / 6.2.2p4):
+            //   * an existing file-scope `Glo` / function `Fun` binding --
+            //     the extern names the same entity; nothing is converted
+            //     and the slot restores normally.
+            //   * a fresh, never-declared name (`Id` class) -- the slot is
+            //     left `Glo`/extern past the block so a later `&name`
+            //     resolves through `live_glo_addr` and the linker emits an
+            //     undefined data symbol keyed by name (this is the only
+            //     binding of the name, so leaking it is harmless).
+            //   * a *bound* enclosing name (a local, parameter, or enum
+            //     constant) -- converting in place would destroy it. Save
+            //     the prior binding for restore at block exit and mark the
+            //     slot so in-block references resolve by name (or to the
+            //     same-TU definition) through `Ast::block_extern_refs`,
+            //     independent of the restored class at walk time.
+            let prior_class = self.symbols[loc_idx].class;
+            let convert_extern =
+                is_extern && prior_class != Token::Glo as i64 && prior_class != Token::Fun as i64;
+            let extern_shadows_binding = convert_extern && prior_class != Token::Id as i64;
+            if !convert_extern || extern_shadows_binding {
                 block_symbols.push((
                     loc_idx,
                     self.symbols[loc_idx].class,
@@ -454,17 +464,24 @@ impl Compiler {
             }
 
             if is_extern {
-                // A block-scope `extern` object refers to a file-scope
-                // definition (here or in another unit) and gets no local
-                // storage. External linkage is what routes `&name`
-                // through `live_glo_addr`'s `GloAddr::Extern` arm to a
-                // name-keyed relocation; without it every block-scope
-                // extern collapses onto the same `.data` base.
                 if convert_extern {
                     self.symbols[loc_idx].class = Token::Glo as i64;
                     self.symbols[loc_idx].type_ = ty;
-                    self.symbols[loc_idx].is_extern_decl = true;
-                    self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
+                    if extern_shadows_binding {
+                        // Carry no in-unit offset; the prior binding's
+                        // `is_extern_decl` / `linkage` stay untouched so the
+                        // block-exit restore is exact. References resolve
+                        // through `block_extern_refs`.
+                        self.symbols[loc_idx].val = 0;
+                        self.symbols[loc_idx].block_extern_active = true;
+                    } else {
+                        // External linkage routes `&name` through
+                        // `live_glo_addr`'s `GloAddr::Extern` arm to a
+                        // name-keyed relocation; without it every block-scope
+                        // extern collapses onto the same `.data` base.
+                        self.symbols[loc_idx].is_extern_decl = true;
+                        self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
+                    }
                 }
             } else if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
@@ -684,11 +701,16 @@ impl Compiler {
             }
         }
 
-        // Restore shadowed bindings on block exit.
+        // Restore shadowed bindings on block exit. A block-scope `extern`
+        // that shadowed a bound name reverts to the saved class/type/val
+        // and drops its `block_extern_active` mark; the marked references
+        // already resolve through `Ast::block_extern_refs` independent of
+        // this restored class.
         for (idx, class, ty, val) in block_symbols.into_iter().rev() {
             self.symbols[idx].class = class;
             self.symbols[idx].type_ = ty;
             self.symbols[idx].val = val;
+            self.symbols[idx].block_extern_active = false;
         }
         // Pop this block's tag bindings; the StructDef storage in
         // `self.structs` stays reachable by id for any reference the
@@ -843,6 +865,7 @@ impl Compiler {
         // producer whose call did not consume them so they cannot reach an
         // unrelated call in a later statement.
         self.pending.indirect_callee_params = None;
+        self.pending.indirect_callee_is_variadic = false;
         // The function-pointer-decay depth (C99 6.3.2.1p4) is intra-
         // expression state: a function name used as a call argument seeds
         // it, and without this reset it leaks into the next statement's

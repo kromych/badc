@@ -1101,6 +1101,7 @@ impl Compiler {
                 // symbol; the array case is handled at its decay below.
                 if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
                     self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
+                    self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
                 }
                 // Array variables decay to a pointer to the first
                 // element: the symbol's address IS its value, no
@@ -1168,6 +1169,7 @@ impl Compiler {
                     if !self.symbols[id_idx].params.is_empty() {
                         self.pending.indirect_callee_params =
                             Some(self.symbols[id_idx].params.clone());
+                        self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
                     }
                 } else if is_struct_value {
                     if identifier_is_local {
@@ -2026,6 +2028,12 @@ impl Compiler {
                 // parameter unconverted and the callee reads the wrong
                 // half of the FP register.
                 let callee_params = self.pending.indirect_callee_params.take();
+                // Recover the variadic prototype alongside the parameter
+                // types so the call node records the fixed-argument count
+                // for the walker's host-ABI tail placement.
+                let callee_is_variadic =
+                    core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
                 let mut arg_idx: usize = 0;
                 while self.lex.tk != ')' {
                     self.loc_offs += 1;
@@ -2078,6 +2086,16 @@ impl Compiler {
                         }
                     }
                     if all_some {
+                        // Record a variadic indirect callee so the walker
+                        // splits the argument list at the fixed count even
+                        // when the callee's prototype is not recoverable
+                        // from its symbol (a struct-field, array-element, or
+                        // dereferenced function pointer).
+                        if callee_is_variadic {
+                            self.ast
+                                .variadic_indirect_callees
+                                .push((callee_id, callee_fixed));
+                        }
                         let id = self.ast.push_expr(
                             super::super::ast::Expr::Call {
                                 callee: callee_id,
@@ -2981,10 +2999,13 @@ impl Compiler {
                 // the index expression is a separate evaluation that must
                 // not consume or clear them. Park them across the parse.
                 let saved_callee_params = self.pending.indirect_callee_params.take();
+                let saved_callee_variadic =
+                    core::mem::take(&mut self.pending.indirect_callee_is_variadic);
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
                 let idx_ast = self.ast_acc;
                 self.pending.indirect_callee_params = saved_callee_params;
+                self.pending.indirect_callee_is_variadic = saved_callee_variadic;
                 // Restore the queue and shift one level down so
                 // the next `[i]` sees the stride for that level
                 // in `pending_index_stride` and the rest in the
@@ -3125,6 +3146,8 @@ impl Compiler {
                 } else {
                     Some(field.params.clone())
                 };
+                self.pending.indirect_callee_is_variadic =
+                    !field.params.is_empty() && field.is_variadic;
 
                 if field.offset > 0 {
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Add, field.offset as i64);

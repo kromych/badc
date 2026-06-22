@@ -130,6 +130,13 @@ pub struct StructField {
     /// 6.5.2.2p7), matching the direct-identifier and array-element
     /// call paths.
     pub params: Vec<i64>,
+    /// True when the function-pointer field's prototype is variadic
+    /// (`int (*fp)(int, ...)`). Mirrors `Symbol::is_variadic`. A
+    /// `s.fp(args)` / `s->fp(args)` call reads this with `params` to
+    /// split the argument list at the fixed-parameter count for the host
+    /// variadic ABI. False for a non-function-pointer field or a
+    /// non-variadic prototype.
+    pub is_variadic: bool,
     /// Non-zero for a field promoted from an anonymous union (C11
     /// 6.7.2.1p13). All members of one anonymous union share the same
     /// value; the same id groups them so a brace-list initializer
@@ -430,6 +437,14 @@ pub(in crate::c5::compiler) struct Pending {
     /// a subscript index parse, cleared at a `.`/`->` field access and at
     /// each statement boundary so it cannot reach an unrelated call.
     pub indirect_callee_params: Option<alloc::vec::Vec<i64>>,
+    /// True when the indirect callee whose parameter types are held in
+    /// `indirect_callee_params` is variadic. Threaded alongside the
+    /// parameter list so an indirect variadic call recovers the
+    /// pre-ellipsis (fixed) argument count and places the variadic tail
+    /// per the host variadic ABI (C99 6.5.2.2; the macOS/AAPCS64 Darwin
+    /// variant passes the tail on the stack). Set and cleared at the same
+    /// sites as `indirect_callee_params`.
+    pub indirect_callee_is_variadic: bool,
     /// Set while parsing a function-pointer declarator's parameter list.
     /// The parameters form a prototype: their names are irrelevant, so
     /// `parse_function_params` records each type without binding the name
@@ -586,6 +601,7 @@ impl Default for Pending {
             typedef_fn_proto: None,
             fn_ptr_param_types: None,
             indirect_callee_params: None,
+            indirect_callee_is_variadic: false,
             parsing_fn_ptr_proto: false,
             param_decl_context: false,
             last_array_decay_size: 0,

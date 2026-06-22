@@ -560,6 +560,25 @@ pub(crate) struct Ast {
     /// is `Some(StmtId)` once the matching labelled statement is
     /// seen; `None` while the label is still pending.
     pub goto_targets: Vec<Option<StmtId>>,
+    /// Indirect-call callees whose pointed-to function is variadic, keyed
+    /// by the callee's `ExprId` with the count of fixed (pre-ellipsis)
+    /// parameters. Populated when the callee's prototype is not
+    /// recoverable from its symbol alone -- a struct-field, array-element,
+    /// or dereferenced function pointer. The walker reads it to split a
+    /// variadic call's arguments at the fixed count so the host variadic
+    /// ABI places the tail correctly (C99 6.5.2.2; macOS/AAPCS64 Darwin
+    /// passes the tail on the stack). Sparse: empty unless a variadic
+    /// indirect call appears in the function.
+    pub variadic_indirect_callees: Vec<(ExprId, u32)>,
+    /// `Expr::Ident` nodes that reference a block-scope `extern` which
+    /// shadows an enclosing bound name (a local, parameter, or enum
+    /// constant). The shadowed binding is restored at block exit, so the
+    /// slot's class at walk time no longer reflects the external
+    /// reference; the walker resolves a node listed here against the
+    /// same-TU file-scope definition (if one exists) or a name-keyed
+    /// cross-TU relocation, rather than re-reading the restored slot.
+    /// Sparse: empty unless a block-scope extern shadows a local.
+    pub block_extern_refs: Vec<ExprId>,
 }
 
 impl Ast {

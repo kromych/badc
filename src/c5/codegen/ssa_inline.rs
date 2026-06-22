@@ -1,7 +1,9 @@
 //! Function inlining over the SSA tier.
 //!
-//! Pre-pass that runs before `ssa_mem2reg` under `-O`. Substitutes
-//! eligible `Inst::Call` sites with the callee's body. Eligibility
+//! Runs under `-O` after `ssa_mem2reg`, so the candidate filter sees
+//! the promoted form: dead cell loads / stores are gone and the
+//! callee reads its parameters via `ParamRef`. Substitutes eligible
+//! `Inst::Call` sites with the callee's body. Eligibility
 //! is intentionally narrow:
 //!
 //! * caller and callee bodies remain in the same translation unit;

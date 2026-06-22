@@ -6,24 +6,22 @@
 //!
 //! ## Algorithm
 //!
-//! 1. Compute last-use PC per SSA value via a single backward
-//!    pass: every `Inst` that reads a `ValueId` extends the
-//!    target's live range to its own PC.
-//! 2. Walk insts forward. Maintain a free pool of integer and FP
-//!    registers (callee-saved + caller-saved, minus a small set
-//!    reserved for scratch + frame).
-//! 3. At each `Inst` that defines a value, expire any active
-//!    interval whose `last_use < current_pc`, then pick a free
-//!    register of the right bank (FP vs int). On register
-//!    pressure, spill the active interval with the furthest next
-//!    use to a fresh frame slot and reuse its register.
-//! 4. At call instructions (`Call` / `CallIndirect` / `CallExt`),
-//!    spill every active caller-saved register before the call
-//!    site -- the allocator marks these values as live in their
-//!    spill slot for the remainder of their range. Pre-coloring
-//!    of the call's argument values into host arg regs is left
-//!    to the per-arch emit pass; the allocator just ensures the
-//!    args are available somewhere reachable.
+//! 1. Compute last-use PC per SSA value via a single backward pass.
+//! 2. Union each phi result with its incoming values into congruence
+//!    classes; every member of a class shares one `Place`. With no
+//!    phis each class is a singleton and the step is identity.
+//! 3. Compute CFG liveness and build an interference graph over the
+//!    class roots: two values ever simultaneously live get an edge.
+//! 4. Derive per-value constraints -- register bank (int vs FP), a
+//!    must-be-callee-saved flag when the live range crosses a call,
+//!    and a coalescing hint from the return / parameter / phi /
+//!    call-argument / call-result hint passes.
+//! 5. Color the graph greedily (`color_graph`): for each node forbid
+//!    the registers held by its live neighbours, then take the hinted
+//!    register if free, else a free register of the right bank
+//!    (caller-saved first unless the value must survive a call), else
+//!    a fresh spill slot. Pre-coloring of call arguments into the host
+//!    argument registers is left to the per-arch emit pass.
 //!
 //! The output is intentionally minimal: each `Place` is either
 //! one of the host's GPRs / FP regs or a stack slot's byte offset
@@ -366,8 +364,8 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // the same `Place`. For a function with no phis every class is a
     // singleton and the lookup degenerates to identity, so the path
     // collapses to today's per-value behaviour. Class-level
-    // last-use is the max over all members so the active-list entry
-    // expires only when every member is dead.
+    // last-use is the max over all members so a value stays live
+    // until every member of its class is dead.
     let liveness = super::ssa_liveness::Liveness::compute(func);
     let mut classes = super::ssa_phi_class::PhiClasses::build(func, &liveness);
     let class_last_use: Vec<u32> = {
@@ -1872,23 +1870,6 @@ fn promote_calls_after_def_to_classes(
         let root = classes.find(v as ValueId);
         if class_must_callee[&root] {
             *entry = true;
-        }
-    }
-}
-
-fn expire(
-    active: &mut Vec<(ValueId, u32, u8)>,
-    free: &mut Vec<u8>,
-    current_pc: u32,
-    _places: &[Place],
-) {
-    let mut i = 0;
-    while i < active.len() {
-        if active[i].1 < current_pc {
-            let (_id, _end, reg) = active.remove(i);
-            free.push(reg);
-        } else {
-            i += 1;
         }
     }
 }

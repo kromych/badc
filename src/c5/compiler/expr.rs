@@ -673,6 +673,14 @@ impl Compiler {
                     let expected_params = self.symbols[id_idx].params.clone();
                     let is_variadic = self.symbols[id_idx].is_variadic;
                     let fn_name_for_warn = self.symbols[id_idx].name.clone();
+                    // A Token::Sys callee is a libc import: it reads each
+                    // argument at the platform-ABI register width and never
+                    // re-narrows to its declared parameter type. A c5
+                    // (Token::Fun) callee instead truncates each argument in
+                    // its prologue via the typed parameter load, so the
+                    // caller-side narrowing below is needed only for Sys
+                    // calls to satisfy the C99 6.5.2.2p4 conversion.
+                    let is_sys_call = self.symbols[id_idx].class == Token::Sys as i64;
                     // Struct-returning callees use a hidden out-pointer
                     // arg at val=2: the caller pre-allocates a temp for
                     // the result and passes its address as arg 0; the
@@ -776,6 +784,7 @@ impl Compiler {
                         // Type-check before the Si overwrites self.ty.
                         if (nargs as usize) < expected_params.len() {
                             let want = expected_params[nargs as usize];
+                            let arg_ty = self.ty;
                             let zero = self.last_emit_is_zero();
                             let untyped = self.last_emit_was_indirect_call();
                             if let Some(reason) =
@@ -805,6 +814,22 @@ impl Compiler {
                             // lands in the GPR-arg register and libm
                             // reads garbage out of the FP register.
                             self.convert_assign_rhs(want);
+                            // C99 6.5.2.2p4: the argument is converted to the
+                            // declared parameter type. For a Sys (libc) callee
+                            // the conversion must happen here -- the import
+                            // reads the argument at the full register width and
+                            // never re-narrows. A c5 callee truncates in its
+                            // typed parameter load, so this is Sys-only, and
+                            // only when the argument is wider than the integer
+                            // parameter (an in-width argument needs no mask).
+                            if is_sys_call
+                                && !is_pointer_ty(want)
+                                && !is_floating_scalar(want)
+                                && !is_struct_ty(want)
+                                && self.size_of_type(arg_ty) > self.size_of_type(want)
+                            {
+                                self.renormalize_to_width(want);
+                            }
                         } else {
                             if !expected_params.is_empty() && !is_variadic {
                                 self.warn_at(

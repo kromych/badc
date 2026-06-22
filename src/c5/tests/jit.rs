@@ -1081,6 +1081,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
+    ("bound_import_arg_narrowing.c", 0),
     ("block_extern_shadows_local.c", 0),
     ("win64_xmm_scratch_callee_save.c", 0),
     ("variadic_fnptr_proto_erased.c", 0),

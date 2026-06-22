@@ -2067,6 +2067,15 @@ fn float_is_four_bytes() {
 }
 
 #[test]
+fn bound_import_arg_narrowing() {
+    // C99 6.5.2.2p4: a bound-import (libc) call argument is converted to
+    // the declared parameter type, matching a user-defined callee. memcmp
+    // with a count > 2^32 narrows to the declared `int`, comparing the
+    // in-range prefix instead of walking past the buffers.
+    assert_eq!(run_fixture("bound_import_arg_narrowing.c"), 0);
+}
+
+#[test]
 fn long_double_advertised_as_fp64() {
     // c5 stores `long double` as 8-byte IEEE binary64 on every target, so
     // float.h must advertise the binary64 characteristics. The previous

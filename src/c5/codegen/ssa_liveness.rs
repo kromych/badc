@@ -29,6 +29,12 @@ pub(super) struct Liveness {
     live_out: Vec<u64>,
     /// Defining block per value.
     block_of: Vec<BlockId>,
+    /// Last program position at which each value is used, excluding phi
+    /// operands (which are edge uses): the instruction index of its
+    /// latest non-phi operand use, or the defining block's
+    /// `inst_range.end` for a terminator use. `0` when never used.
+    /// Drives the O(1) `block_has_use_after` query.
+    last_use_pos: Vec<u32>,
 }
 
 impl Liveness {
@@ -44,12 +50,40 @@ impl Liveness {
             }
         }
 
+        // Latest non-phi use position per value (see `last_use_pos`).
+        let mut last_use_pos: Vec<u32> = vec![0; n];
+        for blk in &func.blocks {
+            for idx in blk.inst_range.clone() {
+                if matches!(func.insts[idx as usize], Inst::Phi { .. }) {
+                    continue;
+                }
+                super::ssa_alloc::for_each_operand(&func.insts[idx as usize], |op| {
+                    if (op as usize) < n && last_use_pos[op as usize] < idx {
+                        last_use_pos[op as usize] = idx;
+                    }
+                });
+            }
+            let term_pos = blk.inst_range.end;
+            let mut term_use = |v: ValueId| {
+                if v != NO_VALUE && (v as usize) < n && last_use_pos[v as usize] < term_pos {
+                    last_use_pos[v as usize] = term_pos;
+                }
+            };
+            match &blk.terminator {
+                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => term_use(*cond),
+                Terminator::GotoIndirect { target } => term_use(*target),
+                Terminator::Return(v) => term_use(*v),
+                Terminator::Jmp(_) | Terminator::TailExt(_) | Terminator::FallThrough(_) => {}
+            }
+        }
+
         if nblocks == 0 {
             return Self {
                 words,
                 live_in: Vec::new(),
                 live_out: Vec::new(),
                 block_of,
+                last_use_pos,
             };
         }
 
@@ -131,6 +165,7 @@ impl Liveness {
             live_in,
             live_out,
             block_of,
+            last_use_pos,
         }
     }
 
@@ -175,10 +210,28 @@ impl Liveness {
         self.block_has_use_after(func, b, x, y)
     }
 
-    /// Whether `x` is used as a non-phi operand or terminator operand
-    /// in block `b` at an instruction index strictly greater than `y`.
+    /// Whether `x` is used as a non-phi operand or terminator operand in
+    /// block `b` at a program point after `y`. `b` is `y`'s block.
+    ///
+    /// Fast path: when `x`'s last use across the whole function lies at
+    /// or before `b`'s end, the precomputed position answers in O(1).
+    /// This holds for every value in a single-block function, which is
+    /// where the former per-call block scan made the interference checks
+    /// super-linear. The scan survives only for the rare case where `x`
+    /// is also used past `b` on a sibling path (so `last_use_pos` points
+    /// outside `b` and cannot speak for the in-block window); the
+    /// caller's `!live_out(b, x)` guard rules out a successor use.
     fn block_has_use_after(&self, func: &FunctionSsa, b: BlockId, x: ValueId, y: ValueId) -> bool {
         let blk = &func.blocks[b as usize];
+        let lup = self.last_use_pos.get(x as usize).copied().unwrap_or(0);
+        // A use strictly before `b`'s end lies in `b` or an earlier
+        // block, so the precomputed position decides directly. The bound
+        // is strict: position `inst_range.end` is both `b`'s terminator
+        // slot and the next block's first instruction index, so a value
+        // last used there is resolved by the scan to avoid the ambiguity.
+        if lup < blk.inst_range.end {
+            return lup > y;
+        }
         for idx in (y + 1)..blk.inst_range.end {
             if matches!(func.insts[idx as usize], Inst::Phi { .. }) {
                 continue;
@@ -447,6 +500,45 @@ mod tests {
 
     fn identity(n: usize) -> Vec<ValueId> {
         (0..n as ValueId).collect()
+    }
+
+    /// `block_has_use_after` (now table-driven) must still distinguish a
+    /// value used past another's definition from one that dies before
+    /// it. b0: v0,v1 = Imm; v2 = v0+v1; v3 = v2+v0; Return v3. v0's last
+    /// use is v3, so v0 is live across v2's def (interfere). v1 dies at
+    /// v2, before v3's def (no interfere with v3).
+    #[test]
+    fn use_after_def_drives_interference() {
+        let insts = alloc::vec![
+            Inst::Imm(0),
+            Inst::Imm(1),
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 0,
+                rhs: 1,
+            },
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 2,
+                rhs: 0,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..4,
+            terminator: Terminator::Return(3),
+            exit_acc: 3,
+        }];
+        let func = func_with(insts, blocks);
+        let live = Liveness::compute(&func);
+        assert!(
+            live.interfere(&func, 0, 2),
+            "v0 used at v3 is live across v2's def"
+        );
+        assert!(
+            !live.interfere(&func, 1, 3),
+            "v1 dies at v2, before v3 is defined"
+        );
     }
 
     #[test]

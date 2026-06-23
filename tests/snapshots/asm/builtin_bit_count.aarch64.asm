@@ -987,11 +987,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x0, #0x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x0, x0, x17
+               	mvn	x0, x0
                	and	x0, x1, x0
                	mov	w0, w0
                	lsr	x1, x0, #1
@@ -1250,11 +1246,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x0, #0x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x0, x0, x17
+               	mvn	x0, x0
                	and	x0, x1, x0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845

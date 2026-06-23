@@ -363,6 +363,12 @@ pub(super) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0xCA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `MVN <Xd>, <Xm>` (`ORN Xd, XZR, Xm`) -- bitwise NOT. `Rn` is baked
+/// to XZR (31); ORN is ORR with the N bit set.
+pub(super) fn enc_mvn(rd: Reg, rm: Reg) -> u32 {
+    0xAA20_03E0 | ((rm.0 as u32) << 16) | (rd.0 as u32)
+}
+
 /// `MUL <Xd>, <Xn>, <Xm>` -- alias for `MADD Xd, Xn, Xm, XZR`.
 /// We bake in `Ra = XZR (31)` so this stays a 3-register helper.
 pub(super) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> u32 {

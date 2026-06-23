@@ -16,11 +16,7 @@ Disassembly of section .text:
 
 <ch>:
                	and	x1, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x0, x0, x17
+               	mvn	x0, x0
                	and	x0, x0, x2
                	eor	x0, x1, x0
                	ret

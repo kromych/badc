@@ -5589,6 +5589,11 @@ fn emit_binop_imm(
         BinOp::Sub => imm12
             .map(|v| enc_sub_imm(rd, rn, v))
             .or_else(|| imm12_neg.map(|v| enc_add_imm(rd, rn, v))),
+        // `x ^ -1` is bitwise NOT -> `mvn`, one instruction instead of
+        // materialising the all-ones constant (movz + 3x movk) into a
+        // scratch and xoring. `mvn` reads the same operand, so the
+        // allocator's liveness is unchanged.
+        BinOp::Xor if rhs_imm == -1 => Some(super::aarch64::enc_mvn(rd, rn)),
         // `x & 0xffffffff` zero-extends the low word; a 32-bit move does
         // it in one instruction, avoiding the load-imm64 + and-register
         // pair (the immediate has no logical-immediate-AND short form

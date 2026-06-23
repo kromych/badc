@@ -476,6 +476,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("return_callee_saved_value.c", 0),
     ("spill_slot_reuse_disjoint_calls.c", 0),
     ("rotate_variable_count.c", 0),
+    ("bitwise_not_mvn.c", 0),
     ("add_sub_negative_imm.c", 0),
     ("fp_param_ternary.c", 0),
     ("hex_float_literal.c", 0),

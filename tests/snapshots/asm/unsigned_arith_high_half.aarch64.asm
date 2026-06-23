@@ -15,11 +15,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	mov	x0, #0xff00             // =65280
                	movk	x0, #0xff00, lsl #16
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x0, x0, x17
+               	mvn	x0, x0
                	mov	w0, w0
                	mov	x17, #0xff              // =255
                	movk	x17, #0xff, lsl #16

@@ -1019,6 +1019,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("libc_div.c", 0),
     ("strength_reduce_pow2_divmod.c", 0),
     ("return_callee_saved_value.c", 0),
+    ("spill_slot_reuse_disjoint_calls.c", 0),
     ("add_sub_negative_imm.c", 0),
     ("wide_string_literal_alignment.c", 0),
     ("va_arg_through_pointer.c", 0),

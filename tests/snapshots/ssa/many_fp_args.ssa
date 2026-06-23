@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=sum10
 fn ent_pc=0 n_params=10 variadic=false locals=0
-  spill_count=2 gpr_used=[13] fp_used=[]
+  spill_count=1 gpr_used=[13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=10 variadic=false locals=0
     v15  ParamRef(7, kind=F64)                            -> d7
     v16  Imm(0)                                           -> x0
     v17  LoadLocal { off=2, kind=F64 }                    -> [spill 0]
-    v18  LoadLocal { off=3, kind=F64 }                    -> [spill 1]
+    v18  LoadLocal { off=3, kind=F64 }                    -> [spill 0]
     v19  Binop { op=fadd, lhs=v1, rhs=v3 }                -> d0
     v20  LoadLocal { off=4, kind=F64 }                    -> d1
     v21  Binop { op=fadd, lhs=v19, rhs=v5 }               -> d0

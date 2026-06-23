@@ -950,10 +950,16 @@ pub(super) fn color_graph(
             continue;
         };
         let mut forbidden: [bool; 64] = [false; 64];
+        // Spill slots held by interfering neighbours. A slot is 8 bytes
+        // of stack shared bank-agnostically (FP and integer spills both
+        // store/reload 8 bytes), so any interfering neighbour's slot is
+        // off-limits regardless of bank.
+        let mut nb_slots: Vec<u32> = Vec::new();
         for &nb in interference.neighbors(node as ValueId) {
             match color[nb as usize] {
                 Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
                 Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
+                Place::Spill(s) => nb_slots.push(s),
                 _ => {}
             }
         }
@@ -990,8 +996,22 @@ pub(super) fn color_graph(
             Some(r) if c.is_fp => Place::FpReg(r),
             Some(r) => Place::IntReg(r),
             None => {
-                let slot = spill_count;
-                spill_count += 1;
+                // Reuse the lowest existing slot held by no interfering
+                // neighbour; allocate a fresh slot only when every one
+                // collides. Two values share a slot only when no
+                // interference edge joins them -- i.e. they are never
+                // simultaneously live -- so the slot holds at most one
+                // live value at any point. Edges are bidirectional, so a
+                // later-coloured value that interferes excludes this
+                // slot, preserving distinct storage for live ranges that
+                // overlap.
+                let slot = (0..spill_count)
+                    .find(|s| !nb_slots.contains(s))
+                    .unwrap_or_else(|| {
+                        let s = spill_count;
+                        spill_count += 1;
+                        s
+                    });
                 Place::Spill(slot)
             }
         };

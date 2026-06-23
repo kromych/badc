@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=15
-  spill_count=6 gpr_used=[3, 12, 14, 15, 13] fp_used=[]
+  spill_count=3 gpr_used=[3, 12, 14, 15, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
@@ -28,11 +28,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     v22  Imm(0)                                           -> x15
     v23  Imm(51966)                                       -> x15
     v24  Imm(0)                                           -> [spill 0]
-    v25  Imm(1000000000000)                               -> [spill 1]
-    v26  Imm(0)                                           -> [spill 2]
-    v27  Imm(4294967296)                                  -> [spill 3]
-    v28  Imm(0)                                           -> [spill 4]
-    v29  LoadLocal { off=-1, kind=I32 }                   -> [spill 5]
+    v25  Imm(1000000000000)                               -> [spill 0]
+    v26  Imm(0)                                           -> [spill 1]
+    v27  Imm(4294967296)                                  -> [spill 1]
+    v28  Imm(0)                                           -> [spill 2]
+    v29  LoadLocal { off=-1, kind=I32 }                   -> [spill 2]
     v30  BinopI { op=ne, lhs=v1, rhs_imm=1 }              -> x0
     terminator Bz { cond=v30, target=b2, fall=b1 }   (exit_acc=v30)
   block 1  start_pc=0

@@ -18,17 +18,7 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rcx
-               	shrq	%cl, %rax
-               	movl	$0x40, %ecx
-               	subq	%rsi, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %r10
-               	movq	%rdi, %rcx
-               	movq	%rcx, %r13
-               	movq	%r10, %rcx
-               	shlq	%cl, %r13
-               	movq	%r13, %rcx
-               	orq	%rcx, %rax
+               	rorq	%cl, %rax
                	movq	(%rsp), %r13
                	addq	$0x10, %rsp
                	popq	%rbp

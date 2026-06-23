@@ -11,12 +11,12 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v5   LoadLocal { off=2, kind=I64 }                    -> x0
     v6   LoadLocal { off=3, kind=I32 }                    -> x0
     v7   Binop { op=shru, lhs=v1, rhs=v3 }                -> x0
-    v8   Imm(64)                                          -> x1
-    v9   Binop { op=sub, lhs=v8, rhs=v3 }                 -> x1
-    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x1
-    v11  BinopI { op=shr, lhs=v10, rhs_imm=32 }           -> x1
-    v12  Binop { op=shl, lhs=v1, rhs=v11 }                -> x1
-    v13  Binop { op=or, lhs=v7, rhs=v12 }                 -> x0
+    v8   Imm(64)                                          -> x0
+    v9   Binop { op=sub, lhs=v8, rhs=v3 }                 -> x0
+    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x0
+    v11  BinopI { op=shr, lhs=v10, rhs_imm=32 }           -> x0
+    v12  Binop { op=shl, lhs=v1, rhs=v11 }                -> x0
+    v13  Binop { op=ror, lhs=v1, rhs=v3 }                 -> x0
     terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=ch

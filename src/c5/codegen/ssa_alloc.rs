@@ -945,21 +945,28 @@ pub(super) fn color_graph(
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
     let mut spill_count: u32 = 0;
+    // Per-slot "stamp" marking which slots interfering neighbours hold,
+    // refreshed per node by bumping `stamp` instead of clearing. Slot
+    // indices are bounded by `spill_count <= n`, so `n` entries suffice.
+    // This keeps the free-slot search O(spill_count) per node rather than
+    // O(spill_count * neighbours): the membership test is an array read,
+    // not a linear scan of the neighbour list.
+    let mut slot_used: Vec<u32> = vec![0u32; n];
+    let mut stamp: u32 = 0;
     for node in 0..n {
         let Some(c) = constraints[node] else {
             continue;
         };
+        stamp += 1;
         let mut forbidden: [bool; 64] = [false; 64];
-        // Spill slots held by interfering neighbours. A slot is 8 bytes
-        // of stack shared bank-agnostically (FP and integer spills both
-        // store/reload 8 bytes), so any interfering neighbour's slot is
-        // off-limits regardless of bank.
-        let mut nb_slots: Vec<u32> = Vec::new();
+        // A spill slot is 8 bytes of stack shared bank-agnostically (FP
+        // and integer spills both store/reload 8 bytes), so a slot held
+        // by any interfering neighbour is off-limits regardless of bank.
         for &nb in interference.neighbors(node as ValueId) {
             match color[nb as usize] {
                 Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
                 Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
-                Place::Spill(s) => nb_slots.push(s),
+                Place::Spill(s) => slot_used[s as usize] = stamp,
                 _ => {}
             }
         }
@@ -1006,7 +1013,7 @@ pub(super) fn color_graph(
                 // slot, preserving distinct storage for live ranges that
                 // overlap.
                 let slot = (0..spill_count)
-                    .find(|s| !nb_slots.contains(s))
+                    .find(|&s| slot_used[s as usize] != stamp)
                     .unwrap_or_else(|| {
                         let s = spill_count;
                         spill_count += 1;

@@ -54,67 +54,50 @@ Disassembly of section .text:
                	sub	x3, x29, #0x8
                	ldrsw	x3, [x3, #0x4]
                	add	x2, x2, x3
-               	sxtw	x2, w2
                	add	x1, x2, x1
-               	sxtw	x1, w1
                	sub	x2, x29, #0x18
                	ldrsw	x2, [x2]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x18
                	ldrsw	x2, [x2, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x18
                	ldrsw	x2, [x2, #0x8]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x20
                	ldrsw	x2, [x2]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x30
                	ldrsw	x2, [x2]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x30
                	ldrsw	x2, [x2, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x30
                	ldrsw	x2, [x2, #0x8]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x30
                	ldrsw	x2, [x2, #0xc]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	add	x1, x1, x5
-               	sxtw	x1, w1
                	sub	x2, x29, #0x48
                	ldrsw	x2, [x2]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x48
                	ldrsw	x2, [x2, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x48
                	ldrsw	x2, [x2, #0x8]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x48
                	ldrsw	x2, [x2, #0xc]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x48
                	ldrsw	x2, [x2, #0x10]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	sub	x2, x29, #0x48
                	ldrsw	x2, [x2, #0x14]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldursw	x2, [x29, #0x80]
                	add	x1, x1, x2
                	sxtw	x1, w1

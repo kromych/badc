@@ -20,9 +20,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x2, w2
-               	sxtw	x3, w1
-               	add	x2, x2, x3
+               	add	x2, x2, x1
                	sxtw	x2, w2
                	b	<addr>
                	sxtw	x0, w2

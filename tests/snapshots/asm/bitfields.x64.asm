@@ -322,7 +322,6 @@ Disassembly of section .text:
                	sarq	$0x8, %rcx
                	andq	$0xff, %rcx
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	andq	$0xff, %rcx
                	movl	(%rax), %edx
                	andq	$-0xff01, %rdx          # imm = 0xFFFF00FF
@@ -345,4 +344,4 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

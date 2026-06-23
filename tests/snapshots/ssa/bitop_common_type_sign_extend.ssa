@@ -82,15 +82,15 @@ fn ent_pc=4 n_params=2 variadic=false locals=2
     v12  Load { addr=v1, disp=1, kind=U8 }                -> x1
     v13  BinopI { op=shl, lhs=v12, rhs_imm=16 }           -> x1
     v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x2
-    v15  Extend { value=v13, kind=I32 }                   -> x1
-    v16  Binop { op=or, lhs=v9, rhs=v15 }                 -> x0
+    v15  Extend { value=v13, kind=I32 }                   -> x2
+    v16  Binop { op=or, lhs=v9, rhs=v13 }                 -> x0
     v17  Imm(2)                                           -> x1
     v18  BinopI { op=add, lhs=v1, rhs_imm=2 }             -> x1
     v19  Load { addr=v1, disp=2, kind=U8 }                -> x1
     v20  BinopI { op=shl, lhs=v19, rhs_imm=8 }            -> x1
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x2
-    v22  Extend { value=v20, kind=I32 }                   -> x1
-    v23  Binop { op=or, lhs=v16, rhs=v22 }                -> x0
+    v22  Extend { value=v20, kind=I32 }                   -> x2
+    v23  Binop { op=or, lhs=v16, rhs=v20 }                -> x0
     v24  Imm(3)                                           -> x1
     v25  BinopI { op=add, lhs=v1, rhs_imm=3 }             -> x1
     v26  Load { addr=v1, disp=3, kind=U8 }                -> x1
@@ -188,15 +188,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v57  Load { addr=v46, disp=1, kind=U8 }               -> x6
     v58  BinopI { op=shl, lhs=v57, rhs_imm=16 }           -> x6
     v59  BinopI { op=shl, lhs=v58, rhs_imm=32 }           -> x7
-    v60  Extend { value=v58, kind=I32 }                   -> x6
-    v61  Binop { op=or, lhs=v54, rhs=v60 }                -> x2
+    v60  Extend { value=v58, kind=I32 }                   -> x7
+    v61  Binop { op=or, lhs=v54, rhs=v58 }                -> x2
     v62  Imm(2)                                           -> x6
     v63  BinopI { op=add, lhs=v46, rhs_imm=2 }            -> x6
     v64  Load { addr=v46, disp=2, kind=U8 }               -> x6
     v65  BinopI { op=shl, lhs=v64, rhs_imm=8 }            -> x6
     v66  BinopI { op=shl, lhs=v65, rhs_imm=32 }           -> x7
-    v67  Extend { value=v65, kind=I32 }                   -> x6
-    v68  Binop { op=or, lhs=v61, rhs=v67 }                -> x2
+    v67  Extend { value=v65, kind=I32 }                   -> x7
+    v68  Binop { op=or, lhs=v61, rhs=v65 }                -> x2
     v69  Imm(3)                                           -> x6
     v70  BinopI { op=add, lhs=v46, rhs_imm=3 }            -> x6
     v71  Load { addr=v46, disp=3, kind=U8 }               -> x0

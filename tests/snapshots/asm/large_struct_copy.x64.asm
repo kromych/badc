@@ -373,7 +373,7 @@ Disassembly of section .text:
                	addq	$0x490, %rsp            # imm = 0x490
                	popq	%rbp
                	retq
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	addq	$0xa, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
@@ -390,7 +390,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	addq	$0x3c, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
@@ -407,7 +407,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	addq	$0x6e, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx

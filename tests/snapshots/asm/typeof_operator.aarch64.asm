@@ -25,7 +25,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
                	add	x0, x0, #0x3
-               	sxtw	x0, w0
                	stur	w0, [x29, #-0x10]
                	ldursw	x0, [x29, #-0x10]
                	cmp	x0, #0x8

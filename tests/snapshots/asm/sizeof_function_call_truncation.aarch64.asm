@@ -19,10 +19,7 @@ Disassembly of section .text:
                	asr	x0, x0, #8
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	sxtw	x1, w1
-               	sxtw	x0, w0
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	sxtw	x0, w0
                	add	sp, sp, #0x30
@@ -36,10 +33,7 @@ Disassembly of section .text:
                	asr	x0, x0, #8
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	sxtw	x1, w1
-               	sxtw	x0, w0
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	sxtw	x0, w0
                	cmp	x0, #0x8c
@@ -52,10 +46,7 @@ Disassembly of section .text:
                	asr	x0, x0, #8
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	sxtw	x1, w1
-               	sxtw	x0, w0
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	sxtw	x0, w0
                	cmp	x0, #0x0
@@ -68,10 +59,7 @@ Disassembly of section .text:
                	asr	x0, x0, #8
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	sxtw	x1, w1
-               	sxtw	x0, w0
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	sxtw	x0, w0
                	cmp	x0, #0x1fe

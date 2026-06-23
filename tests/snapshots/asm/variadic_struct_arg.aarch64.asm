@@ -83,13 +83,11 @@ Disassembly of section .text:
                	str	x10, [x3]
                	ldr	x10, [sp], #0x10
                	mov	x2, x3
-               	sxtw	x0, w0
                	sub	x2, x29, #0x38
                	ldrsw	x2, [x2]
                	sub	x3, x29, #0x38
                	ldrsw	x3, [x3, #0x4]
                	add	x2, x2, x3
-               	sxtw	x2, w2
                	add	x0, x0, x2
                	b	<addr>
                	sub	x1, x29, #0x20

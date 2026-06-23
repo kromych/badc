@@ -101,7 +101,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=2
   block 4  start_pc=0
     v16  LoadLocal { off=2, kind=I64 }                    -> x0
     v17  Extend { value=v7, kind=I32 }                    -> x0
-    v18  BinopI { op=sub, lhs=v17, rhs_imm=1 }            -> x0
+    v18  BinopI { op=sub, lhs=v7, rhs_imm=1 }             -> x0
     v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x1
     v20  Extend { value=v18, kind=I32 }                   -> x0
     v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x1
@@ -120,7 +120,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=2
   block 7  start_pc=0
     v29  LoadLocal { off=2, kind=I64 }                    -> x0
     v30  Extend { value=v7, kind=I32 }                    -> x0
-    v31  BinopI { op=sub, lhs=v30, rhs_imm=1 }            -> x0
+    v31  BinopI { op=sub, lhs=v7, rhs_imm=1 }             -> x0
     v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x1
     v33  Extend { value=v31, kind=I32 }                   -> x0
     v34  BinopI { op=shl, lhs=v33, rhs_imm=3 }            -> x1

@@ -17,15 +17,10 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	mov	x0, #0x7                // =7
                	lsl	x1, x0, #1
-               	sxtw	x1, w1
                	lsl	x2, x0, #2
-               	sxtw	x2, w2
                	lsl	x3, x0, #3
-               	sxtw	x3, w3
                	lsl	x4, x0, #4
-               	sxtw	x4, w4
                	lsl	x5, x0, #10
-               	sxtw	x5, w5
                	lsl	x6, x0, #1
                	mov	w6, w6
                	lsl	x7, x0, #8
@@ -33,11 +28,8 @@ Disassembly of section .text:
                	lsl	x8, x0, #5
                	lsl	x0, x0, #16
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	add	x1, x1, x3
-               	sxtw	x1, w1
                	add	x1, x1, x4
-               	sxtw	x1, w1
                	add	x1, x1, x5
                	sxtw	x1, w1
                	mov	w2, w6

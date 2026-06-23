@@ -43,16 +43,16 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v25  Imm(0)                                           -> x8
     terminator Jmp(b5)   (exit_acc=v24)
   block 7  start_pc=0
-    v26  Extend { value=v18, kind=I32 }                   -> x6
-    v27  BinopI { op=add, lhs=v26, rhs_imm=1 }            -> x6
+    v26  Extend { value=v18, kind=I32 }                   -> x8
+    v27  BinopI { op=add, lhs=v18, rhs_imm=1 }            -> x6
     v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x8
     v29  Extend { value=v27, kind=I32 }                   -> x6
     v30  Imm(0)                                           -> x8
     terminator Jmp(b6)   (exit_acc=v29)
   block 8  start_pc=0
-    v31  Extend { value=v6, kind=I32 }                    -> x1
+    v31  Extend { value=v6, kind=I32 }                    -> x2
     v32  Extend { value=v18, kind=I32 }                   -> x2
-    v33  Binop { op=add, lhs=v31, rhs=v32 }               -> x1
+    v33  Binop { op=add, lhs=v6, rhs=v18 }                -> x1
     v34  BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x2
     v35  Extend { value=v33, kind=I32 }                   -> x1
     v36  Imm(0)                                           -> x2

@@ -102,13 +102,10 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	0x8(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	0xc(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	0x10(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -271,7 +268,6 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rcx
                	movslq	0x4(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leaq	-0x18(%rbp), %rcx
                	movslq	0x8(%rcx), %rcx
                	addq	%rcx, %rax

@@ -537,13 +537,13 @@ fn jmp_to_next_block_falls_through() {
     );
 }
 
-/// C99 6.3.1.8 + 6.5p5: the walker emits the post-binop
-/// sign-narrow as `Binop(Shl, X, Imm(32)); Binop(Shr, _, Imm(32))`.
-/// The aarch64 allocator's sxtw fold collapses that pair into a
-/// single `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`); the x86_64
-/// emit picks `movsxd r64, r32`. Verify the encoded byte
-/// sequence shows up in the emitted text and the two-shift
-/// pair does not.
+/// C99 6.3.1.8 + 6.5p5: the post-binop sign-narrow that renormalizes an
+/// `int` result is built as `Inst::Extend { kind: I32 }`, which the
+/// aarch64 emit lowers to `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`) and the
+/// x86_64 emit to `movsxd r64, r32`. The product feeds a return, whose
+/// upper bits are observed, so the extension is kept. Verify the encoded
+/// byte sequence shows up and the pre-canonicalization shift pair (a
+/// `movz xN, #32` feeding an `lsl`) does not.
 #[test]
 fn sxtw_fold_collapses_int_mul_sign_narrow() {
     use crate::{NativeOptions, Target, emit_native_with_options};

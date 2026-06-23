@@ -17,7 +17,6 @@ Disassembly of section .text:
                	mov	x17, #0x8000            // =32768
                	and	x1, x1, x17
                	cbz	x1, <addr>
-               	sxtw	x0, w0
                	mov	x17, #0x10000           // =65536
                	sub	x0, x0, x17
                	sxtw	x0, w0
@@ -189,7 +188,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
@@ -283,7 +281,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0xd8
                	ldrsh	x1, [x1, #0x2]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0xd8
                	ldrsh	x1, [x1, #0x4]
                	add	x0, x0, x1

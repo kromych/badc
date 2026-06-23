@@ -16,9 +16,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v6   LoadLocal { off=2, kind=I32 }                    -> x1
     v7   BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x1
     v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x2
-    v9   Extend { value=v7, kind=I32 }                    -> x1
+    v9   Extend { value=v7, kind=I32 }                    -> x2
     v10  Imm(0)                                           -> x2
-    v11  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x1
+    v11  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x1
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x2
     v13  Extend { value=v11, kind=I32 }                   -> x1
     v14  LoadLocal { off=2, kind=I32 }                    -> x1

@@ -35,8 +35,7 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	mov	x1, #0x2                // =2
                	b	<addr>
-               	sxtw	x0, w1
-               	mul	x0, x0, x0
+               	mul	x0, x1, x1
                	sxtw	x2, w0
                	b	<addr>
                	b	<addr>
@@ -46,9 +45,7 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ge	<addr>
                	b	<addr>
-               	sxtw	x0, w2
-               	sxtw	x2, w1
-               	add	x2, x0, x2
+               	add	x2, x2, x1
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

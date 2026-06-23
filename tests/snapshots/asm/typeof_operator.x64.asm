@@ -33,7 +33,6 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	addq	$0x3, %rax
-               	movslq	%eax, %rax
                	movl	%eax, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
                	cmpq	$0x8, %rax
@@ -117,3 +116,5 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

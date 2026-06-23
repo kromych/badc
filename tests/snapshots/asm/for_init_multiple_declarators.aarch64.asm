@@ -44,7 +44,6 @@ Disassembly of section .text:
                	sxtw	x3, w3
                	add	x3, x3, #0x1
                	b	<addr>
-               	sxtw	x2, w2
                	add	x2, x2, x1
                	b	<addr>
                	sxtw	x0, w2

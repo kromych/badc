@@ -26,9 +26,7 @@ Disassembly of section .text:
                	incq	%rcx
                	jmp	<addr>
                	pause
-               	movslq	%eax, %rax
-               	movslq	%ecx, %rdx
-               	addq	%rdx, %rax
+               	addq	%rcx, %rax
                	jmp	<addr>
                	movslq	%eax, %rax
                	movq	(%rsp), %r13
@@ -64,3 +62,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

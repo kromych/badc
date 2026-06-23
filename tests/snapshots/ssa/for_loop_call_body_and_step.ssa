@@ -52,7 +52,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     terminator Jmp(b2)   (exit_acc=v12)
   block 4  start_pc=0
     v14  Extend { value=v5, kind=I32 }                    -> x0
-    v15  BinopI { op=mul, lhs=v14, rhs_imm=6 }            -> x0
+    v15  BinopI { op=mul, lhs=v5, rhs_imm=6 }             -> x0
     v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
     v17  Extend { value=v15, kind=I32 }                   -> x0
     terminator Return(v17)   (exit_acc=v17)

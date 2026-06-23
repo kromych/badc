@@ -64,7 +64,7 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	movslq	%edx, %rcx
+               	movq	%rdx, %rcx
                	incq	%rcx
                	movslq	%ecx, %rsi
                	movslq	%esi, %rcx

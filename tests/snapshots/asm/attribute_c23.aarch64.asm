@@ -24,8 +24,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	ret
                	mov	x2, #0xa                // =10
-               	sxtw	x0, w2
-               	add	x0, x0, #0x1
+               	add	x0, x2, #0x1
                	b	<addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16

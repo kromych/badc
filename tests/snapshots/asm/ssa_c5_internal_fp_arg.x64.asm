@@ -52,7 +52,6 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
                	subq	%rdi, %rax
                	movslq	%eax, %rax
                	movabsq	$0x4049400000000000, %rcx # imm = 0x4049400000000000
@@ -135,4 +134,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

@@ -107,7 +107,6 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x10]
                	mov	x17, #0x7               // =7
                	mul	x2, x1, x17
-               	sxtw	x2, w2
                	sub	x2, x2, #0x3
                	str	w2, [x0, x1, lsl #2]
                	b	<addr>
@@ -302,7 +301,6 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x8]
                	ldur	x1, [x29, #-0x18]
                	ldr	x1, [x1]
-               	sxtw	x1, w1
                	add	x0, x0, x1
                	stur	w0, [x29, #-0x8]
                	b	<addr>

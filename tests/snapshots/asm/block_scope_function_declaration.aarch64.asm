@@ -136,7 +136,6 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	sxtw	x2, w2
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	add	x0, x0, x2
                	sxtw	x0, w0
                	ret

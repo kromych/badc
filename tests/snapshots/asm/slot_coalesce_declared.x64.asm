@@ -416,7 +416,7 @@ Disassembly of section .text:
                	addq	$0x3e8, %rdi            # imm = 0x3E8
                	movslq	%edi, %rdi
                	movq	%rdi, (%rdx,%rsi,8)
-               	movslq	%eax, %rdx
+               	movq	%rax, %rdx
                	addq	$0x3e8, %rdx            # imm = 0x3E8
                	movslq	%edx, %rdx
                	addq	%rdx, %rcx

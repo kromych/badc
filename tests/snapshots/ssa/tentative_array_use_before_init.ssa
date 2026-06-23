@@ -53,13 +53,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v10  Imm(0)                                           -> x2
     terminator Jmp(b1)   (exit_acc=v9)
   block 3  start_pc=0
-    v11  Extend { value=v5, kind=I32 }                    -> x0
+    v11  Extend { value=v5, kind=I32 }                    -> x2
     v12  ImmData(136)                                     -> x2
     v13  Extend { value=v4, kind=I32 }                    -> x6
     v14  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x7
     v15  Binop { op=add, lhs=v12, rhs=v14 }               -> x7
     v16  LoadIndexed { base=v12, index=v13, scale=4, kind=I32 } -> x2
-    v17  Binop { op=add, lhs=v11, rhs=v16 }               -> x0
+    v17  Binop { op=add, lhs=v5, rhs=v16 }                -> x0
     v18  Imm(0)                                           -> x2
     v19  Extend { value=v17, kind=I32 }                   -> x2
     terminator Jmp(b2)   (exit_acc=v19)

@@ -24,9 +24,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     terminator Jmp(b1)   (exit_acc=v12)
   block 3  start_pc=0
     v14  Intrinsic { kind=31, args=[] }                   -> x2
-    v15  Extend { value=v7, kind=I32 }                    -> x0
+    v15  Extend { value=v7, kind=I32 }                    -> x2
     v16  Extend { value=v6, kind=I32 }                    -> x2
-    v17  Binop { op=add, lhs=v15, rhs=v16 }               -> x0
+    v17  Binop { op=add, lhs=v7, rhs=v6 }                 -> x0
     v18  Imm(0)                                           -> x2
     v19  Extend { value=v17, kind=I32 }                   -> x2
     terminator Jmp(b2)   (exit_acc=v19)

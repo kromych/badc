@@ -37,11 +37,8 @@ Disassembly of section .text:
                	mov	x4, #0xacef             // =44271
                	movk	x4, #0xf, lsl #16
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	add	x1, x1, x3
-               	sxtw	x1, w1
                	add	x1, x1, x4
-               	sxtw	x1, w1
                	add	x0, x1, x0
                	sxtw	x0, w0
                	add	sp, sp, #0x20
@@ -105,11 +102,8 @@ Disassembly of section .text:
                	mov	x4, #0xacef             // =44271
                	movk	x4, #0xf, lsl #16
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	add	x1, x1, x3
-               	sxtw	x1, w1
                	add	x1, x1, x4
-               	sxtw	x1, w1
                	add	x0, x1, x0
                	sxtw	x0, w0
                	sxtw	x0, w0

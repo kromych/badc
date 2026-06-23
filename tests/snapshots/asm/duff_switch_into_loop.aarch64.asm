@@ -110,8 +110,7 @@ Disassembly of section .text:
                	ldrb	w0, [x2]
                	strb	w0, [x1]
                	b	<addr>
-               	sxtw	x0, w3
-               	sub	x3, x0, #0x1
+               	sub	x3, x3, #0x1
                	sxtw	x0, w3
                	cmp	x0, #0x0
                	b.gt	<addr>

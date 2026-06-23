@@ -23,17 +23,12 @@ Disassembly of section .text:
                	movslq	%edi, %r8
                	cmpq	$0x3, %r8
                	jge	<addr>
-               	movslq	%edx, %rdx
                	movq	%rax, %r8
                	andq	$0xff, %r8
                	addq	%r8, %rdx
-               	movslq	%edx, %rdx
-               	movslq	%esi, %rsi
                	movq	%rcx, %r8
                	andq	$0xffff, %r8            # imm = 0xFFFF
                	addq	%r8, %rsi
-               	movslq	%esi, %rsi
-               	movslq	%edi, %rdi
                	incq	%rdi
                	movslq	%edi, %rdi
                	jmp	<addr>
@@ -52,19 +47,19 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%r8d, %rax
+               	movq	%r8, %rax
                	addq	$0x2, %rax
                	movslq	%eax, %r8
                	movslq	%edx, %rax
                	cmpq	$0x84, %rax
                	je	<addr>
-               	movslq	%r8d, %rax
+               	movq	%r8, %rax
                	addq	$0x4, %rax
                	movslq	%eax, %r8
                	movslq	%esi, %rax
                	cmpq	$0x69cf, %rax           # imm = 0x69CF
                	je	<addr>
-               	movslq	%r8d, %rax
+               	movq	%r8, %rax
                	addq	$0x8, %rax
                	movslq	%eax, %r8
                	movslq	%r8d, %rax
@@ -76,4 +71,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

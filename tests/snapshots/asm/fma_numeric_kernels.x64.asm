@@ -262,9 +262,7 @@ Disassembly of section .text:
                	shlq	$0x3, %r8
                	addq	%r8, %rax
                	leaq	(%rsi,%rsi,2), %rsi
-               	movslq	%esi, %rsi
                	addq	%rdi, %rsi
-               	movslq	%esi, %rsi
                	incq	%rsi
                	movslq	%esi, %rsi
                	cvtsi2sd	%rsi, %xmm0
@@ -418,5 +416,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

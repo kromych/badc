@@ -28,7 +28,7 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	jmp	<addr>
                	movl	$0x14, %edx
-               	movslq	%edx, %rax
+               	movq	%rdx, %rax
                	addq	$0x5, %rax
                	movslq	%eax, %rax
                	jmp	<addr>

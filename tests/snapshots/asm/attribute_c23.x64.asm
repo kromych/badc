@@ -40,7 +40,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0xa, %ecx
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	incq	%rax
                	jmp	<addr>
                	movabsq	$-0x1, %rax

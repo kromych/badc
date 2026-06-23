@@ -93,7 +93,6 @@ Disassembly of section .text:
                	sxtw	x2, w1
                	add	x0, x0, x2
                	add	x2, x2, #0x1
-               	sxtw	x2, w2
                	mov	x17, #0xff              // =255
                	and	x2, x2, x17
                	strb	w2, [x0]
@@ -130,8 +129,7 @@ Disassembly of section .text:
                	mov	x3, x20
                	bl	<addr>
                	b	<addr>
-               	sxtw	x0, w20
-               	add	x0, x0, #0xa
+               	add	x0, x20, #0xa
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	add	sp, sp, #0x50
@@ -161,8 +159,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w20
-               	add	x0, x0, #0x14
+               	add	x0, x20, #0x14
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	add	sp, sp, #0x50

@@ -27,19 +27,12 @@ Disassembly of section .text:
                	sxtw	x6, w6
                	sxtw	x7, w7
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	add	x0, x0, x2
-               	sxtw	x0, w0
                	add	x0, x0, x3
-               	sxtw	x0, w0
                	add	x0, x0, x4
-               	sxtw	x0, w0
                	add	x0, x0, x5
-               	sxtw	x0, w0
                	add	x0, x0, x6
-               	sxtw	x0, w0
                	add	x0, x0, x7
-               	sxtw	x0, w0
                	ldursw	x1, [x29, #0x90]
                	add	x0, x0, x1
                	sxtw	x0, w0

@@ -76,11 +76,9 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	movzbq	0x1(%rdi), %rcx
                	shlq	$0x10, %rcx
-               	movslq	%ecx, %rcx
                	orq	%rcx, %rax
                	movzbq	0x2(%rdi), %rcx
                	shlq	$0x8, %rcx
-               	movslq	%ecx, %rcx
                	orq	%rcx, %rax
                	movzbq	0x3(%rdi), %rcx
                	orq	%rcx, %rax
@@ -165,11 +163,9 @@ Disassembly of section .text:
                	movl	%edx, %edx
                	movzbq	0x1(%rax), %rsi
                	shlq	$0x10, %rsi
-               	movslq	%esi, %rsi
                	orq	%rsi, %rdx
                	movzbq	0x2(%rax), %rsi
                	shlq	$0x8, %rsi
-               	movslq	%esi, %rsi
                	orq	%rsi, %rdx
                	movzbq	0x3(%rax), %rax
                	orq	%rdx, %rax

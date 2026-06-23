@@ -19,7 +19,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	cmpq	$0x5, %rax
                	jge	<addr>
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	incq	%rax
                	movslq	%eax, %rcx
                	jmp	<addr>

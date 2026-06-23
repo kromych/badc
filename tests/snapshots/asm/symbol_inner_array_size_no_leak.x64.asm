@@ -21,14 +21,12 @@ Disassembly of section .text:
                	cmpq	%rsi, %rax
                	jge	<addr>
                	jmp	<addr>
-               	movslq	%ecx, %rax
-               	movq	%rax, %rcx
                	incq	%rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
                	leaq	(%rax,%rax,2), %rdx
-               	movslq	%edx, %rdx
-               	movw	%dx, (%rdi,%rax,2)
+               	movslq	%edx, %r8
+               	movw	%r8w, (%rdi,%rax,2)
                	jmp	<addr>
                	movq	%rsi, %rax
                	decq	%rax
@@ -93,3 +91,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

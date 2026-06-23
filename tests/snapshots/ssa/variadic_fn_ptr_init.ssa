@@ -24,12 +24,12 @@ fn ent_pc=0 n_params=2 variadic=true locals=5
     v14  Imm(0)                                           -> x2
     terminator Jmp(b1)   (exit_acc=v13)
   block 3  start_pc=0
-    v15  Extend { value=v8, kind=I32 }                    -> x0
+    v15  Extend { value=v8, kind=I32 }                    -> x2
     v16  LocalAddr(-3)                                    -> x2
     v17  Imm(4)                                           -> x6
     v18  Intrinsic { kind=5, args=[v16, v17] }            -> x2
     v19  Load { addr=v18, disp=0, kind=I32 }              -> x2
-    v20  Binop { op=add, lhs=v15, rhs=v19 }               -> x0
+    v20  Binop { op=add, lhs=v8, rhs=v19 }                -> x0
     v21  Imm(0)                                           -> x2
     v22  Extend { value=v20, kind=I32 }                   -> x2
     terminator Jmp(b2)   (exit_acc=v22)

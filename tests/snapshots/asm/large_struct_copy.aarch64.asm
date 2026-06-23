@@ -367,8 +367,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x490
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w20
-               	add	x0, x0, #0xa
+               	add	x0, x20, #0xa
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -384,8 +383,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cmp	x0, x1
                	b.eq	<addr>
-               	sxtw	x0, w20
-               	add	x0, x0, #0x3c
+               	add	x0, x20, #0x3c
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -401,8 +399,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cmp	x0, x1
                	b.eq	<addr>
-               	sxtw	x0, w20
-               	add	x0, x0, #0x6e
+               	add	x0, x20, #0x6e
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

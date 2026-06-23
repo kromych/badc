@@ -60,7 +60,6 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	movl	$0x7, %esi
                	movl	%esi, (%rdx)
-               	movslq	%ecx, %rcx
                	addq	%rax, %rcx
                	movslq	%ecx, %rcx
                	cmpq	$0x69, %rcx
@@ -115,4 +114,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

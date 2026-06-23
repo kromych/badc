@@ -222,9 +222,7 @@ Disassembly of section .text:
                	add	x0, x0, x5
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
-               	sxtw	x3, w3
                	add	x3, x3, x4
-               	sxtw	x3, w3
                	add	x3, x3, #0x1
                	sxtw	x3, w3
                	scvtf	d0, x3

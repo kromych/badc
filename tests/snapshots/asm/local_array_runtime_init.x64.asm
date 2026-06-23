@@ -39,7 +39,6 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	movslq	%eax, %rax
                	leaq	-0x8(%rbp), %rcx
                	movzwq	0x2(%rcx), %rcx
                	addq	%rcx, %rax
@@ -86,7 +85,6 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movslq	0x4(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rcx
                	movslq	0x8(%rcx), %rcx
                	addq	%rcx, %rax
@@ -147,17 +145,17 @@ Disassembly of section .text:
                	popq	%r11
                	movq	%rdi, %rax
                	addq	$0x61, %rax
-               	movslq	%eax, %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movb	%al, (%rcx)
+               	movslq	%eax, %rcx
+               	leaq	-0x8(%rbp), %rax
+               	movb	%cl, (%rax)
                	movl	$0x62, %eax
                	leaq	-0x8(%rbp), %rcx
                	movb	%al, 0x1(%rcx)
                	movq	%rdi, %rax
                	incq	%rax
-               	movslq	%eax, %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movb	%al, 0x2(%rcx)
+               	movslq	%eax, %rcx
+               	leaq	-0x8(%rbp), %rax
+               	movb	%cl, 0x2(%rax)
                	movl	$0x64, %eax
                	leaq	-0x8(%rbp), %rcx
                	movb	%al, 0x3(%rcx)
@@ -170,7 +168,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	incq	%rcx
                	jmp	<addr>
-               	movslq	%eax, %rax
                	leaq	-0x8(%rbp), %rdx
                	movslq	%ecx, %rsi
                	addq	%rsi, %rdx
@@ -251,7 +248,6 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movslq	0x4(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rcx
                	movslq	0x8(%rcx), %rcx
                	addq	%rcx, %rax

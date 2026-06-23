@@ -39,8 +39,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v3   LoadLocal { off=2, kind=I16 }                    -> x0
     v4   BinopI { op=shl, lhs=v1, rhs_imm=8 }             -> x0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
-    v6   Extend { value=v4, kind=I32 }                    -> x0
-    v7   BinopI { op=shl, lhs=v6, rhs_imm=48 }            -> x1
+    v6   Extend { value=v4, kind=I32 }                    -> x1
+    v7   BinopI { op=shl, lhs=v4, rhs_imm=48 }            -> x0
     v8   Extend { value=v6, kind=I16 }                    -> x0
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=3 ---
@@ -54,8 +54,8 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v3   LoadLocal { off=2, kind=I8 }                     -> x0
     v4   BinopI { op=add, lhs=v1, rhs_imm=100 }           -> x0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
-    v6   Extend { value=v4, kind=I32 }                    -> x0
-    v7   BinopI { op=shl, lhs=v6, rhs_imm=56 }            -> x1
+    v6   Extend { value=v4, kind=I32 }                    -> x1
+    v7   BinopI { op=shl, lhs=v4, rhs_imm=56 }            -> x0
     v8   Extend { value=v6, kind=I8 }                     -> x0
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=4 ---
@@ -100,8 +100,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v26  Imm(0)                                           -> x1
     v27  BinopI { op=shl, lhs=v25, rhs_imm=8 }            -> x0
     v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x1
-    v29  Extend { value=v27, kind=I32 }                   -> x0
-    v30  BinopI { op=shl, lhs=v29, rhs_imm=48 }           -> x1
+    v29  Extend { value=v27, kind=I32 }                   -> x1
+    v30  BinopI { op=shl, lhs=v27, rhs_imm=48 }           -> x0
     v31  Extend { value=v29, kind=I16 }                   -> x0
     v32  BinopI { op=ne, lhs=v31, rhs_imm=16384 }         -> x0
     terminator Bz { cond=v32, target=b6, fall=b5 }   (exit_acc=v32)
@@ -113,8 +113,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v35  Imm(0)                                           -> x1
     v36  BinopI { op=add, lhs=v34, rhs_imm=100 }          -> x0
     v37  BinopI { op=shl, lhs=v36, rhs_imm=32 }           -> x1
-    v38  Extend { value=v36, kind=I32 }                   -> x0
-    v39  BinopI { op=shl, lhs=v38, rhs_imm=56 }           -> x1
+    v38  Extend { value=v36, kind=I32 }                   -> x1
+    v39  BinopI { op=shl, lhs=v36, rhs_imm=56 }           -> x0
     v40  Extend { value=v38, kind=I8 }                    -> x0
     v41  BinopI { op=ne, lhs=v40, rhs_imm=-56 }           -> x0
     terminator Bz { cond=v41, target=b8, fall=b7 }   (exit_acc=v41)

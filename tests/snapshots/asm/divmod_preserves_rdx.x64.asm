@@ -52,22 +52,12 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	popq	%rdx
                	popq	%rax
-               	movslq	%r8d, %r8
-               	movslq	%r9d, %r9
                	addq	%r9, %r8
-               	movslq	%r8d, %r8
-               	movslq	%r11d, %r9
-               	addq	%r9, %r8
-               	movslq	%r8d, %r8
-               	movslq	%edi, %rdi
+               	addq	%r11, %r8
                	addq	%r8, %rdi
-               	movslq	%edi, %rdi
                	addq	%rdi, %rax
-               	movslq	%eax, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	addq	%rsi, %rax
                	movslq	%eax, %rbx
                	leaq	<rip>, %rdi
@@ -86,3 +76,4 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

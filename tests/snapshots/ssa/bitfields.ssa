@@ -301,8 +301,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
     v211 BinopI { op=and, lhs=v210, rhs_imm=255 }         -> x1
     v212 BinopI { op=add, lhs=v211, rhs_imm=1 }           -> x1
     v213 BinopI { op=shl, lhs=v212, rhs_imm=32 }          -> x2
-    v214 Extend { value=v212, kind=I32 }                  -> x1
-    v215 BinopI { op=and, lhs=v214, rhs_imm=255 }         -> x1
+    v214 Extend { value=v212, kind=I32 }                  -> x2
+    v215 BinopI { op=and, lhs=v212, rhs_imm=255 }         -> x1
     v216 Load { addr=v207, disp=0, kind=U32 }             -> x2
     v217 BinopI { op=and, lhs=v216, rhs_imm=-65281 }      -> x2
     v218 BinopI { op=shl, lhs=v215, rhs_imm=8 }           -> x1

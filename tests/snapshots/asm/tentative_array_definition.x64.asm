@@ -37,15 +37,11 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	%rbx, %rax
                	je	<addr>
-               	movslq	%r12d, %rax
-               	movq	%rax, %r12
                	orq	$0x2, %r12
                	leaq	<rip>, %rax
                	movsbq	(%rax), %rax
                	cmpq	$0x68, %rax
                	je	<addr>
-               	movslq	%r12d, %rax
-               	movq	%rax, %r12
                	orq	$0x4, %r12
                	xorq	%rbx, %rbx
                	leaq	<rip>, %rax
@@ -73,8 +69,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>
-               	movslq	%r12d, %rax
-               	movq	%rax, %r12
                	orq	$0x8, %r12
                	jmp	<addr>
                	leaq	<rip>, %rdi
@@ -104,4 +98,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

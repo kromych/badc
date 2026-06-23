@@ -98,7 +98,6 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	b	<addr>

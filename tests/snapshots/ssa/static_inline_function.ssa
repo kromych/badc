@@ -9,8 +9,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v3   LoadLocal { off=2, kind=I32 }                    -> x0
     v4   BinopI { op=mul, lhs=v1, rhs_imm=3 }             -> x0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
-    v6   Extend { value=v4, kind=I32 }                    -> x0
-    v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
+    v6   Extend { value=v4, kind=I32 }                    -> x1
+    v7   BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x0
     v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x0
     terminator Return(v9)   (exit_acc=v9)
@@ -52,8 +52,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v2   Imm(0)                                           -> x1
     v3   BinopI { op=mul, lhs=v1, rhs_imm=3 }             -> x0
     v4   BinopI { op=shl, lhs=v3, rhs_imm=32 }            -> x1
-    v5   Extend { value=v3, kind=I32 }                    -> x0
-    v6   BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x0
+    v5   Extend { value=v3, kind=I32 }                    -> x1
+    v6   BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x0
     v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
     v8   Extend { value=v6, kind=I32 }                    -> x0
     v9   BinopI { op=ne, lhs=v8, rhs_imm=7 }              -> x0
@@ -66,8 +66,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v12  Imm(0)                                           -> x1
     v13  BinopI { op=mul, lhs=v11, rhs_imm=3 }            -> x0
     v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x1
-    v15  Extend { value=v13, kind=I32 }                   -> x0
-    v16  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x0
+    v15  Extend { value=v13, kind=I32 }                   -> x1
+    v16  BinopI { op=add, lhs=v13, rhs_imm=1 }            -> x0
     v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x1
     v18  Extend { value=v16, kind=I32 }                   -> x0
     v19  BinopI { op=ne, lhs=v18, rhs_imm=-2 }            -> x0

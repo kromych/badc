@@ -21,10 +21,7 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	sarq	$0x8, %rcx
                	andq	$0xff, %rcx
-               	movslq	%eax, %rax
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %r13
@@ -42,10 +39,7 @@ Disassembly of section .text:
                	andq	$0xff, %rcx
                	sarq	$0x8, %rax
                	andq	$0xff, %rax
-               	movslq	%ecx, %rcx
-               	movslq	%eax, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	cmpq	$0x8c, %rax
@@ -60,10 +54,7 @@ Disassembly of section .text:
                	andq	$0xff, %rcx
                	sarq	$0x8, %rax
                	andq	$0xff, %rax
-               	movslq	%ecx, %rcx
-               	movslq	%eax, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -78,10 +69,7 @@ Disassembly of section .text:
                	andq	$0xff, %rcx
                	sarq	$0x8, %rax
                	andq	$0xff, %rax
-               	movslq	%ecx, %rcx
-               	movslq	%eax, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	cmpq	$0x1fe, %rax            # imm = 0x1FE

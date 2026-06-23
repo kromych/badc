@@ -25,7 +25,6 @@ Disassembly of section .text:
                	sxtw	x4, w1
                	add	x5, x4, #0x1
                	str	w5, [x3, x4, lsl #2]
-               	sxtw	x2, w2
                	sxtw	x3, w1
                	lsl	x3, x3, #2
                	add	x4, x0, x3
@@ -34,7 +33,6 @@ Disassembly of section .text:
                	add	x3, x5, x3
                	ldrsw	x3, [x3]
                	add	x3, x4, x3
-               	sxtw	x3, w3
                	add	x2, x2, x3
                	b	<addr>
                	str	w2, [x0, #0xa0]

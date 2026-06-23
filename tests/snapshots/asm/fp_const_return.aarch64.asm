@@ -78,8 +78,7 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.ne	<addr>
                	b	<addr>
-               	sxtw	x1, w2
-               	sub	x1, x1, #0x1
+               	sub	x1, x2, #0x1
                	sxtw	x1, w1
                	ldr	x1, [x0, x1, lsl #3]
                	cmp	x1, #0x0
@@ -91,8 +90,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x1, w2
-               	sub	x1, x1, #0x1
+               	sub	x1, x2, #0x1
                	sxtw	x1, w1
                	ldr	x0, [x0, x1, lsl #3]
                	scvtf	d0, x0

@@ -40,11 +40,8 @@ Disassembly of section .text:
                	movl	$0xcafe, %edx           # imm = 0xCAFE
                	movl	$0xfacef, %esi          # imm = 0xFACEF
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	addq	%rsi, %rax
-               	movslq	%eax, %rax
                	addq	%rdi, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %r13
@@ -111,11 +108,8 @@ Disassembly of section .text:
                	movl	$0xcafe, %esi           # imm = 0xCAFE
                	movl	$0xfacef, %edi          # imm = 0xFACEF
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rdi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	movslq	%eax, %rax
@@ -300,5 +294,4 @@ Disassembly of section .text:
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

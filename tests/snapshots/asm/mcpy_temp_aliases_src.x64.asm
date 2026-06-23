@@ -29,21 +29,13 @@ Disassembly of section .text:
                	movl	$0x9, %ebx
                	movl	$0xa, %r12d
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	addq	%rsi, %rax
-               	movslq	%eax, %rax
                	addq	%rdi, %rax
-               	movslq	%eax, %rax
                	addq	%r8, %rax
-               	movslq	%eax, %rax
                	addq	%r9, %rax
-               	movslq	%eax, %rax
                	addq	%r11, %rax
-               	movslq	%eax, %rax
                	addq	%rbx, %rax
-               	movslq	%eax, %rax
                	addq	%r12, %rax
                	movslq	%eax, %rax
                	leaq	-0x20(%rbp), %rcx

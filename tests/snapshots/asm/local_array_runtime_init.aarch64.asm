@@ -41,7 +41,6 @@ Disassembly of section .text:
                	ldrh	w0, [x0]
                	mov	x17, #0x3e8             // =1000
                	mul	x0, x0, x17
-               	sxtw	x0, w0
                	sub	x1, x29, #0x8
                	ldrh	w1, [x1, #0x2]
                	add	x0, x0, x1
@@ -85,7 +84,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x4]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x8]
                	add	x0, x0, x1
@@ -142,7 +140,6 @@ Disassembly of section .text:
                	strb	w10, [x1, #0x3]
                	ldr	x10, [sp], #0x10
                	add	x1, x0, #0x61
-               	sxtw	x1, w1
                	mov	x17, #0xff              // =255
                	and	x1, x1, x17
                	sub	x2, x29, #0x8
@@ -151,7 +148,6 @@ Disassembly of section .text:
                	sub	x2, x29, #0x8
                	strb	w1, [x2, #0x1]
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
                	sub	x1, x29, #0x8
@@ -168,7 +164,6 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x0, w0
                	sub	x2, x29, #0x8
                	sxtw	x3, w1
                	add	x2, x2, x3
@@ -248,7 +243,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x4]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x8]
                	add	x0, x0, x1

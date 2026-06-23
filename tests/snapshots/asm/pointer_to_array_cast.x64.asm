@@ -27,8 +27,8 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rax
                	movslq	%ecx, %rdx
                	leaq	(%rdx,%rdx,2), %rsi
-               	movslq	%esi, %rsi
-               	movw	%si, (%rax,%rdx,2)
+               	movslq	%esi, %rdi
+               	movw	%di, (%rax,%rdx,2)
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rax
                	leaq	-0x30(%rbp), %rcx

@@ -68,7 +68,6 @@ Disassembly of section .text:
                	ldursw	x3, [x29, #0x10]
                	cmp	x2, x3
                	b.ge	<addr>
-               	sxtw	x0, w0
                	sub	x2, x29, #0x40
                	mov	x17, x2
                	str	x9, [sp, #-0x10]!
@@ -88,8 +87,6 @@ Disassembly of section .text:
                	mov	x2, x16
                	ldrsw	x2, [x2]
                	add	x0, x0, x2
-               	sxtw	x0, w0
-               	sxtw	x1, w1
                	add	x1, x1, #0x1
                	sxtw	x1, w1
                	b	<addr>

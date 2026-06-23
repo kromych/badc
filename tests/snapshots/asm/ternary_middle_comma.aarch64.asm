@@ -187,7 +187,6 @@ Disassembly of section .text:
                	mov	x22, #0x2               // =2
                	mov	x21, #0x3               // =3
                	add	x0, x23, x22
-               	sxtw	x0, w0
                	add	x0, x0, x21
                	sxtw	x20, w0
                	b	<addr>

@@ -19,9 +19,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x0, w0
-               	sxtw	x2, w1
-               	add	x0, x0, x2
+               	add	x0, x0, x1
                	b	<addr>
                	sxtw	x0, w0
                	ret
@@ -35,16 +33,11 @@ Disassembly of section .text:
                	cmp	x3, x4
                	b.ge	<addr>
                	b	<addr>
-               	sxtw	x2, w2
                	add	x2, x2, #0x1
                	sxtw	x1, w1
                	sub	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x0, w0
-               	sxtw	x3, w2
-               	sxtw	x4, w1
-               	add	x3, x3, x4
-               	sxtw	x3, w3
+               	add	x3, x2, x1
                	add	x0, x0, x3
                	b	<addr>
                	sxtw	x0, w0
@@ -78,9 +71,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x0, w0
-               	sxtw	x2, w1
-               	add	x0, x0, x2
+               	add	x0, x0, x1
                	b	<addr>
                	mov	x2, #0xa                // =10
                	sxtw	x1, w2
@@ -90,9 +81,7 @@ Disassembly of section .text:
                	sxtw	x1, w2
                	add	x2, x1, #0x1
                	b	<addr>
-               	sxtw	x0, w0
-               	sxtw	x1, w2
-               	add	x0, x0, x1
+               	add	x0, x0, x2
                	b	<addr>
                	sxtw	x0, w0
                	ret
@@ -117,9 +106,8 @@ Disassembly of section .text:
                	b	<addr>
                	add	x1, x1, #0x4
                	b	<addr>
-               	sxtw	x2, w3
-               	ldrsw	x3, [x1]
-               	add	x3, x2, x3
+               	ldrsw	x2, [x1]
+               	add	x3, x3, x2
                	b	<addr>
                	sxtw	x0, w3
                	add	sp, sp, #0x10

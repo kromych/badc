@@ -56,9 +56,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=13
     v34  Imm(0)                                           -> x7
     terminator Jmp(b7)   (exit_acc=v33)
   block 9  start_pc=0
-    v35  Extend { value=v28, kind=I32 }                   -> x2
+    v35  Extend { value=v28, kind=I32 }                   -> x7
     v36  LoadLocal { off=-7, kind=I32 }                   -> x7
-    v37  Binop { op=add, lhs=v35, rhs=v25 }               -> x2
+    v37  Binop { op=add, lhs=v28, rhs=v25 }               -> x2
     v38  Imm(0)                                           -> x7
     v39  Extend { value=v37, kind=I32 }                   -> x7
     terminator Jmp(b8)   (exit_acc=v39)

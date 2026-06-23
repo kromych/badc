@@ -40,7 +40,6 @@ Disassembly of section .text:
                	add	x5, x0, x5
                	sxtw	x6, w4
                	lsl	x3, x3, #4
-               	sxtw	x3, w3
                	add	x3, x3, x6
                	sxtw	x3, w3
                	str	x3, [x5, x6, lsl #3]

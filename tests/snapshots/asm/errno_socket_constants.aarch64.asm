@@ -60,8 +60,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x1, w2
-               	add	x1, x1, #0x1
+               	add	x1, x2, #0x1
                	sxtw	x3, w1
                	sxtw	x1, w3
                	sxtw	x4, w0

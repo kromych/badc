@@ -29,7 +29,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     v17  Intrinsic { kind=5, args=[v15, v16] }            -> x2
     v18  LocalAddr(-6)                                    -> x6
     v19  Mcpy { dst=v18, src=v17, size=8 }                -> x2
-    v20  Extend { value=v8, kind=I32 }                    -> x0
+    v20  Extend { value=v8, kind=I32 }                    -> x2
     v21  LocalAddr(-6)                                    -> x2
     v22  Load { addr=v21, disp=0, kind=I32 }              -> x2
     v23  LocalAddr(-6)                                    -> x6
@@ -37,8 +37,8 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     v25  Load { addr=v23, disp=4, kind=I32 }              -> x6
     v26  Binop { op=add, lhs=v22, rhs=v25 }               -> x2
     v27  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x6
-    v28  Extend { value=v26, kind=I32 }                   -> x2
-    v29  Binop { op=add, lhs=v20, rhs=v28 }               -> x0
+    v28  Extend { value=v26, kind=I32 }                   -> x6
+    v29  Binop { op=add, lhs=v8, rhs=v26 }                -> x0
     v30  Imm(0)                                           -> x2
     v31  Extend { value=v29, kind=I32 }                   -> x2
     terminator Jmp(b2)   (exit_acc=v31)

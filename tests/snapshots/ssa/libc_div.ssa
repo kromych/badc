@@ -129,11 +129,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=24
     v38  Load { addr=v37, disp=0, kind=I32 }              -> x0
     v39  BinopI { op=mul, lhs=v38, rhs_imm=5 }            -> x0
     v40  BinopI { op=shl, lhs=v39, rhs_imm=32 }           -> x1
-    v41  Extend { value=v39, kind=I32 }                   -> x0
+    v41  Extend { value=v39, kind=I32 }                   -> x1
     v42  LocalAddr(-3)                                    -> x1
     v43  BinopI { op=add, lhs=v42, rhs_imm=4 }            -> x2
     v44  Load { addr=v42, disp=4, kind=I32 }              -> x1
-    v45  Binop { op=add, lhs=v41, rhs=v44 }               -> x0
+    v45  Binop { op=add, lhs=v39, rhs=v44 }               -> x0
     v46  BinopI { op=shl, lhs=v45, rhs_imm=32 }           -> x1
     v47  Extend { value=v45, kind=I32 }                   -> x0
     v48  BinopI { op=ne, lhs=v47, rhs_imm=-17 }           -> x0

@@ -46,11 +46,9 @@ Disassembly of section .text:
                	mov	w2, w2
                	ldrb	w3, [x0, #0x1]
                	lsl	x3, x3, #16
-               	sxtw	x3, w3
                	orr	x2, x2, x3
                	ldrb	w3, [x0, #0x2]
                	lsl	x3, x3, #8
-               	sxtw	x3, w3
                	orr	x2, x2, x3
                	ldrb	w0, [x0, #0x3]
                	orr	x0, x2, x0
@@ -153,11 +151,9 @@ Disassembly of section .text:
                	mov	w2, w2
                	ldrb	w3, [x0, #0x1]
                	lsl	x3, x3, #16
-               	sxtw	x3, w3
                	orr	x2, x2, x3
                	ldrb	w3, [x0, #0x2]
                	lsl	x3, x3, #8
-               	sxtw	x3, w3
                	orr	x2, x2, x3
                	ldrb	w0, [x0, #0x3]
                	orr	x0, x2, x0

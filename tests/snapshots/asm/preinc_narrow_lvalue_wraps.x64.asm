@@ -236,20 +236,15 @@ Disassembly of section .text:
                	movq	%r13, 0x8(%rsp)
                	xorq	%rbx, %rbx
                	callq	<addr>
-               	orq	%rbx, %rax
-               	movslq	%eax, %rbx
+               	orq	%rax, %rbx
                	callq	<addr>
-               	orq	%rbx, %rax
-               	movslq	%eax, %rbx
+               	orq	%rax, %rbx
                	callq	<addr>
-               	orq	%rbx, %rax
-               	movslq	%eax, %rbx
+               	orq	%rax, %rbx
                	callq	<addr>
-               	orq	%rbx, %rax
-               	movslq	%eax, %rbx
+               	orq	%rax, %rbx
                	callq	<addr>
-               	orq	%rbx, %rax
-               	movslq	%eax, %rbx
+               	orq	%rax, %rbx
                	callq	<addr>
                	orq	%rax, %rbx
                	movslq	%ebx, %rsi
@@ -264,4 +259,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

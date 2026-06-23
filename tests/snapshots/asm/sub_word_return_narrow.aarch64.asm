@@ -32,15 +32,15 @@ Disassembly of section .text:
 <s16_shift>:
                	sxth	x0, w0
                	lsl	x0, x0, #8
-               	sxtw	x0, w0
-               	sxth	x0, w0
+               	sxtw	x1, w0
+               	sxth	x0, w1
                	ret
 
 <s8_wrap>:
                	sxtb	x0, w0
                	add	x0, x0, #0x64
-               	sxtw	x0, w0
-               	sxtb	x0, w0
+               	sxtw	x1, w0
+               	sxtb	x0, w1
                	ret
 
 <main>:
@@ -76,8 +76,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x140              // =320
                	lsl	x0, x0, #8
-               	sxtw	x0, w0
-               	sxth	x0, w0
+               	sxtw	x1, w0
+               	sxth	x0, w1
                	mov	x17, #0x4000            // =16384
                	cmp	x0, x17
                	b.eq	<addr>
@@ -85,8 +85,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x64               // =100
                	add	x0, x0, #0x64
-               	sxtw	x0, w0
-               	sxtb	x0, w0
+               	sxtw	x1, w0
+               	sxtb	x0, w1
                	mov	x17, #0xffc8            // =65480
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

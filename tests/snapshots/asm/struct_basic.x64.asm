@@ -25,15 +25,14 @@ Disassembly of section .text:
                	movslq	%ecx, %rsi
                	movslq	%ecx, %rcx
                	imulq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	movslq	%edx, %rax
                	movslq	%edx, %rdx
                	imulq	%rdx, %rax
-               	movslq	%eax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %r13
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

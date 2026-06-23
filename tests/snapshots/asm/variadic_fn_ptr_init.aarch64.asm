@@ -60,7 +60,6 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x0, w0
                	sub	x2, x29, #0x20
                	mov	x17, x2
                	str	x9, [sp, #-0x10]!

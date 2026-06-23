@@ -30,7 +30,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%r13, (%rsp)
                	leaq	<rip>, %rax
-               	movslq	%edi, %rcx
+               	movq	%rdi, %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	leaq	(%rdi,%rsi), %rax
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
                	movq	%r13, 0x18(%rsp)
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	incq	%rax
                	movslq	%eax, %rbx
                	testq	%rdi, %rdi

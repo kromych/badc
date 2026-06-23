@@ -104,11 +104,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=11
     v66  Load { addr=v64, disp=4, kind=I32 }              -> x6
     v67  Binop { op=add, lhs=v63, rhs=v66 }               -> x0
     v68  BinopI { op=shl, lhs=v67, rhs_imm=32 }           -> x6
-    v69  Extend { value=v67, kind=I32 }                   -> x0
+    v69  Extend { value=v67, kind=I32 }                   -> x6
     v70  LocalAddr(-9)                                    -> x6
     v71  BinopI { op=add, lhs=v70, rhs_imm=8 }            -> x7
     v72  Load { addr=v70, disp=8, kind=I32 }              -> x6
-    v73  Binop { op=add, lhs=v69, rhs=v72 }               -> x0
+    v73  Binop { op=add, lhs=v67, rhs=v72 }               -> x0
     v74  BinopI { op=shl, lhs=v73, rhs_imm=32 }           -> x6
     v75  Extend { value=v73, kind=I32 }                   -> x0
     v76  BinopI { op=ne, lhs=v75, rhs_imm=6 }             -> x0

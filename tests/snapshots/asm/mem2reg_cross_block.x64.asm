@@ -21,10 +21,7 @@ Disassembly of section .text:
                	movslq	%edx, %rsi
                	cmpq	$0x3, %rsi
                	jge	<addr>
-               	movslq	%ecx, %rcx
                	addq	%rax, %rcx
-               	movslq	%ecx, %rcx
-               	movslq	%edx, %rdx
                	incq	%rdx
                	movslq	%edx, %rdx
                	jmp	<addr>
@@ -34,3 +31,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

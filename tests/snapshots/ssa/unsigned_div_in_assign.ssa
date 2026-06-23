@@ -15,12 +15,12 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v9   Imm(7)                                           -> x2
     v10  Binop { op=modu, lhs=v4, rhs=v9 }                -> x0
     v11  Imm(0)                                           -> x2
-    v12  Extend { value=v6, kind=I32 }                    -> x1
-    v13  BinopI { op=mul, lhs=v12, rhs_imm=100 }          -> x1
+    v12  Extend { value=v6, kind=I32 }                    -> x2
+    v13  BinopI { op=mul, lhs=v6, rhs_imm=100 }           -> x1
     v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x2
-    v15  Extend { value=v13, kind=I32 }                   -> x1
-    v16  Extend { value=v10, kind=I32 }                   -> x0
-    v17  Binop { op=add, lhs=v15, rhs=v16 }               -> x0
+    v15  Extend { value=v13, kind=I32 }                   -> x2
+    v16  Extend { value=v10, kind=I32 }                   -> x2
+    v17  Binop { op=add, lhs=v13, rhs=v10 }               -> x0
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x1
     v19  Extend { value=v17, kind=I32 }                   -> x0
     terminator Return(v19)   (exit_acc=v19)

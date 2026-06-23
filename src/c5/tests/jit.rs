@@ -1055,6 +1055,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("predefined_constants.c", 0),
     ("c99_qualifiers.c", 0),
     ("integer_suffixes.c", 0),
+    ("int32_sign_extend_elision.c", 0),
     ("predefined_macros.c", 0),
     ("macro_multiline_comment_body.c", 0),
     ("compound_literal_paren_init.c", 0),

@@ -182,7 +182,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=1
     terminator Jmp(b3)   (exit_acc=v125)
   block 26  start_pc=0
     v126 Extend { value=v90, kind=I32 }                   -> x0
-    v127 BinopI { op=add, lhs=v126, rhs_imm=-1 }          -> x6
+    v127 BinopI { op=add, lhs=v90, rhs_imm=-1 }           -> x6
     v128 Imm(0)                                           -> x0
     v129 Extend { value=v127, kind=I32 }                  -> x0
     v130 BinopI { op=gt, lhs=v129, rhs_imm=0 }            -> x0

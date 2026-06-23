@@ -38,9 +38,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x4, w3
-               	sub	x4, x4, x1
-               	sxtw	x4, w4
+               	sub	x4, x3, x1
                	mov	x17, #0x3f              // =63
                	and	x4, x4, x17
                	mov	x5, #0x1                // =1

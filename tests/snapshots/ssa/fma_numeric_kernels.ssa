@@ -266,11 +266,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=31
     v64  Binop { op=add, lhs=v61, rhs=v63 }               -> x0
     v65  BinopI { op=mul, lhs=v59, rhs_imm=3 }            -> x6
     v66  BinopI { op=shl, lhs=v65, rhs_imm=32 }           -> x8
-    v67  Extend { value=v65, kind=I32 }                   -> x6
-    v68  Binop { op=add, lhs=v67, rhs=v62 }               -> x6
+    v67  Extend { value=v65, kind=I32 }                   -> x8
+    v68  Binop { op=add, lhs=v65, rhs=v62 }               -> x6
     v69  BinopI { op=shl, lhs=v68, rhs_imm=32 }           -> x7
-    v70  Extend { value=v68, kind=I32 }                   -> x6
-    v71  BinopI { op=add, lhs=v70, rhs_imm=1 }            -> x6
+    v70  Extend { value=v68, kind=I32 }                   -> x7
+    v71  BinopI { op=add, lhs=v68, rhs_imm=1 }            -> x6
     v72  BinopI { op=shl, lhs=v71, rhs_imm=32 }           -> x7
     v73  Extend { value=v71, kind=I32 }                   -> x6
     v74  FpCast { kind=IntToFp, value=v73 }               -> d0

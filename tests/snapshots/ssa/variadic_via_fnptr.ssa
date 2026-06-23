@@ -25,23 +25,23 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     v19  LoadLocal { off=2, kind=I32 }                    -> x6
     v20  BinopI { op=mul, lhs=v19, rhs_imm=1000 }         -> x6
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x7
-    v22  Extend { value=v20, kind=I32 }                   -> x6
+    v22  Extend { value=v20, kind=I32 }                   -> x7
     v23  Extend { value=v7, kind=I32 }                    -> x7
     v24  BinopI { op=mul, lhs=v7, rhs_imm=100 }           -> x0
     v25  BinopI { op=shl, lhs=v24, rhs_imm=32 }           -> x7
-    v26  Extend { value=v24, kind=I32 }                   -> x0
-    v27  Binop { op=add, lhs=v22, rhs=v26 }               -> x0
+    v26  Extend { value=v24, kind=I32 }                   -> x7
+    v27  Binop { op=add, lhs=v20, rhs=v24 }               -> x0
     v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x6
-    v29  Extend { value=v27, kind=I32 }                   -> x0
+    v29  Extend { value=v27, kind=I32 }                   -> x6
     v30  Extend { value=v11, kind=I32 }                   -> x6
     v31  BinopI { op=mul, lhs=v11, rhs_imm=10 }           -> x1
     v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x6
-    v33  Extend { value=v31, kind=I32 }                   -> x1
-    v34  Binop { op=add, lhs=v29, rhs=v33 }               -> x0
+    v33  Extend { value=v31, kind=I32 }                   -> x6
+    v34  Binop { op=add, lhs=v27, rhs=v31 }               -> x0
     v35  BinopI { op=shl, lhs=v34, rhs_imm=32 }           -> x1
-    v36  Extend { value=v34, kind=I32 }                   -> x0
+    v36  Extend { value=v34, kind=I32 }                   -> x1
     v37  Extend { value=v15, kind=I32 }                   -> x1
-    v38  Binop { op=add, lhs=v36, rhs=v15 }               -> x0
+    v38  Binop { op=add, lhs=v34, rhs=v15 }               -> x0
     v39  BinopI { op=shl, lhs=v38, rhs_imm=32 }           -> x1
     v40  Extend { value=v38, kind=I32 }                   -> x0
     terminator Return(v40)   (exit_acc=v40)

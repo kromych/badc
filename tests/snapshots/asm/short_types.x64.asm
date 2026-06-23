@@ -22,7 +22,6 @@ Disassembly of section .text:
                	andq	$0x8000, %rcx           # imm = 0x8000
                	testq	%rcx, %rcx
                	je	<addr>
-               	movslq	%eax, %rax
                	subq	$0x10000, %rax          # imm = 0x10000
                	movslq	%eax, %rax
                	movq	(%rsp), %r13
@@ -205,7 +204,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	incq	%rax
                	movslq	%eax, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
@@ -292,7 +290,6 @@ Disassembly of section .text:
                	leaq	-0xd8(%rbp), %rcx
                	movswq	0x2(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	leaq	-0xd8(%rbp), %rcx
                	movswq	0x4(%rcx), %rcx
                	addq	%rcx, %rax
@@ -351,3 +348,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

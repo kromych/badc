@@ -49,8 +49,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=3
     v29  Binop { op=add, lhs=v26, rhs=v28 }               -> x11
     v30  BinopI { op=shl, lhs=v24, rhs_imm=4 }            -> x2
     v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x11
-    v32  Extend { value=v30, kind=I32 }                   -> x2
-    v33  Binop { op=add, lhs=v32, rhs=v27 }               -> x2
+    v32  Extend { value=v30, kind=I32 }                   -> x11
+    v33  Binop { op=add, lhs=v30, rhs=v27 }               -> x2
     v34  BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x11
     v35  Extend { value=v33, kind=I32 }                   -> x2
     v36  StoreIndexed { base=v26, index=v27, scale=8, value=v35, kind=I64 } -> -

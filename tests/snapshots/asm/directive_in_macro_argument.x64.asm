@@ -16,14 +16,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%r13, (%rsp)
                	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	movq	%rax, %rcx
                	incq	%rcx
-               	movslq	%ecx, %rax
-               	movq	%rax, %rcx
                	addq	$0x2, %rcx
-               	movslq	%ecx, %rax
-               	movq	%rax, %rcx
                	addq	$0x4, %rcx
                	movslq	%ecx, %rax
                	cmpq	$0x7, %rax
@@ -47,3 +41,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

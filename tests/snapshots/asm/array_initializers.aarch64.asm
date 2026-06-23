@@ -108,13 +108,10 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x2, [x0, #0x8]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x2, [x0, #0xc]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x10]
                	add	x0, x1, x0
                	sxtw	x0, w0
@@ -291,7 +288,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x18
                	ldrsw	x1, [x1, #0x4]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x18
                	ldrsw	x1, [x1, #0x8]
                	add	x0, x0, x1

@@ -184,7 +184,6 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rax
                	movslq	(%rax), %rax
                	leaq	(%rax,%rax,4), %rax
-               	movslq	%eax, %rax
                	leaq	-0x18(%rbp), %rcx
                	movslq	0x4(%rcx), %rcx
                	addq	%rcx, %rax
@@ -275,3 +274,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

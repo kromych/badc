@@ -141,7 +141,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	mov	x17, #0x5               // =5
                	mul	x0, x0, x17
-               	sxtw	x0, w0
                	sub	x1, x29, #0x18
                	ldrsw	x1, [x1, #0x4]
                	add	x0, x0, x1

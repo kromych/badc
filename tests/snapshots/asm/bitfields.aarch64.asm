@@ -371,7 +371,6 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x1, x1, x17
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	mov	x17, #0xff              // =255
                	and	x1, x1, x17
                	ldr	w2, [x0]

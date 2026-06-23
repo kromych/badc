@@ -58,11 +58,9 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldrsh	x1, [x1, #0x4]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldrsh	x1, [x1, #0x6]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x8]
                	add	x0, x0, x1
@@ -85,7 +83,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x4]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x8]
                	add	x0, x0, x1
@@ -110,19 +107,14 @@ Disassembly of section .text:
                	ldrsw	x1, [x1]
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
-               	sxtw	x1, w1
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x8
                	ldrsw	x1, [x1, #0x4]
                	mov	x17, #0x64              // =100
                	mul	x1, x1, x17
-               	sxtw	x1, w1
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	mov	x17, #0x3e8             // =1000
                	mul	x1, x2, x17
-               	sxtw	x1, w1
                	add	x0, x0, x1
                	sxtw	x0, w0
                	add	sp, sp, #0x10
@@ -145,20 +137,15 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	ldrsw	x1, [x1, #0x4]
                	lsl	x1, x1, #1
-               	sxtw	x1, w1
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1]
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
-               	sxtw	x1, w1
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x4]
                	lsl	x1, x1, #2
-               	sxtw	x1, w1
                	add	x0, x0, x1
                	sxtw	x0, w0
                	add	sp, sp, #0x10

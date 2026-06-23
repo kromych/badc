@@ -42,7 +42,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     terminator Return(v25)   (exit_acc=v25)
   block 6  start_pc=0
     v26  Extend { value=v11, kind=I32 }                   -> x1
-    v27  BinopI { op=add, lhs=v26, rhs_imm=1 }            -> x1
+    v27  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x1
     v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x6
     v29  Extend { value=v27, kind=I32 }                   -> x6
     v30  Imm(0)                                           -> x1

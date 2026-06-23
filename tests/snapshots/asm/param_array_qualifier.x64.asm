@@ -18,7 +18,6 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	movslq	0x8(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -35,7 +34,6 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	movslq	0x8(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -52,7 +50,6 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	movslq	0x8(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -69,7 +66,6 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	movslq	0x8(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -101,7 +97,6 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -116,7 +111,6 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -131,7 +125,6 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -156,7 +149,6 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax

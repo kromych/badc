@@ -55,11 +55,11 @@ fn ent_pc=1 n_params=2 variadic=false locals=3
     terminator Return(v9)   (exit_acc=v9)
   block 5  start_pc=0
     v21  Extend { value=v8, kind=I32 }                    -> x2
-    v22  LoadLocal { off=3, kind=I32 }                    -> x8
-    v23  Binop { op=sub, lhs=v21, rhs=v3 }                -> x2
+    v22  LoadLocal { off=3, kind=I32 }                    -> x2
+    v23  Binop { op=sub, lhs=v8, rhs=v3 }                 -> x2
     v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x8
-    v25  Extend { value=v23, kind=I32 }                   -> x2
-    v26  BinopI { op=and, lhs=v25, rhs_imm=63 }           -> x2
+    v25  Extend { value=v23, kind=I32 }                   -> x8
+    v26  BinopI { op=and, lhs=v23, rhs_imm=63 }           -> x2
     v27  Imm(0)                                           -> x8
     v28  LoadLocal { off=-1, kind=I64 }                   -> x8
     v29  Imm(1)                                           -> x8

@@ -18,7 +18,6 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	sub	x0, x29, #0x18
                	ldrb	w0, [x0]
-               	sxtw	x0, w0
                	sub	x0, x0, #0x7
                	sxtw	x0, w0
                	add	sp, sp, #0x20

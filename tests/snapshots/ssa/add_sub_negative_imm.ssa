@@ -96,8 +96,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     terminator Jmp(b15)   (exit_acc=v56)
   block 17  start_pc=0
     v58  Extend { value=v52, kind=I32 }                   -> x0
-    v59  Extend { value=v51, kind=I32 }                   -> x2
-    v60  Binop { op=add, lhs=v58, rhs=v59 }               -> x2
+    v59  Extend { value=v51, kind=I32 }                   -> x0
+    v60  Binop { op=add, lhs=v52, rhs=v51 }               -> x2
     v61  Imm(0)                                           -> x0
     v62  Extend { value=v60, kind=I32 }                   -> x0
     terminator Jmp(b16)   (exit_acc=v62)

@@ -24,22 +24,12 @@ Disassembly of section .text:
                	sdiv	x6, x1, x4
                	sdiv	x7, x2, x4
                	sdiv	x4, x3, x4
-               	sxtw	x5, w5
-               	sxtw	x6, w6
                	add	x5, x5, x6
-               	sxtw	x5, w5
-               	sxtw	x6, w7
-               	add	x5, x5, x6
-               	sxtw	x5, w5
-               	sxtw	x4, w4
+               	add	x5, x5, x7
                	add	x4, x5, x4
-               	sxtw	x4, w4
                	add	x0, x4, x0
-               	sxtw	x0, w0
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	add	x0, x0, x2
-               	sxtw	x0, w0
                	add	x0, x0, x3
                	sxtw	x20, w0
                	adrp	x0, <page>

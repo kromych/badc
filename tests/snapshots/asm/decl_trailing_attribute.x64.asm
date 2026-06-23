@@ -20,7 +20,6 @@ Disassembly of section .text:
                	movb	%cl, (%rax)
                	leaq	-0x18(%rbp), %rax
                	movsbq	(%rax), %rax
-               	movslq	%eax, %rax
                	subq	$0x7, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %r13
@@ -28,4 +27,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

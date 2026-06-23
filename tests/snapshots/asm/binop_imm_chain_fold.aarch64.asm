@@ -17,21 +17,13 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	mov	x0, #0xa                // =10
                	add	x1, x0, #0x3
-               	sxtw	x1, w1
                	add	x1, x1, #0x7
-               	sxtw	x1, w1
                	add	x2, x0, #0x8
-               	sxtw	x2, w2
                	sub	x2, x2, #0x3
-               	sxtw	x2, w2
                	sub	x3, x0, #0x4
-               	sxtw	x3, w3
                	add	x3, x3, #0x9
-               	sxtw	x3, w3
                	sub	x4, x0, #0x2
-               	sxtw	x4, w4
                	sub	x4, x4, #0x5
-               	sxtw	x4, w4
                	mov	x17, #0x3f              // =63
                	and	x5, x0, x17
                	mov	x17, #0x3               // =3
@@ -39,18 +31,10 @@ Disassembly of section .text:
                	mov	x17, #0x3               // =3
                	eor	x0, x0, x17
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	add	x1, x1, x3
-               	sxtw	x1, w1
                	add	x1, x1, x4
-               	sxtw	x1, w1
-               	sxtw	x2, w5
-               	add	x1, x1, x2
-               	sxtw	x1, w1
-               	sxtw	x2, w6
-               	add	x1, x1, x2
-               	sxtw	x1, w1
-               	sxtw	x0, w0
+               	add	x1, x1, x5
+               	add	x1, x1, x6
                	add	x0, x1, x0
                	sxtw	x20, w0
                	adrp	x0, <page>

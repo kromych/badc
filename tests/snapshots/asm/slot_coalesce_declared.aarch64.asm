@@ -352,8 +352,7 @@ Disassembly of section .text:
                	add	x4, x3, #0x3e8
                	sxtw	x4, w4
                	str	x4, [x2, x3, lsl #3]
-               	sxtw	x2, w0
-               	add	x2, x2, #0x3e8
+               	add	x2, x0, #0x3e8
                	sxtw	x2, w2
                	add	x1, x1, x2
                	b	<addr>

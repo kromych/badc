@@ -41,9 +41,8 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x21, x0
                	b	<addr>
-               	sxtw	x0, w21
                	mov	x17, #0x6               // =6
-               	mul	x0, x0, x17
+               	mul	x0, x21, x17
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

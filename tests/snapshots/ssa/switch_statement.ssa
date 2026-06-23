@@ -26,7 +26,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
   block 4  start_pc=0
     v13  Phi { incoming=[b3:v11, b11:v3], kind=I64 }      -> x2
     v14  Extend { value=v13, kind=I32 }                   -> x0
-    v15  BinopI { op=add, lhs=v14, rhs_imm=5 }            -> x0
+    v15  BinopI { op=add, lhs=v13, rhs_imm=5 }            -> x0
     v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
     v17  Extend { value=v15, kind=I32 }                   -> x0
     v18  Imm(0)                                           -> x1

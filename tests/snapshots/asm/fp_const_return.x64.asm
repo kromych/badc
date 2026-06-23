@@ -113,7 +113,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	jmp	<addr>
-               	movslq	%esi, %rax
+               	movq	%rsi, %rax
                	decq	%rax
                	movslq	%eax, %rax
                	movq	(%rdi,%rax,8), %rax
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movslq	%esi, %rax
+               	movq	%rsi, %rax
                	decq	%rax
                	movslq	%eax, %rax
                	movq	(%rdi,%rax,8), %rax

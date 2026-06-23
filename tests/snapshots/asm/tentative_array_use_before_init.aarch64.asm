@@ -40,7 +40,6 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x0, w0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	sxtw	x3, w1

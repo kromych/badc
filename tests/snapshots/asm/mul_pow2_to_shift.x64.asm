@@ -20,19 +20,14 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	movq	%rax, %rcx
                	shlq	$0x1, %rcx
-               	movslq	%ecx, %rcx
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx
-               	movslq	%edx, %rdx
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
-               	movslq	%esi, %rsi
                	movq	%rax, %rdi
                	shlq	$0x4, %rdi
-               	movslq	%edi, %rdi
                	movq	%rax, %r8
                	shlq	$0xa, %r8
-               	movslq	%r8d, %r8
                	movq	%rax, %r9
                	shlq	$0x1, %r9
                	movl	%r9d, %r9d
@@ -43,11 +38,8 @@ Disassembly of section .text:
                	shlq	$0x5, %rbx
                	shlq	$0x10, %rax
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rdi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%r8, %rcx
                	movslq	%ecx, %rcx
                	movl	%r9d, %edx

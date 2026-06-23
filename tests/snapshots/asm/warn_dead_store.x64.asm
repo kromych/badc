@@ -74,13 +74,10 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movl	$0x5, %ecx
                	incq	%rcx
-               	movslq	%ecx, %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rbx
+               	leaq	(%rax,%rcx), %rbx
                	movl	$0x1, %edi
                	callq	<addr>
-               	addq	%rbx, %rax
-               	movslq	%eax, %rbx
+               	addq	%rax, %rbx
                	callq	<addr>
                	addq	%rbx, %rax
                	movslq	%eax, %rax

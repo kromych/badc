@@ -32,8 +32,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x18
                	str	w1, [x0]
-               	sxtw	x0, w1
-               	add	x0, x0, #0x1
+               	add	x0, x1, #0x1
                	sxtw	x0, w0
                	sub	x2, x29, #0x18
                	str	x0, [x2, #0x8]
@@ -50,8 +49,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x18
                	ldr	x0, [x0, #0x8]
-               	sxtw	x2, w1
-               	add	x2, x2, #0x1
+               	add	x2, x1, #0x1
                	sxtw	x2, w2
                	cmp	x0, x2
                	cset	x2, ne
@@ -69,27 +67,23 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	sxtw	x0, w1
-               	lsl	x0, x0, #1
+               	lsl	x0, x1, #1
                	sub	x2, x29, #0x28
                	str	w0, [x2]
-               	sxtw	x0, w1
-               	add	x0, x0, #0x3
+               	add	x0, x1, #0x3
                	sxtw	x0, w0
                	sub	x2, x29, #0x28
                	str	x0, [x2, #0x8]
                	sub	x0, x29, #0x28
                	ldrsw	x0, [x0]
-               	sxtw	x2, w1
-               	lsl	x2, x2, #1
+               	lsl	x2, x1, #1
                	sxtw	x2, w2
                	cmp	x0, x2
                	cset	x2, ne
                	cbnz	x2, <addr>
                	sub	x0, x29, #0x28
                	ldr	x0, [x0, #0x8]
-               	sxtw	x2, w1
-               	add	x2, x2, #0x3
+               	add	x2, x1, #0x3
                	sxtw	x2, w2
                	cmp	x0, x2
                	cset	x2, ne
@@ -109,12 +103,10 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x38
                	str	w1, [x0]
-               	sxtw	x0, w1
-               	lsl	x0, x0, #1
+               	lsl	x0, x1, #1
                	sub	x2, x29, #0x38
                	str	w0, [x2, #0x4]
-               	sxtw	x0, w1
-               	add	x0, x0, #0x5
+               	add	x0, x1, #0x5
                	sxtw	x0, w0
                	sub	x2, x29, #0x38
                	str	x0, [x2, #0x8]
@@ -127,8 +119,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x38
                	ldrsw	x0, [x0, #0x4]
-               	sxtw	x2, w1
-               	lsl	x2, x2, #1
+               	lsl	x2, x1, #1
                	sxtw	x2, w2
                	cmp	x0, x2
                	cset	x0, ne
@@ -137,8 +128,7 @@ Disassembly of section .text:
                	cbnz	x3, <addr>
                	sub	x0, x29, #0x38
                	ldr	x0, [x0, #0x8]
-               	sxtw	x2, w1
-               	add	x2, x2, #0x5
+               	add	x2, x1, #0x5
                	sxtw	x2, w2
                	cmp	x0, x2
                	cset	x3, ne
@@ -164,12 +154,10 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x48
                	str	w1, [x0]
-               	sxtw	x0, w1
-               	add	x0, x0, #0x1
+               	add	x0, x1, #0x1
                	sub	x2, x29, #0x48
                	str	w0, [x2, #0x4]
-               	sxtw	x0, w1
-               	add	x0, x0, #0x2
+               	add	x0, x1, #0x2
                	sub	x2, x29, #0x48
                	str	w0, [x2, #0x8]
                	sub	x0, x29, #0x48
@@ -181,8 +169,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x48
                	ldrsw	x0, [x0, #0x4]
-               	sxtw	x2, w1
-               	add	x2, x2, #0x1
+               	add	x2, x1, #0x1
                	sxtw	x2, w2
                	cmp	x0, x2
                	cset	x0, ne
@@ -191,8 +178,7 @@ Disassembly of section .text:
                	cbnz	x3, <addr>
                	sub	x0, x29, #0x48
                	ldrsw	x0, [x0, #0x8]
-               	sxtw	x2, w1
-               	add	x2, x2, #0x2
+               	add	x2, x1, #0x2
                	sxtw	x2, w2
                	cmp	x0, x2
                	cset	x3, ne

@@ -20,8 +20,7 @@ Disassembly of section .text:
                	cmp	x3, x1
                	b.ge	<addr>
                	b	<addr>
-               	sxtw	x3, w4
-               	add	x3, x3, #0x1
+               	add	x3, x4, #0x1
                	sxtw	x4, w3
                	b	<addr>
                	sxtw	x3, w4
@@ -88,8 +87,7 @@ Disassembly of section .text:
                	cmp	x0, #0x8
                	b.ge	<addr>
                	b	<addr>
-               	sxtw	x0, w22
-               	add	x0, x0, #0x1
+               	add	x0, x22, #0x1
                	sxtw	x22, w0
                	b	<addr>
                	sxtw	x2, w22
@@ -108,7 +106,6 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	str	w22, [x20, x21, lsl #2]
-               	sxtw	x23, w23
                	add	x0, x21, #0x1
                	sxtw	x1, w0
                	mov	x0, x20

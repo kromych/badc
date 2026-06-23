@@ -39,7 +39,6 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -60,10 +59,8 @@ Disassembly of section .text:
                	movsbq	(%rax), %rcx
                	movsbq	0x1(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movsbq	0x2(%rax), %rdx
                	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movsbq	0x3(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -147,7 +144,6 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	movslq	%ecx, %rsi
                	imulq	$0x64, %rdx, %rdx
-               	movslq	%edx, %rdx
                	addq	%rsi, %rdx
                	movl	%edx, (%rax,%rsi,4)
                	jmp	<addr>
@@ -191,10 +187,9 @@ Disassembly of section .text:
                	movslq	%ecx, %rsi
                	addq	%rsi, %rax
                	addq	$0x41, %rdx
-               	movslq	%edx, %rdx
                	addq	%rsi, %rdx
-               	movslq	%edx, %rdx
-               	movb	%dl, (%rax)
+               	movslq	%edx, %rsi
+               	movb	%sil, (%rax)
                	jmp	<addr>
                	jmp	<addr>
                	movl	$0x3, %eax
@@ -209,3 +204,5 @@ Disassembly of section .text:
                	addq	$0x4d0, %rsp            # imm = 0x4D0
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

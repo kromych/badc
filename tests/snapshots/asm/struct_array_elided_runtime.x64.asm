@@ -214,7 +214,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	incq	%rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx

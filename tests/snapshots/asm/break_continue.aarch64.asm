@@ -36,8 +36,6 @@ Disassembly of section .text:
                	cmp	x2, #0x0
                	b.ne	<addr>
                	b	<addr>
-               	sxtw	x1, w1
-               	sxtw	x2, w0
-               	add	x1, x1, x2
+               	add	x1, x1, x0
                	sxtw	x1, w1
                	b	<addr>

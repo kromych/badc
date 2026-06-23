@@ -11,8 +11,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v5   LocalAddr(-3)                                    -> x0
     v6   Load { addr=v5, disp=0, kind=I8 }                -> x0
     v7   Imm(0)                                           -> x1
-    v8   Extend { value=v6, kind=I32 }                    -> x0
-    v9   BinopI { op=sub, lhs=v8, rhs_imm=7 }             -> x0
+    v8   Extend { value=v6, kind=I32 }                    -> x1
+    v9   BinopI { op=sub, lhs=v6, rhs_imm=7 }             -> x0
     v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x1
     v11  Extend { value=v9, kind=I32 }                    -> x0
     terminator Return(v11)   (exit_acc=v11)

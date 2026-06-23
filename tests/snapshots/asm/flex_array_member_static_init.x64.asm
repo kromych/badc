@@ -64,7 +64,7 @@ Disassembly of section .text:
                	cmpq	$0x5, %rax
                	je	<addr>
                	jmp	<addr>
-               	movslq	%edx, %rax
+               	movq	%rdx, %rax
                	addq	$0xa, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %r13
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	cmpq	$0x12345678, %rax       # imm = 0x12345678
                	je	<addr>
                	jmp	<addr>
-               	movslq	%edx, %rax
+               	movq	%rdx, %rax
                	addq	$0x1e, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %r13

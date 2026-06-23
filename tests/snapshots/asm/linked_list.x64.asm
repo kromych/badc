@@ -40,9 +40,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	testq	%r14, %r14
                	je	<addr>
-               	movslq	%r12d, %rax
-               	movq	(%r14), %rcx
-               	leaq	(%rax,%rcx), %r12
+               	movq	(%r14), %rax
+               	addq	%rax, %r12
                	movq	0x8(%r14), %r14
                	jmp	<addr>
                	movslq	%r12d, %rax

@@ -21,24 +21,15 @@ Disassembly of section .text:
                	movslq	%r8d, %r8
                	movslq	%r9d, %r9
                	imulq	$0x186a0, %rdi, %rax    # imm = 0x186A0
-               	movslq	%eax, %rax
                	imulq	$0x2710, %rsi, %rsi     # imm = 0x2710
-               	movslq	%esi, %rsi
                	addq	%rsi, %rax
-               	movslq	%eax, %rax
                	imulq	$0x3e8, %rdx, %rdx      # imm = 0x3E8
-               	movslq	%edx, %rdx
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	movslq	(%rcx), %rcx
                	imulq	$0x64, %rcx, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	imulq	$0xa, %r8, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	addq	%r9, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %r13
@@ -60,24 +51,15 @@ Disassembly of section .text:
                	movl	$0x4, %edi
                	movl	$0x5, %r8d
                	imulq	$0x186a0, %rax, %rax    # imm = 0x186A0
-               	movslq	%eax, %rax
                	imulq	$0x2710, %rcx, %rcx     # imm = 0x2710
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	imulq	$0x3e8, %rdx, %rcx      # imm = 0x3E8
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	movslq	(%rsi), %rcx
                	imulq	$0x64, %rcx, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	imulq	$0xa, %rdi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	addq	%r8, %rax
                	movslq	%eax, %rax
                	cmpq	$0x1e361, %rax          # imm = 0x1E361
@@ -92,5 +74,4 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

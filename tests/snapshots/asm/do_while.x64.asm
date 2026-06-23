@@ -16,7 +16,7 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movq	%r13, (%rsp)
                	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	incq	%rax
                	movslq	%eax, %rcx
                	cmpq	$0x5, %rcx

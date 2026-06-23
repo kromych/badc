@@ -1129,6 +1129,7 @@ fn is_pure_inst(inst: &Inst) -> bool {
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::FpCast { .. }
+            | Inst::Extend { .. }
     )
 }
 

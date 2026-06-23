@@ -13,7 +13,7 @@ Disassembly of section .text:
 <harness>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x40, %rsp
                	movq	%r13, (%rsp)
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
@@ -25,12 +25,10 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
 
@@ -48,9 +46,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	shlq	$0x1, %rax
-               	movslq	%eax, %rax
                	movslq	%eax, %rax
                	cmpq	$0x8c, %rax
                	je	<addr>
@@ -68,9 +64,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	shlq	$0x1, %rax
-               	movslq	%eax, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
@@ -88,9 +82,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	shlq	$0x1, %rax
-               	movslq	%eax, %rax
                	movslq	%eax, %rax
                	cmpq	$0x1fe, %rax            # imm = 0x1FE
                	je	<addr>

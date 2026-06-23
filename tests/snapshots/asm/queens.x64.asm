@@ -13,7 +13,7 @@ Disassembly of section .text:
 <conflicts>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movq	%r13, (%rsp)
                	movslq	%esi, %rsi
                	movslq	%edx, %rdx
@@ -35,17 +35,15 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	subq	%r10, %rax
                	movslq	%eax, %r9
-               	movslq	%r9d, %rax
-               	testq	%rax, %rax
+               	testq	%r9, %r9
                	jge	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movslq	%r9d, %rax
-               	imulq	$-0x1, %rax, %rax
+               	imulq	$-0x1, %r9, %rax
                	movslq	%eax, %r9
                	movslq	%ecx, %rax
                	movslq	(%rdi,%rax,4), %rax
@@ -53,16 +51,15 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movslq	%r8d, %rax
-               	movslq	%r9d, %r8
-               	cmpq	%r8, %rax
+               	movslq	%r9d, %rax
+               	cmpq	%rax, %r8
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>
@@ -118,8 +115,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movslq	%r14d, %rax
-               	movl	%eax, (%rbx,%r12,4)
+               	movl	%r14d, (%rbx,%r12,4)
                	movslq	%r15d, %r15
                	movq	%r12, %rax
                	incq	%rax

@@ -153,10 +153,9 @@ Disassembly of section .text:
                	jge	<addr>
                	leaq	-0x40(%rbp), %rax
                	movslq	%ecx, %rdx
-               	movq	%rdx, %rsi
-               	shlq	$0x3, %rsi
-               	addq	%rsi, %rax
-               	movl	%edx, (%rax)
+               	shlq	$0x3, %rdx
+               	addq	%rdx, %rax
+               	movl	%ecx, (%rax)
                	leaq	-0x40(%rbp), %rax
                	movslq	%ecx, %rdx
                	movq	%rdx, %rsi
@@ -273,7 +272,6 @@ Disassembly of section .text:
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	cmpq	$0xc, %rax
                	je	<addr>
                	movl	$0x10, %eax
@@ -286,4 +284,5 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -83,7 +83,6 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x1, x29, #0x20
                	ldur	x1, [x29, #0x10]
-               	sxtw	x0, w0
                	str	w0, [x1]
                	mov	x0, #0x0                // =0
                	ldr	x19, [sp]

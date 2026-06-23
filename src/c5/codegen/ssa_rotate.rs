@@ -40,7 +40,7 @@
 
 use alloc::vec::Vec;
 
-use super::super::ir::{BinOp, FunctionSsa, Inst, ValueId};
+use super::super::ir::{BinOp, FunctionSsa, Inst, LoadKind, ValueId};
 
 /// Look at `idx`'s def in `func`; return `Some(C)` when it is
 /// `Inst::Imm(C)`. Conservatively returns `None` otherwise.
@@ -52,30 +52,33 @@ fn const_imm(func: &FunctionSsa, idx: ValueId) -> Option<i64> {
     }
 }
 
-/// Trace a 32-bit sign-narrow pair `BinopI(Shr, BinopI(Shl, v, 32),
-/// 32)` and return the inner `v`. Returns `None` when the chain
-/// doesn't match exactly. The pair is what the walker emits when
-/// promoting an int (i32) value to an i64 shift count.
+/// Trace the i32 sign-narrow of a shift count and return the inner
+/// `v`. The builder canonicalizes the `Shl 32; Shr 32` pair into
+/// `Inst::Extend { kind: I32 }`; both shapes promote an int (i32)
+/// value to an i64 shift count. Returns `None` on no match.
 fn strip_sign_narrow_32(func: &FunctionSsa, idx: ValueId) -> Option<ValueId> {
-    let hi = func.insts.get(idx as usize)?;
-    let Inst::BinopI {
-        op: BinOp::Shr,
-        lhs: lo_id,
-        rhs_imm: 32,
-    } = hi
-    else {
-        return None;
-    };
-    let lo = func.insts.get(*lo_id as usize)?;
-    let Inst::BinopI {
-        op: BinOp::Shl,
-        lhs: v,
-        rhs_imm: 32,
-    } = lo
-    else {
-        return None;
-    };
-    Some(*v)
+    match func.insts.get(idx as usize)? {
+        Inst::Extend {
+            value,
+            kind: LoadKind::I32,
+        } => Some(*value),
+        Inst::BinopI {
+            op: BinOp::Shr,
+            lhs: lo_id,
+            rhs_imm: 32,
+        } => {
+            let Inst::BinopI {
+                op: BinOp::Shl,
+                lhs: v,
+                rhs_imm: 32,
+            } = func.insts.get(*lo_id as usize)?
+            else {
+                return None;
+            };
+            Some(*v)
+        }
+        _ => None,
+    }
 }
 
 enum ShiftAmount {

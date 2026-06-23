@@ -32,8 +32,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rcx
-               	movslq	%ebx, %rax
-               	movl	%eax, (%rcx)
+               	movl	%ebx, (%rcx)
                	movq	%r12, 0x8(%rcx)
                	jmp	<addr>
                	xorq	%rcx, %rcx
@@ -52,4 +51,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

@@ -243,6 +243,21 @@ fn foldable_displaced_addresses(
 /// the low `64 - K` bits of the result equal those of `w`, so a store
 /// that writes no more than that many bits sees the same value.
 fn pre_normalize(insts: &[Inst], v: ValueId, store_width: u8) -> Option<ValueId> {
+    // The builder canonicalizes the signed `Shl K; Shr K` pair into
+    // `Inst::Extend`; its low `kind`-width bits equal those of the
+    // source, so a store no wider than that sees the same value.
+    if let Some(Inst::Extend { value: w, kind }) = insts.get(v as usize) {
+        let kind_bits = match kind {
+            LoadKind::I8 => 8i64,
+            LoadKind::I16 => 16,
+            LoadKind::I32 => 32,
+            _ => return None,
+        };
+        if (store_width as i64) * 8 <= kind_bits {
+            return Some(*w);
+        }
+        return None;
+    }
     let Some(Inst::BinopI {
         op: BinOp::Shr | BinOp::Shru,
         lhs,

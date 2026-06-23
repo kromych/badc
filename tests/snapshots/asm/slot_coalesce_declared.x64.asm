@@ -400,9 +400,9 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	setne	%bl
                	movzbq	%bl, %rbx
-               	xorq	%r8, %r8
-               	movq	%r8, %rax
-               	movq	%r8, %rcx
+               	xorq	%r9, %r9
+               	movq	%r9, %rax
+               	movq	%r9, %rcx
                	movslq	%eax, %rdx
                	cmpq	$0x6, %rdx
                	jge	<addr>
@@ -433,13 +433,13 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %rax
                	movslq	%edx, %rsi
                	movq	(%rax,%rsi,8), %rax
-               	addq	%rax, %r8
+               	addq	%rax, %r9
                	jmp	<addr>
                	movslq	%ebx, %rax
                	xorq	%rbx, %rbx
                	testq	%rax, %rax
                	je	<addr>
-               	cmpq	%rcx, %r8
+               	cmpq	%rcx, %r9
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

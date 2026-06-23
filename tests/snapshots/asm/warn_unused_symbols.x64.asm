@@ -13,16 +13,15 @@ Disassembly of section .text:
 <live_static>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movq	%r13, (%rsp)
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
 
@@ -37,9 +36,9 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	movq	(%rsp), %r13
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

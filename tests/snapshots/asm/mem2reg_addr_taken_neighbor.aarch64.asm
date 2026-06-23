@@ -23,8 +23,7 @@ Disassembly of section .text:
                	cmp	x2, #0x3
                	b.ge	<addr>
                	ldrsw	x2, [x1]
-               	sxtw	x4, w0
-               	add	x2, x2, x4
+               	add	x2, x2, x0
                	str	w2, [x1]
                	sxtw	x2, w3
                	add	x2, x2, #0x1

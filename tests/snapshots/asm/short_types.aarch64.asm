@@ -174,7 +174,6 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	add	x2, x0, x1
                	sxtw	x2, w2
-               	sxtw	x2, w2
                	mov	x17, #0xffff            // =65535
                	and	x2, x2, x17
                	mov	x17, #0xffff            // =65535
@@ -210,7 +209,6 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #48
                	mov	x2, #0x1                // =1
                	add	x3, x2, x0
-               	sxtw	x3, w3
                	sxtw	x3, w3
                	cmp	x3, #0x0
                	b.eq	<addr>

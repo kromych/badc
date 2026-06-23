@@ -147,9 +147,9 @@ Disassembly of section .text:
                	b.ge	<addr>
                	sub	x0, x29, #0x40
                	sxtw	x2, w1
-               	lsl	x3, x2, #3
-               	add	x0, x0, x3
-               	str	w2, [x0]
+               	lsl	x2, x2, #3
+               	add	x0, x0, x2
+               	str	w1, [x0]
                	sub	x0, x29, #0x40
                	sxtw	x2, w1
                	lsl	x3, x2, #3
@@ -263,7 +263,6 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	sxtw	x0, w0
                	cmp	x0, #0xc
                	b.eq	<addr>

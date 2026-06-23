@@ -32,18 +32,13 @@ Disassembly of section .text:
                	mov	w7, w7
                	lsl	x8, x0, #5
                	lsl	x0, x0, #16
-               	sxtw	x1, w1
-               	sxtw	x2, w2
                	add	x1, x1, x2
                	sxtw	x1, w1
-               	sxtw	x2, w3
-               	add	x1, x1, x2
+               	add	x1, x1, x3
                	sxtw	x1, w1
-               	sxtw	x2, w4
-               	add	x1, x1, x2
+               	add	x1, x1, x4
                	sxtw	x1, w1
-               	sxtw	x2, w5
-               	add	x1, x1, x2
+               	add	x1, x1, x5
                	sxtw	x1, w1
                	mov	w2, w6
                	add	x1, x1, x2

@@ -176,7 +176,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	movslq	%eax, %rax
                	cmpq	$-0x7, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -223,8 +222,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	movslq	%ebx, %rax
-               	cmpq	$-0x4d2fa200, %rax      # imm = 0xB2D05E00
+               	cmpq	$-0x4d2fa200, %rbx      # imm = 0xB2D05E00
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -244,8 +242,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	movslq	%ebx, %rax
-               	cmpq	$-0x4d2fa200, %rax      # imm = 0xB2D05E00
+               	cmpq	$-0x4d2fa200, %rbx      # imm = 0xB2D05E00
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -581,5 +578,3 @@ Disassembly of section .text:
                	addq	$0x120, %rsp            # imm = 0x120
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

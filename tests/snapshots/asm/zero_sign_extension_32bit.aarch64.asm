@@ -190,7 +190,6 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	b	<addr>
-               	sxtw	x0, w0
                	mov	x17, #0xfff9            // =65529
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -241,12 +240,11 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	b	<addr>
-               	sxtw	x0, w20
                	mov	x17, #0x5e00            // =24064
                	movk	x17, #0xb2d0, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
+               	cmp	x20, x17
                	cset	x0, eq
                	cmp	x0, #0x0
                	b.ne	<addr>
@@ -265,12 +263,11 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	b	<addr>
-               	sxtw	x0, w20
                	mov	x17, #0x5e00            // =24064
                	movk	x17, #0xb2d0, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
+               	cmp	x20, x17
                	cset	x0, eq
                	cmp	x0, #0x0
                	b.ne	<addr>

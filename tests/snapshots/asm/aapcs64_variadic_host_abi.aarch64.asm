@@ -460,7 +460,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
-               	sxtw	x0, w0
                	sub	x1, x29, #0x20
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!

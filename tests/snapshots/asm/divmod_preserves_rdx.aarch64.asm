@@ -44,11 +44,10 @@ Disassembly of section .text:
                	sxtw	x20, w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	sxtw	x1, w20
+               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	sxtw	x0, w20
-               	cmp	x0, #0xd4
+               	cmp	x20, #0xd4
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
                	b	<addr>

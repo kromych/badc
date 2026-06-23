@@ -164,12 +164,18 @@ pub(crate) enum Inst {
         neg_product: bool,
         neg_addend: bool,
     },
-    /// Sign-extend the low bytes of `value` to 64 bits, as a load of
-    /// `kind` would after reading them from memory (C99 6.3.1.3). The
-    /// width comes from `kind`, which is one of the signed narrow load
-    /// kinds (`I8`, `I16`, `I32`). Produced when promotion lifts a
-    /// signed narrow local slot whose frame round-trip performed the
-    /// sign extension.
+    /// Sign-extend the low bytes of `value` to 64 bits: discard the
+    /// bits above `kind`'s width and replicate the sign bit, the fused
+    /// `trunc; sext` that lowers to one `sxtb`/`sxth`/`sxtw` (AArch64)
+    /// or `movsx`/`movsxd` (x86-64). The width comes from `kind`, one
+    /// of the signed narrow kinds (`I8`, `I16`, `I32`). Two origins,
+    /// one operation:
+    ///   * widening a signed narrow load (C99 6.3.1.3) -- promotion
+    ///     lifts a narrow local slot whose frame round-trip sign
+    ///     extended, or a load feeds a 64-bit use;
+    ///   * renormalizing a signed integer result to its declared
+    ///     width after a 64-bit computation (C99 6.5p5) -- equivalent
+    ///     to the `Shl K; Shr K` pair the builder folds here.
     Extend { value: ValueId, kind: LoadKind },
     /// Floating-point <-> integer cast.
     FpCast { kind: FpCastKind, value: ValueId },
@@ -346,7 +352,7 @@ pub(crate) enum Inst {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum LoadKind {
     /// 8-byte signed integer.
     I64,

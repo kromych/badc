@@ -13,18 +13,16 @@ Disassembly of section .text:
 <big>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x12d0, %rsp           # imm = 0x12D0
                	movq	%r13, (%rsp)
                	movslq	%edi, %rdi
                	movslq	%edi, %rax
                	incq	%rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	incq	%rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
+               	addq	$0x12d0, %rsp           # imm = 0x12D0
                	popq	%rbp
                	retq
 
@@ -37,9 +35,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	incq	%rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	incq	%rax
-               	movslq	%eax, %rax
                	movslq	%eax, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %r13

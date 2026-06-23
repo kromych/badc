@@ -85,7 +85,6 @@ Disassembly of section .text:
                	movzbq	0x3(%rdi), %rcx
                	orq	%rcx, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	addq	%rsi, %rax
                	subq	%rsi, %rax
                	movq	(%rsp), %r13
@@ -175,7 +174,6 @@ Disassembly of section .text:
                	movzbq	0x3(%rax), %rax
                	orq	%rdx, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	addq	%rcx, %rax
                	subq	%rcx, %rax
                	cmpq	$-0x23e, %rax           # imm = 0xFDC2
@@ -190,5 +188,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

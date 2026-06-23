@@ -92,7 +92,6 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	lsl	x1, x1, #1
                	sxtw	x1, w1
-               	sxtw	x1, w1
                	cmp	x1, #0xc
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

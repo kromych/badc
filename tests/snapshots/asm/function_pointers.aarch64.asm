@@ -53,9 +53,7 @@ Disassembly of section .text:
                	blr	x9
                	add	sp, sp, #0x20
                	sxtw	x0, w0
-               	sxtw	x1, w21
-               	sxtw	x0, w0
-               	mul	x0, x1, x0
+               	mul	x0, x21, x0
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

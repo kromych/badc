@@ -38,15 +38,11 @@ Disassembly of section .text:
                	orr	x6, x0, x17
                	mov	x17, #0x3               // =3
                	eor	x0, x0, x17
-               	sxtw	x1, w1
-               	sxtw	x2, w2
                	add	x1, x1, x2
                	sxtw	x1, w1
-               	sxtw	x2, w3
-               	add	x1, x1, x2
+               	add	x1, x1, x3
                	sxtw	x1, w1
-               	sxtw	x2, w4
-               	add	x1, x1, x2
+               	add	x1, x1, x4
                	sxtw	x1, w1
                	sxtw	x2, w5
                	add	x1, x1, x2
@@ -59,11 +55,10 @@ Disassembly of section .text:
                	sxtw	x20, w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	sxtw	x1, w20
+               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	sxtw	x0, w20
-               	cmp	x0, #0x53
+               	cmp	x20, #0x53
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
                	b	<addr>

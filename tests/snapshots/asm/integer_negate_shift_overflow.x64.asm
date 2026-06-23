@@ -32,7 +32,6 @@ Disassembly of section .text:
                	movabsq	$-0x80000000, %rax      # imm = 0x80000000
                	imulq	$-0x1, %rax, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	cmpq	$-0x80000000, %rax      # imm = 0x80000000
                	je	<addr>
                	movl	$0x3, %eax
@@ -88,4 +87,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

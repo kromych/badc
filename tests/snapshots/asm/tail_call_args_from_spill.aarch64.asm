@@ -33,7 +33,7 @@ Disassembly of section .text:
 <forward>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
+               	sub	sp, sp, #0xc0
                	str	x20, [sp]
                	sxtw	x0, w0
                	sxtw	x1, w0
@@ -67,43 +67,29 @@ Disassembly of section .text:
                	sxtw	x15, w15
                	add	x0, x0, #0xf
                	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sxtw	x2, w2
                	add	x1, x1, x2
                	sxtw	x1, w1
-               	sxtw	x2, w4
-               	add	x1, x1, x2
+               	add	x1, x1, x4
                	sxtw	x1, w1
-               	sxtw	x2, w5
-               	add	x1, x1, x2
+               	add	x1, x1, x5
                	sxtw	x1, w1
-               	sxtw	x2, w7
-               	add	x1, x1, x2
+               	add	x1, x1, x7
                	sxtw	x1, w1
-               	sxtw	x2, w8
-               	add	x1, x1, x2
+               	add	x1, x1, x8
                	sxtw	x1, w1
-               	sxtw	x2, w9
-               	add	x1, x1, x2
+               	add	x1, x1, x9
                	sxtw	x1, w1
-               	sxtw	x2, w10
-               	add	x1, x1, x2
+               	add	x1, x1, x10
                	sxtw	x1, w1
-               	sxtw	x2, w11
-               	add	x1, x1, x2
+               	add	x1, x1, x11
                	sxtw	x1, w1
-               	sxtw	x2, w12
-               	add	x1, x1, x2
+               	add	x1, x1, x12
                	sxtw	x1, w1
-               	sxtw	x2, w13
-               	add	x1, x1, x2
+               	add	x1, x1, x13
                	sxtw	x1, w1
-               	sxtw	x2, w15
-               	add	x1, x1, x2
+               	add	x1, x1, x15
                	sxtw	x1, w1
-               	sxtw	x0, w0
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
@@ -112,29 +98,25 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ldr	x20, [sp]
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sxtw	x0, w3
-               	sxtw	x1, w6
-               	sxtw	x2, w10
-               	sxtw	x3, w14
-               	sxtw	x0, w0
-               	lsl	x1, x1, #1
+               	lsl	x1, x6, #1
                	sxtw	x1, w1
                	add	x0, x0, x1
                	sxtw	x0, w0
                	mov	x17, #0x3               // =3
-               	mul	x1, x2, x17
+               	mul	x1, x10, x17
                	sxtw	x1, w1
                	add	x0, x0, x1
                	sxtw	x0, w0
-               	lsl	x1, x3, #2
+               	lsl	x1, x14, #2
                	sxtw	x1, w1
                	add	x0, x0, x1
                	sxtw	x0, w0
                	ldr	x20, [sp]
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
 

@@ -82,6 +82,10 @@ enum PureKey {
         kind: FpCastKind,
         value: ValueId,
     },
+    Extend {
+        value: ValueId,
+        kind: LoadKind,
+    },
 }
 
 /// Builder over a [`FunctionSsa`]. Each method that defines a value
@@ -725,6 +729,24 @@ impl SsaBuilder {
         if zero_collapses {
             return self.imm(0);
         }
+        // Canonicalize the signed sign-narrow idiom `Shl K; Shr K`
+        // (arithmetic right shift) into one `Inst::Extend`. The pair
+        // truncates to `64 - K` bits and sign-extends back; for the
+        // load-kind widths it is exactly `sxtw`/`sxth`/`sxtb`. A typed
+        // node lets the redundant-extend pass and the per-arch emit
+        // reason about width directly instead of pattern-matching the
+        // shift pair at allocation time.
+        if op == BinOp::Shr
+            && let Some(kind) = sign_narrow_kind(rhs_imm)
+            && let Some(&Inst::BinopI {
+                op: BinOp::Shl,
+                lhs: inner,
+                rhs_imm: shl_k,
+            }) = self.func.insts.get(lhs as usize)
+            && shl_k == rhs_imm
+        {
+            return self.extend(inner, kind);
+        }
         // Mul by a positive power of two collapses to a left shift.
         // Two's-complement arithmetic makes `x * 2^K` and `x << K`
         // produce the same 64-bit bit pattern for signed and
@@ -850,6 +872,32 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Fneg(v));
+        self.pure_cache.insert(key, id);
+        id
+    }
+
+    /// `Inst::Extend` -- sign-extend the low `kind`-width bits of
+    /// `value` to 64 bits. `kind` is a signed narrow load kind
+    /// (`I8`, `I16`, `I32`). A constant operand folds to the
+    /// sign-extended constant. See [`Inst::Extend`].
+    pub(crate) fn extend(&mut self, value: ValueId, kind: LoadKind) -> ValueId {
+        let bits = match kind {
+            LoadKind::I8 => 8,
+            LoadKind::I16 => 16,
+            LoadKind::I32 => 32,
+            _ => 64,
+        };
+        if bits < 64
+            && let Some(k) = self.peek_imm(value)
+        {
+            let shift = 64 - bits;
+            return self.imm((k << shift) >> shift);
+        }
+        let key = PureKey::Extend { value, kind };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::Extend { value, kind });
         self.pure_cache.insert(key, id);
         id
     }
@@ -1203,6 +1251,20 @@ impl SsaBuilder {
         }
         self.func.blocks = blocks;
         self.func
+    }
+}
+
+/// Map the right-shift amount `K` of a signed sign-narrow `Shl K;
+/// Shr K` pair to the equivalent `Inst::Extend` kind: `K = 64 -
+/// width_bits`, so 32 -> I32, 48 -> I16, 56 -> I8. Other amounts are
+/// genuine shifts (or sub-word bitfield extractions) and are left
+/// alone.
+fn sign_narrow_kind(k: i64) -> Option<LoadKind> {
+    match k {
+        32 => Some(LoadKind::I32),
+        48 => Some(LoadKind::I16),
+        56 => Some(LoadKind::I8),
+        _ => None,
     }
 }
 
@@ -1610,5 +1672,54 @@ mod tests {
         let v_body = b.imm(7);
         assert_ne!(v_entry, v_body, "imm across block boundary must emit fresh",);
         b.return_(v_body);
+    }
+
+    /// The signed sign-narrow idiom `Shl K; Shr K` (arithmetic right
+    /// shift) canonicalizes to one `Inst::Extend` for the load-kind
+    /// widths (K = 32 / 48 / 56). The inner `Shl` survives as a dead
+    /// pure inst the allocator's DCE drops.
+    #[test]
+    fn shl_shr_pair_canonicalizes_to_extend() {
+        for (k, kind) in [(32, LoadKind::I32), (48, LoadKind::I16), (56, LoadKind::I8)] {
+            let mut b = SsaBuilder::new(0, 1, false);
+            let v = b.load_local(2, LoadKind::I64);
+            let shl = b.binop_imm(BinOp::Shl, v, k);
+            let res = b.binop_imm(BinOp::Shr, shl, k);
+            b.return_(res);
+            let func = b.finish();
+            assert!(
+                matches!(func.insts[res as usize], Inst::Extend { value, kind: rk }
+                    if value == v && rk == kind),
+                "Shr(Shl(v,{k}),{k}) must become Extend{{v, {kind:?}}}, got {:?}",
+                func.insts[res as usize],
+            );
+        }
+    }
+
+    /// A logical right shift (`Shru`) is a zero-extend, not the signed
+    /// sign-narrow, and stays a shift; an unequal shift amount (a
+    /// sub-word bitfield extraction) also stays a shift.
+    #[test]
+    fn non_signed_narrow_shifts_stay_shifts() {
+        let mut b = SsaBuilder::new(0, 1, false);
+        let v = b.load_local(2, LoadKind::I64);
+        let shl32 = b.binop_imm(BinOp::Shl, v, 32);
+        let shru = b.binop_imm(BinOp::Shru, shl32, 32);
+        let shl40 = b.binop_imm(BinOp::Shl, v, 40);
+        let uneven = b.binop_imm(BinOp::Shr, shl40, 40);
+        let both = b.binop(BinOp::Add, shru, uneven);
+        b.return_(both);
+        let func = b.finish();
+        assert!(matches!(
+            func.insts[shru as usize],
+            Inst::BinopI {
+                op: BinOp::Shru,
+                ..
+            }
+        ));
+        assert!(matches!(
+            func.insts[uneven as usize],
+            Inst::BinopI { op: BinOp::Shr, .. }
+        ));
     }
 }

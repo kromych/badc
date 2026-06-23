@@ -10,6 +10,9 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x20
                	sxtw	x1, w1
                	sxtw	x2, w2
                	mov	x4, #0x0                // =0
@@ -27,30 +30,33 @@ Disassembly of section .text:
                	ldrsw	x3, [x0, x3, lsl #2]
                	sub	x3, x2, x3
                	sxtw	x6, w3
-               	sxtw	x3, w6
-               	cmp	x3, #0x0
+               	cmp	x6, #0x0
                	b.ge	<addr>
                	b	<addr>
                	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x3, w6
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x3, x3, x17
+               	mul	x3, x6, x17
                	sxtw	x6, w3
                	sxtw	x3, w4
                	ldrsw	x3, [x0, x3, lsl #2]
                	cmp	x3, x2
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x3, w5
-               	sxtw	x5, w6
-               	cmp	x3, x5
+               	sxtw	x3, w6
+               	cmp	x5, x3
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
@@ -101,8 +107,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
-               	sxtw	x0, w22
-               	str	w0, [x20, x21, lsl #2]
+               	str	w22, [x20, x21, lsl #2]
                	sxtw	x23, w23
                	add	x0, x21, #0x1
                	sxtw	x1, w0

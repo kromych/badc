@@ -15,7 +15,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
@@ -29,7 +28,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
                	imulq	$-0x1, %rdi, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %r13
@@ -147,4 +145,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
-               	addb	%al, (%rax)

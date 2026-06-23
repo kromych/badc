@@ -14,7 +14,6 @@ Disassembly of section .text:
                	ret
 
 <g>:
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	sxtw	x0, w0
                	ret

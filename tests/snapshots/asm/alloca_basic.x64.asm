@@ -72,7 +72,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x2030, %rsp           # imm = 0x2030
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
                	leaq	-0x20(%rbp), %r10
                	movq	%r10, (%r10)
                	movl	%edi, 0x10(%rbp)
@@ -252,7 +251,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x2030, %rsp           # imm = 0x2030
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
                	leaq	-0x20(%rbp), %r10
                	movq	%r10, (%r10)
                	movl	%edi, 0x10(%rbp)
@@ -308,7 +306,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x2040, %rsp           # imm = 0x2040
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
                	leaq	-0x28(%rbp), %r10
                	movq	%r10, (%r10)
                	movl	%edi, 0x10(%rbp)
@@ -469,5 +466,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

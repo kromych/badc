@@ -122,8 +122,6 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movq	%r13, (%rsp)
                	movq	%rsi, -0x8(%rbp)
-               	movslq	%edi, %rdi
-               	movslq	%edx, %rdx
                	leaq	-0x8(%rbp), %rax
                	movslq	(%rax), %rax
                	imulq	$0xa, %rax, %rax
@@ -350,3 +348,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)

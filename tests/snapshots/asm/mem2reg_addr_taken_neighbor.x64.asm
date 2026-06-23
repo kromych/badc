@@ -15,7 +15,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
                	xorq	%rsi, %rsi
                	movl	%esi, -0x8(%rbp)
                	movq	%rdi, %rax
@@ -47,3 +46,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

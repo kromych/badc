@@ -49,8 +49,12 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
 /// full register, so it observes the upper bits directly. `Inst::Extend` reads
 /// only the low `kind`-width bits, so it never observes its source's upper bits.
 /// Anything not positively classified as low-word-only is treated as observing,
-/// so the result is a conservative over-approximation.
-fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
+/// so the result is a conservative over-approximation. Shared with the allocator,
+/// which consults it to skip a `ParamRef` entry sign-extension whose result is
+/// never read above bit 31 (the parameter's low word already holds the C99
+/// 6.5.2.2p4-converted value; the return boundary stays conservative, so a value
+/// feeding the return keeps its canonicalization).
+pub(super) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
     let n = func.insts.len();
     let mut hi = alloc::vec![false; n];
     let mut work: Vec<ValueId> = Vec::new();

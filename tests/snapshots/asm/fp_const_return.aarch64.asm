@@ -49,7 +49,6 @@ Disassembly of section .text:
                	ret
 
 <ret_half>:
-               	sxtw	x0, w0
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d0, x0
                	ret

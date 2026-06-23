@@ -26,7 +26,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x0, w0
                	fcvt	d0, s0
                	fcvtzs	x1, d0
                	add	x0, x0, x1
@@ -59,7 +58,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x0, w0
                	fcvt	d0, s0
                	fcvtzs	x1, d0
                	add	x0, x0, x1

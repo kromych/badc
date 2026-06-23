@@ -73,7 +73,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x2, lsl #12   // =0x2000
                	sub	sp, sp, #0x30
                	str	x19, [sp]
-               	sxtw	x0, w0
                	sub	x16, x29, #0x20
                	str	x16, [x16]
                	stur	w0, [x29, #0x10]
@@ -267,7 +266,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x2, lsl #12   // =0x2000
                	sub	sp, sp, #0x30
                	str	x19, [sp]
-               	sxtw	x0, w0
                	sub	x16, x29, #0x20
                	str	x16, [x16]
                	stur	w0, [x29, #0x10]
@@ -319,7 +317,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x2, lsl #12   // =0x2000
                	sub	sp, sp, #0x40
                	str	x19, [sp]
-               	sxtw	x0, w0
                	sub	x16, x29, #0x28
                	str	x16, [x16]
                	stur	w0, [x29, #0x10]

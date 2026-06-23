@@ -30,14 +30,12 @@ Disassembly of section .text:
                	ret
 
 <s16_shift>:
-               	sxth	x0, w0
                	lsl	x0, x0, #8
                	sxtw	x1, w0
                	sxth	x0, w1
                	ret
 
 <s8_wrap>:
-               	sxtb	x0, w0
                	add	x0, x0, #0x64
                	sxtw	x1, w0
                	sxtb	x0, w1

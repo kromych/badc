@@ -14,7 +14,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	sub	sp, sp, #0x2c0
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	add	x0, x0, #0x1
                	sxtw	x0, w0

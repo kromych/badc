@@ -84,7 +84,6 @@ Disassembly of section .text:
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x0, w0
                	stur	w0, [x29, #0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

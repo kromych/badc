@@ -15,12 +15,10 @@ Disassembly of section .text:
                	ret
 
 <take_action>:
-               	sxtw	x0, w0
                	mov	x0, #0x0                // =0
                	ret
 
 <run>:
-               	sxtw	x0, w0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]

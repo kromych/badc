@@ -24,7 +24,6 @@ Disassembly of section .text:
                	ret
 
 <param_probe>:
-               	sxtw	x0, w0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]

@@ -15,8 +15,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	leaq	-0x8(%rbp), %rax
                	movl	%edi, (%rax)
                	leaq	-0x8(%rbp), %rax
@@ -34,7 +32,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
                	movl	$0xdead, %eax           # imm = 0xDEAD
                	movl	$0xbeef, %ecx           # imm = 0xBEEF
                	movl	$0xcafe, %edx           # imm = 0xCAFE
@@ -294,4 +291,4 @@ Disassembly of section .text:
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

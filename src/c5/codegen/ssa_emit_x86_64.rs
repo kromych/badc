@@ -1769,7 +1769,12 @@ pub(super) fn emit_function(
             moves.push((Place::IntReg(src), dst));
             vids.push(vid);
             homes.push(dst);
-            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32) {
+            // Sign-extend on entry only when a consumer reads the
+            // parameter's upper bits; otherwise the low word already
+            // holds the C99 6.5.2.2p4-converted value.
+            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32)
+                && alloc.high_observed.get(vid).copied().unwrap_or(true)
+            {
                 exts.push((dst, *kind));
             }
         }
@@ -2968,9 +2973,13 @@ fn emit_inst(
                     return false;
                 }
             };
+            // Skip the entry sign-extension when no consumer reads the
+            // parameter's upper bits; the low word already holds it.
+            let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
             let materialize = |code: &mut Vec<u8>, rd: Reg| {
                 if from_home {
                     match kind {
+                        _ if high_dead => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
                         LoadKind::I8 => {
                             super::x86_64::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
                         }
@@ -2984,6 +2993,7 @@ fn emit_inst(
                     }
                 } else {
                     match kind {
+                        _ if high_dead => emit_mov_rr(code, rd, arg_reg),
                         LoadKind::I8 => super::x86_64::emit_movsx_r_r8(code, rd, arg_reg),
                         LoadKind::I16 => super::x86_64::emit_movsx_r_r16(code, rd, arg_reg),
                         LoadKind::I32 => super::x86_64::emit_movsxd_r_r(code, rd, arg_reg),

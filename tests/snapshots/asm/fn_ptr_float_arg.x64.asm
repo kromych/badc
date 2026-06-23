@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
                	cvtss2sd	%xmm0, %xmm0
                	cvttsd2si	%xmm0, %rax
                	addq	%rdi, %rax
@@ -59,7 +58,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
                	cvtss2sd	%xmm0, %xmm0
                	cvttsd2si	%xmm0, %rax
                	addq	%rdi, %rax
@@ -140,5 +138,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

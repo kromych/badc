@@ -762,7 +762,12 @@ pub(super) fn emit_function(
             moves.push((Place::IntReg(src), dst));
             vids.push(vid);
             homes.push(dst);
-            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32) {
+            // Sign-extend on entry only when a consumer reads the
+            // parameter's upper bits; otherwise the low word already
+            // holds the C99 6.5.2.2p4-converted value.
+            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32)
+                && alloc.high_observed.get(vid).copied().unwrap_or(true)
+            {
                 exts.push((dst, *kind));
             }
         }
@@ -1830,10 +1835,14 @@ fn emit_inst(
                 return false;
             };
             // The encoding to write `dst <- sign-extend(arg_reg)`.
-            // For full-width kinds (I64), it is a plain mov.
+            // For full-width kinds (I64), it is a plain mov. The
+            // sign-extension is skipped when no consumer reads the
+            // parameter's upper bits.
+            let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
             let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
                 let rn = Reg(arg_reg);
                 match kind {
+                    _ if high_dead => emit_mov_reg(code, rd, rn),
                     LoadKind::I8 => emit(code, super::aarch64::enc_sxtb(rd, rn)),
                     LoadKind::I16 => emit(code, super::aarch64::enc_sxth(rd, rn)),
                     LoadKind::I32 => emit(code, super::aarch64::enc_sxtw(rd, rn)),

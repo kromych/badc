@@ -35,8 +35,6 @@ Disassembly of section .text:
                	str	x5, [x16]
                	str	x6, [x16, #0x8]
                	mov	x5, x7
-               	sxtw	x1, w1
-               	sxtw	x5, w5
                	sub	x0, x29, #0x48
                	ldur	x2, [x29, #0x70]
                	str	x10, [sp, #-0x10]!
@@ -112,7 +110,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x0, w0
                	sub	x1, x29, #0x8
                	str	w0, [x1]
                	sub	x1, x29, #0x8
@@ -129,7 +126,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	str	w0, [x1]
                	sub	x1, x29, #0x10
@@ -155,7 +151,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	sub	x16, x29, #0x20
                	str	x8, [x16]
-               	sxtw	x0, w0
                	sub	x1, x29, #0x18
                	str	w0, [x1]
                	sub	x1, x29, #0x18

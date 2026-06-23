@@ -10,10 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sxtw	x2, w2
-               	sxtw	x3, w3
                	add	x0, x0, x1
                	add	x0, x0, x2
                	add	x0, x0, x3
@@ -24,8 +20,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x0, w0
-               	sxtw	x1, w1
                	add	x0, x0, x1
                	sxtw	x0, w0
                	add	sp, sp, #0x10
@@ -36,8 +30,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x0, w0
-               	sxtw	x1, w1
                	mul	x0, x0, x1
                	sxtw	x0, w0
                	cmp	x0, #0x0
@@ -50,8 +42,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x1, w1
-               	sxtw	x2, w2
                	add	x1, x1, x2
                	sxtw	x1, w1
                	ldrsw	x0, [x0, x1, lsl #2]

@@ -18,7 +18,6 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	movslq	%edx, %rdx
-               	movslq	%ecx, %rcx
                	xorq	%r8, %r8
                	movq	%r8, %rax
                	movslq	%eax, %r9
@@ -98,4 +97,3 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

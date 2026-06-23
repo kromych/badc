@@ -101,8 +101,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sub	x16, x29, #0x8
                	str	x1, [x16]
-               	sxtw	x0, w0
-               	sxtw	x2, w2
                	sub	x1, x29, #0x8
                	ldrsw	x1, [x1]
                	mov	x17, #0xa               // =10

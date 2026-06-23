@@ -14,7 +14,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x0, w0
                	stur	w0, [x29, #0x10]
                	ldursw	x0, [x29, #0x10]
                	cmp	x0, #0x0
@@ -108,7 +107,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sxtw	x0, w0
                	stur	w0, [x29, #0x10]
                	sub	x0, x29, #0x10
                	mov	x1, #0x0                // =0

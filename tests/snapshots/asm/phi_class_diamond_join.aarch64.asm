@@ -11,8 +11,6 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sxtw	x2, w2
                	cbz	x0, <addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0

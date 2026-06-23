@@ -60,7 +60,6 @@ Disassembly of section .text:
                	ret
 
 <doubler>:
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	sxtw	x0, w0
                	ret
@@ -74,7 +73,6 @@ Disassembly of section .text:
                	ret
 
 <plain_func>:
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret

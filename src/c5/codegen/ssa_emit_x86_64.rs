@@ -4914,6 +4914,17 @@ fn emit_binop(
         bail_msg("Binop: rhs not int reg / spill");
         return false;
     };
+    // `lea rd, [rn + rm]` folds the staging mov and the add into one
+    // address-unit op when the result lands in a different register
+    // than the lhs. It reads both operands before writing rd (so it is
+    // correct even were rd to alias rm) and sets no flags, which an
+    // add-result consumer never reads. The rd == rn case is already a
+    // single `add rd, rm`, so it stays on the path below.
+    if matches!(op, BinOp::Add) && rd.0 != rn.0 {
+        super::x86_64::emit_lea_r_sib(code, rd, rn, rm, 1);
+        spill_dst_to_slot(code, dst, rd, frame);
+        return true;
+    }
     // x86_64's two-operand ops mutate the destination, so stage
     // the LHS into rd first (preserves SSA semantics where the
     // result is `lhs OP rhs`). Cmp ops skip this -- they read

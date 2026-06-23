@@ -70,8 +70,7 @@ Disassembly of section .text:
                	movsbq	(%rax), %rsi
                	jmp	<addr>
                	xorq	%rsi, %rsi
-               	movq	%rsi, %rax
-               	addq	%rcx, %rax
+               	leaq	(%rsi,%rcx), %rax
                	movl	%eax, (%rdx)
                	leaq	-0x38(%rbp), %rax
                	movl	$0x7, %ecx
@@ -165,4 +164,5 @@ Disassembly of section .text:
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

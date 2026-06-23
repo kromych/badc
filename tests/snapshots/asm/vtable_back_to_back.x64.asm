@@ -19,8 +19,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	leaq	<rip>, %rax
                	movq	%rax, (%rdi)
-               	movq	%rdx, %rax
-               	addq	%rcx, %rax
+               	leaq	(%rdx,%rcx), %rax
                	movl	%eax, 0x8(%rdi)
                	xorq	%rax, %rax
                	movq	(%rsp), %r13
@@ -81,5 +80,4 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

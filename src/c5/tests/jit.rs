@@ -1022,6 +1022,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("spill_slot_reuse_disjoint_calls.c", 0),
     ("rotate_variable_count.c", 0),
     ("bitwise_not_mvn.c", 0),
+    ("add_three_operand_lea.c", 0),
     ("add_sub_negative_imm.c", 0),
     ("wide_string_literal_alignment.c", 0),
     ("va_arg_through_pointer.c", 0),

@@ -26,8 +26,7 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	movl	$0x64, %eax
-               	movq	%rbx, %rcx
-               	addq	%rax, %rcx
+               	leaq	(%rbx,%rax), %rcx
                	cmpq	$0x64, %rax
                	jne	<addr>
                	jmp	<addr>
@@ -83,8 +82,7 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	movl	$0x64, %eax
-               	movq	%rbx, %rcx
-               	addq	%rax, %rcx
+               	leaq	(%rbx,%rax), %rcx
                	cmpq	$0x64, %rax
                	jne	<addr>
                	jmp	<addr>

@@ -72,8 +72,7 @@ Disassembly of section .text:
                	addq	$0xf0, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %rdx
-               	addq	%rcx, %rdx
+               	leaq	(%rax,%rcx), %rdx
                	movslq	%edx, %rdx
                	movswq	%dx, %rdx
                	cmpq	$0x4a8, %rdx            # imm = 0x4A8
@@ -191,8 +190,7 @@ Disassembly of section .text:
                	retq
                	movl	$0xfffe, %eax           # imm = 0xFFFE
                	movl	$0x1, %ecx
-               	movq	%rax, %rdx
-               	addq	%rcx, %rdx
+               	leaq	(%rax,%rcx), %rdx
                	movslq	%edx, %rdx
                	movslq	%edx, %rdx
                	andq	$0xffff, %rdx           # imm = 0xFFFF
@@ -223,8 +221,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x1, %rax
                	movl	$0x1, %edx
-               	movq	%rdx, %rsi
-               	addq	%rax, %rsi
+               	leaq	(%rdx,%rax), %rsi
                	movslq	%esi, %rsi
                	movslq	%esi, %rsi
                	testq	%rsi, %rsi
@@ -355,4 +352,3 @@ Disassembly of section .text:
                	addq	$0xf0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

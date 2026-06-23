@@ -70,8 +70,7 @@ Disassembly of section .text:
                	movzbq	0xb(%rcx), %r11
                	movb	%r11b, 0xb(%rax)
                	popq	%r11
-               	movq	%rdi, %rax
-               	addq	%rsi, %rax
+               	leaq	(%rdi,%rsi), %rax
                	leaq	-0x10(%rbp), %rcx
                	movl	%eax, (%rcx)
                	movq	%rdi, %rax
@@ -110,8 +109,7 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %r11
                	movq	%r11, 0x8(%rax)
                	popq	%r11
-               	movq	%rdi, %rax
-               	addq	%rsi, %rax
+               	leaq	(%rdi,%rsi), %rax
                	leaq	-0x10(%rbp), %rcx
                	movq	%rax, (%rcx)
                	movq	%rdi, %rax

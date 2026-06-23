@@ -44,8 +44,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	addq	$0x1000, %rcx           # imm = 0x1000
                	jmp	<addr>
-               	movq	%r12, %rax
-               	addq	%rcx, %rax
+               	leaq	(%r12,%rcx), %rax
                	movq	%rcx, %rdx
                	shrq	$0xc, %rdx
                	incq	%rdx
@@ -57,8 +56,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	addq	$0x1000, %r14           # imm = 0x1000
                	jmp	<addr>
-               	movq	%r12, %rax
-               	addq	%r14, %rax
+               	leaq	(%r12,%r14), %rax
                	movsbq	(%rax), %rax
                	movq	%r14, %rcx
                	shrq	$0xc, %rcx

@@ -414,8 +414,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movabsq	$-0x1, %rbx
                	movl	$0x1, %r12d
-               	movq	%rbx, %rax
-               	addq	%r12, %rax
+               	leaq	(%rbx,%r12), %rax
                	movl	%eax, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -582,4 +581,5 @@ Disassembly of section .text:
                	addq	$0x120, %rsp            # imm = 0x120
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

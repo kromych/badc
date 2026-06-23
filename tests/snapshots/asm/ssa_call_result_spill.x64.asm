@@ -115,8 +115,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	0x50(%rsp), %rcx
                	addq	%r12, %rcx
-               	movq	%r12, %rdx
-               	addq	%rax, %rdx
+               	leaq	(%r12,%rax), %rdx
                	jmp	<addr>
                	movq	0x38(%rsp), %rax
                	movabsq	$0x30a55d88de61bb19, %r13 # imm = 0x30A55D88DE61BB19
@@ -153,3 +152,4 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

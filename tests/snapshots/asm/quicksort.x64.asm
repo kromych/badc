@@ -62,12 +62,10 @@ Disassembly of section .text:
                	incq	%rax
                	movslq	%eax, %rax
                	shlq	$0x2, %rax
-               	movq	%rbx, %rdi
-               	addq	%rax, %rdi
+               	leaq	(%rbx,%rax), %rdi
                	movq	%r12, %rax
                	shlq	$0x2, %rax
-               	movq	%rbx, %rsi
-               	addq	%rax, %rsi
+               	leaq	(%rbx,%rax), %rsi
                	callq	<addr>
                	movq	0x38(%rsp), %rax
                	movslq	%eax, %rax
@@ -89,12 +87,10 @@ Disassembly of section .text:
                	movq	0x38(%rsp), %rax
                	movslq	%eax, %rax
                	shlq	$0x2, %rax
-               	movq	%rbx, %rdi
-               	addq	%rax, %rdi
+               	leaq	(%rbx,%rax), %rdi
                	movslq	%r15d, %rax
                	shlq	$0x2, %rax
-               	movq	%rbx, %rsi
-               	addq	%rax, %rsi
+               	leaq	(%rbx,%rax), %rsi
                	callq	<addr>
                	jmp	<addr>
                	jmp	<addr>

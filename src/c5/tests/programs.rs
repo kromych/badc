@@ -554,6 +554,16 @@ fn inline_phi_caller_leaf_helper() {
 }
 
 #[test]
+fn inline_phi_narrow_param_return() {
+    // A leaf returning its narrow parameter inlines to an Extend of the
+    // call argument; the call result resolves to that Extend. With a
+    // loop-carried (back-edge) argument the value-remap fixpoint must
+    // converge the Extend's operand, and the parameter narrows the wide
+    // argument every iteration (the callee-narrows ABI).
+    assert_eq!(run_fixture("inline_phi_narrow_param_return.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

@@ -661,6 +661,19 @@ pub(super) fn emit_xchg_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg: Reg
     emit_modrm_mem(code, reg, base, disp);
 }
 
+/// `XCHG r64, r64` -- exchange two registers (Intel SDM Vol.2,
+/// `REX.W + 87 /r`). A register operand carries no implicit LOCK (that
+/// applies only to a memory operand), so this is a plain register swap.
+/// Used to break a register-register parallel-move cycle with no scratch.
+pub(super) fn emit_xchg_rr(code: &mut Vec<u8>, a: Reg, b: Reg) {
+    if a == b {
+        return;
+    }
+    emit_byte(code, rex(true, b.high(), false, a.high()));
+    emit_byte(code, 0x87);
+    emit_byte(code, modrm(0b11, b.lo(), a.lo()));
+}
+
 /// `LOCK CMPXCHG [base + disp], reg` -- compare RAX with the memory
 /// operand; on equality store `reg` and set ZF, else load the memory
 /// operand into RAX and clear ZF (Intel SDM Vol.2 CMPXCHG with the

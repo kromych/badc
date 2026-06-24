@@ -59,7 +59,7 @@ use super::x86_64::{
     emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd, emit_subss,
     emit_test_rr, emit_ucomisd, emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd,
     emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
-    emit_xchg_mem_r, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
+    emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
 };
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -946,9 +946,9 @@ fn materialize_int_shifted(
 /// Emit the predecessor-exit moves for each `Inst::Phi` at the head
 /// of every CFG successor of `self_block`. Mirrors the aarch64
 /// helper: IntReg -> IntReg pairs schedule through the parallel-copy
-/// helper so cycles drop to one scratch-mediated copy; Spill
-/// destinations route through the materialise helper and a store
-/// against rsp.
+/// helper, which breaks register cycles with `xchg` (no scratch) and
+/// routes a spill-touching cycle through `hold`; Spill destinations
+/// route through the materialise helper and a store against rsp.
 ///
 /// TODO: extend to FpReg dst / src once a real fixture demands it;
 /// the current promotion path admits only int-store slots
@@ -1119,23 +1119,46 @@ fn schedule_place_moves(
             }
         }
         if !progress {
-            // Only cycle members remain. Save one cycle source into
-            // `hold` and redirect every move that reads it. A single
-            // cycle drains completely before the next break, so one
-            // persistent `hold` register suffices.
-            let cyc = moves
+            // Only cycle members remain. Break a register-register edge
+            // with `xchg` (no scratch, and not locked for register
+            // operands): exchanging the two endpoints satisfies that move
+            // -- the target ends up holding the source's value -- and
+            // leaves the source holding the target's old value for the
+            // move that reads it. An edge touching a spill slot has no
+            // register swap, so route one such source through `hold`
+            // instead. A single cycle drains before the next break, so
+            // one persistent `hold` suffices.
+            if let Some(i) = moves
                 .iter()
-                .map(|(s, _)| *s)
-                .find(|s| !place_same_loc(*s, Place::IntReg(hold.0)))
-                .unwrap_or(moves[0].0);
-            // Copy the cycle source into `hold` (a register move or a
-            // spill reload). `materialize_int` is unsuitable here: for
-            // an `IntReg` source it returns the register without
-            // emitting anything, leaving `hold` unloaded.
-            emit_place_move(code, cyc, Place::IntReg(hold.0), frame, stage);
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, cyc) {
-                    m.0 = Place::IntReg(hold.0);
+                .position(|(s, t)| matches!(s, Place::IntReg(_)) && matches!(t, Place::IntReg(_)))
+            {
+                let (s, t) = moves[i];
+                let (Place::IntReg(sr), Place::IntReg(tr)) = (s, t) else {
+                    unreachable!()
+                };
+                emit_xchg_rr(code, Reg(sr), Reg(tr));
+                moves.swap_remove(i);
+                for m in moves.iter_mut() {
+                    if place_same_loc(m.0, t) {
+                        m.0 = s;
+                    }
+                }
+                moves.retain(|(s, t)| !place_same_loc(*s, *t));
+            } else {
+                // Copy the cycle source into `hold` (a spill reload).
+                // `materialize_int` is unsuitable: for an `IntReg` source
+                // it returns the register without emitting, leaving `hold`
+                // unloaded.
+                let cyc = moves
+                    .iter()
+                    .map(|(s, _)| *s)
+                    .find(|s| !place_same_loc(*s, Place::IntReg(hold.0)))
+                    .unwrap_or(moves[0].0);
+                emit_place_move(code, cyc, Place::IntReg(hold.0), frame, stage);
+                for m in moves.iter_mut() {
+                    if place_same_loc(m.0, cyc) {
+                        m.0 = Place::IntReg(hold.0);
+                    }
                 }
             }
         }
@@ -1256,7 +1279,7 @@ fn schedule_fp_place_moves(
     }
 }
 
-fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
+fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>) {
     moves.retain(|(s, t)| s != t);
     while !moves.is_empty() {
         let mut progress = false;
@@ -1273,25 +1296,20 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
             }
         }
         if !progress {
-            // Pick a source whose register is not the scratch
-            // itself; the mirror of the aarch64 fix. Without the
-            // filter, if any cycle member's source equals
-            // `scratch`, `mov scratch, scratch` is a no-op and
-            // the rewrite leaves the move list unchanged, so the
-            // outer loop spins forever. Surfaces under the relaxed
-            // calls_after_def bound when the allocator parks an
-            // arg-source value on the scratch register.
-            let cycle_src = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|&s| s != scratch.0)
-                .unwrap_or(moves[0].0);
-            emit_mov_rr(code, scratch, Reg(cycle_src));
+            // Only cycle members remain, all register to register, so
+            // break a cycle with `xchg` (no scratch): the exchange
+            // satisfies one move -- the target receives the source's
+            // value -- and leaves the displaced value in the source for
+            // the move that reads it.
+            let (s, t) = moves[0];
+            emit_xchg_rr(code, Reg(s), Reg(t));
+            moves.swap_remove(0);
             for m in moves.iter_mut() {
-                if m.0 == cycle_src {
-                    m.0 = scratch.0;
+                if m.0 == t {
+                    m.0 = s;
                 }
             }
+            moves.retain(|(s, t)| s != t);
         }
     }
 }
@@ -1305,8 +1323,7 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 /// still-needed source. Resolution uses the classical
 /// parallel-copy algorithm: drain leaves (target not a source of
 /// any other pending move) first; break the residual cycles with
-/// one scratch-mediated copy. Pass ordering mirrors the AArch64
-/// emit:
+/// an `xchg`. Pass ordering mirrors the AArch64 emit:
 ///
 ///   * Stack slots first -- their sources are read into
 ///     `SCRATCH_R10` and stored to the host-stack overflow
@@ -1318,8 +1335,8 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 ///     the target xmm before the int marshal can overwrite the
 ///     source.
 ///   * Integer reg-to-reg moves, scheduled through
-///     [`schedule_int_reg_moves`] so cycles drop to a single
-///     scratch-mediated copy.
+///     [`schedule_int_reg_moves`], which breaks cycles with `xchg`
+///     and so needs no scratch.
 ///   * Spill sources for `IntReg` placements then materialise
 ///     directly into the target arg register
 ///     (`materialize_int_shifted` writes its load into the dst).
@@ -1554,7 +1571,7 @@ fn marshal_args(
             _ => {}
         }
     }
-    schedule_int_reg_moves(code, &mut int_moves, SCRATCH_R10);
+    schedule_int_reg_moves(code, &mut int_moves);
 
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::IntReg(r) = placement {

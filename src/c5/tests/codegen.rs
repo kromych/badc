@@ -846,6 +846,47 @@ fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
     hay.windows(needle.len()).any(|w| w == needle)
 }
 
+/// x86_64 parallel-move cycle breaking uses `xchg`. A call that permutes
+/// its caller's argument registers -- `other(b, a)` from `swap_call(a,
+/// b)` -- forms a register cycle (rdi holds a but the call needs b there,
+/// rsi the reverse). The argument marshaller resolves it with a single
+/// `xchg rdi, rsi` (REX.W 87, bytes 48 87) rather than a three-move
+/// shuffle through a scratch register.
+#[test]
+fn x64_arg_permutation_cycle_uses_xchg() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "int other(int a, int b); \
+         int swap_call(int a, int b) { return other(b, a); } \
+         int main(void) { return swap_call(1, 2); }"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    let obj =
+        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(
+                &program,
+                Target::LinuxX64,
+                NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                },
+            )
+        })
+        .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let entry = elf_func_value(&obj, "swap_call").expect("swap_call symbol") as usize;
+    let end = (entry + 96).min(text.len());
+    assert!(
+        contains_bytes(&text[entry..end], &[0x48, 0x87]),
+        "swap_call must break the rdi<->rsi argument cycle with `xchg` (REX.W 87 = 48 87); \
+         bytes={:02x?}",
+        &text[entry..end]
+    );
+}
+
 /// x86_64 leaf-frame elision. A spill-free function that calls nothing
 /// and needs no callee-saved register must emit no prologue: no `push
 /// %rbp`, no `sub %rsp`, and no save of a scratch register. The emit

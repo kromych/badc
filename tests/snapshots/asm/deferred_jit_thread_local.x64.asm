@@ -11,24 +11,15 @@ Disassembly of section .text:
                	ud2
 
 <s_local_to_force_layout_shift>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	movslq	%edi, %rdi
                	leaq	<rip>, %rax
                	movl	%edi, (%rax,%rdi,4)
                	movslq	(%rax,%rdi,4), %rax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	xorq	%rdi, %rdi
                	callq	<addr>
                	movq	%fs:0x0, %rax
@@ -37,8 +28,6 @@ Disassembly of section .text:
                	cmpq	$0x7, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movq	%fs:0x0, %rcx
@@ -47,8 +36,6 @@ Disassembly of section .text:
                	cmpq	$-0x3, %rcx
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movslq	(%rax), %rcx
@@ -61,14 +48,9 @@ Disassembly of section .text:
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

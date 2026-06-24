@@ -13,17 +13,15 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x10, %rsp
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	incq	%rax
                	movslq	%eax, %rcx
                	cmpq	$0x5, %rcx
                	jl	<addr>
-               	movq	(%rsp), %r13
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

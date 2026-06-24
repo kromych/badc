@@ -13,8 +13,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xa0, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x90, %rsp
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	movq	%rcx, %rdx
@@ -147,9 +146,8 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movl	$0x1, %ecx
-               	movq	(%rsp), %r13
                	movq	%rcx, %rax
-               	addq	$0xa0, %rsp
+               	addq	$0x90, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

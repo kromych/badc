@@ -11,15 +11,8 @@ Disassembly of section .text:
                	ud2
 
 <via_table>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -27,26 +20,23 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r13, 0x8(%rsp)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movabsq	$0x1111111111111111, %r13 # imm = 0x1111111111111111
-               	cmpq	%r13, %rax
+               	movabsq	$0x1111111111111111, %r11 # imm = 0x1111111111111111
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movabsq	$0x2222222222222222, %r13 # imm = 0x2222222222222222
-               	cmpq	%r13, %rax
+               	movabsq	$0x2222222222222222, %r11 # imm = 0x2222222222222222
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -66,7 +56,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -75,14 +64,13 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

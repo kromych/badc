@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=isum
 fn ent_pc=0 n_params=1 variadic=true locals=5
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x2
@@ -41,7 +41,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=5
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=dsum
 fn ent_pc=1 n_params=1 variadic=true locals=5
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x2
@@ -82,7 +82,7 @@ fn ent_pc=1 n_params=1 variadic=true locals=5
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=mixed
 fn ent_pc=2 n_params=1 variadic=true locals=5
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x2
@@ -141,7 +141,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=5
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=icopy
 fn ent_pc=3 n_params=1 variadic=true locals=8
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x2
@@ -212,7 +212,7 @@ fn ent_pc=3 n_params=1 variadic=true locals=8
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=named_overflow
 fn ent_pc=4 n_params=10 variadic=true locals=4
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LoadLocal { off=2, kind=I32 }                    -> x0
@@ -283,7 +283,7 @@ fn ent_pc=4 n_params=10 variadic=true locals=4
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
 fn ent_pc=5 n_params=0 variadic=false locals=14
-  spill_count=2 gpr_used=[3, 12, 14, 15, 13] fp_used=[]
+  spill_count=2 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x3
@@ -311,8 +311,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=14
     v19  Imm(4)                                           -> x8
     v20  Imm(5)                                           -> x9
     v21  Imm(6)                                           -> x0
-    v22  Imm(7)                                           -> x11
-    v23  Imm(8)                                           -> x12
+    v22  Imm(7)                                           -> x12
+    v23  Imm(8)                                           -> x13
     v24  Imm(9)                                           -> x14
     v25  Imm(10)                                          -> x15
     v26  Imm(11)                                          -> [spill 0]
@@ -351,8 +351,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=14
     v51  Imm(4616189618054758400)                         -> x8
     v52  Imm(4617315517961601024)                         -> x9
     v53  Imm(4618441417868443648)                         -> x0
-    v54  Imm(4619567317775286272)                         -> x11
-    v55  Imm(4620693217682128896)                         -> x12
+    v54  Imm(4619567317775286272)                         -> x12
+    v55  Imm(4620693217682128896)                         -> x13
     v56  Imm(4621256167635550208)                         -> x14
     v57  Imm(4621819117588971520)                         -> x15
     v58  Call { target_pc=1, args=[v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57], fixed_args=1, fp_return=true, fp_arg_mask=0x7fe } -> d0
@@ -408,8 +408,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=14
     v96  Imm(5)                                           -> x8
     v97  Imm(6)                                           -> x9
     v98  Imm(7)                                           -> x0
-    v99  Imm(8)                                           -> x11
-    v100 Imm(9)                                           -> x12
+    v99  Imm(8)                                           -> x12
+    v100 Imm(9)                                           -> x13
     v101 Imm(10)                                          -> x14
     v102 Imm(100)                                         -> x15
     v103 Imm(200)                                         -> [spill 0]
@@ -444,7 +444,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=14
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -456,7 +456,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7

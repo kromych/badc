@@ -11,10 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <sum_short_row>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	movslq	%esi, %rsi
                	movq	%rsi, %rax
                	shlq	$0x2, %rax
@@ -23,16 +19,9 @@ Disassembly of section .text:
                	movzwq	0x2(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <sum_int_row>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	movslq	%esi, %rsi
                	imulq	$0xc, %rsi, %rax
                	addq	%rdi, %rax
@@ -42,16 +31,9 @@ Disassembly of section .text:
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <sum_char_row>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	movslq	%esi, %rsi
                	movq	%rsi, %rax
                	shlq	$0x2, %rax
@@ -64,9 +46,6 @@ Disassembly of section .text:
                	movsbq	0x3(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -74,7 +53,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x4d0, %rsp            # imm = 0x4D0
                	movq	%rbx, (%rsp)
-               	movq	%r13, 0x8(%rsp)
                	xorq	%rcx, %rcx
                	movslq	%ecx, %rax
                	cmpq	$0x100, %rax            # imm = 0x100
@@ -109,7 +87,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x4d0, %rsp            # imm = 0x4D0
                	popq	%rbp
                	retq
@@ -150,7 +127,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x4d0, %rsp            # imm = 0x4D0
                	popq	%rbp
                	retq
@@ -194,15 +170,12 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x4d0, %rsp            # imm = 0x4D0
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x4d0, %rsp            # imm = 0x4D0
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

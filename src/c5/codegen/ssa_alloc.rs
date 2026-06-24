@@ -206,7 +206,7 @@ impl RegBanks {
                 // (large-immediate and adrp / add fixups), x18 is the
                 // Windows platform register, x19 is the writer's
                 // address-materialisation scratch (see
-                // [[function_clobbers_x19]]); all stay reserved.
+                // `function_clobbers_scratch`); all stay reserved.
                 // AAPCS64 callee-saved (non-volatile) GPRs are
                 // x19..x28; x19 is the writer's scratch so the bank
                 // starts at x20 and runs through x28.
@@ -216,29 +216,34 @@ impl RegBanks {
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
             },
             Target::LinuxX64 => Self {
-                // System V x86_64. Callee-saved: rbx, r12, r14, r15.
-                // r13 stays reserved as the writer's scratch / legacy
-                // accumulator. r10 stays reserved as `SCRATCH_R10`
-                // in ssa_emit_x86_64 -- many handlers
-                // (int_or_spill_dst, materialize_int for spilled
-                // sources, the Va* / call-arg marshallers) write r10
-                // unconditionally to land a value in a known register,
-                // so the allocator must not park another SSA value
-                // there. Caller-saved opens up to the SysV arg regs
-                // (rdi, rsi, rdx, rcx, r8, r9) plus rax, r11.
-                callee_gprs: &[3, 12, 14, 15],
-                caller_gprs: &[0, 1, 2, 6, 7, 8, 9, 11],
+                // System V x86_64. Callee-saved: rbx, r12, r13, r14,
+                // r15. r10 and r11 stay reserved as the writer's fixed
+                // scratch (`SCRATCH_R10` / `SCRATCH_R11` in
+                // ssa_emit_x86_64) -- many handlers (int_or_spill_dst,
+                // materialize_int for spilled sources, the Va* /
+                // call-arg marshallers) write them unconditionally to
+                // land a value in a known register, so the allocator
+                // must not park another SSA value there. Both are
+                // caller-saved, so reserving them forces no prologue
+                // save and a scratch-only body stays leaf-elidable. r13
+                // is an ordinary callee-saved allocation target, saved
+                // only when colored. Caller-saved opens up to the SysV
+                // arg regs (rdi, rsi, rdx, rcx, r8, r9) plus rax.
+                callee_gprs: &[3, 12, 13, 14, 15],
+                caller_gprs: &[0, 1, 2, 6, 7, 8, 9],
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
             },
             Target::WindowsX64 => Self {
-                // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r14,
-                // r15. r13 / r10 stay reserved as the writer's
+                // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r13, r14,
+                // r15. r10 / r11 stay reserved as the writer's fixed
                 // scratch (see the LinuxX64 comment for the SCRATCH_R10
-                // contract). Caller-saved opens up to the Win64 arg
-                // regs (rcx, rdx, r8, r9) plus rax, r11.
-                callee_gprs: &[3, 6, 7, 12, 14, 15],
-                caller_gprs: &[0, 1, 2, 8, 9, 11],
+                // / SCRATCH_R11 contract); both are caller-saved. r13 is
+                // an ordinary callee-saved allocation target. Caller-
+                // saved opens up to the Win64 arg regs (rcx, rdx, r8,
+                // r9) plus rax.
+                callee_gprs: &[3, 6, 7, 12, 13, 14, 15],
+                caller_gprs: &[0, 1, 2, 8, 9],
                 // Win64 marks xmm6..xmm15 non-volatile (callee-saved),
                 // but the x86_64 prologue/epilogue and `Frame` layout
                 // reserve no space for and emit no save/restore of FP
@@ -259,51 +264,56 @@ impl RegBanks {
 
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
-/// Whether an x86_64 function body writes r13, the writer's reserved
-/// secondary scratch (`SCRATCH_R13` in ssa_emit_x86_64). r13 is
-/// callee-saved under System V / Win64, so the prologue must preserve
-/// the caller's value when the body clobbers it. The predicate is
-/// safe-by-default: it returns `true` for any instruction outside a
-/// short whitelist of lowerings that target their destination register
-/// directly and never need a second scratch (immediates, address
-/// materialisation, loads, sign/zero extension, parameter reads). A
-/// spilled operand materialises through r13, and block-argument moves
-/// (`emit_phi_predecessor_moves`) route through it, so any spill or any
-/// control-flow join also forces the save. A new `Inst` variant that is
-/// not whitelisted defaults to forcing the save rather than risking a
-/// silent unsaved clobber.
-fn function_clobbers_r13(func: &FunctionSsa, spill_count: u32) -> bool {
-    // A tail-call forwarder (`Terminator::TailExt`, the synthetic libc
-    // trampolines) exits through a `jmp` with no epilogue, so a saved
-    // r13 could never be restored -- the callee's `ret` would pop the
-    // trampoline's frame as its return address. These forwarders do not
-    // clobber r13 either: their arguments are already in the host ABI
-    // registers when control reaches them. Leave them frame-less.
-    if func
-        .blocks
-        .iter()
-        .any(|b| matches!(b.terminator, Terminator::TailExt(_)))
-    {
-        return false;
+/// Callee-saved registers the emit pass reserves as fixed scratch and
+/// must preserve when the body clobbers them. The allocator's
+/// `gpr_used` callee-saved filter cannot see a reserved scratch -- it
+/// is never an allocator value -- so the save decision lives here.
+///
+/// x86_64 reserves r10/r11 (`SCRATCH_R10` / `SCRATCH_R11`), both
+/// caller-saved, so it has nothing to preserve: a body that only
+/// touches scratch stays leaf-elidable. aarch64 reserves x19
+/// (callee-saved) as the address scratch the TLS / indirect-call /
+/// intrinsic lowerings route through, and as a third modulo operand
+/// when a dividend, divisor and result all spill.
+///
+/// The returned slice is the set of such registers actually clobbered.
+/// Each target consumes it through its own prologue/epilogue path
+/// (x86_64 folds it into `gpr_used_callee`; aarch64 reserves a
+/// dedicated slot via `Frame::uses_x19`).
+pub(super) fn function_clobbers_scratch(
+    func: &FunctionSsa,
+    target: Target,
+    spill_count: u32,
+) -> &'static [u8] {
+    match target {
+        Target::LinuxX64 | Target::WindowsX64 => &[],
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            let routes_through_x19 = func.insts.iter().any(|inst| {
+                matches!(
+                    inst,
+                    Inst::TlsAddr(_)
+                        | Inst::CallIndirect { .. }
+                        | Inst::CallExt { .. }
+                        | Inst::Intrinsic { .. }
+                )
+            });
+            let mod_under_spill = spill_count > 0
+                && func.insts.iter().any(|inst| {
+                    matches!(
+                        inst,
+                        Inst::Binop {
+                            op: BinOp::Mod | BinOp::Modu,
+                            ..
+                        }
+                    )
+                });
+            if routes_through_x19 || mod_under_spill {
+                &[19]
+            } else {
+                &[]
+            }
+        }
     }
-    if spill_count > 0 || func.blocks.len() > 1 {
-        return true;
-    }
-    func.insts.iter().any(|inst| {
-        !matches!(
-            inst,
-            Inst::Imm(_)
-                | Inst::ImmData(_)
-                | Inst::ImmCode(_)
-                | Inst::ImmExtCode(_)
-                | Inst::BlockAddr(_)
-                | Inst::LocalAddr(_)
-                | Inst::Load { .. }
-                | Inst::LoadLocal { .. }
-                | Inst::ParamRef { .. }
-                | Inst::Extend { .. }
-        )
-    })
 }
 
 /// Win64 non-volatile xmm registers the x86_64 emit pass uses as fixed
@@ -462,26 +472,17 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // prologue's `str xN, [sp, ...]` sequence to exactly the
     // registers AAPCS64 / SysV / Win64 require the callee to
     // preserve.
-    let mut gpr_used_callee: Vec<u8> = gpr_used
+    let gpr_used_callee: Vec<u8> = gpr_used
         .into_iter()
         .filter(|r| banks.callee_gprs.contains(r))
         .collect();
-    // The x86_64 writer borrows r13 as its reserved secondary scratch
-    // (`SCRATCH_R13` in ssa_emit_x86_64). r13 is callee-saved under both
-    // System V and Win64, so a function that clobbers it must save and
-    // restore the caller's value -- otherwise a foreign (clang/gcc)
-    // caller holding a live value in r13 across a call into c5 code sees
-    // it corrupted. r13 sits outside `callee_gprs` (it is never an
-    // allocator value), so the filter above drops it; list it here when
-    // the body actually touches it so the prologue / epilogue's
-    // callee-save loop preserves it exactly as it does rbx / r12 / r14 /
-    // r15. The aarch64 writer handles its own callee-saved scratch (x19)
-    // through the analogous `function_clobbers_x19` path.
-    if matches!(target, Target::LinuxX64 | Target::WindowsX64)
-        && function_clobbers_r13(func, spill_count)
-    {
-        gpr_used_callee.push(13);
-    }
+    // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
+    // it needs no save: `function_clobbers_scratch` returns empty for
+    // x86_64 and r13 -- now an ordinary callee-saved allocation target --
+    // is already captured by the `callee_gprs` filter above when colored.
+    // The aarch64 writer reserves the callee-saved x19; it consumes
+    // `function_clobbers_scratch` through its own `Frame::uses_x19` path,
+    // not this list, so adding it here would double-count the save.
     let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r))

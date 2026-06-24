@@ -20,8 +20,7 @@ Disassembly of section .text:
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x10, %rsp
                	addsd	%xmm1, %xmm0
                	addsd	%xmm2, %xmm0
                	addsd	%xmm3, %xmm0
@@ -33,8 +32,7 @@ Disassembly of section .text:
                	addsd	%xmm1, %xmm0
                	movsd	0xa0(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
-               	movq	(%rsp), %r13
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11
                	addq	$0xa0, %rsp
@@ -55,12 +53,12 @@ Disassembly of section .text:
                	movabsq	$0x4014000000000000, %r8 # imm = 0x4014000000000000
                	movabsq	$0x4018000000000000, %r9 # imm = 0x4018000000000000
                	movabsq	$0x401c000000000000, %rax # imm = 0x401C000000000000
-               	movabsq	$0x4020000000000000, %r11 # imm = 0x4020000000000000
-               	movabsq	$0x4022000000000000, %rbx # imm = 0x4022000000000000
-               	movabsq	$0x4024000000000000, %r12 # imm = 0x4024000000000000
+               	movabsq	$0x4020000000000000, %rbx # imm = 0x4020000000000000
+               	movabsq	$0x4022000000000000, %r12 # imm = 0x4022000000000000
+               	movabsq	$0x4024000000000000, %r13 # imm = 0x4024000000000000
                	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	movq	%r12, (%rsp)
+               	movq	%r13, 0x8(%rsp)
                	movq	%rdi, %xmm0
                	movq	%rsi, %xmm1
                	movq	%rdx, %xmm2
@@ -68,7 +66,7 @@ Disassembly of section .text:
                	movq	%r8, %xmm4
                	movq	%r9, %xmm5
                	movq	%rax, %xmm6
-               	movq	%r11, %xmm7
+               	movq	%rbx, %xmm7
                	callq	<addr>
                	addq	$0x10, %rsp
                	movabsq	$0x404b800000000000, %rax # imm = 0x404B800000000000

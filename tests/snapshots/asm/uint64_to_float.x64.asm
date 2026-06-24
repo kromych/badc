@@ -13,8 +13,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x30, %rsp
                	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
                	movabsq	$-0x54ab567314e0f52e, %rcx # imm = 0xAB54A98CEB1F0AD2
                	movabsq	$-0x1, %rdx
@@ -24,11 +23,11 @@ Disassembly of section .text:
                	js	<addr>
                	cvtsi2sd	%r10, %xmm0
                	jmp	<addr>
-               	movq	%r10, %r13
-               	shrq	$0x1, %r13
+               	movq	%r10, %r11
+               	shrq	$0x1, %r11
                	andq	$0x1, %r10
-               	orq	%r10, %r13
-               	cvtsi2sd	%r13, %xmm0
+               	orq	%r10, %r11
+               	cvtsi2sd	%r11, %xmm0
                	addsd	%xmm0, %xmm0
                	movabsq	$0x43e0000000000000, %rdi # imm = 0x43E0000000000000
                	movq	%rdi, %xmm15
@@ -41,8 +40,7 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movq	%rcx, %r10
@@ -50,11 +48,11 @@ Disassembly of section .text:
                	js	<addr>
                	cvtsi2sd	%r10, %xmm0
                	jmp	<addr>
-               	movq	%r10, %r13
-               	shrq	$0x1, %r13
+               	movq	%r10, %r11
+               	shrq	$0x1, %r11
                	andq	$0x1, %r10
-               	orq	%r10, %r13
-               	cvtsi2sd	%r13, %xmm0
+               	orq	%r10, %r11
+               	cvtsi2sd	%r11, %xmm0
                	addsd	%xmm0, %xmm0
                	movabsq	$0x43e56a95319d63e1, %rcx # imm = 0x43E56A95319D63E1
                	movq	%rcx, %xmm15
@@ -67,8 +65,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movq	%rdx, %r10
@@ -76,11 +73,11 @@ Disassembly of section .text:
                	js	<addr>
                	cvtsi2sd	%r10, %xmm0
                	jmp	<addr>
-               	movq	%r10, %r13
-               	shrq	$0x1, %r13
+               	movq	%r10, %r11
+               	shrq	$0x1, %r11
                	andq	$0x1, %r10
-               	orq	%r10, %r13
-               	cvtsi2sd	%r13, %xmm0
+               	orq	%r10, %r11
+               	cvtsi2sd	%r11, %xmm0
                	addsd	%xmm0, %xmm0
                	movabsq	$0x43f0000000000000, %rcx # imm = 0x43F0000000000000
                	movq	%rcx, %xmm15
@@ -93,8 +90,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movq	%rsi, %r10
@@ -102,11 +98,11 @@ Disassembly of section .text:
                	js	<addr>
                	cvtsi2sd	%r10, %xmm0
                	jmp	<addr>
-               	movq	%r10, %r13
-               	shrq	$0x1, %r13
+               	movq	%r10, %r11
+               	shrq	$0x1, %r11
                	andq	$0x1, %r10
-               	orq	%r10, %r13
-               	cvtsi2sd	%r13, %xmm0
+               	orq	%r10, %r11
+               	cvtsi2sd	%r11, %xmm0
                	addsd	%xmm0, %xmm0
                	movabsq	$0x4059000000000000, %rcx # imm = 0x4059000000000000
                	movq	%rcx, %xmm15
@@ -119,8 +115,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	cvtsi2sd	%rdx, %xmm0
@@ -138,8 +133,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x5, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movq	%rax, %r10
@@ -147,11 +141,11 @@ Disassembly of section .text:
                	js	<addr>
                	cvtsi2sd	%r10, %xmm0
                	jmp	<addr>
-               	movq	%r10, %r13
-               	shrq	$0x1, %r13
+               	movq	%r10, %r11
+               	shrq	$0x1, %r11
                	andq	$0x1, %r10
-               	orq	%r10, %r13
-               	cvtsi2sd	%r13, %xmm0
+               	orq	%r10, %r11
+               	cvtsi2sd	%r11, %xmm0
                	addsd	%xmm0, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movabsq	$0x43e0000000000000, %rax # imm = 0x43E0000000000000
@@ -166,13 +160,11 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %r13
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	addb	%al, 0x41(%rdx)

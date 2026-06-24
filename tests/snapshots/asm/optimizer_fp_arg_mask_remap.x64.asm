@@ -13,29 +13,28 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x70, %rsp
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
                	movsd	-0x8(%rbp,%riz), %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
-               	movsd	%xmm0, 0x28(%rsp)
+               	movsd	%xmm0, 0x18(%rsp)
                	movsd	-0x8(%rbp,%riz), %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
-               	movsd	%xmm0, 0x20(%rsp)
+               	movsd	%xmm0, 0x10(%rsp)
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movq	%rax, %xmm14
                	sqrtsd	%xmm14, %xmm14
-               	movsd	%xmm14, 0x18(%rsp)
+               	movsd	%xmm14, 0x8(%rsp)
                	xorq	%rdi, %rdi
                	movq	%rdi, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x3fdea7ef9db22d0e, %rax # imm = 0x3FDEA7EF9DB22D0E
-               	movsd	0x28(%rsp), %xmm14
+               	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	setb	%cl
@@ -46,7 +45,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movabsq	$0x3fdeb851eb851eb8, %rax # imm = 0x3FDEB851EB851EB8
-               	movsd	0x28(%rsp), %xmm14
+               	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	seta	%cl
@@ -54,12 +53,11 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x80, %rsp
+               	addq	$0x70, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x3fec10624dd2f1aa, %rax # imm = 0x3FEC10624DD2F1AA
-               	movsd	0x20(%rsp), %xmm14
+               	movsd	0x10(%rsp), %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	setb	%cl
@@ -70,7 +68,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movabsq	$0x3fec189374bc6a7f, %rax # imm = 0x3FEC189374BC6A7F
-               	movsd	0x20(%rsp), %xmm14
+               	movsd	0x10(%rsp), %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	seta	%cl
@@ -78,12 +76,11 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x80, %rsp
+               	addq	$0x70, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movsd	0x18(%rsp), %xmm14
+               	movsd	0x8(%rsp), %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	setne	%al
@@ -94,8 +91,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x80, %rsp
+               	addq	$0x70, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x3feff7ced916872b, %rax # imm = 0x3FEFF7CED916872B
@@ -116,13 +112,11 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x80, %rsp
+               	addq	$0x70, %rsp
                	popq	%rbp
                	retq
                	movl	$0x13, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x80, %rsp
+               	addq	$0x70, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

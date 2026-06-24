@@ -13,8 +13,7 @@ Disassembly of section .text:
 <widen>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x90, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x80, %rsp
                	movq	%rdi, %rax
                	incq	%rax
                	addq	$0x2, %rax
@@ -32,8 +31,7 @@ Disassembly of section .text:
                	addq	$0xe, %rax
                	addq	$0xf, %rax
                	addq	$0x10, %rax
-               	movq	(%rsp), %r13
-               	addq	$0x90, %rsp
+               	addq	$0x80, %rsp
                	popq	%rbp
                	retq
 
@@ -42,7 +40,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r13, 0x8(%rsp)
                	xorq	%rdi, %rdi
                	callq	<addr>
                	movq	%rax, %rbx
@@ -55,9 +52,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	movq	%rcx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -13,32 +13,27 @@ Disassembly of section .text:
 <passthrough>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%r13, (%rsp)
-               	movq	(%rsp), %r13
-               	addq	$0x20, %rsp
+               	subq	$0x10, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 
 <add3>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x20, %rsp
                	addss	%xmm1, %xmm0
                	addss	%xmm2, %xmm0
-               	movq	(%rsp), %r13
-               	addq	$0x30, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xa0, %rsp
+               	subq	$0x90, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
                	xorq	%rbx, %rbx
                	jmp	<addr>
                	leaq	<rip>, %rdi
@@ -244,12 +239,12 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	cvtsd2ss	%xmm14, %xmm0
                	callq	<addr>
-               	movsd	%xmm0, 0x28(%rsp)
+               	movsd	%xmm0, 0x18(%rsp)
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm14
                	cvtsd2ss	%xmm14, %xmm0
                	callq	<addr>
-               	movsd	0x28(%rsp), %xmm14
+               	movsd	0x18(%rsp), %xmm14
                	ucomiss	%xmm0, %xmm14
                	sete	%al
                	movzbq	%al, %rax
@@ -353,8 +348,7 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	addq	$0xa0, %rsp
+               	addq	$0x90, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>
@@ -370,3 +364,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

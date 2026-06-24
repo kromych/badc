@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=rot
 fn ent_pc=0 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=ch
 fn ent_pc=1 n_params=3 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -41,7 +41,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=bs1
 fn ent_pc=2 n_params=1 variadic=false locals=2
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -85,22 +85,22 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=13
-  spill_count=6 gpr_used=[3, 12, 14, 15, 13] fp_used=[]
+  spill_count=5 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(256)                                         -> [spill 4]
+    v1   Imm(256)                                         -> [spill 3]
     v2   Imm(0)                                           -> x0
-    v3   Imm(512)                                         -> [spill 3]
+    v3   Imm(512)                                         -> [spill 2]
     v4   Imm(0)                                           -> x0
-    v5   Imm(1024)                                        -> [spill 2]
+    v5   Imm(1024)                                        -> [spill 1]
     v6   Imm(0)                                           -> x0
-    v7   Imm(2048)                                        -> [spill 1]
+    v7   Imm(2048)                                        -> [spill 0]
     v8   Imm(0)                                           -> x0
-    v9   Imm(4096)                                        -> [spill 0]
+    v9   Imm(4096)                                        -> x15
     v10  Imm(0)                                           -> x0
-    v11  Imm(8192)                                        -> x15
+    v11  Imm(8192)                                        -> x14
     v12  Imm(0)                                           -> x0
-    v13  Imm(16384)                                       -> x14
+    v13  Imm(16384)                                       -> x13
     v14  Imm(0)                                           -> x0
     v15  Imm(32768)                                       -> x12
     v16  Imm(0)                                           -> x0
@@ -110,13 +110,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
   block 1  start_pc=0
     v19  Phi { incoming=[b0:v17, b2:v31], kind=I64 }      -> x3
     v20  Phi { incoming=[b0:v15, b2:v21], kind=I64 }      -> x12
-    v21  Phi { incoming=[b0:v13, b2:v22], kind=I64 }      -> x14
-    v22  Phi { incoming=[b0:v11, b2:v23], kind=I64 }      -> x15
-    v23  Phi { incoming=[b0:v9, b2:v54], kind=I64 }       -> [spill 0]
-    v24  Phi { incoming=[b0:v7, b2:v25], kind=I64 }       -> [spill 1]
-    v25  Phi { incoming=[b0:v5, b2:v26], kind=I64 }       -> [spill 2]
-    v26  Phi { incoming=[b0:v3, b2:v27], kind=I64 }       -> [spill 3]
-    v27  Phi { incoming=[b0:v1, b2:v63], kind=I64 }       -> [spill 4]
+    v21  Phi { incoming=[b0:v13, b2:v22], kind=I64 }      -> x13
+    v22  Phi { incoming=[b0:v11, b2:v23], kind=I64 }      -> x14
+    v23  Phi { incoming=[b0:v9, b2:v54], kind=I64 }       -> x15
+    v24  Phi { incoming=[b0:v7, b2:v25], kind=I64 }       -> [spill 0]
+    v25  Phi { incoming=[b0:v5, b2:v26], kind=I64 }       -> [spill 1]
+    v26  Phi { incoming=[b0:v3, b2:v27], kind=I64 }       -> [spill 2]
+    v27  Phi { incoming=[b0:v1, b2:v63], kind=I64 }       -> [spill 3]
     v28  Extend { value=v19, kind=I32 }                   -> x0
     v29  BinopI { op=lt, lhs=v28, rhs_imm=4 }             -> x0
     terminator Bz { cond=v29, target=b4, fall=b3 }   (exit_acc=v29)
@@ -127,7 +127,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     terminator Jmp(b1)   (exit_acc=v31)
   block 3  start_pc=0
     v33  LoadLocal { off=-5, kind=I64 }                   -> x0
-    v34  Call { target_pc=2, args=[v23], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 5]
+    v34  Call { target_pc=2, args=[v23], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 4]
     v35  LoadLocal { off=-5, kind=I64 }                   -> x0
     v36  LoadLocal { off=-6, kind=I64 }                   -> x0
     v37  LoadLocal { off=-7, kind=I64 }                   -> x0
@@ -179,7 +179,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -191,7 +191,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7

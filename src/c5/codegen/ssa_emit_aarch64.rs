@@ -77,7 +77,8 @@ pub(super) struct Frame {
     /// Whether this function clobbers x19. x19 is callee-saved per
     /// AAPCS64 and is the scratch the writer's patch_adrp_add forces
     /// for address materialisation, so it is saved and restored only
-    /// when the function actually uses it (see [`function_clobbers_x19`]).
+    /// when the function actually uses it (see the aarch64 arm of
+    /// [`super::ssa_alloc::function_clobbers_scratch`]).
     pub uses_x19: bool,
     /// Total bytes the prologue allocates above the saved fp/lr
     /// for c5 cdecl parameter slots and host-stack overflow. The
@@ -114,7 +115,12 @@ pub(super) struct Frame {
 }
 
 impl Frame {
-    pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
+    pub fn for_function(
+        func: &FunctionSsa,
+        alloc: &Allocation,
+        abi: super::Abi,
+        target: Target,
+    ) -> Self {
         let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
         // After mem2reg + dead-store elimination, every reference to
         // user-local slots (negative `off`) may be gone. The
@@ -138,23 +144,16 @@ impl Frame {
         let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
         let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
         // Reserve the x19 slot only when the function actually
-        // clobbers x19; the prologue / epilogue's store / load
-        // already gates on the same condition, so a function that
-        // leaves x19 alone needs no slot and can drop the 16 bytes.
-        // A spilling function with a modulo may need x19 as a third
-        // scratch when its dividend, divisor and result all spill, so
-        // reserve it in that case too.
-        let mod_under_spill = alloc.spill_count > 0
-            && func.insts.iter().any(|inst| {
-                matches!(
-                    inst,
-                    Inst::Binop {
-                        op: BinOp::Mod | BinOp::Modu,
-                        ..
-                    }
-                )
-            });
-        let uses_x19 = function_clobbers_x19(func) || mod_under_spill;
+        // clobbers x19; the prologue / epilogue's store / load already
+        // gates on the same condition, so a function that leaves x19
+        // alone needs no slot and can drop the 16 bytes. The clobber
+        // decision (TLS / indirect-call / intrinsic address scratch, or
+        // a third modulo operand under spill) lives in the shared
+        // `function_clobbers_scratch`, which knows each target's
+        // reserved scratch set.
+        let uses_x19 =
+            !super::ssa_alloc::function_clobbers_scratch(func, target, alloc.spill_count)
+                .is_empty();
         let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
         let frame_bytes =
             locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
@@ -412,25 +411,6 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
     reg_bytes + overflow_bytes
 }
 
-/// x19 is overwritten only by the lowerings that route through it:
-/// the indirect-call environment setup, the setjmp / longjmp
-/// intrinsics, TLS address loads, and external call thunks. A
-/// function touching none of these leaves x19 untouched, so its
-/// prologue need not save the caller's value. `Inst::ImmData` and
-/// `Inst::ImmCode` route the adrp/add through the allocator's chosen
-/// destination, so they no longer participate.
-fn function_clobbers_x19(func: &FunctionSsa) -> bool {
-    func.insts.iter().any(|inst| {
-        matches!(
-            inst,
-            Inst::TlsAddr(_)
-                | Inst::CallIndirect { .. }
-                | Inst::CallExt { .. }
-                | Inst::Intrinsic { .. }
-        )
-    })
-}
-
 /// A function that meets every condition to skip the standard
 /// stp fp/lr / mov fp,sp / ldp prologue triple: no callee it
 /// must save lr for, no frame to allocate, no param spill, no
@@ -678,7 +658,7 @@ pub(super) fn emit_function(
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
     let abi = target.abi();
-    let frame = Frame::for_function(func, alloc, abi);
+    let frame = Frame::for_function(func, alloc, abi, target);
     let scratch = ScratchPool::new();
     let snapshot = code.len();
     // Snapshot every fixup vector at function entry so a partial
@@ -6786,7 +6766,7 @@ mod tests {
         // The frame must reserve the three slots the test forces, or the
         // spill-offset computation underflows.
         alloc.spill_count = alloc.spill_count.max(3);
-        let frame = Frame::for_function(&func, &alloc, target.abi());
+        let frame = Frame::for_function(&func, &alloc, target.abi(), target);
         let scratch = ScratchPool {
             primary: Reg(16),
             secondary: Reg(17),

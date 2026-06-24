@@ -15,7 +15,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r13, 0x8(%rsp)
+               	movq	%r12, 0x8(%rsp)
                	movl	$0x64, %eax
                	movl	$0x32, %ecx
                	movl	$0x19, %edx
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	cqto
                	idivq	%rdi
-               	movq	%rax, %r11
+               	movq	%rax, %rbx
                	popq	%rdx
                	popq	%rax
                	pushq	%rax
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	popq	%rdx
                	popq	%rax
                	addq	%r9, %r8
-               	addq	%r11, %r8
+               	addq	%rbx, %r8
                	addq	%r8, %rdi
                	addq	%rdi, %rax
                	addq	%rcx, %rax
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x70, %rsp
                	popq	%rbp

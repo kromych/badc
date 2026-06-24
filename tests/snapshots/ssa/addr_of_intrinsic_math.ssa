@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=main
 fn ent_pc=13 n_params=0 variadic=false locals=14
-  spill_count=1 gpr_used=[3, 12, 14, 15, 13] fp_used=[]
+  spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmExtCode(binding=44)                           -> x0
@@ -10,11 +10,11 @@ fn ent_pc=13 n_params=0 variadic=false locals=14
     v4   Imm(0)                                           -> x1
     v5   ImmExtCode(binding=45)                           -> x12
     v6   Imm(0)                                           -> x1
-    v7   ImmExtCode(binding=46)                           -> x14
+    v7   ImmExtCode(binding=46)                           -> x13
     v8   Imm(0)                                           -> x1
-    v9   ImmExtCode(binding=47)                           -> x15
+    v9   ImmExtCode(binding=47)                           -> x14
     v10  Imm(0)                                           -> x1
-    v11  Imm(4615063718147915776)                         -> [spill 0]
+    v11  Imm(4615063718147915776)                         -> x15
     v12  Fneg(v11)                                        -> d0
     v13  LoadLocal { off=-1, kind=I64 }                   -> x1
     v14  CallIndirect { target=v1, args=[v12], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
@@ -149,7 +149,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -161,7 +161,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7

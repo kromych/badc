@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=mkq
 fn ent_pc=0 n_params=2 variadic=false locals=4
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
@@ -29,7 +29,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=4
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=useq
 fn ent_pc=1 n_params=1 variadic=false locals=4
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
@@ -50,7 +50,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=4
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=simple
 fn ent_pc=2 n_params=1 variadic=false locals=2
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -86,7 +86,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=heavy
 fn ent_pc=3 n_params=1 variadic=false locals=11
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -152,7 +152,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=11
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=sum8
 fn ent_pc=4 n_params=1 variadic=false locals=8
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-8)                                    -> x0
@@ -205,11 +205,11 @@ fn ent_pc=5 n_params=2 variadic=false locals=35
     v11  BinopI { op=add, lhs=v1, rhs_imm=5 }             -> x8
     v12  Imm(0)                                           -> x9
     v13  BinopI { op=add, lhs=v1, rhs_imm=6 }             -> x9
-    v14  Imm(0)                                           -> x11
-    v15  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> x11
-    v16  Imm(0)                                           -> x3
-    v17  LoadLocal { off=-1, kind=I64 }                   -> x3
-    v18  LoadLocal { off=-2, kind=I64 }                   -> x3
+    v14  Imm(0)                                           -> x3
+    v15  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> x3
+    v16  Imm(0)                                           -> x12
+    v17  LoadLocal { off=-1, kind=I64 }                   -> x12
+    v18  LoadLocal { off=-2, kind=I64 }                   -> x12
     v19  Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
     v20  LoadLocal { off=-3, kind=I64 }                   -> x1
     v21  Binop { op=add, lhs=v19, rhs=v5 }                -> x0
@@ -237,13 +237,13 @@ fn ent_pc=5 n_params=2 variadic=false locals=35
     v43  BinopI { op=add, lhs=v31, rhs_imm=5 }            -> x8
     v44  Imm(0)                                           -> x9
     v45  BinopI { op=add, lhs=v31, rhs_imm=6 }            -> x9
-    v46  Imm(0)                                           -> x11
-    v47  BinopI { op=add, lhs=v31, rhs_imm=7 }            -> x11
-    v48  Imm(0)                                           -> x3
-    v49  LoadLocal { off=-10, kind=I64 }                  -> x3
-    v50  LoadLocal { off=-11, kind=I64 }                  -> x3
+    v46  Imm(0)                                           -> x3
+    v47  BinopI { op=add, lhs=v31, rhs_imm=7 }            -> x3
+    v48  Imm(0)                                           -> x12
+    v49  LoadLocal { off=-10, kind=I64 }                  -> x12
+    v50  LoadLocal { off=-11, kind=I64 }                  -> x12
     v51  Binop { op=add, lhs=v31, rhs=v35 }               -> x1
-    v52  LoadLocal { off=-12, kind=I64 }                  -> x3
+    v52  LoadLocal { off=-12, kind=I64 }                  -> x12
     v53  Binop { op=add, lhs=v51, rhs=v37 }               -> x1
     v54  LoadLocal { off=-13, kind=I64 }                  -> x2
     v55  Binop { op=add, lhs=v53, rhs=v39 }               -> x1
@@ -267,15 +267,15 @@ fn ent_pc=5 n_params=2 variadic=false locals=35
     v73  BinopI { op=add, lhs=v63, rhs_imm=4 }            -> x8
     v74  Imm(0)                                           -> x9
     v75  BinopI { op=add, lhs=v63, rhs_imm=5 }            -> x9
-    v76  Imm(0)                                           -> x11
-    v77  BinopI { op=add, lhs=v63, rhs_imm=6 }            -> x11
-    v78  Imm(0)                                           -> x3
-    v79  BinopI { op=add, lhs=v63, rhs_imm=7 }            -> x3
-    v80  Imm(0)                                           -> x12
-    v81  LoadLocal { off=-19, kind=I64 }                  -> x12
-    v82  LoadLocal { off=-20, kind=I64 }                  -> x12
+    v76  Imm(0)                                           -> x3
+    v77  BinopI { op=add, lhs=v63, rhs_imm=6 }            -> x3
+    v78  Imm(0)                                           -> x12
+    v79  BinopI { op=add, lhs=v63, rhs_imm=7 }            -> x12
+    v80  Imm(0)                                           -> x13
+    v81  LoadLocal { off=-19, kind=I64 }                  -> x13
+    v82  LoadLocal { off=-20, kind=I64 }                  -> x13
     v83  Binop { op=add, lhs=v63, rhs=v67 }               -> x2
-    v84  LoadLocal { off=-21, kind=I64 }                  -> x12
+    v84  LoadLocal { off=-21, kind=I64 }                  -> x13
     v85  Binop { op=add, lhs=v83, rhs=v69 }               -> x2
     v86  LoadLocal { off=-22, kind=I64 }                  -> x6
     v87  Binop { op=add, lhs=v85, rhs=v71 }               -> x2
@@ -344,7 +344,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=35
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
 fn ent_pc=7 n_params=0 variadic=false locals=60
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(50)                                          -> x3
@@ -580,7 +580,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=60
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -592,7 +592,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7

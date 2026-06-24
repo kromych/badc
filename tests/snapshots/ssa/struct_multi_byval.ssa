@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=take_many
 fn ent_pc=0 n_params=8 variadic=false locals=9
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(1, kind=I32)                            -> x6
@@ -115,7 +115,7 @@ fn ent_pc=0 n_params=8 variadic=false locals=9
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=make2
 fn ent_pc=1 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -135,7 +135,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=make4
 fn ent_pc=2 n_params=1 variadic=false locals=2
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -169,7 +169,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=make6
 fn ent_pc=3 n_params=2 variadic=false locals=3
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
@@ -217,7 +217,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=3
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
 fn ent_pc=4 n_params=0 variadic=false locals=42
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
@@ -242,7 +242,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=42
     v20  LocalAddr(-6)                                    -> x8
     v21  Imm(2000)                                        -> x9
     v22  LocalAddr(-9)                                    -> x0
-    v23  Imm(3000)                                        -> x11
+    v23  Imm(3000)                                        -> x3
     v24  Call { target_pc=0, args=[v16, v17, v18, v19, v20, v21, v22, v23], fixed_args=8, fp_return=false, fp_arg_mask=0x0 } -> x0
     v25  ImmData(8)                                       -> x0
     v26  Load { addr=v25, disp=0, kind=I64 }              -> x0
@@ -471,7 +471,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=42
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -483,7 +483,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7

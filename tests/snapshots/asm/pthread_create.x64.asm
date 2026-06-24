@@ -11,14 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <thread_main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	movl	$0xb, %eax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -27,8 +20,7 @@ Disassembly of section .text:
                	subq	$0x70, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%r14, 0x10(%rsp)
-               	movq	%r13, 0x18(%rsp)
+               	movq	%r13, 0x10(%rsp)
                	xorq	%rbx, %rbx
                	movl	$0x2, %esi
                	movq	%rbx, %rdi
@@ -39,7 +31,7 @@ Disassembly of section .text:
                	movq	%r12, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r14
+               	movq	%rax, %r13
                	leaq	<rip>, %rsi
                	movq	%r12, %rdi
                	xorl	%eax, %eax
@@ -47,21 +39,19 @@ Disassembly of section .text:
                	movq	%rax, %r12
                	leaq	-0x20(%rbp), %rdi
                	leaq	-<rip>, %rdx       # <addr>
-               	movq	%r14, %r11
+               	movq	%r13, %rax
                	movq	%rbx, %rsi
                	movq	%rbx, %rcx
-               	callq	*%r11
+               	callq	*%rax
                	movq	-0x20(%rbp), %rdi
                	leaq	-0x28(%rbp), %rsi
-               	movq	%r12, %r11
-               	callq	*%r11
+               	movq	%r12, %rax
+               	callq	*%rax
                	movq	-0x28(%rbp), %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r13
+               	movq	0x10(%rsp), %r13
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

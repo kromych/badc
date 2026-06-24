@@ -11,16 +11,9 @@ Disassembly of section .text:
                	ud2
 
 <do_add>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	leaq	(%rsi,%rdx), %rax
                	movl	%eax, (%rdi)
                	xorq	%rax, %rax
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <driver>:
@@ -28,7 +21,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r13, 0x8(%rsp)
                	leaq	<rip>, %rax
                	movl	$0x7, %ecx
                	movl	%ecx, (%rax)
@@ -40,12 +32,10 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movq	%rax, %r11
                	movq	%rbx, %rdi
-               	callq	*%r11
+               	callq	*%rax
                	movslq	(%rbx), %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -53,10 +43,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
-               	movq	(%rsp), %r13
-               	addq	$0x10, %rsp
                	popq	%rbp
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

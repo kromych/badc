@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=sink
 fn ent_pc=1 n_params=4 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -40,7 +40,7 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=forward
 fn ent_pc=2 n_params=1 variadic=false locals=21
-  spill_count=6 gpr_used=[3, 12, 14, 15, 13] fp_used=[]
+  spill_count=6 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -66,18 +66,18 @@ fn ent_pc=2 n_params=1 variadic=false locals=21
     v21  Extend { value=v19, kind=I32 }                   -> x9
     v22  Imm(0)                                           -> x9
     v23  BinopI { op=add, lhs=v1, rhs_imm=5 }             -> x9
-    v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x11
-    v25  Extend { value=v23, kind=I32 }                   -> x11
-    v26  Imm(0)                                           -> x11
-    v27  BinopI { op=add, lhs=v1, rhs_imm=6 }             -> x11
-    v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x3
-    v29  Extend { value=v27, kind=I32 }                   -> x3
-    v30  Imm(0)                                           -> x3
-    v31  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> x3
-    v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x12
-    v33  Extend { value=v31, kind=I32 }                   -> x12
-    v34  Imm(0)                                           -> x12
-    v35  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x12
+    v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x3
+    v25  Extend { value=v23, kind=I32 }                   -> x3
+    v26  Imm(0)                                           -> x3
+    v27  BinopI { op=add, lhs=v1, rhs_imm=6 }             -> x3
+    v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x12
+    v29  Extend { value=v27, kind=I32 }                   -> x12
+    v30  Imm(0)                                           -> x12
+    v31  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> x12
+    v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x13
+    v33  Extend { value=v31, kind=I32 }                   -> x13
+    v34  Imm(0)                                           -> x13
+    v35  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v36  BinopI { op=shl, lhs=v35, rhs_imm=32 }           -> x14
     v37  Extend { value=v35, kind=I32 }                   -> x14
     v38  Imm(0)                                           -> x14
@@ -198,7 +198,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=21
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=4
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(10)                                          -> x7
@@ -225,7 +225,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -237,7 +237,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7

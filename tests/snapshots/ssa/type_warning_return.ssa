@@ -4,7 +4,7 @@ type_warning_return.c:25: warning: incompatible struct types in return (declared
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=ret_ptr_as_int
 fn ent_pc=0 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(24)                                      -> x0
@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=ret_int_as_ptr
 fn ent_pc=1 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x0
@@ -23,7 +23,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=ret_wrong_struct
 fn ent_pc=2 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
@@ -31,7 +31,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=ret_null
 fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -39,7 +39,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=ret_ok
 fn ent_pc=4 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x0
@@ -49,7 +49,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
 fn ent_pc=5 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -57,7 +57,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -69,7 +69,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7

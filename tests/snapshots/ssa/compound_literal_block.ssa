@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=sum
 fn ent_pc=0 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -17,7 +17,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=first4
 fn ent_pc=1 n_params=1 variadic=false locals=3
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -80,7 +80,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=3
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=two_strings
 fn ent_pc=2 n_params=1 variadic=false locals=3
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -150,7 +150,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=3
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=14
-  spill_count=0 gpr_used=[3, 12, 14, 13] fp_used=[]
+  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
@@ -235,7 +235,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=14
   block 8  start_pc=0
     v65  Phi { incoming=[b21:v56, b7:v63], kind=I64 }     -> x12
     v66  LoadLocal { off=-14, kind=I64 }                  -> x0
-    v67  Imm(1)                                           -> x14
+    v67  Imm(1)                                           -> x13
     v68  Imm(0)                                           -> x0
     terminator Bnz { cond=v65, target=b22, fall=b9 }   (exit_acc=v65)
   block 9  start_pc=0
@@ -244,11 +244,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=14
     v71  BinopI { op=add, lhs=v50, rhs_imm=8 }            -> x0
     v72  Load { addr=v50, disp=8, kind=I32 }              -> x0
     v73  BinopI { op=ne, lhs=v72, rhs_imm=0 }             -> x0
-    v74  BinopI { op=ne, lhs=v73, rhs_imm=0 }             -> x14
+    v74  BinopI { op=ne, lhs=v73, rhs_imm=0 }             -> x13
     v75  Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v74)
   block 10  start_pc=0
-    v76  Phi { incoming=[b22:v67, b9:v74], kind=I64 }     -> x14
+    v76  Phi { incoming=[b22:v67, b9:v74], kind=I64 }     -> x13
     v77  LoadLocal { off=-13, kind=I64 }                  -> x0
     v78  Imm(0)                                           -> x0
     terminator Bnz { cond=v76, target=b23, fall=b11 }   (exit_acc=v76)
@@ -257,11 +257,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=14
     v80  Imm(12)                                          -> x0
     v81  BinopI { op=add, lhs=v50, rhs_imm=12 }           -> x0
     v82  Load { addr=v50, disp=12, kind=I32 }             -> x0
-    v83  BinopI { op=ne, lhs=v82, rhs_imm=0 }             -> x14
+    v83  BinopI { op=ne, lhs=v82, rhs_imm=0 }             -> x13
     v84  Imm(0)                                           -> x0
     terminator Jmp(b12)   (exit_acc=v83)
   block 12  start_pc=0
-    v85  Phi { incoming=[b23:v76, b11:v83], kind=I64 }    -> x14
+    v85  Phi { incoming=[b23:v76, b11:v83], kind=I64 }    -> x13
     v86  LoadLocal { off=-12, kind=I64 }                  -> x0
     terminator Bz { cond=v85, target=b14, fall=b13 }   (exit_acc=v85)
   block 13  start_pc=0
@@ -319,7 +319,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=14
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -331,7 +331,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7

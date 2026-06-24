@@ -26,8 +26,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	orq	$0x1, %r12
-               	callq	<addr>
-               	cmpq	%rbx, %rax
+               	cmpq	%rbx, %rbx
                	je	<addr>
                	orq	$0x2, %r12
                	leaq	<rip>, %rax
@@ -88,4 +87,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

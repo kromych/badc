@@ -77,8 +77,9 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x5, %edi
-               	callq	<addr>
+               	movl	$0x5, %eax
+               	incq	%rax
+               	movslq	%eax, %rax
                	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x3, %eax
@@ -152,4 +153,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

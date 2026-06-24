@@ -73,6 +73,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x140              // =320
+               	sxth	x0, w0
                	lsl	x0, x0, #8
                	sxtw	x1, w0
                	sxth	x0, w1
@@ -82,6 +83,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x64               // =100
+               	sxtb	x0, w0
                	add	x0, x0, #0x64
                	sxtw	x1, w0
                	sxtb	x0, w1

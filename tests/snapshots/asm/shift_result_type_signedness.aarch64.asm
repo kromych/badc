@@ -24,6 +24,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0xfb               // =251
                	mov	x1, #0x18               // =24
+               	sxtw	x1, w1
                	mov	w0, w0
                	lsl	x0, x0, x1
                	mov	w0, w0
@@ -41,6 +42,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0xff               // =255
                	mov	x1, #0x18               // =24
+               	sxtw	x1, w1
                	mov	w0, w0
                	lsl	x0, x0, x1
                	mov	w0, w0
@@ -58,6 +60,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x80               // =128
                	mov	x1, #0x18               // =24
+               	sxtw	x1, w1
                	mov	w0, w0
                	lsl	x0, x0, x1
                	mov	w0, w0
@@ -75,6 +78,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x7f               // =127
                	mov	x1, #0x18               // =24
+               	sxtw	x1, w1
                	mov	w0, w0
                	lsl	x0, x0, x1
                	mov	w0, w0

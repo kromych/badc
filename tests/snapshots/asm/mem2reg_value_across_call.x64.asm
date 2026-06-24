@@ -35,8 +35,9 @@ Disassembly of section .text:
                	movq	%r13, %r14
                	cmpq	%rbx, %r13
                	jge	<addr>
-               	movq	%r13, %rdi
-               	callq	<addr>
+               	movq	%r13, %rax
+               	shlq	$0x1, %rax
+               	incq	%rax
                	addq	%rax, %r14
                	movq	%r12, %rax
                	movq	%r13, %rdi
@@ -63,3 +64,4 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

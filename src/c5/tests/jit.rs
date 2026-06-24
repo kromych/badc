@@ -1044,6 +1044,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("mem2reg_value_across_call.c", 33),
     ("mem2reg_param_promoted.c", 0),
     ("inline_forward_ref_value.c", 0),
+    ("inline_phi_caller_leaf_helper.c", 0),
     ("natural_width_local.c", 0),
     ("arithmetic.c", 60),
     ("goto.c", 5),

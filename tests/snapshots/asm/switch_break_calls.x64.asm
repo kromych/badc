@@ -27,42 +27,30 @@ Disassembly of section .text:
                	retq
 
 <driver>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%rdi, %rbx
-               	movslq	%ebx, %rbx
-               	cmpq	$0x1, %rbx
+               	movslq	%edi, %rdi
+               	cmpq	$0x1, %rdi
                	jl	<addr>
                	jmp	<addr>
-               	movslq	%ebx, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	movslq	%eax, %rax
                	retq
-               	callq	<addr>
-               	movq	%rax, %rbx
+               	movl	$0x64, %eax
                	jmp	<addr>
-               	callq	<addr>
-               	movq	%rax, %rbx
+               	movl	$0xc8, %eax
                	jmp	<addr>
-               	callq	<addr>
-               	movq	%rax, %rbx
+               	movl	$0x12c, %eax            # imm = 0x12C
                	jmp	<addr>
-               	callq	<addr>
-               	movq	%rax, %rbx
+               	movl	$0x190, %eax            # imm = 0x190
                	jmp	<addr>
-               	testq	%rbx, %rbx
+               	testq	%rdi, %rdi
                	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x2, %rbx
+               	cmpq	$0x2, %rdi
                	jl	<addr>
                	jmp	<addr>
-               	cmpq	$0x1, %rbx
+               	cmpq	$0x1, %rdi
                	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x2, %rbx
+               	cmpq	$0x2, %rdi
                	je	<addr>
                	jmp	<addr>
                	jmp	<addr>
@@ -73,5 +61,4 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	popq	%rbp
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

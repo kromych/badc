@@ -25,7 +25,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
                	movq	%rbx, (%rsp)
-               	callq	<addr>
+               	movl	$0x1f9, %eax            # imm = 0x1F9
+               	cvtsi2sd	%rax, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movsd	-0x8(%rbp,%riz), %xmm0
                	movabsq	$0x407f900000000000, %rax # imm = 0x407F900000000000
@@ -67,7 +68,8 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	callq	<addr>
+               	movabsq	$-0x1, %rax
+               	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm1
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
@@ -121,5 +123,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

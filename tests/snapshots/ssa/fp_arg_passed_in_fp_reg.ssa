@@ -62,43 +62,45 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v13  Imm(4609434218613702656)                         -> x1
     v14  Imm(4)                                           -> x2
     v15  Imm(4612811918334230528)                         -> x6
-    v16  Imm(0)                                           -> x7
+    v16  Extend { value=v12, kind=I32 }                   -> x0
     v17  Imm(0)                                           -> x7
     v18  Imm(0)                                           -> x7
-    v19  Imm(0)                                           -> x7
-    v20  FpCast { kind=IntToFp, value=v12 }               -> d0
-    v21  Binop { op=fmul, lhs=v13, rhs=v20 }              -> d1
-    v22  FpCast { kind=IntToFp, value=v14 }               -> d1
-    v23  Binop { op=fmul, lhs=v15, rhs=v22 }              -> d1
-    v24  Fma { a=v13, b=v20, c=v23, neg_product=false, neg_addend=false } -> d0
-    v25  Imm(0)                                           -> x0
-    v26  LoadLocal { off=-2, kind=F64 }                   -> d1
-    v27  Imm(4624352392379367424)                         -> x0
-    v28  Binop { op=fne, lhs=v24, rhs=v27 }               -> x0
-    terminator Bz { cond=v28, target=b4, fall=b3 }   (exit_acc=v28)
+    v19  Extend { value=v14, kind=I32 }                   -> x2
+    v20  Imm(0)                                           -> x7
+    v21  Imm(0)                                           -> x7
+    v22  FpCast { kind=IntToFp, value=v16 }               -> d0
+    v23  Binop { op=fmul, lhs=v13, rhs=v22 }              -> d1
+    v24  FpCast { kind=IntToFp, value=v19 }               -> d1
+    v25  Binop { op=fmul, lhs=v15, rhs=v24 }              -> d1
+    v26  Fma { a=v13, b=v22, c=v25, neg_product=false, neg_addend=false } -> d0
+    v27  Imm(0)                                           -> x0
+    v28  LoadLocal { off=-2, kind=F64 }                   -> d1
+    v29  Imm(4624352392379367424)                         -> x0
+    v30  Binop { op=fne, lhs=v26, rhs=v29 }               -> x0
+    terminator Bz { cond=v30, target=b4, fall=b3 }   (exit_acc=v30)
   block 3  start_pc=0
-    v29  Imm(2)                                           -> x0
-    terminator Return(v29)   (exit_acc=v29)
+    v31  Imm(2)                                           -> x0
+    terminator Return(v31)   (exit_acc=v31)
   block 4  start_pc=0
-    v30  Imm(4618722892845154304)                         -> x0
-    v31  StoreLocal { off=-3, value=v30, kind=F64 }       -> -
-    v32  LoadLocal { off=-3, kind=F64 }                   -> d0
-    v33  Imm(4616189618054758400)                         -> x0
-    v34  Imm(0)                                           -> x1
-    v35  Imm(0)                                           -> x1
-    v36  Binop { op=fmul, lhs=v32, rhs=v33 }              -> d1
-    v37  Fma { a=v32, b=v33, c=v32, neg_product=false, neg_addend=false } -> d0
-    v38  Imm(0)                                           -> x0
-    v39  LoadLocal { off=-4, kind=F64 }                   -> d1
-    v40  Imm(4629489310704336896)                         -> x0
-    v41  Binop { op=fne, lhs=v37, rhs=v40 }               -> x0
-    terminator Bz { cond=v41, target=b6, fall=b5 }   (exit_acc=v41)
+    v32  Imm(4618722892845154304)                         -> x0
+    v33  StoreLocal { off=-3, value=v32, kind=F64 }       -> -
+    v34  LoadLocal { off=-3, kind=F64 }                   -> d0
+    v35  Imm(4616189618054758400)                         -> x0
+    v36  Imm(0)                                           -> x1
+    v37  Imm(0)                                           -> x1
+    v38  Binop { op=fmul, lhs=v34, rhs=v35 }              -> d1
+    v39  Fma { a=v34, b=v35, c=v34, neg_product=false, neg_addend=false } -> d0
+    v40  Imm(0)                                           -> x0
+    v41  LoadLocal { off=-4, kind=F64 }                   -> d1
+    v42  Imm(4629489310704336896)                         -> x0
+    v43  Binop { op=fne, lhs=v39, rhs=v42 }               -> x0
+    terminator Bz { cond=v43, target=b6, fall=b5 }   (exit_acc=v43)
   block 5  start_pc=0
-    v42  Imm(3)                                           -> x0
-    terminator Return(v42)   (exit_acc=v42)
+    v44  Imm(3)                                           -> x0
+    terminator Return(v44)   (exit_acc=v44)
   block 6  start_pc=0
-    v43  Imm(0)                                           -> x0
-    terminator Return(v43)   (exit_acc=v43)
+    v45  Imm(0)                                           -> x0
+    terminator Return(v45)   (exit_acc=v45)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

@@ -27,6 +27,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0xfb, %eax
                	movl	$0x18, %ecx
+               	movslq	%ecx, %rcx
                	movl	%eax, %eax
                	shlq	%cl, %rax
                	movl	%eax, %eax
@@ -40,6 +41,7 @@ Disassembly of section .text:
                	retq
                	movl	$0xff, %eax
                	movl	$0x18, %ecx
+               	movslq	%ecx, %rcx
                	movl	%eax, %eax
                	shlq	%cl, %rax
                	movl	%eax, %eax
@@ -53,6 +55,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x80, %eax
                	movl	$0x18, %ecx
+               	movslq	%ecx, %rcx
                	movl	%eax, %eax
                	shlq	%cl, %rax
                	movl	%eax, %eax
@@ -66,6 +69,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x7f, %eax
                	movl	$0x18, %ecx
+               	movslq	%ecx, %rcx
                	movl	%eax, %eax
                	shlq	%cl, %rax
                	movl	%eax, %eax

@@ -97,33 +97,35 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     terminator Return(v24)   (exit_acc=v24)
   block 4  start_pc=0
     v25  Imm(320)                                         -> x0
-    v26  Imm(0)                                           -> x1
-    v27  BinopI { op=shl, lhs=v25, rhs_imm=8 }            -> x0
-    v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x1
-    v29  Extend { value=v27, kind=I32 }                   -> x1
-    v30  BinopI { op=shl, lhs=v27, rhs_imm=48 }           -> x0
-    v31  Extend { value=v29, kind=I16 }                   -> x0
-    v32  BinopI { op=ne, lhs=v31, rhs_imm=16384 }         -> x0
-    terminator Bz { cond=v32, target=b6, fall=b5 }   (exit_acc=v32)
+    v26  Extend { value=v25, kind=I16 }                   -> x0
+    v27  Imm(0)                                           -> x1
+    v28  BinopI { op=shl, lhs=v26, rhs_imm=8 }            -> x0
+    v29  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x1
+    v30  Extend { value=v28, kind=I32 }                   -> x1
+    v31  BinopI { op=shl, lhs=v28, rhs_imm=48 }           -> x0
+    v32  Extend { value=v30, kind=I16 }                   -> x0
+    v33  BinopI { op=ne, lhs=v32, rhs_imm=16384 }         -> x0
+    terminator Bz { cond=v33, target=b6, fall=b5 }   (exit_acc=v33)
   block 5  start_pc=0
-    v33  Imm(3)                                           -> x0
-    terminator Return(v33)   (exit_acc=v33)
+    v34  Imm(3)                                           -> x0
+    terminator Return(v34)   (exit_acc=v34)
   block 6  start_pc=0
-    v34  Imm(100)                                         -> x0
-    v35  Imm(0)                                           -> x1
-    v36  BinopI { op=add, lhs=v34, rhs_imm=100 }          -> x0
-    v37  BinopI { op=shl, lhs=v36, rhs_imm=32 }           -> x1
-    v38  Extend { value=v36, kind=I32 }                   -> x1
-    v39  BinopI { op=shl, lhs=v36, rhs_imm=56 }           -> x0
-    v40  Extend { value=v38, kind=I8 }                    -> x0
-    v41  BinopI { op=ne, lhs=v40, rhs_imm=-56 }           -> x0
-    terminator Bz { cond=v41, target=b8, fall=b7 }   (exit_acc=v41)
+    v35  Imm(100)                                         -> x0
+    v36  Extend { value=v35, kind=I8 }                    -> x0
+    v37  Imm(0)                                           -> x1
+    v38  BinopI { op=add, lhs=v36, rhs_imm=100 }          -> x0
+    v39  BinopI { op=shl, lhs=v38, rhs_imm=32 }           -> x1
+    v40  Extend { value=v38, kind=I32 }                   -> x1
+    v41  BinopI { op=shl, lhs=v38, rhs_imm=56 }           -> x0
+    v42  Extend { value=v40, kind=I8 }                    -> x0
+    v43  BinopI { op=ne, lhs=v42, rhs_imm=-56 }           -> x0
+    terminator Bz { cond=v43, target=b8, fall=b7 }   (exit_acc=v43)
   block 7  start_pc=0
-    v42  Imm(4)                                           -> x0
-    terminator Return(v42)   (exit_acc=v42)
+    v44  Imm(4)                                           -> x0
+    terminator Return(v44)   (exit_acc=v44)
   block 8  start_pc=0
-    v43  Imm(0)                                           -> x0
-    terminator Return(v43)   (exit_acc=v43)
+    v45  Imm(0)                                           -> x0
+    terminator Return(v45)   (exit_acc=v45)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

@@ -106,11 +106,9 @@ Disassembly of section .text:
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0xb                // =11
-               	bl	<addr>
                	sub	x1, x29, #0x28
                	str	w0, [x1]
                	mov	x0, #0x16               // =22
-               	bl	<addr>
                	sub	x1, x29, #0x28
                	str	w0, [x1, #0x4]
                	sub	x0, x29, #0x28

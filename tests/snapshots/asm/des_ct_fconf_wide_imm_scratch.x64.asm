@@ -536,6 +536,7 @@ Disassembly of section .text:
                	movl	%edx, %edx
                	andq	$0x12020120, %rcx       # imm = 0x12020120
                	movl	$0x5, %esi
+               	movslq	%esi, %rsi
                	movl	%ecx, %ecx
                	movq	%rcx, %rdi
                	pushq	%rcx
@@ -580,21 +581,24 @@ Disassembly of section .text:
                	orq	%rsi, %rcx
                	movl	%ecx, %ecx
                	andq	$0x20000200, %rdx       # imm = 0x20000200
+               	movslq	%ebx, %rsi
                	movl	%edx, %edx
-               	movq	%rdx, %rsi
+               	movq	%rdx, %rdi
                	pushq	%rcx
-               	movq	%rbx, %rcx
-               	shlq	%cl, %rsi
+               	movq	%rsi, %rcx
+               	shlq	%cl, %rdi
                	popq	%rcx
-               	movl	%esi, %esi
-               	movl	$0x20, %edi
-               	subq	%rbx, %rdi
-               	movslq	%edi, %rdi
+               	movl	%edi, %edi
+               	movl	$0x20, %r8d
+               	movq	%rsi, %r10
+               	movq	%r8, %rsi
+               	subq	%r10, %rsi
+               	movslq	%esi, %rsi
                	pushq	%rcx
-               	movq	%rdi, %rcx
+               	movq	%rsi, %rcx
                	shrq	%cl, %rdx
                	popq	%rcx
-               	orq	%rsi, %rdx
+               	orq	%rdi, %rdx
                	orq	%rdx, %rcx
                	movl	%ecx, %ecx
                	movl	%eax, %edx
@@ -623,6 +627,7 @@ Disassembly of section .text:
                	movl	%ecx, %ecx
                	andq	$0x40801800, %rdx       # imm = 0x40801800
                	movl	$0x11, %esi
+               	movslq	%esi, %rsi
                	movl	%edx, %edx
                	movq	%rdx, %rdi
                	pushq	%rcx
@@ -662,6 +667,7 @@ Disassembly of section .text:
                	movl	$0x88000008, %r11d      # imm = 0x88000008
                	andq	%r11, %rdx
                	movl	$0x18, %esi
+               	movslq	%esi, %rsi
                	movl	%edx, %edx
                	movq	%rdx, %rdi
                	pushq	%rcx
@@ -746,3 +752,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

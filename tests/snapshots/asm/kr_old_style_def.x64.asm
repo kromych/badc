@@ -25,7 +25,10 @@ Disassembly of section .text:
 <main>:
                	movl	$0x1, %eax
                	xorq	%rcx, %rcx
+               	movslq	%eax, %rdx
+               	movsbq	%cl, %rcx
                	movq	%rax, %r10
+               	movq	%rdx, %rax
                	subq	%r10, %rax
                	addq	%rcx, %rax
                	testq	%rax, %rax
@@ -35,6 +38,8 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	movl	$0x5, %ecx
                	movl	$0x3, %edx
+               	movslq	%eax, %rax
+               	movsbq	%cl, %rcx
                	subq	%rdx, %rax
                	addq	%rcx, %rax
                	cmpq	$0xc, %rax
@@ -49,3 +54,5 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

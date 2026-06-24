@@ -106,8 +106,8 @@ Disassembly of section .text:
                	mov	w1, w20
                	ldr	x0, [x0, x1, lsl #3]
                	sxtw	x1, w21
-               	bl	<addr>
-               	mov	x22, x0
+               	sxtw	x1, w1
+               	ror	x22, x0, x1
                	sub	x0, x29, #0x30
                	mov	w1, w20
                	ldr	x0, [x0, x1, lsl #3]

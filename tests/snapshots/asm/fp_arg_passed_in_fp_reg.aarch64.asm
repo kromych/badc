@@ -45,6 +45,8 @@ Disassembly of section .text:
                	mov	x1, #0x3ff8000000000000 // =4609434218613702656
                	mov	x2, #0x4                // =4
                	mov	x3, #0x4004000000000000 // =4612811918334230528
+               	sxtw	x0, w0
+               	sxtw	x2, w2
                	scvtf	d0, x0
                	scvtf	d1, x2
                	fmov	d16, x3

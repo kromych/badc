@@ -29,6 +29,7 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x1234, %eax           # imm = 0x1234
+               	movslq	%eax, %rax
                	movq	%rax, %rcx
                	andq	$0xff, %rcx
                	sarq	$0x8, %rax
@@ -41,6 +42,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	movq	%rax, %rcx
                	andq	$0xff, %rcx
                	sarq	$0x8, %rax
@@ -53,6 +55,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	movl	$0xff00, %eax           # imm = 0xFF00
+               	movslq	%eax, %rax
                	movq	%rax, %rcx
                	andq	$0xff, %rcx
                	sarq	$0x8, %rax
@@ -66,3 +69,5 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

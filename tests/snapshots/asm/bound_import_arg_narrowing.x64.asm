@@ -43,8 +43,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x100000003, %rdi      # imm = 0x100000003
-               	callq	<addr>
+               	movabsq	$0x100000003, %rax      # imm = 0x100000003
+               	movslq	%eax, %rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x2, %eax
@@ -105,4 +105,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

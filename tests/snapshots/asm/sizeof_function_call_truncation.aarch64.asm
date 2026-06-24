@@ -28,6 +28,7 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x1234             // =4660
+               	sxtw	x0, w0
                	mov	x17, #0xff              // =255
                	and	x1, x0, x17
                	asr	x0, x0, #8
@@ -41,6 +42,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	mov	x17, #0xff              // =255
                	and	x1, x0, x17
                	asr	x0, x0, #8
@@ -54,6 +56,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0xff00             // =65280
+               	sxtw	x0, w0
                	mov	x17, #0xff              // =255
                	and	x1, x0, x17
                	asr	x0, x0, #8

@@ -19,10 +19,10 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	movl	$0x14, %ecx
                	addq	%rcx, %rax
-               	movl	$0x1e, %ecx
-               	movl	$0x28, %edx
-               	addq	%rdx, %rcx
-               	addq	%rcx, %rax
+               	movl	$0x1e, %edx
+               	movl	$0x28, %esi
+               	addq	%rsi, %rdx
+               	addq	%rdx, %rax
                	movslq	%eax, %rax
                	retq
                	addb	%al, (%rax)

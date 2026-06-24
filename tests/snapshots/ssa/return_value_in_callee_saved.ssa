@@ -17,11 +17,12 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v7   BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x1
     v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x2
     v9   Extend { value=v7, kind=I32 }                    -> x2
-    v10  Imm(0)                                           -> x2
-    v11  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x1
-    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x2
-    v13  Extend { value=v11, kind=I32 }                   -> x1
-    v14  LoadLocal { off=2, kind=I32 }                    -> x1
+    v10  Extend { value=v9, kind=I32 }                    -> x2
+    v11  Imm(0)                                           -> x2
+    v12  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x1
+    v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x2
+    v14  Extend { value=v12, kind=I32 }                   -> x1
+    v15  LoadLocal { off=2, kind=I32 }                    -> x1
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=hop

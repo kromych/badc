@@ -70,6 +70,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	movl	$0x140, %eax            # imm = 0x140
+               	movswq	%ax, %rax
                	shlq	$0x8, %rax
                	movslq	%eax, %rcx
                	movswq	%cx, %rax
@@ -78,6 +79,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movl	$0x64, %eax
+               	movsbq	%al, %rax
                	addq	$0x64, %rax
                	movslq	%eax, %rcx
                	movsbq	%cl, %rax

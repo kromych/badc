@@ -172,6 +172,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	add	x2, x0, x1
                	sxtw	x2, w2
+               	sxtw	x2, w2
                	mov	x17, #0xffff            // =65535
                	and	x2, x2, x17
                	mov	x17, #0xffff            // =65535
@@ -188,6 +189,7 @@ Disassembly of section .text:
                	ret
                	add	x0, x0, x1
                	add	x0, x0, #0x1
+               	sxtw	x0, w0
                	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
@@ -235,6 +237,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	lsl	x0, x1, #15
+               	sxtw	x0, w0
                	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17

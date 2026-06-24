@@ -26,6 +26,7 @@ Disassembly of section .text:
                	movl	$0xa, %ecx
                	movl	%ecx, (%rax)
                	movl	$0x3, %ecx
+               	movslq	%ecx, %rcx
                	cmpq	$0x3, %rcx
                	je	<addr>
                	movl	$0x1, %eax
@@ -44,5 +45,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

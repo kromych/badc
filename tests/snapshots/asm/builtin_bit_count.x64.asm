@@ -63,6 +63,8 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	movl	$0x1f, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -113,6 +115,8 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	xorq	%rcx, %rcx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -163,6 +167,8 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	movl	$0xf, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -213,6 +219,8 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	xorq	%rcx, %rcx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -246,6 +254,8 @@ Disassembly of section .text:
                	shrq	$0x10, %rdx
                	addq	%rdx, %rcx
                	andq	$0x7f, %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%eax, %rax
                	cmpq	%rax, %rcx
                	sete	%al
                	movzbq	%al, %rax
@@ -280,6 +290,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x1f, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -314,6 +326,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x10, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -348,6 +362,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x1e, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -376,6 +392,8 @@ Disassembly of section .text:
                	shrq	$0x10, %rdx
                	addq	%rdx, %rcx
                	andq	$0x7f, %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%eax, %rax
                	cmpq	%rax, %rcx
                	sete	%al
                	movzbq	%al, %rax
@@ -405,6 +423,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x20, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -434,6 +454,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x10, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -463,6 +485,8 @@ Disassembly of section .text:
                	shrq	$0x10, %rdx
                	addq	%rdx, %rax
                	andq	$0x7f, %rax
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -521,6 +545,8 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	movl	$0x3f, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -579,6 +605,8 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	xorq	%rcx, %rcx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -637,6 +665,8 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%r10, %rax
                	movl	$0x1f, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -675,6 +705,8 @@ Disassembly of section .text:
                	shrq	$0x20, %rdx
                	addq	%rdx, %rcx
                	andq	$0x7f, %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%eax, %rax
                	cmpq	%rax, %rcx
                	sete	%al
                	movzbq	%al, %rax
@@ -713,6 +745,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x3f, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -752,6 +786,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x20, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -786,6 +822,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x40, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -820,6 +858,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x23, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -853,6 +893,8 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	andq	$0x7f, %rcx
                	movl	$0x10, %edx
+               	movslq	%ecx, %rcx
+               	movslq	%edx, %rdx
                	cmpq	%rdx, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
@@ -903,6 +945,8 @@ Disassembly of section .text:
                	movq	%rdx, %rcx
                	subq	%r10, %rcx
                	movl	$0x8, %edx
+               	movslq	%ecx, %rcx
+               	movslq	%edx, %rdx
                	cmpq	%rdx, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
@@ -938,6 +982,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	xorq	%rcx, %rcx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -976,6 +1022,8 @@ Disassembly of section .text:
                	shrq	$0x20, %rdx
                	addq	%rdx, %rcx
                	andq	$0x7f, %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%eax, %rax
                	cmpq	%rax, %rcx
                	sete	%al
                	movzbq	%al, %rax
@@ -1015,6 +1063,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x10, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -1049,6 +1099,8 @@ Disassembly of section .text:
                	shrq	$0x20, %rdx
                	addq	%rdx, %rax
                	andq	$0x7f, %rax
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -1083,6 +1135,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x10, %ecx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -1122,6 +1176,8 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	andq	$0x7f, %rcx
                	movl	$0x10, %edx
+               	movslq	%ecx, %rcx
+               	movslq	%edx, %rdx
                	cmpq	%rdx, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
@@ -1162,6 +1218,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	xorq	%rcx, %rcx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -1175,3 +1233,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

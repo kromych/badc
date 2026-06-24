@@ -44,37 +44,38 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   TlsAddr(0)                                       -> x0
     v2   Load { addr=v1, disp=0, kind=I32 }               -> x1
-    v3   Imm(0)                                           -> x2
-    v4   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
-    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x2
-    v6   Extend { value=v4, kind=I32 }                    -> x2
-    v7   Imm(3)                                           -> x2
-    v8   Binop { op=add, lhs=v4, rhs=v7 }                 -> x1
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x2
-    v10  Extend { value=v8, kind=I32 }                    -> x2
-    v11  Store { addr=v1, disp=0, value=v8, kind=I32 }    -> -
-    v12  Extend { value=v8, kind=I32 }                    -> x0
-    v13  BinopI { op=ne, lhs=v12, rhs_imm=11 }            -> x0
-    terminator Bz { cond=v13, target=b3, fall=b1 }   (exit_acc=v13)
+    v3   Extend { value=v2, kind=I32 }                    -> x2
+    v4   Imm(0)                                           -> x2
+    v5   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
+    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x2
+    v7   Extend { value=v5, kind=I32 }                    -> x2
+    v8   Imm(3)                                           -> x2
+    v9   Binop { op=add, lhs=v5, rhs=v8 }                 -> x1
+    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x2
+    v11  Extend { value=v9, kind=I32 }                    -> x2
+    v12  Store { addr=v1, disp=0, value=v9, kind=I32 }    -> -
+    v13  Extend { value=v9, kind=I32 }                    -> x0
+    v14  BinopI { op=ne, lhs=v13, rhs_imm=11 }            -> x0
+    terminator Bz { cond=v14, target=b3, fall=b1 }   (exit_acc=v14)
   block 1  start_pc=0
     terminator Jmp(b4)
   block 2  start_pc=0
-    terminator Jmp(b3)   (exit_acc=v16)
+    terminator Jmp(b3)   (exit_acc=v17)
   block 3  start_pc=0
-    v14  Imm(0)                                           -> x0
-    terminator Return(v14)   (exit_acc=v14)
+    v15  Imm(0)                                           -> x0
+    terminator Return(v15)   (exit_acc=v15)
   block 4  start_pc=0
     terminator Jmp(b5)
   block 5  start_pc=0
-    v15  Imm(1)                                           -> x0
-    terminator Jmp(b7)   (exit_acc=v15)
+    v16  Imm(1)                                           -> x0
+    terminator Jmp(b7)   (exit_acc=v16)
   block 6  start_pc=0
     terminator Jmp(b5)
   block 7  start_pc=0
     terminator Jmp(b6)
   block 8  start_pc=0
-    v16  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v16)
+    v17  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

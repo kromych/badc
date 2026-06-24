@@ -101,22 +101,23 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     terminator Return(v42)   (exit_acc=v42)
   block 10  start_pc=0
     v43  Imm(3)                                           -> x0
-    v44  Imm(0)                                           -> x1
-    v45  ImmData(16)                                      -> x1
-    v46  Load { addr=v45, disp=0, kind=I32 }              -> x1
-    v47  Imm(0)                                           -> x2
-    v48  Extend { value=v46, kind=I32 }                   -> x2
-    v49  Binop { op=add, lhs=v46, rhs=v43 }               -> x0
-    v50  BinopI { op=shl, lhs=v49, rhs_imm=32 }           -> x1
-    v51  Extend { value=v49, kind=I32 }                   -> x0
-    v52  BinopI { op=ne, lhs=v51, rhs_imm=80 }            -> x0
-    terminator Bz { cond=v52, target=b12, fall=b11 }   (exit_acc=v52)
+    v44  Extend { value=v43, kind=I32 }                   -> x1
+    v45  Imm(0)                                           -> x1
+    v46  ImmData(16)                                      -> x1
+    v47  Load { addr=v46, disp=0, kind=I32 }              -> x1
+    v48  Imm(0)                                           -> x2
+    v49  Extend { value=v47, kind=I32 }                   -> x2
+    v50  Binop { op=add, lhs=v47, rhs=v43 }               -> x0
+    v51  BinopI { op=shl, lhs=v50, rhs_imm=32 }           -> x1
+    v52  Extend { value=v50, kind=I32 }                   -> x0
+    v53  BinopI { op=ne, lhs=v52, rhs_imm=80 }            -> x0
+    terminator Bz { cond=v53, target=b12, fall=b11 }   (exit_acc=v53)
   block 11  start_pc=0
-    v53  Imm(6)                                           -> x0
-    terminator Return(v53)   (exit_acc=v53)
-  block 12  start_pc=0
-    v54  Imm(0)                                           -> x0
+    v54  Imm(6)                                           -> x0
     terminator Return(v54)   (exit_acc=v54)
+  block 12  start_pc=0
+    v55  Imm(0)                                           -> x0
+    terminator Return(v55)   (exit_acc=v55)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

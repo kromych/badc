@@ -32,7 +32,17 @@ use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::ir::{Block, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
+
+/// Outer candidacy fixpoint cap: re-evaluating candidacy after each
+/// substitution pass lets a helper that became a leaf inline on the
+/// next round. A 3-level call chain reaches the bottom in 3 rounds, so
+/// this bounds the chain depth that fully collapses.
+const INLINE_FIXPOINT_ITERS: usize = 8;
+
+/// Per-call-step cap on multi-block splices into one caller, bounding
+/// expansion when a caller has many distinct multi-block call sites.
+const MAX_MULTI_BLOCK_SPLICE_STEPS: usize = 64;
 
 /// `inst.is_inline_candidate(cap)`-style predicate. See module docs.
 fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
@@ -609,13 +619,21 @@ fn splice_multi_block(
         for ce_pc in cblock.inst_range.start..cblock.inst_range.end {
             let cinst = &callee.insts[ce_pc as usize];
             match cinst {
-                Inst::ParamRef { idx, .. } => {
+                Inst::ParamRef { idx, kind } => {
                     let i = *idx as usize;
-                    callee_remap[ce_pc as usize] = if i < remapped_args.len() {
+                    let arg = if i < remapped_args.len() {
                         remapped_args[i]
                     } else {
                         NO_VALUE
                     };
+                    callee_remap[ce_pc as usize] = splice_param_ref(
+                        *kind,
+                        arg,
+                        (0, 0),
+                        &mut new_insts,
+                        &mut new_inst_src,
+                        &mut new_f32,
+                    );
                     continue;
                 }
                 Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
@@ -764,6 +782,42 @@ fn splice_multi_block(
     };
 }
 
+/// Resolve a callee `ParamRef(idx, kind)` to a caller value, mirroring
+/// the parameter load a non-inlined call performs at entry. That load
+/// sign-extends a signed narrow parameter (`movsx` / `sxtw`); every
+/// other kind is a plain register copy -- the unsigned base types and
+/// `long` / pointer parameters arrive full-width (the walker emits a
+/// `ParamRef(I64)` and the body re-narrows unsigned uses with a mask the
+/// splice preserves), and FP arguments are converted at the call site.
+/// So sign-extend the signed narrow kinds and pass everything else
+/// through unchanged. `arg` may be `NO_VALUE` on an early flat-splice
+/// fixpoint pass and resolves on a later one, so the `Extend` is emitted
+/// unconditionally to keep emission structurally identical across passes.
+fn splice_param_ref(
+    kind: LoadKind,
+    arg: ValueId,
+    src_pos: (u32, u32),
+    new_insts: &mut Vec<Inst>,
+    new_inst_src: &mut Vec<(u32, u32)>,
+    new_f32: &mut Vec<bool>,
+) -> ValueId {
+    match kind {
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => {
+            let id = new_insts.len() as u32;
+            new_insts.push(Inst::Extend { value: arg, kind });
+            new_inst_src.push(src_pos);
+            new_f32.push(false);
+            id
+        }
+        LoadKind::I64
+        | LoadKind::U8
+        | LoadKind::U16
+        | LoadKind::U32
+        | LoadKind::F32
+        | LoadKind::F64 => arg,
+    }
+}
+
 /// Splice eligible call sites in `caller` with the bodies named by
 /// `callees`. Modifies `caller` in place.
 fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSsa>) {
@@ -845,14 +899,21 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                     for ce_pc in callee_block.inst_range.start..callee_block.inst_range.end {
                         let cinst = &callee.insts[ce_pc as usize];
                         match cinst {
-                            Inst::ParamRef { idx, .. } => {
+                            Inst::ParamRef { idx, kind } => {
                                 let i = *idx as usize;
-                                let mapped = if i < remapped_args.len() {
+                                let arg = if i < remapped_args.len() {
                                     remapped_args[i]
                                 } else {
                                     NO_VALUE
                                 };
-                                callee_remap[ce_pc as usize] = mapped;
+                                callee_remap[ce_pc as usize] = splice_param_ref(
+                                    *kind,
+                                    arg,
+                                    src_pos,
+                                    &mut new_insts,
+                                    &mut new_inst_src,
+                                    &mut new_f32,
+                                );
                                 continue;
                             }
                             // Walker-emitted cdecl-cell loads + stores
@@ -1017,8 +1078,17 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     // blocks so the loop re-scans from scratch after every step.
     // Bounded by a generous step cap to keep runaway expansion in
     // check.
+    // `splice_multi_block` shifts caller block ids > the splice point;
+    // a surviving caller phi's incoming.0 would then name the wrong
+    // predecessor (a silent miscompile, since emit matches incoming by
+    // block id). Skip multi-block splicing while the caller carries phis
+    // until that remap lands.
+    let caller_has_phi = caller
+        .insts
+        .iter()
+        .any(|inst| matches!(inst, Inst::Phi { .. }));
     let mut steps = 0usize;
-    while steps < 64 {
+    while steps < MAX_MULTI_BLOCK_SPLICE_STEPS && !caller_has_phi {
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
@@ -1085,9 +1155,8 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
     // Iterate to a fixed point: each pass re-evaluates candidacy on
     // the now-substituted function bodies, so a helper that became a
     // leaf after its own sub-calls were inlined becomes eligible on
-    // the next round. The 8-iteration cap bounds runaway expansion
-    // (a 3-level call chain reaches the bottom in 3 iterations).
-    for iter in 0..8 {
+    // the next round. `INLINE_FIXPOINT_ITERS` bounds the depth.
+    for iter in 0..INLINE_FIXPOINT_ITERS {
         let snapshot: Vec<FunctionSsa> = funcs.to_vec();
         let mut candidates: BTreeMap<usize, &FunctionSsa> = BTreeMap::new();
         for f in &snapshot {
@@ -1125,25 +1194,15 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
             if local.is_empty() {
                 continue;
             }
-            // Skip callers that contain phis. `remap_caller_inst`
-            // remaps a phi's incoming values through the caller
-            // remap table in PC order, but a loop-head phi
-            // references back-edge incomings whose remap entries
-            // are still NO_VALUE when the phi is processed -- the
-            // phi then carries `incoming = (pred, NO_VALUE)` into
-            // the inlined IR and the per-arch emit bails on the
-            // first downstream operand that resolves to NO_VALUE.
-            // TODO: two-pass remap (populate the full caller/callee
-            // value and block remap, then rewrite phi incomings)
-            // so a caller with loop-head phis can still inline; the
-            // skip leaves loop-carrying callers un-inlined.
-            if caller
-                .insts
-                .iter()
-                .any(|inst| matches!(inst, Inst::Phi { .. }))
-            {
-                continue;
-            }
+            // A caller with phis can inline single-block callees. The
+            // flat splice keeps block ids fixed, so a phi's incoming.0
+            // (a block id) stays valid, and the value-remap fixpoint
+            // converges every phi's incoming value -- including a loop
+            // back-edge whose definition follows the phi in array order.
+            // Multi-block splicing shifts caller block ids and is gated
+            // on a phi-free caller inside `inline_caller`; the incoming.0
+            // remap for that path is not yet implemented.
+            //
             // Skip a caller with a computed goto: splicing a callee
             // shifts the caller's block ids, which `Inst::BlockAddr`
             // and computed_goto_targets reference directly.

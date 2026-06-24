@@ -559,6 +559,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("duff_switch_into_loop.c", 0),
     ("empty_macro_arg_and_string_rows.c", 0),
     ("inline_arg_count_mismatch.c", 0),
+    ("inline_phi_caller_leaf_helper.c", 0),
     ("block_scope_extern.c", 0),
     ("extern_incomplete_struct_completion.c", 0),
     ("const_member_address_init.c", 0),

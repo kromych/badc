@@ -23,31 +23,20 @@ Disassembly of section .text:
                	retq
 
 <driver>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %r12
-               	movslq	%ebx, %rax
-               	cmpq	$0x7, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %rax
+               	movslq	%ecx, %rdx
+               	cmpq	$0x7, %rdx
                	jge	<addr>
                	jmp	<addr>
-               	movslq	%ebx, %rdi
-               	callq	<addr>
-               	movq	%rax, %rbx
+               	incq	%rcx
+               	movslq	%ecx, %rcx
                	jmp	<addr>
-               	movslq	%r12d, %rdi
-               	callq	<addr>
-               	movq	%rax, %r12
-               	jmp	<addr>
-               	imulq	$0x6, %r12, %rax
+               	incq	%rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	jmp	<addr>
+               	imulq	$0x6, %rax, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -55,3 +44,5 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	popq	%rbp
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -340,6 +340,43 @@ fn modulo_with_spilled_divisor_under_pressure() {
 }
 
 #[test]
+fn indirect_call_spilled_target_under_pressure() {
+    // A six-argument indirect call. Under register pressure the target
+    // pointer is spilled to a stack slot above the marshal's scratch
+    // window; the marshaller reloads spilled argument sources relative to
+    // the adjusted stack pointer, and that shift must include the target
+    // slot. Without it a reloaded pointer argument reads the wrong stack
+    // offset and the callee dereferences a corrupt pointer (x86_64 only;
+    // surfaces under the low-GPR pressure CI exercises).
+    let src = r#"
+        typedef long (*cmp)(void *, int *, long *, long, long *, long);
+        struct task { cmp fn; };
+        static long do_cmp(void *t, int *cached, long *k1, long n1, long *k2, long n2) {
+            (void)t; *cached = 1;
+            return *k1 * 1000 + *k2 * 10 + n1 + n2;
+        }
+        static long run(struct task *pt, long *p1, long n1, long *p2, long n2) {
+            int cached = 0;
+            long r = pt->fn(pt, &cached, p1 + 2, n1, p2 + 2, n2);
+            return r + cached;
+        }
+        int main(void) {
+            struct task t; t.fn = do_cmp;
+            long a[4]; long b[4];
+            a[2] = 3; b[2] = 7;
+            return run(&t, a, 5, b, 9) == 3085 ? 0 : 1;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(3, 3, || {
+        jit_exit_native_optimized(src, &["indirect-spill-target"])
+    });
+    assert_eq!(
+        result, 0,
+        "indirect-call target-slot spill desynced a spilled argument reload under pressure"
+    );
+}
+
+#[test]
 fn division_with_spilled_dividend_under_pressure() {
     // On x86_64 the divmod lowering stages the dividend into the
     // destination register; when the allocator reuses the divisor's
@@ -1057,6 +1094,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("integer_suffixes.c", 0),
     ("int32_sign_extend_elision.c", 0),
     ("arg_register_cycle.c", 0),
+    ("indirect_call_six_args_spilled_target.c", 0),
     ("predefined_macros.c", 0),
     ("macro_multiline_comment_body.c", 0),
     ("compound_literal_paren_init.c", 0),

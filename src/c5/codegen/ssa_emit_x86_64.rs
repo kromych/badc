@@ -6163,7 +6163,15 @@ fn emit_call_indirect(
         if plan.scratch_bytes > 0 {
             emit_sub_rsp_imm32(code, plan.scratch_bytes);
         }
-        if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
+        // rsp is now slot_bytes + scratch_bytes below the frame baseline.
+        // marshal_args reloads spilled argument sources at
+        // `spill_offset + plan.scratch_bytes`; the target slot must be
+        // folded into that shift, or every spilled-source reload reads
+        // slot_bytes too low (a spilled arg loads garbage and the call
+        // jumps through a corrupt register).
+        let mut shifted = plan.clone();
+        shifted.scratch_bytes = plan.scratch_bytes + slot_bytes;
+        if !marshal_args(code, &shifted, args, alloc, frame, "CallIndirect") {
             return false;
         }
         // The target slot sits just above the marshal's scratch

@@ -568,6 +568,14 @@ fn inline_struct_return_reg() {
 }
 
 #[test]
+fn inline_two_word_struct_return() {
+    // A helper returning a 16-byte struct (two integer registers) inlines,
+    // including a partially-written union whose unspecified bytes need not
+    // be reproduced.
+    assert_eq!(run_fixture("inline_two_word_struct_return.c"), 0);
+}
+
+#[test]
 fn struct_return_reg_computed_goto() {
     // A one-word-struct return that carries a label address is promoted out
     // of its frame slot; the computed-goto terminator reading the field must

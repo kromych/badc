@@ -36,7 +36,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    Block, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    BinOp, Block, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
 };
 use super::Abi;
 use super::abi_classify::{AggClass, RegClass, classify_aggregate};
@@ -60,30 +60,30 @@ fn store_width(kind: StoreKind) -> i64 {
     }
 }
 
-/// Whether the byte intervals cover `[0, size)` with no gap.
-fn covers_range(intervals: &mut [(i64, i64)], size: i64) -> bool {
-    if size <= 0 {
-        return true;
-    }
-    intervals.sort_unstable();
-    let mut reached = 0i64;
-    for &(lo, hi) in intervals.iter() {
-        if lo > reached {
-            return false;
-        }
-        if hi > reached {
-            reached = hi;
-        }
-        if reached >= size {
-            return true;
-        }
-    }
-    reached >= size
-}
-
 /// Whether `addr`'s defining instruction is `LocalAddr(slot)`.
 fn addr_is_slot(func: &FunctionSsa, addr: ValueId, slot: i64) -> bool {
-    matches!(func.insts.get(addr as usize), Some(Inst::LocalAddr(s)) if *s == slot)
+    slot_base_offset(func, addr, slot).is_some()
+}
+
+/// If `addr` names `slot` -- either `LocalAddr(slot)` directly, or
+/// `BinopI(Add, LocalAddr(slot), K)` (a field address before the per-arch
+/// disp folds it into the store) -- return the byte offset from the slot
+/// base. A second-eightbyte store of a two-register return reaches the
+/// candidate filter in the unfolded `Add` form, so the result-slot writes
+/// must be recognised through it.
+fn slot_base_offset(func: &FunctionSsa, addr: ValueId, slot: i64) -> Option<i64> {
+    match func.insts.get(addr as usize) {
+        Some(Inst::LocalAddr(s)) if *s == slot => Some(0),
+        Some(Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm,
+        }) => match func.insts.get(*lhs as usize) {
+            Some(Inst::LocalAddr(s)) if *s == slot => Some(*rhs_imm),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// `inst.is_inline_candidate(cap)`-style predicate. See module docs.
@@ -108,16 +108,13 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
         say("variadic");
         return false;
     }
-    // Host-ABI aggregates are admitted only in the narrow shape the
-    // splice can reproduce: a struct passed by value in a single integer
-    // register. Such a parameter arrives as the address of the caller's
-    // copy in one argument, and the body's field loads off the parameter
-    // slot redirect to that address at the splice (see `inline_caller`).
-    // Reject anything wider (multi-register or memory-class), an
-    // FP-class single register, or a struct RETURN -- the latter needs a
-    // callee result local merged into the caller frame, which the splice
-    // does not yet do. A struct argument to a body call also lands in
-    // agg_descs, but the per-inst filter below rejects body calls anyway.
+    // Host-ABI aggregates are admitted only in the shapes the splice can
+    // reproduce: a by-value parameter passed in a single integer register
+    // (it arrives as the address of the caller's copy in one argument, and
+    // the body's field loads off the parameter slot redirect to that
+    // address), and a return passed in one or two integer registers (the
+    // body's result-slot writes redirect to the caller's return slot).
+    // Memory-class and FP-class shapes stay rejected.
     if !func.agg_descs.is_empty() {
         // The redirect (parameter slot -> caller argument address; result
         // slot -> caller return slot) is wired only through the flat
@@ -127,17 +124,21 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
             say("multi-block aggregate");
             return false;
         }
-        // Every descriptor must pass by value in one integer register: a
-        // parameter arrives as one argument address, a return is
-        // delivered in one register. Classify the return descriptor with
-        // is_return=true and the rest as arguments. FP-class single
-        // registers and multi-register / memory shapes stay rejected.
+        // Every descriptor must pass by value in integer registers. A
+        // by-value parameter arrives as one argument address, so it must
+        // occupy exactly one integer register. A return is delivered in
+        // the integer return registers (rax:rdx / x0:x1), so it may occupy
+        // one or two. FP-class and memory-class shapes stay rejected.
         for (i, d) in func.agg_descs.iter().enumerate() {
             let is_ret = func.ret_agg == Some(i as u32);
+            let max_regs = if is_ret { 2 } else { 1 };
             match classify_aggregate(d.size, d.align, &d.fields, abi, is_ret) {
-                AggClass::Regs(regs) if regs.len() == 1 && regs[0] == RegClass::Integer => {}
+                AggClass::Regs(regs)
+                    if !regs.is_empty()
+                        && regs.len() <= max_regs
+                        && regs.iter().all(|r| *r == RegClass::Integer) => {}
                 _ => {
-                    say("aggregate not a single integer register");
+                    say("aggregate not in one or two integer registers");
                     return false;
                 }
             }
@@ -308,29 +309,36 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
     } else {
         None
     };
-    // Every byte of the result slot must be written by the body, so the
-    // inlined return image equals what the non-inlined call delivers in
-    // the return register (padding included). A leading template `Mcpy`
-    // covers the whole slot; field `Store`s cover their own ranges.
+    // Every write into the result slot must stay within its bounds: the
+    // splice reproduces each result-slot store against the caller's return
+    // slot, so a store past the slot would corrupt the caller's frame.
+    // Bytes the body leaves unwritten (a union's inactive members, struct
+    // padding) take unspecified values (C99 6.2.6.1p6-7); the non-inlined
+    // return register leaves them unspecified too, so they need not match
+    // and full coverage is not required.
     if let Some(rs) = result_slot {
         let agg_size = func.agg_descs[func.ret_agg.unwrap() as usize].size as i64;
-        let mut intervals: Vec<(i64, i64)> = Vec::new();
         for inst in &func.insts {
-            match inst {
+            let interval = match inst {
                 Inst::Store {
                     addr, disp, kind, ..
-                } if addr_is_slot(func, *addr, rs) => {
-                    intervals.push((*disp as i64, *disp as i64 + store_width(*kind)));
+                } => slot_base_offset(func, *addr, rs).map(|base| {
+                    (
+                        base + *disp as i64,
+                        base + *disp as i64 + store_width(*kind),
+                    )
+                }),
+                Inst::Mcpy { dst, size, .. } => {
+                    slot_base_offset(func, *dst, rs).map(|base| (base, base + *size))
                 }
-                Inst::Mcpy { dst, size, .. } if addr_is_slot(func, *dst, rs) => {
-                    intervals.push((0, *size));
-                }
-                _ => {}
+                _ => None,
+            };
+            if let Some((lo, hi)) = interval
+                && (lo < 0 || hi > agg_size)
+            {
+                say("aggregate return slot write out of bounds");
+                return false;
             }
-        }
-        if !covers_range(&mut intervals, agg_size) {
-            say("aggregate return slot not fully written");
-            return false;
         }
     }
     for (idx, inst) in func.insts.iter().enumerate() {

@@ -96,10 +96,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	bl	<addr>
-               	sub	x16, x29, #0x30
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
+               	sub	x0, x29, #0x30
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
+               	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x30
                	ldr	x0, [x0]
                	adrp	x1, <page>

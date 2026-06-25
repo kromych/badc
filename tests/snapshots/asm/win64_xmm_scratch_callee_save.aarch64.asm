@@ -48,15 +48,25 @@ Disassembly of section .text:
                	mov	x3, #0x4010000000000000 // =4616189618054758400
                	mov	x4, #0x4014000000000000 // =4617315517961601024
                	mov	x5, #0x4018000000000000 // =4618441417868443648
-               	fmov	d0, x0
-               	fmov	d1, x1
-               	fmov	d2, x2
-               	fmov	d3, x3
-               	fmov	d4, x4
-               	fmov	d5, x5
-               	bl	<addr>
-               	sub	x16, x29, #0x58
-               	str	x0, [x16]
+               	fmov	d16, x2
+               	fmov	d17, x3
+               	fmul	d0, d16, d17
+               	fmov	d16, x0
+               	fmov	d17, x1
+               	fmadd	d0, d16, d17, d0
+               	fmov	d16, x4
+               	fmov	d17, x5
+               	fmadd	d0, d16, d17, d0
+               	sub	x1, x29, #0x58
+               	fcvtzs	x2, d0
+               	str	w2, [x1]
+               	sub	x1, x29, #0x58
+               	mov	x2, #0x4000000000000000 // =4611686018427387904
+               	fmov	d17, x2
+               	fmov	d18, x0
+               	fmadd	d0, d0, d17, d18
+               	fcvtzs	x0, d0
+               	str	w0, [x1, #0x4]
                	sub	x0, x29, #0x58
                	sub	x1, x29, #0x8
                	str	x10, [sp, #-0x10]!
@@ -83,15 +93,25 @@ Disassembly of section .text:
                	mov	x0, #0x4024000000000000 // =4621819117588971520
                	mov	x1, #0x3ff0000000000000 // =4607182418800017408
                	mov	x2, #0x0                // =0
-               	fmov	d0, x0
-               	fmov	d1, x1
-               	fmov	d2, x2
-               	fmov	d3, x2
-               	fmov	d4, x2
-               	fmov	d5, x2
-               	bl	<addr>
-               	sub	x16, x29, #0x60
-               	str	x0, [x16]
+               	fmov	d16, x2
+               	fmov	d17, x2
+               	fmul	d0, d16, d17
+               	fmov	d16, x0
+               	fmov	d17, x1
+               	fmadd	d0, d16, d17, d0
+               	fmov	d16, x2
+               	fmov	d17, x2
+               	fmadd	d0, d16, d17, d0
+               	sub	x1, x29, #0x60
+               	fcvtzs	x2, d0
+               	str	w2, [x1]
+               	sub	x1, x29, #0x60
+               	mov	x2, #0x4000000000000000 // =4611686018427387904
+               	fmov	d17, x2
+               	fmov	d18, x0
+               	fmadd	d0, d0, d17, d18
+               	fcvtzs	x0, d0
+               	str	w0, [x1, #0x4]
                	sub	x0, x29, #0x60
                	sub	x1, x29, #0x18
                	str	x10, [sp, #-0x10]!

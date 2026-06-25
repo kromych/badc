@@ -1971,6 +1971,13 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_inline::run (x86_64)", || {
             super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
         });
+        // Forward an inlined one-word struct return out of its frame slot:
+        // a single full-width store + slot reads collapse to the stored
+        // register value. Runs after the inliner produces the slot and
+        // before store-forwarding cleans up any second-hop reload.
+        super::ssa_emit_common::time_pass("ssa_struct_return_reg::run (x86_64)", || {
+            super::ssa_struct_return_reg::run(&mut ssa_funcs);
+        });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
         // so post-inline parameter substitutions expose the constant

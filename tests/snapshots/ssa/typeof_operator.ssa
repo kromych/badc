@@ -61,11 +61,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     terminator Return(v29)   (exit_acc=v29)
   block 8  start_pc=0
     v30  LocalAddr(-7)                                    -> x0
-    v31  Imm(8589934591)                                  -> x1
-    v32  Store { addr=v30, disp=0, value=v31, kind=I64 }  -> -
-    v33  LocalAddr(-7)                                    -> x0
-    v34  Load { addr=v33, disp=0, kind=I64 }              -> x0
-    v35  BinopI { op=ne, lhs=v34, rhs_imm=8589934591 }    -> x0
+    v31  Imm(8589934591)                                  -> x0
+    v32  Imm(0)                                           -> x1
+    v33  LocalAddr(-7)                                    -> x1
+    v34  Load { addr=v33, disp=0, kind=I64 }              -> x1
+    v35  BinopI { op=ne, lhs=v31, rhs_imm=8589934591 }    -> x0
     terminator Bz { cond=v35, target=b10, fall=b9 }   (exit_acc=v35)
   block 9  start_pc=0
     v36  Imm(5)                                           -> x0

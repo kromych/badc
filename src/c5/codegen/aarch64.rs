@@ -1537,6 +1537,11 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_inline::run (aarch64)", || {
             super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
         });
+        // Forward an inlined one-word struct return out of its frame slot;
+        // see x86_64.rs's matching block for the rationale.
+        super::ssa_emit_common::time_pass("ssa_struct_return_reg::run (aarch64)", || {
+            super::ssa_struct_return_reg::run(&mut ssa_funcs);
+        });
         super::ssa_emit_common::time_pass("ssa_rotate::run (aarch64)", || {
             super::ssa_rotate::run(&mut ssa_funcs);
         });

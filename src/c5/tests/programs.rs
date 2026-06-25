@@ -546,6 +546,36 @@ fn inline_struct_param_mutated() {
 }
 
 #[test]
+fn inline_struct_return_escape() {
+    // A struct-returning helper with an escaping store through a pointer
+    // parameter stays out of line; the escaping write still happens.
+    assert_eq!(run_fixture("inline_struct_return_escape.c"), 0);
+}
+
+#[test]
+fn inline_one_word_struct_return() {
+    // A one-word-struct-returning helper inlines; its result-slot writes
+    // redirect to the caller's return slot.
+    assert_eq!(run_fixture("inline_one_word_struct_return.c"), 0);
+}
+
+#[test]
+fn inline_struct_return_reg() {
+    // A one-word-struct return is forwarded out of its frame slot into a
+    // register: a store-into-array-slot, a field read, and a local-variable
+    // round-trip all read the stored word directly.
+    assert_eq!(run_fixture("inline_struct_return_reg.c"), 0);
+}
+
+#[test]
+fn struct_return_reg_computed_goto() {
+    // A one-word-struct return that carries a label address is promoted out
+    // of its frame slot; the computed-goto terminator reading the field must
+    // be redirected to the stored word rather than the neutralised slot.
+    assert_eq!(run_fixture("struct_return_reg_computed_goto.c"), 0);
+}
+
+#[test]
 fn inline_one_word_struct() {
     // A read-only helper taking a one-word struct by value inlines; its
     // field load redirects to the caller's argument address.

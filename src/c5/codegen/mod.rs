@@ -76,6 +76,7 @@ pub(crate) mod ssa_shadow;
 mod ssa_slot_coalesce;
 mod ssa_split_crit_edges;
 mod ssa_store_forward;
+mod ssa_struct_return_reg;
 mod x86_64;
 
 /// Re-exported for the multi-TU link path, which recovers Win64

@@ -56,11 +56,7 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x38(%rbp), %rax
-               	movabsq	$0x1ffffffff, %rcx      # imm = 0x1FFFFFFFF
-               	movq	%rcx, (%rax)
-               	leaq	-0x38(%rbp), %rax
-               	movq	(%rax), %rax
+               	movabsq	$0x1ffffffff, %rax      # imm = 0x1FFFFFFFF
                	movabsq	$0x1ffffffff, %r11      # imm = 0x1FFFFFFFF
                	cmpq	%r11, %rax
                	je	<addr>
@@ -98,4 +94,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

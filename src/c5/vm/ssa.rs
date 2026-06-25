@@ -301,11 +301,11 @@ impl Memory {
                 self.bytes.len(),
             )));
         }
-        if dst < self.data_end {
-            return Err(C5Error::Runtime(format!(
-                "vm_ssa: Mcpy: dst 0x{dst:x} in read-only data region",
-            )));
-        }
+        // A struct assignment to a writable global / static (`g = f()`)
+        // copies into the data segment, which holds writable objects. The
+        // data segment is not runtime-protected: scalar `store` writes
+        // there too (see its note), and writing a string literal is UB at
+        // the language level. Only the out-of-bounds check above applies.
         self.bytes.copy_within(src..src + n, dst);
         Ok(())
     }

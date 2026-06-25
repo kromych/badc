@@ -842,6 +842,14 @@ fn struct_return_by_value() {
 }
 
 #[test]
+fn struct_return_to_global() {
+    // A by-value struct returned (or passed) to a global / static object
+    // copies into the data segment, which holds writable objects: the SSA
+    // interpreter's Mcpy must permit the write, matching native code.
+    assert_eq!(run_fixture("struct_return_to_global.c"), 0);
+}
+
+#[test]
 fn goto() {
     assert_eq!(run_fixture("goto.c"), 5);
 }

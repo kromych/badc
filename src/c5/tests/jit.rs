@@ -1409,6 +1409,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_multi_byval.c", 0),
     ("struct_arg_two_eightbyte.c", 0),
     ("struct_return_by_value.c", 0),
+    ("struct_return_to_global.c", 0),
     ("cast_fn_ptr_call.c", 0),
     ("fma_numeric_kernels.c", 0),
     ("fp_unary_intrinsic.c", 0),

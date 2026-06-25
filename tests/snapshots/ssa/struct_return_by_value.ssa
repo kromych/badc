@@ -83,9 +83,14 @@ fn ent_pc=4 n_params=1 variadic=false locals=4
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I32 }                    -> x0
     v4   Call { target_pc=0, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5   LocalAddr(-4)                                    -> x7
-    v6   Call { target_pc=2, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    terminator Return(v6)   (exit_acc=v6)
+    v5   LocalAddr(-4)                                    -> x0
+    v6   Load { addr=v5, disp=0, kind=I32 }               -> x1
+    v7   BinopI { op=add, lhs=v5, rhs_imm=4 }             -> x2
+    v8   Load { addr=v5, disp=4, kind=I32 }               -> x0
+    v9   Binop { op=add, lhs=v6, rhs=v8 }                 -> x0
+    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x1
+    v11  Extend { value=v9, kind=I32 }                    -> x0
+    terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=big_round
 fn ent_pc=5 n_params=1 variadic=false locals=9

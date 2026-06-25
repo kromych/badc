@@ -11,10 +11,13 @@
 //! * callee's body is at most `cap` instructions (the
 //!   `--inline-cap=N` knob; default 32);
 //! * callee is non-variadic;
-//! * callee's body contains no `Call*` / `Phi` / `LocalAddr` /
-//!   `AllocaInit` / `Mcpy` / `Store*` / `Intrinsic` / `TailExt` --
-//!   only the pure straight-line shapes whose `for_each_operand`
-//!   walks a known set of `ValueId` fields.
+//! * callee's body contains no `Call*` / `Phi` / `AllocaInit` / `Mcpy`
+//!   / `Store*` / `Intrinsic` / `TailExt` -- only the pure
+//!   straight-line shapes whose `for_each_operand` walks a known set of
+//!   `ValueId` fields. A `LocalAddr` is admitted only when it names a
+//!   register-passed struct parameter's slot: the splice redirects it
+//!   to the caller's argument address, inlining a one-word-struct
+//!   read-only helper. Any other `LocalAddr` stays rejected.
 //!
 //! Those constraints cover the small leaf helpers (R / Ch / Maj /
 //! Sigma / sigma in SHA-512, `stb__perlin_lerp` / `fastfloor` /
@@ -28,11 +31,13 @@
 //! later reference to the call's old `ValueId`. Block boundaries
 //! shift forward, terminators and exit_acc get remapped.
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
+use super::Abi;
+use super::abi_classify::{AggClass, RegClass, classify_aggregate};
 
 /// Outer candidacy fixpoint cap: re-evaluating candidacy after each
 /// substitution pass lets a helper that became a leaf inline on the
@@ -45,7 +50,7 @@ const INLINE_FIXPOINT_ITERS: usize = 8;
 const MAX_MULTI_BLOCK_SPLICE_STEPS: usize = 64;
 
 /// `inst.is_inline_candidate(cap)`-style predicate. See module docs.
-fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
+fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
     #[cfg(feature = "codegen_test")]
@@ -66,16 +71,38 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
         say("variadic");
         return false;
     }
-    // Host-ABI aggregate metadata does not survive a splice: a struct
-    // parameter has no entry copy in the IR (the callee prologue
-    // scatters its argument registers into a body local, which the
-    // splice cannot reproduce), and a host-ABI struct call in the body
-    // carries `agg_descs` indices that are valid only against this
-    // function's own table. `agg_descs` is non-empty whenever either
-    // is present, so reject such callees outright.
+    // Host-ABI aggregates are admitted only in the narrow shape the
+    // splice can reproduce: a struct passed by value in a single integer
+    // register. Such a parameter arrives as the address of the caller's
+    // copy in one argument, and the body's field loads off the parameter
+    // slot redirect to that address at the splice (see `inline_caller`).
+    // Reject anything wider (multi-register or memory-class), an
+    // FP-class single register, or a struct RETURN -- the latter needs a
+    // callee result local merged into the caller frame, which the splice
+    // does not yet do. A struct argument to a body call also lands in
+    // agg_descs, but the per-inst filter below rejects body calls anyway.
     if !func.agg_descs.is_empty() {
-        say("host-ABI aggregate metadata");
-        return false;
+        if func.ret_agg.is_some() {
+            say("aggregate return");
+            return false;
+        }
+        // The single-register-aggregate redirect is wired only through
+        // the flat single-block splice; a multi-block aggregate callee
+        // would reach `splice_multi_block`, which does not redirect the
+        // parameter slot. Keep those out of line for now.
+        if func.blocks.len() != 1 {
+            say("multi-block aggregate");
+            return false;
+        }
+        for d in &func.agg_descs {
+            match classify_aggregate(d.size, d.align, &d.fields, abi, false) {
+                AggClass::Regs(regs) if regs.len() == 1 && regs[0] == RegClass::Integer => {}
+                _ => {
+                    say("aggregate not a single integer register");
+                    return false;
+                }
+            }
+        }
     }
     // Multi-block callees are supported when exactly one block
     // terminates in `Return`. Other terminator shapes (Jmp, Bz, Bnz,
@@ -204,6 +231,18 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             }
         }
     }
+    // Frame slots holding a register-passed struct parameter's bytes. A
+    // body `LocalAddr` of one of these redirects to the caller's
+    // argument address at the splice; any other `LocalAddr` names a
+    // caller frame slot that does not exist after inlining.
+    let param_agg_slots: BTreeSet<i64> = func
+        .param_aggs
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.is_some())
+        .filter_map(|(i, _)| func.param_local_slots.get(i).copied())
+        .filter(|&s| s != 0)
+        .collect();
     for (idx, inst) in func.insts.iter().enumerate() {
         match inst {
             Inst::Imm(_)
@@ -220,6 +259,19 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             | Inst::FpCast { .. }
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. } => {}
+            Inst::LocalAddr(s) => {
+                // Only a register-passed struct parameter's slot is
+                // inlinable: the splice redirects it to the caller's
+                // argument address. Any other `LocalAddr` has no caller
+                // equivalent. Read-only-ness of the parameter is
+                // enforced structurally -- `Store` / `StoreIndexed` /
+                // `Mcpy` / `Call*` stay rejected by the catch-all, so an
+                // admitted callee can only read through this address.
+                if !param_agg_slots.contains(s) {
+                    say(&alloc::format!("LocalAddr of non-parameter slot {s}"));
+                    return false;
+                }
+            }
             Inst::LoadLocal { .. } => {
                 // The splice drops every LoadLocal because the
                 // caller's frame has no matching slot. That is only
@@ -230,12 +282,16 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
                     return false;
                 }
             }
-            Inst::StoreLocal { .. } => {
-                // StoreLocal has no result; the splice drops it.
-                // The store's slot writes into a frame the caller
-                // does not own, but with every LoadLocal also
-                // dropped no observation of the missing write
-                // survives the splice.
+            Inst::StoreLocal { off, .. } => {
+                // StoreLocal has no result; the splice drops it. A drop
+                // is unobservable only when no surviving read sees the
+                // slot. A struct-parameter slot is now read by address
+                // (the redirected LocalAddr), so a dropped write into it
+                // would leave that read stale -- reject.
+                if param_agg_slots.contains(off) {
+                    say("StoreLocal into a struct-parameter slot");
+                    return false;
+                }
             }
             _ => {
                 say(&alloc::format!("disallowed inst {:?}", inst));
@@ -765,10 +821,13 @@ fn splice_multi_block(
         extern_tls_refs: tls_refs,
         f32_values: new_f32,
         param_fp_mask: original.param_fp_mask,
-        // Inlining only splices callees with no aggregate ABI
-        // metadata (see the eligibility guard), so the caller's own
-        // `agg_descs` carry through unchanged and no spliced
-        // instruction references a callee-side index.
+        // The caller's own `agg_descs` carry through unchanged. A
+        // spliced callee may carry agg_descs, but only the
+        // single-integer-register parameter shape (see the eligibility
+        // guard): its sole agg-referencing inst is the parameter-slot
+        // `LocalAddr`, which the splice redirects to the caller argument
+        // and never re-emits, so no spliced instruction references a
+        // callee-side index. Do not merge the callee's agg_descs.
         agg_descs: original.agg_descs,
         param_aggs: original.param_aggs,
 
@@ -896,9 +955,29 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                         call_args.iter().map(|&a| map_v(a, &remap)).collect();
                     let callee_block = &callee.blocks[0];
                     let mut callee_remap: Vec<ValueId> = vec![NO_VALUE; callee.insts.len()];
+                    // A register-passed struct parameter is read in the
+                    // body through `LocalAddr(slot)`; map each such slot to
+                    // its parameter index so the splice redirects it to the
+                    // caller's argument address (the candidate filter
+                    // admitted only this shape).
+                    let param_slot_arg: BTreeMap<i64, usize> = callee
+                        .param_aggs
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, a)| a.is_some())
+                        .filter_map(|(i, _)| callee.param_local_slots.get(i).map(|&s| (s, i)))
+                        .filter(|&(s, _)| s != 0)
+                        .collect();
                     for ce_pc in callee_block.inst_range.start..callee_block.inst_range.end {
                         let cinst = &callee.insts[ce_pc as usize];
                         match cinst {
+                            Inst::LocalAddr(s) => {
+                                if let Some(&i) = param_slot_arg.get(s) {
+                                    callee_remap[ce_pc as usize] =
+                                        remapped_args.get(i).copied().unwrap_or(NO_VALUE);
+                                    continue;
+                                }
+                            }
                             Inst::ParamRef { idx, kind } => {
                                 let i = *idx as usize;
                                 let arg = if i < remapped_args.len() {
@@ -1116,7 +1195,7 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
 /// Inline eligible callees across every function in `funcs`. A
 /// callee is eligible per `is_inline_candidate`; `cap == 0` disables
 /// the pass.
-pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
+pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
     // Env-var override for the `is_inline` attribute pending parser
@@ -1160,7 +1239,7 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
         let snapshot: Vec<FunctionSsa> = funcs.to_vec();
         let mut candidates: BTreeMap<usize, &FunctionSsa> = BTreeMap::new();
         for f in &snapshot {
-            if is_inline_candidate(f, cap) {
+            if is_inline_candidate(f, cap, abi) {
                 candidates.insert(f.ent_pc, f);
             }
         }

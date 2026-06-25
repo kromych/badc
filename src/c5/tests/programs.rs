@@ -539,6 +539,20 @@ fn block_scope_extern() {
 }
 
 #[test]
+fn inline_struct_param_mutated() {
+    // A helper that mutates its by-value struct parameter stays out of
+    // line; the caller's copy is unaffected.
+    assert_eq!(run_fixture("inline_struct_param_mutated.c"), 0);
+}
+
+#[test]
+fn inline_one_word_struct() {
+    // A read-only helper taking a one-word struct by value inlines; its
+    // field load redirects to the caller's argument address.
+    assert_eq!(run_fixture("inline_one_word_struct.c"), 0);
+}
+
+#[test]
 fn inline_arg_count_mismatch() {
     // A call passing fewer arguments than the callee has parameters is
     // not inlined, so the optimized IR stays well-formed.

@@ -1969,7 +1969,7 @@ pub(super) fn lower(
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.
         super::ssa_emit_common::time_pass("ssa_inline::run (x86_64)", || {
-            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap);
+            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
         });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner

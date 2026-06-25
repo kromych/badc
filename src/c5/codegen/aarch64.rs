@@ -1535,7 +1535,7 @@ pub(super) fn lower(
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
         super::ssa_emit_common::time_pass("ssa_inline::run (aarch64)", || {
-            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap);
+            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
         });
         super::ssa_emit_common::time_pass("ssa_rotate::run (aarch64)", || {
             super::ssa_rotate::run(&mut ssa_funcs);

@@ -553,6 +553,14 @@ fn inline_one_word_struct() {
 }
 
 #[test]
+fn inline_into_computed_goto() {
+    // A single-block helper inlines into a computed-goto caller. The flat
+    // splice keeps block ids fixed, so the caller's `Inst::BlockAddr` and
+    // computed-goto target table stay valid and dispatch is correct.
+    assert_eq!(run_fixture("inline_into_computed_goto.c"), 0);
+}
+
+#[test]
 fn inline_arg_count_mismatch() {
     // A call passing fewer arguments than the callee has parameters is
     // not inlined, so the optimized IR stays well-formed.

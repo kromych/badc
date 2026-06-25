@@ -1160,14 +1160,17 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     // `splice_multi_block` shifts caller block ids > the splice point;
     // a surviving caller phi's incoming.0 would then name the wrong
     // predecessor (a silent miscompile, since emit matches incoming by
-    // block id). Skip multi-block splicing while the caller carries phis
-    // until that remap lands.
-    let caller_has_phi = caller
-        .insts
-        .iter()
-        .any(|inst| matches!(inst, Inst::Phi { .. }));
+    // block id). The same shift invalidates a computed-goto caller's
+    // `Inst::BlockAddr` and `computed_goto_targets` block-id references.
+    // Skip multi-block splicing for either shape; the flat single-block
+    // path above already ran and keeps block ids fixed.
+    let block_id_shift_unsafe = !caller.computed_goto_targets.is_empty()
+        || caller
+            .insts
+            .iter()
+            .any(|inst| matches!(inst, Inst::Phi { .. }));
     let mut steps = 0usize;
-    while steps < MAX_MULTI_BLOCK_SPLICE_STEPS && !caller_has_phi {
+    while steps < MAX_MULTI_BLOCK_SPLICE_STEPS && !block_id_shift_unsafe {
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
@@ -1278,16 +1281,11 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             // (a block id) stays valid, and the value-remap fixpoint
             // converges every phi's incoming value -- including a loop
             // back-edge whose definition follows the phi in array order.
-            // Multi-block splicing shifts caller block ids and is gated
-            // on a phi-free caller inside `inline_caller`; the incoming.0
-            // remap for that path is not yet implemented.
-            //
-            // Skip a caller with a computed goto: splicing a callee
-            // shifts the caller's block ids, which `Inst::BlockAddr`
-            // and computed_goto_targets reference directly.
-            if !caller.computed_goto_targets.is_empty() {
-                continue;
-            }
+            // A computed-goto caller is handled the same way: the flat
+            // splice rebuilds the block array one-to-one, leaving every
+            // block id, `Inst::BlockAddr`, and `computed_goto_targets`
+            // entry valid. Only multi-block splicing shifts block ids;
+            // `inline_caller` gates that path off for such callers.
             let before = caller.insts.len();
             inline_caller(caller, &local);
             if caller.insts.len() != before {

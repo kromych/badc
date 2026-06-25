@@ -1332,6 +1332,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("duff_switch_into_loop.c", 0),
     ("empty_macro_arg_and_string_rows.c", 0),
     ("inline_arg_count_mismatch.c", 0),
+    ("inline_into_computed_goto.c", 0),
     ("inline_one_word_struct.c", 0),
     ("inline_struct_param_mutated.c", 0),
     ("block_scope_extern.c", 0),

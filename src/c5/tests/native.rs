@@ -407,6 +407,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("struct_param_stack_spill.c", 0),
     ("struct_stack_arg_then_scalar.c", 0),
     ("mixed_struct_gpr_abi.c", 0),
+    ("unary_plus_preserves_type.c", 0),
     ("return_void_expression.c", 0),
     ("macro_operators.c", 0),
     ("typedef_basic.c", 0),

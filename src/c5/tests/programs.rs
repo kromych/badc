@@ -218,6 +218,14 @@ fn mixed_struct_gpr_abi() {
 }
 
 #[test]
+fn unary_plus_preserves_type() {
+    // Unary `+` yields the integer-promoted operand type (C99 6.5.3.3p2);
+    // an operand of rank int or above keeps its width and signedness, so
+    // a following relational operator runs with the correct type.
+    assert_eq!(run_fixture("unary_plus_preserves_type.c"), 0);
+}
+
+#[test]
 fn inline_two_reg_struct_param() {
     // A 16-byte all-integer struct parameter inlines: the splice
     // redirects the body's parameter-slot reads to the caller's argument.

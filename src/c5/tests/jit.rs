@@ -1100,6 +1100,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_param_stack_spill.c", 0),
     ("struct_stack_arg_then_scalar.c", 0),
     ("mixed_struct_gpr_abi.c", 0),
+    ("unary_plus_preserves_type.c", 0),
     ("wide_string_literal_alignment.c", 0),
     ("va_arg_through_pointer.c", 0),
     ("pthread_key_once_width.c", 0),

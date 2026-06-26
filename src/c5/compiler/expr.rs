@@ -1760,17 +1760,19 @@ impl Compiler {
             }
             self.ty = promoted;
         } else if self.lex.tk == Token::AddOp {
-            // Unary `+`: a no-op per C99 6.5.3.3p2. The operand's
-            // type is preserved (subject to integer promotion for
-            // sub-int integer operands -- a `(unsigned char)c`
-            // promotes to `int`, which the `+` doesn't undo).
-            // Critically, FP operands must keep their FP type --
-            // otherwise `+0.5` poses as an integer and a later
-            // `r + (+0.5)` lowers to `BinOp::Add` instead of `BinOp::Fadd`.
+            // Unary `+`: a no-op per C99 6.5.3.3p2; the result has the
+            // integer-promoted operand type. Integer promotion only
+            // widens sub-int operands (char / short -> int); types of
+            // rank int and above (unsigned, long, long long) keep their
+            // type, so forcing `int` here would drop the width and
+            // signedness and run a later comparison or shift on the
+            // wrong type. FP operands keep their FP type -- otherwise
+            // `+0.5` poses as an integer and a later `r + (+0.5)` lowers
+            // to `BinOp::Add` instead of `BinOp::Fadd`.
             self.next()?;
             self.expr(Token::Inc as i64)?;
             if !is_floating_scalar(self.ty) {
-                self.ty = Ty::Int as i64;
+                self.ty = integer_promote(self.ty);
             }
         } else if self.lex.tk == Token::SubOp {
             self.next()?;

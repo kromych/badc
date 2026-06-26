@@ -222,6 +222,14 @@ fn assign_expr_value_narrowed() {
 }
 
 #[test]
+fn global_addr_struct_member() {
+    // C99 6.6: the address of a struct member / array element of a static
+    // object is an address constant; the designator may chain members and
+    // subscripts.
+    assert_eq!(run_fixture("global_addr_struct_member.c"), 0);
+}
+
+#[test]
 fn global_addr_multidim_index() {
     // The address of a multi-dimensional array element is an address
     // constant; each subscript level strides by the product of the inner

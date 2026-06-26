@@ -23,23 +23,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x2, x1
-               	mov	x1, x0
-               	ldrb	w3, [x1]
+               	mov	x2, x0
+               	ldrb	w3, [x2]
                	cbz	x3, <addr>
                	b	<addr>
-               	add	x1, x1, #0x1
                	add	x2, x2, #0x1
+               	add	x1, x1, #0x1
                	b	<addr>
-               	ldrb	w0, [x1]
-               	ldrb	w1, [x2]
+               	ldrb	w0, [x2]
+               	ldrb	w1, [x1]
                	cmp	x0, x1
                	cset	x0, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w0, [x1]
-               	ldrb	w3, [x2]
+               	ldrb	w0, [x2]
+               	ldrb	w3, [x1]
                	cmp	x0, x3
                	cset	x3, eq
                	cbz	x3, <addr>

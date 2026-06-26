@@ -431,6 +431,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         .map(|v| classes.find(v))
         .collect();
     let interference = liveness.interference(func, &node_of);
+    let param_incoming_forbid = compute_param_incoming_forbid(func, target);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
         if !produces_value(inst) {
@@ -441,12 +442,14 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             is_fp: false,
             must_callee: false,
             hint: None,
+            forbid: 0,
         });
         entry.is_fp = produces_fp_result(inst);
         entry.must_callee |= calls_after_def[v];
         if entry.hint.is_none() {
             entry.hint = hints[v];
         }
+        entry.forbid |= param_incoming_forbid[v];
     }
     let (max_gpr, max_fpr) = pool_size_limits();
     let coloring = color_graph(
@@ -862,6 +865,11 @@ pub(super) struct NodeConstraints {
     pub must_callee: bool,
     /// Preferred register, honoured when free and bank-legal.
     pub hint: Option<u8>,
+    /// Physical registers (in this node's bank) the colorer must not
+    /// assign, beyond interference. Bit `r` set forbids register `r`.
+    /// Used to keep a `ParamRef` off the incoming argument register of a
+    /// later same-bank `ParamRef`, whose incoming value is still live.
+    pub forbid: u64,
 }
 
 /// Result of coloring the interference graph.
@@ -977,6 +985,15 @@ pub(super) fn color_graph(
                 Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
                 Place::Spill(s) => slot_used[s as usize] = stamp,
                 _ => {}
+            }
+        }
+        // Registers excluded beyond interference: the incoming argument
+        // registers of later same-bank `ParamRef`s whose values are still
+        // live at this node's definition. The forbid mask is in this
+        // node's bank (set only for matching `is_fp`).
+        for r in 0..64u8 {
+            if (c.forbid >> r) & 1 != 0 {
+                forbidden[r as usize] = true;
             }
         }
         // Bank size cap: BADC_MAX_GPR / BADC_MAX_FPR truncate each bank
@@ -1560,6 +1577,104 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
     }
 }
 
+/// Per-value mask of physical registers the colorer must not assign,
+/// to keep each `Inst::ParamRef` off the incoming argument register of a
+/// later same-bank `ParamRef`. A `ParamRef` reads its incoming argument
+/// register, which stays live from function entry until that `ParamRef`
+/// materializes. `ParamRef`s materialize in value-id order; an earlier
+/// one placed in a later one's incoming register overwrites that
+/// register before the later `ParamRef` reads it. The own-incoming-
+/// register hint ([`populate_param_ref_hints`]) avoids this at full
+/// register pressure, but is rejected once the incoming register falls
+/// beyond a truncated bank, so the colorer parks the early `ParamRef` on
+/// a low register that is another parameter's incoming register. Forbid
+/// that placement: the colorer then picks a free register or spills, and
+/// a spilled `ParamRef` stores its incoming register straight to the
+/// slot, which never clobbers.
+fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
+    let mut forbid = alloc::vec![0u64; func.insts.len()];
+    if func.is_variadic {
+        return forbid;
+    }
+    let int_args: &[u8] = match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            &[0, 1, 2, 3, 4, 5, 6, 7]
+        }
+        Target::LinuxX64 => &[7, 6, 2, 1, 8, 9],
+        Target::WindowsX64 => &[1, 2, 8, 9],
+    };
+    let fp_args: &[u8] = match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 | Target::LinuxX64 => {
+            &[0, 1, 2, 3, 4, 5, 6, 7]
+        }
+        Target::WindowsX64 => &[0, 1, 2, 3],
+    };
+    // Only protect parameters that are read: an unused `ParamRef` is not
+    // materialized, so its incoming register need not survive.
+    let mut used = alloc::vec![false; func.insts.len()];
+    for inst in &func.insts {
+        for_each_operand(inst, |op| {
+            if (op as usize) < used.len() {
+                used[op as usize] = true;
+            }
+        });
+    }
+    for block in &func.blocks {
+        match &block.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
+                if (*cond as usize) < used.len() {
+                    used[*cond as usize] = true;
+                }
+            }
+            Terminator::Return(v) if (*v as usize) < used.len() => used[*v as usize] = true,
+            Terminator::GotoIndirect { target } if (*target as usize) < used.len() => {
+                used[*target as usize] = true;
+            }
+            _ => {}
+        }
+    }
+    // (value id, is_fp, incoming register) for each used ParamRef, in
+    // value-id (materialization) order.
+    let mut params: Vec<(usize, bool, u8)> = Vec::new();
+    for (vid, inst) in func.insts.iter().enumerate() {
+        let Inst::ParamRef { idx, .. } = inst else {
+            continue;
+        };
+        if !used[vid] {
+            continue;
+        }
+        let pi = *idx as usize;
+        let is_fp = (func.param_fp_mask & (1u32 << pi)) != 0;
+        let (rank, bank): (usize, &[u8]) = if is_fp {
+            (
+                (0..pi)
+                    .filter(|&j| (func.param_fp_mask & (1u32 << j)) != 0)
+                    .count(),
+                fp_args,
+            )
+        } else {
+            (
+                (0..pi)
+                    .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
+                    .count(),
+                int_args,
+            )
+        };
+        if let Some(&r) = bank.get(rank) {
+            params.push((vid, is_fp, r));
+        }
+    }
+    for a in 0..params.len() {
+        let (vid_a, fp_a, _) = params[a];
+        for &(_, fp_b, reg_b) in &params[a + 1..] {
+            if fp_a == fp_b {
+                forbid[vid_a] |= 1u64 << reg_b;
+            }
+        }
+    }
+    forbid
+}
+
 fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
     // Hint each `Inst::ParamRef(i)` to its incoming integer-argument
     // register. The per-arch emit reads the argument register
@@ -1964,6 +2079,7 @@ mod tests {
             is_fp: false,
             must_callee,
             hint,
+            forbid: 0,
         })
     }
 

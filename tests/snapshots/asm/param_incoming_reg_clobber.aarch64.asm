@@ -14,20 +14,19 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x3, x1
-               	mov	x1, x0
+               	mov	x3, x0
                	stur	x2, [x29, #0x30]
                	ldur	w0, [x29, #0x30]
                	sub	x2, x0, #0x1
                	stur	w2, [x29, #0x30]
                	cmp	x0, #0x0
                	b.eq	<addr>
-               	add	x0, x1, #0x1
-               	add	x2, x3, #0x1
-               	ldrb	w3, [x3]
-               	strb	w3, [x1]
-               	mov	x1, x0
-               	mov	x3, x2
+               	add	x0, x3, #0x1
+               	add	x2, x1, #0x1
+               	ldrb	w1, [x1]
+               	strb	w1, [x3]
+               	mov	x3, x0
+               	mov	x1, x2
                	b	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10

@@ -340,6 +340,37 @@ fn modulo_with_spilled_divisor_under_pressure() {
 }
 
 #[test]
+fn fp_param_incoming_reg_clobber_under_pressure() {
+    // Each Inst::ParamRef reads its incoming FP argument register, which
+    // stays live from function entry until that ParamRef materializes.
+    // Under FP register pressure the hint that homes each parameter in
+    // its own incoming register is rejected (the register lies beyond the
+    // truncated bank), so the colorer could park an earlier ParamRef on a
+    // later ParamRef's incoming register; the earlier parameter's
+    // materialization then overwrote the later parameter's argument before
+    // it was read. sum4 mixes float and double parameters: the double in
+    // d3 is routed through d0, the float parameter a's incoming register,
+    // clobbering a before its spill. The allocator now forbids placing a
+    // ParamRef on a later same-bank ParamRef's incoming register.
+    let src = r#"
+        static double sum4(float a, double b, float c, double d) {
+            return a + b + c + d;
+        }
+        int main(void) {
+            return sum4(1.0f, 2.0, 3.0f, 4.0) == 10.0 ? 0 : 5;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["fp-param-incoming-clobber"])
+    });
+    assert_eq!(
+        result, 0,
+        "a float parameter in an earlier FP argument register was clobbered \
+         by a later double routed through it under register pressure"
+    );
+}
+
+#[test]
 fn indirect_call_spilled_target_under_pressure() {
     // A six-argument indirect call. Under register pressure the target
     // pointer is spilled to a stack slot above the marshal's scratch

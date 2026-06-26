@@ -192,6 +192,14 @@ fn fp_param_float_before_double() {
 }
 
 #[test]
+fn assign_expr_value_narrowed() {
+    // C99 6.5.16p3: a narrowing integer assignment used as a value
+    // yields the converted (narrowed) left-operand value, not the raw
+    // right-hand side.
+    assert_eq!(run_fixture("assign_expr_value_narrowed.c"), 0);
+}
+
+#[test]
 fn global_addr_multidim_index() {
     // The address of a multi-dimensional array element is an address
     // constant; each subscript level strides by the product of the inner

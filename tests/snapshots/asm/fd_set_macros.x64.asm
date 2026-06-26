@@ -203,8 +203,9 @@ Disassembly of section .text:
                	sarq	$0x3, %rcx
                	addq	%rcx, %rax
                	movzbq	(%rax), %rcx
-               	andq	$-0x81, %rcx
-               	movb	%cl, (%rax)
+               	movq	%rcx, %rdx
+               	andq	$-0x81, %rdx
+               	movb	%dl, (%rax)
                	leaq	-0x80(%rbp), %rax
                	movl	$0x7, %ecx
                	xorq	%rdx, %rdx
@@ -318,4 +319,4 @@ Disassembly of section .text:
                	addq	$0xf0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

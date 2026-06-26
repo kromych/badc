@@ -4104,8 +4104,9 @@ Disassembly of section .text:
                	movq	%r13, %rax
                	addq	$0x8, %rax
                	movq	(%r13), %rcx
-               	movq	-0x48(%rbp), %r12
-               	movb	%r12b, (%rcx)
+               	movq	-0x48(%rbp), %rdx
+               	movb	%dl, (%rcx)
+               	movsbq	%dl, %r12
                	movq	%r12, -0x48(%rbp)
                	movq	%rax, %r13
                	jmp	<addr>

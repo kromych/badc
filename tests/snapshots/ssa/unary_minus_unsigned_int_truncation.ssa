@@ -100,22 +100,24 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v66  LoadLocal { off=-5, kind=U32 }                   -> x1
     v67  Binop { op=xor, lhs=v62, rhs=v62 }               -> x0
     v68  Imm(0)                                           -> x1
-    v69  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> x0
-    v70  BinopI { op=mul, lhs=v69, rhs_imm=-1 }           -> x1
-    v71  BinopI { op=and, lhs=v70, rhs_imm=4294967295 }   -> x1
-    v72  Binop { op=or, lhs=v69, rhs=v71 }                -> x0
-    v73  BinopI { op=shru, lhs=v72, rhs_imm=31 }          -> x0
-    v74  BinopI { op=xor, lhs=v73, rhs_imm=1 }            -> x0
-    v75  Imm(0)                                           -> x1
-    v76  BinopI { op=and, lhs=v74, rhs_imm=4294967295 }   -> x0
-    v77  BinopI { op=ne, lhs=v76, rhs_imm=1 }             -> x0
-    terminator Bz { cond=v77, target=b16, fall=b15 }   (exit_acc=v77)
+    v69  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> x1
+    v70  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> x0
+    v71  BinopI { op=mul, lhs=v70, rhs_imm=-1 }           -> x1
+    v72  BinopI { op=and, lhs=v71, rhs_imm=4294967295 }   -> x1
+    v73  Binop { op=or, lhs=v70, rhs=v72 }                -> x0
+    v74  BinopI { op=shru, lhs=v73, rhs_imm=31 }          -> x0
+    v75  BinopI { op=xor, lhs=v74, rhs_imm=1 }            -> x0
+    v76  Imm(0)                                           -> x1
+    v77  BinopI { op=and, lhs=v75, rhs_imm=4294967295 }   -> x1
+    v78  BinopI { op=and, lhs=v75, rhs_imm=4294967295 }   -> x0
+    v79  BinopI { op=ne, lhs=v78, rhs_imm=1 }             -> x0
+    terminator Bz { cond=v79, target=b16, fall=b15 }   (exit_acc=v79)
   block 15  start_pc=0
-    v78  Imm(8)                                           -> x0
-    terminator Return(v78)   (exit_acc=v78)
+    v80  Imm(8)                                           -> x0
+    terminator Return(v80)   (exit_acc=v80)
   block 16  start_pc=0
-    v79  Imm(0)                                           -> x0
-    terminator Return(v79)   (exit_acc=v79)
+    v81  Imm(0)                                           -> x0
+    terminator Return(v81)   (exit_acc=v81)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

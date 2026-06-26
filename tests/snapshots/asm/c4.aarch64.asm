@@ -4474,8 +4474,10 @@ Disassembly of section .text:
                	b.ne	<addr>
                	add	x0, x22, #0x8
                	ldr	x1, [x22]
-               	ldur	x21, [x29, #-0x48]
-               	strb	w21, [x1]
+               	ldur	x2, [x29, #-0x48]
+               	strb	w2, [x1]
+               	mov	x17, #0xff              // =255
+               	and	x21, x2, x17
                	stur	x21, [x29, #-0x48]
                	mov	x22, x0
                	b	<addr>

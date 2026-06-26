@@ -226,8 +226,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	strb	w1, [x0]
+               	and	x2, x1, x17
+               	strb	w2, [x0]
                	sub	x0, x29, #0x80
                	mov	x1, #0x7                // =7
                	mov	x2, #0x0                // =0

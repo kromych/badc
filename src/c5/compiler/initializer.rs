@@ -2047,10 +2047,19 @@ impl Compiler {
                 }
             } else if is_struct_ty(field.ty)
                 && struct_ptr_depth(field.ty) == 0
-                && self.lex.tk == '{'
+                && (self.lex.tk == '{' || !self.structs[struct_id_of(field.ty)].is_union)
             {
                 let nested_sid = struct_id_of(field.ty);
-                self.collect_struct_initializer(nested_sid, field_base as i64)?;
+                if self.lex.tk == '{' {
+                    self.collect_struct_initializer(nested_sid, field_base as i64)?;
+                } else {
+                    // C99 6.7.8p20: a nested struct field's braces may be
+                    // elided, filling its members from the surrounding flat
+                    // list. Mirrors the array-of-struct element path. An
+                    // unbraced union takes only its first member, handled by
+                    // the single-value path below.
+                    self.fill_struct_fields(nested_sid, field_base as i64, false)?;
+                }
             } else if field.bit_width > 0 {
                 // Bitfield brace-initializer entry. C99 6.7.8 says
                 // the initializer's value is converted to the

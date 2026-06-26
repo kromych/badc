@@ -902,21 +902,36 @@ impl Compiler {
                         self.next()?; // consume outer `}`
                         return Ok(());
                     }
+                    // A multi-dimensional array's top-level groups are
+                    // inner sub-arrays, not single structs; each spans the
+                    // product of the inner dimensions (C99 6.7.8). Mirror
+                    // the static-local path: recurse per inner dimension.
+                    let inner_dims = self.inner_dims_of(loc_idx);
+                    let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
+                    let group_stride = elem_size as i64 * inner_product;
+                    let group_count = declared_array_size / inner_product;
                     self.next()?; // consume outer `{`
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {
-                        if i >= declared_array_size {
+                        if i >= group_count {
                             return Err(self.compile_err(format!(
                                 "too many initializers for array `{}` ({} > {})",
                                 var_name,
                                 i + 1,
-                                declared_array_size
+                                group_count
                             )));
                         }
-                        let here = staged_off as i64 + i * elem_size as i64;
+                        let here = staged_off as i64 + i * group_stride;
                         // C99 6.7.8p20: a struct element's braces may be
                         // elided, filling its fields from the flat list.
-                        if self.lex.tk == '{' {
+                        if !inner_dims.is_empty() {
+                            self.collect_struct_array_data(
+                                sid,
+                                here,
+                                &inner_dims,
+                                elem_size as i64,
+                            )?;
+                        } else if self.lex.tk == '{' {
                             self.collect_struct_initializer(sid, here)?;
                         } else {
                             self.fill_struct_fields(sid, here, false)?;

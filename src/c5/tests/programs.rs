@@ -226,6 +226,22 @@ fn unary_plus_preserves_type() {
 }
 
 #[test]
+fn local_multidim_aggregate_array_init() {
+    // An automatic multi-dimensional array of structs/unions accepts the
+    // nested-brace initializer; the inner braces span the inner
+    // dimensions (C99 6.7.8).
+    assert_eq!(run_fixture("local_multidim_aggregate_array_init.c"), 0);
+}
+
+#[test]
+fn nested_aggregate_brace_elision() {
+    // A nested struct field's braces may be elided, filling its members
+    // from the flat list; an unbraced union takes its first member
+    // (C99 6.7.8p17/p20).
+    assert_eq!(run_fixture("nested_aggregate_brace_elision.c"), 0);
+}
+
+#[test]
 fn inline_two_reg_struct_param() {
     // A 16-byte all-integer struct parameter inlines: the splice
     // redirects the body's parameter-slot reads to the caller's argument.

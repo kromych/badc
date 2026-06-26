@@ -192,6 +192,13 @@ fn fp_param_float_before_double() {
 }
 
 #[test]
+fn inline_two_reg_struct_param() {
+    // A 16-byte all-integer struct parameter inlines: the splice
+    // redirects the body's parameter-slot reads to the caller's argument.
+    assert_eq!(run_fixture("inline_two_reg_struct_param.c"), 0);
+}
+
+#[test]
 fn struct_copy_comma_side_effect() {
     // C99 6.5.17: a struct copy as the discarded left operand of a comma,
     // nested in an enclosing assignment to a global, must still execute.

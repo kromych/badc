@@ -125,13 +125,18 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
             return false;
         }
         // Every descriptor must pass by value in integer registers. A
-        // by-value parameter arrives as one argument address, so it must
-        // occupy exactly one integer register. A return is delivered in
-        // the integer return registers (rax:rdx / x0:x1), so it may occupy
-        // one or two. FP-class and memory-class shapes stay rejected.
+        // by-value parameter arrives as a single argument value -- the
+        // address of the caller's copy (the SSA `Inst::Call` carries one
+        // arg per struct parameter regardless of how many registers the
+        // ABI marshals it into), which the splice redirects the body's
+        // `LocalAddr(slot)` reads to. So a one- or two-register integer
+        // aggregate parameter is admissible; the redirect is identical
+        // either way. A return is delivered in the integer return
+        // registers (rax:rdx / x0:x1), so it may occupy one or two.
+        // FP-class and memory-class shapes stay rejected.
         for (i, d) in func.agg_descs.iter().enumerate() {
             let is_ret = func.ret_agg == Some(i as u32);
-            let max_regs = if is_ret { 2 } else { 1 };
+            let max_regs = 2;
             match classify_aggregate(d.size, d.align, &d.fields, abi, is_ret) {
                 AggClass::Regs(regs)
                     if !regs.is_empty()

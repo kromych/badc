@@ -1632,34 +1632,88 @@ fn emit_struct_param_scatter(
         let Some(agg_idx) = agg else {
             continue;
         };
-        let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
-            continue;
-        };
         let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
         if slot >= 0 {
             continue;
         }
-        // Materialise the body local's address into x16, then store each
-        // unit from its argument register. An integer eightbyte stores at
-        // offset 8k; an HFA member stores at its own offset with its
-        // natural size (d-register for 8 bytes, s-register for 4). x16/x17
-        // are never argument registers, so the source `regs` are untouched.
-        let hfa = super::abi_classify::hfa_member_layout(&func.agg_descs[*agg_idx as usize].fields);
-        emit_local_addr(code, Place::IntReg(16), slot, frame);
-        for (k, cr) in regs.iter().take(*n as usize).enumerate() {
-            if cr.is_fp {
-                let (off, msize) = hfa
-                    .as_ref()
-                    .and_then(|m| m.get(k).copied())
-                    .unwrap_or(((k as u32) * 8, 8));
-                if msize == 8 {
-                    emit(code, super::aarch64::enc_str_d_imm(cr.reg, Reg(16), off));
-                } else {
-                    emit(code, super::aarch64::enc_str_s_imm(cr.reg, Reg(16), off));
+        match placements.get(i) {
+            Some(super::ArgPlacement::StructRegs { regs, n }) => {
+                // Materialise the body local's address into x16, then store
+                // each unit from its argument register. An integer
+                // eightbyte stores at offset 8k; an HFA member stores at
+                // its own offset with its natural size (d-register for 8
+                // bytes, s-register for 4). x16/x17 are never argument
+                // registers, so the source `regs` are untouched.
+                let hfa = super::abi_classify::hfa_member_layout(
+                    &func.agg_descs[*agg_idx as usize].fields,
+                );
+                emit_local_addr(code, Place::IntReg(16), slot, frame);
+                for (k, cr) in regs.iter().take(*n as usize).enumerate() {
+                    if cr.is_fp {
+                        let (off, msize) = hfa
+                            .as_ref()
+                            .and_then(|m| m.get(k).copied())
+                            .unwrap_or(((k as u32) * 8, 8));
+                        if msize == 8 {
+                            emit(code, super::aarch64::enc_str_d_imm(cr.reg, Reg(16), off));
+                        } else {
+                            emit(code, super::aarch64::enc_str_s_imm(cr.reg, Reg(16), off));
+                        }
+                    } else {
+                        emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
+                    }
                 }
-            } else {
-                emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
             }
+            Some(super::ArgPlacement::StructStack { off, size }) => {
+                // The aggregate spilled to the caller's stack argument
+                // area, which sits above the saved fp/lr (16 bytes) and
+                // the callee's c5 parameter cells (`param_spill_bytes`).
+                // Copy its bytes from there into the body local the
+                // parameter is read from; the cell reserved for this
+                // parameter (param_reg_stack_split counts a StructStack as
+                // a register slot, so a 16-byte cell is reserved) stays
+                // unused. AAPCS64 5.4.2 rounds the stack slot up to 8
+                // bytes; copy each whole eightbyte then a sub-eightbyte
+                // tail. x17 is the value temp, fp the source base; x16 the
+                // destination base, so no argument register is disturbed.
+                let src = 16 + frame.param_spill_bytes + *off;
+                let size = *size;
+                debug_assert!(
+                    src + size <= 4096 * 8,
+                    "stack-arg offset beyond ldr imm12 reach"
+                );
+                emit_local_addr(code, Place::IntReg(16), slot, frame);
+                let mut o = 0u32;
+                while o + 8 <= size {
+                    emit(code, enc_ldr_imm(Reg(17), Reg(29), src + o));
+                    emit(code, enc_str_imm(Reg(17), Reg(16), o));
+                    o += 8;
+                }
+                if o + 4 <= size {
+                    emit(
+                        code,
+                        super::aarch64::enc_ldr32_imm(Reg(17), Reg(29), src + o),
+                    );
+                    emit(code, super::aarch64::enc_str32_imm(Reg(17), Reg(16), o));
+                    o += 4;
+                }
+                if o + 2 <= size {
+                    emit(
+                        code,
+                        super::aarch64::enc_ldrh_imm(Reg(17), Reg(29), src + o),
+                    );
+                    emit(code, super::aarch64::enc_strh_imm(Reg(17), Reg(16), o));
+                    o += 2;
+                }
+                if o < size {
+                    emit(
+                        code,
+                        super::aarch64::enc_ldrb_imm(Reg(17), Reg(29), src + o),
+                    );
+                    emit(code, super::aarch64::enc_strb_imm(Reg(17), Reg(16), o));
+                }
+            }
+            _ => continue,
         }
     }
 }

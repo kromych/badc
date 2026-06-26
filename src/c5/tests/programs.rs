@@ -192,6 +192,14 @@ fn fp_param_float_before_double() {
 }
 
 #[test]
+fn struct_param_stack_spill() {
+    // A by-value struct that spills to the stack (preceding scalar args
+    // exhaust the integer argument registers) must be read correctly by
+    // the callee from the caller's stack argument area.
+    assert_eq!(run_fixture("struct_param_stack_spill.c"), 0);
+}
+
+#[test]
 fn inline_two_reg_struct_param() {
     // A 16-byte all-integer struct parameter inlines: the splice
     // redirects the body's parameter-slot reads to the caller's argument.

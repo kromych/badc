@@ -1097,6 +1097,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("assign_expr_value_narrowed.c", 0),
     ("struct_copy_comma_side_effect.c", 0),
     ("inline_two_reg_struct_param.c", 0),
+    ("struct_param_stack_spill.c", 0),
     ("wide_string_literal_alignment.c", 0),
     ("va_arg_through_pointer.c", 0),
     ("pthread_key_once_width.c", 0),

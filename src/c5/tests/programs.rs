@@ -222,6 +222,14 @@ fn assign_expr_value_narrowed() {
 }
 
 #[test]
+fn local_array_runtime_nested_init() {
+    // C99 6.7.8: a multi-dimensional automatic array with non-constant
+    // element initializers (&local) inits per-element, recursing into
+    // nested braces with brace elision and zero-fill of omitted tails.
+    assert_eq!(run_fixture("local_array_runtime_nested_init.c"), 0);
+}
+
+#[test]
 fn global_addr_struct_member() {
     // C99 6.6: the address of a struct member / array element of a static
     // object is an address constant; the designator may chain members and

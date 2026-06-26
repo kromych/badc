@@ -798,7 +798,10 @@ impl Compiler {
                     }
                     let local_val = self.symbols[loc_idx].val;
                     let var_name = self.symbols[loc_idx].name.clone();
-                    self.emit_local_array_init_runtime(local_val, ty, final_size, &var_name)?;
+                    let inner = self.inner_dims_of(loc_idx);
+                    self.emit_local_array_init_runtime(
+                        local_val, ty, final_size, &inner, &var_name,
+                    )?;
                     return Ok(());
                 }
                 // Constant path: keep matching the legacy flow
@@ -954,10 +957,12 @@ impl Compiler {
                         self.data.push(0);
                     }
                     self.emit_local_array_init(local_val, zero_off, full_bytes);
+                    let inner = self.inner_dims_of(loc_idx);
                     self.emit_local_array_init_runtime(
                         local_val,
                         ty,
                         declared_array_size,
+                        &inner,
                         &var_name,
                     )?;
                     return Ok(());
@@ -1077,7 +1082,13 @@ impl Compiler {
                         self.data.push(0);
                     }
                     self.emit_local_array_init(slot, zero_off, full);
-                    self.emit_local_array_init_runtime(slot, elem_ty, count, "<compound literal>")?;
+                    self.emit_local_array_init_runtime(
+                        slot,
+                        elem_ty,
+                        count,
+                        &[],
+                        "<compound literal>",
+                    )?;
                 } else {
                     let elements = self.collect_array_initializer(elem_ty)?;
                     let (start, bytes) = self.pack_initializer_into_data(elem_ty, &elements);
@@ -1098,7 +1109,13 @@ impl Compiler {
                         self.data.push(0);
                     }
                     self.emit_local_array_init(slot, zero_off, full);
-                    self.emit_local_array_init_runtime(slot, elem_ty, count, "<compound literal>")?;
+                    self.emit_local_array_init_runtime(
+                        slot,
+                        elem_ty,
+                        count,
+                        &[],
+                        "<compound literal>",
+                    )?;
                 } else {
                     self.pending.init_target_array_size = count;
                     let elements = self.collect_array_initializer(elem_ty)?;
@@ -1351,58 +1368,73 @@ impl Compiler {
         &mut self,
         local_val: i64,
         ty: i64,
-        max: i64,
+        total_count: i64,
+        inner_dims: &[i64],
+        var_name: &str,
+    ) -> Result<(), C5Error> {
+        let elem_size = self.size_of_type(ty) as i64;
+        // Build the full dimension list, outermost first. `inner_dims`
+        // are the fixed inner dimensions (`array_dims[1..]`); the outer
+        // count is the total element count divided by their product (1
+        // for a one-dimensional array).
+        let inner_span: i64 = inner_dims.iter().product();
+        let outer = if inner_span > 0 {
+            total_count / inner_span
+        } else {
+            total_count
+        };
+        let mut dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
+        dims.push(outer.max(0));
+        dims.extend_from_slice(inner_dims);
+        self.fill_array_init_runtime(local_val, 0, &dims, ty, elem_size, var_name)
+    }
+
+    /// Parse one brace level of a runtime array initializer at byte
+    /// offset `base` within the local, recursing for each inner
+    /// dimension. C99 6.7.8: a nested `{ ... }` opens a sub-array;
+    /// brace elision (a value where a sub-array is expected) fills the
+    /// sub-array's leaves in row-major order. Omitted trailing
+    /// positions keep the zero seed the caller wrote (6.7.8p21). On
+    /// entry the current token is `{`; on return it is the token after
+    /// the matching `}`.
+    fn fill_array_init_runtime(
+        &mut self,
+        local_val: i64,
+        base: i64,
+        dims: &[i64],
+        ty: i64,
+        elem_size: i64,
         var_name: &str,
     ) -> Result<(), C5Error> {
         debug_assert!(self.lex.tk == '{');
         self.next()?; // consume `{`
-        let elem_size = self.size_of_type(ty) as i64;
+        let count = dims[0];
+        let sub_span: i64 = dims[1..].iter().product();
+        let sub_bytes = sub_span * elem_size;
         let mut i: i64 = 0;
         while self.lex.tk != '}' {
-            if i >= max {
+            if i >= count {
                 return Err(self.compile_err(format!(
                     "too many initializers for array `{}` (> {})",
-                    var_name, max
+                    var_name, count
                 )));
             }
-            // Compute &arr[i] = &arr[0] + i * elem_size.
-            self.emit_lea(local_val);
-            if i > 0 {
-                // Inline Psh + Imm + Add (the private
-                // emit_binop_with_imm helper) -- bumps the base
-                // address loaded by Lea by `i * elem_size` bytes.
-                self.ast_psh();
-                self.emit_imm(i * elem_size);
-                self.ast_binop(crate::c5::ir::BinOp::Add);
-            }
-            self.ast_psh();
-            // Parse the element expression at assignment
-            // precedence; the comma between elements is the
-            // delimiter, not a comma-expression operator.
-            self.expr(Token::Assign as i64)?;
-            // Capture the element's AST node for the matching
-            // `LocalInit::Runtime { elements: ... }` entry so the
-            // walker can emit one `store_local(offset, value)`
-            // per element.
-            let elem_ast = self.ast_acc;
-            // Float / double init into a non-float slot would
-            // need a conversion op here; today c5's only narrow
-            // FP storage is in struct fields (handled elsewhere),
-            // so the integer-store ops match the local slot
-            // width for every type we hit.
-            // The AST shape is the same regardless of element
-            // width or FP-vs-int -- `ast_assign` builds `Expr::Assign`
-            // on top of the lvalue + rvalue the parser already
-            // staged on the vstack. Walker downstream picks the
-            // matching store width from `field.ty`.
-            self.ast_assign();
-            if let Some(value) = elem_ast {
-                self.pending_local_runtime_elements
-                    .push(super::super::ast::RuntimeInitElement {
-                        offset: i * elem_size,
-                        value,
+            let off = base + i * sub_bytes;
+            if dims.len() > 1 {
+                if self.lex.tk == '{' {
+                    self.fill_array_init_runtime(
+                        local_val,
+                        off,
+                        &dims[1..],
                         ty,
-                    });
+                        elem_size,
+                        var_name,
+                    )?;
+                } else {
+                    self.fill_array_leaves_runtime(local_val, off, sub_span, ty, elem_size)?;
+                }
+            } else {
+                self.emit_array_leaf_runtime(local_val, off, ty)?;
             }
             i += 1;
             if self.lex.tk == ',' {
@@ -1410,6 +1442,64 @@ impl Compiler {
             }
         }
         self.next()?; // consume `}`
+        Ok(())
+    }
+
+    /// Fill up to `n` scalar leaves at consecutive offsets from `base`
+    /// (a brace-elided sub-array). Stops early at `}` -- the omitted
+    /// trailing positions keep the caller's zero seed (C99 6.7.8p21).
+    fn fill_array_leaves_runtime(
+        &mut self,
+        local_val: i64,
+        base: i64,
+        n: i64,
+        ty: i64,
+        elem_size: i64,
+    ) -> Result<(), C5Error> {
+        let mut k: i64 = 0;
+        while k < n {
+            if self.lex.tk == '}' {
+                break;
+            }
+            self.emit_array_leaf_runtime(local_val, base + k * elem_size, ty)?;
+            k += 1;
+            if k < n && self.lex.tk == ',' {
+                self.next()?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Emit one runtime scalar store of an array element:
+    /// `local[off] = expr`. The element value rides the parser vstack
+    /// (lvalue address + rvalue), captured as a `RuntimeInitElement`
+    /// the walker lowers to a single `store_local(off, value)`.
+    fn emit_array_leaf_runtime(
+        &mut self,
+        local_val: i64,
+        off: i64,
+        ty: i64,
+    ) -> Result<(), C5Error> {
+        self.emit_lea(local_val);
+        if off > 0 {
+            self.ast_psh();
+            self.emit_imm(off);
+            self.ast_binop(crate::c5::ir::BinOp::Add);
+        }
+        self.ast_psh();
+        // Assignment precedence: the comma between elements is the
+        // delimiter, not a comma-expression operator.
+        self.expr(Token::Assign as i64)?;
+        let elem_ast = self.ast_acc;
+        self.ast_assign();
+        if let Some(value) = elem_ast {
+            self.pending_local_runtime_elements
+                .push(super::super::ast::RuntimeInitElement {
+                    offset: off,
+                    value,
+                    ty,
+                });
+        }
         Ok(())
     }
 

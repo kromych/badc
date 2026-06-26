@@ -1280,6 +1280,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("fp_return_value.c", 0),
     ("global_addr_multidim_index.c", 0),
     ("global_addr_struct_member.c", 0),
+    ("local_array_runtime_nested_init.c", 0),
     ("many_fp_args.c", 0),
     ("fp_param_after_int_overflow.c", 0),
     ("float_double_mix.c", 0),

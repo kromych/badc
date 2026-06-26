@@ -242,6 +242,14 @@ fn nested_aggregate_brace_elision() {
 }
 
 #[test]
+fn const_addr_multidim_array_elem() {
+    // The address of a multi-dimensional array element in a pointer-array
+    // initializer strides by the full dimension ladder, not the leaf
+    // element size (C99 6.6 / 6.5.2.1p2).
+    assert_eq!(run_fixture("const_addr_multidim_array_elem.c"), 0);
+}
+
+#[test]
 fn inline_two_reg_struct_param() {
     // A 16-byte all-integer struct parameter inlines: the splice
     // redirects the body's parameter-slot reads to the caller's argument.

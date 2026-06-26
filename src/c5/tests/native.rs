@@ -410,6 +410,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unary_plus_preserves_type.c", 0),
     ("local_multidim_aggregate_array_init.c", 0),
     ("nested_aggregate_brace_elision.c", 0),
+    ("const_addr_multidim_array_elem.c", 0),
     ("return_void_expression.c", 0),
     ("macro_operators.c", 0),
     ("typedef_basic.c", 0),

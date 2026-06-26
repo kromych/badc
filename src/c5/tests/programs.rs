@@ -192,6 +192,13 @@ fn fp_param_float_before_double() {
 }
 
 #[test]
+fn struct_copy_comma_side_effect() {
+    // C99 6.5.17: a struct copy as the discarded left operand of a comma,
+    // nested in an enclosing assignment to a global, must still execute.
+    assert_eq!(run_fixture("struct_copy_comma_side_effect.c"), 0);
+}
+
+#[test]
 fn assign_expr_value_narrowed() {
     // C99 6.5.16p3: a narrowing integer assignment used as a value
     // yields the converted (narrowed) left-operand value, not the raw

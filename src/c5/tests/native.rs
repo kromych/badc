@@ -402,6 +402,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_paren_init.c", 0),
     ("alignof_operator.c", 0),
     ("assign_expr_value_narrowed.c", 0),
+    ("struct_copy_comma_side_effect.c", 0),
     ("return_void_expression.c", 0),
     ("macro_operators.c", 0),
     ("typedef_basic.c", 0),

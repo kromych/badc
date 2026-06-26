@@ -1497,11 +1497,20 @@ fn emit_prologue(
         if n_stack > 0 {
             let overflow_bytes = (n_stack as u32) * 16;
             emit_sub_sp_imm(code, overflow_bytes);
-            for i in 0..n_stack {
-                let host_off = (i as u32) * 8 + overflow_bytes;
-                let c5_off = (i as u32) * 16;
-                emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
-                emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
+            // Each scalar stack parameter's incoming offset is the
+            // planner's placement offset, which accounts for any by-value
+            // aggregate stack parameter (StructStack) that precedes it. A
+            // plain index assumes an 8-byte stride and would read an
+            // aggregate's bytes instead of the scalar.
+            let mut slot_i = 0u32;
+            for p in &placements {
+                if let super::ArgPlacement::Stack(off) = p {
+                    let host_off = *off + overflow_bytes;
+                    let c5_off = slot_i * 16;
+                    emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
+                    emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
+                    slot_i += 1;
+                }
             }
         }
         let mut seeded_params: alloc::collections::BTreeSet<u32> =
@@ -6324,6 +6333,47 @@ fn marshal_args(
         }
     }
 
+    // Aggregates passed on the caller's stack (AAPCS64 5.4.2): copy the
+    // source bytes to [sp + off] here, before the register-argument
+    // marshal below. The source address is read from a value register
+    // that the register marshal can overwrite, so it must be consumed
+    // while still live; x16/x17 are scratch and hold no argument value
+    // at this point.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::StructStack { off, size } = placement {
+            let src = match materialize_int_shifted(
+                code,
+                arg_place(i),
+                scratch.primary,
+                frame,
+                plan.scratch_bytes,
+            ) {
+                Some(r) => r,
+                None => return false,
+            };
+            if src.0 != scratch.primary.0 {
+                emit_mov_reg(code, scratch.primary, src);
+            }
+            let mut copied = 0u32;
+            while copied + 8 <= size {
+                emit(
+                    code,
+                    enc_ldr_imm(scratch.secondary, scratch.primary, copied),
+                );
+                emit(code, enc_str_imm(scratch.secondary, Reg(31), off + copied));
+                copied += 8;
+            }
+            while copied < size {
+                emit(
+                    code,
+                    enc_ldrb_imm(scratch.secondary, scratch.primary, copied),
+                );
+                emit(code, enc_strb_imm(scratch.secondary, Reg(31), off + copied));
+                copied += 1;
+            }
+        }
+    }
+
     // FP args before int args: an FP value can sit in an integer
     // register as a raw bit pattern (`Inst::Imm` with the f64 bit
     // pattern, allocator places it in an IntReg). The int marshal
@@ -6501,7 +6551,7 @@ fn marshal_args(
     // last, overwritten by its own eightbyte. Integer-only here
     // (homogeneous floating-point aggregates are excluded upstream),
     // so every eightbyte register is general-purpose.
-    for (i, &placement) in plan.placements.iter().enumerate() {
+    for &placement in plan.placements.iter() {
         match placement {
             // Integer-class aggregate: load the eightbytes from the base in
             // regs[0]. An HFA (regs[0] is an FP register) loaded above.
@@ -6514,41 +6564,6 @@ fn marshal_args(
                     );
                 }
                 emit(code, enc_ldr_imm(Reg(base), Reg(base), 0));
-            }
-            super::ArgPlacement::StructStack { off, size } => {
-                let ap = arg_place(i);
-                let src = match materialize_int_shifted(
-                    code,
-                    ap,
-                    scratch.primary,
-                    frame,
-                    plan.scratch_bytes,
-                ) {
-                    Some(r) => r,
-                    None => return false,
-                };
-                if src.0 != scratch.primary.0 {
-                    emit_mov_reg(code, scratch.primary, src);
-                }
-                // Copy `size` bytes from [scratch.primary] to
-                // [sp + off] in 8-byte words plus a sub-word tail.
-                let mut copied = 0u32;
-                while copied + 8 <= size {
-                    emit(
-                        code,
-                        enc_ldr_imm(scratch.secondary, scratch.primary, copied),
-                    );
-                    emit(code, enc_str_imm(scratch.secondary, Reg(31), off + copied));
-                    copied += 8;
-                }
-                while copied < size {
-                    emit(
-                        code,
-                        enc_ldrb_imm(scratch.secondary, scratch.primary, copied),
-                    );
-                    emit(code, enc_strb_imm(scratch.secondary, Reg(31), off + copied));
-                    copied += 1;
-                }
             }
             super::ArgPlacement::StructByRefReg(_) | super::ArgPlacement::StructByRefStack(_) => {
                 // Not produced for AAPCS64 in this phase: >16-byte

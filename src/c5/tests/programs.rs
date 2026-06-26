@@ -200,6 +200,24 @@ fn struct_param_stack_spill() {
 }
 
 #[test]
+fn struct_stack_arg_then_scalar() {
+    // A by-value 16-byte struct overflowing to the stack argument area
+    // followed by a trailing scalar stack argument: the caller copies the
+    // struct before the register marshal clobbers its source address, and
+    // the callee reads the scalar from the incoming offset past the
+    // struct (AAPCS64 5.4.2).
+    assert_eq!(run_fixture("struct_stack_arg_then_scalar.c"), 0);
+}
+
+#[test]
+fn mixed_struct_gpr_abi() {
+    // A non-homogeneous aggregate no larger than 16 bytes with a
+    // floating-point member passes in general registers (AAPCS64 5.4.2
+    // C.10), not by reference.
+    assert_eq!(run_fixture("mixed_struct_gpr_abi.c"), 0);
+}
+
+#[test]
 fn inline_two_reg_struct_param() {
     // A 16-byte all-integer struct parameter inlines: the splice
     // redirects the body's parameter-slot reads to the caller's argument.

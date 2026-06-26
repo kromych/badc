@@ -441,12 +441,22 @@ impl Compiler {
             } else {
                 1
             };
+            // Per-subscript byte stride, outermost first. A multi-
+            // dimensional array `T a[D0][D1]...[Dk]` records its full
+            // dimension list in `array_dims`; the stride at subscript
+            // level `i` is `product(array_dims[i+1..]) * sizeof(T)`, so
+            // the first index strides over whole sub-arrays and the
+            // innermost over elements (C99 6.5.2.1p2). A 1D array leaves
+            // `array_dims` empty and uses the single `elem_size` stride.
+            let dims = self.symbols[target_idx].array_dims.clone();
             self.next()?;
-            // Optional `[const_expr]` -- `&array[N]` and
-            // `&array[N+M]` etc. The constant-expression evaluator
-            // handles `+`, `-`, `*`, parens, `Token::Num`-class
-            // identifiers (enum / `#define`d constants).
-            if self.lex.tk == Token::Brak {
+            // Optional `[const_expr]...` -- `&array[N]`, `&array[N+M]`,
+            // and multi-dimensional `&array[I][J]`. The constant-
+            // expression evaluator handles `+`, `-`, `*`, parens, and
+            // `Token::Num`-class identifiers (enum / `#define`d
+            // constants).
+            let mut level = 0usize;
+            while self.lex.tk == Token::Brak {
                 self.next()?;
                 let n = self.parse_constant_int()?;
                 if self.lex.tk != ']' {
@@ -459,7 +469,13 @@ impl Compiler {
                     ));
                 }
                 self.next()?;
-                target_offset += n * elem_size;
+                let stride = if level < dims.len() {
+                    dims[level + 1..].iter().product::<i64>() * elem_size
+                } else {
+                    elem_size
+                };
+                target_offset += n * stride;
+                level += 1;
             }
             // A target defined in another translation unit (`extern T g;`
             // with no definition here) is resolved by name at link time;

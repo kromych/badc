@@ -192,6 +192,14 @@ fn fp_param_float_before_double() {
 }
 
 #[test]
+fn global_addr_multidim_index() {
+    // The address of a multi-dimensional array element is an address
+    // constant; each subscript level strides by the product of the inner
+    // dimensions times the element size (C99 6.6).
+    assert_eq!(run_fixture("global_addr_multidim_index.c"), 0);
+}
+
+#[test]
 fn struct_array_init_from_lvalue() {
     // An array-of-struct element initialized by a compatible struct
     // expression copies the whole object (C99 6.7.9p13).

@@ -764,6 +764,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("fp_param_float_before_double.c", 0),
     ("float_arg_single_precision.c", 0),
     ("fp_return_value.c", 0),
+    ("global_addr_multidim_index.c", 0),
     ("many_fp_args.c", 0),
     ("fp_param_after_int_overflow.c", 0),
     ("float_double_mix.c", 0),

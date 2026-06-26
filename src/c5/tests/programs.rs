@@ -185,6 +185,13 @@ fn fp_const_return() {
 }
 
 #[test]
+fn fp_param_float_before_double() {
+    // A float parameter ahead of a double in the FP argument bank must not
+    // be clobbered when the parameters are materialized at entry.
+    assert_eq!(run_fixture("fp_param_float_before_double.c"), 0);
+}
+
+#[test]
 fn struct_array_init_from_lvalue() {
     // An array-of-struct element initialized by a compatible struct
     // expression copies the whole object (C99 6.7.9p13).

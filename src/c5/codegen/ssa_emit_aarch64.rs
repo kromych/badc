@@ -781,6 +781,50 @@ pub(super) fn emit_function(
         }
     }
 
+    // Floating-point parameters: the same parallel-copy hazard applies in
+    // the FP bank when one parameter's home d-register is a later
+    // parameter's incoming argument register -- the per-inst `fmov dst,
+    // arg` then clobbers that source before it is read. Schedule the FP
+    // parameters as an FP parallel copy with d16 / d17 cycle-breaking
+    // (mirroring the integer batch); the per-inst path handles any not
+    // placed here (stack-passed, dead, or a non-permutation home set).
+    {
+        let param_plan = param_placements(func, abi);
+        let mut fp_moves: Vec<(Place, Place)> = Vec::new();
+        let mut fp_vids: Vec<usize> = Vec::new();
+        let mut fp_homes: Vec<Place> = Vec::new();
+        for (vid, inst) in func.insts.iter().enumerate() {
+            let Inst::ParamRef { idx, kind } = inst else {
+                continue;
+            };
+            if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                continue;
+            }
+            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+                continue;
+            }
+            let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
+            if !matches!(dst, Place::FpReg(_) | Place::Spill(_)) {
+                continue;
+            }
+            let i = *idx as usize;
+            let Some(super::ArgPlacement::FpReg(src)) = param_plan.get(i).copied() else {
+                continue;
+            };
+            fp_moves.push((Place::FpReg(src), dst));
+            fp_vids.push(vid);
+            fp_homes.push(dst);
+        }
+        let homes_distinct = (0..fp_homes.len())
+            .all(|a| ((a + 1)..fp_homes.len()).all(|b| !place_same_loc(fp_homes[a], fp_homes[b])));
+        if !fp_moves.is_empty() && homes_distinct {
+            schedule_fp_place_moves(code, &mut fp_moves, frame, 17, 16);
+            for vid in fp_vids {
+                param_prebatched[vid] = true;
+            }
+        }
+    }
+
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
     // GCC `&&label`: each `Inst::BlockAddr` emits an `ADR rd, .`

@@ -1604,16 +1604,37 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // point a later integer ParamRef at the wrong arg register -- one an
     // earlier integer parameter actually arrives in -- reintroducing the
     // very cross-clobber this pass exists to remove.
+    // Floating-point parameters arrive in the FP argument bank and the
+    // same cross-clobber hazard applies there; hint each FP parameter to
+    // its own incoming FP argument register (by its rank within the FP
+    // bank, which on every supported target is the d/xmm index). The FP
+    // banks: AAPCS64 d0-d7, System V xmm0-7, Win64 xmm0-3.
+    let fp_args: &[u8] = match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 | Target::LinuxX64 => {
+            &[0, 1, 2, 3, 4, 5, 6, 7]
+        }
+        Target::WindowsX64 => &[0, 1, 2, 3],
+    };
     for (idx, inst) in func.insts.iter().enumerate() {
         if let Inst::ParamRef { idx: i, .. } = inst {
             let pi = *i as usize;
-            if (func.param_fp_mask & (1u32 << pi)) != 0 {
-                continue;
-            }
-            let int_rank = (0..pi)
-                .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
-                .count();
-            if let Some(&r) = int_args.get(int_rank)
+            let is_fp = (func.param_fp_mask & (1u32 << pi)) != 0;
+            let (rank, bank): (usize, &[u8]) = if is_fp {
+                (
+                    (0..pi)
+                        .filter(|&j| (func.param_fp_mask & (1u32 << j)) != 0)
+                        .count(),
+                    fp_args,
+                )
+            } else {
+                (
+                    (0..pi)
+                        .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
+                        .count(),
+                    int_args,
+                )
+            };
+            if let Some(&r) = bank.get(rank)
                 && idx < hints.len()
                 && hints[idx].is_none()
             {

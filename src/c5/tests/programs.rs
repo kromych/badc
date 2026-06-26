@@ -250,6 +250,14 @@ fn const_addr_multidim_array_elem() {
 }
 
 #[test]
+fn unsigned_signed_relational_compare() {
+    // A relational comparison whose common type is unsigned and narrower
+    // than the register masks a sign-extended signed operand to the common
+    // width so the unsigned compare is correct (C99 6.3.1.8).
+    assert_eq!(run_fixture("unsigned_signed_relational_compare.c"), 0);
+}
+
+#[test]
 fn inline_two_reg_struct_param() {
     // A 16-byte all-integer struct parameter inlines: the splice
     // redirects the body's parameter-slot reads to the caller's argument.

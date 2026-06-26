@@ -77,6 +77,7 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	add	x1, x1, x2
                	asr	x1, x1, #3
+               	mov	w1, w1
                	cmp	x0, x1
                	b.hs	<addr>
                	b	<addr>

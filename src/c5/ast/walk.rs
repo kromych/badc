@@ -1451,6 +1451,42 @@ impl<'a> Walker<'a> {
                 let op = &op_remapped;
                 let mask = unsigned_narrow_mask(*ty);
                 let needs_divmod_mask = mask != 0 && matches!(*op, BinOp::Divu | BinOp::Modu);
+                // An unsigned relational compare at a common type narrower
+                // than the register where one operand is signed: the signed
+                // operand carries its sign-extended high bits in the 64-bit
+                // register, but C99 6.3.1.8 converts it to the unsigned
+                // common type (zero-extended), so those bits must be cleared
+                // or the unsigned compare reads a huge value. The common
+                // type is unsigned (the front end picked the U-op) and
+                // 4-byte unless an operand is 8 bytes, in which case the
+                // value already fills the register. Two unsigned operands
+                // are already zero-extended and need no mask. Mask both
+                // operands to the common width.
+                let cmp_mask = if matches!(*op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge) {
+                    // An operand carries sign-extended high bits only when it
+                    // is signed and not a non-negative literal: an unsigned
+                    // operand is zero-extended, and a non-negative constant
+                    // has no high bits set. The latter keeps the common
+                    // `unsigned < positive-literal` loop test on the
+                    // immediate path.
+                    let needs = |id: ExprId, this: &Self| -> (bool, usize) {
+                        let e = this.ast.expr(id);
+                        let ty = expr_ty(e);
+                        let sz = ty.map_or(8, |t| type_size_bytes(t, this.target));
+                        let signed = ty.is_some_and(|t| t & UNSIGNED_BIT == 0);
+                        let nonneg_lit = matches!(e, Expr::IntLit { val, .. } if *val >= 0);
+                        (signed && !nonneg_lit, sz)
+                    };
+                    let (l_needs, lsz) = needs(*lhs, self);
+                    let (r_needs, rsz) = needs(*rhs, self);
+                    if lsz <= 4 && rsz <= 4 && (l_needs || r_needs) {
+                        0xffff_ffffi64
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
                 // Constant-rhs short-circuit: when the AST rhs is
                 // an integer literal and the per-arch BinopI
                 // lowering covers `*op`, route through
@@ -1484,6 +1520,9 @@ impl<'a> Walker<'a> {
                         | BinOp::Ule
                         | BinOp::Uge
                 );
+                // Operands that need masking take the register path so the
+                // mask below applies; the immediate fast paths skip it.
+                let imm_safe_op = imm_safe_op && cmp_mask == 0;
                 // C99 6.6: a constant expression evaluates at
                 // translation time. The parser doesn't fold the
                 // synthesised pointer-arithmetic scaling
@@ -1615,9 +1654,10 @@ impl<'a> Walker<'a> {
                 // half in the 64-bit register; without the mask,
                 // `udiv` / `umod` operate on the wider pattern
                 // and produce the wrong order of magnitude.
-                if needs_divmod_mask {
-                    lv = b.binop_imm(BinOp::And, lv, mask);
-                    rv = b.binop_imm(BinOp::And, rv, mask);
+                if needs_divmod_mask || cmp_mask != 0 {
+                    let m = if needs_divmod_mask { mask } else { cmp_mask };
+                    lv = b.binop_imm(BinOp::And, lv, m);
+                    rv = b.binop_imm(BinOp::And, rv, m);
                 }
                 // Strength-reduce divide / modulo by a constant power of
                 // two to shifts / masks. This is the only constant-

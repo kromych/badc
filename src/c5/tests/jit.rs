@@ -1104,6 +1104,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("local_multidim_aggregate_array_init.c", 0),
     ("nested_aggregate_brace_elision.c", 0),
     ("const_addr_multidim_array_elem.c", 0),
+    ("unsigned_signed_relational_compare.c", 0),
     ("wide_string_literal_alignment.c", 0),
     ("va_arg_through_pointer.c", 0),
     ("pthread_key_once_width.c", 0),

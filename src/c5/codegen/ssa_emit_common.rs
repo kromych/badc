@@ -95,6 +95,32 @@ pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Pl
     }
 }
 
+/// Resolve each call argument's aggregate descriptor to its ABI classification
+/// for the marshalling pass. Empty when no argument is an aggregate.
+pub(super) fn build_arg_aggs(
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
+    abi: super::Abi,
+) -> alloc::vec::Vec<Option<super::ArgAgg>> {
+    if arg_aggs.iter().all(Option::is_none) {
+        return alloc::vec::Vec::new();
+    }
+    arg_aggs
+        .iter()
+        .map(|o| {
+            o.map(|idx| {
+                let d = &agg_descs[idx as usize];
+                super::ArgAgg {
+                    class: super::abi_classify::classify_aggregate(
+                        d.size, d.align, &d.fields, abi, false,
+                    ),
+                    size: d.size,
+                }
+            })
+        })
+        .collect()
+}
+
 /// Whether per-pass wall-clock instrumentation is enabled. The
 /// `BADC_TIME_PASSES` environment variable is consulted only under the
 /// `codegen_test` feature; a production build always reports `false`

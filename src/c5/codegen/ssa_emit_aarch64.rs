@@ -62,7 +62,7 @@ use super::aarch64::{
     load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::{Frame, place_same_loc};
+use super::ssa_emit_common::{Frame, build_arg_aggs, place_same_loc};
 
 /// Compute the aarch64 stack-frame layout for `func`. Fills the shared
 /// [`Frame`]'s aarch64 fields; the x86_64-only fields stay at their defaults.
@@ -3508,35 +3508,6 @@ fn target_for_ext(abi: super::Abi) -> Target {
 /// placeholder, and records a `Fixup::Bl` for the outer fixup
 /// pass to resolve. Result lands in x0; the SSA emit moves it to
 /// the inst's `dst` if needed.
-#[allow(clippy::too_many_arguments)]
-/// Build the per-argument aggregate classification slice the
-/// struct-aware planner consumes: `arg_aggs[k] = Some(i)` resolves
-/// to `agg_descs[i]` classified for `abi`. Returns an empty vector
-/// when no argument is an aggregate (the scalar fast path).
-fn build_arg_aggs(
-    arg_aggs: &[Option<u32>],
-    agg_descs: &[super::super::ir::AggDesc],
-    abi: super::Abi,
-) -> Vec<Option<super::ArgAgg>> {
-    if arg_aggs.iter().all(Option::is_none) {
-        return Vec::new();
-    }
-    arg_aggs
-        .iter()
-        .map(|o| {
-            o.map(|idx| {
-                let d = &agg_descs[idx as usize];
-                super::ArgAgg {
-                    class: super::abi_classify::classify_aggregate(
-                        d.size, d.align, &d.fields, abi, false,
-                    ),
-                    size: d.size,
-                }
-            })
-        })
-        .collect()
-}
-
 #[allow(clippy::too_many_arguments)]
 fn emit_call(
     code: &mut Vec<u8>,

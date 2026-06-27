@@ -45,7 +45,7 @@ use super::DataFixup;
 use super::GotFixup;
 use super::Target;
 use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::{Frame, place_same_loc};
+use super::ssa_emit_common::{Frame, build_arg_aggs, place_same_loc};
 use super::x86_64::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
     emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
@@ -1296,30 +1296,6 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>) {
 /// Resolve a call's `arg_aggs` indices into the `ArgAgg` vector the
 /// struct-aware planner consumes; empty when the call passes no
 /// aggregate by value.
-fn build_arg_aggs(
-    arg_aggs: &[Option<u32>],
-    agg_descs: &[super::super::ir::AggDesc],
-    abi: super::Abi,
-) -> Vec<Option<super::ArgAgg>> {
-    if arg_aggs.iter().all(Option::is_none) {
-        return Vec::new();
-    }
-    arg_aggs
-        .iter()
-        .map(|o| {
-            o.map(|idx| {
-                let d = &agg_descs[idx as usize];
-                super::ArgAgg {
-                    class: super::abi_classify::classify_aggregate(
-                        d.size, d.align, &d.fields, abi, false,
-                    ),
-                    size: d.size,
-                }
-            })
-        })
-        .collect()
-}
-
 fn marshal_args(
     code: &mut Vec<u8>,
     plan: &super::CallPlan,

@@ -95,6 +95,52 @@ pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Pl
     }
 }
 
+/// Per-backend encoding leaves the shared emit helpers dispatch through, so a
+/// helper carries the instruction-selection structure once and the backend
+/// supplies the target-specific register/memory transfers. Leaves take raw
+/// register numbers; each backend wraps them in its own register newtype.
+/// Grows as more emit families adopt it.
+pub(super) trait EmitBackend {
+    /// Copy one FP/vector register to another (`dst <- src`).
+    fn fp_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
+    /// Store FP register `src` to spill slot `slot`.
+    fn fp_spill_store(&self, code: &mut alloc::vec::Vec<u8>, frame: Frame, slot: u32, src: u8);
+    /// Load FP register `dst` from spill slot `slot`.
+    fn fp_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Frame, slot: u32, dst: u8);
+}
+
+/// Stateless backend selectors. The per-target leaf implementations live in the
+/// respective emitter modules; the shared generic helpers dispatch through one
+/// of these.
+pub(super) struct X64Backend;
+pub(super) struct Aarch64Backend;
+
+/// Emit a resolved FP location-to-location move. The four source/target
+/// combinations are shared; the backend supplies the register and spill-slot
+/// transfers. `stage` carries the value for a spill-to-spill move.
+pub(super) fn emit_fp_place_move<B: EmitBackend>(
+    b: &B,
+    code: &mut alloc::vec::Vec<u8>,
+    src: super::ssa_alloc::Place,
+    dst: super::ssa_alloc::Place,
+    frame: Frame,
+    stage: u8,
+) {
+    use super::ssa_alloc::Place;
+    match (src, dst) {
+        (Place::FpReg(s), Place::FpReg(t)) => b.fp_reg_mov(code, t, s),
+        (Place::FpReg(s), Place::Spill(slot)) => b.fp_spill_store(code, frame, slot, s),
+        (Place::Spill(slot), Place::FpReg(t)) => b.fp_spill_load(code, frame, slot, t),
+        (Place::Spill(ss), Place::Spill(ts)) => {
+            b.fp_spill_load(code, frame, ss, stage);
+            b.fp_spill_store(code, frame, ts, stage);
+        }
+        // Integer and None locations never reach here: an FP phi edge is
+        // FP-classed on both ends.
+        _ => {}
+    }
+}
+
 /// Sequentialize a set of parallel register moves `(src, dst)` (raw register
 /// numbers), breaking any cycle through `scratch`. A move whose target is no
 /// longer a pending source is emitted first; when only a cycle remains, one

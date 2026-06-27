@@ -6034,24 +6034,17 @@ fn schedule_place_moves(
 /// spill-to-spill case (load then store); it must lie outside the
 /// allocator's FP pool. `IntReg` and `None` places never reach here
 /// (an FP phi's home and its operands are FP-classed).
-fn emit_fp_place_move(code: &mut Vec<u8>, src: Place, dst: Place, frame: Frame, stage_d: u8) {
-    match (src, dst) {
-        (Place::FpReg(s), Place::FpReg(t)) => emit(code, super::aarch64::enc_fmov_d_d(t, s)),
-        (Place::FpReg(s), Place::Spill(slot)) => {
-            // FP phi moves keep all values in d-regs, so the GPR scratch
-            // x16 is free to carry the base for out-of-reach slots.
-            emit_sp_str_d_auto(code, s, spill_off(frame, slot));
-        }
-        (Place::Spill(slot), Place::FpReg(t)) => {
-            emit_sp_ldr_d_auto(code, t, spill_off(frame, slot));
-        }
-        (Place::Spill(ss), Place::Spill(ts)) => {
-            emit_sp_ldr_d_auto(code, stage_d, spill_off(frame, ss));
-            emit_sp_str_d_auto(code, stage_d, spill_off(frame, ts));
-        }
-        // Integer and None locations never reach here: an FP phi edge
-        // is FP-classed on both ends.
-        _ => {}
+impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Backend {
+    fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        emit(code, super::aarch64::enc_fmov_d_d(dst, src));
+    }
+    fn fp_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+        // FP phi moves keep all values in d-regs, so the GPR scratch x16 is
+        // free to carry the base for out-of-reach slots.
+        emit_sp_str_d_auto(code, src, spill_off(frame, slot));
+    }
+    fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+        emit_sp_ldr_d_auto(code, dst, spill_off(frame, slot));
     }
 }
 
@@ -6077,7 +6070,14 @@ fn schedule_fp_place_moves(
             let (s, t) = moves[i];
             let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
             if !tgt_still_a_source {
-                emit_fp_place_move(code, s, t, frame, stage_d);
+                super::ssa_emit_common::emit_fp_place_move(
+                    &super::ssa_emit_common::Aarch64Backend,
+                    code,
+                    s,
+                    t,
+                    frame,
+                    stage_d,
+                );
                 moves.swap_remove(i);
                 progress = true;
             } else {
@@ -6096,7 +6096,14 @@ fn schedule_fp_place_moves(
             // spill reload). `materialize_fp` is unsuitable: for an
             // `FpReg` source it returns the register without emitting,
             // leaving `hold_d` unloaded.
-            emit_fp_place_move(code, cyc, Place::FpReg(hold_d), frame, stage_d);
+            super::ssa_emit_common::emit_fp_place_move(
+                &super::ssa_emit_common::Aarch64Backend,
+                code,
+                cyc,
+                Place::FpReg(hold_d),
+                frame,
+                stage_d,
+            );
             for m in moves.iter_mut() {
                 if place_same_loc(m.0, cyc) {
                     m.0 = Place::FpReg(hold_d);

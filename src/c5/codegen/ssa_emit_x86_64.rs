@@ -988,7 +988,14 @@ fn emit_phi_predecessor_moves(
         // FP phi edges: xmm14 / xmm15 are reserved scratch outside the
         // allocator's xmm pool, so they hold no live FP value across
         // the terminator.
-        schedule_fp_place_moves(code, &mut fp_moves, frame, SCRATCH_XMM15, SCRATCH_XMM14);
+        super::ssa_emit_common::schedule_fp_place_moves(
+            &super::ssa_emit_common::X64Backend,
+            code,
+            &mut fp_moves,
+            frame,
+            SCRATCH_XMM15.0,
+            SCRATCH_XMM14.0,
+        );
     }
     true
 }
@@ -1156,64 +1163,6 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend 
 /// then break a residual cycle by holding one cycle source in `hold`.
 /// `hold` and `stage` must lie outside the allocator's xmm pool so
 /// they collide with no pending source or destination.
-fn schedule_fp_place_moves(
-    code: &mut Vec<u8>,
-    moves: &mut Vec<(Place, Place)>,
-    frame: Frame,
-    hold: Reg,
-    stage: Reg,
-) {
-    moves.retain(|(s, t)| !place_same_loc(*s, *t));
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
-            if !tgt_still_a_source {
-                super::ssa_emit_common::emit_fp_place_move(
-                    &super::ssa_emit_common::X64Backend,
-                    code,
-                    s,
-                    t,
-                    frame,
-                    stage.0,
-                );
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            // Only cycle members remain. Save one cycle source into
-            // the `hold` xmm and redirect every move that reads it.
-            let cyc = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|s| !place_same_loc(*s, Place::FpReg(hold.0)))
-                .unwrap_or(moves[0].0);
-            // Copy the cycle source into `hold` (a register move or a
-            // spill reload). `materialize_fp` is unsuitable: for an
-            // `FpReg` source it returns the register without emitting,
-            // leaving `hold` unloaded.
-            super::ssa_emit_common::emit_fp_place_move(
-                &super::ssa_emit_common::X64Backend,
-                code,
-                cyc,
-                Place::FpReg(hold.0),
-                frame,
-                stage.0,
-            );
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, cyc) {
-                    m.0 = Place::FpReg(hold.0);
-                }
-            }
-        }
-    }
-}
-
 fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>) {
     moves.retain(|(s, t)| s != t);
     while !moves.is_empty() {

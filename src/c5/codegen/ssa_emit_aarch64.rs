@@ -749,7 +749,14 @@ pub(super) fn emit_function(
         let homes_distinct = (0..fp_homes.len())
             .all(|a| ((a + 1)..fp_homes.len()).all(|b| !place_same_loc(fp_homes[a], fp_homes[b])));
         if !fp_moves.is_empty() && homes_distinct {
-            schedule_fp_place_moves(code, &mut fp_moves, frame, 17, 16);
+            super::ssa_emit_common::schedule_fp_place_moves(
+                &super::ssa_emit_common::Aarch64Backend,
+                code,
+                &mut fp_moves,
+                frame,
+                17,
+                16,
+            );
             for vid in fp_vids {
                 param_prebatched[vid] = true;
             }
@@ -5924,7 +5931,14 @@ fn emit_phi_predecessor_moves(
         // FP phi edges: d16 / d17 are reserved scratch outside the
         // allocator's d-register pool (d0..d15), so they hold no live
         // FP value across the terminator.
-        schedule_fp_place_moves(code, &mut fp_moves, frame, 17, 16);
+        super::ssa_emit_common::schedule_fp_place_moves(
+            &super::ssa_emit_common::Aarch64Backend,
+            code,
+            &mut fp_moves,
+            frame,
+            17,
+            16,
+        );
     }
     true
 }
@@ -6054,71 +6068,6 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Back
         // source, so the store borrows `hold` via a stack save/restore when
         // the destination slot is out of reach.
         emit_sp_str_x_borrow(code, Reg(stage), spill_off(frame, dst), Reg(hold));
-    }
-}
-
-/// Sequentialize a parallel copy over FP locations (d-registers and
-/// stack spill slots) for FP-classed phi predecessor moves. Mirrors
-/// [`schedule_place_moves`] with `fmov d, d` / `ldr d` / `str d`:
-/// leaves first, then break a residual cycle by holding one cycle
-/// source in `hold_d`. `hold_d` and `stage_d` must lie outside the
-/// allocator's FP pool so they collide with no pending source or
-/// destination.
-fn schedule_fp_place_moves(
-    code: &mut Vec<u8>,
-    moves: &mut Vec<(Place, Place)>,
-    frame: Frame,
-    hold_d: u8,
-    stage_d: u8,
-) {
-    moves.retain(|(s, t)| !place_same_loc(*s, *t));
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
-            if !tgt_still_a_source {
-                super::ssa_emit_common::emit_fp_place_move(
-                    &super::ssa_emit_common::Aarch64Backend,
-                    code,
-                    s,
-                    t,
-                    frame,
-                    stage_d,
-                );
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            // Only cycle members remain. Save one cycle source into
-            // the `hold_d` d-reg and redirect every move that reads it.
-            let cyc = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|s| !place_same_loc(*s, Place::FpReg(hold_d)))
-                .unwrap_or(moves[0].0);
-            // Copy the cycle source into `hold_d` (a register move or a
-            // spill reload). `materialize_fp` is unsuitable: for an
-            // `FpReg` source it returns the register without emitting,
-            // leaving `hold_d` unloaded.
-            super::ssa_emit_common::emit_fp_place_move(
-                &super::ssa_emit_common::Aarch64Backend,
-                code,
-                cyc,
-                Place::FpReg(hold_d),
-                frame,
-                stage_d,
-            );
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, cyc) {
-                    m.0 = Place::FpReg(hold_d);
-                }
-            }
-        }
     }
 }
 

@@ -192,6 +192,51 @@ pub(super) fn emit_place_move<B: EmitBackend>(
     }
 }
 
+/// Sequentialize parallel FP location-to-location moves, breaking a cycle by
+/// staging one source through the `hold` register. Each move is emitted via
+/// [`emit_fp_place_move`]; `stage` backs a spill-to-spill transfer.
+pub(super) fn schedule_fp_place_moves<B: EmitBackend>(
+    b: &B,
+    code: &mut alloc::vec::Vec<u8>,
+    moves: &mut alloc::vec::Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)>,
+    frame: Frame,
+    hold: u8,
+    stage: u8,
+) {
+    use super::ssa_alloc::Place;
+    moves.retain(|(s, t)| !place_same_loc(*s, *t));
+    while !moves.is_empty() {
+        let mut progress = false;
+        let mut i = 0;
+        while i < moves.len() {
+            let (s, t) = moves[i];
+            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
+            if !tgt_still_a_source {
+                emit_fp_place_move(b, code, s, t, frame, stage);
+                moves.swap_remove(i);
+                progress = true;
+            } else {
+                i += 1;
+            }
+        }
+        if !progress {
+            // Only cycle members remain. Stage one cycle source into `hold` and
+            // redirect every move that reads it.
+            let cyc = moves
+                .iter()
+                .map(|(s, _)| *s)
+                .find(|s| !place_same_loc(*s, Place::FpReg(hold)))
+                .unwrap_or(moves[0].0);
+            emit_fp_place_move(b, code, cyc, Place::FpReg(hold), frame, stage);
+            for m in moves.iter_mut() {
+                if place_same_loc(m.0, cyc) {
+                    m.0 = Place::FpReg(hold);
+                }
+            }
+        }
+    }
+}
+
 /// Sequentialize a set of parallel register moves `(src, dst)` (raw register
 /// numbers), breaking any cycle through `scratch`. A move whose target is no
 /// longer a pending source is emitted first; when only a cycle remains, one

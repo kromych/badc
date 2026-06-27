@@ -62,7 +62,6 @@ use super::aarch64::{
     load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::EmitBackend;
 use super::ssa_emit_common::{Frame, build_arg_aggs, place_same_loc};
 
 /// Compute the aarch64 stack-frame layout for `func`. Fills the shared
@@ -1801,7 +1800,6 @@ fn emit_inst(
     let pending_func_fixups = &mut *cx.pending_func_fixups;
     let tls_index_fixups = &mut *cx.tls_index_fixups;
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
-    let b = super::ssa_emit_common::Aarch64Backend;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca; emit
@@ -1986,7 +1984,7 @@ fn emit_inst(
         // (it needs the local block_offsets table for its PC-relative
         // fixup), so it never reaches emit_inst.
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
-        Inst::Load { addr, disp, kind } => b.emit_load(
+        Inst::Load { addr, disp, kind } => emit_load(
             code,
             dst,
             *addr,
@@ -1995,37 +1993,44 @@ fn emit_inst(
             alloc.is_f32(v),
             alloc,
             frame,
+            scratch,
         ),
         Inst::Store {
             addr,
             disp,
             value,
             kind,
-        } => b.emit_store(code, dst, *addr, *disp, *value, *kind, alloc, frame),
+        } => emit_store(
+            code, dst, *addr, *disp, *value, *kind, alloc, frame, scratch,
+        ),
         Inst::LoadLocal { off, kind } => {
-            b.emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
+            emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, scratch)
         }
         Inst::StoreLocal { off, value, kind } => {
-            b.emit_store_local(code, dst, *off, *value, *kind, alloc, frame, func, abi)
+            emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch)
         }
         Inst::LoadIndexed {
             base,
             index,
             scale,
             kind,
-        } => b.emit_load_indexed(code, dst, *base, *index, *scale, *kind, alloc, frame),
+        } => emit_load_indexed(
+            code, dst, *base, *index, *scale, *kind, alloc, frame, scratch,
+        ),
         Inst::StoreIndexed {
             base,
             index,
             scale,
             value,
             kind,
-        } => b.emit_store_indexed(
-            code, dst, *base, *index, *scale, *value, *kind, alloc, frame,
+        } => emit_store_indexed(
+            code, dst, *base, *index, *scale, *value, *kind, alloc, frame, scratch,
         ),
-        Inst::Binop { op, lhs, rhs } => b.emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
+        Inst::Binop { op, lhs, rhs } => {
+            emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame, scratch)
+        }
         Inst::BinopI { op, lhs, rhs_imm } => {
-            b.emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
+            emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }
         Inst::Call {
             target_pc,
@@ -2037,7 +2042,7 @@ fn emit_inst(
             ret_agg,
             ret_slot_local,
             ..
-        } => b.emit_call(
+        } => emit_call(
             code,
             dst,
             *target_pc,
@@ -2045,15 +2050,16 @@ fn emit_inst(
             *fixed_args,
             alloc,
             frame,
+            scratch,
             abi,
             fixups,
             variadic_targets.contains(target_pc),
             *fp_return,
             *fp_arg_mask,
             arg_aggs,
+            &func.agg_descs,
             *ret_agg,
             *ret_slot_local,
-            func,
         ),
         Inst::CallExt {
             binding_idx,
@@ -2061,7 +2067,7 @@ fn emit_inst(
             fp_arg_mask,
             arg_aggs,
             ..
-        } => b.emit_call_ext(
+        } => emit_call_ext(
             code,
             dst,
             *binding_idx,
@@ -2069,12 +2075,13 @@ fn emit_inst(
             *fp_arg_mask,
             alloc,
             frame,
+            scratch,
             abi,
             target,
             plt_call_fixups,
             imports,
             arg_aggs,
-            func,
+            &func.agg_descs,
         ),
         Inst::CallIndirect {
             target,
@@ -2087,7 +2094,7 @@ fn emit_inst(
             ret_agg,
             ret_slot_local,
             ..
-        } => b.emit_call_indirect(
+        } => emit_call_indirect(
             code,
             dst,
             *target,
@@ -2096,31 +2103,32 @@ fn emit_inst(
             *fixed_args,
             alloc,
             frame,
+            scratch,
             abi,
             *fp_return,
             *fp_arg_mask,
             arg_aggs,
+            &func.agg_descs,
             *ret_agg,
             *ret_slot_local,
-            func,
         ),
         Inst::Mcpy {
             dst: d,
             src: s,
             size,
-        } => b.emit_mcpy(code, dst, *d, *s, *size, alloc, frame),
+        } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame, scratch),
         Inst::AtomicRmw {
             op,
             addr,
             value,
             width,
-        } => b.emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame),
+        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame, scratch),
         Inst::AtomicCas {
             addr,
             expected_addr,
             desired,
             width,
-        } => b.emit_atomic_cas(
+        } => emit_atomic_cas(
             code,
             dst,
             *addr,
@@ -2129,17 +2137,19 @@ fn emit_inst(
             *width,
             alloc,
             frame,
+            scratch,
         ),
-        Inst::Intrinsic { kind, args } => b.emit_intrinsic(
+        Inst::Intrinsic { kind, args } => emit_intrinsic(
             code,
+            func,
+            abi,
             *kind,
             args,
             dst,
             v,
-            func,
             alloc,
             frame,
-            abi,
+            scratch,
             *current_alloca_top,
         ),
         Inst::Fneg(src) => {
@@ -5900,7 +5910,6 @@ fn schedule_place_moves(
 /// allocator's FP pool. `IntReg` and `None` places never reach here
 /// (an FP phi's home and its operands are FP-classed).
 impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Backend {
-    type Fixup = Fixup;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit(code, super::aarch64::enc_fmov_d_d(dst, src));
     }
@@ -5968,385 +5977,6 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Back
                 m.0 = Place::IntReg(hold);
             }
         }
-    }
-    fn emit_load(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        addr: u32,
-        disp: i32,
-        kind: LoadKind,
-        keep_f32: bool,
-        alloc: &Allocation,
-        frame: Frame,
-    ) -> bool {
-        emit_load(
-            code,
-            dst,
-            addr,
-            disp,
-            kind,
-            keep_f32,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_load_indexed(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        base: u32,
-        index: u32,
-        scale: u8,
-        kind: LoadKind,
-        alloc: &Allocation,
-        frame: Frame,
-    ) -> bool {
-        emit_load_indexed(
-            code,
-            dst,
-            base,
-            index,
-            scale,
-            kind,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_store_indexed(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        base: u32,
-        index: u32,
-        scale: u8,
-        value: u32,
-        kind: StoreKind,
-        alloc: &Allocation,
-        frame: Frame,
-    ) -> bool {
-        emit_store_indexed(
-            code,
-            dst,
-            base,
-            index,
-            scale,
-            value,
-            kind,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_mcpy(
-        &self,
-        code: &mut Vec<u8>,
-        dst_place: Place,
-        dst_val: u32,
-        src_val: u32,
-        size: i64,
-        alloc: &Allocation,
-        frame: Frame,
-    ) -> bool {
-        emit_mcpy(
-            code,
-            dst_place,
-            dst_val,
-            src_val,
-            size,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_atomic_rmw(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        op: super::super::ir::AtomicRmwOp,
-        addr: super::super::ir::ValueId,
-        value: super::super::ir::ValueId,
-        width: u8,
-        alloc: &Allocation,
-        frame: Frame,
-    ) -> bool {
-        emit_atomic_rmw(
-            code,
-            dst,
-            op,
-            addr,
-            value,
-            width,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_atomic_cas(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        addr: super::super::ir::ValueId,
-        expected_addr: super::super::ir::ValueId,
-        desired: super::super::ir::ValueId,
-        width: u8,
-        alloc: &Allocation,
-        frame: Frame,
-    ) -> bool {
-        emit_atomic_cas(
-            code,
-            dst,
-            addr,
-            expected_addr,
-            desired,
-            width,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_store(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        addr: u32,
-        disp: i32,
-        value: u32,
-        kind: StoreKind,
-        alloc: &Allocation,
-        frame: Frame,
-    ) -> bool {
-        emit_store(
-            code,
-            dst,
-            addr,
-            disp,
-            value,
-            kind,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_load_local(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        off: i64,
-        kind: LoadKind,
-        keep_f32: bool,
-        frame: Frame,
-        _func: &FunctionSsa,
-        _abi: super::Abi,
-    ) -> bool {
-        emit_load_local(code, dst, off, kind, keep_f32, frame, &ScratchPool::new())
-    }
-    fn emit_store_local(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        off: i64,
-        value: u32,
-        kind: StoreKind,
-        alloc: &Allocation,
-        frame: Frame,
-        _func: &FunctionSsa,
-        _abi: super::Abi,
-    ) -> bool {
-        emit_store_local(
-            code,
-            dst,
-            off,
-            value,
-            kind,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_intrinsic(
-        &self,
-        code: &mut Vec<u8>,
-        kind: i64,
-        args: &[u32],
-        dst: Place,
-        v: super::super::ir::ValueId,
-        func: &FunctionSsa,
-        alloc: &Allocation,
-        frame: Frame,
-        abi: super::Abi,
-        current_alloca_top: u32,
-    ) -> bool {
-        emit_intrinsic(
-            code,
-            func,
-            abi,
-            kind,
-            args,
-            dst,
-            v,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-            current_alloca_top,
-        )
-    }
-    fn emit_binop(
-        &self,
-        code: &mut Vec<u8>,
-        op: BinOp,
-        v: super::super::ir::ValueId,
-        dst: Place,
-        lhs: u32,
-        rhs: u32,
-        alloc: &Allocation,
-        frame: Frame,
-    ) -> bool {
-        emit_binop(
-            code,
-            op,
-            v,
-            dst,
-            lhs,
-            rhs,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_binop_imm(
-        &self,
-        code: &mut Vec<u8>,
-        op: BinOp,
-        v: super::super::ir::ValueId,
-        dst: Place,
-        lhs: u32,
-        rhs_imm: i64,
-        alloc: &Allocation,
-        frame: Frame,
-    ) -> bool {
-        emit_binop_imm(
-            code,
-            op,
-            v,
-            dst,
-            lhs,
-            rhs_imm,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-        )
-    }
-    fn emit_call_ext(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        binding_idx: i64,
-        args: &[u32],
-        fp_arg_mask: u32,
-        alloc: &Allocation,
-        frame: Frame,
-        abi: super::Abi,
-        target: Target,
-        plt_call_fixups: &mut Vec<super::PltCallFixup>,
-        imports: &super::ResolvedImports,
-        arg_aggs: &[Option<u32>],
-        func: &FunctionSsa,
-    ) -> bool {
-        emit_call_ext(
-            code,
-            dst,
-            binding_idx,
-            args,
-            fp_arg_mask,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-            abi,
-            target,
-            plt_call_fixups,
-            imports,
-            arg_aggs,
-            &func.agg_descs,
-        )
-    }
-    fn emit_call_indirect(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        target: u32,
-        args: &[u32],
-        callee_variadic: bool,
-        fixed_args: usize,
-        alloc: &Allocation,
-        frame: Frame,
-        abi: super::Abi,
-        fp_return: bool,
-        fp_arg_mask: u32,
-        arg_aggs: &[Option<u32>],
-        ret_agg: Option<u32>,
-        ret_slot: i64,
-        func: &FunctionSsa,
-    ) -> bool {
-        emit_call_indirect(
-            code,
-            dst,
-            target,
-            args,
-            callee_variadic,
-            fixed_args,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-            abi,
-            fp_return,
-            fp_arg_mask,
-            arg_aggs,
-            &func.agg_descs,
-            ret_agg,
-            ret_slot,
-        )
-    }
-    fn emit_call(
-        &self,
-        code: &mut Vec<u8>,
-        dst: Place,
-        target_pc: usize,
-        args: &[u32],
-        fixed_args: usize,
-        alloc: &Allocation,
-        frame: Frame,
-        abi: super::Abi,
-        fixups: &mut Vec<Fixup>,
-        callee_is_variadic: bool,
-        fp_return: bool,
-        fp_arg_mask: u32,
-        arg_aggs: &[Option<u32>],
-        ret_agg: Option<u32>,
-        ret_slot: i64,
-        func: &FunctionSsa,
-    ) -> bool {
-        emit_call(
-            code,
-            dst,
-            target_pc,
-            args,
-            fixed_args,
-            alloc,
-            frame,
-            &ScratchPool::new(),
-            abi,
-            fixups,
-            callee_is_variadic,
-            fp_return,
-            fp_arg_mask,
-            arg_aggs,
-            &func.agg_descs,
-            ret_agg,
-            ret_slot,
-        )
     }
 }
 

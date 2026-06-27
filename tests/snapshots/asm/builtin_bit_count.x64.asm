@@ -956,8 +956,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %rcx
-               	decq	%rcx
+               	leaq	-0x1(%rax), %rcx
                	xorq	$-0x1, %rax
                	andq	%rcx, %rax
                	movl	%eax, %eax
@@ -1187,8 +1186,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %rcx
-               	decq	%rcx
+               	leaq	-0x1(%rax), %rcx
                	xorq	$-0x1, %rax
                	andq	%rcx, %rax
                	movq	%rax, %rcx

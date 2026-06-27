@@ -92,8 +92,7 @@ Disassembly of section .text:
                	jae	<addr>
                	jmp	<addr>
                	movl	%ebx, %eax
-               	movq	%rax, %rbx
-               	incq	%rbx
+               	leaq	0x1(%rax), %rbx
                	jmp	<addr>
                	movl	$0x1, %r12d
                	jmp	<addr>
@@ -110,8 +109,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%r12d, %rax
-               	movq	%rax, %r12
-               	incq	%r12
+               	leaq	0x1(%rax), %r12
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rax
                	movl	%ebx, %ecx
@@ -151,3 +149,5 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

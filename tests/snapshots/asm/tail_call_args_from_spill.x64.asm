@@ -30,41 +30,26 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
-               	movq	%rdi, %rax
-               	incq	%rax
-               	movq	%rdi, %rcx
-               	addq	$0x2, %rcx
-               	movq	%rdi, %rsi
-               	addq	$0x3, %rsi
-               	movq	%rdi, %r8
-               	addq	$0x4, %r8
-               	movq	%rdi, %r9
-               	addq	$0x5, %r9
-               	movq	%rdi, %r12
-               	addq	$0x6, %r12
-               	movq	%rdi, %r13
-               	addq	$0x7, %r13
-               	movq	%rdi, %r14
-               	addq	$0x8, %r14
-               	movq	%rdi, %r15
-               	addq	$0x9, %r15
-               	movq	%rdi, %r10
-               	addq	$0xa, %r10
+               	leaq	0x1(%rdi), %rax
+               	leaq	0x2(%rdi), %rcx
+               	leaq	0x3(%rdi), %rsi
+               	leaq	0x4(%rdi), %r8
+               	leaq	0x5(%rdi), %r9
+               	leaq	0x6(%rdi), %r12
+               	leaq	0x7(%rdi), %r13
+               	leaq	0x8(%rdi), %r14
+               	leaq	0x9(%rdi), %r15
+               	leaq	0xa(%rdi), %r10
                	movq	%r10, 0x70(%rsp)
-               	movq	%rdi, %r10
-               	addq	$0xb, %r10
+               	leaq	0xb(%rdi), %r10
                	movq	%r10, 0x68(%rsp)
-               	movq	%rdi, %r10
-               	addq	$0xc, %r10
+               	leaq	0xc(%rdi), %r10
                	movq	%r10, 0x60(%rsp)
-               	movq	%rdi, %r10
-               	addq	$0xd, %r10
+               	leaq	0xd(%rdi), %r10
                	movq	%r10, 0x58(%rsp)
-               	movq	%rdi, %r10
-               	addq	$0xe, %r10
+               	leaq	0xe(%rdi), %r10
                	movq	%r10, 0x48(%rsp)
-               	movq	%rdi, %r10
-               	addq	$0xf, %r10
+               	leaq	0xf(%rdi), %r10
                	movq	%r10, 0x40(%rsp)
                	addq	%rdi, %rax
                	addq	%rsi, %rax
@@ -132,4 +117,5 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

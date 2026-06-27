@@ -98,8 +98,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x80(%rbp), %rax
-               	movq	%rax, %rdi
-               	addq	$0x2, %rdi
+               	leaq	0x2(%rax), %rdi
                	leaq	-0x80(%rbp), %rsi
                	movl	$0x5, %edx
                	xorl	%eax, %eax
@@ -271,3 +270,4 @@ Disassembly of section .text:
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

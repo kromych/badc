@@ -15,8 +15,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	cmpq	$0x5, %rax
                	jge	<addr>
-               	movq	%rcx, %rax
-               	incq	%rax
+               	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
@@ -26,3 +25,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, (%rax)

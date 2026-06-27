@@ -30,8 +30,7 @@ Disassembly of section .text:
                	movl	(%rax), %ecx
                	movq	%rcx, %rdx
                	andq	$0x7fffffff, %rdx       # imm = 0x7FFFFFFF
-               	movq	%rdx, %rsi
-               	incq	%rsi
+               	leaq	0x1(%rdx), %rsi
                	andq	$-0x80000000, %rcx      # imm = 0x80000000
                	andq	$0x7fffffff, %rsi       # imm = 0x7FFFFFFF
                	orq	%rsi, %rcx
@@ -208,8 +207,7 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	sarq	$0x9, %rdx
                	andq	$0xfffff, %rdx          # imm = 0xFFFFF
-               	movq	%rdx, %rsi
-               	incq	%rsi
+               	leaq	0x1(%rdx), %rsi
                	andq	$-0x1ffffe01, %rcx      # imm = 0xE00001FF
                	andq	$0xfffff, %rsi          # imm = 0xFFFFF
                	shlq	$0x9, %rsi

@@ -26,8 +26,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0xc0(%rbp), %rcx
                	movslq	%eax, %rdx
-               	movq	%rdx, %rsi
-               	incq	%rsi
+               	leaq	0x1(%rdx), %rsi
                	movslq	%esi, %rsi
                	imulq	%rdi, %rsi
                	movq	%rsi, (%rcx,%rdx,8)
@@ -38,8 +37,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	-0xc0(%rbp), %rax
                	movslq	%ecx, %rdx

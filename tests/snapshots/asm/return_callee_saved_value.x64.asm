@@ -16,15 +16,13 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	leaq	(%rdi,%rdi,2), %rax
-               	movq	%rax, %rbx
-               	incq	%rbx
+               	leaq	0x1(%rax), %rbx
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	%rbx, %rcx
+               	movq	%rbx, %rax
                	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -49,4 +47,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

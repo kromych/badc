@@ -83,8 +83,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%edx, %rax
-               	movq	%rax, %rdx
-               	incq	%rdx
+               	leaq	0x1(%rax), %rdx
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	%edx, %rcx
@@ -112,8 +111,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	%ecx, %rdx

@@ -22,8 +22,7 @@ Disassembly of section .text:
                	cmpq	%rsi, %rax
                	jge	<addr>
                	jmp	<addr>
-               	movq	%rcx, %rax
-               	incq	%rax
+               	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
@@ -92,8 +91,7 @@ Disassembly of section .text:
                	cmpq	$0x8, %rax
                	jge	<addr>
                	jmp	<addr>
-               	movq	%r13, %rax
-               	incq	%rax
+               	leaq	0x1(%r13), %rax
                	movslq	%eax, %r13
                	jmp	<addr>
                	movslq	%r13d, %rdx
@@ -113,8 +111,7 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	movl	%r13d, (%rbx,%r12,4)
-               	movq	%r12, %rax
-               	incq	%rax
+               	leaq	0x1(%r12), %rax
                	movslq	%eax, %rsi
                	movq	%rbx, %rdi
                	callq	<addr>

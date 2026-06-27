@@ -11,25 +11,21 @@ Disassembly of section .text:
                	ud2
 
 <plus_one>:
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 
 <minus_one>:
-               	movq	%rdi, %rax
-               	decq	%rax
+               	leaq	-0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 
 <plus_one_l>:
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	retq
 
 <minus_neg_one>:
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	retq
 
 <count_up>:

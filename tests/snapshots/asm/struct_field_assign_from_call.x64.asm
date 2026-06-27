@@ -29,8 +29,7 @@ Disassembly of section .text:
                	movq	%rsi, %r12
                	movq	0x8(%rbx), %r13
                	movq	0x18(%rbx), %r14
-               	movq	%rbx, %rsi
-               	addq	$0x14, %rsi
+               	leaq	0x14(%rbx), %rsi
                	movslq	0x10(%rbx), %rax
                	incq	%rax
                	movslq	%eax, %rdx
@@ -44,8 +43,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, 0x8(%rbx)
                	movq	0x18(%rbx), %rdi
-               	movq	%rbx, %rsi
-               	addq	$0x24, %rsi
+               	leaq	0x24(%rbx), %rsi
                	movslq	0x20(%rbx), %rax
                	incq	%rax
                	movslq	%eax, %rdx

@@ -30,8 +30,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	addq	$0x10, %rcx
+               	leaq	0x10(%rax), %rcx
                	movq	%rax, %r10
                	movq	%rcx, %rax
                	subq	%r10, %rax
@@ -42,8 +41,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movq	%rax, %rcx
-               	addq	$0x20, %rcx
+               	leaq	0x20(%rax), %rcx
                	addq	$0x10, %rax
                	movq	%rax, %r10
                	movq	%rcx, %rax

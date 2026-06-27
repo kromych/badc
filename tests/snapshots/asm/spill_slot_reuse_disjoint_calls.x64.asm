@@ -28,24 +28,16 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
-               	movq	%rdi, %rbx
-               	incq	%rbx
-               	movq	%rdi, %r12
-               	addq	$0x2, %r12
-               	movq	%rdi, %r13
-               	addq	$0x3, %r13
-               	movq	%rdi, %r14
-               	addq	$0x4, %r14
-               	movq	%rdi, %r15
-               	addq	$0x5, %r15
-               	movq	%rdi, %r10
-               	addq	$0x6, %r10
+               	leaq	0x1(%rdi), %rbx
+               	leaq	0x2(%rdi), %r12
+               	leaq	0x3(%rdi), %r13
+               	leaq	0x4(%rdi), %r14
+               	leaq	0x5(%rdi), %r15
+               	leaq	0x6(%rdi), %r10
                	movq	%r10, 0x48(%rsp)
-               	movq	%rdi, %r10
-               	addq	$0x7, %r10
+               	leaq	0x7(%rdi), %r10
                	movq	%r10, 0x40(%rsp)
-               	movq	%rdi, %r10
-               	addq	$0x8, %r10
+               	leaq	0x8(%rdi), %r10
                	movq	%r10, 0x38(%rsp)
                	callq	<addr>
                	addq	%rbx, %rax
@@ -57,24 +49,16 @@ Disassembly of section .text:
                	addq	0x40(%rsp), %rax
                	movq	%rax, %rdi
                	addq	0x38(%rsp), %rdi
-               	movq	%rdi, %rbx
-               	incq	%rbx
-               	movq	%rdi, %r12
-               	addq	$0x2, %r12
-               	movq	%rdi, %r13
-               	addq	$0x3, %r13
-               	movq	%rdi, %r14
-               	addq	$0x4, %r14
-               	movq	%rdi, %r15
-               	addq	$0x5, %r15
-               	movq	%rdi, %r10
-               	addq	$0x6, %r10
+               	leaq	0x1(%rdi), %rbx
+               	leaq	0x2(%rdi), %r12
+               	leaq	0x3(%rdi), %r13
+               	leaq	0x4(%rdi), %r14
+               	leaq	0x5(%rdi), %r15
+               	leaq	0x6(%rdi), %r10
                	movq	%r10, 0x48(%rsp)
-               	movq	%rdi, %r10
-               	addq	$0x7, %r10
+               	leaq	0x7(%rdi), %r10
                	movq	%r10, 0x40(%rsp)
-               	movq	%rdi, %r10
-               	addq	$0x8, %r10
+               	leaq	0x8(%rdi), %r10
                	movq	%r10, 0x38(%rsp)
                	callq	<addr>
                	addq	%rbx, %rax

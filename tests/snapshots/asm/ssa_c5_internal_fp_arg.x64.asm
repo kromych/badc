@@ -34,8 +34,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movq	%rdi, %rax
-               	addq	$0x64, %rax
+               	leaq	0x64(%rdi), %rax
                	subq	%rdi, %rax
                	movslq	%eax, %rax
                	movabsq	$0x4049400000000000, %rcx # imm = 0x4049400000000000
@@ -113,4 +112,5 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

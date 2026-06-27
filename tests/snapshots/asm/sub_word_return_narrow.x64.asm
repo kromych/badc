@@ -37,8 +37,7 @@ Disassembly of section .text:
                	retq
 
 <s8_wrap>:
-               	movq	%rdi, %rax
-               	addq	$0x64, %rax
+               	leaq	0x64(%rdi), %rax
                	movslq	%eax, %rcx
                	movsbq	%cl, %rax
                	retq
@@ -89,4 +88,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)

@@ -133,16 +133,14 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	movq	%rdi, %rax
-               	addq	$0x61, %rax
+               	leaq	0x61(%rdi), %rax
                	movslq	%eax, %rcx
                	leaq	-0x8(%rbp), %rax
                	movb	%cl, (%rax)
                	movl	$0x62, %eax
                	leaq	-0x8(%rbp), %rcx
                	movb	%al, 0x1(%rcx)
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rcx
                	leaq	-0x8(%rbp), %rax
                	movb	%cl, 0x2(%rax)

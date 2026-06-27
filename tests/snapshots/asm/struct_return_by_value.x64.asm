@@ -17,8 +17,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movl	%edi, (%rax)
                	leaq	-0x8(%rbp), %rax
-               	movq	%rdi, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rdi), %rcx
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, %rcx
@@ -121,8 +120,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movl	%edi, (%rax)
                	leaq	-0x20(%rbp), %rax
-               	movq	%rdi, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rdi), %rcx
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x20(%rbp), %rax
                	movslq	(%rax), %rcx

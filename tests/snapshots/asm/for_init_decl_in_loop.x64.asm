@@ -18,8 +18,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	xorq	%rsi, %rsi
                	jmp	<addr>
@@ -30,8 +29,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%esi, %rax
-               	movq	%rax, %rsi
-               	incq	%rsi
+               	leaq	0x1(%rax), %rsi
                	jmp	<addr>
                	imulq	$0x64, %rcx, %rax
                	addq	%rsi, %rax

@@ -83,9 +83,10 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%rbx, %rcx
+               	movq	%rbx, %rax
                	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

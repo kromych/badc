@@ -45,8 +45,7 @@ Disassembly of section .text:
                	subq	$0x150, %rsp            # imm = 0x150
                	movq	%rbx, (%rsp)
                	leaq	<rip>, %rax
-               	movq	%rax, %rdi
-               	addq	$0x8, %rdi
+               	leaq	0x8(%rax), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax
@@ -64,8 +63,7 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movq	%rax, %rdi
-               	addq	$0x4, %rdi
+               	leaq	0x4(%rax), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax
@@ -149,8 +147,7 @@ Disassembly of section .text:
                	movq	%rdx, 0x100(%rax)
                	popq	%rdx
                	leaq	-0x108(%rbp), %rax
-               	movq	%rax, %rdi
-               	addq	$0x8, %rdi
+               	leaq	0x8(%rax), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax
@@ -184,8 +181,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x120(%rbp), %rax
-               	movq	%rax, %rdi
-               	addq	$0x4, %rdi
+               	leaq	0x4(%rax), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax

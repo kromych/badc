@@ -11,8 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <classify>:
-               	movq	%rdi, %rax
-               	addq	$0x64, %rax
+               	leaq	0x64(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 
@@ -91,5 +90,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

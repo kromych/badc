@@ -26,8 +26,7 @@ Disassembly of section .text:
                	orq	%r10, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	movq	%rax, %rcx
-               	addq	$0x18, %rcx
+               	leaq	0x18(%rax), %rcx
                	movsd	(%rcx,%riz), %xmm0
                	movl	$0x4, %ecx
                	cvtsi2sd	%rcx, %xmm1
@@ -43,8 +42,7 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	testq	%rsi, %rsi
                	jne	<addr>
-               	movq	%rax, %rcx
-               	addq	$0x20, %rcx
+               	leaq	0x20(%rax), %rcx
                	movsd	(%rcx,%riz), %xmm0
                	movl	$0x5, %ecx
                	cvtsi2sd	%rcx, %xmm1

@@ -5366,6 +5366,21 @@ fn emit_binop_imm(
             super::x86_64::emit_ror_r_imm8(code, rd, shift_amount.unwrap());
             true
         }
+        // `lea rd, [rn +/- imm]` computes the sum into a different
+        // register in one instruction, folding away the `mov rd, rn`
+        // copy the destructive `add` / `sub` forms below would need. lea
+        // writes no flags, which is fine: no consumer reads the carry of
+        // a `BinopI` result (see the inc/dec note). Restricted to rd !=
+        // rn (the in-place forms below are already one instruction) and
+        // to a displacement that fits the signed 32-bit `lea` field.
+        BinOp::Add if rd.0 != rn.0 && imm_fits_i32 => {
+            super::x86_64::emit_lea_r_mem(code, rd, rn, rhs_imm as i32);
+            true
+        }
+        BinOp::Sub if rd.0 != rn.0 && imm_fits_i32 && rhs_imm != i64::from(i32::MIN) => {
+            super::x86_64::emit_lea_r_mem(code, rd, rn, -(rhs_imm as i32));
+            true
+        }
         // A step of one encodes as `inc` / `dec` (three bytes) rather
         // than `add` / `sub` with an immediate (seven). The flags differ
         // -- `inc` / `dec` leave the carry flag unchanged -- but the
@@ -7564,7 +7579,20 @@ fn emit_return(
             && (value as usize) < func.insts.len()
             && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));
     let needs_staging = matches!(return_place, Place::IntReg(r) if alloc.gpr_used.contains(&r));
-    let staged_int = if needs_staging {
+    // An integer return value sitting in a callee-saved register goes
+    // straight to rax BEFORE the restore loop: rax is caller-saved (never
+    // in gpr_used), so the restore cannot clobber it and no post-restore
+    // move is needed -- one `mov` instead of staging through rcx and
+    // copying back. FP returns keep the rcx staging below so the xmm0 path
+    // and the int-shaped-caller mirror are undisturbed.
+    let staged_rax = needs_staging && !return_is_fp;
+    if staged_rax
+        && let Place::IntReg(r) = return_place
+        && r != Reg::RAX.0
+    {
+        emit_mov_rr(code, Reg::RAX, Reg(r));
+    }
+    let staged_int = if needs_staging && !staged_rax {
         match return_place {
             Place::IntReg(r) if r != Reg::RCX.0 => {
                 emit_mov_rr(code, Reg::RCX, Reg(r));

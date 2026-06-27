@@ -33,23 +33,20 @@ Disassembly of section .text:
                	movslq	%r14d, %r14
                	movslq	%r12d, %r12
                	movslq	(%rbx,%r12,4), %r13
-               	movq	%r14, %r15
-               	decq	%r15
+               	leaq	-0x1(%r14), %r15
                	movslq	%r14d, %rax
                	cmpq	%r12, %rax
                	jge	<addr>
                	jmp	<addr>
                	movslq	%r14d, %rax
-               	movq	%rax, %r14
-               	incq	%r14
+               	leaq	0x1(%rax), %r14
                	jmp	<addr>
                	movslq	%r14d, %rax
                	movslq	(%rbx,%rax,4), %rax
                	cmpq	%r13, %rax
                	jg	<addr>
                	jmp	<addr>
-               	movq	%r15, %rax
-               	incq	%rax
+               	leaq	0x1(%r15), %rax
                	movslq	%eax, %rax
                	shlq	$0x2, %rax
                	leaq	(%rbx,%rax), %rdi
@@ -57,8 +54,7 @@ Disassembly of section .text:
                	shlq	$0x2, %rax
                	leaq	(%rbx,%rax), %rsi
                	callq	<addr>
-               	movq	%r15, %rax
-               	incq	%rax
+               	leaq	0x1(%r15), %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -99,14 +95,12 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	callq	<addr>
                	movq	%rax, %r14
-               	movq	%r14, %rax
-               	decq	%rax
+               	leaq	-0x1(%r14), %rax
                	movslq	%eax, %rdx
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
-               	movq	%r14, %rax
-               	incq	%rax
+               	leaq	0x1(%r14), %rax
                	movslq	%eax, %rsi
                	movq	%rbx, %rdi
                	movq	%r13, %rdx
@@ -188,4 +182,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

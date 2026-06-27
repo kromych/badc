@@ -137,8 +137,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movslq	%esi, %rsi
-               	movq	%rdi, %rax
-               	addq	$0x8, %rax
+               	leaq	0x8(%rdi), %rax
                	movq	%rsi, %rcx
                	shlq	$0x4, %rcx
                	addq	%rcx, %rax
@@ -202,8 +201,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	-0x98(%rbp), %rax
                	addq	$0x8, %rax

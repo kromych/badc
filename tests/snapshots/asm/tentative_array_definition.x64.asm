@@ -43,8 +43,7 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	movslq	%ebx, %rax
-               	movq	%rax, %rbx
-               	incq	%rbx
+               	leaq	0x1(%rax), %rbx
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	%ebx, %rcx
@@ -87,4 +86,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

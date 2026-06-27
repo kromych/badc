@@ -14,8 +14,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	addq	$0x2, %rax
                	addq	$0x3, %rax
                	addq	$0x4, %rax
@@ -83,3 +82,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

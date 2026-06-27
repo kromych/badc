@@ -37,8 +37,7 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
-               	movq	%r8, %rax
-               	incq	%rax
+               	leaq	0x1(%r8), %rax
                	movslq	%eax, %r8
                	movq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
@@ -46,20 +45,17 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
-               	movq	%r8, %rax
-               	addq	$0x2, %rax
+               	leaq	0x2(%r8), %rax
                	movslq	%eax, %r8
                	movslq	%edx, %rax
                	cmpq	$0x84, %rax
                	je	<addr>
-               	movq	%r8, %rax
-               	addq	$0x4, %rax
+               	leaq	0x4(%r8), %rax
                	movslq	%eax, %r8
                	movslq	%esi, %rax
                	cmpq	$0x69cf, %rax           # imm = 0x69CF
                	je	<addr>
-               	movq	%r8, %rax
-               	addq	$0x8, %rax
+               	leaq	0x8(%r8), %rax
                	movslq	%eax, %r8
                	movslq	%r8d, %rax
                	addq	$0x30, %rsp

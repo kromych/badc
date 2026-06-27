@@ -11,8 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <f>:
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 
@@ -32,5 +31,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -11,8 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <add1>:
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 
@@ -48,5 +47,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

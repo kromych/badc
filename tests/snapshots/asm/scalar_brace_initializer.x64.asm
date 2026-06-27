@@ -16,8 +16,7 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	movl	$0x5, %eax
                	leaq	<rip>, %rcx
-               	movq	%rax, %rdx
-               	incq	%rdx
+               	leaq	0x1(%rax), %rdx
                	movslq	%edx, %rdx
                	movl	$0x7, %esi
                	leaq	(%rax,%rdx), %rdi
@@ -94,4 +93,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

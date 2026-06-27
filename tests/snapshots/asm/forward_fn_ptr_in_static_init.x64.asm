@@ -11,8 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <add_two>:
-               	movq	%rdi, %rax
-               	addq	$0x2, %rax
+               	leaq	0x2(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 
@@ -22,8 +21,7 @@ Disassembly of section .text:
                	retq
 
 <minus_seven>:
-               	movq	%rdi, %rax
-               	subq	$0x7, %rax
+               	leaq	-0x7(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 

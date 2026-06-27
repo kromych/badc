@@ -11,8 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <cb>:
-               	movq	%rdi, %rax
-               	addq	$0x7, %rax
+               	leaq	0x7(%rdi), %rax
                	retq
 
 <noise>:
@@ -45,12 +44,11 @@ Disassembly of section .text:
                	addq	%rax, %r14
                	incq	%r13
                	jmp	<addr>
-               	movq	%r14, %rcx
+               	movq	%r14, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
-               	movq	%rcx, %rax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
@@ -65,3 +63,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

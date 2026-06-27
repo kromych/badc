@@ -29,11 +29,9 @@ Disassembly of section .text:
                	cmpq	$0x64, %rax
                	jne	<addr>
                	jmp	<addr>
-               	movq	%rbx, %rax
-               	incq	%rax
+               	leaq	0x1(%rbx), %rax
                	addq	$0x2, %rax
-               	movq	%rax, %rbx
-               	addq	$0x4, %rbx
+               	leaq	0x4(%rax), %rbx
                	jmp	<addr>
                	orq	$0x4000, %rbx           # imm = 0x4000
                	jmp	<addr>
@@ -80,11 +78,9 @@ Disassembly of section .text:
                	cmpq	$0x64, %rax
                	jne	<addr>
                	jmp	<addr>
-               	movq	%rbx, %rax
-               	incq	%rax
+               	leaq	0x1(%rbx), %rax
                	addq	$0x2, %rax
-               	movq	%rax, %rbx
-               	addq	$0x4, %rbx
+               	leaq	0x4(%rax), %rbx
                	jmp	<addr>
                	orq	$0x4000, %rbx           # imm = 0x4000
                	jmp	<addr>
@@ -131,4 +127,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -22,18 +22,15 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%eax, %rdx
                	movl	%eax, (%rdi,%rdx,4)
-               	movq	%rdi, %rdx
-               	addq	$0x28, %rdx
+               	leaq	0x28(%rdi), %rdx
                	movslq	%eax, %rsi
-               	movq	%rsi, %r8
-               	incq	%r8
+               	leaq	0x1(%rsi), %r8
                	movl	%r8d, (%rdx,%rsi,4)
                	movslq	%eax, %rdx
                	shlq	$0x2, %rdx
                	leaq	(%rdi,%rdx), %rsi
                	movslq	(%rsi), %rsi
-               	movq	%rdi, %r8
-               	addq	$0x28, %r8
+               	leaq	0x28(%rdi), %r8
                	addq	%r8, %rdx
                	movslq	(%rdx), %rdx
                	addq	%rsi, %rdx
@@ -84,4 +81,5 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

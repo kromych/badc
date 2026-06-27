@@ -19,13 +19,11 @@ Disassembly of section .text:
                	retq
 
 <ga>:
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	retq
 
 <gb>:
-               	movq	%rdi, %rax
-               	addq	$0x2, %rax
+               	leaq	0x2(%rdi), %rax
                	retq
 
 <main>:

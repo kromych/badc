@@ -30,8 +30,7 @@ Disassembly of section .text:
                	addq	%rax, %rcx
                	xorq	%rsi, %rsi
                	movb	%sil, (%rcx)
-               	movq	%rdx, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rdx), %rcx
                	movslq	%ecx, %rdx
                	jmp	<addr>
                	jmp	<addr>
@@ -166,5 +165,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

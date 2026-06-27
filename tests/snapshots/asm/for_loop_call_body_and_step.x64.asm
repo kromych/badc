@@ -11,14 +11,12 @@ Disassembly of section .text:
                	ud2
 
 <add_one>:
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 
 <advance>:
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 

@@ -11,15 +11,13 @@ Disassembly of section .text:
                	ud2
 
 <bump>:
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 
 <combine>:
                	leaq	<rip>, %rax
-               	movq	%rdi, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rdi), %rcx
                	movl	%ecx, (%rax)
                	leaq	(%rdi,%rsi), %rax
                	retq
@@ -36,15 +34,12 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rbx
                	testq	%rdi, %rdi
                	je	<addr>
-               	movq	%rdi, %r12
-               	addq	$0x64, %r12
-               	movq	%rdi, %r13
-               	incq	%r13
+               	leaq	0x64(%rdi), %r12
+               	leaq	0x1(%rdi), %r13
                	testq	%r12, %r12
                	jne	<addr>
                	jmp	<addr>
@@ -86,5 +81,4 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

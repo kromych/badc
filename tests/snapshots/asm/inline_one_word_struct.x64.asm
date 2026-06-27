@@ -59,13 +59,11 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	-0x28(%rbp), %rax
                	movslq	%ecx, %rdx
-               	movq	%rdx, %rsi
-               	incq	%rsi
+               	leaq	0x1(%rdx), %rsi
                	movslq	%esi, %rsi
                	imulq	$0x64, %rsi, %rsi
                	movq	%rsi, (%rax,%rdx,8)

@@ -16,17 +16,13 @@ Disassembly of section .text:
                	subq	$0x70, %rsp
                	movq	%rbx, (%rsp)
                	movl	$0xa, %eax
-               	movq	%rax, %rcx
-               	addq	$0x3, %rcx
+               	leaq	0x3(%rax), %rcx
                	addq	$0x7, %rcx
-               	movq	%rax, %rdx
-               	addq	$0x8, %rdx
+               	leaq	0x8(%rax), %rdx
                	subq	$0x3, %rdx
-               	movq	%rax, %rsi
-               	subq	$0x4, %rsi
+               	leaq	-0x4(%rax), %rsi
                	addq	$0x9, %rsi
-               	movq	%rax, %rdi
-               	subq	$0x2, %rdi
+               	leaq	-0x2(%rax), %rdi
                	subq	$0x5, %rdi
                	movq	%rax, %r8
                	andq	$0x3f, %r8

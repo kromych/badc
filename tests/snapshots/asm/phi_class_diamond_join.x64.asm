@@ -14,13 +14,11 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	testq	%rdi, %rdi
                	je	<addr>
-               	movq	%rsi, %rax
-               	incq	%rax
+               	leaq	0x1(%rsi), %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
                	retq
-               	movq	%rdx, %rax
-               	decq	%rax
+               	leaq	-0x1(%rdx), %rax
                	movslq	%eax, %rcx
                	jmp	<addr>
 

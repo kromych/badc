@@ -14,8 +14,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x12c0, %rsp           # imm = 0x12C0
-               	movq	%rdi, %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	incq	%rax
                	movslq	%eax, %rax
                	addq	$0x12c0, %rsp           # imm = 0x12C0
@@ -29,4 +28,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movslq	%eax, %rax
                	retq
-               	addb	%al, (%rax)

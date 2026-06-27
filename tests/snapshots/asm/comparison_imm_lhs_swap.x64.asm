@@ -20,43 +20,35 @@ Disassembly of section .text:
                	xorq	%r12, %r12
                	testq	%rbx, %rbx
                	jle	<addr>
-               	movq	%r12, %rax
-               	incq	%rax
+               	leaq	0x1(%r12), %rax
                	movslq	%eax, %r12
                	testq	%rbx, %rbx
                	jl	<addr>
-               	movq	%r12, %rax
-               	incq	%rax
+               	leaq	0x1(%r12), %rax
                	movslq	%eax, %r12
                	cmpq	$0xa, %rbx
                	jge	<addr>
-               	movq	%r12, %rax
-               	incq	%rax
+               	leaq	0x1(%r12), %rax
                	movslq	%eax, %r12
                	cmpq	$0xa, %rbx
                	jg	<addr>
-               	movq	%r12, %rax
-               	incq	%rax
+               	leaq	0x1(%r12), %rax
                	movslq	%eax, %r12
                	testq	%rbx, %rbx
                	jbe	<addr>
-               	movq	%r12, %rax
-               	incq	%rax
+               	leaq	0x1(%r12), %rax
                	movslq	%eax, %r12
                	testq	%rbx, %rbx
                	jb	<addr>
-               	movq	%r12, %rax
-               	incq	%rax
+               	leaq	0x1(%r12), %rax
                	movslq	%eax, %r12
                	cmpq	$0xa, %rbx
                	jae	<addr>
-               	movq	%r12, %rax
-               	incq	%rax
+               	leaq	0x1(%r12), %rax
                	movslq	%eax, %r12
                	cmpq	$0xa, %rbx
                	ja	<addr>
-               	movq	%r12, %rax
-               	incq	%rax
+               	leaq	0x1(%r12), %rax
                	movslq	%eax, %r12
                	cmpq	$0xa, %rbx
                	jle	<addr>

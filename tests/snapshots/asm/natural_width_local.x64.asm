@@ -30,28 +30,24 @@ Disassembly of section .text:
                	movsbq	%al, %rdx
                	cmpq	$0x2c, %rdx
                	je	<addr>
-               	movq	%rdi, %rdx
-               	incq	%rdx
+               	leaq	0x1(%rdi), %rdx
                	movslq	%edx, %rdi
                	andq	$0xff, %rax
                	xorq	$0x2c, %rax
                	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
-               	movq	%rdi, %rax
-               	addq	$0x2, %rax
+               	leaq	0x2(%rdi), %rax
                	movslq	%eax, %rdi
                	movsbq	%cl, %rax
                	cmpq	$-0x38, %rax
                	je	<addr>
-               	movq	%rdi, %rax
-               	addq	$0x4, %rax
+               	leaq	0x4(%rdi), %rax
                	movslq	%eax, %rdi
                	movslq	%esi, %rax
                	cmpq	$0xb0, %rax
                	je	<addr>
-               	movq	%rdi, %rax
-               	addq	$0x8, %rax
+               	leaq	0x8(%rdi), %rax
                	movslq	%eax, %rdi
                	movslq	%edi, %rax
                	addq	$0x30, %rsp

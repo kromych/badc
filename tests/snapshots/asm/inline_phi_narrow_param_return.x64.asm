@@ -27,14 +27,12 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	imulq	$0xf4243, %rdx, %rax    # imm = 0xF4243
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rdx
-               	incq	%rdx
+               	leaq	0x1(%rax), %rdx
                	jmp	<addr>
                	movq	%rdx, %rax
                	addq	$0x20, %rsp

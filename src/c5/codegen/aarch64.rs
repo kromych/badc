@@ -307,9 +307,15 @@ pub(super) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
 // Each follows the same template: a base opcode | Rm<<16 | Rn<<5 | Rd.
 // Verified against `clang -c -arch arm64` on Apple Silicon.
 
+/// 3-register data-processing word: `base | Rm<<16 | Rn<<5 | Rd`. Any baked
+/// field (e.g. MUL's `Ra = XZR`) is part of `base`.
+fn enc_rrr(base: u32, rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    base | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `ADD <Xd>, <Xn>, <Xm>` -- 64-bit register add, no shift.
 pub(super) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x8B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0x8B00_0000, rd, rn, rm)
 }
 
 /// `ADD <Xd>, <Xn>, <Xm>, LSL #<shift>` -- 64-bit add of a left-shifted
@@ -324,12 +330,12 @@ pub(super) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> u32 {
 
 /// `SUB <Xd>, <Xn>, <Xm>` -- 64-bit register subtract.
 pub(super) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0xCB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0xCB00_0000, rd, rn, rm)
 }
 
 /// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
 pub(super) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x8A00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0x8A00_0000, rd, rn, rm)
 }
 
 /// `AND <Xd>, <Xn>, #~15` -- mask off the low four bits so the
@@ -348,7 +354,7 @@ pub(super) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
 pub(super) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0xAA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0xAA00_0000, rd, rn, rm)
 }
 
 /// `MOV <Wd>, <Wn>` (`ORR Wd, WZR, Wn`) -- 32-bit register move. A write
@@ -360,7 +366,7 @@ pub(super) fn enc_mov_w_w(rd: Reg, rn: Reg) -> u32 {
 
 /// `EOR <Xd>, <Xn>, <Xm>` -- bitwise xor.
 pub(super) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0xCA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0xCA00_0000, rd, rn, rm)
 }
 
 /// `MVN <Xd>, <Xm>` (`ORN Xd, XZR, Xm`) -- bitwise NOT. `Rn` is baked
@@ -372,20 +378,20 @@ pub(super) fn enc_mvn(rd: Reg, rm: Reg) -> u32 {
 /// `MUL <Xd>, <Xn>, <Xm>` -- alias for `MADD Xd, Xn, Xm, XZR`.
 /// We bake in `Ra = XZR (31)` so this stays a 3-register helper.
 pub(super) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9B00_7C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0x9B00_7C00, rd, rn, rm)
 }
 
 /// `SDIV <Xd>, <Xn>, <Xm>` -- signed integer division. Pairs with
 /// [`enc_msub`] when computing modulo.
 pub(super) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_0C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0x9AC0_0C00, rd, rn, rm)
 }
 
 /// `UDIV <Xd>, <Xn>, <Xm>` -- unsigned integer division. Differs from
 /// SDIV only in the opcode2 field (bit 10 cleared). Pairs with
 /// [`enc_msub`] when computing unsigned modulo.
 pub(super) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_0800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0x9AC0_0800, rd, rn, rm)
 }
 
 /// `MSUB <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa - (Xn * Xm)`. The
@@ -402,23 +408,23 @@ pub(super) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
 /// `LSLV <Xd>, <Xn>, <Xm>` -- variable left shift, masking the shift
 /// amount to 6 bits (i.e., shifting by `Xm % 64`).
 pub(super) fn enc_lslv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_2000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0x9AC0_2000, rd, rn, rm)
 }
 
 /// `LSRV <Xd>, <Xn>, <Xm>` -- variable logical right shift.
 pub(super) fn enc_lsrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_2400 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0x9AC0_2400, rd, rn, rm)
 }
 
 /// `ASRV <Xd>, <Xn>, <Xm>` -- variable arithmetic right shift. The
 /// signed counterpart to `LSRV`
 pub(super) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_2800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0x9AC0_2800, rd, rn, rm)
 }
 
 /// `RORV <Xd>, <Xn>, <Xm>` -- variable rotate right.
 pub(super) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_2C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    enc_rrr(0x9AC0_2C00, rd, rn, rm)
 }
 
 /// `ROR <Xd>, <Xs>, #<shift>` -- bit-rotate-right by constant. Encoded
@@ -464,28 +470,31 @@ pub(super) fn enc_fmov_d_d(dd: u8, dn: u8) -> u32 {
     0x1E60_4000 | ((dn as u32) << 5) | (dd as u32)
 }
 
+/// FP data-processing (2 source) word: `base | Rm<<16 | Rn<<5 | Rd`, V-register
+/// operands. The ptype/opcode bits are part of `base`.
+fn enc_fp2(base: u32, dd: u8, dn: u8, dm: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32 && dm < 32);
+    base | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+}
+
 /// `FADD <Dd>, <Dn>, <Dm>` -- double-precision add. `Dd = Dn + Dm`.
 pub(super) fn enc_fadd_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32 && dm < 32);
-    0x1E60_2800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+    enc_fp2(0x1E60_2800, dd, dn, dm)
 }
 
 /// `FSUB <Dd>, <Dn>, <Dm>`. `Dd = Dn - Dm`.
 pub(super) fn enc_fsub_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32 && dm < 32);
-    0x1E60_3800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+    enc_fp2(0x1E60_3800, dd, dn, dm)
 }
 
 /// `FMUL <Dd>, <Dn>, <Dm>`. `Dd = Dn * Dm`.
 pub(super) fn enc_fmul_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32 && dm < 32);
-    0x1E60_0800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+    enc_fp2(0x1E60_0800, dd, dn, dm)
 }
 
 /// `FDIV <Dd>, <Dn>, <Dm>`. `Dd = Dn / Dm`.
 pub(super) fn enc_fdiv_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32 && dm < 32);
-    0x1E60_1800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+    enc_fp2(0x1E60_1800, dd, dn, dm)
 }
 
 /// `FNEG <Dd>, <Dn>`. `Dd = -Dn`.
@@ -577,26 +586,22 @@ pub(super) fn enc_fmov_s_s(sd: u8, sn: u8) -> u32 {
 /// `FADD <Sd>, <Sn>, <Sm>` -- single-precision add. `Sd = Sn + Sm`
 /// (C99 6.3.1.8: `float op float` has type `float`).
 pub(super) fn enc_fadd_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32 && sm < 32);
-    0x1E20_2800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+    enc_fp2(0x1E20_2800, sd, sn, sm)
 }
 
 /// `FSUB <Sd>, <Sn>, <Sm>`. `Sd = Sn - Sm`.
 pub(super) fn enc_fsub_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32 && sm < 32);
-    0x1E20_3800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+    enc_fp2(0x1E20_3800, sd, sn, sm)
 }
 
 /// `FMUL <Sd>, <Sn>, <Sm>`. `Sd = Sn * Sm`.
 pub(super) fn enc_fmul_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32 && sm < 32);
-    0x1E20_0800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+    enc_fp2(0x1E20_0800, sd, sn, sm)
 }
 
 /// `FDIV <Sd>, <Sn>, <Sm>`. `Sd = Sn / Sm`.
 pub(super) fn enc_fdiv_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32 && sm < 32);
-    0x1E20_1800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+    enc_fp2(0x1E20_1800, sd, sn, sm)
 }
 
 /// `FNEG <Sd>, <Sn>`. `Sd = -Sn`.
@@ -917,31 +922,40 @@ pub(super) fn enc_svc(imm16: u16) -> u32 {
 
 // ---- Loads / stores (scaled 12-bit unsigned offset). ----
 
+/// Load/store with a scaled 12-bit unsigned immediate offset:
+/// `base | (imm >> scale_log2) << 10 | Rn<<5 | Rt`. `scale_log2` is the
+/// access-size shift (0 byte, 1 half, 2 word, 3 doubleword); `imm` is the byte
+/// offset and must be a multiple of the access size within the scaled range.
+fn enc_ldst_scaled(base: u32, scale_log2: u32, rt: Reg, rn: Reg, imm: u32) -> u32 {
+    let stride = 1u32 << scale_log2;
+    debug_assert!(
+        imm & (stride - 1) == 0,
+        "ldst imm {imm} not aligned to {stride}"
+    );
+    let scaled = imm >> scale_log2;
+    debug_assert!(
+        scaled < 4096,
+        "ldst imm {imm} out of range for stride {stride}"
+    );
+    base | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDR <Xt>, [<Xn|SP>, #imm]` -- 64-bit load, immediate offset
 /// scaled by 8. `imm` is the byte offset; range `[0, 32760]`.
 pub(super) fn enc_ldr_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(8), "ldr imm: {imm} not 8-byte aligned");
-    let scaled = imm / 8;
-    debug_assert!(scaled < 4096, "ldr imm: {imm} > 32760");
-    0xF940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0xF940_0000, 3, rt, rn, imm)
 }
 
 /// `STR <Xt>, [<Xn|SP>, #imm]` -- 64-bit store. Same scaling as `LDR`.
 pub(super) fn enc_str_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(8), "str imm: {imm} not 8-byte aligned");
-    let scaled = imm / 8;
-    debug_assert!(scaled < 4096, "str imm: {imm} > 32760");
-    0xF900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0xF900_0000, 3, rt, rn, imm)
 }
 
 /// `LDR <Wt>, [<Xn|SP>, #imm]` -- 32-bit load (zero-extended into
 /// `Xt`), immediate offset scaled by 4. Used by the Win64 TLS
 /// lowering to read the 4-byte `_tls_index` slot.
 pub(super) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(4), "ldr32 imm: {imm} not 4-byte aligned");
-    let scaled = imm / 4;
-    debug_assert!(scaled < 4096, "ldr32 imm: {imm} > 16380");
-    0xB940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0xB940_0000, 2, rt, rn, imm)
 }
 
 /// `LDRSW <Xt>, [<Xn|SP>, #imm]` -- 32-bit load sign-extended into
@@ -949,20 +963,14 @@ pub(super) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// [`LoadKind::I32`] for signed `int` lvalue reads -- the C signed-int
 /// model requires the high bit of the 4-byte slot to propagate.
 pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(4), "ldrsw imm: {imm} not 4-byte aligned");
-    let scaled = imm / 4;
-    debug_assert!(scaled < 4096, "ldrsw imm: {imm} > 16380");
-    0xB980_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0xB980_0000, 2, rt, rn, imm)
 }
 
 /// `STR <Wt>, [<Xn|SP>, #imm]` -- 32-bit store (low half of `Xt`),
 /// immediate offset scaled by 4. Companion to [`enc_ldrsw_imm`] /
 /// [`enc_ldr32_imm`] for the `StoreKind::I32` lowering.
 pub(super) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(4), "str32 imm: {imm} not 4-byte aligned");
-    let scaled = imm / 4;
-    debug_assert!(scaled < 4096, "str32 imm: {imm} > 16380");
-    0xB900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0xB900_0000, 2, rt, rn, imm)
 }
 
 /// `LDR <Xt>, [<Xn|SP>, <Xm>, LSL #3]` -- 64-bit load, base-plus-
@@ -1050,10 +1058,7 @@ pub(super) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
 /// [`LoadKind::I16`] for `short` lvalue reads. Encoding: opc=10
 /// (sign-extend to 64-bit), size=01 (halfword).
 pub(super) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(2), "ldrsh imm: {imm} not 2-byte aligned");
-    let scaled = imm / 2;
-    debug_assert!(scaled < 4096, "ldrsh imm: {imm} > 8190");
-    0x7980_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0x7980_0000, 1, rt, rn, imm)
 }
 
 /// `LDRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit load zero-extended into
@@ -1061,28 +1066,21 @@ pub(super) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// scaled by 2. Used by [`LoadKind::U16`] for `unsigned short` lvalue
 /// reads. Encoding: opc=01 (load), size=01.
 pub(super) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(2), "ldrh imm: {imm} not 2-byte aligned");
-    let scaled = imm / 2;
-    debug_assert!(scaled < 4096, "ldrh imm: {imm} > 8190");
-    0x7940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0x7940_0000, 1, rt, rn, imm)
 }
 
 /// `STRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit store (low half of `Wt`),
 /// immediate offset scaled by 2. Companion to [`enc_ldrsh_imm`] /
 /// [`enc_ldrh_imm`] for the `StoreKind::I16` lowering.
 pub(super) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(2), "strh imm: {imm} not 2-byte aligned");
-    let scaled = imm / 2;
-    debug_assert!(scaled < 4096, "strh imm: {imm} > 8190");
-    0x7900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0x7900_0000, 1, rt, rn, imm)
 }
 
 /// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
 /// 32-bit register (which on AArch64 means the high 32 bits of the
 /// 64-bit register are also cleared).
 pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm < 4096, "ldrb imm: {imm} > 4095");
-    0x3940_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0x3940_0000, 0, rt, rn, imm)
 }
 
 /// `LDRSB <Xt>, [<Xn|SP>, #imm]` -- byte load sign-extended into
@@ -1090,15 +1088,13 @@ pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// lvalue reads. Encoding: opc=10 (sign-extend to 64-bit),
 /// size=00 (byte). Imm is unscaled (byte stride).
 pub(super) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm < 4096, "ldrsb imm: {imm} > 4095");
-    0x3980_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0x3980_0000, 0, rt, rn, imm)
 }
 
 /// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
 /// of `Wt` and ignores the rest.
 pub(super) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm < 4096, "strb imm: {imm} > 4095");
-    0x3900_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_ldst_scaled(0x3900_0000, 0, rt, rn, imm)
 }
 
 // ---- Exclusive-monitor load / store (ARM ARM C6.2). Used by the

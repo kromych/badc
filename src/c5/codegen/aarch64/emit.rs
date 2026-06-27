@@ -47,7 +47,7 @@ use alloc::vec::Vec;
 use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::DataFixup;
 use super::Target;
-use super::aarch64::{
+use super::encode::{
     BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
     enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
@@ -411,7 +411,7 @@ fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
     if hi != 0 {
         emit(
             code,
-            super::aarch64::enc_add_imm_lsl12(dst, Reg(31), hi >> 12),
+            super::encode::enc_add_imm_lsl12(dst, Reg(31), hi >> 12),
         );
         if lo != 0 {
             emit(code, enc_add_imm(dst, dst, lo));
@@ -432,7 +432,7 @@ fn emit_sp_plus_off_from_fp(code: &mut Vec<u8>, dst: Reg, off: u32) {
     if hi != 0 {
         emit(
             code,
-            super::aarch64::enc_add_imm_lsl12(dst, Reg(29), hi >> 12),
+            super::encode::enc_add_imm_lsl12(dst, Reg(29), hi >> 12),
         );
         if lo != 0 {
             emit(code, enc_add_imm(dst, dst, lo));
@@ -488,10 +488,10 @@ fn emit_sp_str_x_borrow(code: &mut Vec<u8>, rt: Reg, off: u32, borrow: Reg) {
         return;
     }
     debug_assert_ne!(rt.0, borrow.0, "sp str borrow: borrow aliases data");
-    emit(code, super::aarch64::enc_str_pre(borrow, Reg(31), -16));
+    emit(code, super::encode::enc_str_pre(borrow, Reg(31), -16));
     emit_sp_plus_off(code, borrow, off + 16);
     emit(code, enc_str_imm(rt, borrow, 0));
-    emit(code, super::aarch64::enc_ldr_post(borrow, Reg(31), 16));
+    emit(code, super::encode::enc_ldr_post(borrow, Reg(31), 16));
 }
 
 /// SP-relative 8-byte FP load into d-reg `dt`. The base address is
@@ -562,7 +562,7 @@ enum LocalBranchKind {
 /// `Fixup::Bl` per `Inst::Call`; the `apply_fixups` post-pass
 /// resolves them once `pc_to_native` is final.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn emit_function(
+pub(crate) fn emit_function(
     func: &FunctionSsa,
     alloc: &Allocation,
     target: Target,
@@ -690,9 +690,9 @@ pub(super) fn emit_function(
             }
             for (dst, kind) in exts {
                 let ext = |code: &mut Vec<u8>, r: Reg| match kind {
-                    LoadKind::I8 => emit(code, super::aarch64::enc_sxtb(r, r)),
-                    LoadKind::I16 => emit(code, super::aarch64::enc_sxth(r, r)),
-                    LoadKind::I32 => emit(code, super::aarch64::enc_sxtw(r, r)),
+                    LoadKind::I8 => emit(code, super::encode::enc_sxtb(r, r)),
+                    LoadKind::I16 => emit(code, super::encode::enc_sxth(r, r)),
+                    LoadKind::I32 => emit(code, super::encode::enc_sxtw(r, r)),
                     _ => {}
                 };
                 match dst {
@@ -1145,7 +1145,7 @@ pub(super) fn emit_function(
                         return false;
                     }
                 };
-                super::aarch64::emit_got_tail_jump(code, plt_call_fixups, import_index);
+                super::encode::emit_got_tail_jump(code, plt_call_fixups, import_index);
             }
         }
     }
@@ -1310,21 +1310,21 @@ fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi, counter: Re
     }
     let n_pages = bytes >> 12;
     let remainder = bytes & 0xfff;
-    super::aarch64::load_imm64(code, counter, n_pages as u64);
+    super::encode::load_imm64(code, counter, n_pages as u64);
     // loop: sub sp, sp, #PAGE; str counter, [sp]; subs counter, #1; b.ne loop
     let loop_start = code.len();
-    emit(code, super::aarch64::enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
-    emit(code, super::aarch64::enc_str_imm(counter, Reg::SP, 0));
-    emit(code, super::aarch64::enc_subs_imm(counter, counter, 1));
+    emit(code, super::encode::enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
+    emit(code, super::encode::enc_str_imm(counter, Reg::SP, 0));
+    emit(code, super::encode::enc_subs_imm(counter, counter, 1));
     let off = ((loop_start as i64) - (code.len() as i64)) / 4;
     emit(
         code,
-        super::aarch64::enc_b_cond(super::aarch64::Cond::Ne, off as i32),
+        super::encode::enc_b_cond(super::encode::Cond::Ne, off as i32),
     );
     if remainder != 0 {
         emit(
             code,
-            super::aarch64::enc_sub_imm(Reg::SP, Reg::SP, remainder),
+            super::encode::enc_sub_imm(Reg::SP, Reg::SP, remainder),
         );
     }
 }
@@ -1612,9 +1612,9 @@ fn emit_struct_param_scatter(
                             .and_then(|m| m.get(k).copied())
                             .unwrap_or(((k as u32) * 8, 8));
                         if msize == 8 {
-                            emit(code, super::aarch64::enc_str_d_imm(cr.reg, Reg(16), off));
+                            emit(code, super::encode::enc_str_d_imm(cr.reg, Reg(16), off));
                         } else {
-                            emit(code, super::aarch64::enc_str_s_imm(cr.reg, Reg(16), off));
+                            emit(code, super::encode::enc_str_s_imm(cr.reg, Reg(16), off));
                         }
                     } else {
                         emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
@@ -1649,25 +1649,25 @@ fn emit_struct_param_scatter(
                 if o + 4 <= size {
                     emit(
                         code,
-                        super::aarch64::enc_ldr32_imm(Reg(17), Reg(29), src + o),
+                        super::encode::enc_ldr32_imm(Reg(17), Reg(29), src + o),
                     );
-                    emit(code, super::aarch64::enc_str32_imm(Reg(17), Reg(16), o));
+                    emit(code, super::encode::enc_str32_imm(Reg(17), Reg(16), o));
                     o += 4;
                 }
                 if o + 2 <= size {
                     emit(
                         code,
-                        super::aarch64::enc_ldrh_imm(Reg(17), Reg(29), src + o),
+                        super::encode::enc_ldrh_imm(Reg(17), Reg(29), src + o),
                     );
-                    emit(code, super::aarch64::enc_strh_imm(Reg(17), Reg(16), o));
+                    emit(code, super::encode::enc_strh_imm(Reg(17), Reg(16), o));
                     o += 2;
                 }
                 if o < size {
                     emit(
                         code,
-                        super::aarch64::enc_ldrb_imm(Reg(17), Reg(29), src + o),
+                        super::encode::enc_ldrb_imm(Reg(17), Reg(29), src + o),
                     );
-                    emit(code, super::aarch64::enc_strb_imm(Reg(17), Reg(16), o));
+                    emit(code, super::encode::enc_strb_imm(Reg(17), Reg(16), o));
                 }
             }
             _ => continue,
@@ -1724,8 +1724,8 @@ fn fused_branch_cond(
     alloc: &Allocation,
     cond: super::super::ir::ValueId,
     negate: bool,
-) -> Option<super::aarch64::Cond> {
-    use super::aarch64::Cond;
+) -> Option<super::encode::Cond> {
+    use super::encode::Cond;
     if !alloc
         .branch_fused
         .get(cond as usize)
@@ -1821,7 +1821,7 @@ fn emit_inst(
                 let low = top_offset & 0xfff;
                 emit(
                     code,
-                    super::aarch64::enc_sub_imm_lsl12(Reg(16), Reg(29), high >> 12),
+                    super::encode::enc_sub_imm_lsl12(Reg(16), Reg(29), high >> 12),
                 );
                 if low != 0 {
                     emit(code, enc_sub_imm(Reg(16), Reg(16), low));
@@ -1854,7 +1854,7 @@ fn emit_inst(
                 match dst {
                     Place::FpReg(r) => {
                         if r != d {
-                            emit(code, super::aarch64::enc_fmov_d_d(r, d));
+                            emit(code, super::encode::enc_fmov_d_d(r, d));
                         }
                     }
                     Place::Spill(slot) => {
@@ -1881,9 +1881,9 @@ fn emit_inst(
                 let rn = Reg(arg_reg);
                 match kind {
                     _ if high_dead => emit_mov_reg(code, rd, rn),
-                    LoadKind::I8 => emit(code, super::aarch64::enc_sxtb(rd, rn)),
-                    LoadKind::I16 => emit(code, super::aarch64::enc_sxth(rd, rn)),
-                    LoadKind::I32 => emit(code, super::aarch64::enc_sxtw(rd, rn)),
+                    LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
+                    LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
+                    LoadKind::I32 => emit(code, super::encode::enc_sxtw(rd, rn)),
                     _ => emit_mov_reg(code, rd, rn),
                 }
             };
@@ -1966,7 +1966,7 @@ fn emit_inst(
                     return false;
                 }
             };
-            plt_call_fixups.push(super::aarch64::PltCallFixup {
+            plt_call_fixups.push(super::encode::PltCallFixup {
                 instr_offset: code.len(),
                 import_index,
                 is_tail: false,
@@ -2175,7 +2175,7 @@ fn emit_inst(
                 _ => return false,
             };
             if is_f32 {
-                emit(code, super::aarch64::enc_fneg_s(dd, dn));
+                emit(code, super::encode::enc_fneg_s(dd, dn));
             } else {
                 emit(code, enc_fneg_d(dd, dn));
             }
@@ -2238,7 +2238,7 @@ fn emit_inst(
             };
             emit(
                 code,
-                super::aarch64::enc_fma(dd, da, dm, dc, is_f32, *neg_product, *neg_addend),
+                super::encode::enc_fma(dd, da, dm, dc, is_f32, *neg_product, *neg_addend),
             );
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
@@ -2392,7 +2392,7 @@ fn emit_tls_addr(
     // offset) rather than by the placeholder `offset`.
     tls_extern_sym: Option<&str>,
 ) -> bool {
-    use super::aarch64::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
+    use super::encode::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
     let Some(rd) = int_reg(dst) else {
         bail_msg("TlsAddr: dst not int reg");
         return false;
@@ -2669,7 +2669,7 @@ fn emit_va_arg_aapcs64(
 }
 
 /// `Inst::Intrinsic` lowering. Each variant matches the pool
-/// path's shape in [`super::aarch64::lower_op`] but pulls its
+/// path's shape in [`super::encode::lower_op`] but pulls its
 /// operands from the allocator's `Place`s rather than off the c5
 /// stack / accumulator.
 fn emit_intrinsic(
@@ -3043,7 +3043,7 @@ fn emit_intrinsic(
             emit(code, enc_add_imm(scratch.secondary, n, 15));
             emit(
                 code,
-                super::aarch64::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
+                super::encode::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
             );
             // x16 = &arena_top -- the bookkeeping slot's address.
             let top_offset = current_alloca_top;
@@ -3054,7 +3054,7 @@ fn emit_intrinsic(
                 let low = top_offset & 0xfff;
                 emit(
                     code,
-                    super::aarch64::enc_sub_imm_lsl12(scratch.primary, Reg(29), high >> 12),
+                    super::encode::enc_sub_imm_lsl12(scratch.primary, Reg(29), high >> 12),
                 );
                 if low != 0 {
                     emit(code, enc_sub_imm(scratch.primary, scratch.primary, low));
@@ -3071,16 +3071,16 @@ fn emit_intrinsic(
             let arena_bytes = (crate::c5::op::ALLOCA_ARENA_SLOTS * 8) as u32;
             emit(
                 code,
-                super::aarch64::enc_sub_imm_lsl12(
+                super::encode::enc_sub_imm_lsl12(
                     scratch.secondary,
                     scratch.primary,
                     arena_bytes >> 12,
                 ),
             );
-            emit(code, super::aarch64::enc_cmp_reg(rd, scratch.secondary));
+            emit(code, super::encode::enc_cmp_reg(rd, scratch.secondary));
             emit(
                 code,
-                super::aarch64::enc_b_cond(super::aarch64::Cond::Hs, 2),
+                super::encode::enc_b_cond(super::encode::Cond::Hs, 2),
             );
             emit(code, 0xD420_0020); // brk #1
             emit(code, enc_str_imm(rd, scratch.primary, 0));
@@ -3241,7 +3241,7 @@ fn emit_intrinsic(
                 Place::Spill(_) => SCRATCH_FP1,
                 _ => return false,
             };
-            use super::aarch64::{
+            use super::encode::{
                 enc_fabs_d, enc_fabs_s, enc_frintm_d, enc_frintm_s, enc_frintp_d, enc_frintp_s,
                 enc_frintz_d, enc_frintz_s, enc_fsqrt_d, enc_fsqrt_s,
             };
@@ -3680,12 +3680,12 @@ fn finish_call_result(
                 if *msize == 8 {
                     emit(
                         code,
-                        super::aarch64::enc_str_d_imm(k as u8, scratch.primary, *off),
+                        super::encode::enc_str_d_imm(k as u8, scratch.primary, *off),
                     );
                 } else {
                     emit(
                         code,
-                        super::aarch64::enc_str_s_imm(k as u8, scratch.primary, *off),
+                        super::encode::enc_str_s_imm(k as u8, scratch.primary, *off),
                     );
                 }
             }
@@ -3717,7 +3717,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
         match dst {
             Place::FpReg(r) => {
                 if r != 0 {
-                    emit(code, super::aarch64::enc_fmov_d_d(r, 0));
+                    emit(code, super::encode::enc_fmov_d_d(r, 0));
                 }
             }
             Place::IntReg(r) => emit(code, enc_fmov_d_to_x(Reg(r), 0)),
@@ -4051,7 +4051,7 @@ fn atomic_save_working(code: &mut Vec<u8>) {
     // offset 0 would overwrite x9/x10's slot.
     emit(
         code,
-        super::aarch64::enc_stp_off(Reg(11), Reg(12), Reg(31), 16),
+        super::encode::enc_stp_off(Reg(11), Reg(12), Reg(31), 16),
     );
 }
 
@@ -4061,7 +4061,7 @@ fn atomic_save_working(code: &mut Vec<u8>) {
 fn atomic_restore_working(code: &mut Vec<u8>) {
     emit(
         code,
-        super::aarch64::enc_ldp_off(Reg(11), Reg(12), Reg(31), 16),
+        super::encode::enc_ldp_off(Reg(11), Reg(12), Reg(31), 16),
     );
     emit(
         code,
@@ -4347,7 +4347,7 @@ fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bo
             if hi != 0 {
                 emit(
                     code,
-                    super::aarch64::enc_add_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
+                    super::encode::enc_add_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
                 );
             }
             if lo != 0 {
@@ -4358,7 +4358,7 @@ fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bo
             if hi != 0 {
                 emit(
                     code,
-                    super::aarch64::enc_sub_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
+                    super::encode::enc_sub_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
                 );
             }
             if lo != 0 {
@@ -4430,9 +4430,9 @@ fn emit_extend(
         }
     };
     let enc = match kind {
-        LoadKind::I8 => super::aarch64::enc_sxtb(rd, rn),
-        LoadKind::I16 => super::aarch64::enc_sxth(rd, rn),
-        LoadKind::I32 => super::aarch64::enc_sxtw(rd, rn),
+        LoadKind::I8 => super::encode::enc_sxtb(rd, rn),
+        LoadKind::I16 => super::encode::enc_sxth(rd, rn),
+        LoadKind::I32 => super::encode::enc_sxtw(rd, rn),
         _ => {
             bail_msg("Extend: unsupported kind");
             return false;
@@ -4570,15 +4570,15 @@ fn emit_load_local(
         {
             emit(
                 code,
-                super::aarch64::enc_ldr_s_imm(dd, Reg(29), disp as u32),
+                super::encode::enc_ldr_s_imm(dd, Reg(29), disp as u32),
             );
         } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
             return false;
         } else {
-            emit(code, super::aarch64::enc_ldr_s_imm(dd, scratch.primary, 0));
+            emit(code, super::encode::enc_ldr_s_imm(dd, scratch.primary, 0));
         }
         if !keep_f32 {
-            emit(code, super::aarch64::enc_fcvt_d_s(dd, dd));
+            emit(code, super::encode::enc_fcvt_d_s(dd, dd));
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
@@ -4604,12 +4604,12 @@ fn emit_load_local(
         {
             emit(
                 code,
-                super::aarch64::enc_ldr_d_imm(dd, Reg(29), disp as u32),
+                super::encode::enc_ldr_d_imm(dd, Reg(29), disp as u32),
             );
         } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
             return false;
         } else {
-            emit(code, super::aarch64::enc_ldr_d_imm(dd, scratch.primary, 0));
+            emit(code, super::encode::enc_ldr_d_imm(dd, scratch.primary, 0));
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
@@ -4629,13 +4629,13 @@ fn emit_load_local(
         // Fits the unscaled 9-bit signed field; load directly
         // with the kind-specific unscaled encoder.
         let word = match kind {
-            LoadKind::I64 => super::aarch64::enc_ldur(rd, Reg(29), disp),
-            LoadKind::I32 => super::aarch64::enc_ldursw(rd, Reg(29), disp),
-            LoadKind::U32 => super::aarch64::enc_ldur32(rd, Reg(29), disp),
-            LoadKind::I16 => super::aarch64::enc_ldursh(rd, Reg(29), disp),
-            LoadKind::U16 => super::aarch64::enc_ldurh(rd, Reg(29), disp),
-            LoadKind::I8 => super::aarch64::enc_ldursb(rd, Reg(29), disp),
-            LoadKind::U8 => super::aarch64::enc_ldurb(rd, Reg(29), disp),
+            LoadKind::I64 => super::encode::enc_ldur(rd, Reg(29), disp),
+            LoadKind::I32 => super::encode::enc_ldursw(rd, Reg(29), disp),
+            LoadKind::U32 => super::encode::enc_ldur32(rd, Reg(29), disp),
+            LoadKind::I16 => super::encode::enc_ldursh(rd, Reg(29), disp),
+            LoadKind::U16 => super::encode::enc_ldurh(rd, Reg(29), disp),
+            LoadKind::I8 => super::encode::enc_ldursb(rd, Reg(29), disp),
+            LoadKind::U8 => super::encode::enc_ldurb(rd, Reg(29), disp),
             LoadKind::F32 | LoadKind::F64 => unreachable!(),
         };
         emit(code, word);
@@ -4652,13 +4652,13 @@ fn emit_load_local(
         return false;
     }
     let word = match kind {
-        LoadKind::I64 => super::aarch64::enc_ldr_imm(rd, scratch.primary, 0),
-        LoadKind::I32 => super::aarch64::enc_ldrsw_imm(rd, scratch.primary, 0),
-        LoadKind::U32 => super::aarch64::enc_ldr32_imm(rd, scratch.primary, 0),
-        LoadKind::I16 => super::aarch64::enc_ldrsh_imm(rd, scratch.primary, 0),
-        LoadKind::U16 => super::aarch64::enc_ldrh_imm(rd, scratch.primary, 0),
-        LoadKind::I8 => super::aarch64::enc_ldrsb_imm(rd, scratch.primary, 0),
-        LoadKind::U8 => super::aarch64::enc_ldrb_imm(rd, scratch.primary, 0),
+        LoadKind::I64 => super::encode::enc_ldr_imm(rd, scratch.primary, 0),
+        LoadKind::I32 => super::encode::enc_ldrsw_imm(rd, scratch.primary, 0),
+        LoadKind::U32 => super::encode::enc_ldr32_imm(rd, scratch.primary, 0),
+        LoadKind::I16 => super::encode::enc_ldrsh_imm(rd, scratch.primary, 0),
+        LoadKind::U16 => super::encode::enc_ldrh_imm(rd, scratch.primary, 0),
+        LoadKind::I8 => super::encode::enc_ldrsb_imm(rd, scratch.primary, 0),
+        LoadKind::U8 => super::encode::enc_ldrb_imm(rd, scratch.primary, 0),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     };
     emit(code, word);
@@ -4704,7 +4704,7 @@ fn emit_store_local(
             {
                 emit(
                     code,
-                    super::aarch64::enc_str_s_imm(sn, Reg(29), disp as u32),
+                    super::encode::enc_str_s_imm(sn, Reg(29), disp as u32),
                 );
                 true
             } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
@@ -4712,7 +4712,7 @@ fn emit_store_local(
             } else {
                 emit(
                     code,
-                    super::aarch64::enc_str_s_imm(sn, scratch.secondary, 0),
+                    super::encode::enc_str_s_imm(sn, scratch.secondary, 0),
                 );
                 true
             }
@@ -4730,7 +4730,7 @@ fn emit_store_local(
             }
             if let Some(rd) = fp_reg(dst) {
                 if rd != sn {
-                    emit(code, super::aarch64::enc_fmov_s_s(rd, sn));
+                    emit(code, super::encode::enc_fmov_s_s(rd, sn));
                 }
             } else if let Place::Spill(slot) = dst {
                 emit_sp_str_d_auto(code, sn, spill_off(frame, slot));
@@ -4755,7 +4755,7 @@ fn emit_store_local(
                 return false;
             }
         };
-        emit(code, super::aarch64::enc_fcvt_s_d(SCRATCH_FP1, dn));
+        emit(code, super::encode::enc_fcvt_s_d(SCRATCH_FP1, dn));
         if !store_to_slot(code, SCRATCH_FP1) {
             return false;
         }
@@ -4788,21 +4788,21 @@ fn emit_store_local(
         {
             emit(
                 code,
-                super::aarch64::enc_str_d_imm(dn, Reg(29), disp as u32),
+                super::encode::enc_str_d_imm(dn, Reg(29), disp as u32),
             );
         } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
             return false;
         } else {
             emit(
                 code,
-                super::aarch64::enc_str_d_imm(dn, scratch.secondary, 0),
+                super::encode::enc_str_d_imm(dn, scratch.secondary, 0),
             );
         }
         // c5 store-op leaves the value in the accumulator; propagate
         // to dst if the allocator parked it elsewhere.
         match dst {
             Place::FpReg(r) if r != dn => {
-                emit(code, super::aarch64::enc_fmov_d_d(r, dn));
+                emit(code, super::encode::enc_fmov_d_d(r, dn));
             }
             Place::Spill(slot) => {
                 let sp_off = spill_off(frame, slot);
@@ -4826,7 +4826,7 @@ fn emit_store_local(
     // `fmov d -> x` into a GPR before the store; otherwise it
     // routes through the normal int materialisation.
     let rv = if let Place::FpReg(dr) = value_place {
-        emit(code, super::aarch64::enc_fmov_d_to_x(scratch.primary, dr));
+        emit(code, super::encode::enc_fmov_d_to_x(scratch.primary, dr));
         scratch.primary
     } else {
         match materialize_int(code, value_place, scratch.primary, frame) {
@@ -4842,10 +4842,10 @@ fn emit_store_local(
             // an assignment expression yields the stored value before
             // any re-narrowing on read-back (C99 6.5.16p3).
             let enc = match kind {
-                StoreKind::I64 => super::aarch64::enc_stur(rv, Reg(29), disp),
-                StoreKind::I32 => super::aarch64::enc_stur32(rv, Reg(29), disp),
-                StoreKind::I16 => super::aarch64::enc_sturh(rv, Reg(29), disp),
-                StoreKind::I8 => super::aarch64::enc_sturb(rv, Reg(29), disp),
+                StoreKind::I64 => super::encode::enc_stur(rv, Reg(29), disp),
+                StoreKind::I32 => super::encode::enc_stur32(rv, Reg(29), disp),
+                StoreKind::I16 => super::encode::enc_sturh(rv, Reg(29), disp),
+                StoreKind::I8 => super::encode::enc_sturb(rv, Reg(29), disp),
                 StoreKind::F32 | StoreKind::F64 => unreachable!(),
             };
             emit(code, enc);
@@ -4888,10 +4888,10 @@ fn emit_store_local_large_disp(
         return false;
     }
     let enc = match kind {
-        StoreKind::I64 => super::aarch64::enc_str_imm(rv, scratch.secondary, 0),
-        StoreKind::I32 => super::aarch64::enc_str32_imm(rv, scratch.secondary, 0),
-        StoreKind::I16 => super::aarch64::enc_strh_imm(rv, scratch.secondary, 0),
-        StoreKind::I8 => super::aarch64::enc_strb_imm(rv, scratch.secondary, 0),
+        StoreKind::I64 => super::encode::enc_str_imm(rv, scratch.secondary, 0),
+        StoreKind::I32 => super::encode::enc_str32_imm(rv, scratch.secondary, 0),
+        StoreKind::I16 => super::encode::enc_strh_imm(rv, scratch.secondary, 0),
+        StoreKind::I8 => super::encode::enc_strb_imm(rv, scratch.secondary, 0),
         StoreKind::F32 | StoreKind::F64 => unreachable!(),
     };
     emit(code, enc);
@@ -4955,13 +4955,13 @@ fn emit_load_indexed(
         return false;
     }
     let word = match kind {
-        LoadKind::I64 => super::aarch64::enc_ldr_reg_lsl3(rd, rn, rm),
-        LoadKind::I32 => super::aarch64::enc_ldrsw_reg_lsl2(rd, rn, rm),
-        LoadKind::U32 => super::aarch64::enc_ldr32_reg_lsl2(rd, rn, rm),
-        LoadKind::I16 => super::aarch64::enc_ldrsh_reg_lsl1(rd, rn, rm),
-        LoadKind::U16 => super::aarch64::enc_ldrh_reg_lsl1(rd, rn, rm),
-        LoadKind::I8 => super::aarch64::enc_ldrsb_reg(rd, rn, rm),
-        LoadKind::U8 => super::aarch64::enc_ldrb_reg(rd, rn, rm),
+        LoadKind::I64 => super::encode::enc_ldr_reg_lsl3(rd, rn, rm),
+        LoadKind::I32 => super::encode::enc_ldrsw_reg_lsl2(rd, rn, rm),
+        LoadKind::U32 => super::encode::enc_ldr32_reg_lsl2(rd, rn, rm),
+        LoadKind::I16 => super::encode::enc_ldrsh_reg_lsl1(rd, rn, rm),
+        LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm),
+        LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm),
+        LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     };
     emit(code, word);
@@ -5041,7 +5041,7 @@ fn emit_store_indexed(
         let shift = scale.trailing_zeros();
         emit(
             code,
-            super::aarch64::enc_add_reg_lsl(scratch.primary, rn, rm, shift),
+            super::encode::enc_add_reg_lsl(scratch.primary, rn, rm, shift),
         );
         addr_reg = Some(scratch.primary);
         vscratch = scratch.secondary;
@@ -5051,7 +5051,7 @@ fn emit_store_indexed(
     let rv = if let StoreKind::I64 = kind
         && let Place::FpReg(dr) = value_place
     {
-        emit(code, super::aarch64::enc_fmov_d_to_x(vscratch, dr));
+        emit(code, super::encode::enc_fmov_d_to_x(vscratch, dr));
         vscratch
     } else {
         match materialize_int(code, value_place, vscratch, frame) {
@@ -5060,14 +5060,14 @@ fn emit_store_indexed(
         }
     };
     let word = match (kind, addr_reg) {
-        (StoreKind::I64, None) => super::aarch64::enc_str_reg_lsl3(rv, rn, rm),
-        (StoreKind::I32, None) => super::aarch64::enc_str32_reg_lsl2(rv, rn, rm),
-        (StoreKind::I16, None) => super::aarch64::enc_strh_reg_lsl1(rv, rn, rm),
-        (StoreKind::I8, None) => super::aarch64::enc_strb_reg(rv, rn, rm),
-        (StoreKind::I64, Some(a)) => super::aarch64::enc_str_imm(rv, a, 0),
-        (StoreKind::I32, Some(a)) => super::aarch64::enc_str32_imm(rv, a, 0),
-        (StoreKind::I16, Some(a)) => super::aarch64::enc_strh_imm(rv, a, 0),
-        (StoreKind::I8, Some(a)) => super::aarch64::enc_strb_imm(rv, a, 0),
+        (StoreKind::I64, None) => super::encode::enc_str_reg_lsl3(rv, rn, rm),
+        (StoreKind::I32, None) => super::encode::enc_str32_reg_lsl2(rv, rn, rm),
+        (StoreKind::I16, None) => super::encode::enc_strh_reg_lsl1(rv, rn, rm),
+        (StoreKind::I8, None) => super::encode::enc_strb_reg(rv, rn, rm),
+        (StoreKind::I64, Some(a)) => super::encode::enc_str_imm(rv, a, 0),
+        (StoreKind::I32, Some(a)) => super::encode::enc_str32_imm(rv, a, 0),
+        (StoreKind::I16, Some(a)) => super::encode::enc_strh_imm(rv, a, 0),
+        (StoreKind::I8, Some(a)) => super::encode::enc_strb_imm(rv, a, 0),
         (StoreKind::F32 | StoreKind::F64, _) => unreachable!(),
     };
     emit(code, word);
@@ -5138,7 +5138,7 @@ fn emit_store(
             // Propagate the f32 accumulator to `dst` if parked elsewhere.
             if let Some(rd) = fp_reg(dst) {
                 if rd != sn {
-                    emit(code, super::aarch64::enc_fmov_s_s(rd, sn));
+                    emit(code, super::encode::enc_fmov_s_s(rd, sn));
                 }
             } else if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
@@ -5187,10 +5187,10 @@ fn emit_store(
         let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
             return false;
         };
-        emit(code, super::aarch64::enc_str_d_imm(dn, rn, disp));
+        emit(code, super::encode::enc_str_d_imm(dn, rn, disp));
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
-                emit(code, super::aarch64::enc_fmov_d_d(rd, dn));
+                emit(code, super::encode::enc_fmov_d_d(rd, dn));
             }
         } else if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
@@ -5285,10 +5285,10 @@ fn emit_binop(
         };
         let word = if is_f32 {
             match op {
-                BinOp::Fadd => super::aarch64::enc_fadd_s(dd, dn, dm),
-                BinOp::Fsub => super::aarch64::enc_fsub_s(dd, dn, dm),
-                BinOp::Fmul => super::aarch64::enc_fmul_s(dd, dn, dm),
-                BinOp::Fdiv => super::aarch64::enc_fdiv_s(dd, dn, dm),
+                BinOp::Fadd => super::encode::enc_fadd_s(dd, dn, dm),
+                BinOp::Fsub => super::encode::enc_fsub_s(dd, dn, dm),
+                BinOp::Fmul => super::encode::enc_fmul_s(dd, dn, dm),
+                BinOp::Fdiv => super::encode::enc_fdiv_s(dd, dn, dm),
                 _ => return false,
             }
         } else {
@@ -5369,9 +5369,9 @@ fn emit_binop(
         };
         let k = alloc.sxtw_k.get(v as usize).copied().unwrap_or(0);
         let word = match k {
-            32 => super::aarch64::enc_sxtw(rd, rn),
-            48 => super::aarch64::enc_sxth(rd, rn),
-            56 => super::aarch64::enc_sxtb(rd, rn),
+            32 => super::encode::enc_sxtw(rd, rn),
+            48 => super::encode::enc_sxth(rd, rn),
+            56 => super::encode::enc_sxtb(rd, rn),
             _ => return false,
         };
         emit(code, word);
@@ -5442,7 +5442,7 @@ fn emit_binop(
         BinOp::Shl => enc_lslv(rd, rn, rm),
         BinOp::Shr => enc_asrv(rd, rn, rm),
         BinOp::Shru => enc_lsrv(rd, rn, rm),
-        BinOp::Ror => super::aarch64::enc_rorv(rd, rn, rm),
+        BinOp::Ror => super::encode::enc_rorv(rd, rn, rm),
         _ => return false,
     };
     emit(code, word);
@@ -5542,9 +5542,9 @@ fn emit_binop_imm(
             None => return false,
         };
         let word = match rhs_imm {
-            32 => super::aarch64::enc_sxtw(rd, rn),
-            48 => super::aarch64::enc_sxth(rd, rn),
-            56 => super::aarch64::enc_sxtb(rd, rn),
+            32 => super::encode::enc_sxtw(rd, rn),
+            48 => super::encode::enc_sxth(rd, rn),
+            56 => super::encode::enc_sxtb(rd, rn),
             _ => unreachable!(),
         };
         emit(code, word);
@@ -5595,11 +5595,11 @@ fn emit_binop_imm(
         None
     };
     let used_peephole = match op {
-        BinOp::Shl => shift_amount.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
-        BinOp::Shr => shift_amount.map(|s| super::aarch64::enc_asr_imm(rd, rn, s)),
-        BinOp::Shru => shift_amount.map(|s| super::aarch64::enc_lsr_imm(rd, rn, s)),
-        BinOp::Ror => shift_amount.map(|s| super::aarch64::enc_ror_imm(rd, rn, s)),
-        BinOp::Mul => imm_pow2_shift.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
+        BinOp::Shl => shift_amount.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
+        BinOp::Shr => shift_amount.map(|s| super::encode::enc_asr_imm(rd, rn, s)),
+        BinOp::Shru => shift_amount.map(|s| super::encode::enc_lsr_imm(rd, rn, s)),
+        BinOp::Ror => shift_amount.map(|s| super::encode::enc_ror_imm(rd, rn, s)),
+        BinOp::Mul => imm_pow2_shift.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
         BinOp::Add => imm12
             .map(|v| enc_add_imm(rd, rn, v))
             .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v))),
@@ -5610,12 +5610,12 @@ fn emit_binop_imm(
         // materialising the all-ones constant (movz + 3x movk) into a
         // scratch and xoring. `mvn` reads the same operand, so the
         // allocator's liveness is unchanged.
-        BinOp::Xor if rhs_imm == -1 => Some(super::aarch64::enc_mvn(rd, rn)),
+        BinOp::Xor if rhs_imm == -1 => Some(super::encode::enc_mvn(rd, rn)),
         // `x & 0xffffffff` zero-extends the low word; a 32-bit move does
         // it in one instruction, avoiding the load-imm64 + and-register
         // pair (the immediate has no logical-immediate-AND short form
         // the rest of this path would otherwise use).
-        BinOp::And if rhs_imm as u64 == 0xffff_ffff => Some(super::aarch64::enc_mov_w_w(rd, rn)),
+        BinOp::And if rhs_imm as u64 == 0xffff_ffff => Some(super::encode::enc_mov_w_w(rd, rn)),
         _ => None,
     };
     if let Some(word) = used_peephole {
@@ -5681,7 +5681,7 @@ fn emit_binop_imm(
         BinOp::Shl => enc_lslv(rd, rn, rm),
         BinOp::Shr => enc_asrv(rd, rn, rm),
         BinOp::Shru => enc_lsrv(rd, rn, rm),
-        BinOp::Ror => super::aarch64::enc_rorv(rd, rn, rm),
+        BinOp::Ror => super::encode::enc_rorv(rd, rn, rm),
         _ => return false,
     };
     emit(code, word);
@@ -5830,7 +5830,7 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 /// pool so it collides with no pending source or target.
 fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch_d: u8) {
     super::ssa_emit_common::schedule_reg_moves_via_scratch(code, moves, scratch_d, |code, t, s| {
-        emit(code, super::aarch64::enc_fmov_d_d(t, s))
+        emit(code, super::encode::enc_fmov_d_d(t, s))
     });
 }
 
@@ -5911,7 +5911,7 @@ fn schedule_place_moves(
 /// (an FP phi's home and its operands are FP-classed).
 impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Backend {
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
-        emit(code, super::aarch64::enc_fmov_d_d(dst, src));
+        emit(code, super::encode::enc_fmov_d_d(dst, src));
     }
     fn fp_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
         // FP phi moves keep all values in d-regs, so the GPR scratch x16 is
@@ -6122,7 +6122,7 @@ fn marshal_args(
                         None => return false,
                     };
                     if src != r {
-                        emit(code, super::aarch64::enc_fmov_d_d(r, src));
+                        emit(code, super::encode::enc_fmov_d_d(r, src));
                     }
                 }
             }
@@ -6163,9 +6163,9 @@ fn marshal_args(
                 .and_then(|m| m.get(k).copied())
                 .unwrap_or(((k as u32) * 8, 8));
             if msize == 8 {
-                emit(code, super::aarch64::enc_ldr_d_imm(cr.reg, base, off));
+                emit(code, super::encode::enc_ldr_d_imm(cr.reg, base, off));
             } else {
-                emit(code, super::aarch64::enc_ldr_s_imm(cr.reg, base, off));
+                emit(code, super::encode::enc_ldr_s_imm(cr.reg, base, off));
             }
         }
     }
@@ -6326,9 +6326,9 @@ fn emit_return(
             // for an F32). Load each from its byte offset in the source.
             for (k, (off, msize)) in members.iter().enumerate() {
                 if *msize == 8 {
-                    emit(code, super::aarch64::enc_ldr_d_imm(k as u8, base, *off));
+                    emit(code, super::encode::enc_ldr_d_imm(k as u8, base, *off));
                 } else {
-                    emit(code, super::aarch64::enc_ldr_s_imm(k as u8, base, *off));
+                    emit(code, super::encode::enc_ldr_s_imm(k as u8, base, *off));
                 }
             }
         } else if size <= 16 {
@@ -6377,7 +6377,7 @@ fn emit_return(
                 && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));
         if let Place::FpReg(r) = place {
             if r != 0 {
-                emit(code, super::aarch64::enc_fmov_d_d(0, r));
+                emit(code, super::encode::enc_fmov_d_d(0, r));
             }
         } else if returns_fp {
             // The function returns a floating-point scalar in d0 but the

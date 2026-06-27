@@ -62,7 +62,6 @@ pub(crate) mod ssa_alloc;
 pub(crate) mod ssa_build;
 #[cfg(feature = "std")]
 mod ssa_dump;
-mod ssa_emit_aarch64;
 mod ssa_emit_common;
 mod ssa_liveness;
 pub(crate) mod ssa_mem2reg;

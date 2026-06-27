@@ -62,6 +62,7 @@ use super::aarch64::{
     load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
+use super::ssa_emit_common::place_same_loc;
 
 /// Per-function frame layout. Bytes are 16-aligned at every
 /// region boundary so AAPCS64's sp-at-call-site invariant holds.
@@ -6084,15 +6085,6 @@ fn emit_phi_predecessor_moves(
 /// Compare two `Place`s by physical location identity. Distinct
 /// `Place` variants never alias; same-variant places alias when their
 /// register number or spill slot matches.
-fn place_same_loc(a: Place, b: Place) -> bool {
-    match (a, b) {
-        (Place::IntReg(x), Place::IntReg(y)) => x == y,
-        (Place::Spill(x), Place::Spill(y)) => x == y,
-        (Place::FpReg(x), Place::FpReg(y)) => x == y,
-        _ => false,
-    }
-}
-
 /// Emit a single resolved location-to-location move. `stage` is a
 /// scratch register used only for the spill-to-spill case (load then
 /// store); `hold` is borrowed (saved/restored on the stack) to carry

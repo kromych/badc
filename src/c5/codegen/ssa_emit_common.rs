@@ -25,6 +25,18 @@ pub(super) fn slots16(n_slots: u32) -> u32 {
     align16(n_slots * 8)
 }
 
+/// Whether two resolved locations name the same physical place. A move
+/// between identical locations is elided by the move schedulers.
+pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Place) -> bool {
+    use super::ssa_alloc::Place;
+    match (a, b) {
+        (Place::IntReg(x), Place::IntReg(y)) => x == y,
+        (Place::Spill(x), Place::Spill(y)) => x == y,
+        (Place::FpReg(x), Place::FpReg(y)) => x == y,
+        _ => false,
+    }
+}
+
 /// Whether per-pass wall-clock instrumentation is enabled. The
 /// `BADC_TIME_PASSES` environment variable is consulted only under the
 /// `codegen_test` feature; a production build always reports `false`

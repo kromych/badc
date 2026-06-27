@@ -45,6 +45,7 @@ use super::DataFixup;
 use super::GotFixup;
 use super::Target;
 use super::ssa_alloc::{Allocation, Place};
+use super::ssa_emit_common::place_same_loc;
 use super::x86_64::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
     emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
@@ -1052,15 +1053,6 @@ fn emit_phi_predecessor_moves(
 /// Compare two `Place`s by physical location identity. Distinct
 /// `Place` variants never alias; same-variant places alias when their
 /// register number or spill slot matches.
-fn place_same_loc(a: Place, b: Place) -> bool {
-    match (a, b) {
-        (Place::IntReg(x), Place::IntReg(y)) => x == y,
-        (Place::Spill(x), Place::Spill(y)) => x == y,
-        (Place::FpReg(x), Place::FpReg(y)) => x == y,
-        _ => false,
-    }
-}
-
 /// Emit a single resolved location-to-location move. `stage` is a
 /// scratch register used only for the spill-to-spill case (load then
 /// store); it must lie outside the allocator's bank.

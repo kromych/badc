@@ -155,6 +155,95 @@ pub(super) trait EmitBackend {
         hold: u8,
         stage: u8,
     );
+
+    // Per-instruction lowering. Each routes one `Inst` variant to the target's
+    // leaf emitter; the shared `emit_inst` dispatch calls through these so a
+    // single match table serves both targets.
+
+    /// `Inst::Load`: load `[addr + disp]` of width `kind` into `dst`.
+    /// `keep_f32` preserves single precision for an f32 load.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_load(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        addr: u32,
+        disp: i32,
+        kind: super::super::ir::LoadKind,
+        keep_f32: bool,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+    ) -> bool;
+
+    /// `Inst::LoadIndexed`: load `[base + index*scale]` of width `kind`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_load_indexed(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        base: u32,
+        index: u32,
+        scale: u8,
+        kind: super::super::ir::LoadKind,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+    ) -> bool;
+
+    /// `Inst::StoreIndexed`: store `value` to `[base + index*scale]`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_store_indexed(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        base: u32,
+        index: u32,
+        scale: u8,
+        value: u32,
+        kind: super::super::ir::StoreKind,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+    ) -> bool;
+
+    /// `Inst::Mcpy`: copy `size` bytes from `src_val` to `dst_val`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_mcpy(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst_place: super::ssa_alloc::Place,
+        dst_val: u32,
+        src_val: u32,
+        size: i64,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+    ) -> bool;
+
+    /// `Inst::AtomicRmw`: atomic read-modify-write of `width` bytes at `addr`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_atomic_rmw(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        op: super::super::ir::AtomicRmwOp,
+        addr: super::super::ir::ValueId,
+        value: super::super::ir::ValueId,
+        width: u8,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+    ) -> bool;
+
+    /// `Inst::AtomicCas`: atomic compare-and-swap of `width` bytes at `addr`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_atomic_cas(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        addr: super::super::ir::ValueId,
+        expected_addr: super::super::ir::ValueId,
+        desired: super::super::ir::ValueId,
+        width: u8,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+    ) -> bool;
 }
 
 /// Stateless backend selectors. The per-target leaf implementations live in the

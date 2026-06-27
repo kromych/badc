@@ -62,6 +62,7 @@ use super::aarch64::{
     load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
+use super::ssa_emit_common::EmitBackend;
 use super::ssa_emit_common::{Frame, build_arg_aggs, place_same_loc};
 
 /// Compute the aarch64 stack-frame layout for `func`. Fills the shared
@@ -1800,6 +1801,7 @@ fn emit_inst(
     let pending_func_fixups = &mut *cx.pending_func_fixups;
     let tls_index_fixups = &mut *cx.tls_index_fixups;
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
+    let b = super::ssa_emit_common::Aarch64Backend;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca; emit
@@ -1984,7 +1986,7 @@ fn emit_inst(
         // (it needs the local block_offsets table for its PC-relative
         // fixup), so it never reaches emit_inst.
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
-        Inst::Load { addr, disp, kind } => emit_load(
+        Inst::Load { addr, disp, kind } => b.emit_load(
             code,
             dst,
             *addr,
@@ -1993,7 +1995,6 @@ fn emit_inst(
             alloc.is_f32(v),
             alloc,
             frame,
-            scratch,
         ),
         Inst::Store {
             addr,
@@ -2014,17 +2015,15 @@ fn emit_inst(
             index,
             scale,
             kind,
-        } => emit_load_indexed(
-            code, dst, *base, *index, *scale, *kind, alloc, frame, scratch,
-        ),
+        } => b.emit_load_indexed(code, dst, *base, *index, *scale, *kind, alloc, frame),
         Inst::StoreIndexed {
             base,
             index,
             scale,
             value,
             kind,
-        } => emit_store_indexed(
-            code, dst, *base, *index, *scale, *value, *kind, alloc, frame, scratch,
+        } => b.emit_store_indexed(
+            code, dst, *base, *index, *scale, *value, *kind, alloc, frame,
         ),
         Inst::Binop { op, lhs, rhs } => {
             emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame, scratch)
@@ -2116,19 +2115,19 @@ fn emit_inst(
             dst: d,
             src: s,
             size,
-        } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame, scratch),
+        } => b.emit_mcpy(code, dst, *d, *s, *size, alloc, frame),
         Inst::AtomicRmw {
             op,
             addr,
             value,
             width,
-        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame, scratch),
+        } => b.emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame),
         Inst::AtomicCas {
             addr,
             expected_addr,
             desired,
             width,
-        } => emit_atomic_cas(
+        } => b.emit_atomic_cas(
             code,
             dst,
             *addr,
@@ -2137,7 +2136,6 @@ fn emit_inst(
             *width,
             alloc,
             frame,
-            scratch,
         ),
         Inst::Intrinsic { kind, args } => emit_intrinsic(
             code,
@@ -5977,6 +5975,144 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Back
                 m.0 = Place::IntReg(hold);
             }
         }
+    }
+    fn emit_load(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        addr: u32,
+        disp: i32,
+        kind: LoadKind,
+        keep_f32: bool,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_load(
+            code,
+            dst,
+            addr,
+            disp,
+            kind,
+            keep_f32,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+        )
+    }
+    fn emit_load_indexed(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        base: u32,
+        index: u32,
+        scale: u8,
+        kind: LoadKind,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_load_indexed(
+            code,
+            dst,
+            base,
+            index,
+            scale,
+            kind,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+        )
+    }
+    fn emit_store_indexed(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        base: u32,
+        index: u32,
+        scale: u8,
+        value: u32,
+        kind: StoreKind,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_store_indexed(
+            code,
+            dst,
+            base,
+            index,
+            scale,
+            value,
+            kind,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+        )
+    }
+    fn emit_mcpy(
+        &self,
+        code: &mut Vec<u8>,
+        dst_place: Place,
+        dst_val: u32,
+        src_val: u32,
+        size: i64,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_mcpy(
+            code,
+            dst_place,
+            dst_val,
+            src_val,
+            size,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+        )
+    }
+    fn emit_atomic_rmw(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        op: super::super::ir::AtomicRmwOp,
+        addr: super::super::ir::ValueId,
+        value: super::super::ir::ValueId,
+        width: u8,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_atomic_rmw(
+            code,
+            dst,
+            op,
+            addr,
+            value,
+            width,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+        )
+    }
+    fn emit_atomic_cas(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        addr: super::super::ir::ValueId,
+        expected_addr: super::super::ir::ValueId,
+        desired: super::super::ir::ValueId,
+        width: u8,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_atomic_cas(
+            code,
+            dst,
+            addr,
+            expected_addr,
+            desired,
+            width,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+        )
     }
 }
 

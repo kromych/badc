@@ -2001,14 +2001,12 @@ fn emit_inst(
             disp,
             value,
             kind,
-        } => emit_store(
-            code, dst, *addr, *disp, *value, *kind, alloc, frame, scratch,
-        ),
+        } => b.emit_store(code, dst, *addr, *disp, *value, *kind, alloc, frame),
         Inst::LoadLocal { off, kind } => {
-            emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, scratch)
+            b.emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
         }
         Inst::StoreLocal { off, value, kind } => {
-            emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch)
+            b.emit_store_local(code, dst, *off, *value, *kind, alloc, frame, func, abi)
         }
         Inst::LoadIndexed {
             base,
@@ -2137,17 +2135,16 @@ fn emit_inst(
             alloc,
             frame,
         ),
-        Inst::Intrinsic { kind, args } => emit_intrinsic(
+        Inst::Intrinsic { kind, args } => b.emit_intrinsic(
             code,
-            func,
-            abi,
             *kind,
             args,
             dst,
             v,
+            func,
             alloc,
             frame,
-            scratch,
+            abi,
             *current_alloca_top,
         ),
         Inst::Fneg(src) => {
@@ -6112,6 +6109,92 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Back
             alloc,
             frame,
             &ScratchPool::new(),
+        )
+    }
+    fn emit_store(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        addr: u32,
+        disp: i32,
+        value: u32,
+        kind: StoreKind,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_store(
+            code,
+            dst,
+            addr,
+            disp,
+            value,
+            kind,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+        )
+    }
+    fn emit_load_local(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        off: i64,
+        kind: LoadKind,
+        keep_f32: bool,
+        frame: Frame,
+        _func: &FunctionSsa,
+        _abi: super::Abi,
+    ) -> bool {
+        emit_load_local(code, dst, off, kind, keep_f32, frame, &ScratchPool::new())
+    }
+    fn emit_store_local(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        off: i64,
+        value: u32,
+        kind: StoreKind,
+        alloc: &Allocation,
+        frame: Frame,
+        _func: &FunctionSsa,
+        _abi: super::Abi,
+    ) -> bool {
+        emit_store_local(
+            code,
+            dst,
+            off,
+            value,
+            kind,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+        )
+    }
+    fn emit_intrinsic(
+        &self,
+        code: &mut Vec<u8>,
+        kind: i64,
+        args: &[u32],
+        dst: Place,
+        v: super::super::ir::ValueId,
+        func: &FunctionSsa,
+        alloc: &Allocation,
+        frame: Frame,
+        abi: super::Abi,
+        current_alloca_top: u32,
+    ) -> bool {
+        emit_intrinsic(
+            code,
+            func,
+            abi,
+            kind,
+            args,
+            dst,
+            v,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+            current_alloca_top,
         )
     }
 }

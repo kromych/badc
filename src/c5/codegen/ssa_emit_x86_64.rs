@@ -1134,6 +1134,72 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend 
     ) -> bool {
         emit_atomic_cas(code, dst, addr, expected_addr, desired, width, alloc, frame)
     }
+    fn emit_store(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        addr: u32,
+        disp: i32,
+        value: u32,
+        kind: StoreKind,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_store(code, dst, addr, disp, value, kind, alloc, frame)
+    }
+    fn emit_load_local(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        off: i64,
+        kind: LoadKind,
+        keep_f32: bool,
+        frame: Frame,
+        func: &FunctionSsa,
+        abi: super::Abi,
+    ) -> bool {
+        emit_load_local(code, dst, off, kind, keep_f32, frame, func, abi)
+    }
+    fn emit_store_local(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        off: i64,
+        value: u32,
+        kind: StoreKind,
+        alloc: &Allocation,
+        frame: Frame,
+        func: &FunctionSsa,
+        abi: super::Abi,
+    ) -> bool {
+        emit_store_local(code, dst, off, value, kind, alloc, frame, func, abi)
+    }
+    fn emit_intrinsic(
+        &self,
+        code: &mut Vec<u8>,
+        kind: i64,
+        args: &[u32],
+        dst: Place,
+        v: super::super::ir::ValueId,
+        func: &FunctionSsa,
+        alloc: &Allocation,
+        frame: Frame,
+        abi: super::Abi,
+        current_alloca_top: u32,
+    ) -> bool {
+        emit_intrinsic(
+            code,
+            kind,
+            args,
+            dst,
+            v,
+            func,
+            alloc,
+            frame,
+            abi,
+            current_alloca_top,
+        )
+    }
 }
 
 /// Sequentialize a parallel copy over FP locations (xmm registers and
@@ -2957,12 +3023,12 @@ fn emit_inst(
             disp,
             value,
             kind,
-        } => emit_store(code, dst, v, *addr, *disp, *value, *kind, alloc, frame),
+        } => b.emit_store(code, dst, *addr, *disp, *value, *kind, alloc, frame),
         Inst::LoadLocal { off, kind } => {
-            emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
+            b.emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
         }
         Inst::StoreLocal { off, value, kind } => {
-            emit_store_local(code, dst, v, *off, *value, *kind, alloc, frame, func, abi)
+            b.emit_store_local(code, dst, *off, *value, *kind, alloc, frame, func, abi)
         }
         Inst::LoadIndexed {
             base,
@@ -3098,7 +3164,7 @@ fn emit_inst(
             *ret_slot_local,
             func,
         ),
-        Inst::Intrinsic { kind, args } => emit_intrinsic(
+        Inst::Intrinsic { kind, args } => b.emit_intrinsic(
             code,
             *kind,
             args,
@@ -3503,7 +3569,6 @@ fn emit_load_local(
 fn emit_store_local(
     code: &mut Vec<u8>,
     dst: Place,
-    _v: super::super::ir::ValueId,
     off: i64,
     value: u32,
     kind: StoreKind,
@@ -3887,7 +3952,6 @@ fn emit_load(
 fn emit_store(
     code: &mut Vec<u8>,
     dst: Place,
-    _v: super::super::ir::ValueId,
     addr: u32,
     disp: i32,
     value: u32,

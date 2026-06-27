@@ -244,6 +244,65 @@ pub(super) trait EmitBackend {
         alloc: &super::ssa_alloc::Allocation,
         frame: Frame,
     ) -> bool;
+
+    /// `Inst::Store`: store `value` to `[addr + disp]` of width `kind`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_store(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        addr: u32,
+        disp: i32,
+        value: u32,
+        kind: super::super::ir::StoreKind,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+    ) -> bool;
+
+    /// `Inst::LoadLocal`: load local at frame offset `off` of width `kind`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_load_local(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        off: i64,
+        kind: super::super::ir::LoadKind,
+        keep_f32: bool,
+        frame: Frame,
+        func: &super::super::ir::FunctionSsa,
+        abi: super::Abi,
+    ) -> bool;
+
+    /// `Inst::StoreLocal`: store `value` to local at frame offset `off`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_store_local(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        off: i64,
+        value: u32,
+        kind: super::super::ir::StoreKind,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+        func: &super::super::ir::FunctionSsa,
+        abi: super::Abi,
+    ) -> bool;
+
+    /// `Inst::Intrinsic`: lower the compiler intrinsic identified by `kind`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_intrinsic(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        kind: i64,
+        args: &[u32],
+        dst: super::ssa_alloc::Place,
+        v: super::super::ir::ValueId,
+        func: &super::super::ir::FunctionSsa,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+        abi: super::Abi,
+        current_alloca_top: u32,
+    ) -> bool;
 }
 
 /// Stateless backend selectors. The per-target leaf implementations live in the

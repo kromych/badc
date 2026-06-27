@@ -150,7 +150,7 @@ pub(super) struct Allocation {
     /// Empty (all-false) for SSA built outside the walker.
     pub f32_values: Vec<bool>,
     /// Per-value upper-bit observation (see
-    /// `ssa_drop_redundant_extend::compute_high_observed`). The emit
+    /// `drop_redundant_extend::compute_high_observed`). The emit
     /// consults this to skip a `ParamRef` entry sign-extension when no
     /// consumer reads the parameter's bits above bit 31. Empty or
     /// out-of-range entries default to observed, keeping the extension.
@@ -625,7 +625,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         branch_fused,
         hints,
         f32_values: func.f32_values.clone(),
-        high_observed: super::ssa_drop_redundant_extend::compute_high_observed(func),
+        high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(func),
     }
 }
 

@@ -22,7 +22,7 @@
 
 use alloc::vec::Vec;
 
-use super::super::ir::{BinOp, FunctionSsa, Inst, Terminator, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, Terminator, ValueId};
 
 /// f32 marker for a value, defaulting to f64 when unrecorded.
 fn is_f32(func: &FunctionSsa, idx: ValueId) -> bool {
@@ -47,7 +47,7 @@ fn as_fmul(func: &FunctionSsa, idx: ValueId, want_f32: bool) -> Option<(ValueId,
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
     let mut counts = alloc::vec![0u32; func.insts.len()];
     for inst in &func.insts {
-        super::ssa_alloc::for_each_operand(inst, |v| {
+        crate::c5::codegen::ssa_alloc::for_each_operand(inst, |v| {
             if let Some(slot) = counts.get_mut(v as usize) {
                 *slot += 1;
             }
@@ -65,7 +65,7 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
             Terminator::Return(v) => bump(v),
             Terminator::Jmp(_) | Terminator::TailExt(_) | Terminator::FallThrough(_) => {}
         }
-        if block.exit_acc != super::super::ir::NO_VALUE {
+        if block.exit_acc != crate::c5::ir::NO_VALUE {
             bump(block.exit_acc);
         }
     }
@@ -152,7 +152,7 @@ fn match_fma(func: &FunctionSsa, counts: &[u32], idx: usize) -> Option<Inst> {
 }
 
 /// Walk every function, contracting recognised multiply-add chains.
-pub(super) fn run(funcs: &mut [FunctionSsa]) {
+pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let counts = use_counts(func);
         let n = func.insts.len();

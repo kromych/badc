@@ -152,7 +152,7 @@ pub(crate) enum Inst {
     /// Fused multiply-add computed with a single rounding (C99 6.5p8,
     /// FP_CONTRACT). The value is
     /// `(neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`. Produced
-    /// by `ssa_fma` from an `fadd` / `fsub` whose single-use operand is
+    /// by `fma` from an `fadd` / `fsub` whose single-use operand is
     /// an `fmul` of the same floating-point width; the result's width
     /// follows the contracted `fadd` / `fsub` (tracked in `f32_values`).
     /// The four sign combinations map to the host fmadd / fmsub /
@@ -414,7 +414,7 @@ pub(crate) enum BinOp {
     Shr,
     Shru,
     /// Bit-rotate right: `(x >> c) | (x << (W - c))` where W is
-    /// the type width. The `ssa_rotate` pass folds the canonical
+    /// the type width. The `rotate` pass folds the canonical
     /// shift / OR shape to this opcode so x86_64's `ror` and
     /// aarch64's `ror` lower to a single instruction.
     Ror,

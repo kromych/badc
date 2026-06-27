@@ -4455,7 +4455,7 @@ fn emit_load(
     scratch: &ScratchPool,
 ) -> bool {
     // `disp` is a byte offset folded from a constant pointer addition.
-    // ssa_index_fold only emits a displacement that is a multiple of the
+    // index_fold only emits a displacement that is a multiple of the
     // access width and within the scaled-immediate range, so it passes
     // straight to the immediate-offset encoders below.
     let disp = disp as u32;
@@ -6568,7 +6568,7 @@ mod tests {
             crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target).expect("ssa");
         // StoreIndexed is produced by the index fold, which the lowering
         // runs after `produce_ssa_funcs`.
-        super::super::ssa_index_fold::run(&mut funcs);
+        crate::c5::codegen::passes::index_fold::run(&mut funcs);
         let func = funcs
             .into_iter()
             .find(|f| {

@@ -1528,49 +1528,49 @@ pub(super) fn lower(
         });
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
-        super::ssa_emit_common::time_pass("ssa_inline::run (aarch64)", || {
-            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
+        super::ssa_emit_common::time_pass("passes::inline::run (aarch64)", || {
+            crate::c5::codegen::passes::inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
         });
         // Forward an inlined one-word struct return out of its frame slot;
         // see x86_64.rs's matching block for the rationale.
-        super::ssa_emit_common::time_pass("ssa_struct_return_reg::run (aarch64)", || {
-            super::ssa_struct_return_reg::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::struct_return_reg::run (aarch64)", || {
+            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_rotate::run (aarch64)", || {
-            super::ssa_rotate::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::rotate::run (aarch64)", || {
+            crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
         });
         // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
         // -O). Runs after the inliner so products exposed by parameter
         // substitution into an add/sub become contractible.
-        super::ssa_emit_common::time_pass("ssa_fma::run (aarch64)", || {
-            super::ssa_fma::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::fma::run (aarch64)", || {
+            crate::c5::codegen::passes::fma::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_constfold_branch::run (aarch64)", || {
-            super::ssa_constfold_branch::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::constfold_branch::run (aarch64)", || {
+            crate::c5::codegen::passes::constfold_branch::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_split_crit_edges::run (aarch64)", || {
-            super::ssa_split_crit_edges::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::split_crit_edges::run (aarch64)", || {
+            crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_dedup_imm::run (aarch64)", || {
-            super::ssa_dedup_imm::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::dedup_imm::run (aarch64)", || {
+            crate::c5::codegen::passes::dedup_imm::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (aarch64)", || {
-            super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::drop_redundant_extend::run (aarch64)", || {
+            crate::c5::codegen::passes::drop_redundant_extend::run(&mut ssa_funcs);
         });
         // Scaled-index addressing: fold `base + index*scale` into the
         // load / store. Runs last so it sees the final address shape;
         // the optimizer passes never traverse `LoadIndexed` /
         // `StoreIndexed`, so the per-arch emit is the only later consumer.
-        super::ssa_emit_common::time_pass("ssa_index_fold::run (aarch64)", || {
-            super::ssa_index_fold::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::index_fold::run (aarch64)", || {
+            crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
         });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
         // are both normalised to the same `(base, disp)`. Bounded by
         // live-range extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
-        super::ssa_emit_common::time_pass("ssa_store_forward::run (aarch64)", || {
-            super::ssa_store_forward::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::store_forward::run (aarch64)", || {
+            crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
         });
     }
     // Upper bound on ent_pcs the lowering will reference. The

@@ -15,7 +15,7 @@
 //! Dead duplicates are removed by the per-arch emit's `is_dead_pure`
 //! skip; the pass does not touch the inst tape.
 
-use super::super::ir::{FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use crate::c5::ir::{FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 use alloc::vec::Vec;
 use hashbrown::HashMap;
 
@@ -223,7 +223,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator};
+    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator};
     use super::run_one;
     use alloc::vec::Vec;
 

@@ -1968,55 +1968,55 @@ pub(super) fn lower(
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.
-        super::ssa_emit_common::time_pass("ssa_inline::run (x86_64)", || {
-            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
+        super::ssa_emit_common::time_pass("passes::inline::run (x86_64)", || {
+            crate::c5::codegen::passes::inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
         });
         // Forward an inlined one-word struct return out of its frame slot:
         // a single full-width store + slot reads collapse to the stored
         // register value. Runs after the inliner produces the slot and
         // before store-forwarding cleans up any second-hop reload.
-        super::ssa_emit_common::time_pass("ssa_struct_return_reg::run (x86_64)", || {
-            super::ssa_struct_return_reg::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::struct_return_reg::run (x86_64)", || {
+            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
         });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
         // so post-inline parameter substitutions expose the constant
         // rotate counts.
-        super::ssa_emit_common::time_pass("ssa_rotate::run (x86_64)", || {
-            super::ssa_rotate::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::rotate::run (x86_64)", || {
+            crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
         });
         // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
         // -O). Runs after the inliner so products exposed by parameter
         // substitution into an add/sub become contractible.
-        super::ssa_emit_common::time_pass("ssa_fma::run (x86_64)", || {
-            super::ssa_fma::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::fma::run (x86_64)", || {
+            crate::c5::codegen::passes::fma::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_constfold_branch::run (x86_64)", || {
-            super::ssa_constfold_branch::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::constfold_branch::run (x86_64)", || {
+            crate::c5::codegen::passes::constfold_branch::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_split_crit_edges::run (x86_64)", || {
-            super::ssa_split_crit_edges::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::split_crit_edges::run (x86_64)", || {
+            crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_dedup_imm::run (x86_64)", || {
-            super::ssa_dedup_imm::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::dedup_imm::run (x86_64)", || {
+            crate::c5::codegen::passes::dedup_imm::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (x86_64)", || {
-            super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::drop_redundant_extend::run (x86_64)", || {
+            crate::c5::codegen::passes::drop_redundant_extend::run(&mut ssa_funcs);
         });
         // Scaled-index addressing: fold `base + index*scale` into the
         // load / store. Runs last so it sees the final address shape;
         // the optimizer passes never traverse `LoadIndexed` /
         // `StoreIndexed`, so the per-arch emit is the only later consumer.
-        super::ssa_emit_common::time_pass("ssa_index_fold::run (x86_64)", || {
-            super::ssa_index_fold::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::index_fold::run (x86_64)", || {
+            crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
         });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
         // are both normalised to the same `(base, disp)`. Bounded by
         // live-range extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
-        super::ssa_emit_common::time_pass("ssa_store_forward::run (x86_64)", || {
-            super::ssa_store_forward::run(&mut ssa_funcs);
+        super::ssa_emit_common::time_pass("passes::store_forward::run (x86_64)", || {
+            crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
         });
     }
     // Upper bound on ent_pcs the lowering will reference. The

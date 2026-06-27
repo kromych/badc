@@ -28,7 +28,7 @@
 //!     the store dominates the reads and the value is available at each.
 //! A slot failing any condition is left in memory.
 
-use super::super::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
@@ -56,7 +56,7 @@ enum LoadForward {
     Direct,
     /// Sign-extend the stored value's low bytes.
     Extend(LoadKind),
-    /// Not forwardable (unsigned narrow or floating; see ssa_store_forward).
+    /// Not forwardable (unsigned narrow or floating; see store_forward).
     No,
 }
 

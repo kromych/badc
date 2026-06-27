@@ -14,15 +14,15 @@
 //! conditional branch now targets the synthetic block, so the moves
 //! execute only when the edge is taken.
 //!
-//! Pass runs after `ssa_mem2reg` / `ssa_inline` / `ssa_rotate` /
-//! `ssa_constfold_branch`, all of which can change the CFG. Each
+//! Pass runs after `ssa_mem2reg` / `inline` / `rotate` /
+//! `constfold_branch`, all of which can change the CFG. Each
 //! split inserts one `Terminator::Jmp` block; the inst range stays
 //! empty so the emit's per-block walk sees no body instructions and
 //! falls straight to `emit_phi_predecessor_moves` + the terminator.
 
 use alloc::vec::Vec;
 
-use super::super::ir::{Block, BlockId, FunctionSsa, Inst, Terminator};
+use crate::c5::ir::{Block, BlockId, FunctionSsa, Inst, Terminator};
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs {
@@ -93,7 +93,7 @@ fn run_one(func: &mut FunctionSsa) {
             start_pc: 0,
             inst_range: insts_end..insts_end,
             terminator: Terminator::Jmp(original_succ),
-            exit_acc: super::super::ir::NO_VALUE,
+            exit_acc: crate::c5::ir::NO_VALUE,
         });
         // Rewire the predecessor's terminator: every reference to
         // `original_succ` becomes `new_id`. A predecessor may
@@ -185,7 +185,7 @@ fn successors(term: &Terminator) -> Vec<BlockId> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator};
+    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator};
     use super::*;
     use alloc::vec;
 

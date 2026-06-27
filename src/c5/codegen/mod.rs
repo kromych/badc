@@ -54,29 +54,20 @@ mod mach_o;
 mod pe;
 #[cfg(feature = "std")]
 mod so_versions;
+mod passes;
 pub(crate) mod ssa_alloc;
 pub(crate) mod ssa_build;
-mod ssa_constfold_branch;
-mod ssa_dedup_imm;
-mod ssa_drop_redundant_extend;
 #[cfg(feature = "std")]
 mod ssa_dump;
 mod ssa_emit_aarch64;
 mod ssa_emit_common;
 mod ssa_emit_x86_64;
-mod ssa_fma;
-mod ssa_index_fold;
-mod ssa_inline;
 mod ssa_liveness;
 pub(crate) mod ssa_mem2reg;
 mod ssa_native;
 mod ssa_phi_class;
-mod ssa_rotate;
 pub(crate) mod ssa_shadow;
 mod ssa_slot_coalesce;
-mod ssa_split_crit_edges;
-mod ssa_store_forward;
-mod ssa_struct_return_reg;
 mod x86_64;
 
 /// Re-exported for the multi-TU link path, which recovers Win64

@@ -39,7 +39,7 @@
 //! A load forwards from an earlier load only when the load kinds match
 //! exactly, so the extension already applied is the one wanted.
 
-use super::super::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
 use alloc::vec::Vec;
 
 /// Access width in bytes for a load kind.
@@ -385,7 +385,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::ir::{Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
+    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
     use super::run_one;
     use alloc::vec::Vec;
 
@@ -616,7 +616,7 @@ mod tests {
                     kind: LoadKind::I64
                 },
                 Inst::Binop {
-                    op: super::super::super::ir::BinOp::Add,
+                    op: crate::c5::ir::BinOp::Add,
                     lhs: 2,
                     rhs: 3
                 },

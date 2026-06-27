@@ -35,11 +35,11 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::ir::{
+use crate::c5::ir::{
     BinOp, Block, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
 };
-use super::Abi;
-use super::abi_classify::{AggClass, RegClass, classify_aggregate};
+use crate::c5::codegen::Abi;
+use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
 
 /// Outer candidacy fixpoint cap: re-evaluating candidacy after each
 /// substitution pass lets a helper that became a leaf inline on the
@@ -1363,7 +1363,7 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
 /// Inline eligible callees across every function in `funcs`. A
 /// callee is eligible per `is_inline_candidate`; `cap == 0` disables
 /// the pass.
-pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
+pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
     // Env-var override for the `is_inline` attribute pending parser

@@ -74,6 +74,25 @@ pub(super) fn compute_frame_base(
     (locals_bytes, alloc_spill_bytes, saved_gpr_bytes)
 }
 
+/// Whether the function issues no call and needs no scratch-clobbering
+/// intrinsic or TLS access, so a leaf prologue/epilogue may be elided. The
+/// frame and register-file conditions a leaf also requires are target-specific
+/// and checked by the caller.
+pub(super) fn function_makes_no_calls(func: &super::super::ir::FunctionSsa) -> bool {
+    use super::super::ir::Inst;
+    !func.insts.iter().any(|inst| {
+        matches!(
+            inst,
+            Inst::Call { .. }
+                | Inst::CallIndirect { .. }
+                | Inst::CallExt { .. }
+                | Inst::TailExt(_)
+                | Inst::Intrinsic { .. }
+                | Inst::TlsAddr(_)
+        )
+    })
+}
+
 /// Whether two resolved locations name the same physical place. A move
 /// between identical locations is elided by the move schedulers.
 pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Place) -> bool {

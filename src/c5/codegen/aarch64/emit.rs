@@ -360,17 +360,7 @@ fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
     if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {
         return false;
     }
-    !func.insts.iter().any(|inst| {
-        matches!(
-            inst,
-            Inst::Call { .. }
-                | Inst::CallIndirect { .. }
-                | Inst::CallExt { .. }
-                | Inst::TailExt(_)
-                | Inst::Intrinsic { .. }
-                | Inst::TlsAddr(_)
-        )
-    })
+    super::ssa_emit_common::function_makes_no_calls(func)
 }
 
 fn bail_msg(reason: &str) {

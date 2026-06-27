@@ -101,6 +101,10 @@ pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Pl
 /// register numbers; each backend wraps them in its own register newtype.
 /// Grows as more emit families adopt it.
 pub(super) trait EmitBackend {
+    /// The target's relocation record type, accumulated while lowering a
+    /// direct call. The two backends use distinct layouts.
+    type Fixup;
+
     /// Copy one FP/vector register to another (`dst <- src`).
     fn fp_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
     /// Store FP register `src` to spill slot `slot`.
@@ -364,6 +368,28 @@ pub(super) trait EmitBackend {
         alloc: &super::ssa_alloc::Allocation,
         frame: Frame,
         abi: super::Abi,
+        fp_return: bool,
+        fp_arg_mask: u32,
+        arg_aggs: &[Option<u32>],
+        ret_agg: Option<u32>,
+        ret_slot: i64,
+        func: &super::super::ir::FunctionSsa,
+    ) -> bool;
+
+    /// `Inst::Call`: call the direct target at `target_pc`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_call(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        target_pc: usize,
+        args: &[u32],
+        fixed_args: usize,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+        abi: super::Abi,
+        fixups: &mut alloc::vec::Vec<Self::Fixup>,
+        callee_is_variadic: bool,
         fp_return: bool,
         fp_arg_mask: u32,
         arg_aggs: &[Option<u32>],

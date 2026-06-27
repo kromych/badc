@@ -2037,7 +2037,7 @@ fn emit_inst(
             ret_agg,
             ret_slot_local,
             ..
-        } => emit_call(
+        } => b.emit_call(
             code,
             dst,
             *target_pc,
@@ -2045,16 +2045,15 @@ fn emit_inst(
             *fixed_args,
             alloc,
             frame,
-            scratch,
             abi,
             fixups,
             variadic_targets.contains(target_pc),
             *fp_return,
             *fp_arg_mask,
             arg_aggs,
-            &func.agg_descs,
             *ret_agg,
             *ret_slot_local,
+            func,
         ),
         Inst::CallExt {
             binding_idx,
@@ -5901,6 +5900,7 @@ fn schedule_place_moves(
 /// allocator's FP pool. `IntReg` and `None` places never reach here
 /// (an FP phi's home and its operands are FP-classed).
 impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Backend {
+    type Fixup = Fixup;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit(code, super::aarch64::enc_fmov_d_d(dst, src));
     }
@@ -6301,6 +6301,45 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Back
             frame,
             &ScratchPool::new(),
             abi,
+            fp_return,
+            fp_arg_mask,
+            arg_aggs,
+            &func.agg_descs,
+            ret_agg,
+            ret_slot,
+        )
+    }
+    fn emit_call(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        target_pc: usize,
+        args: &[u32],
+        fixed_args: usize,
+        alloc: &Allocation,
+        frame: Frame,
+        abi: super::Abi,
+        fixups: &mut Vec<Fixup>,
+        callee_is_variadic: bool,
+        fp_return: bool,
+        fp_arg_mask: u32,
+        arg_aggs: &[Option<u32>],
+        ret_agg: Option<u32>,
+        ret_slot: i64,
+        func: &FunctionSsa,
+    ) -> bool {
+        emit_call(
+            code,
+            dst,
+            target_pc,
+            args,
+            fixed_args,
+            alloc,
+            frame,
+            &ScratchPool::new(),
+            abi,
+            fixups,
+            callee_is_variadic,
             fp_return,
             fp_arg_mask,
             arg_aggs,

@@ -1127,35 +1127,9 @@ fn schedule_place_moves(
 /// allocator's xmm pool so it collides with no pending source or
 /// target.
 fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
-    moves.retain(|(s, t)| s != t);
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(other_s, _)| *other_s == t);
-            if !tgt_still_a_source {
-                emit_movapd_xmm_xmm(code, Reg(t), Reg(s));
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            let cycle_src = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|&s| s != scratch.0)
-                .unwrap_or(moves[0].0);
-            emit_movapd_xmm_xmm(code, scratch, Reg(cycle_src));
-            for m in moves.iter_mut() {
-                if m.0 == cycle_src {
-                    m.0 = scratch.0;
-                }
-            }
-        }
-    }
+    super::ssa_emit_common::schedule_reg_moves_via_scratch(code, moves, scratch.0, |code, t, s| {
+        emit_movapd_xmm_xmm(code, Reg(t), Reg(s))
+    });
 }
 
 /// Emit a single resolved FP location-to-location move over `FpReg`

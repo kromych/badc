@@ -5831,50 +5831,9 @@ fn fp_reg(place: Place) -> Option<u8> {
 /// `scratch` that lives outside the allocator's bank so it cannot
 /// collide with any pending source or target.
 fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
-    moves.retain(|(s, t)| s != t);
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(other_s, _)| *other_s == t);
-            if !tgt_still_a_source {
-                emit_mov_reg(code, Reg(t), Reg(s));
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            // Worklist contains only cycle members. Save one source
-            // into the scratch and redirect every move that read
-            // from it; the redirected `(scratch, ...)` move now
-            // breaks the cycle.
-            //
-            // Pick a source whose register is not the scratch
-            // itself. Without the filter, if any cycle member's
-            // source equals `scratch`, the cycle-break emits
-            // `mov scratch, scratch` (no-op) and the rewrite
-            // returns sources to their original values -- the
-            // outer loop never makes progress and the function
-            // spins forever. The relaxed calls_after_def bound
-            // surfaces this shape by parking more values in
-            // caller-saved registers, occasionally landing one on
-            // the same physical register as the scratch.
-            let cycle_src = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|&s| s != scratch.0)
-                .unwrap_or(moves[0].0);
-            emit_mov_reg(code, scratch, Reg(cycle_src));
-            for m in moves.iter_mut() {
-                if m.0 == cycle_src {
-                    m.0 = scratch.0;
-                }
-            }
-        }
-    }
+    super::ssa_emit_common::schedule_reg_moves_via_scratch(code, moves, scratch.0, |code, t, s| {
+        emit_mov_reg(code, Reg(t), Reg(s))
+    });
 }
 
 /// Sequentialize a parallel copy over d-registers. Mirrors
@@ -5882,35 +5841,9 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 /// copies. `scratch_d` must lie outside the allocator's d-register
 /// pool so it collides with no pending source or target.
 fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch_d: u8) {
-    moves.retain(|(s, t)| s != t);
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(other_s, _)| *other_s == t);
-            if !tgt_still_a_source {
-                emit(code, super::aarch64::enc_fmov_d_d(t, s));
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            let cycle_src = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|&s| s != scratch_d)
-                .unwrap_or(moves[0].0);
-            emit(code, super::aarch64::enc_fmov_d_d(scratch_d, cycle_src));
-            for m in moves.iter_mut() {
-                if m.0 == cycle_src {
-                    m.0 = scratch_d;
-                }
-            }
-        }
-    }
+    super::ssa_emit_common::schedule_reg_moves_via_scratch(code, moves, scratch_d, |code, t, s| {
+        emit(code, super::aarch64::enc_fmov_d_d(t, s))
+    });
 }
 
 /// Emit the predecessor-exit moves for each `Inst::Phi` at the head

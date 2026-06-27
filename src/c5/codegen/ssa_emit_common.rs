@@ -95,6 +95,50 @@ pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Pl
     }
 }
 
+/// Sequentialize a set of parallel register moves `(src, dst)` (raw register
+/// numbers), breaking any cycle through `scratch`. A move whose target is no
+/// longer a pending source is emitted first; when only a cycle remains, one
+/// source is copied into `scratch`, the moves that read it are redirected, and
+/// the loop continues. `emit_mov(code, dst, src)` emits the backend's register
+/// copy. Used by every move scheduler whose backend breaks cycles with a
+/// scratch register; the x86_64 integer scheduler uses `xchg` instead.
+pub(super) fn schedule_reg_moves_via_scratch(
+    code: &mut alloc::vec::Vec<u8>,
+    moves: &mut alloc::vec::Vec<(u8, u8)>,
+    scratch: u8,
+    mut emit_mov: impl FnMut(&mut alloc::vec::Vec<u8>, u8, u8),
+) {
+    moves.retain(|(s, t)| s != t);
+    while !moves.is_empty() {
+        let mut progress = false;
+        let mut i = 0;
+        while i < moves.len() {
+            let (s, t) = moves[i];
+            let tgt_still_a_source = moves.iter().any(|(other_s, _)| *other_s == t);
+            if !tgt_still_a_source {
+                emit_mov(code, t, s);
+                moves.swap_remove(i);
+                progress = true;
+            } else {
+                i += 1;
+            }
+        }
+        if !progress {
+            let cycle_src = moves
+                .iter()
+                .map(|(s, _)| *s)
+                .find(|&s| s != scratch)
+                .unwrap_or(moves[0].0);
+            emit_mov(code, scratch, cycle_src);
+            for m in moves.iter_mut() {
+                if m.0 == cycle_src {
+                    m.0 = scratch;
+                }
+            }
+        }
+    }
+}
+
 /// Resolve each call argument's aggregate descriptor to its ABI classification
 /// for the marshalling pass. Empty when no argument is an aggregate.
 pub(super) fn build_arg_aggs(

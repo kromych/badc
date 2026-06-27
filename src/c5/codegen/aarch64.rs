@@ -1970,24 +1970,7 @@ fn apply_fixups(
 ///
 /// Resolved by `lower()` once trampoline byte offsets are known --
 /// the call instruction's `imm26` is rewritten in place.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct PltCallFixup {
-    /// Byte offset within the lower-pass `code` of the BL/B
-    /// instruction whose `imm26` the fixup pass backfills.
-    pub(super) instr_offset: usize,
-    /// Import slot the call should reach via its trampoline.
-    pub(super) import_index: usize,
-    /// `true` -> emit `B <tramp>` (tail jump); `false` -> emit
-    /// `BL <tramp>` (call). Both share the same imm26 encoding;
-    /// only the link bit at 0x80000000 differs.
-    pub(super) is_tail: bool,
-    /// `true` -> the site is an `adrp + add` pair that takes the
-    /// import's address (`Inst::ImmExtCode`, `&strcmp`) rather than
-    /// a BL/B. The pair resolves to the import's shared stub via the
-    /// page-relative reloc rather than the imm26 branch; `is_tail`
-    /// is irrelevant.
-    pub(super) is_addr: bool,
-}
+pub(super) use super::PltCallFixup;
 
 /// Tail-jump variant of [`emit_got_call`]: emits a 4-byte
 /// `B <plt_trampoline>` placeholder. libc's `RET` returns

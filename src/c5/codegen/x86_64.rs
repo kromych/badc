@@ -2379,31 +2379,7 @@ fn apply_fixups(
     Ok(())
 }
 
-/// Per-call-site placeholder for the post-pass that
-/// patches `CALL rel32` / `JMP rel32` displacements once
-/// trampolines have been laid out at the tail of `code`. Mirror
-/// of the aarch64 type with the same name.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct PltCallFixup {
-    /// Byte offset within `code` of the CALL/JMP instruction
-    /// (the opcode byte, not the disp32 field).
-    pub(super) instr_offset: usize,
-    /// Import slot the call should reach via its trampoline.
-    pub(super) import_index: usize,
-    /// `true` -> emit `JMP rel32` (tail jump from
-    /// `Terminator::TailExt`); `false` -> emit `CALL rel32`
-    /// (regular `Inst::CallExt` site).
-    /// Both are 5 bytes, both use the same disp32 measurement
-    /// origin (one byte past the instruction).
-    pub(super) is_tail: bool,
-    /// `true` -> the site is a `LEA r, [rip+disp32]` that takes
-    /// the import's address (`Inst::ImmExtCode`, `&strcmp`) rather
-    /// than a CALL/JMP that transfers control. The disp32 still
-    /// resolves to the import's shared stub, but it sits three
-    /// bytes past `instr_offset` (REX + opcode + modrm) instead of
-    /// one, and `is_tail` is irrelevant.
-    pub(super) is_addr: bool,
-}
+pub(super) use super::PltCallFixup;
 
 /// Append one PLT trampoline per import. Each trampoline is a
 /// single 6-byte `JMP qword ptr [rip + disp32]` whose disp32 is

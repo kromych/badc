@@ -1564,6 +1564,23 @@ pub(crate) struct MachoTlvDescriptor {
 /// The codegen emits zero bytes where the adrp + ldr would go, then
 /// records this so the Mach-O writer can fill them in once it knows
 /// the data segment's final vmaddr.
+/// Per-call-site placeholder the trampoline post-pass patches once the import
+/// trampolines are laid out at the tail of `code`: a `CALL`/`JMP rel32`
+/// (x86_64) or `BL`/`B` / `adrp+add` (aarch64) whose displacement resolves to
+/// the import's shared stub. Shared by both backends.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PltCallFixup {
+    /// Byte offset within `code` of the patched instruction.
+    pub(crate) instr_offset: usize,
+    /// Import slot the call reaches via its trampoline.
+    pub(crate) import_index: usize,
+    /// Tail jump (`JMP`/`B`) when true, else a call (`CALL`/`BL`).
+    pub(crate) is_tail: bool,
+    /// Address-materialisation site (`LEA rip` / `adrp+add`) taking the
+    /// import's address rather than transferring control; `is_tail` unused.
+    pub(crate) is_addr: bool,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct GotFixup {
     /// Byte offset within `Build::text` of the adrp instruction.

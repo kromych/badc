@@ -2507,6 +2507,33 @@ fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi) {
 /// [`super::FnUnwind`] records every prologue instruction boundary
 /// relative to it so the PE writer can build a Win64 `UNWIND_INFO`
 /// for the frame. `begin` / `end` are filled by the caller.
+/// Save the callee-saved registers the allocator reported: the non-volatile
+/// xmm scratch at the frame bottom (full 128-bit movups, the caller's value
+/// may occupy the upper lanes) and the callee-saved GPRs directly above at
+/// sp + saved_fpr_bytes. SysV leaves fp_used empty. One source for the
+/// offsets so the prologue and every return path agree.
+fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
+    for (i, &r) in alloc.fp_used.iter().enumerate() {
+        emit_movups_mem_xmm(code, Reg::RSP, (i as i32) * 16, Reg(r));
+    }
+    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
+    for (i, &r) in alloc.gpr_used.iter().enumerate() {
+        super::x86_64::emit_mov_mem_r(code, Reg::RSP, saved_fpr_bytes + (i as i32) * 8, Reg(r));
+    }
+}
+
+/// Restore what [`save_callee_saved`] saved, in mirror order. Every return
+/// path routes through this so the saved-region offsets cannot drift.
+fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
+    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
+    for (i, &r) in alloc.gpr_used.iter().enumerate() {
+        super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, saved_fpr_bytes + (i as i32) * 8);
+    }
+    for (i, &r) in alloc.fp_used.iter().enumerate() {
+        emit_movups_xmm_mem(code, Reg(r), Reg::RSP, (i as i32) * 16);
+    }
+}
+
 fn emit_prologue(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -2690,17 +2717,7 @@ fn emit_prologue(
     // of the frame (lowest addresses) with the full 128-bit `movups`,
     // since the caller's value may occupy the upper lanes. SysV leaves
     // `fp_used` empty.
-    for (i, &r) in alloc.fp_used.iter().enumerate() {
-        let off = (i as i32) * 16;
-        emit_movups_mem_xmm(code, Reg::RSP, off, Reg(r));
-    }
-    // Save callee-saved GPRs the allocator reported as used, directly
-    // above the saved-xmm region at sp + saved_fpr_bytes.
-    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = saved_fpr_bytes + (i as i32) * 8;
-        super::x86_64::emit_mov_mem_r(code, Reg::RSP, off, Reg(r));
-    }
+    save_callee_saved(code, alloc, frame);
     emit_struct_param_scatter(code, func, frame, abi);
     emit_struct_stack_param_copy(code, func, frame, abi);
     uw
@@ -7423,14 +7440,7 @@ fn emit_tail_call(
     // staging (the callee's own `ret` carries the value back). The
     // marshalled args ride caller-saved arg registers, disjoint from the
     // callee-saved GPRs and the non-volatile xmm scratch restored here.
-    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = saved_fpr_bytes + (i as i32) * 8;
-        super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
-    }
-    for (i, &r) in alloc.fp_used.iter().enumerate() {
-        emit_movups_xmm_mem(code, Reg(r), Reg::RSP, (i as i32) * 16);
-    }
+    restore_callee_saved(code, alloc, frame);
     if !is_full_leaf(func, frame, alloc, abi) {
         if frame.frame_bytes > 0 {
             emit_add_rsp_imm32(code, frame.frame_bytes);
@@ -7521,13 +7531,7 @@ fn emit_return(
         // saved_fpr_bytes). rcx already holds the struct address and is
         // caller-saved, so the restore does not disturb it; the return
         // eightbytes load into the volatile rax/rdx/xmm0/xmm1 below.
-        let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
-        for (i, &r) in alloc.gpr_used.iter().enumerate() {
-            super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, saved_fpr_bytes + (i as i32) * 8);
-        }
-        for (i, &r) in alloc.fp_used.iter().enumerate() {
-            emit_movups_xmm_mem(code, Reg(r), Reg::RSP, (i as i32) * 16);
-        }
+        restore_callee_saved(code, alloc, frame);
         // Place each eightbyte in its bank: System V returns SSE eightbytes
         // in xmm0/xmm1 and INTEGER eightbytes in rax/rdx, each in order.
         let int_ret = [Reg::RAX, Reg::RDX];
@@ -7613,15 +7617,7 @@ fn emit_return(
     }
     // Restore callee-saved GPRs and saved non-volatile xmm scratch
     // (mirror of the prologue's saves: xmm at the bottom, GPRs above).
-    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = saved_fpr_bytes + (i as i32) * 8;
-        super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
-    }
-    for (i, &r) in alloc.fp_used.iter().enumerate() {
-        let off = (i as i32) * 16;
-        emit_movups_xmm_mem(code, Reg(r), Reg::RSP, off);
-    }
+    restore_callee_saved(code, alloc, frame);
     if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
     } else if !needs_staging {

@@ -62,10 +62,37 @@ use super::encode::{
     load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::{Frame, build_arg_aggs, place_same_loc};
+use super::ssa_emit_common::{build_arg_aggs, place_same_loc};
 
 /// Compute the aarch64 stack-frame layout for `func`. Fills the shared
 /// [`Frame`]'s aarch64 fields; the x86_64-only fields stay at their defaults.
+/// Per-function stack-frame layout for aarch64. Every region is an explicit
+/// byte count so the prologue and epilogue read the same values.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Frame {
+    /// Total frame the prologue allocates: locals + allocator spills + saved
+    /// callee-saved registers + any register-save area.
+    pub frame_bytes: u32,
+    /// Byte distance from the frame base down to the allocator spill region.
+    pub alloc_spill_base: u32,
+    /// Total bytes reserved for c5 cdecl parameter cells and host-stack overflow.
+    pub param_spill_bytes: u32,
+    /// Byte stride between adjacent parameter cells: 16 for the c5 cdecl cell,
+    /// 8 for a host variadic callee's contiguous argument region.
+    pub param_cell_stride: i64,
+    /// Whether the function clobbers (and therefore saves) x19.
+    pub uses_x19: bool,
+    /// AAPCS64 variadic callee reads named parameters from the register save
+    /// area rather than cdecl cells.
+    pub va_named_redirect: bool,
+    /// `FunctionSsa::param_fp_mask` for the named-parameter redirect.
+    pub va_param_fp_mask: u32,
+    /// Named-parameter count for the redirect's `plan_param_regs`.
+    pub va_n_params: usize,
+    /// ABI carried for the redirect's slot mapping.
+    pub va_abi: super::Abi,
+}
+
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
     let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
     // After mem2reg + dead-store elimination, every reference to
@@ -134,7 +161,6 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
         va_param_fp_mask: func.param_fp_mask,
         va_n_params: func.n_params,
         va_abi: abi,
-        ..Default::default()
     }
 }
 
@@ -5883,6 +5909,7 @@ fn schedule_place_moves(
 /// allocator's FP pool. `IntReg` and `None` places never reach here
 /// (an FP phi's home and its operands are FP-classed).
 impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Backend {
+    type Frame = Frame;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit(code, super::encode::enc_fmov_d_d(dst, src));
     }

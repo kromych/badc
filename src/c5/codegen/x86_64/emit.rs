@@ -61,12 +61,33 @@ use super::encode::{
     emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
 };
 use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::{Frame, build_arg_aggs, place_same_loc};
+use super::ssa_emit_common::{build_arg_aggs, place_same_loc};
 
 /// Per-function frame layout. Bytes are 16-aligned at every
 /// region boundary so SysV / Win64's sp-at-call invariant holds.
 /// Compute the x86_64 stack-frame layout for `func`. Fills the shared
 /// [`Frame`]'s x86_64 fields; the aarch64-only fields stay at their defaults.
+/// Per-function stack-frame layout for x86_64. Every region is an explicit
+/// byte count so the prologue and epilogue read the same values.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Frame {
+    /// Total frame the prologue allocates: locals + allocator spills + saved
+    /// callee-saved registers + any register-save area.
+    pub frame_bytes: u32,
+    /// Byte distance from the frame base down to the allocator spill region.
+    pub alloc_spill_base: u32,
+    /// Total bytes reserved for c5 cdecl parameter cells and host-stack overflow.
+    pub param_spill_bytes: u32,
+    /// Byte stride between adjacent parameter cells: 16 for the c5 cdecl cell,
+    /// 8 for a host variadic callee's contiguous argument region.
+    pub param_cell_stride: i64,
+    /// rbp-relative base of the System V register save area; 0 when unused.
+    pub va_reg_save_off: i32,
+    /// Bytes of saved non-volatile xmm scratch (Win64), 16 per register;
+    /// 0 on System V.
+    pub saved_fpr_bytes: u32,
+}
+
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
     let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
     // After mem2reg + dead-store elimination, every reference to
@@ -137,7 +158,6 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
         param_cell_stride,
         va_reg_save_off,
         saved_fpr_bytes,
-        ..Default::default()
     }
 }
 
@@ -971,6 +991,7 @@ fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 /// allocator's xmm pool. `IntReg` and `None` places never reach here
 /// (an FP phi's home and its operands are FP-classed).
 impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend {
+    type Frame = Frame;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_movapd_xmm_xmm(code, Reg(dst), Reg(src));
     }

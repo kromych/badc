@@ -27,42 +27,6 @@ pub(super) struct EmitCtx<'a> {
     pub(super) prologue_native: &'a mut alloc::collections::BTreeMap<usize, usize>,
 }
 
-/// Per-function stack-frame layout, shared by both backends. Each backend's
-/// `compute_frame` fills the fields it uses and defaults the rest: the
-/// x86_64-only register-save / saved-xmm fields and the aarch64-only x19 /
-/// AAPCS64-variadic redirect fields. Every region is an explicit byte count so
-/// a backend's prologue and epilogue read the same values.
-#[derive(Debug, Clone, Copy, Default)]
-pub(super) struct Frame {
-    /// Total frame the prologue allocates: locals + allocator spills + saved
-    /// callee-saved registers + any register-save area.
-    pub frame_bytes: u32,
-    /// Byte distance from the frame base down to the allocator spill region.
-    pub alloc_spill_base: u32,
-    /// Total bytes reserved for c5 cdecl parameter cells and host-stack
-    /// overflow; the epilogue reads the same count.
-    pub param_spill_bytes: u32,
-    /// Byte stride between adjacent parameter cells: 16 for the c5 cdecl cell,
-    /// 8 for a host variadic callee's contiguous argument region.
-    pub param_cell_stride: i64,
-    /// x86_64: rbp-relative base of the System V register save area; 0 unused.
-    pub va_reg_save_off: i32,
-    /// x86_64: bytes of saved non-volatile xmm scratch (Win64), 16 per
-    /// register; 0 on System V.
-    pub saved_fpr_bytes: u32,
-    /// aarch64: whether the function clobbers (and therefore saves) x19.
-    pub uses_x19: bool,
-    /// aarch64: AAPCS64 variadic callee reads named parameters from the
-    /// register save area rather than cdecl cells.
-    pub va_named_redirect: bool,
-    /// aarch64: `FunctionSsa::param_fp_mask` for the named-parameter redirect.
-    pub va_param_fp_mask: u32,
-    /// aarch64: named-parameter count for the redirect's `plan_param_regs`.
-    pub va_n_params: usize,
-    /// aarch64: ABI carried for the redirect's slot mapping.
-    pub va_abi: super::Abi,
-}
-
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
 /// AMD64, and Win64 all require the call-site stack pointer to
 /// hold 16-byte alignment after the prologue's frame allocation;
@@ -101,12 +65,23 @@ pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Pl
 /// register numbers; each backend wraps them in its own register newtype.
 /// Grows as more emit families adopt it.
 pub(super) trait EmitBackend {
+    /// The target's per-function stack-frame layout. Each backend defines its
+    /// own fields; the shared helpers thread a value through to the leaves
+    /// without inspecting it.
+    type Frame: Copy;
+
     /// Copy one FP/vector register to another (`dst <- src`).
     fn fp_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
     /// Store FP register `src` to spill slot `slot`.
-    fn fp_spill_store(&self, code: &mut alloc::vec::Vec<u8>, frame: Frame, slot: u32, src: u8);
+    fn fp_spill_store(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        frame: Self::Frame,
+        slot: u32,
+        src: u8,
+    );
     /// Load FP register `dst` from spill slot `slot`.
-    fn fp_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Frame, slot: u32, dst: u8);
+    fn fp_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Self::Frame, slot: u32, dst: u8);
     /// Copy one integer register to another (`dst <- src`).
     fn int_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
     /// Store integer register `src` to spill slot `slot`; `base` is a free
@@ -114,20 +89,26 @@ pub(super) trait EmitBackend {
     fn int_spill_store(
         &self,
         code: &mut alloc::vec::Vec<u8>,
-        frame: Frame,
+        frame: Self::Frame,
         slot: u32,
         src: u8,
         base: u8,
     );
     /// Load integer register `dst` from spill slot `slot`.
-    fn int_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Frame, slot: u32, dst: u8);
+    fn int_spill_load(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        frame: Self::Frame,
+        slot: u32,
+        dst: u8,
+    );
     /// Move a value from spill slot `src` to spill slot `dst`, staging through
     /// register `stage`; `hold` is a borrowable register for an out-of-reach
     /// destination address. The reach handling is target-specific.
     fn int_spill_to_spill(
         &self,
         code: &mut alloc::vec::Vec<u8>,
-        frame: Frame,
+        frame: Self::Frame,
         src: u32,
         dst: u32,
         stage: u8,
@@ -140,7 +121,7 @@ pub(super) trait EmitBackend {
     fn int_spill_store_auto(
         &self,
         code: &mut alloc::vec::Vec<u8>,
-        frame: Frame,
+        frame: Self::Frame,
         slot: u32,
         src: u8,
     );
@@ -151,7 +132,7 @@ pub(super) trait EmitBackend {
         &self,
         code: &mut alloc::vec::Vec<u8>,
         moves: &mut alloc::vec::Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)>,
-        frame: Frame,
+        frame: Self::Frame,
         hold: u8,
         stage: u8,
     );
@@ -171,7 +152,7 @@ pub(super) fn emit_fp_place_move<B: EmitBackend>(
     code: &mut alloc::vec::Vec<u8>,
     src: super::ssa_alloc::Place,
     dst: super::ssa_alloc::Place,
-    frame: Frame,
+    frame: B::Frame,
     stage: u8,
 ) {
     use super::ssa_alloc::Place;
@@ -197,7 +178,7 @@ pub(super) fn emit_place_move<B: EmitBackend>(
     code: &mut alloc::vec::Vec<u8>,
     src: super::ssa_alloc::Place,
     dst: super::ssa_alloc::Place,
-    frame: Frame,
+    frame: B::Frame,
     stage: u8,
     hold: u8,
 ) {
@@ -221,7 +202,7 @@ pub(super) fn schedule_fp_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
     moves: &mut alloc::vec::Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)>,
-    frame: Frame,
+    frame: B::Frame,
     hold: u8,
     stage: u8,
 ) {
@@ -268,7 +249,7 @@ pub(super) fn schedule_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
     moves: &mut alloc::vec::Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)>,
-    frame: Frame,
+    frame: B::Frame,
     hold: u8,
     stage: u8,
 ) -> bool {
@@ -307,7 +288,7 @@ pub(super) fn write_atomic_result<B: EmitBackend>(
     code: &mut alloc::vec::Vec<u8>,
     dst: super::ssa_alloc::Place,
     src: u8,
-    frame: Frame,
+    frame: B::Frame,
 ) {
     use super::ssa_alloc::Place;
     match dst {
@@ -329,7 +310,7 @@ pub(super) fn emit_phi_predecessor_moves<B: EmitBackend>(
     self_block: super::super::ir::BlockId,
     func: &super::super::ir::FunctionSsa,
     alloc: &super::ssa_alloc::Allocation,
-    frame: Frame,
+    frame: B::Frame,
     int_hold: u8,
     int_stage: u8,
     fp_hold: u8,

@@ -32,6 +32,9 @@ use alloc::vec::Vec;
 
 use super::error::C5Error;
 use super::program::Program;
+// Re-bind the c5-level modules the arch submodules reach through `super::super`;
+// moving the large emit/encode files one level deeper changed that path's base.
+use crate::c5::{error, ir, op, program};
 
 mod aarch64;
 // Host-ABI aggregate classifier. Consumed by `plan_call_args` and
@@ -61,7 +64,6 @@ pub(crate) mod ssa_build;
 mod ssa_dump;
 mod ssa_emit_aarch64;
 mod ssa_emit_common;
-mod ssa_emit_x86_64;
 mod ssa_liveness;
 pub(crate) mod ssa_mem2reg;
 mod ssa_native;

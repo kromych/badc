@@ -46,7 +46,7 @@ use super::GotFixup;
 use super::Target;
 use super::ssa_alloc::{Allocation, Place};
 use super::ssa_emit_common::{Frame, build_arg_aggs, place_same_loc};
-use super::x86_64::{
+use super::encode::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
     emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
     emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_divss,
@@ -873,7 +873,7 @@ fn materialize_int_shifted(
             // call sites that route every argument through the
             // integer arg bank (the callee's prologue spills only
             // int_arg_regs into the c5 cdecl slots).
-            super::x86_64::emit_movq_r_xmm(code, scratch, Reg(r));
+            super::encode::emit_movq_r_xmm(code, scratch, Reg(r));
             Some(scratch)
         }
         Place::None => None,
@@ -1194,8 +1194,8 @@ fn marshal_args(
             }
             for b in (words * 8)..size {
                 let o = b as i32;
-                super::x86_64::emit_movzx_r_mem8(code, SCRATCH_R11, SCRATCH_R10, o);
-                super::x86_64::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, SCRATCH_R11);
+                super::encode::emit_movzx_r_mem8(code, SCRATCH_R11, SCRATCH_R10, o);
+                super::encode::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, SCRATCH_R11);
             }
         }
     }
@@ -1362,7 +1362,7 @@ fn marshal_args(
                     // (rcx / rdx / r8 / r9), so the call-arg plan
                     // can name the integer placement with the value
                     // sitting in xmm.
-                    super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg(s));
+                    super::encode::emit_movq_r_xmm(code, Reg(r), Reg(s));
                 }
             }
         }
@@ -1429,7 +1429,7 @@ fn marshal_args(
 /// emit grew bottom-up from the same shape and the x86_64 path
 /// follows that trajectory.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn emit_function(
+pub(crate) fn emit_function(
     func: &FunctionSsa,
     alloc: &Allocation,
     target: Target,
@@ -1575,9 +1575,9 @@ pub(super) fn emit_function(
             }
             for (dst, kind) in exts {
                 let ext = |code: &mut Vec<u8>, r: Reg| match kind {
-                    LoadKind::I8 => super::x86_64::emit_movsx_r_r8(code, r, r),
-                    LoadKind::I16 => super::x86_64::emit_movsx_r_r16(code, r, r),
-                    LoadKind::I32 => super::x86_64::emit_movsxd_r_r(code, r, r),
+                    LoadKind::I8 => super::encode::emit_movsx_r_r8(code, r, r),
+                    LoadKind::I16 => super::encode::emit_movsx_r_r16(code, r, r),
+                    LoadKind::I32 => super::encode::emit_movsxd_r_r(code, r, r),
                     _ => {}
                 };
                 match dst {
@@ -1685,7 +1685,7 @@ pub(super) fn emit_function(
                         return false;
                     };
                     let lea_start = code.len();
-                    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+                    super::encode::emit_lea_r_rip32(code, rd, 0);
                     block_addr_fixups.push((lea_start, *tb));
                     spill_dst_to_slot(code, place, rd, frame);
                     continue;
@@ -1858,7 +1858,7 @@ pub(super) fn emit_function(
                     };
                     // `test rc, rc` sets ZF=1 iff rc==0; je takes the
                     // branch on ZF=1. Shorter than `cmp rc, 0`.
-                    super::x86_64::emit_test_rr(code, rc, rc);
+                    super::encode::emit_test_rr(code, rc, rc);
                     emit_local_branch(
                         code,
                         &mut branch_fixups,
@@ -1915,7 +1915,7 @@ pub(super) fn emit_function(
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         return false;
                     };
-                    super::x86_64::emit_test_rr(code, rc, rc);
+                    super::encode::emit_test_rr(code, rc, rc);
                     emit_local_branch(
                         code,
                         &mut branch_fixups,
@@ -1963,7 +1963,7 @@ pub(super) fn emit_function(
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         return false;
                     };
-                    super::x86_64::emit_jmp_r(code, rt);
+                    super::encode::emit_jmp_r(code, rt);
                 }
                 Terminator::TailExt(binding_idx) => {
                     // The parser emits `Terminator::TailExt` for the
@@ -1992,7 +1992,7 @@ pub(super) fn emit_function(
                         is_tail: true,
                         is_addr: false,
                     });
-                    super::x86_64::emit_jmp_rel32(code, 0);
+                    super::encode::emit_jmp_rel32(code, 0);
                 }
             }
         }
@@ -2039,7 +2039,7 @@ pub(super) fn emit_function(
     // byte after the instruction (`lea_start + LEA_RIP32_LEN`).
     for (lea_start, target_block) in &block_addr_fixups {
         let target_off = block_offsets[*target_block as usize] as i64;
-        let rel = target_off - (*lea_start as i64 + super::x86_64::LEA_RIP32_LEN as i64);
+        let rel = target_off - (*lea_start as i64 + super::encode::LEA_RIP32_LEN as i64);
         let imm = match i32::try_from(rel) {
             Ok(v) => v,
             Err(_) => {
@@ -2142,9 +2142,9 @@ fn emit_local_branch(
                 short,
             });
             if short {
-                super::x86_64::emit_jmp_rel8(code, 0);
+                super::encode::emit_jmp_rel8(code, 0);
             } else {
-                super::x86_64::emit_jmp_rel32(code, 0);
+                super::encode::emit_jmp_rel32(code, 0);
             }
         }
         LocalBranchKind::Jcc(cc) => {
@@ -2161,9 +2161,9 @@ fn emit_local_branch(
                 short,
             });
             if short {
-                super::x86_64::emit_jcc_rel8(code, cc, 0);
+                super::encode::emit_jcc_rel8(code, cc, 0);
             } else {
-                super::x86_64::emit_jcc_rel32(code, cc, 0);
+                super::encode::emit_jcc_rel32(code, cc, 0);
             }
         }
     }
@@ -2262,18 +2262,18 @@ fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi) {
         return;
     }
     // r11 = bytes remaining to allocate.
-    super::x86_64::emit_mov_r_imm64(code, Reg::R11, bytes as i64);
+    super::encode::emit_mov_r_imm64(code, Reg::R11, bytes as i64);
     // loop: while r11 >= PAGE { sub rsp, PAGE; touch [rsp]; r11 -= PAGE }
     let loop_start = code.len();
     emit_sub_rsp_imm32(code, PAGE);
     // Touch the freshly-decremented page so the guard-page handler
     // commits it and relocates the guard one page lower.
-    super::x86_64::emit_mov_mem_r(code, Reg::RSP, 0, Reg::R11);
-    super::x86_64::emit_sub_r_imm32(code, Reg::R11, PAGE as i32);
-    super::x86_64::emit_cmp_r_imm32(code, Reg::R11, PAGE as i32);
+    super::encode::emit_mov_mem_r(code, Reg::RSP, 0, Reg::R11);
+    super::encode::emit_sub_r_imm32(code, Reg::R11, PAGE as i32);
+    super::encode::emit_cmp_r_imm32(code, Reg::R11, PAGE as i32);
     // jae loop_start (unsigned: r11 still at least one page).
     let after_cmp = code.len();
-    super::x86_64::emit_jcc_rel32(code, super::x86_64::Cc::Ae, 0);
+    super::encode::emit_jcc_rel32(code, super::encode::Cc::Ae, 0);
     let rel = (loop_start as i64) - (code.len() as i64);
     let rel32 = rel as i32;
     let patch_at = code.len() - 4;
@@ -2300,7 +2300,7 @@ fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
     }
     let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        super::x86_64::emit_mov_mem_r(code, Reg::RSP, saved_fpr_bytes + (i as i32) * 8, Reg(r));
+        super::encode::emit_mov_mem_r(code, Reg::RSP, saved_fpr_bytes + (i as i32) * 8, Reg(r));
     }
 }
 
@@ -2309,7 +2309,7 @@ fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
 fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
     let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, saved_fpr_bytes + (i as i32) * 8);
+        super::encode::emit_mov_r_mem(code, Reg(r), Reg::RSP, saved_fpr_bytes + (i as i32) * 8);
     }
     for (i, &r) in alloc.fp_used.iter().enumerate() {
         emit_movups_xmm_mem(code, Reg(r), Reg::RSP, (i as i32) * 16);
@@ -2477,8 +2477,8 @@ fn emit_prologue(
             emit_mov_mem_r(code, Reg::RBP, reg_save + (i as i32) * 8, Reg(reg));
         }
         // test al, al ; je past_fp_save
-        super::x86_64::emit_test_al_al(code);
-        super::x86_64::emit_jcc_rel32(code, Cc::E, 0);
+        super::encode::emit_test_al_al(code);
+        super::encode::emit_jcc_rel32(code, Cc::E, 0);
         // The rel32 operand occupies the four bytes just emitted; the
         // jump is relative to the end of the je instruction (which is
         // where the XMM stores begin).
@@ -2551,8 +2551,8 @@ fn emit_struct_stack_param_copy(
             emit_mov_mem_r(code, Reg::RBP, (dst_off + o) as i32, SCRATCH_R10);
         }
         for b in (words * 8)..(size as i64) {
-            super::x86_64::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, (src_off + b) as i32);
-            super::x86_64::emit_mov_mem8_r(code, Reg::RBP, (dst_off + b) as i32, SCRATCH_R10);
+            super::encode::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, (src_off + b) as i32);
+            super::encode::emit_mov_mem8_r(code, Reg::RBP, (dst_off + b) as i32, SCRATCH_R10);
         }
     }
 }
@@ -2588,9 +2588,9 @@ fn emit_struct_param_scatter(
         for (k, cr) in regs.iter().take(*n as usize).enumerate() {
             let off = (base + (k as i64) * 8) as i32;
             if cr.is_fp {
-                super::x86_64::emit_movsd_mem_xmm(code, Reg::RBP, off, Reg(cr.reg));
+                super::encode::emit_movsd_mem_xmm(code, Reg::RBP, off, Reg(cr.reg));
             } else {
-                super::x86_64::emit_mov_mem_r(code, Reg::RBP, off, Reg(cr.reg));
+                super::encode::emit_mov_mem_r(code, Reg::RBP, off, Reg(cr.reg));
             }
         }
     }
@@ -2797,22 +2797,22 @@ fn emit_inst(
                     match kind {
                         _ if high_dead => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
                         LoadKind::I8 => {
-                            super::x86_64::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
+                            super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
                         }
                         LoadKind::I16 => {
-                            super::x86_64::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
+                            super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
                         }
                         LoadKind::I32 => {
-                            super::x86_64::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
+                            super::encode::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
                         }
                         _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
                     }
                 } else {
                     match kind {
                         _ if high_dead => emit_mov_rr(code, rd, arg_reg),
-                        LoadKind::I8 => super::x86_64::emit_movsx_r_r8(code, rd, arg_reg),
-                        LoadKind::I16 => super::x86_64::emit_movsx_r_r16(code, rd, arg_reg),
-                        LoadKind::I32 => super::x86_64::emit_movsxd_r_r(code, rd, arg_reg),
+                        LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, arg_reg),
+                        LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, arg_reg),
+                        LoadKind::I32 => super::encode::emit_movsxd_r_r(code, rd, arg_reg),
                         _ => emit_mov_rr(code, rd, arg_reg),
                     }
                 }
@@ -3405,11 +3405,11 @@ fn emit_load_local(
     match kind {
         LoadKind::I64 => emit_mov_r_mem(code, rd, Reg::RBP, disp),
         LoadKind::I32 => emit_movsxd_r_mem(code, rd, Reg::RBP, disp),
-        LoadKind::U32 => super::x86_64::emit_mov_r32_mem(code, rd, Reg::RBP, disp),
+        LoadKind::U32 => super::encode::emit_mov_r32_mem(code, rd, Reg::RBP, disp),
         LoadKind::I16 => emit_movsx_r_mem16(code, rd, Reg::RBP, disp),
         LoadKind::U16 => emit_movzx_r_mem16(code, rd, Reg::RBP, disp),
-        LoadKind::I8 => super::x86_64::emit_movsx_r_mem8(code, rd, Reg::RBP, disp),
-        LoadKind::U8 => super::x86_64::emit_movzx_r_mem8(code, rd, Reg::RBP, disp),
+        LoadKind::I8 => super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, disp),
+        LoadKind::U8 => super::encode::emit_movzx_r_mem8(code, rd, Reg::RBP, disp),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     }
     spill_dst_to_slot(code, dst, rd, frame);
@@ -3506,7 +3506,7 @@ fn emit_store_local(
         // always available -- a caller-saved pick can come up empty
         // under saturation.
         let scratch = SCRATCH_R10;
-        super::x86_64::emit_movq_r_xmm(code, scratch, Reg(xr));
+        super::encode::emit_movq_r_xmm(code, scratch, Reg(xr));
         scratch
     } else {
         match materialize_int(code, value_place, SCRATCH_R10, frame) {
@@ -3523,9 +3523,9 @@ fn emit_store_local(
     // re-narrowing on read-back (C99 6.5.16p3).
     match kind {
         StoreKind::I64 => emit_mov_mem_r(code, Reg::RBP, disp, rv),
-        StoreKind::I32 => super::x86_64::emit_mov_mem32_r(code, Reg::RBP, disp, rv),
-        StoreKind::I16 => super::x86_64::emit_mov_mem16_r(code, Reg::RBP, disp, rv),
-        StoreKind::I8 => super::x86_64::emit_mov_mem8_r(code, Reg::RBP, disp, rv),
+        StoreKind::I32 => super::encode::emit_mov_mem32_r(code, Reg::RBP, disp, rv),
+        StoreKind::I16 => super::encode::emit_mov_mem16_r(code, Reg::RBP, disp, rv),
+        StoreKind::I8 => super::encode::emit_mov_mem8_r(code, Reg::RBP, disp, rv),
         StoreKind::F32 | StoreKind::F64 => unreachable!(),
     }
     // Mirror the store value into the destination Place.
@@ -3591,13 +3591,13 @@ fn emit_load_indexed(
         return false;
     };
     match kind {
-        LoadKind::I64 => super::x86_64::emit_mov_r_sib(code, rd, rbase, rindex, scale),
-        LoadKind::I32 => super::x86_64::emit_movsxd_r_sib(code, rd, rbase, rindex, scale),
-        LoadKind::U32 => super::x86_64::emit_mov_r32_sib(code, rd, rbase, rindex, scale),
-        LoadKind::I16 => super::x86_64::emit_movsx_r_sib16(code, rd, rbase, rindex, scale),
-        LoadKind::U16 => super::x86_64::emit_movzx_r_sib16(code, rd, rbase, rindex, scale),
-        LoadKind::I8 => super::x86_64::emit_movsx_r_sib8(code, rd, rbase, rindex, scale),
-        LoadKind::U8 => super::x86_64::emit_movzx_r_sib8(code, rd, rbase, rindex, scale),
+        LoadKind::I64 => super::encode::emit_mov_r_sib(code, rd, rbase, rindex, scale),
+        LoadKind::I32 => super::encode::emit_movsxd_r_sib(code, rd, rbase, rindex, scale),
+        LoadKind::U32 => super::encode::emit_mov_r32_sib(code, rd, rbase, rindex, scale),
+        LoadKind::I16 => super::encode::emit_movsx_r_sib16(code, rd, rbase, rindex, scale),
+        LoadKind::U16 => super::encode::emit_movzx_r_sib16(code, rd, rbase, rindex, scale),
+        LoadKind::I8 => super::encode::emit_movsx_r_sib8(code, rd, rbase, rindex, scale),
+        LoadKind::U8 => super::encode::emit_movzx_r_sib8(code, rd, rbase, rindex, scale),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     }
     spill_dst_to_slot(code, dst, rd, frame);
@@ -3672,12 +3672,12 @@ fn emit_store_indexed(
         let target = match free {
             Some(s) => s,
             None => {
-                super::x86_64::emit_lea_r_sib(code, SCRATCH_R10, rbase, rindex, scale);
+                super::encode::emit_lea_r_sib(code, SCRATCH_R10, rbase, rindex, scale);
                 precomputed_addr = Some(SCRATCH_R10);
                 SCRATCH_R11
             }
         };
-        super::x86_64::emit_movq_r_xmm(code, target, Reg(xr));
+        super::encode::emit_movq_r_xmm(code, target, Reg(xr));
         target
     } else if let Place::IntReg(r) = value_place {
         Reg(r)
@@ -3691,7 +3691,7 @@ fn emit_store_indexed(
                 }
             },
             None => {
-                super::x86_64::emit_lea_r_sib(code, SCRATCH_R10, rbase, rindex, scale);
+                super::encode::emit_lea_r_sib(code, SCRATCH_R10, rbase, rindex, scale);
                 precomputed_addr = Some(SCRATCH_R10);
                 match materialize_int(code, value_place, SCRATCH_R11, frame) {
                     Some(r) => r,
@@ -3705,17 +3705,17 @@ fn emit_store_indexed(
     };
     match precomputed_addr {
         Some(addr) => match kind {
-            StoreKind::I64 => super::x86_64::emit_mov_mem_r(code, addr, 0, rv),
-            StoreKind::I32 => super::x86_64::emit_mov_mem_r32(code, addr, 0, rv),
-            StoreKind::I16 => super::x86_64::emit_mov_mem_r16(code, addr, 0, rv),
-            StoreKind::I8 => super::x86_64::emit_mov_mem_r8(code, addr, 0, rv),
+            StoreKind::I64 => super::encode::emit_mov_mem_r(code, addr, 0, rv),
+            StoreKind::I32 => super::encode::emit_mov_mem_r32(code, addr, 0, rv),
+            StoreKind::I16 => super::encode::emit_mov_mem_r16(code, addr, 0, rv),
+            StoreKind::I8 => super::encode::emit_mov_mem_r8(code, addr, 0, rv),
             StoreKind::F32 | StoreKind::F64 => unreachable!(),
         },
         None => match kind {
-            StoreKind::I64 => super::x86_64::emit_mov_sib_r(code, rbase, rindex, scale, rv),
-            StoreKind::I32 => super::x86_64::emit_mov_sib_r32(code, rbase, rindex, scale, rv),
-            StoreKind::I16 => super::x86_64::emit_mov_sib_r16(code, rbase, rindex, scale, rv),
-            StoreKind::I8 => super::x86_64::emit_mov_sib_r8(code, rbase, rindex, scale, rv),
+            StoreKind::I64 => super::encode::emit_mov_sib_r(code, rbase, rindex, scale, rv),
+            StoreKind::I32 => super::encode::emit_mov_sib_r32(code, rbase, rindex, scale, rv),
+            StoreKind::I16 => super::encode::emit_mov_sib_r16(code, rbase, rindex, scale, rv),
+            StoreKind::I8 => super::encode::emit_mov_sib_r8(code, rbase, rindex, scale, rv),
             StoreKind::F32 | StoreKind::F64 => unreachable!(),
         },
     }
@@ -3793,11 +3793,11 @@ fn emit_load(
     match kind {
         LoadKind::I64 => emit_mov_r_mem(code, rd, base, disp),
         LoadKind::I32 => emit_movsxd_r_mem(code, rd, base, disp),
-        LoadKind::U32 => super::x86_64::emit_mov_r32_mem(code, rd, base, disp),
+        LoadKind::U32 => super::encode::emit_mov_r32_mem(code, rd, base, disp),
         LoadKind::I16 => emit_movsx_r_mem16(code, rd, base, disp),
         LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, disp),
-        LoadKind::I8 => super::x86_64::emit_movsx_r_mem8(code, rd, base, disp),
-        LoadKind::U8 => super::x86_64::emit_movzx_r_mem8(code, rd, base, disp),
+        LoadKind::I8 => super::encode::emit_movsx_r_mem8(code, rd, base, disp),
+        LoadKind::U8 => super::encode::emit_movzx_r_mem8(code, rd, base, disp),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     }
     spill_dst_to_slot(code, dst, rd, frame);
@@ -3916,9 +3916,9 @@ fn emit_store(
     };
     match kind {
         StoreKind::I64 => emit_mov_mem_r(code, base, disp, rs),
-        StoreKind::I32 => super::x86_64::emit_mov_mem32_r(code, base, disp, rs),
-        StoreKind::I16 => super::x86_64::emit_mov_mem16_r(code, base, disp, rs),
-        StoreKind::I8 => super::x86_64::emit_mov_mem8_r(code, base, disp, rs),
+        StoreKind::I32 => super::encode::emit_mov_mem32_r(code, base, disp, rs),
+        StoreKind::I16 => super::encode::emit_mov_mem16_r(code, base, disp, rs),
+        StoreKind::I8 => super::encode::emit_mov_mem8_r(code, base, disp, rs),
         StoreKind::F32 | StoreKind::F64 => unreachable!(),
     }
     // Stored value also feeds dst when the allocator wants it
@@ -3962,9 +3962,9 @@ fn emit_extend(
         }
     };
     match kind {
-        LoadKind::I8 => super::x86_64::emit_movsx_r_r8(code, rd, rn),
-        LoadKind::I16 => super::x86_64::emit_movsx_r_r16(code, rd, rn),
-        LoadKind::I32 => super::x86_64::emit_movsxd_r_r(code, rd, rn),
+        LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, rn),
+        LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
+        LoadKind::I32 => super::encode::emit_movsxd_r_r(code, rd, rn),
         _ => {
             bail_msg("Extend: unsupported kind");
             return false;
@@ -4121,7 +4121,7 @@ fn emit_fp_unary(
     frame: Frame,
 ) -> bool {
     use super::super::op::Intrinsic as I;
-    use super::x86_64::{emit_andpd, emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
+    use super::encode::{emit_andpd, emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
     let src_place = alloc
         .places
         .get(value as usize)
@@ -4480,9 +4480,9 @@ fn emit_binop(
                     SCRATCH_R10
                 };
                 let fix_cc = if matches!(nan_fix, FpCmpNanFix::AndNotP) {
-                    super::x86_64::Cc::Np
+                    super::encode::Cc::Np
                 } else {
-                    super::x86_64::Cc::P
+                    super::encode::Cc::P
                 };
                 emit_setcc_r8(code, fix_cc, scratch);
                 emit_movzx_r_r8(code, scratch, scratch);
@@ -4529,9 +4529,9 @@ fn emit_binop(
         };
         let k = alloc.sxtw_k.get(v as usize).copied().unwrap_or(0);
         match k {
-            32 => super::x86_64::emit_movsxd_r_r(code, rd, src_reg),
-            48 => super::x86_64::emit_movsx_r_r16(code, rd, src_reg),
-            56 => super::x86_64::emit_movsx_r_r8(code, rd, src_reg),
+            32 => super::encode::emit_movsxd_r_r(code, rd, src_reg),
+            48 => super::encode::emit_movsx_r_r16(code, rd, src_reg),
+            56 => super::encode::emit_movsx_r_r8(code, rd, src_reg),
             _ => {
                 bail_msg("Binop sxtw: unexpected K");
                 return false;
@@ -4747,7 +4747,7 @@ fn emit_binop(
     // add-result consumer never reads. The rd == rn case is already a
     // single `add rd, rm`, so it stays on the path below.
     if matches!(op, BinOp::Add) && rd.0 != rn.0 {
-        super::x86_64::emit_lea_r_sib(code, rd, rn, rm, 1);
+        super::encode::emit_lea_r_sib(code, rd, rn, rm, 1);
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
@@ -4921,14 +4921,14 @@ fn emit_binop_divmod(
     if is_unsigned {
         emit_xor_rr(code, Reg::RDX, Reg::RDX);
         match div_operand {
-            DivOperand::Reg(r) => super::x86_64::emit_div_r(code, r),
-            DivOperand::Mem(off) => super::x86_64::emit_div_m(code, Reg::RSP, off),
+            DivOperand::Reg(r) => super::encode::emit_div_r(code, r),
+            DivOperand::Mem(off) => super::encode::emit_div_m(code, Reg::RSP, off),
         }
     } else {
-        super::x86_64::emit_cqo(code);
+        super::encode::emit_cqo(code);
         match div_operand {
-            DivOperand::Reg(r) => super::x86_64::emit_idiv_r(code, r),
-            DivOperand::Mem(off) => super::x86_64::emit_idiv_m(code, Reg::RSP, off),
+            DivOperand::Reg(r) => super::encode::emit_idiv_r(code, r),
+            DivOperand::Mem(off) => super::encode::emit_idiv_m(code, Reg::RSP, off),
         }
     }
     // Capture result into rd before restoring rdx / rax.
@@ -4985,7 +4985,7 @@ fn emit_shift_by_count_reg(
         BinOp::Shl => emit_shl_r_cl(code, target),
         BinOp::Shr => emit_sar_r_cl(code, target),
         BinOp::Shru => emit_shr_r_cl(code, target),
-        BinOp::Ror => super::x86_64::emit_ror_r_cl(code, target),
+        BinOp::Ror => super::encode::emit_ror_r_cl(code, target),
         _ => unreachable!("emit_shift_by_count_reg: non-shift op {op:?}"),
     };
     if rd.0 == Reg::RCX.0 {
@@ -4997,7 +4997,7 @@ fn emit_shift_by_count_reg(
         match count {
             ShiftCount::Reg(r) if r.0 != Reg::RCX.0 => emit_mov_rr(code, Reg::RCX, r),
             ShiftCount::Reg(_) => {}
-            ShiftCount::Imm(imm) => super::x86_64::emit_mov_r_imm64(code, Reg::RCX, imm),
+            ShiftCount::Imm(imm) => super::encode::emit_mov_r_imm64(code, Reg::RCX, imm),
         }
         do_shift(code, scratch);
         emit_mov_rr(code, rd, scratch);
@@ -5016,7 +5016,7 @@ fn emit_shift_by_count_reg(
     match count {
         ShiftCount::Reg(r) if r.0 != Reg::RCX.0 => emit_mov_rr(code, Reg::RCX, r),
         ShiftCount::Reg(_) => {}
-        ShiftCount::Imm(imm) => super::x86_64::emit_mov_r_imm64(code, Reg::RCX, imm),
+        ShiftCount::Imm(imm) => super::encode::emit_mov_r_imm64(code, Reg::RCX, imm),
     }
     do_shift(code, rd);
     if rcx_holds_live {
@@ -5083,9 +5083,9 @@ fn emit_binop_imm(
             }
         };
         match rhs_imm {
-            32 => super::x86_64::emit_movsxd_r_r(code, rd, src_reg),
-            48 => super::x86_64::emit_movsx_r_r16(code, rd, src_reg),
-            56 => super::x86_64::emit_movsx_r_r8(code, rd, src_reg),
+            32 => super::encode::emit_movsxd_r_r(code, rd, src_reg),
+            48 => super::encode::emit_movsx_r_r16(code, rd, src_reg),
+            56 => super::encode::emit_movsx_r_r8(code, rd, src_reg),
             _ => unreachable!(),
         }
         spill_dst_to_slot(code, dst, rd, frame);
@@ -5112,7 +5112,7 @@ fn emit_binop_imm(
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_shl_r_imm8(code, rd, (rhs_imm as u64).trailing_zeros() as u8);
+            super::encode::emit_shl_r_imm8(code, rd, (rhs_imm as u64).trailing_zeros() as u8);
             true
         }
         // Multiply by 3 / 5 / 9 is one `lea rd, [rn + rn*2/4/8]`: a
@@ -5120,7 +5120,7 @@ fn emit_binop_imm(
         // `imul`. The base and index are both `rn`, so the result may
         // reuse `rn` (the effective address is read before the write).
         BinOp::Mul if matches!(rhs_imm, 3 | 5 | 9) => {
-            super::x86_64::emit_lea_r_sib(code, rd, rn, rn, (rhs_imm - 1) as u8);
+            super::encode::emit_lea_r_sib(code, rd, rn, rn, (rhs_imm - 1) as u8);
             true
         }
         // `imul rd, rn, imm32` reads `rn` and writes `rd` in one
@@ -5129,35 +5129,35 @@ fn emit_binop_imm(
         // non-power-of-two constant that the scratch path below cannot
         // lower when no caller-saved register is free.
         BinOp::Mul if imm_fits_i32 => {
-            super::x86_64::emit_imul_r_r_imm32(code, rd, rn, rhs_imm as i32);
+            super::encode::emit_imul_r_r_imm32(code, rd, rn, rhs_imm as i32);
             true
         }
         BinOp::Shl if shift_amount.is_some() => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_shl_r_imm8(code, rd, shift_amount.unwrap());
+            super::encode::emit_shl_r_imm8(code, rd, shift_amount.unwrap());
             true
         }
         BinOp::Shr if shift_amount.is_some() => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_sar_r_imm8(code, rd, shift_amount.unwrap());
+            super::encode::emit_sar_r_imm8(code, rd, shift_amount.unwrap());
             true
         }
         BinOp::Shru if shift_amount.is_some() => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_shr_r_imm8(code, rd, shift_amount.unwrap());
+            super::encode::emit_shr_r_imm8(code, rd, shift_amount.unwrap());
             true
         }
         BinOp::Ror if shift_amount.is_some() => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_ror_r_imm8(code, rd, shift_amount.unwrap());
+            super::encode::emit_ror_r_imm8(code, rd, shift_amount.unwrap());
             true
         }
         // `lea rd, [rn +/- imm]` computes the sum into a different
@@ -5168,11 +5168,11 @@ fn emit_binop_imm(
         // rn (the in-place forms below are already one instruction) and
         // to a displacement that fits the signed 32-bit `lea` field.
         BinOp::Add if rd.0 != rn.0 && imm_fits_i32 => {
-            super::x86_64::emit_lea_r_mem(code, rd, rn, rhs_imm as i32);
+            super::encode::emit_lea_r_mem(code, rd, rn, rhs_imm as i32);
             true
         }
         BinOp::Sub if rd.0 != rn.0 && imm_fits_i32 && rhs_imm != i64::from(i32::MIN) => {
-            super::x86_64::emit_lea_r_mem(code, rd, rn, -(rhs_imm as i32));
+            super::encode::emit_lea_r_mem(code, rd, rn, -(rhs_imm as i32));
             true
         }
         // A step of one encodes as `inc` / `dec` (three bytes) rather
@@ -5185,9 +5185,9 @@ fn emit_binop_imm(
                 emit_mov_rr(code, rd, rn);
             }
             if rhs_imm == 1 {
-                super::x86_64::emit_inc_r(code, rd);
+                super::encode::emit_inc_r(code, rd);
             } else {
-                super::x86_64::emit_dec_r(code, rd);
+                super::encode::emit_dec_r(code, rd);
             }
             true
         }
@@ -5196,9 +5196,9 @@ fn emit_binop_imm(
                 emit_mov_rr(code, rd, rn);
             }
             if rhs_imm == 1 {
-                super::x86_64::emit_dec_r(code, rd);
+                super::encode::emit_dec_r(code, rd);
             } else {
-                super::x86_64::emit_inc_r(code, rd);
+                super::encode::emit_inc_r(code, rd);
             }
             true
         }
@@ -5206,14 +5206,14 @@ fn emit_binop_imm(
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_add_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_add_r_imm32(code, rd, rhs_imm as i32);
             true
         }
         BinOp::Sub if imm_fits_i32 => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_sub_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_sub_r_imm32(code, rd, rhs_imm as i32);
             true
         }
         // `x & 0xffffffff` is a zero-extension of the low 32 bits. A
@@ -5223,28 +5223,28 @@ fn emit_binop_imm(
         // sign-extends the immediate, so 0xffffffff would become
         // 0xffffffffffffffff and mask nothing.
         BinOp::And if rhs_imm == 0xffff_ffff => {
-            super::x86_64::emit_mov_r32_r32(code, rd, rn);
+            super::encode::emit_mov_r32_r32(code, rd, rn);
             true
         }
         BinOp::And if imm_fits_i32 => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_and_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_and_r_imm32(code, rd, rhs_imm as i32);
             true
         }
         BinOp::Or if imm_fits_i32 => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_or_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_or_r_imm32(code, rd, rhs_imm as i32);
             true
         }
         BinOp::Xor if imm_fits_i32 => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::x86_64::emit_xor_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_xor_r_imm32(code, rd, rhs_imm as i32);
             true
         }
         _ => false,
@@ -5268,9 +5268,9 @@ fn emit_binop_imm(
         // CF / OF match `cmp rn, 0`, so the dependent setcc / jcc is
         // unchanged.
         if rhs_imm == 0 {
-            super::x86_64::emit_test_rr(code, rn, rn);
+            super::encode::emit_test_rr(code, rn, rn);
         } else {
-            super::x86_64::emit_cmp_r_imm32(code, rn, rhs_imm as i32);
+            super::encode::emit_cmp_r_imm32(code, rn, rhs_imm as i32);
         }
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return true;
@@ -5305,7 +5305,7 @@ fn emit_binop_imm(
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
     );
     if commutative && rd.0 != rn.0 {
-        super::x86_64::emit_mov_r_imm64(code, rd, rhs_imm);
+        super::encode::emit_mov_r_imm64(code, rd, rhs_imm);
         match op {
             BinOp::Add => emit_add_rr(code, rd, rn),
             BinOp::Mul => emit_imul_rr(code, rd, rn),
@@ -5344,7 +5344,7 @@ fn emit_binop_imm(
     // register pressure -- unlike a caller-saved pick, which a
     // saturated allocation can leave with no candidate.
     let scratch = SCRATCH_R11;
-    super::x86_64::emit_mov_r_imm64(code, scratch, rhs_imm);
+    super::encode::emit_mov_r_imm64(code, scratch, rhs_imm);
     if rd.0 != rn.0 {
         emit_mov_rr(code, rd, rn);
     }
@@ -5449,9 +5449,9 @@ fn emit_call(
         fixups.push(Fixup {
             native_offset: call_site,
             target_ent_pc: target_pc,
-            kind: super::x86_64::BranchKind::Call,
+            kind: super::encode::BranchKind::Call,
         });
-        super::x86_64::emit_call_rel32(code, 0);
+        super::encode::emit_call_rel32(code, 0);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
@@ -5479,7 +5479,7 @@ fn emit_call(
                     }
                 }
                 Place::Spill(_) => fp_spill_dst_to_slot(code, dst, Reg::XMM0, frame),
-                Place::IntReg(r) => super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
+                Place::IntReg(r) => super::encode::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
                 Place::None => {}
             }
         } else if let Some(rd) = int_or_spill_dst(dst) {
@@ -5515,14 +5515,14 @@ fn emit_call(
         if !marshal_args(code, &plan, args, alloc, frame, "Call (SysV variadic)") {
             return false;
         }
-        super::x86_64::emit_mov_al_imm8(code, xmm_used);
+        super::encode::emit_mov_al_imm8(code, xmm_used);
         let call_site = code.len();
         fixups.push(Fixup {
             native_offset: call_site,
             target_ent_pc: target_pc,
-            kind: super::x86_64::BranchKind::Call,
+            kind: super::encode::BranchKind::Call,
         });
-        super::x86_64::emit_call_rel32(code, 0);
+        super::encode::emit_call_rel32(code, 0);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
@@ -5550,7 +5550,7 @@ fn emit_call(
                     }
                 }
                 Place::Spill(_) => fp_spill_dst_to_slot(code, dst, Reg::XMM0, frame),
-                Place::IntReg(r) => super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
+                Place::IntReg(r) => super::encode::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
                 Place::None => {}
             }
         } else if let Some(rd) = int_or_spill_dst(dst) {
@@ -5594,9 +5594,9 @@ fn emit_call(
     fixups.push(Fixup {
         native_offset: call_site,
         target_ent_pc: target_pc,
-        kind: super::x86_64::BranchKind::Call,
+        kind: super::encode::BranchKind::Call,
     });
-    super::x86_64::emit_call_rel32(code, 0);
+    super::encode::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
@@ -5648,7 +5648,7 @@ fn emit_call(
                 }
             }
             Place::Spill(_) => fp_spill_dst_to_slot(code, dst, Reg::XMM0, frame),
-            Place::IntReg(r) => super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
+            Place::IntReg(r) => super::encode::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
             Place::None => {}
         }
     } else {
@@ -5659,7 +5659,7 @@ fn emit_call(
                 }
             }
             Place::Spill(_) => spill_dst_to_slot(code, dst, Reg::RAX, frame),
-            Place::FpReg(r) => super::x86_64::emit_movq_xmm_r(code, Reg(r), Reg::RAX),
+            Place::FpReg(r) => super::encode::emit_movq_xmm_r(code, Reg(r), Reg::RAX),
             Place::None => {}
         }
     }
@@ -5716,9 +5716,9 @@ fn emit_call_ext(
     // `variadic_zero_xmm_count` in its `Abi`.
     if abi.variadic_zero_xmm_count {
         if imp.is_variadic {
-            super::x86_64::emit_mov_al_imm8(code, xmm_used);
+            super::encode::emit_mov_al_imm8(code, xmm_used);
         } else {
-            super::x86_64::emit_xor_eax_eax(code);
+            super::encode::emit_xor_eax_eax(code);
         }
     }
     let call_site = code.len();
@@ -5728,7 +5728,7 @@ fn emit_call_ext(
         is_tail: false,
         is_addr: false,
     });
-    super::x86_64::emit_call_rel32(code, 0);
+    super::encode::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
@@ -5769,7 +5769,7 @@ fn emit_call_ext(
                 spill_dst_to_slot(code, dst, scratch, frame);
             }
             Place::FpReg(r) => {
-                super::x86_64::emit_movq_xmm_r(code, Reg(r), scratch);
+                super::encode::emit_movq_xmm_r(code, Reg(r), scratch);
             }
             Place::None => {}
         }
@@ -5789,7 +5789,7 @@ fn emit_call_ext(
                 }
             }
             Place::IntReg(r) => {
-                super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg::XMM0);
+                super::encode::emit_movq_r_xmm(code, Reg(r), Reg::XMM0);
             }
             Place::Spill(_) => {
                 fp_spill_dst_to_slot(code, dst, Reg::XMM0, frame);
@@ -5799,7 +5799,7 @@ fn emit_call_ext(
         return true;
     }
     let ext = super::return_extension(return_type_tag, target);
-    super::x86_64::emit_extend_rax_for_return(code, ext);
+    super::encode::emit_extend_rax_for_return(code, ext);
     if let Some(rd) = int_or_spill_dst(dst) {
         if rd.0 != Reg::RAX.0 {
             emit_mov_rr(code, rd, Reg::RAX);
@@ -5945,9 +5945,9 @@ fn emit_call_indirect(
             return false;
         }
         if sysv_variadic_call {
-            super::x86_64::emit_mov_al_imm8(code, xmm_used);
+            super::encode::emit_mov_al_imm8(code, xmm_used);
         }
-        super::x86_64::emit_call_r(code, target_scratch);
+        super::encode::emit_call_r(code, target_scratch);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
@@ -5987,9 +5987,9 @@ fn emit_call_indirect(
         // window, at [rsp + scratch_bytes] after the second sub.
         emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, plan.scratch_bytes as i32);
         if sysv_variadic_call {
-            super::x86_64::emit_mov_al_imm8(code, xmm_used);
+            super::encode::emit_mov_al_imm8(code, xmm_used);
         }
-        super::x86_64::emit_call_r(code, SCRATCH_R10);
+        super::encode::emit_call_r(code, SCRATCH_R10);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
@@ -6041,7 +6041,7 @@ fn emit_call_indirect(
                 }
             }
             Place::Spill(_) => fp_spill_dst_to_slot(code, dst, Reg::XMM0, frame),
-            Place::IntReg(r) => super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
+            Place::IntReg(r) => super::encode::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
             Place::None => {}
         }
     } else {
@@ -6052,7 +6052,7 @@ fn emit_call_indirect(
                 }
             }
             Place::Spill(_) => spill_dst_to_slot(code, dst, Reg::RAX, frame),
-            Place::FpReg(r) => super::x86_64::emit_movq_xmm_r(code, Reg(r), Reg::RAX),
+            Place::FpReg(r) => super::encode::emit_movq_xmm_r(code, Reg(r), Reg::RAX),
             Place::None => {}
         }
     }
@@ -6144,18 +6144,18 @@ fn emit_va_arg_sysv(
     // plus the in-memory va_list fields, so it never clobbers a live
     // allocator value (the consuming `t += va_arg(...)` keeps `t` in an
     // allocator register that an earlier draft overwrote via rcx).
-    super::x86_64::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
+    super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
     // cmp r10d, bound ; jae use_overflow
-    super::x86_64::emit_cmp_r_imm32(code, SCRATCH_R10, bound);
-    super::x86_64::emit_jcc_rel32(code, Cc::Ae, 0);
+    super::encode::emit_cmp_r_imm32(code, SCRATCH_R10, bound);
+    super::encode::emit_jcc_rel32(code, Cc::Ae, 0);
     let jae_rel32_at = code.len() - 4;
     // --- register-save path ---
     // r10 = offset + reg_save_area (at [ap + 16]) = the argument slot,
     // then bump the offset field in memory by step.
-    super::x86_64::emit_add_r_mem(code, SCRATCH_R10, ap, 16);
-    super::x86_64::emit_add_mem32_imm32(code, ap, off_disp, step);
+    super::encode::emit_add_r_mem(code, SCRATCH_R10, ap, 16);
+    super::encode::emit_add_mem32_imm32(code, ap, off_disp, step);
     // jmp done
-    super::x86_64::emit_jmp_rel32(code, 0);
+    super::encode::emit_jmp_rel32(code, 0);
     let jmp_rel32_at = code.len() - 4;
     // --- overflow path ---
     let overflow_start = code.len();
@@ -6167,7 +6167,7 @@ fn emit_va_arg_sysv(
     // `double` occupies one, a by-value aggregate `ceil(size/8)`.
     let ov_step = if is_fp { 8 } else { aligned };
     emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
-    super::x86_64::emit_add_mem64_imm32(code, ap, 8, ov_step);
+    super::encode::emit_add_mem64_imm32(code, ap, 8, ov_step);
     // --- done: r10 holds the argument address; deliver it to dst. ---
     let done = code.len();
     let rel_to_done = (done - (jmp_rel32_at + 4)) as i32;
@@ -6179,7 +6179,7 @@ fn emit_va_arg_sysv(
             }
         }
         Place::Spill(_) => spill_dst_to_slot(code, dst, SCRATCH_R10, frame),
-        Place::FpReg(r) => super::x86_64::emit_movq_xmm_r(code, Reg(r), SCRATCH_R10),
+        Place::FpReg(r) => super::encode::emit_movq_xmm_r(code, Reg(r), SCRATCH_R10),
         Place::None => {}
     }
     true
@@ -6260,8 +6260,8 @@ fn emit_intrinsic(
                 return false;
             };
             // gp_offset (u32) at [ap + 0], fp_offset (u32) at [ap + 4].
-            super::x86_64::emit_mov_mem32_imm32(code, ap, 0, gp_offset as i32);
-            super::x86_64::emit_mov_mem32_imm32(code, ap, 4, fp_offset as i32);
+            super::encode::emit_mov_mem32_imm32(code, ap, 0, gp_offset as i32);
+            super::encode::emit_mov_mem32_imm32(code, ap, 4, fp_offset as i32);
             // overflow_arg_area (ptr) at [ap + 8] = first variadic stack
             // argument. Incoming stack arguments sit just above the return
             // address at [rbp + 16]; the named parameters that overflowed
@@ -6583,12 +6583,12 @@ fn emit_intrinsic(
             if n.0 != size_reg.0 {
                 emit_mov_rr(code, size_reg, n);
             }
-            super::x86_64::emit_add_r_imm32(code, size_reg, 15);
-            super::x86_64::emit_and_r_imm32(code, size_reg, -16);
+            super::encode::emit_add_r_imm32(code, size_reg, 15);
+            super::encode::emit_and_r_imm32(code, size_reg, -16);
             let disp = -(current_alloca_top as i32);
             emit_lea_r_mem(code, addr_reg, Reg::RBP, disp);
             emit_mov_r_mem(code, rd_phys, addr_reg, 0);
-            super::x86_64::emit_sub_rr(code, rd_phys, size_reg);
+            super::encode::emit_sub_rr(code, rd_phys, size_reg);
             // Trap on arena underflow: a bumped pointer below the
             // per-frame arena floor (addr_reg - ALLOCA_ARENA_SLOTS*8)
             // would scribble the saved-register area, so fault
@@ -6596,8 +6596,8 @@ fn emit_intrinsic(
             // lower alloca to a real SP decrement for unbounded sizes.
             let arena_bytes = (crate::c5::op::ALLOCA_ARENA_SLOTS * 8) as i32;
             emit_lea_r_mem(code, size_reg, addr_reg, -arena_bytes);
-            super::x86_64::emit_cmp_rr(code, rd_phys, size_reg);
-            super::x86_64::emit_jcc_rel8(code, super::x86_64::Cc::Ae, 2);
+            super::encode::emit_cmp_rr(code, rd_phys, size_reg);
+            super::encode::emit_jcc_rel8(code, super::encode::Cc::Ae, 2);
             code.push(0x0F);
             code.push(0x0B); // ud2
             emit_mov_mem_r(code, addr_reg, 0, rd_phys);
@@ -6648,7 +6648,7 @@ fn emit_intrinsic(
                 return false;
             };
             if addr.0 != SCRATCH_R10.0 {
-                super::x86_64::emit_mov_rr(code, SCRATCH_R10, addr);
+                super::encode::emit_mov_rr(code, SCRATCH_R10, addr);
             }
             let reg_field: u8 = if matches!(intrinsic, I::X87StoreControlWord) {
                 7
@@ -6738,7 +6738,7 @@ fn emit_imm_data(
     });
     // `lea rd, [rip + 0]` placeholder; the writer patches the
     // disp32 once the data segment's runtime address is known.
-    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+    super::encode::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
     true
 }
@@ -6756,7 +6756,7 @@ fn emit_imm_code(
     };
     let instr_offset = code.len();
     pending_func_fixups.push((instr_offset, target_ent_pc));
-    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+    super::encode::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
     true
 }
@@ -6792,7 +6792,7 @@ fn emit_imm_ext_code(
         is_tail: false,
         is_addr: true,
     });
-    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+    super::encode::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
     true
 }
@@ -6868,8 +6868,8 @@ fn emit_mcpy(
     let tail_start = words * 8;
     for i in 0..(bytes - tail_start) {
         let off = (tail_start + i) as i32;
-        super::x86_64::emit_movzx_r_mem8(code, temp, src_r, off);
-        super::x86_64::emit_mov_mem8_r(code, dst_r, off, temp);
+        super::encode::emit_movzx_r_mem8(code, temp, src_r, off);
+        super::encode::emit_mov_mem8_r(code, dst_r, off, temp);
     }
     emit_pop_r(code, temp);
     // memcpy returns dst; propagate into the inst's dst.
@@ -6900,9 +6900,9 @@ fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
 /// boundary) and so the prior value carries no high-byte residue.
 fn emit_atomic_load(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
     match width {
-        1 => super::x86_64::emit_movzx_r_mem8(code, dst, base, 0),
-        2 => super::x86_64::emit_movzx_r_mem16(code, dst, base, 0),
-        4 => super::x86_64::emit_mov_r32_mem(code, dst, base, 0),
+        1 => super::encode::emit_movzx_r_mem8(code, dst, base, 0),
+        2 => super::encode::emit_movzx_r_mem16(code, dst, base, 0),
+        4 => super::encode::emit_mov_r32_mem(code, dst, base, 0),
         _ => emit_mov_r_mem(code, dst, base, 0),
     }
 }
@@ -6911,9 +6911,9 @@ fn emit_atomic_load(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
 /// [`emit_atomic_load`] for the compare-exchange expected-operand writeback.
 fn emit_atomic_store(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
     match width {
-        1 => super::x86_64::emit_mov_mem_r8(code, base, 0, src),
-        2 => super::x86_64::emit_mov_mem_r16(code, base, 0, src),
-        4 => super::x86_64::emit_mov_mem_r32(code, base, 0, src),
+        1 => super::encode::emit_mov_mem_r8(code, base, 0, src),
+        2 => super::encode::emit_mov_mem_r16(code, base, 0, src),
+        4 => super::encode::emit_mov_mem_r32(code, base, 0, src),
         _ => emit_mov_mem_r(code, base, 0, src),
     }
 }
@@ -7246,9 +7246,9 @@ fn emit_tail_call(
     fixups.push(Fixup {
         native_offset: jmp_site,
         target_ent_pc: target_pc,
-        kind: super::x86_64::BranchKind::Jmp,
+        kind: super::encode::BranchKind::Jmp,
     });
-    super::x86_64::emit_jmp_rel32(code, 0);
+    super::encode::emit_jmp_rel32(code, 0);
     true
 }
 
@@ -7309,7 +7309,7 @@ fn emit_return(
             }
             Place::Spill(slot) => {
                 let sp_off = spill_slot_sp_offset(frame, slot);
-                super::x86_64::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
+                super::encode::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
             }
             _ => {}
         }
@@ -7384,7 +7384,7 @@ fn emit_return(
             Place::IntReg(_) => true,
             Place::Spill(slot) => {
                 let sp_off = spill_slot_sp_offset(frame, slot);
-                super::x86_64::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
+                super::encode::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
                 true
             }
             _ => false,
@@ -7417,7 +7417,7 @@ fn emit_return(
             }
             Place::Spill(slot) => {
                 let sp_off = spill_slot_sp_offset(frame, slot);
-                super::x86_64::emit_mov_r_mem(code, Reg::RAX, Reg::RSP, sp_off);
+                super::encode::emit_mov_r_mem(code, Reg::RAX, Reg::RSP, sp_off);
             }
             _ => {}
         }

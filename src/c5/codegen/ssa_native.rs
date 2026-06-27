@@ -145,7 +145,7 @@ pub(crate) fn compile_function_to_bytes(
                     pc_to_native: &mut pc_to_native,
                     prologue_native: &mut prologue_native,
                 };
-                super::ssa_emit_x86_64::emit_function(
+                super::x86_64::emit::emit_function(
                     func,
                     &alloc,
                     target,

@@ -89,27 +89,8 @@ pub(crate) struct Frame {
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
-    let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
-    // After mem2reg + dead-store elimination, every reference to
-    // user-local slots (negative `off`) may be gone. The
-    // surviving `func.insts` is the source of truth; when no
-    // `LoadLocal` / `StoreLocal` / `LocalAddr` references a
-    // negative slot the prologue need not allocate locals
-    // storage (C99 6.2.4p2: a never-observed object needs no
-    // storage). Param cells use non-negative `off` and are
-    // sized by `param_spill_bytes`, so they are not affected.
-    let any_local_access = func.insts.iter().any(|i| match i {
-        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
-        Inst::LocalAddr(off) => *off < 0,
-        _ => false,
-    });
-    let locals_bytes = if any_local_access {
-        declared_locals_bytes
-    } else {
-        0
-    };
-    let alloc_spill_bytes = super::ssa_emit_common::slots16(alloc.spill_count);
-    let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
+    let (locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
+        super::ssa_emit_common::compute_frame_base(func, alloc);
     // System V variadic callees reserve the 176-byte register save
     // area (System V AMD64 3.5.7) at the bottom of the frame. It is
     // added to `frame_bytes` only; `alloc_spill_base` (and thus the

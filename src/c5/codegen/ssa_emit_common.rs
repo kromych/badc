@@ -47,6 +47,33 @@ pub(super) fn slots16(n_slots: u32) -> u32 {
     align16(n_slots * 8)
 }
 
+/// The frame regions both targets size identically: the locals region, the
+/// allocator spill region, and the saved callee-GPR region, each a 16-byte
+/// aligned byte count. The locals region is zero when no surviving instruction
+/// references a user local (negative `off`); after mem2reg and dead-store
+/// elimination such an object is never observed and needs no storage
+/// (C99 6.2.4p2). Param cells use non-negative `off` and are sized separately.
+pub(super) fn compute_frame_base(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &super::ssa_alloc::Allocation,
+) -> (u32, u32, u32) {
+    use super::super::ir::Inst;
+    let declared_locals_bytes = slots16(func.locals.max(0) as u32);
+    let any_local_access = func.insts.iter().any(|i| match i {
+        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
+        Inst::LocalAddr(off) => *off < 0,
+        _ => false,
+    });
+    let locals_bytes = if any_local_access {
+        declared_locals_bytes
+    } else {
+        0
+    };
+    let alloc_spill_bytes = slots16(alloc.spill_count);
+    let saved_gpr_bytes = slots16(alloc.gpr_used.len() as u32);
+    (locals_bytes, alloc_spill_bytes, saved_gpr_bytes)
+}
+
 /// Whether two resolved locations name the same physical place. A move
 /// between identical locations is elided by the move schedulers.
 pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Place) -> bool {

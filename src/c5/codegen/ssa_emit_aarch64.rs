@@ -5855,92 +5855,20 @@ fn emit_phi_predecessor_moves(
     scratch: &ScratchPool,
     frame: Frame,
 ) -> bool {
-    use super::super::ir::Terminator;
-    let succs: Vec<super::super::ir::BlockId> = match func.blocks[self_block as usize].terminator {
-        Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
-        Terminator::Bz {
-            target,
-            fall_through,
-            ..
-        }
-        | Terminator::Bnz {
-            target,
-            fall_through,
-            ..
-        } => alloc::vec![target, fall_through],
-        Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
-        Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
-    };
-    for succ in succs {
-        let head = func.blocks[succ as usize].inst_range.start;
-        let end = func.blocks[succ as usize].inst_range.end;
-        // Collect every phi's predecessor-exit move as one
-        // location-to-location parallel copy. Splitting the set into
-        // a register pass and a separate spill-store pass is unsound:
-        // a register reg-to-reg move can overwrite a register that a
-        // pending spill store still needs as its source. Scheduling
-        // all locations together preserves the parallel-copy
-        // semantics across both register and stack-slot operands.
-        let mut moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
-        let mut fp_moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
-        for id in head..end {
-            let inst = &func.insts[id as usize];
-            let super::super::ir::Inst::Phi { incoming, kind } = inst else {
-                break;
-            };
-            let Some((_, src_v)) = incoming.iter().find(|(b, _)| *b == self_block) else {
-                continue;
-            };
-            let dst_place = alloc
-                .places
-                .get(id as usize)
-                .copied()
-                .unwrap_or(super::ssa_alloc::Place::None);
-            let src_place = alloc
-                .places
-                .get(*src_v as usize)
-                .copied()
-                .unwrap_or(super::ssa_alloc::Place::None);
-            use super::ssa_alloc::Place;
-            // The predecessor-exit move must stay within one register
-            // file. An FP phi (kind F32 / F64) has its home and operands
-            // FP-classed; its move is scheduled over the FP locations
-            // (d-registers and spill slots). Every other phi is
-            // integer-classed and scheduled over the integer locations.
-            // The two files do not alias, so the two parallel copies are
-            // independent.
-            let phi_is_fp = matches!(
-                kind,
-                super::super::ir::LoadKind::F32 | super::super::ir::LoadKind::F64
-            );
-            if phi_is_fp {
-                match (src_place, dst_place) {
-                    (Place::None, _) | (_, Place::None) => {}
-                    _ => fp_moves.push((src_place, dst_place)),
-                }
-            } else {
-                match (src_place, dst_place) {
-                    (Place::None, _) | (_, Place::None) => {}
-                    _ => moves.push((src_place, dst_place)),
-                }
-            }
-        }
-        if !schedule_place_moves(code, &mut moves, frame, scratch.primary, scratch.secondary) {
-            return false;
-        }
-        // FP phi edges: d16 / d17 are reserved scratch outside the
-        // allocator's d-register pool (d0..d15), so they hold no live
-        // FP value across the terminator.
-        super::ssa_emit_common::schedule_fp_place_moves(
-            &super::ssa_emit_common::Aarch64Backend,
-            code,
-            &mut fp_moves,
-            frame,
-            17,
-            16,
-        );
-    }
-    true
+    // d16 / d17 are reserved FP scratch outside the allocator's d0..d15 pool;
+    // `scratch.primary` / `secondary` are the reserved integer scratch.
+    super::ssa_emit_common::emit_phi_predecessor_moves(
+        &super::ssa_emit_common::Aarch64Backend,
+        code,
+        self_block,
+        func,
+        alloc,
+        frame,
+        scratch.primary.0,
+        scratch.secondary.0,
+        17,
+        16,
+    )
 }
 
 /// Compare two `Place`s by physical location identity. Distinct

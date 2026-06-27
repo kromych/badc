@@ -289,6 +289,88 @@ pub(super) fn schedule_place_moves<B: EmitBackend>(
     true
 }
 
+/// Emit the predecessor-exit phi moves for `self_block`: for each successor,
+/// collect every phi's incoming value into one integer and one FP parallel copy
+/// (the register files do not alias) and schedule each. Returns false if the
+/// integer copy cannot be scheduled, so the caller bails. `int_*` / `fp_*` are
+/// the reserved scratch registers each parallel copy may use.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_phi_predecessor_moves<B: EmitBackend>(
+    b: &B,
+    code: &mut alloc::vec::Vec<u8>,
+    self_block: super::super::ir::BlockId,
+    func: &super::super::ir::FunctionSsa,
+    alloc: &super::ssa_alloc::Allocation,
+    frame: Frame,
+    int_hold: u8,
+    int_stage: u8,
+    fp_hold: u8,
+    fp_stage: u8,
+) -> bool {
+    use super::super::ir::{Inst, LoadKind, Terminator};
+    use super::ssa_alloc::Place;
+    let succs: alloc::vec::Vec<super::super::ir::BlockId> =
+        match func.blocks[self_block as usize].terminator {
+            Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
+            Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            }
+            | Terminator::Bnz {
+                target,
+                fall_through,
+                ..
+            } => alloc::vec![target, fall_through],
+            Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
+            Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
+        };
+    for succ in succs {
+        let head = func.blocks[succ as usize].inst_range.start;
+        let end = func.blocks[succ as usize].inst_range.end;
+        // Collect every phi's predecessor-exit move as one location-to-location
+        // parallel copy per register file: a register reg-to-reg move can
+        // overwrite a register a pending spill store still reads, so register
+        // and stack-slot operands must be scheduled together. An FP phi (kind
+        // F32 / F64) is FP-classed; every other phi is integer-classed. The two
+        // files do not alias, so the two copies are independent.
+        let mut moves: alloc::vec::Vec<(Place, Place)> = alloc::vec::Vec::new();
+        let mut fp_moves: alloc::vec::Vec<(Place, Place)> = alloc::vec::Vec::new();
+        for id in head..end {
+            let Inst::Phi { incoming, kind } = &func.insts[id as usize] else {
+                break;
+            };
+            let Some((_, src_v)) = incoming.iter().find(|(pred, _)| *pred == self_block) else {
+                continue;
+            };
+            let dst_place = alloc
+                .places
+                .get(id as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let src_place = alloc
+                .places
+                .get(*src_v as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let phi_is_fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
+            if matches!(src_place, Place::None) || matches!(dst_place, Place::None) {
+                continue;
+            }
+            if phi_is_fp {
+                fp_moves.push((src_place, dst_place));
+            } else {
+                moves.push((src_place, dst_place));
+            }
+        }
+        if !schedule_place_moves(b, code, &mut moves, frame, int_hold, int_stage) {
+            return false;
+        }
+        schedule_fp_place_moves(b, code, &mut fp_moves, frame, fp_hold, fp_stage);
+    }
+    true
+}
+
 /// Sequentialize a set of parallel register moves `(src, dst)` (raw register
 /// numbers), breaking any cycle through `scratch`. A move whose target is no
 /// longer a pending source is emitted first; when only a cycle remains, one

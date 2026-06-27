@@ -229,25 +229,7 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
     if !spills_named_params_on_entry(func, abi) || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
-    if func.param_aggs.iter().all(Option::is_none) {
-        return super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements;
-    }
-    let aggs: Vec<Option<super::ArgAgg>> = func
-        .param_aggs
-        .iter()
-        .map(|o| {
-            o.map(|idx| {
-                let d = &func.agg_descs[idx as usize];
-                super::ArgAgg {
-                    class: super::abi_classify::classify_aggregate(
-                        d.size, d.align, &d.fields, abi, false,
-                    ),
-                    size: d.size,
-                }
-            })
-        })
-        .collect();
-    super::plan_param_regs_aggs(func.n_params, func.param_fp_mask, abi, &aggs).placements
+    super::ssa_emit_common::param_placements_common(func, abi)
 }
 
 /// `(n_reg, n_stack)` split of the declared parameters: how many land

@@ -139,6 +139,22 @@ pub(super) fn schedule_reg_moves_via_scratch(
     }
 }
 
+/// The per-parameter incoming-register plan, once the backend's entry guard has
+/// decided the function spills its named parameters. Routes through the
+/// scalar planner when no parameter is an aggregate, else through the
+/// struct-aware planner. The backend supplies the guard (x86_64 skips variadic
+/// callees; aarch64 consults `spills_named_params_on_entry`).
+pub(super) fn param_placements_common(
+    func: &super::super::ir::FunctionSsa,
+    abi: super::Abi,
+) -> alloc::vec::Vec<super::ArgPlacement> {
+    if func.param_aggs.iter().all(Option::is_none) {
+        return super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements;
+    }
+    let aggs = build_arg_aggs(&func.param_aggs, &func.agg_descs, abi);
+    super::plan_param_regs_aggs(func.n_params, func.param_fp_mask, abi, &aggs).placements
+}
+
 /// Resolve each call argument's aggregate descriptor to its ABI classification
 /// for the marshalling pass. Empty when no argument is an aggregate.
 pub(super) fn build_arg_aggs(

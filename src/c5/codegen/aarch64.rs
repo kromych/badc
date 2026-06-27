@@ -1653,28 +1653,33 @@ pub(super) fn lower(
             .iter()
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
             .collect();
-        let ok = super::ssa_emit_aarch64::emit_function(
-            func_ssa,
-            alloc_for,
-            target,
-            &mut code,
-            &mut fixups,
-            &mut plt_call_fixups,
-            &mut data_fixups,
-            &mut user_extern_data_refs,
-            &extern_data_names,
-            &extern_tls_names,
-            &mut pending_func_fixups,
-            imports,
-            &variadic_targets,
-            &mut tls_index_fixups,
-            &mut macho_tlv_fixups,
-            &mut macho_tlv_descriptors,
-            &mut elf_tpoff_fixups,
-            &mut pc_to_native,
-            &mut func_prologue_native,
-            &mut ssa_line_rows,
-        );
+        let ok = {
+            let mut cx = super::ssa_emit_common::EmitCtx {
+                code: &mut code,
+                plt_call_fixups: &mut plt_call_fixups,
+                data_fixups: &mut data_fixups,
+                user_extern_data_refs: &mut user_extern_data_refs,
+                pending_func_fixups: &mut pending_func_fixups,
+                tls_index_fixups: &mut tls_index_fixups,
+                elf_tpoff_fixups: &mut elf_tpoff_fixups,
+                ssa_line_rows: &mut ssa_line_rows,
+                pc_to_native: &mut pc_to_native,
+                prologue_native: &mut func_prologue_native,
+            };
+            super::ssa_emit_aarch64::emit_function(
+                func_ssa,
+                alloc_for,
+                target,
+                &mut cx,
+                &mut fixups,
+                &extern_data_names,
+                &extern_tls_names,
+                imports,
+                &variadic_targets,
+                &mut macho_tlv_fixups,
+                &mut macho_tlv_descriptors,
+            )
+        };
         if !ok {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &alloc::format!(

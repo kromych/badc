@@ -1665,25 +1665,29 @@ pub(super) fn emit_function(
     func: &FunctionSsa,
     alloc: &Allocation,
     target: Target,
-    code: &mut Vec<u8>,
+    cx: &mut super::ssa_emit_common::EmitCtx,
     fixups: &mut Vec<Fixup>,
-    plt_call_fixups: &mut Vec<PltCallFixup>,
     _got_fixups: &mut Vec<GotFixup>,
-    data_fixups: &mut Vec<DataFixup>,
-    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
-    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
-    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
     tls_total_size: usize,
-    pc_to_native: &mut [usize],
-    prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
-    ssa_line_rows: &mut Vec<(usize, u32, u32)>,
     fn_unwind: &mut Vec<super::FnUnwind>,
 ) -> bool {
+    // The bundled emit output arrives in `cx`; recreate the per-field names as
+    // disjoint reborrows so the body below (including the per-`Inst` `cx` it
+    // rebuilds for `emit_inst`) is unchanged.
+    let code = &mut *cx.code;
+    let plt_call_fixups = &mut *cx.plt_call_fixups;
+    let data_fixups = &mut *cx.data_fixups;
+    let user_extern_data_refs = &mut *cx.user_extern_data_refs;
+    let pending_func_fixups = &mut *cx.pending_func_fixups;
+    let tls_index_fixups = &mut *cx.tls_index_fixups;
+    let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
+    let ssa_line_rows = &mut *cx.ssa_line_rows;
+    let pc_to_native = &mut *cx.pc_to_native;
+    let prologue_native = &mut *cx.prologue_native;
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
@@ -1924,9 +1928,13 @@ pub(super) fn emit_function(
                         code: &mut *code,
                         plt_call_fixups: &mut *plt_call_fixups,
                         data_fixups: &mut *data_fixups,
+                        user_extern_data_refs: &mut *user_extern_data_refs,
                         pending_func_fixups: &mut *pending_func_fixups,
                         tls_index_fixups: &mut *tls_index_fixups,
                         elf_tpoff_fixups: &mut *elf_tpoff_fixups,
+                        ssa_line_rows: &mut *ssa_line_rows,
+                        pc_to_native: &mut *pc_to_native,
+                        prologue_native: &mut *prologue_native,
                     };
                     emit_inst(
                         &mut cx,

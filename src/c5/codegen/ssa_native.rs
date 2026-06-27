@@ -68,28 +68,33 @@ pub(crate) fn compile_function_to_bytes(
             // Single-unit in-memory emit: TLS accesses keep the baked
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
-            let ok = super::ssa_emit_aarch64::emit_function(
-                func,
-                &alloc,
-                target,
-                &mut code,
-                &mut fixups,
-                &mut plt_call_fixups,
-                &mut data_fixups,
-                &mut user_extern_data_refs,
-                &extern_data_names,
-                &extern_tls_names,
-                &mut pending_func_fixups,
-                &imports,
-                &variadic_targets,
-                &mut tls_index_fixups,
-                &mut macho_tlv_fixups,
-                &mut macho_tlv_descriptors,
-                &mut elf_tpoff_fixups,
-                &mut pc_to_native,
-                &mut prologue_native,
-                &mut ssa_line_rows,
-            );
+            let ok = {
+                let mut cx = super::ssa_emit_common::EmitCtx {
+                    code: &mut code,
+                    plt_call_fixups: &mut plt_call_fixups,
+                    data_fixups: &mut data_fixups,
+                    user_extern_data_refs: &mut user_extern_data_refs,
+                    pending_func_fixups: &mut pending_func_fixups,
+                    tls_index_fixups: &mut tls_index_fixups,
+                    elf_tpoff_fixups: &mut elf_tpoff_fixups,
+                    ssa_line_rows: &mut ssa_line_rows,
+                    pc_to_native: &mut pc_to_native,
+                    prologue_native: &mut prologue_native,
+                };
+                super::ssa_emit_aarch64::emit_function(
+                    func,
+                    &alloc,
+                    target,
+                    &mut cx,
+                    &mut fixups,
+                    &extern_data_names,
+                    &extern_tls_names,
+                    &imports,
+                    &variadic_targets,
+                    &mut macho_tlv_fixups,
+                    &mut macho_tlv_descriptors,
+                )
+            };
             if !ok {
                 return Err("ssa_native: emit_function bailed".to_string());
             }
@@ -127,29 +132,34 @@ pub(crate) fn compile_function_to_bytes(
             // The JIT single-function path builds no PE; the unwind
             // descriptor is discarded.
             let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
-            let ok = super::ssa_emit_x86_64::emit_function(
-                func,
-                &alloc,
-                target,
-                &mut code,
-                &mut fixups,
-                &mut plt_call_fixups,
-                &mut got_fixups,
-                &mut data_fixups,
-                &mut user_extern_data_refs,
-                &extern_data_names,
-                &extern_tls_names,
-                &mut pending_func_fixups,
-                &imports,
-                &variadic_targets,
-                &mut tls_index_fixups,
-                &mut elf_tpoff_fixups,
-                0,
-                &mut pc_to_native,
-                &mut prologue_native,
-                &mut ssa_line_rows,
-                &mut fn_unwind,
-            );
+            let ok = {
+                let mut cx = super::ssa_emit_common::EmitCtx {
+                    code: &mut code,
+                    plt_call_fixups: &mut plt_call_fixups,
+                    data_fixups: &mut data_fixups,
+                    user_extern_data_refs: &mut user_extern_data_refs,
+                    pending_func_fixups: &mut pending_func_fixups,
+                    tls_index_fixups: &mut tls_index_fixups,
+                    elf_tpoff_fixups: &mut elf_tpoff_fixups,
+                    ssa_line_rows: &mut ssa_line_rows,
+                    pc_to_native: &mut pc_to_native,
+                    prologue_native: &mut prologue_native,
+                };
+                super::ssa_emit_x86_64::emit_function(
+                    func,
+                    &alloc,
+                    target,
+                    &mut cx,
+                    &mut fixups,
+                    &mut got_fixups,
+                    &extern_data_names,
+                    &extern_tls_names,
+                    &imports,
+                    &variadic_targets,
+                    0,
+                    &mut fn_unwind,
+                )
+            };
             if !ok {
                 return Err("ssa_native: emit_function bailed".to_string());
             }

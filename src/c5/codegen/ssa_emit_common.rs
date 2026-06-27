@@ -18,9 +18,13 @@ pub(super) struct EmitCtx<'a> {
     pub(super) code: &'a mut alloc::vec::Vec<u8>,
     pub(super) plt_call_fixups: &'a mut alloc::vec::Vec<super::PltCallFixup>,
     pub(super) data_fixups: &'a mut alloc::vec::Vec<super::DataFixup>,
+    pub(super) user_extern_data_refs: &'a mut alloc::vec::Vec<super::UserExternDataRef>,
     pub(super) pending_func_fixups: &'a mut alloc::vec::Vec<(usize, usize)>,
     pub(super) tls_index_fixups: &'a mut alloc::vec::Vec<super::TlsIndexFixup>,
     pub(super) elf_tpoff_fixups: &'a mut alloc::vec::Vec<super::ElfTpoffFixup>,
+    pub(super) ssa_line_rows: &'a mut alloc::vec::Vec<(usize, u32, u32)>,
+    pub(super) pc_to_native: &'a mut [usize],
+    pub(super) prologue_native: &'a mut alloc::collections::BTreeMap<usize, usize>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV

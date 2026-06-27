@@ -1001,6 +1001,9 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend 
         emit_mov_r_mem(code, Reg(stage), Reg::RSP, spill_slot_sp_offset(frame, src));
         emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, dst), Reg(stage));
     }
+    fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+        emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, slot), Reg(src));
+    }
     fn break_place_cycle(
         &self,
         code: &mut Vec<u8>,
@@ -6882,11 +6885,13 @@ fn emit_mcpy(
 /// `Place`. Runs after the borrowed registers are restored so the
 /// spill slot's rsp offset is the unshifted one.
 fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
-    match dst {
-        Place::IntReg(r) if r != src.0 => emit_mov_rr(code, Reg(r), src),
-        Place::Spill(_) => spill_dst_to_slot(code, dst, src, frame),
-        _ => {}
-    }
+    super::ssa_emit_common::write_atomic_result(
+        &super::ssa_emit_common::X64Backend,
+        code,
+        dst,
+        src.0,
+        frame,
+    );
 }
 
 /// Load the low `width` bytes of `[base]` into `dst`, zero-extended. A

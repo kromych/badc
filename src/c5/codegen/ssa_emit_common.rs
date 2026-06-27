@@ -133,6 +133,17 @@ pub(super) trait EmitBackend {
         stage: u8,
         hold: u8,
     );
+    /// Store integer register `src` to spill slot `slot`, resolving an
+    /// out-of-reach slot address from a backend-internal scratch register
+    /// (unlike [`int_spill_store`], the caller supplies no base). Used to write
+    /// a computed result back to its spill home.
+    fn int_spill_store_auto(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        frame: Frame,
+        slot: u32,
+        src: u8,
+    );
     /// Break a residual cycle in an integer place-move set: emit one resolving
     /// transfer and rewrite the moves that read the displaced source. x86_64
     /// exchanges a register-register edge; aarch64 stages through `hold`.
@@ -287,6 +298,23 @@ pub(super) fn schedule_place_moves<B: EmitBackend>(
         }
     }
     true
+}
+
+/// Write an atomic operation's result register `src` to its destination
+/// `dst`: a register copy (self-moves elide) or a spill-slot store.
+pub(super) fn write_atomic_result<B: EmitBackend>(
+    b: &B,
+    code: &mut alloc::vec::Vec<u8>,
+    dst: super::ssa_alloc::Place,
+    src: u8,
+    frame: Frame,
+) {
+    use super::ssa_alloc::Place;
+    match dst {
+        Place::IntReg(r) => b.int_reg_mov(code, r, src),
+        Place::Spill(slot) => b.int_spill_store_auto(code, frame, slot, src),
+        _ => {}
+    }
 }
 
 /// Emit the predecessor-exit phi moves for `self_block`: for each successor,

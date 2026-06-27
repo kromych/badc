@@ -4100,14 +4100,13 @@ fn atomic_operand_into(
 /// `Place`. Run after the working registers are restored so a spilled
 /// result lands at the unshifted sp offset.
 fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
-    if let Some(rd) = int_reg(dst) {
-        if rd.0 != src.0 {
-            emit_mov_reg(code, rd, src);
-        }
-    } else if let Place::Spill(slot) = dst {
-        let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, src, sp_off);
-    }
+    super::ssa_emit_common::write_atomic_result(
+        &super::ssa_emit_common::Aarch64Backend,
+        code,
+        dst,
+        src.0,
+        frame,
+    );
 }
 
 /// C11 7.17.7.2-7.17.7.5 atomic read-modify-write via an LDAXR / STLXR
@@ -5945,6 +5944,9 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Back
         // source, so the store borrows `hold` via a stack save/restore when
         // the destination slot is out of reach.
         emit_sp_str_x_borrow(code, Reg(stage), spill_off(frame, dst), Reg(hold));
+    }
+    fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+        emit_sp_str_x_auto(code, Reg(src), spill_off(frame, slot));
     }
     fn break_place_cycle(
         &self,

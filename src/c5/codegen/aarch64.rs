@@ -466,8 +466,7 @@ pub(super) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> u32 {
 /// move a `double` value into the allocator's chosen d-register
 /// when the producer wrote a different one.
 pub(super) fn enc_fmov_d_d(dd: u8, dn: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32);
-    0x1E60_4000 | ((dn as u32) << 5) | (dd as u32)
+    enc_fp1(0x1E60_4000, dd, dn)
 }
 
 /// FP data-processing (2 source) word: `base | Rm<<16 | Rn<<5 | Rd`, V-register
@@ -475,6 +474,12 @@ pub(super) fn enc_fmov_d_d(dd: u8, dn: u8) -> u32 {
 fn enc_fp2(base: u32, dd: u8, dn: u8, dm: u8) -> u32 {
     debug_assert!(dd < 32 && dn < 32 && dm < 32);
     base | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+}
+
+/// FP data-processing (1 source) word: `base | Rn<<5 | Rd`, V-register operands.
+fn enc_fp1(base: u32, d: u8, n: u8) -> u32 {
+    debug_assert!(d < 32 && n < 32);
+    base | ((n as u32) << 5) | (d as u32)
 }
 
 /// `FADD <Dd>, <Dn>, <Dm>` -- double-precision add. `Dd = Dn + Dm`.
@@ -499,61 +504,56 @@ pub(super) fn enc_fdiv_d(dd: u8, dn: u8, dm: u8) -> u32 {
 
 /// `FNEG <Dd>, <Dn>`. `Dd = -Dn`.
 pub(super) fn enc_fneg_d(dd: u8, dn: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32);
-    0x1E61_4000 | ((dn as u32) << 5) | (dd as u32)
+    enc_fp1(0x1E61_4000, dd, dn)
 }
 
 /// `FSQRT <Dd>, <Dn>` -- scalar double square root. FP data-processing
 /// (1 source), ptype=01, opcode=000011.
 pub(super) fn enc_fsqrt_d(dd: u8, dn: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32);
-    0x1E61_C000 | ((dn as u32) << 5) | (dd as u32)
+    enc_fp1(0x1E61_C000, dd, dn)
 }
 
 /// `FSQRT <Sd>, <Sn>` -- scalar single square root. ptype=00.
 pub(super) fn enc_fsqrt_s(sd: u8, sn: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32);
-    0x1E21_C000 | ((sn as u32) << 5) | (sd as u32)
+    enc_fp1(0x1E21_C000, sd, sn)
 }
 
 /// `FABS <Dd>, <Dn>` -- scalar double absolute value. opcode=000001.
 pub(super) fn enc_fabs_d(dd: u8, dn: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32);
-    0x1E60_C000 | ((dn as u32) << 5) | (dd as u32)
+    enc_fp1(0x1E60_C000, dd, dn)
 }
 
 /// `FABS <Sd>, <Sn>` -- scalar single absolute value.
 pub(super) fn enc_fabs_s(sd: u8, sn: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32);
-    0x1E20_C000 | ((sn as u32) << 5) | (sd as u32)
+    enc_fp1(0x1E20_C000, sd, sn)
 }
 
 /// `FRINTM <Dd>, <Dn>` -- round to integral toward -inf (floor).
 /// FP-1-source opcode 001010.
 pub(super) fn enc_frintm_d(dd: u8, dn: u8) -> u32 {
-    0x1E65_4000 | ((dn as u32) << 5) | (dd as u32)
+    enc_fp1(0x1E65_4000, dd, dn)
 }
 /// `FRINTM <Sd>, <Sn>`.
 pub(super) fn enc_frintm_s(sd: u8, sn: u8) -> u32 {
-    0x1E25_4000 | ((sn as u32) << 5) | (sd as u32)
+    enc_fp1(0x1E25_4000, sd, sn)
 }
 /// `FRINTP <Dd>, <Dn>` -- round to integral toward +inf (ceil).
 /// FP-1-source opcode 001001.
 pub(super) fn enc_frintp_d(dd: u8, dn: u8) -> u32 {
-    0x1E64_C000 | ((dn as u32) << 5) | (dd as u32)
+    enc_fp1(0x1E64_C000, dd, dn)
 }
 /// `FRINTP <Sd>, <Sn>`.
 pub(super) fn enc_frintp_s(sd: u8, sn: u8) -> u32 {
-    0x1E24_C000 | ((sn as u32) << 5) | (sd as u32)
+    enc_fp1(0x1E24_C000, sd, sn)
 }
 /// `FRINTZ <Dd>, <Dn>` -- round to integral toward zero (trunc).
 /// FP-1-source opcode 001011.
 pub(super) fn enc_frintz_d(dd: u8, dn: u8) -> u32 {
-    0x1E65_C000 | ((dn as u32) << 5) | (dd as u32)
+    enc_fp1(0x1E65_C000, dd, dn)
 }
 /// `FRINTZ <Sd>, <Sn>`.
 pub(super) fn enc_frintz_s(sd: u8, sn: u8) -> u32 {
-    0x1E25_C000 | ((sn as u32) << 5) | (sd as u32)
+    enc_fp1(0x1E25_C000, sd, sn)
 }
 
 /// `FCMP <Dn>, <Dm>` -- set NZCV per the IEEE comparison of `Dn`
@@ -579,8 +579,7 @@ pub(super) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
 /// move an `float` value into the allocator's chosen register when
 /// the producer wrote a different one.
 pub(super) fn enc_fmov_s_s(sd: u8, sn: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32);
-    0x1E20_4000 | ((sn as u32) << 5) | (sd as u32)
+    enc_fp1(0x1E20_4000, sd, sn)
 }
 
 /// `FADD <Sd>, <Sn>, <Sm>` -- single-precision add. `Sd = Sn + Sm`
@@ -606,8 +605,7 @@ pub(super) fn enc_fdiv_s(sd: u8, sn: u8, sm: u8) -> u32 {
 
 /// `FNEG <Sd>, <Sn>`. `Sd = -Sn`.
 pub(super) fn enc_fneg_s(sd: u8, sn: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32);
-    0x1E21_4000 | ((sn as u32) << 5) | (sd as u32)
+    enc_fp1(0x1E21_4000, sd, sn)
 }
 
 /// Floating-point fused multiply-add (3 source). `Dd = (neg_product ?

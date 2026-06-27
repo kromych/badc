@@ -1200,6 +1200,32 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend 
             current_alloca_top,
         )
     }
+    fn emit_binop(
+        &self,
+        code: &mut Vec<u8>,
+        op: BinOp,
+        v: super::super::ir::ValueId,
+        dst: Place,
+        lhs: u32,
+        rhs: u32,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_binop(code, op, v, dst, lhs, rhs, alloc, frame)
+    }
+    fn emit_binop_imm(
+        &self,
+        code: &mut Vec<u8>,
+        op: BinOp,
+        v: super::super::ir::ValueId,
+        dst: Place,
+        lhs: u32,
+        rhs_imm: i64,
+        alloc: &Allocation,
+        frame: Frame,
+    ) -> bool {
+        emit_binop_imm(code, op, v, dst, lhs, rhs_imm, alloc, frame)
+    }
 }
 
 /// Sequentialize a parallel copy over FP locations (xmm registers and
@@ -3045,9 +3071,9 @@ fn emit_inst(
         } => b.emit_store_indexed(
             code, dst, *base, *index, *scale, *value, *kind, alloc, frame,
         ),
-        Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
+        Inst::Binop { op, lhs, rhs } => b.emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
         Inst::BinopI { op, lhs, rhs_imm } => {
-            emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
+            b.emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
         }
         Inst::Call {
             target_pc,

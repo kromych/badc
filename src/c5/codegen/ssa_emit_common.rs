@@ -303,6 +303,34 @@ pub(super) trait EmitBackend {
         abi: super::Abi,
         current_alloca_top: u32,
     ) -> bool;
+
+    /// `Inst::Binop`: lower the two-operand arithmetic/comparison `op`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_binop(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        op: super::super::ir::BinOp,
+        v: super::super::ir::ValueId,
+        dst: super::ssa_alloc::Place,
+        lhs: u32,
+        rhs: u32,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+    ) -> bool;
+
+    /// `Inst::BinopI`: lower a two-operand `op` with an immediate right operand.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_binop_imm(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        op: super::super::ir::BinOp,
+        v: super::super::ir::ValueId,
+        dst: super::ssa_alloc::Place,
+        lhs: u32,
+        rhs_imm: i64,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+    ) -> bool;
 }
 
 /// Stateless backend selectors. The per-target leaf implementations live in the

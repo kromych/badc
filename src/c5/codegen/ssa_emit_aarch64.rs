@@ -5967,65 +5967,14 @@ fn schedule_place_moves(
     hold: Reg,
     stage: Reg,
 ) -> bool {
-    moves.retain(|(s, t)| !place_same_loc(*s, *t));
-    if moves.iter().any(|(s, t)| {
-        matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
-    }) {
-        return false;
-    }
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
-            if !tgt_still_a_source {
-                super::ssa_emit_common::emit_place_move(
-                    &super::ssa_emit_common::Aarch64Backend,
-                    code,
-                    s,
-                    t,
-                    frame,
-                    stage.0,
-                    hold.0,
-                );
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            // Only cycle members remain. Save one cycle source into
-            // `hold` and redirect every move that reads it. A single
-            // cycle drains completely before the next break, so a
-            // single persistent `hold` register suffices.
-            let cyc = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|s| !place_same_loc(*s, Place::IntReg(hold.0)))
-                .unwrap_or(moves[0].0);
-            // Copy the cycle source into `hold` (a register move or a
-            // spill reload). `materialize_int` is unsuitable here: for
-            // an `IntReg` source it returns the register without
-            // emitting anything, leaving `hold` unloaded.
-            super::ssa_emit_common::emit_place_move(
-                &super::ssa_emit_common::Aarch64Backend,
-                code,
-                cyc,
-                Place::IntReg(hold.0),
-                frame,
-                stage.0,
-                hold.0,
-            );
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, cyc) {
-                    m.0 = Place::IntReg(hold.0);
-                }
-            }
-        }
-    }
-    true
+    super::ssa_emit_common::schedule_place_moves(
+        &super::ssa_emit_common::Aarch64Backend,
+        code,
+        moves,
+        frame,
+        hold.0,
+        stage.0,
+    )
 }
 
 /// Emit a single resolved FP location-to-location move over `FpReg`
@@ -6068,6 +6017,36 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Back
         // source, so the store borrows `hold` via a stack save/restore when
         // the destination slot is out of reach.
         emit_sp_str_x_borrow(code, Reg(stage), spill_off(frame, dst), Reg(hold));
+    }
+    fn break_place_cycle(
+        &self,
+        code: &mut Vec<u8>,
+        moves: &mut Vec<(Place, Place)>,
+        frame: Frame,
+        hold: u8,
+        stage: u8,
+    ) {
+        // Stage one cycle source into `hold` and redirect every move that
+        // reads it. A single cycle drains completely before the next break.
+        let cyc = moves
+            .iter()
+            .map(|(s, _)| *s)
+            .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
+            .unwrap_or(moves[0].0);
+        super::ssa_emit_common::emit_place_move(
+            self,
+            code,
+            cyc,
+            Place::IntReg(hold),
+            frame,
+            stage,
+            hold,
+        );
+        for m in moves.iter_mut() {
+            if place_same_loc(m.0, cyc) {
+                m.0 = Place::IntReg(hold);
+            }
+        }
     }
 }
 

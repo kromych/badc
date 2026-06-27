@@ -1022,88 +1022,14 @@ fn schedule_place_moves(
     hold: Reg,
     stage: Reg,
 ) -> bool {
-    moves.retain(|(s, t)| !place_same_loc(*s, *t));
-    if moves.iter().any(|(s, t)| {
-        matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
-    }) {
-        return false;
-    }
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
-            if !tgt_still_a_source {
-                super::ssa_emit_common::emit_place_move(
-                    &super::ssa_emit_common::X64Backend,
-                    code,
-                    s,
-                    t,
-                    frame,
-                    stage.0,
-                    hold.0,
-                );
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            // Only cycle members remain. Break a register-register edge
-            // with `xchg` (no scratch, and not locked for register
-            // operands): exchanging the two endpoints satisfies that move
-            // -- the target ends up holding the source's value -- and
-            // leaves the source holding the target's old value for the
-            // move that reads it. An edge touching a spill slot has no
-            // register swap, so route one such source through `hold`
-            // instead. A single cycle drains before the next break, so
-            // one persistent `hold` suffices.
-            if let Some(i) = moves
-                .iter()
-                .position(|(s, t)| matches!(s, Place::IntReg(_)) && matches!(t, Place::IntReg(_)))
-            {
-                let (s, t) = moves[i];
-                let (Place::IntReg(sr), Place::IntReg(tr)) = (s, t) else {
-                    unreachable!()
-                };
-                emit_xchg_rr(code, Reg(sr), Reg(tr));
-                moves.swap_remove(i);
-                for m in moves.iter_mut() {
-                    if place_same_loc(m.0, t) {
-                        m.0 = s;
-                    }
-                }
-                moves.retain(|(s, t)| !place_same_loc(*s, *t));
-            } else {
-                // Copy the cycle source into `hold` (a spill reload).
-                // `materialize_int` is unsuitable: for an `IntReg` source
-                // it returns the register without emitting, leaving `hold`
-                // unloaded.
-                let cyc = moves
-                    .iter()
-                    .map(|(s, _)| *s)
-                    .find(|s| !place_same_loc(*s, Place::IntReg(hold.0)))
-                    .unwrap_or(moves[0].0);
-                super::ssa_emit_common::emit_place_move(
-                    &super::ssa_emit_common::X64Backend,
-                    code,
-                    cyc,
-                    Place::IntReg(hold.0),
-                    frame,
-                    stage.0,
-                    hold.0,
-                );
-                for m in moves.iter_mut() {
-                    if place_same_loc(m.0, cyc) {
-                        m.0 = Place::IntReg(hold.0);
-                    }
-                }
-            }
-        }
-    }
-    true
+    super::ssa_emit_common::schedule_place_moves(
+        &super::ssa_emit_common::X64Backend,
+        code,
+        moves,
+        frame,
+        hold.0,
+        stage.0,
+    )
 }
 
 /// Sequentialize a parallel copy over xmm registers. Mirrors
@@ -1154,6 +1080,57 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend 
     ) {
         emit_mov_r_mem(code, Reg(stage), Reg::RSP, spill_slot_sp_offset(frame, src));
         emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, dst), Reg(stage));
+    }
+    fn break_place_cycle(
+        &self,
+        code: &mut Vec<u8>,
+        moves: &mut Vec<(Place, Place)>,
+        frame: Frame,
+        hold: u8,
+        stage: u8,
+    ) {
+        // Break a register-register edge with `xchg` (no scratch, not locked
+        // for register operands): the exchange satisfies that move and leaves
+        // the displaced value in the source for the move that reads it. An edge
+        // touching a spill slot has no register swap, so route one such source
+        // through `hold`. A single cycle drains before the next break.
+        if let Some(i) = moves
+            .iter()
+            .position(|(s, t)| matches!(s, Place::IntReg(_)) && matches!(t, Place::IntReg(_)))
+        {
+            let (s, t) = moves[i];
+            let (Place::IntReg(sr), Place::IntReg(tr)) = (s, t) else {
+                unreachable!()
+            };
+            emit_xchg_rr(code, Reg(sr), Reg(tr));
+            moves.swap_remove(i);
+            for m in moves.iter_mut() {
+                if place_same_loc(m.0, t) {
+                    m.0 = s;
+                }
+            }
+            moves.retain(|(s, t)| !place_same_loc(*s, *t));
+        } else {
+            let cyc = moves
+                .iter()
+                .map(|(s, _)| *s)
+                .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
+                .unwrap_or(moves[0].0);
+            super::ssa_emit_common::emit_place_move(
+                self,
+                code,
+                cyc,
+                Place::IntReg(hold),
+                frame,
+                stage,
+                hold,
+            );
+            for m in moves.iter_mut() {
+                if place_same_loc(m.0, cyc) {
+                    m.0 = Place::IntReg(hold);
+                }
+            }
+        }
     }
 }
 

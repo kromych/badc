@@ -133,6 +133,17 @@ pub(super) trait EmitBackend {
         stage: u8,
         hold: u8,
     );
+    /// Break a residual cycle in an integer place-move set: emit one resolving
+    /// transfer and rewrite the moves that read the displaced source. x86_64
+    /// exchanges a register-register edge; aarch64 stages through `hold`.
+    fn break_place_cycle(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        moves: &mut alloc::vec::Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)>,
+        frame: Frame,
+        hold: u8,
+        stage: u8,
+    );
 }
 
 /// Stateless backend selectors. The per-target leaf implementations live in the
@@ -235,6 +246,47 @@ pub(super) fn schedule_fp_place_moves<B: EmitBackend>(
             }
         }
     }
+}
+
+/// Sequentialize parallel integer location-to-location moves. Returns false
+/// (the caller falls back to per-instruction placement) if any endpoint is an
+/// FP register or None. Each move is emitted via [`emit_place_move`]; a
+/// residual cycle is broken by the backend's [`EmitBackend::break_place_cycle`].
+/// `hold`/`stage` are scratch registers outside the allocator's bank.
+pub(super) fn schedule_place_moves<B: EmitBackend>(
+    b: &B,
+    code: &mut alloc::vec::Vec<u8>,
+    moves: &mut alloc::vec::Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)>,
+    frame: Frame,
+    hold: u8,
+    stage: u8,
+) -> bool {
+    use super::ssa_alloc::Place;
+    moves.retain(|(s, t)| !place_same_loc(*s, *t));
+    if moves.iter().any(|(s, t)| {
+        matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
+    }) {
+        return false;
+    }
+    while !moves.is_empty() {
+        let mut progress = false;
+        let mut i = 0;
+        while i < moves.len() {
+            let (s, t) = moves[i];
+            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
+            if !tgt_still_a_source {
+                emit_place_move(b, code, s, t, frame, stage, hold);
+                moves.swap_remove(i);
+                progress = true;
+            } else {
+                i += 1;
+            }
+        }
+        if !progress {
+            b.break_place_cycle(code, moves, frame, hold, stage);
+        }
+    }
+    true
 }
 
 /// Sequentialize a set of parallel register moves `(src, dst)` (raw register

@@ -62,135 +62,79 @@ use super::aarch64::{
     load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::place_same_loc;
+use super::ssa_emit_common::{Frame, place_same_loc};
 
-/// Per-function frame layout. Bytes are 16-aligned at every
-/// region boundary so AAPCS64's sp-at-call-site invariant holds.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct Frame {
-    /// Total frame size below fp, sub-spilled once at prologue
-    /// entry. Includes locals, allocator spills, and saved
-    /// callee-saved regs.
-    pub frame_bytes: u32,
-    /// Byte distance from fp down to the start of the
-    /// allocator-managed spill region.
-    pub alloc_spill_base: u32,
-    /// Whether this function clobbers x19. x19 is callee-saved per
-    /// AAPCS64 and is the scratch the writer's patch_adrp_add forces
-    /// for address materialisation, so it is saved and restored only
-    /// when the function actually uses it (see the aarch64 arm of
-    /// [`super::ssa_alloc::function_clobbers_scratch`]).
-    pub uses_x19: bool,
-    /// Total bytes the prologue allocates above the saved fp/lr
-    /// for c5 cdecl parameter slots and host-stack overflow. The
-    /// epilogue reads this directly so prologue and epilogue
-    /// agree on one byte count regardless of which branch the
-    /// prologue took (variadic, host-stack overflow,
-    /// ParamRef-elided, per-slot pending_sub flush).
-    pub param_spill_bytes: u32,
-    /// Byte stride between adjacent parameter cells in the callee
-    /// frame. 16 today (the c5 cdecl cell width the prologue
-    /// allocates and `va_arg` walks). Carried on the frame so a
-    /// later phase can shrink non-variadic cells in one place;
-    /// `c5_slot_to_fp_offset` and the prologue both read it.
-    pub param_cell_stride: i64,
-    /// True for an AAPCS64 host variadic callee (Linux aarch64): the
-    /// named parameters live in the prologue-spilled general / vector
-    /// register save area rather than 16-byte cdecl cells, so
-    /// `local_slot_off` redirects a positive c5 slot to that area
-    /// instead of using `param_cell_stride`. Carried on the frame so the
-    /// slot-addressing helpers stay independent of `func` / `abi`.
-    pub va_named_redirect: bool,
-    /// Copy of `FunctionSsa::param_fp_mask` for the named-parameter
-    /// redirect: bit i set means named parameter i is floating-point and
-    /// reads from the vector save area. Meaningful only when
-    /// `va_named_redirect` is set.
-    pub va_param_fp_mask: u32,
-    /// Named-parameter count and ABI carried for the redirect's
-    /// `plan_param_regs` call, so `local_slot_off` and `va_start` can map a
-    /// named parameter to its argument-register-bank slot or its
-    /// incoming-stack overflow slot without `func` / `abi` in scope.
-    /// Meaningful only when `va_named_redirect` is set.
-    pub va_n_params: usize,
-    pub va_abi: super::Abi,
-}
-
-impl Frame {
-    pub fn for_function(
-        func: &FunctionSsa,
-        alloc: &Allocation,
-        abi: super::Abi,
-        target: Target,
-    ) -> Self {
-        let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
-        // After mem2reg + dead-store elimination, every reference to
-        // user-local slots (negative `off`) may be gone. The
-        // surviving `func.insts` is the source of truth; when no
-        // `LoadLocal` / `StoreLocal` / `LocalAddr` references a
-        // negative slot the prologue need not allocate locals
-        // storage (C99 6.2.4p2: a never-observed object needs no
-        // storage). Param cells use non-negative `off` and are
-        // sized by `param_spill_bytes`, so they are not affected.
-        let any_local_access = func.insts.iter().any(|i| match i {
-            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
-            Inst::LocalAddr(off) => *off < 0,
-            _ => false,
-        });
-        let locals_bytes = if any_local_access {
-            declared_locals_bytes
-        } else {
-            0
-        };
-        let alloc_spill_bytes = super::ssa_emit_common::slots16(alloc.spill_count);
-        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
-        let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
-        // Reserve the x19 slot only when the function actually
-        // clobbers x19; the prologue / epilogue's store / load already
-        // gates on the same condition, so a function that leaves x19
-        // alone needs no slot and can drop the 16 bytes. The clobber
-        // decision (TLS / indirect-call / intrinsic address scratch, or
-        // a third modulo operand under spill) lives in the shared
-        // `function_clobbers_scratch`, which knows each target's
-        // reserved scratch set.
-        let uses_x19 =
-            !super::ssa_alloc::function_clobbers_scratch(func, target, alloc.spill_count)
-                .is_empty();
-        let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
-        let frame_bytes =
-            locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
-        // A Windows-on-ARM64 variadic callee (Microsoft ARM64 calling
-        // convention) receives every argument (named and variadic) in a
-        // contiguous 8-byte-per-argument region: the first eight in
-        // x0..x7 (spilled by the prologue into a 64-byte gr-save area
-        // above the saved fp/lr), the rest on the incoming stack just
-        // above it. The body reads its named parameters and `va_arg`
-        // walks the variadic tail with a single 8-byte stride across
-        // that region, so the cell stride is 8 rather than the 16-byte
-        // c5 cdecl cell width, and the prologue allocates a fixed
-        // 64-byte gr-save area. Every other aarch64 callee keeps the
-        // 16-byte stride and its `prologue_param_spill_bytes` count.
-        let (param_spill_bytes, param_cell_stride) = if win_arm64_variadic_callee(func, abi) {
-            (WIN_ARM64_GR_SAVE_BYTES, 8)
-        } else if aarch64_host_variadic_callee(func, abi) {
-            // The AAPCS64 variadic callee reserves the 192-byte general +
-            // vector register save area above the saved fp/lr. Named
-            // parameters read from it through `local_slot_off`, not the
-            // 16-byte cdecl cell, so the cell stride is unused here.
-            (AARCH64_VA_SAVE_BYTES, 16)
-        } else {
-            (prologue_param_spill_bytes(func, alloc, abi), 16)
-        };
-        Self {
-            frame_bytes,
-            alloc_spill_base: locals_bytes,
-            uses_x19,
-            param_spill_bytes,
-            param_cell_stride,
-            va_named_redirect: aarch64_host_variadic_callee(func, abi),
-            va_param_fp_mask: func.param_fp_mask,
-            va_n_params: func.n_params,
-            va_abi: abi,
-        }
+/// Compute the aarch64 stack-frame layout for `func`. Fills the shared
+/// [`Frame`]'s aarch64 fields; the x86_64-only fields stay at their defaults.
+fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
+    let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
+    // After mem2reg + dead-store elimination, every reference to
+    // user-local slots (negative `off`) may be gone. The
+    // surviving `func.insts` is the source of truth; when no
+    // `LoadLocal` / `StoreLocal` / `LocalAddr` references a
+    // negative slot the prologue need not allocate locals
+    // storage (C99 6.2.4p2: a never-observed object needs no
+    // storage). Param cells use non-negative `off` and are
+    // sized by `param_spill_bytes`, so they are not affected.
+    let any_local_access = func.insts.iter().any(|i| match i {
+        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
+        Inst::LocalAddr(off) => *off < 0,
+        _ => false,
+    });
+    let locals_bytes = if any_local_access {
+        declared_locals_bytes
+    } else {
+        0
+    };
+    let alloc_spill_bytes = super::ssa_emit_common::slots16(alloc.spill_count);
+    let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
+    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
+    // Reserve the x19 slot only when the function actually
+    // clobbers x19; the prologue / epilogue's store / load already
+    // gates on the same condition, so a function that leaves x19
+    // alone needs no slot and can drop the 16 bytes. The clobber
+    // decision (TLS / indirect-call / intrinsic address scratch, or
+    // a third modulo operand under spill) lives in the shared
+    // `function_clobbers_scratch`, which knows each target's
+    // reserved scratch set.
+    let uses_x19 =
+        !super::ssa_alloc::function_clobbers_scratch(func, target, alloc.spill_count).is_empty();
+    let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
+    let frame_bytes =
+        locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
+    // A Windows-on-ARM64 variadic callee (Microsoft ARM64 calling
+    // convention) receives every argument (named and variadic) in a
+    // contiguous 8-byte-per-argument region: the first eight in
+    // x0..x7 (spilled by the prologue into a 64-byte gr-save area
+    // above the saved fp/lr), the rest on the incoming stack just
+    // above it. The body reads its named parameters and `va_arg`
+    // walks the variadic tail with a single 8-byte stride across
+    // that region, so the cell stride is 8 rather than the 16-byte
+    // c5 cdecl cell width, and the prologue allocates a fixed
+    // 64-byte gr-save area. Every other aarch64 callee keeps the
+    // 16-byte stride and its `prologue_param_spill_bytes` count.
+    let (param_spill_bytes, param_cell_stride) = if win_arm64_variadic_callee(func, abi) {
+        (WIN_ARM64_GR_SAVE_BYTES, 8)
+    } else if aarch64_host_variadic_callee(func, abi) {
+        // The AAPCS64 variadic callee reserves the 192-byte general +
+        // vector register save area above the saved fp/lr. Named
+        // parameters read from it through `local_slot_off`, not the
+        // 16-byte cdecl cell, so the cell stride is unused here.
+        (AARCH64_VA_SAVE_BYTES, 16)
+    } else {
+        (prologue_param_spill_bytes(func, alloc, abi), 16)
+    };
+    Frame {
+        frame_bytes,
+        alloc_spill_base: locals_bytes,
+        uses_x19,
+        param_spill_bytes,
+        param_cell_stride,
+        va_named_redirect: aarch64_host_variadic_callee(func, abi),
+        va_param_fp_mask: func.param_fp_mask,
+        va_n_params: func.n_params,
+        va_abi: abi,
+        ..Default::default()
     }
 }
 
@@ -663,7 +607,7 @@ pub(super) fn emit_function(
     let pc_to_native = &mut *cx.pc_to_native;
     let prologue_native = &mut *cx.prologue_native;
     let abi = target.abi();
-    let frame = Frame::for_function(func, alloc, abi, target);
+    let frame = compute_frame(func, alloc, abi, target);
     let scratch = ScratchPool::new();
     let snapshot = code.len();
     // Snapshot every fixup vector at function entry so a partial
@@ -6894,7 +6838,7 @@ mod tests {
         // The frame must reserve the three slots the test forces, or the
         // spill-offset computation underflows.
         alloc.spill_count = alloc.spill_count.max(3);
-        let frame = Frame::for_function(&func, &alloc, target.abi(), target);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
         let scratch = ScratchPool {
             primary: Reg(16),
             secondary: Reg(17),

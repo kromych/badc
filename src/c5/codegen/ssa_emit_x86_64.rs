@@ -45,7 +45,7 @@ use super::DataFixup;
 use super::GotFixup;
 use super::Target;
 use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::place_same_loc;
+use super::ssa_emit_common::{Frame, place_same_loc};
 use super::x86_64::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
     emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
@@ -65,118 +65,79 @@ use super::x86_64::{
 
 /// Per-function frame layout. Bytes are 16-aligned at every
 /// region boundary so SysV / Win64's sp-at-call invariant holds.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct Frame {
-    pub frame_bytes: u32,
-    pub alloc_spill_base: u32,
-    /// Total bytes the prologue allocates between the return
-    /// address and the saved rbp for c5 cdecl parameter slots
-    /// and host-stack overflow. The epilogue reads this directly
-    /// so prologue and epilogue agree on one byte count regardless
-    /// of which branch the prologue took.
-    pub param_spill_bytes: u32,
-    /// Byte stride between adjacent parameter cells in the callee
-    /// frame. 16 today (the c5 cdecl cell width the prologue
-    /// allocates and `va_arg` walks). Carried on the frame so a
-    /// later phase can shrink non-variadic cells in one place;
-    /// `c5_slot_to_fp_offset` and the prologue both read it.
-    pub param_cell_stride: i64,
-    /// Bytes of System V AMD64 register save area (3.5.7) reserved
-    /// inside the frame for a System V variadic callee:
-    /// `SYSV_REG_SAVE_BYTES` (176) for one, 0 otherwise.
-    pub va_save_bytes: u32,
-    /// rbp-relative byte offset (always negative) of the System V
-    /// register save area's base -- the start of the gp area, with the
-    /// fp area at `+48`. The area sits between the spill region above it
-    /// (locals + allocator spills, addressed top-down from rbp) and the
-    /// saved-callee-GPR region below it (addressed bottom-up from rsp),
-    /// so both keep their existing offset formulas: `base =
-    /// -(locals_bytes + alloc_spill_bytes + va_save_bytes)`. `va_start`
-    /// stores it as `reg_save_area`; `va_arg` reads from it. 0 when the
-    /// callee is not a System V variadic callee.
-    pub va_reg_save_off: i32,
-    /// Bytes reserved at the bottom of the frame (lowest addresses, just
-    /// above rsp) for saved non-volatile xmm scratch registers: 16 per
-    /// register in `alloc.fp_used`, 0 on System V (where every xmm is
-    /// volatile). The saved-GPR region sits directly above it, so the
-    /// GPR save/restore offsets shift up by this amount. The values are
-    /// stored with `movups` (no alignment requirement).
-    pub saved_fpr_bytes: u32,
-}
-
-impl Frame {
-    pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
-        let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
-        // After mem2reg + dead-store elimination, every reference to
-        // user-local slots (negative `off`) may be gone. The
-        // surviving `func.insts` is the source of truth; when no
-        // `LoadLocal` / `StoreLocal` / `LocalAddr` references a
-        // negative slot the prologue need not allocate locals
-        // storage (C99 6.2.4p2: a never-observed object needs no
-        // storage). Param cells use non-negative `off` and are
-        // sized by `param_spill_bytes`, so they are not affected.
-        let any_local_access = func.insts.iter().any(|i| match i {
-            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
-            Inst::LocalAddr(off) => *off < 0,
-            _ => false,
-        });
-        let locals_bytes = if any_local_access {
-            declared_locals_bytes
-        } else {
-            0
-        };
-        let alloc_spill_bytes = super::ssa_emit_common::slots16(alloc.spill_count);
-        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
-        // System V variadic callees reserve the 176-byte register save
-        // area (System V AMD64 3.5.7) at the bottom of the frame. It is
-        // added to `frame_bytes` only; `alloc_spill_base` (and thus the
-        // spill / locals offsets, which are measured from rbp down by
-        // `alloc_spill_base`) is unchanged, so the existing regions keep
-        // their rbp-relative positions and the save area takes the lowest
-        // bytes.
-        let va_save_bytes = if sysv_variadic_callee(func, abi) {
-            SYSV_REG_SAVE_BYTES
-        } else {
-            0
-        };
-        // The save area sits above the saved-callee-GPR region
-        // (addressed bottom-up from rsp) and below the locals / spill
-        // region (addressed top-down from rbp), so neither region's
-        // offset formula changes. Its base is the gp area start.
-        let va_reg_save_off = if va_save_bytes > 0 {
-            -((locals_bytes + alloc_spill_bytes + va_save_bytes) as i32)
-        } else {
-            0
-        };
-        // Saved non-volatile xmm scratch (Win64): 16 bytes per register,
-        // placed at the bottom of the frame below the saved-GPR region.
-        let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
-        let frame_bytes =
-            locals_bytes + alloc_spill_bytes + saved_gpr_bytes + va_save_bytes + saved_fpr_bytes;
-        let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
-        // A Win64 variadic callee receives every argument (named and
-        // variadic) in a contiguous 8-byte-per-argument region: the
-        // first four in rcx/rdx/r8/r9 (spilled by the prologue into
-        // the caller-reserved home area at `[rbp + 16 + i*8]`), the
-        // rest on the incoming stack just above it. The body reads its
-        // named parameters and `va_arg` walks the variadic tail with a
-        // single 8-byte stride across that region, so the cell stride
-        // is 8 rather than the 16-byte c5 cdecl cell width. Every other
-        // callee keeps the 16-byte stride.
-        let param_cell_stride = if win64_variadic_callee(func, abi) {
-            8
-        } else {
-            16
-        };
-        Self {
-            frame_bytes,
-            alloc_spill_base: locals_bytes,
-            param_spill_bytes,
-            param_cell_stride,
-            va_save_bytes,
-            va_reg_save_off,
-            saved_fpr_bytes,
-        }
+/// Compute the x86_64 stack-frame layout for `func`. Fills the shared
+/// [`Frame`]'s x86_64 fields; the aarch64-only fields stay at their defaults.
+fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
+    let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
+    // After mem2reg + dead-store elimination, every reference to
+    // user-local slots (negative `off`) may be gone. The
+    // surviving `func.insts` is the source of truth; when no
+    // `LoadLocal` / `StoreLocal` / `LocalAddr` references a
+    // negative slot the prologue need not allocate locals
+    // storage (C99 6.2.4p2: a never-observed object needs no
+    // storage). Param cells use non-negative `off` and are
+    // sized by `param_spill_bytes`, so they are not affected.
+    let any_local_access = func.insts.iter().any(|i| match i {
+        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
+        Inst::LocalAddr(off) => *off < 0,
+        _ => false,
+    });
+    let locals_bytes = if any_local_access {
+        declared_locals_bytes
+    } else {
+        0
+    };
+    let alloc_spill_bytes = super::ssa_emit_common::slots16(alloc.spill_count);
+    let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
+    // System V variadic callees reserve the 176-byte register save
+    // area (System V AMD64 3.5.7) at the bottom of the frame. It is
+    // added to `frame_bytes` only; `alloc_spill_base` (and thus the
+    // spill / locals offsets, which are measured from rbp down by
+    // `alloc_spill_base`) is unchanged, so the existing regions keep
+    // their rbp-relative positions and the save area takes the lowest
+    // bytes.
+    let va_save_bytes = if sysv_variadic_callee(func, abi) {
+        SYSV_REG_SAVE_BYTES
+    } else {
+        0
+    };
+    // The save area sits above the saved-callee-GPR region
+    // (addressed bottom-up from rsp) and below the locals / spill
+    // region (addressed top-down from rbp), so neither region's
+    // offset formula changes. Its base is the gp area start.
+    let va_reg_save_off = if va_save_bytes > 0 {
+        -((locals_bytes + alloc_spill_bytes + va_save_bytes) as i32)
+    } else {
+        0
+    };
+    // Saved non-volatile xmm scratch (Win64): 16 bytes per register,
+    // placed at the bottom of the frame below the saved-GPR region.
+    let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
+    let frame_bytes =
+        locals_bytes + alloc_spill_bytes + saved_gpr_bytes + va_save_bytes + saved_fpr_bytes;
+    let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
+    // A Win64 variadic callee receives every argument (named and
+    // variadic) in a contiguous 8-byte-per-argument region: the
+    // first four in rcx/rdx/r8/r9 (spilled by the prologue into
+    // the caller-reserved home area at `[rbp + 16 + i*8]`), the
+    // rest on the incoming stack just above it. The body reads its
+    // named parameters and `va_arg` walks the variadic tail with a
+    // single 8-byte stride across that region, so the cell stride
+    // is 8 rather than the 16-byte c5 cdecl cell width. Every other
+    // callee keeps the 16-byte stride.
+    let param_cell_stride = if win64_variadic_callee(func, abi) {
+        8
+    } else {
+        16
+    };
+    Frame {
+        frame_bytes,
+        alloc_spill_base: locals_bytes,
+        param_spill_bytes,
+        param_cell_stride,
+        va_reg_save_off,
+        saved_fpr_bytes,
+        ..Default::default()
     }
 }
 
@@ -1700,7 +1661,7 @@ pub(super) fn emit_function(
     let elf_tpoff_snapshot = elf_tpoff_fixups.len();
     let pending_func_fixups_snapshot = pending_func_fixups.len();
     let abi = target.abi();
-    let frame = Frame::for_function(func, alloc, abi);
+    let frame = compute_frame(func, alloc, abi);
 
     // A per-inst `Inst::ParamRef` materialises its parameter from the
     // incoming host argument register. The allocator can pack several

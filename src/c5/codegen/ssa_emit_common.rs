@@ -27,6 +27,42 @@ pub(super) struct EmitCtx<'a> {
     pub(super) prologue_native: &'a mut alloc::collections::BTreeMap<usize, usize>,
 }
 
+/// Per-function stack-frame layout, shared by both backends. Each backend's
+/// `compute_frame` fills the fields it uses and defaults the rest: the
+/// x86_64-only register-save / saved-xmm fields and the aarch64-only x19 /
+/// AAPCS64-variadic redirect fields. Every region is an explicit byte count so
+/// a backend's prologue and epilogue read the same values.
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct Frame {
+    /// Total frame the prologue allocates: locals + allocator spills + saved
+    /// callee-saved registers + any register-save area.
+    pub frame_bytes: u32,
+    /// Byte distance from the frame base down to the allocator spill region.
+    pub alloc_spill_base: u32,
+    /// Total bytes reserved for c5 cdecl parameter cells and host-stack
+    /// overflow; the epilogue reads the same count.
+    pub param_spill_bytes: u32,
+    /// Byte stride between adjacent parameter cells: 16 for the c5 cdecl cell,
+    /// 8 for a host variadic callee's contiguous argument region.
+    pub param_cell_stride: i64,
+    /// x86_64: rbp-relative base of the System V register save area; 0 unused.
+    pub va_reg_save_off: i32,
+    /// x86_64: bytes of saved non-volatile xmm scratch (Win64), 16 per
+    /// register; 0 on System V.
+    pub saved_fpr_bytes: u32,
+    /// aarch64: whether the function clobbers (and therefore saves) x19.
+    pub uses_x19: bool,
+    /// aarch64: AAPCS64 variadic callee reads named parameters from the
+    /// register save area rather than cdecl cells.
+    pub va_named_redirect: bool,
+    /// aarch64: `FunctionSsa::param_fp_mask` for the named-parameter redirect.
+    pub va_param_fp_mask: u32,
+    /// aarch64: named-parameter count for the redirect's `plan_param_regs`.
+    pub va_n_params: usize,
+    /// aarch64: ABI carried for the redirect's slot mapping.
+    pub va_abi: super::Abi,
+}
+
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
 /// AMD64, and Win64 all require the call-site stack pointer to
 /// hold 16-byte alignment after the prologue's frame allocation;

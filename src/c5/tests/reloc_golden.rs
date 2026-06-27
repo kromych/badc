@@ -55,6 +55,22 @@ const FIXTURES: &[Fixture] = &[
         name: "data_calls",
         src: "int cb(int); int G[4]={5,6,7,8}; int top(int i){return cb(i)+G[i&3];}",
     },
+    // Aggregate parameter that spills to the stack once the integer
+    // argument registers are exhausted (StructStack placement).
+    Fixture {
+        name: "struct_param_spill",
+        src: "struct S { int a; int b; }; \
+              long f(long a,long b,long c,long d,long e,long g,long h,long i,struct S s){ \
+              return a+b+c+d+e+g+h+i+s.a+s.b; }",
+    },
+    // A floating-point value live across a struct-returning call: exercises
+    // callee-saved FP save/restore around the call and struct-return handling.
+    Fixture {
+        name: "fp_across_struct_call",
+        src: "struct P { double x; double y; }; struct P mk(double a, double b); \
+              double compute(double a, double b){ double s=a*b; struct P p=mk(a,b); \
+              return s+p.x+p.y; }",
+    },
 ];
 
 /// FNV-1a 64-bit. No dependency; a change detector, not a cryptographic hash.
@@ -122,6 +138,46 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
     ("data_calls", "macos-arm64", 0x2eaa6b7fcabb0b37, 1688),
     ("data_calls", "win-x64", 0x8701619c09b78c22, 1680),
     ("data_calls", "win-arm64", 0x2eaa6b7fcabb0b37, 1688),
+    ("struct_param_spill", "linux-x64", 0x4c486c8df4456e10, 1680),
+    (
+        "struct_param_spill",
+        "linux-arm64",
+        0x57d897a30a6971ba,
+        1664,
+    ),
+    (
+        "struct_param_spill",
+        "macos-arm64",
+        0x57d897a30a6971ba,
+        1664,
+    ),
+    ("struct_param_spill", "win-x64", 0xc8b021ee3b3b7577, 1720),
+    ("struct_param_spill", "win-arm64", 0x0bcb20a73947ed86, 1696),
+    (
+        "fp_across_struct_call",
+        "linux-x64",
+        0x9e3edfe0dc19dbdb,
+        1744,
+    ),
+    (
+        "fp_across_struct_call",
+        "linux-arm64",
+        0x728818c3ad0a7bc6,
+        1688,
+    ),
+    (
+        "fp_across_struct_call",
+        "macos-arm64",
+        0x728818c3ad0a7bc6,
+        1688,
+    ),
+    ("fp_across_struct_call", "win-x64", 0xefdbefe433ac8e18, 1816),
+    (
+        "fp_across_struct_call",
+        "win-arm64",
+        0x728818c3ad0a7bc6,
+        1688,
+    ),
 ];
 
 #[test]
@@ -141,6 +197,13 @@ fn reloc_object_bytes_are_byte_stable_across_runs() {
 
 #[test]
 fn reloc_object_bytes_match_golden() {
+    // The table is pinned at the default register file. The `codegen_test`
+    // pressure knobs (BADC_MAX_GPR / BADC_MAX_FPR) force extra spills and
+    // legitimately change the emitted bytes; under a forced-pressure run the
+    // functional suite and demos are the gate, not this byte table.
+    if std::env::var_os("BADC_MAX_GPR").is_some() || std::env::var_os("BADC_MAX_FPR").is_some() {
+        return;
+    }
     let mut actual = alloc::string::String::new();
     let mut mismatch = GOLDEN.is_empty();
     for fx in FIXTURES {

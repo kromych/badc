@@ -5937,37 +5937,6 @@ fn emit_phi_predecessor_moves(
 /// store); `hold` is borrowed (saved/restored on the stack) to carry
 /// the base when a spill-to-spill destination slot lies beyond the
 /// scaled-imm12 reach. Both must lie outside the allocator's bank.
-fn emit_place_move(
-    code: &mut Vec<u8>,
-    src: Place,
-    dst: Place,
-    frame: Frame,
-    stage: Reg,
-    hold: Reg,
-) {
-    match (src, dst) {
-        (Place::IntReg(s), Place::IntReg(t)) => emit_mov_reg(code, Reg(t), Reg(s)),
-        (Place::IntReg(s), Place::Spill(slot)) => {
-            // `stage` is unused on this arm, so it is free to carry the
-            // base when the slot is beyond the scaled-imm12 reach.
-            emit_sp_str_x(code, Reg(s), spill_off(frame, slot), stage);
-        }
-        (Place::Spill(slot), Place::IntReg(t)) => {
-            emit_sp_ldr_x(code, Reg(t), spill_off(frame, slot));
-        }
-        (Place::Spill(ss), Place::Spill(ts)) => {
-            emit_sp_ldr_x(code, stage, spill_off(frame, ss));
-            // The value occupies `stage` and `hold` may carry a live
-            // cycle source, so the store borrows `hold` via a stack
-            // save/restore when the destination slot is out of reach.
-            emit_sp_str_x_borrow(code, stage, spill_off(frame, ts), hold);
-        }
-        // FP and None locations are filtered by the caller before
-        // scheduling; they never reach this point.
-        _ => {}
-    }
-}
-
 /// Sequentialize a parallel copy over physical locations (integer
 /// registers and stack spill slots). Leaves -- destinations that are
 /// not the source of any other pending move -- are emitted first;
@@ -5997,7 +5966,15 @@ fn schedule_place_moves(
             let (s, t) = moves[i];
             let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
             if !tgt_still_a_source {
-                emit_place_move(code, s, t, frame, stage, hold);
+                super::ssa_emit_common::emit_place_move(
+                    &super::ssa_emit_common::Aarch64Backend,
+                    code,
+                    s,
+                    t,
+                    frame,
+                    stage.0,
+                    hold.0,
+                );
                 moves.swap_remove(i);
                 progress = true;
             } else {
@@ -6018,7 +5995,15 @@ fn schedule_place_moves(
             // spill reload). `materialize_int` is unsuitable here: for
             // an `IntReg` source it returns the register without
             // emitting anything, leaving `hold` unloaded.
-            emit_place_move(code, cyc, Place::IntReg(hold.0), frame, stage, hold);
+            super::ssa_emit_common::emit_place_move(
+                &super::ssa_emit_common::Aarch64Backend,
+                code,
+                cyc,
+                Place::IntReg(hold.0),
+                frame,
+                stage.0,
+                hold.0,
+            );
             for m in moves.iter_mut() {
                 if place_same_loc(m.0, cyc) {
                     m.0 = Place::IntReg(hold.0);
@@ -6045,6 +6030,30 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Back
     }
     fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
         emit_sp_ldr_d_auto(code, dst, spill_off(frame, slot));
+    }
+    fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        emit_mov_reg(code, Reg(dst), Reg(src));
+    }
+    fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, base: u8) {
+        emit_sp_str_x(code, Reg(src), spill_off(frame, slot), Reg(base));
+    }
+    fn int_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+        emit_sp_ldr_x(code, Reg(dst), spill_off(frame, slot));
+    }
+    fn int_spill_to_spill(
+        &self,
+        code: &mut Vec<u8>,
+        frame: Frame,
+        src: u32,
+        dst: u32,
+        stage: u8,
+        hold: u8,
+    ) {
+        emit_sp_ldr_x(code, Reg(stage), spill_off(frame, src));
+        // The value occupies `stage` and `hold` may carry a live cycle
+        // source, so the store borrows `hold` via a stack save/restore when
+        // the destination slot is out of reach.
+        emit_sp_str_x_borrow(code, Reg(stage), spill_off(frame, dst), Reg(hold));
     }
 }
 

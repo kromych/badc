@@ -999,24 +999,6 @@ fn emit_phi_predecessor_moves(
 /// Emit a single resolved location-to-location move. `stage` is a
 /// scratch register used only for the spill-to-spill case (load then
 /// store); it must lie outside the allocator's bank.
-fn emit_place_move(code: &mut Vec<u8>, src: Place, dst: Place, frame: Frame, stage: Reg) {
-    match (src, dst) {
-        (Place::IntReg(s), Place::IntReg(t)) => emit_mov_rr(code, Reg(t), Reg(s)),
-        (Place::IntReg(s), Place::Spill(slot)) => {
-            emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, slot), Reg(s));
-        }
-        (Place::Spill(slot), Place::IntReg(t)) => {
-            emit_mov_r_mem(code, Reg(t), Reg::RSP, spill_slot_sp_offset(frame, slot));
-        }
-        (Place::Spill(ss), Place::Spill(ts)) => {
-            emit_mov_r_mem(code, stage, Reg::RSP, spill_slot_sp_offset(frame, ss));
-            emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, ts), stage);
-        }
-        // FP and None locations are filtered by the caller.
-        _ => {}
-    }
-}
-
 /// Sequentialize a parallel copy over physical locations (integer
 /// registers and stack spill slots). Leaves -- destinations that are
 /// not the source of any other pending move -- are emitted first;
@@ -1046,7 +1028,15 @@ fn schedule_place_moves(
             let (s, t) = moves[i];
             let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
             if !tgt_still_a_source {
-                emit_place_move(code, s, t, frame, stage);
+                super::ssa_emit_common::emit_place_move(
+                    &super::ssa_emit_common::X64Backend,
+                    code,
+                    s,
+                    t,
+                    frame,
+                    stage.0,
+                    hold.0,
+                );
                 moves.swap_remove(i);
                 progress = true;
             } else {
@@ -1089,7 +1079,15 @@ fn schedule_place_moves(
                     .map(|(s, _)| *s)
                     .find(|s| !place_same_loc(*s, Place::IntReg(hold.0)))
                     .unwrap_or(moves[0].0);
-                emit_place_move(code, cyc, Place::IntReg(hold.0), frame, stage);
+                super::ssa_emit_common::emit_place_move(
+                    &super::ssa_emit_common::X64Backend,
+                    code,
+                    cyc,
+                    Place::IntReg(hold.0),
+                    frame,
+                    stage.0,
+                    hold.0,
+                );
                 for m in moves.iter_mut() {
                     if place_same_loc(m.0, cyc) {
                         m.0 = Place::IntReg(hold.0);
@@ -1128,6 +1126,27 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend 
     }
     fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
         emit_movsd_xmm_mem(code, Reg(dst), Reg::RSP, spill_slot_sp_offset(frame, slot));
+    }
+    fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        emit_mov_rr(code, Reg(dst), Reg(src));
+    }
+    fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, _base: u8) {
+        emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, slot), Reg(src));
+    }
+    fn int_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+        emit_mov_r_mem(code, Reg(dst), Reg::RSP, spill_slot_sp_offset(frame, slot));
+    }
+    fn int_spill_to_spill(
+        &self,
+        code: &mut Vec<u8>,
+        frame: Frame,
+        src: u32,
+        dst: u32,
+        stage: u8,
+        _hold: u8,
+    ) {
+        emit_mov_r_mem(code, Reg(stage), Reg::RSP, spill_slot_sp_offset(frame, src));
+        emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, dst), Reg(stage));
     }
 }
 

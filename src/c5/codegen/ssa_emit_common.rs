@@ -107,6 +107,32 @@ pub(super) trait EmitBackend {
     fn fp_spill_store(&self, code: &mut alloc::vec::Vec<u8>, frame: Frame, slot: u32, src: u8);
     /// Load FP register `dst` from spill slot `slot`.
     fn fp_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Frame, slot: u32, dst: u8);
+    /// Copy one integer register to another (`dst <- src`).
+    fn int_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
+    /// Store integer register `src` to spill slot `slot`; `base` is a free
+    /// scratch a backend may use to form an out-of-reach slot address.
+    fn int_spill_store(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        frame: Frame,
+        slot: u32,
+        src: u8,
+        base: u8,
+    );
+    /// Load integer register `dst` from spill slot `slot`.
+    fn int_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Frame, slot: u32, dst: u8);
+    /// Move a value from spill slot `src` to spill slot `dst`, staging through
+    /// register `stage`; `hold` is a borrowable register for an out-of-reach
+    /// destination address. The reach handling is target-specific.
+    fn int_spill_to_spill(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        frame: Frame,
+        src: u32,
+        dst: u32,
+        stage: u8,
+        hold: u8,
+    );
 }
 
 /// Stateless backend selectors. The per-target leaf implementations live in the
@@ -137,6 +163,31 @@ pub(super) fn emit_fp_place_move<B: EmitBackend>(
         }
         // Integer and None locations never reach here: an FP phi edge is
         // FP-classed on both ends.
+        _ => {}
+    }
+}
+
+/// Emit a resolved integer location-to-location move. The four source/target
+/// combinations are shared; `stage` carries a spill-to-spill value and `hold`
+/// backs an out-of-reach destination address on backends that need it.
+pub(super) fn emit_place_move<B: EmitBackend>(
+    b: &B,
+    code: &mut alloc::vec::Vec<u8>,
+    src: super::ssa_alloc::Place,
+    dst: super::ssa_alloc::Place,
+    frame: Frame,
+    stage: u8,
+    hold: u8,
+) {
+    use super::ssa_alloc::Place;
+    match (src, dst) {
+        (Place::IntReg(s), Place::IntReg(t)) => b.int_reg_mov(code, t, s),
+        (Place::IntReg(s), Place::Spill(slot)) => b.int_spill_store(code, frame, slot, s, stage),
+        (Place::Spill(slot), Place::IntReg(t)) => b.int_spill_load(code, frame, slot, t),
+        (Place::Spill(ss), Place::Spill(ts)) => {
+            b.int_spill_to_spill(code, frame, ss, ts, stage, hold)
+        }
+        // FP and None locations are filtered by the caller before scheduling.
         _ => {}
     }
 }

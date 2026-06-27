@@ -186,6 +186,10 @@ def sync_windows(box: Box, github_token: str) -> int:
         sys.stdout.write(f"[{box.short}] scp failed: {scp.stderr}\n")
         return scp.returncode
     remote_path = box.remote_path.replace("/", "\\")
+    # Remove the tracked source trees before extracting. tar extraction does
+    # not prune, so a file deleted or renamed in the working tree would linger
+    # on the box and collide with its replacement (e.g. a module that became a
+    # directory). target/ and .git are siblings and are preserved.
     return stream(
         box.short,
         [
@@ -193,6 +197,7 @@ def sync_windows(box: Box, github_token: str) -> int:
             box.host,
             f'cmd /c "mkdir {remote_path} 2>NUL & '
             f"cd /d {remote_path} && "
+            f"rmdir /s /q src 2>NUL & rmdir /s /q tests 2>NUL & "
             f'tar xzf C:\\tmp\\badc-tree.tar.gz"',
         ],
     )

@@ -1226,6 +1226,75 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend 
     ) -> bool {
         emit_binop_imm(code, op, v, dst, lhs, rhs_imm, alloc, frame)
     }
+    fn emit_call_ext(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        binding_idx: i64,
+        args: &[u32],
+        fp_arg_mask: u32,
+        alloc: &Allocation,
+        frame: Frame,
+        abi: super::Abi,
+        target: Target,
+        plt_call_fixups: &mut Vec<super::PltCallFixup>,
+        imports: &super::ResolvedImports,
+        arg_aggs: &[Option<u32>],
+        func: &FunctionSsa,
+    ) -> bool {
+        emit_call_ext(
+            code,
+            dst,
+            binding_idx,
+            args,
+            fp_arg_mask,
+            alloc,
+            frame,
+            abi,
+            target,
+            plt_call_fixups,
+            imports,
+            arg_aggs,
+            &func.agg_descs,
+        )
+    }
+    fn emit_call_indirect(
+        &self,
+        code: &mut Vec<u8>,
+        dst: Place,
+        target: u32,
+        args: &[u32],
+        callee_variadic: bool,
+        fixed_args: usize,
+        alloc: &Allocation,
+        frame: Frame,
+        abi: super::Abi,
+        fp_return: bool,
+        fp_arg_mask: u32,
+        arg_aggs: &[Option<u32>],
+        ret_agg: Option<u32>,
+        ret_slot: i64,
+        func: &FunctionSsa,
+    ) -> bool {
+        emit_call_indirect(
+            code,
+            dst,
+            target,
+            args,
+            callee_variadic,
+            fixed_args,
+            alloc,
+            frame,
+            abi,
+            fp_return,
+            fp_arg_mask,
+            arg_aggs,
+            &func.agg_descs,
+            ret_agg,
+            ret_slot,
+            func,
+        )
+    }
 }
 
 /// Sequentialize a parallel copy over FP locations (xmm registers and
@@ -3110,7 +3179,7 @@ fn emit_inst(
             fp_arg_mask,
             arg_aggs,
             ..
-        } => emit_call_ext(
+        } => b.emit_call_ext(
             code,
             dst,
             *binding_idx,
@@ -3123,7 +3192,7 @@ fn emit_inst(
             plt_call_fixups,
             imports,
             arg_aggs,
-            &func.agg_descs,
+            func,
         ),
         Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
         Inst::ImmCode(target_ent_pc) => {
@@ -3172,7 +3241,7 @@ fn emit_inst(
             ret_agg,
             ret_slot_local,
             ..
-        } => emit_call_indirect(
+        } => b.emit_call_indirect(
             code,
             dst,
             *target,
@@ -3185,7 +3254,6 @@ fn emit_inst(
             *fp_return,
             *fp_arg_mask,
             arg_aggs,
-            &func.agg_descs,
             *ret_agg,
             *ret_slot_local,
             func,

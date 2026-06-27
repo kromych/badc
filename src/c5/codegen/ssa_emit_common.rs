@@ -331,6 +331,46 @@ pub(super) trait EmitBackend {
         alloc: &super::ssa_alloc::Allocation,
         frame: Frame,
     ) -> bool;
+
+    /// `Inst::CallExt`: call an imported symbol bound by `binding_idx`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_call_ext(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        binding_idx: i64,
+        args: &[u32],
+        fp_arg_mask: u32,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+        abi: super::Abi,
+        target: super::Target,
+        plt_call_fixups: &mut alloc::vec::Vec<super::PltCallFixup>,
+        imports: &super::ResolvedImports,
+        arg_aggs: &[Option<u32>],
+        func: &super::super::ir::FunctionSsa,
+    ) -> bool;
+
+    /// `Inst::CallIndirect`: call the value computed by `target`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_call_indirect(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: super::ssa_alloc::Place,
+        target: u32,
+        args: &[u32],
+        callee_variadic: bool,
+        fixed_args: usize,
+        alloc: &super::ssa_alloc::Allocation,
+        frame: Frame,
+        abi: super::Abi,
+        fp_return: bool,
+        fp_arg_mask: u32,
+        arg_aggs: &[Option<u32>],
+        ret_agg: Option<u32>,
+        ret_slot: i64,
+        func: &super::super::ir::FunctionSsa,
+    ) -> bool;
 }
 
 /// Stateless backend selectors. The per-target leaf implementations live in the

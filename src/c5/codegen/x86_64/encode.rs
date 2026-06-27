@@ -1969,7 +1969,11 @@ pub(crate) fn lower(
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.
         super::ssa_emit_common::time_pass("passes::inline::run (x86_64)", || {
-            crate::c5::codegen::passes::inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
+            crate::c5::codegen::passes::inline::run(
+                &mut ssa_funcs,
+                native.inline_cap,
+                target.abi(),
+            );
         });
         // Forward an inlined one-word struct return out of its frame slot:
         // a single full-width store + slot reads collapse to the stored

@@ -385,8 +385,8 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
 
 #[cfg(test)]
 mod tests {
-    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
     use super::run_one;
+    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
     use alloc::vec::Vec;
 
     fn fresh(insts: Vec<Inst>, term: Terminator, exit_acc: u32) -> FunctionSsa {

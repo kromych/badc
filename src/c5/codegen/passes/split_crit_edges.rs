@@ -185,8 +185,8 @@ fn successors(term: &Terminator) -> Vec<BlockId> {
 
 #[cfg(test)]
 mod tests {
-    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator};
     use super::*;
+    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator};
     use alloc::vec;
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {

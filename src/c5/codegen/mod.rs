@@ -53,11 +53,11 @@ mod elf_reloc;
 mod jit;
 #[cfg(feature = "native-emit")]
 mod mach_o;
+mod passes;
 #[cfg(feature = "native-emit")]
 mod pe;
 #[cfg(feature = "std")]
 mod so_versions;
-mod passes;
 pub(crate) mod ssa_alloc;
 pub(crate) mod ssa_build;
 #[cfg(feature = "std")]

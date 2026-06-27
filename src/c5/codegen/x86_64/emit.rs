@@ -44,8 +44,6 @@ use super::super::ir::{BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind
 use super::DataFixup;
 use super::GotFixup;
 use super::Target;
-use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::{Frame, build_arg_aggs, place_same_loc};
 use super::encode::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
     emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
@@ -62,6 +60,8 @@ use super::encode::{
     emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
     emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
 };
+use super::ssa_alloc::{Allocation, Place};
+use super::ssa_emit_common::{Frame, build_arg_aggs, place_same_loc};
 
 /// Per-function frame layout. Bytes are 16-aligned at every
 /// region boundary so SysV / Win64's sp-at-call invariant holds.

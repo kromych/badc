@@ -1655,18 +1655,12 @@ fn emit_struct_param_scatter(
                     o += 4;
                 }
                 if o + 2 <= size {
-                    emit(
-                        code,
-                        super::encode::enc_ldrh_imm(Reg(17), Reg(29), src + o),
-                    );
+                    emit(code, super::encode::enc_ldrh_imm(Reg(17), Reg(29), src + o));
                     emit(code, super::encode::enc_strh_imm(Reg(17), Reg(16), o));
                     o += 2;
                 }
                 if o < size {
-                    emit(
-                        code,
-                        super::encode::enc_ldrb_imm(Reg(17), Reg(29), src + o),
-                    );
+                    emit(code, super::encode::enc_ldrb_imm(Reg(17), Reg(29), src + o));
                     emit(code, super::encode::enc_strb_imm(Reg(17), Reg(16), o));
                 }
             }
@@ -3078,10 +3072,7 @@ fn emit_intrinsic(
                 ),
             );
             emit(code, super::encode::enc_cmp_reg(rd, scratch.secondary));
-            emit(
-                code,
-                super::encode::enc_b_cond(super::encode::Cond::Hs, 2),
-            );
+            emit(code, super::encode::enc_b_cond(super::encode::Cond::Hs, 2));
             emit(code, 0xD420_0020); // brk #1
             emit(code, enc_str_imm(rd, scratch.primary, 0));
             true
@@ -4568,10 +4559,7 @@ fn emit_load_local(
             && (disp as u32).is_multiple_of(4)
             && (disp as u32) <= 16380
         {
-            emit(
-                code,
-                super::encode::enc_ldr_s_imm(dd, Reg(29), disp as u32),
-            );
+            emit(code, super::encode::enc_ldr_s_imm(dd, Reg(29), disp as u32));
         } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
             return false;
         } else {
@@ -4602,10 +4590,7 @@ fn emit_load_local(
             && (disp as u32).is_multiple_of(8)
             && (disp as u32) < 32760
         {
-            emit(
-                code,
-                super::encode::enc_ldr_d_imm(dd, Reg(29), disp as u32),
-            );
+            emit(code, super::encode::enc_ldr_d_imm(dd, Reg(29), disp as u32));
         } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
             return false;
         } else {
@@ -4702,18 +4687,12 @@ fn emit_store_local(
                 && (disp as u32).is_multiple_of(4)
                 && (disp as u32) < 16380
             {
-                emit(
-                    code,
-                    super::encode::enc_str_s_imm(sn, Reg(29), disp as u32),
-                );
+                emit(code, super::encode::enc_str_s_imm(sn, Reg(29), disp as u32));
                 true
             } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
                 false
             } else {
-                emit(
-                    code,
-                    super::encode::enc_str_s_imm(sn, scratch.secondary, 0),
-                );
+                emit(code, super::encode::enc_str_s_imm(sn, scratch.secondary, 0));
                 true
             }
         };
@@ -4786,17 +4765,11 @@ fn emit_store_local(
             && (disp as u32).is_multiple_of(8)
             && (disp as u32) < 32760
         {
-            emit(
-                code,
-                super::encode::enc_str_d_imm(dn, Reg(29), disp as u32),
-            );
+            emit(code, super::encode::enc_str_d_imm(dn, Reg(29), disp as u32));
         } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
             return false;
         } else {
-            emit(
-                code,
-                super::encode::enc_str_d_imm(dn, scratch.secondary, 0),
-            );
+            emit(code, super::encode::enc_str_d_imm(dn, scratch.secondary, 0));
         }
         // c5 store-op leaves the value in the accumulator; propagate
         // to dst if the allocator parked it elsewhere.

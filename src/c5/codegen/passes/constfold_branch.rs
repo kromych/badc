@@ -69,8 +69,8 @@ fn fold(insts: &[Inst], v: crate::c5::ir::ValueId) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use crate::c5::ir::{Block, FunctionSsa, NO_VALUE, ValueId};
     use super::*;
+    use crate::c5::ir::{Block, FunctionSsa, NO_VALUE, ValueId};
     use alloc::vec;
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {

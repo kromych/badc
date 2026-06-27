@@ -625,7 +625,9 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         branch_fused,
         hints,
         f32_values: func.f32_values.clone(),
-        high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(func),
+        high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
+            func,
+        ),
     }
 }
 

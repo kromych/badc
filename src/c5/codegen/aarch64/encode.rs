@@ -1529,7 +1529,11 @@ pub(crate) fn lower(
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
         super::ssa_emit_common::time_pass("passes::inline::run (aarch64)", || {
-            crate::c5::codegen::passes::inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
+            crate::c5::codegen::passes::inline::run(
+                &mut ssa_funcs,
+                native.inline_cap,
+                target.abi(),
+            );
         });
         // Forward an inlined one-word struct return out of its frame slot;
         // see x86_64.rs's matching block for the rationale.

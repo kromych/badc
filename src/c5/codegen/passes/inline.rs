@@ -35,11 +35,11 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
 use alloc::vec::Vec;
 
+use crate::c5::codegen::Abi;
+use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
 use crate::c5::ir::{
     BinOp, Block, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
 };
-use crate::c5::codegen::Abi;
-use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
 
 /// Outer candidacy fixpoint cap: re-evaluating candidacy after each
 /// substitution pass lets a helper that became a leaf inline on the

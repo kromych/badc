@@ -45,54 +45,47 @@ Disassembly of section .text:
                	fcmp	d8, d17
                	cset	x0, gt
                	cbz	x0, <addr>
-               	sxtw	x0, w20
                	mov	x17, #0x2               // =2
-               	orr	x20, x0, x17
+               	orr	x20, x20, x17
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
                	cset	x0, ls
                	cbz	x0, <addr>
-               	sxtw	x0, w20
                	mov	x17, #0x4               // =4
-               	orr	x20, x0, x17
+               	orr	x20, x20, x17
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
                	cset	x0, ge
                	cbz	x0, <addr>
-               	sxtw	x0, w20
                	mov	x17, #0x8               // =8
-               	orr	x20, x0, x17
+               	orr	x20, x20, x17
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
                	cset	x0, eq
                	cbz	x0, <addr>
-               	sxtw	x0, w20
                	mov	x17, #0x10              // =16
-               	orr	x20, x0, x17
+               	orr	x20, x20, x17
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
                	cset	x0, ne
                	cmp	x0, #0x0
                	b.ne	<addr>
-               	sxtw	x0, w20
                	mov	x17, #0x20              // =32
-               	orr	x20, x0, x17
+               	orr	x20, x20, x17
                	fcmp	d8, d8
                	cset	x0, mi
                	cbz	x0, <addr>
-               	sxtw	x0, w20
                	mov	x17, #0x40              // =64
-               	orr	x20, x0, x17
+               	orr	x20, x20, x17
                	fcmp	d8, d8
                	cset	x0, eq
                	cbz	x0, <addr>
-               	sxtw	x0, w20
                	mov	x17, #0x80              // =128
-               	orr	x20, x0, x17
+               	orr	x20, x20, x17
                	sxtw	x0, w20
                	cbz	x0, <addr>
                	adrp	x0, <page>

@@ -16,8 +16,7 @@ Disassembly of section .text:
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x20, %rsp
                	movq	%rsi, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
                	movq	%rcx, -0x20(%rbp)
@@ -42,10 +41,7 @@ Disassembly of section .text:
                	movl	0x8(%rcx), %ecx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x30, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	popq	%r11
                	addq	$0x30, %rsp
@@ -58,8 +54,7 @@ Disassembly of section .text:
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x20, %rsp
                	movq	%rdi, -0x10(%rbp)
                	movq	%rsi, -0x8(%rbp)
                	movq	%rdx, -0x20(%rbp)
@@ -81,10 +76,7 @@ Disassembly of section .text:
                	movl	0x8(%rcx), %ecx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x30, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	popq	%r11
                	addq	$0x20, %rsp
@@ -96,7 +88,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r13, 0x8(%rsp)
                	leaq	-0x8(%rbp), %rax
                	movl	$0x9, %ecx
                	movl	%ecx, (%rax)
@@ -126,10 +117,7 @@ Disassembly of section .text:
                	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
@@ -150,10 +138,7 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
@@ -174,10 +159,7 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
@@ -206,10 +188,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
@@ -230,18 +209,12 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x5, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
-               	movq	%rcx, %rax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
@@ -250,4 +223,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

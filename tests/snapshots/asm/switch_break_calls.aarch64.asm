@@ -26,42 +26,30 @@ Disassembly of section .text:
                	ret
 
 <driver>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x20, [sp]
-               	mov	x20, x0
-               	sxtw	x20, w20
-               	cmp	x20, #0x1
+               	sxtw	x0, w0
+               	cmp	x0, #0x1
                	b.lt	<addr>
                	b	<addr>
-               	sxtw	x0, w20
-               	ldr	x20, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	sxtw	x0, w0
                	ret
-               	bl	<addr>
-               	mov	x20, x0
+               	mov	x0, #0x64               // =100
                	b	<addr>
-               	bl	<addr>
-               	mov	x20, x0
+               	mov	x0, #0xc8               // =200
                	b	<addr>
-               	bl	<addr>
-               	mov	x20, x0
+               	mov	x0, #0x12c              // =300
                	b	<addr>
-               	bl	<addr>
-               	mov	x20, x0
+               	mov	x0, #0x190              // =400
                	b	<addr>
-               	cmp	x20, #0x0
+               	cmp	x0, #0x0
                	b.eq	<addr>
                	b	<addr>
-               	cmp	x20, #0x2
+               	cmp	x0, #0x2
                	b.lt	<addr>
                	b	<addr>
-               	cmp	x20, #0x1
+               	cmp	x0, #0x1
                	b.eq	<addr>
                	b	<addr>
-               	cmp	x20, #0x2
+               	cmp	x0, #0x2
                	b.eq	<addr>
                	b	<addr>
                	b	<addr>

@@ -27,14 +27,15 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	sxtw	x2, w0
-               	mov	x3, #0x2                // =2
-               	sdiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	asr	x3, x2, #63
+               	lsr	x3, x3, #63
+               	add	x2, x2, x3
+               	mov	x17, #0x1               // =1
+               	and	x2, x2, x17
+               	sub	x2, x2, x3
                	cmp	x2, #0x0
                	b.ne	<addr>
                	b	<addr>
-               	sxtw	x1, w1
-               	sxtw	x2, w0
-               	add	x1, x1, x2
+               	add	x1, x1, x0
                	sxtw	x1, w1
                	b	<addr>

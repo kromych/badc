@@ -97,15 +97,12 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	ldrsw	x1, [x1, #0x4]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x4]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	sxtw	x0, w0
                	cmp	x0, #0x172
                	b.eq	<addr>

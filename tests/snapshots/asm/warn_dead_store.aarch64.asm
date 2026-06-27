@@ -20,7 +20,6 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -54,14 +53,10 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	mov	x1, #0x5                // =5
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
-               	sxtw	x1, w1
-               	add	x0, x0, x1
-               	sxtw	x20, w0
+               	add	x20, x0, x1
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	add	x0, x20, x0
-               	sxtw	x20, w0
+               	add	x20, x20, x0
                	bl	<addr>
                	add	x0, x20, x0
                	sxtw	x0, w0

@@ -25,9 +25,7 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	b	<addr>
                	yield
-               	sxtw	x1, w1
-               	sxtw	x3, w2
-               	add	x1, x1, x3
+               	add	x1, x1, x2
                	b	<addr>
                	sxtw	x0, w1
                	ldr	x19, [sp]

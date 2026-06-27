@@ -13,8 +13,6 @@ Disassembly of section .text:
 <spin_sum>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	movslq	%edi, %rdi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
@@ -26,32 +24,20 @@ Disassembly of section .text:
                	incq	%rcx
                	jmp	<addr>
                	pause
-               	movslq	%eax, %rax
-               	movslq	%ecx, %rdx
-               	addq	%rdx, %rax
+               	addq	%rcx, %rax
                	jmp	<addr>
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	movl	$0x5, %edi
                	callq	<addr>
                	cmpq	$0xa, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movl	$0xa, %edi
@@ -59,16 +45,8 @@ Disassembly of section .text:
                	cmpq	$0x2d, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq

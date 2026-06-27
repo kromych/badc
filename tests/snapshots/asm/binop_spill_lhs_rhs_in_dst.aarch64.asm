@@ -22,14 +22,12 @@ Disassembly of section .text:
                	sxtw	x3, w5
                	add	x5, x3, #0x1
                	b	<addr>
-               	sxtw	x3, w4
-               	sxtw	x4, w5
-               	ldrsw	x4, [x0, x4, lsl #2]
-               	add	x3, x3, x4
+               	sxtw	x3, w5
+               	ldrsw	x3, [x0, x3, lsl #2]
+               	add	x3, x4, x3
                	sxtw	x4, w3
                	b	<addr>
-               	sxtw	x0, w4
-               	add	x0, x0, x1
+               	add	x0, x4, x1
                	sxtw	x0, w0
                	ret
 

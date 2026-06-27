@@ -34,10 +34,8 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	cmp	x1, #0x0
                	b.eq	<addr>
-               	sxtw	x0, w2
-               	ldrsw	x2, [x1]
-               	add	x0, x0, x2
-               	sxtw	x2, w0
+               	ldrsw	x0, [x1]
+               	add	x2, x2, x0
                	ldr	x1, [x1, #0x8]
                	b	<addr>
                	sxtw	x0, w2

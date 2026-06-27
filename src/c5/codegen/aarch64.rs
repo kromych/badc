@@ -363,6 +363,12 @@ pub(super) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0xCA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `MVN <Xd>, <Xm>` (`ORN Xd, XZR, Xm`) -- bitwise NOT. `Rn` is baked
+/// to XZR (31); ORN is ORR with the N bit set.
+pub(super) fn enc_mvn(rd: Reg, rm: Reg) -> u32 {
+    0xAA20_03E0 | ((rm.0 as u32) << 16) | (rd.0 as u32)
+}
+
 /// `MUL <Xd>, <Xn>, <Xm>` -- alias for `MADD Xd, Xn, Xm, XZR`.
 /// We bake in `Ra = XZR (31)` so this stays a 3-register helper.
 pub(super) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> u32 {
@@ -1529,7 +1535,12 @@ pub(super) fn lower(
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
         super::ssa_emit_common::time_pass("ssa_inline::run (aarch64)", || {
-            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap);
+            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
+        });
+        // Forward an inlined one-word struct return out of its frame slot;
+        // see x86_64.rs's matching block for the rationale.
+        super::ssa_emit_common::time_pass("ssa_struct_return_reg::run (aarch64)", || {
+            super::ssa_struct_return_reg::run(&mut ssa_funcs);
         });
         super::ssa_emit_common::time_pass("ssa_rotate::run (aarch64)", || {
             super::ssa_rotate::run(&mut ssa_funcs);

@@ -13,10 +13,8 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	ldrb	w2, [x0, #0x1]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrb	w2, [x0, #0x2]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrb	w0, [x0, #0x3]
                	add	x0, x1, x0
                	sxtw	x0, w0
@@ -32,10 +30,8 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	ldrb	w2, [x0, #0x1]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrb	w2, [x0, #0x2]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrb	w2, [x0, #0x3]
                	add	x1, x1, x2
                	sxtw	x1, w1
@@ -50,10 +46,8 @@ Disassembly of section .text:
                	ldrb	w2, [x1]
                	ldrb	w3, [x1, #0x1]
                	add	x2, x2, x3
-               	sxtw	x2, w2
                	ldrb	w3, [x1, #0x2]
                	add	x2, x2, x3
-               	sxtw	x2, w2
                	ldrb	w1, [x1, #0x3]
                	add	x1, x2, x1
                	sxtw	x1, w1
@@ -68,10 +62,8 @@ Disassembly of section .text:
                	ldrb	w2, [x1]
                	ldrb	w3, [x1, #0x1]
                	add	x2, x2, x3
-               	sxtw	x2, w2
                	ldrb	w3, [x1, #0x2]
                	add	x2, x2, x3
-               	sxtw	x2, w2
                	ldrb	w1, [x1, #0x3]
                	add	x1, x2, x1
                	sxtw	x1, w1

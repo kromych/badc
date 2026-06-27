@@ -16,14 +16,13 @@ Disassembly of section .text:
                	cmp	x2, x1
                	b.ge	<addr>
                	b	<addr>
-               	sxtw	x2, w3
-               	add	x3, x2, #0x1
+               	add	x3, x3, #0x1
                	b	<addr>
                	sxtw	x2, w3
                	mov	x17, #0x3               // =3
                	mul	x4, x2, x17
-               	sxtw	x4, w4
-               	strh	w4, [x0, x2, lsl #1]
+               	sxtw	x5, w4
+               	strh	w5, [x0, x2, lsl #1]
                	b	<addr>
                	sub	x1, x1, #0x1
                	sxtw	x1, w1

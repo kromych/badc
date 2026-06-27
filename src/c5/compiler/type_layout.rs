@@ -393,11 +393,18 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
             return None;
         }
         // System V x86_64 routes FP eightbytes to xmm (<= 16 bytes, in
-        // registers) or the stack (> 16 bytes), so an aggregate with a
-        // floating-point member is admitted there. Other non-HFA targets
-        // keep FP aggregates by-address (Windows x64 has no SSE-eightbyte
-        // struct class). TODO: Windows x64 FP-aggregate arguments.
-        if !matches!(target, Target::LinuxX64) && fields.iter().any(|f| f.kind != ScalarKind::Int) {
+        // registers) or the stack (> 16 bytes); AAPCS64 passes a non-HFA
+        // composite of at most 16 bytes in the general-purpose registers
+        // regardless of member types (AAPCS64 5.4.2 C.10 -- only an HFA,
+        // handled above, uses the FP registers), so both admit an
+        // aggregate with a floating-point member. Windows x64 has no
+        // struct-in-register FP class, so an FP-member aggregate there
+        // keeps the by-address convention. TODO: Windows x64 FP-aggregate
+        // arguments.
+        if !matches!(target, Target::LinuxX64)
+            && !aarch64
+            && fields.iter().any(|f| f.kind != ScalarKind::Int)
+        {
             return None;
         }
     }

@@ -26,9 +26,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	str	x19, [sp]
-               	sxtw	x0, w0
                	add	x1, x0, #0x64
-               	sxtw	x1, w1
                	sub	x1, x1, x0
                	sxtw	x1, w1
                	mov	x2, #0x400000000000     // =70368744177664

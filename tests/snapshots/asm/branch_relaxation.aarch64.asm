@@ -29,9 +29,7 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x0, w1
                	ret
-               	sxtw	x1, w1
-               	sxtw	x3, w2
-               	add	x1, x1, x3
+               	add	x1, x1, x2
                	b	<addr>
                	sxtw	x3, w2
                	mov	x4, #0x3                // =3
@@ -39,10 +37,8 @@ Disassembly of section .text:
                	msub	x3, x17, x4, x3
                	cmp	x3, #0x1
                	b.ne	<addr>
-               	sxtw	x1, w1
                	sub	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x1, w1
                	add	x1, x1, #0x2
                	b	<addr>
 

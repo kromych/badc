@@ -108,17 +108,12 @@ Disassembly of section .text:
                	ldursw	x3, [x29, #0x10]
                	mov	x17, #0x3e8             // =1000
                	mul	x3, x3, x17
-               	sxtw	x3, w3
                	mov	x17, #0x64              // =100
                	mul	x0, x0, x17
-               	sxtw	x0, w0
                	add	x0, x3, x0
-               	sxtw	x0, w0
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
-               	sxtw	x1, w1
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	add	x0, x0, x2
                	sxtw	x0, w0
                	ldr	x19, [sp]

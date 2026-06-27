@@ -40,8 +40,7 @@ Disassembly of section .text:
                	blr	x9
                	add	sp, sp, #0x30
                	sxtw	x24, w0
-               	sxtw	x0, w24
-               	cmp	x0, #0x0
+               	cmp	x24, #0x0
                	b.ge	<addr>
                	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
@@ -53,11 +52,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w24
                	mov	x1, #0x400              // =1024
                	mov	x9, x23
                	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
+               	str	x24, [sp, #-0x10]!
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	blr	x9
@@ -75,11 +73,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w24
                	sub	x1, x29, #0xb8
                	mov	x9, x22
                	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
+               	str	x24, [sp, #-0x10]!
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	blr	x9
@@ -97,10 +94,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w24
                	mov	x1, #0x2                // =2
                	mov	x2, #0x1                // =1
                	mov	x9, x21
+               	mov	x0, x24
                	blr	x9
                	sxtw	x0, w0
                	cmp	x0, #0x0
@@ -115,9 +112,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w24
                	mov	x9, x20
-               	str	x0, [sp, #-0x10]!
+               	str	x24, [sp, #-0x10]!
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10

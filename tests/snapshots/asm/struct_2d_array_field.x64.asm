@@ -13,16 +13,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
-               	movq	%r13, (%rsp)
+               	subq	$0x50, %rsp
                	xorq	%rcx, %rcx
                	movslq	%ecx, %rax
                	cmpq	$0x3, %rax
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	xorq	%rdx, %rdx
                	jmp	<addr>
@@ -35,8 +33,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%edx, %rax
-               	movq	%rax, %rdx
-               	incq	%rdx
+               	leaq	0x1(%rax), %rdx
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rax
                	movslq	%ecx, %rsi
@@ -45,7 +42,6 @@ Disassembly of section .text:
                	addq	%rdi, %rax
                	movslq	%edx, %rdi
                	imulq	$0xa, %rsi, %rsi
-               	movslq	%esi, %rsi
                	addq	%rdi, %rsi
                	movl	%esi, (%rax,%rdi,4)
                	jmp	<addr>
@@ -59,13 +55,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rdi, %rdi
                	jmp	<addr>
-               	movslq	%edx, %rax
-               	subq	$0x6f, %rax
+               	leaq	-0x6f(%rdx), %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x60, %rsp
+               	addq	$0x50, %rsp
                	popq	%rbp
                	retq
                	movslq	%edi, %rsi
@@ -73,10 +65,8 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%edi, %rsi
-               	movq	%rsi, %rdi
-               	incq	%rdi
+               	leaq	0x1(%rsi), %rdi
                	jmp	<addr>
-               	movslq	%edx, %rdx
                	movslq	%ecx, %rsi
                	shlq	$0x4, %rsi
                	addq	%rax, %rsi

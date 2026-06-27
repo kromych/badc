@@ -11,10 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	movslq	%eax, %rdx
@@ -29,25 +25,19 @@ Disassembly of section .text:
                	jne	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
                	movslq	%eax, %rdx
-               	movl	$0x2, %esi
-               	pushq	%rax
-               	movq	%rdx, %rax
-               	cqto
-               	idivq	%rsi
-               	popq	%rax
+               	movq	%rdx, %rsi
+               	sarq	$0x3f, %rsi
+               	shrq	$0x3f, %rsi
+               	addq	%rsi, %rdx
+               	andq	$0x1, %rdx
+               	subq	%rsi, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	movslq	%eax, %rdx
-               	addq	%rdx, %rcx
+               	addq	%rax, %rcx
                	movslq	%ecx, %rcx
                	jmp	<addr>
+               	addb	%al, (%rax)

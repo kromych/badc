@@ -25,8 +25,8 @@ Disassembly of section .text:
                	sxtw	x2, w1
                	mov	x17, #0x3               // =3
                	mul	x3, x2, x17
-               	sxtw	x3, w3
-               	strh	w3, [x0, x2, lsl #1]
+               	sxtw	x4, w3
+               	strh	w4, [x0, x2, lsl #1]
                	b	<addr>
                	sub	x0, x29, #0x30
                	sub	x1, x29, #0x30

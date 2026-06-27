@@ -37,9 +37,8 @@ Disassembly of section .text:
                	b	<addr>
                	cmp	x22, #0x0
                	b.eq	<addr>
-               	sxtw	x0, w21
-               	ldr	x1, [x22]
-               	add	x21, x0, x1
+               	ldr	x0, [x22]
+               	add	x21, x21, x0
                	ldr	x22, [x22, #0x8]
                	b	<addr>
                	sxtw	x0, w21

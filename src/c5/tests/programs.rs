@@ -185,6 +185,125 @@ fn fp_const_return() {
 }
 
 #[test]
+fn fp_param_float_before_double() {
+    // A float parameter ahead of a double in the FP argument bank must not
+    // be clobbered when the parameters are materialized at entry.
+    assert_eq!(run_fixture("fp_param_float_before_double.c"), 0);
+}
+
+#[test]
+fn struct_param_stack_spill() {
+    // A by-value struct that spills to the stack (preceding scalar args
+    // exhaust the integer argument registers) must be read correctly by
+    // the callee from the caller's stack argument area.
+    assert_eq!(run_fixture("struct_param_stack_spill.c"), 0);
+}
+
+#[test]
+fn struct_stack_arg_then_scalar() {
+    // A by-value 16-byte struct overflowing to the stack argument area
+    // followed by a trailing scalar stack argument: the caller copies the
+    // struct before the register marshal clobbers its source address, and
+    // the callee reads the scalar from the incoming offset past the
+    // struct (AAPCS64 5.4.2).
+    assert_eq!(run_fixture("struct_stack_arg_then_scalar.c"), 0);
+}
+
+#[test]
+fn mixed_struct_gpr_abi() {
+    // A non-homogeneous aggregate no larger than 16 bytes with a
+    // floating-point member passes in general registers (AAPCS64 5.4.2
+    // C.10), not by reference.
+    assert_eq!(run_fixture("mixed_struct_gpr_abi.c"), 0);
+}
+
+#[test]
+fn unary_plus_preserves_type() {
+    // Unary `+` yields the integer-promoted operand type (C99 6.5.3.3p2);
+    // an operand of rank int or above keeps its width and signedness, so
+    // a following relational operator runs with the correct type.
+    assert_eq!(run_fixture("unary_plus_preserves_type.c"), 0);
+}
+
+#[test]
+fn local_multidim_aggregate_array_init() {
+    // An automatic multi-dimensional array of structs/unions accepts the
+    // nested-brace initializer; the inner braces span the inner
+    // dimensions (C99 6.7.8).
+    assert_eq!(run_fixture("local_multidim_aggregate_array_init.c"), 0);
+}
+
+#[test]
+fn nested_aggregate_brace_elision() {
+    // A nested struct field's braces may be elided, filling its members
+    // from the flat list; an unbraced union takes its first member
+    // (C99 6.7.8p17/p20).
+    assert_eq!(run_fixture("nested_aggregate_brace_elision.c"), 0);
+}
+
+#[test]
+fn const_addr_multidim_array_elem() {
+    // The address of a multi-dimensional array element in a pointer-array
+    // initializer strides by the full dimension ladder, not the leaf
+    // element size (C99 6.6 / 6.5.2.1p2).
+    assert_eq!(run_fixture("const_addr_multidim_array_elem.c"), 0);
+}
+
+#[test]
+fn unsigned_signed_relational_compare() {
+    // A relational comparison whose common type is unsigned and narrower
+    // than the register masks a sign-extended signed operand to the common
+    // width so the unsigned compare is correct (C99 6.3.1.8).
+    assert_eq!(run_fixture("unsigned_signed_relational_compare.c"), 0);
+}
+
+#[test]
+fn inline_two_reg_struct_param() {
+    // A 16-byte all-integer struct parameter inlines: the splice
+    // redirects the body's parameter-slot reads to the caller's argument.
+    assert_eq!(run_fixture("inline_two_reg_struct_param.c"), 0);
+}
+
+#[test]
+fn struct_copy_comma_side_effect() {
+    // C99 6.5.17: a struct copy as the discarded left operand of a comma,
+    // nested in an enclosing assignment to a global, must still execute.
+    assert_eq!(run_fixture("struct_copy_comma_side_effect.c"), 0);
+}
+
+#[test]
+fn assign_expr_value_narrowed() {
+    // C99 6.5.16p3: a narrowing integer assignment used as a value
+    // yields the converted (narrowed) left-operand value, not the raw
+    // right-hand side.
+    assert_eq!(run_fixture("assign_expr_value_narrowed.c"), 0);
+}
+
+#[test]
+fn local_array_runtime_nested_init() {
+    // C99 6.7.8: a multi-dimensional automatic array with non-constant
+    // element initializers (&local) inits per-element, recursing into
+    // nested braces with brace elision and zero-fill of omitted tails.
+    assert_eq!(run_fixture("local_array_runtime_nested_init.c"), 0);
+}
+
+#[test]
+fn global_addr_struct_member() {
+    // C99 6.6: the address of a struct member / array element of a static
+    // object is an address constant; the designator may chain members and
+    // subscripts.
+    assert_eq!(run_fixture("global_addr_struct_member.c"), 0);
+}
+
+#[test]
+fn global_addr_multidim_index() {
+    // The address of a multi-dimensional array element is an address
+    // constant; each subscript level strides by the product of the inner
+    // dimensions times the element size (C99 6.6).
+    assert_eq!(run_fixture("global_addr_multidim_index.c"), 0);
+}
+
+#[test]
 fn struct_array_init_from_lvalue() {
     // An array-of-struct element initialized by a compatible struct
     // expression copies the whole object (C99 6.7.9p13).
@@ -539,10 +658,88 @@ fn block_scope_extern() {
 }
 
 #[test]
+fn inline_struct_param_mutated() {
+    // A helper that mutates its by-value struct parameter stays out of
+    // line; the caller's copy is unaffected.
+    assert_eq!(run_fixture("inline_struct_param_mutated.c"), 0);
+}
+
+#[test]
+fn inline_struct_return_escape() {
+    // A struct-returning helper with an escaping store through a pointer
+    // parameter stays out of line; the escaping write still happens.
+    assert_eq!(run_fixture("inline_struct_return_escape.c"), 0);
+}
+
+#[test]
+fn inline_one_word_struct_return() {
+    // A one-word-struct-returning helper inlines; its result-slot writes
+    // redirect to the caller's return slot.
+    assert_eq!(run_fixture("inline_one_word_struct_return.c"), 0);
+}
+
+#[test]
+fn inline_struct_return_reg() {
+    // A one-word-struct return is forwarded out of its frame slot into a
+    // register: a store-into-array-slot, a field read, and a local-variable
+    // round-trip all read the stored word directly.
+    assert_eq!(run_fixture("inline_struct_return_reg.c"), 0);
+}
+
+#[test]
+fn inline_two_word_struct_return() {
+    // A helper returning a 16-byte struct (two integer registers) inlines,
+    // including a partially-written union whose unspecified bytes need not
+    // be reproduced.
+    assert_eq!(run_fixture("inline_two_word_struct_return.c"), 0);
+}
+
+#[test]
+fn struct_return_reg_computed_goto() {
+    // A one-word-struct return that carries a label address is promoted out
+    // of its frame slot; the computed-goto terminator reading the field must
+    // be redirected to the stored word rather than the neutralised slot.
+    assert_eq!(run_fixture("struct_return_reg_computed_goto.c"), 0);
+}
+
+#[test]
+fn inline_one_word_struct() {
+    // A read-only helper taking a one-word struct by value inlines; its
+    // field load redirects to the caller's argument address.
+    assert_eq!(run_fixture("inline_one_word_struct.c"), 0);
+}
+
+#[test]
+fn inline_into_computed_goto() {
+    // A single-block helper inlines into a computed-goto caller. The flat
+    // splice keeps block ids fixed, so the caller's `Inst::BlockAddr` and
+    // computed-goto target table stay valid and dispatch is correct.
+    assert_eq!(run_fixture("inline_into_computed_goto.c"), 0);
+}
+
+#[test]
 fn inline_arg_count_mismatch() {
     // A call passing fewer arguments than the callee has parameters is
     // not inlined, so the optimized IR stays well-formed.
     assert_eq!(run_fixture("inline_arg_count_mismatch.c"), 0);
+}
+
+#[test]
+fn inline_phi_caller_leaf_helper() {
+    // A single-block leaf helper inlines into a caller whose loop-carried
+    // values are phis; the value-remap fixpoint resolves each phi's
+    // back-edge incoming so the spliced body stays well-formed.
+    assert_eq!(run_fixture("inline_phi_caller_leaf_helper.c"), 0);
+}
+
+#[test]
+fn inline_phi_narrow_param_return() {
+    // A leaf returning its narrow parameter inlines to an Extend of the
+    // call argument; the call result resolves to that Extend. With a
+    // loop-carried (back-edge) argument the value-remap fixpoint must
+    // converge the Extend's operand, and the parameter narrows the wide
+    // argument every iteration (the callee-narrows ABI).
+    assert_eq!(run_fixture("inline_phi_narrow_param_return.c"), 0);
 }
 
 #[test]
@@ -769,6 +966,14 @@ fn struct_return_by_value() {
     // C99 6.8.6.4 + AAPCS64 6.9: integer aggregate returns in x0/x1
     // (<= 16 bytes) or through x8 (> 16 bytes).
     assert_eq!(run_fixture("struct_return_by_value.c"), 0);
+}
+
+#[test]
+fn struct_return_to_global() {
+    // A by-value struct returned (or passed) to a global / static object
+    // copies into the data segment, which holds writable objects: the SSA
+    // interpreter's Mcpy must permit the write, matching native code.
+    assert_eq!(run_fixture("struct_return_to_global.c"), 0);
 }
 
 #[test]

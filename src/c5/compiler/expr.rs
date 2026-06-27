@@ -1760,17 +1760,19 @@ impl Compiler {
             }
             self.ty = promoted;
         } else if self.lex.tk == Token::AddOp {
-            // Unary `+`: a no-op per C99 6.5.3.3p2. The operand's
-            // type is preserved (subject to integer promotion for
-            // sub-int integer operands -- a `(unsigned char)c`
-            // promotes to `int`, which the `+` doesn't undo).
-            // Critically, FP operands must keep their FP type --
-            // otherwise `+0.5` poses as an integer and a later
-            // `r + (+0.5)` lowers to `BinOp::Add` instead of `BinOp::Fadd`.
+            // Unary `+`: a no-op per C99 6.5.3.3p2; the result has the
+            // integer-promoted operand type. Integer promotion only
+            // widens sub-int operands (char / short -> int); types of
+            // rank int and above (unsigned, long, long long) keep their
+            // type, so forcing `int` here would drop the width and
+            // signedness and run a later comparison or shift on the
+            // wrong type. FP operands keep their FP type -- otherwise
+            // `+0.5` poses as an integer and a later `r + (+0.5)` lowers
+            // to `BinOp::Add` instead of `BinOp::Fadd`.
             self.next()?;
             self.expr(Token::Inc as i64)?;
             if !is_floating_scalar(self.ty) {
-                self.ty = Ty::Int as i64;
+                self.ty = integer_promote(self.ty);
             }
         } else if self.lex.tk == Token::SubOp {
             self.next()?;
@@ -2140,14 +2142,15 @@ impl Compiler {
                 self.next()?;
                 let lhs_is_struct_value = is_struct_ty(t) && struct_ptr_depth(t) == 0;
                 if lhs_is_struct_value {
-                    // Struct-to-struct copy. The LHS already left
-                    // its address in `a`; push it so the RHS can
-                    // produce the source address into `a`. The
-                    // walker emits `Inst::Mcpy` with the byte size;
-                    // the runtime (VM and both codegens) takes
-                    // top-of-stack as dst, accumulator as src, and
-                    // copies `size` bytes. Returns dst in `a` to
-                    // mirror libc memcpy.
+                    // Struct-to-struct copy. The destination lvalue is
+                    // captured in `struct_lhs_ast`; the walker emits
+                    // `Inst::Mcpy { dst, src, size }` from the AST node
+                    // and returns the dst address as the value (mirroring
+                    // libc memcpy). The lvalue is not pushed onto the
+                    // AST vstack: a sub-expression must leave the vstack
+                    // as it found it (its result rides `ast_acc`), or an
+                    // enclosing assignment's `ast_apply_assign` pops the
+                    // stray entry as its own lvalue and drops itself.
                     //
                     // This branch must run *before* the scalar
                     // load-rewrite below: for `*pItem =
@@ -2158,7 +2161,7 @@ impl Compiler {
                     // would otherwise misroute us into the scalar
                     // path and rewrite the wrong tag.
                     let struct_lhs_ast = self.ast_acc.take();
-                    self.ast_psh();
+                    self.mark_emit_other();
                     self.expr(Token::Assign as i64)?;
                     let struct_rhs_ast = self.ast_acc;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {

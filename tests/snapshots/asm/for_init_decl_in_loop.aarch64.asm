@@ -30,15 +30,10 @@ Disassembly of section .text:
                	sxtw	x0, w3
                	add	x3, x0, #0x1
                	b	<addr>
-               	sxtw	x0, w2
-               	sxtw	x2, w1
                	mov	x17, #0x64              // =100
-               	mul	x2, x2, x17
-               	sxtw	x2, w2
-               	sxtw	x4, w3
-               	add	x2, x2, x4
-               	sxtw	x2, w2
-               	add	x2, x0, x2
+               	mul	x0, x1, x17
+               	add	x0, x0, x3
+               	add	x2, x2, x0
                	b	<addr>
                	b	<addr>
 

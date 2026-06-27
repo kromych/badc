@@ -509,6 +509,46 @@ fn elf_func_symbols(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64)> {
     out
 }
 
+/// `st_value` of the named FUNC symbol. In a relocatable object `.text`
+/// starts at vaddr 0, so this is the function's byte offset within the
+/// `.text` section bytes returned by [`elf64_section`].
+fn elf_func_value(b: &[u8], name: &str) -> Option<u64> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let mut symtab_sh = None;
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        if u32a(sh + 4) == 2 {
+            symtab_sh = Some(sh);
+            break;
+        }
+    }
+    let sh = symtab_sh?;
+    let sym_off = u64a(sh + 0x18) as usize;
+    let sym_len = u64a(sh + 0x20) as usize;
+    let strsh = shoff + (u32a(sh + 0x28) as usize) * shentsize;
+    let str_off = u64a(strsh + 0x18) as usize;
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_len {
+        let st_name = u32a(p) as usize;
+        let st_info = b[p + 4];
+        let st_value = u64a(p + 8);
+        if st_info & 0xf == 2 {
+            let s = str_off + st_name;
+            let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+            if b[s..e] == *name.as_bytes() {
+                return Some(st_value);
+            }
+        }
+        p += 24;
+    }
+    None
+}
+
 /// A block whose unconditional `Jmp` targets the next block in layout
 /// must fall through, not emit a jump to the immediately-following
 /// instruction (`e9 00 00 00 00` -- `jmp rel32 = 0` -- on x86-64). Such
@@ -537,13 +577,13 @@ fn jmp_to_next_block_falls_through() {
     );
 }
 
-/// C99 6.3.1.8 + 6.5p5: the walker emits the post-binop
-/// sign-narrow as `Binop(Shl, X, Imm(32)); Binop(Shr, _, Imm(32))`.
-/// The aarch64 allocator's sxtw fold collapses that pair into a
-/// single `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`); the x86_64
-/// emit picks `movsxd r64, r32`. Verify the encoded byte
-/// sequence shows up in the emitted text and the two-shift
-/// pair does not.
+/// C99 6.3.1.8 + 6.5p5: the post-binop sign-narrow that renormalizes an
+/// `int` result is built as `Inst::Extend { kind: I32 }`, which the
+/// aarch64 emit lowers to `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`) and the
+/// x86_64 emit to `movsxd r64, r32`. The product feeds a return, whose
+/// upper bits are observed, so the extension is kept. Verify the encoded
+/// byte sequence shows up and the pre-canonicalization shift pair (a
+/// `movz xN, #32` feeding an `lsl`) does not.
 #[test]
 fn sxtw_fold_collapses_int_mul_sign_narrow() {
     use crate::{NativeOptions, Target, emit_native_with_options};
@@ -804,6 +844,103 @@ fn dead_local_only_function_skips_frame_sub_sp() {
 /// True when `needle` appears as a contiguous subslice of `hay`.
 fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
     hay.windows(needle.len()).any(|w| w == needle)
+}
+
+/// x86_64 parallel-move cycle breaking uses `xchg`. A call that permutes
+/// its caller's argument registers -- `other(b, a)` from `swap_call(a,
+/// b)` -- forms a register cycle (rdi holds a but the call needs b there,
+/// rsi the reverse). The argument marshaller resolves it with a single
+/// `xchg rdi, rsi` (REX.W 87, bytes 48 87) rather than a three-move
+/// shuffle through a scratch register.
+#[test]
+fn x64_arg_permutation_cycle_uses_xchg() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "int other(int a, int b); \
+         int swap_call(int a, int b) { return other(b, a); } \
+         int main(void) { return swap_call(1, 2); }"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    let obj =
+        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(
+                &program,
+                Target::LinuxX64,
+                NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                },
+            )
+        })
+        .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let entry = elf_func_value(&obj, "swap_call").expect("swap_call symbol") as usize;
+    let end = (entry + 96).min(text.len());
+    assert!(
+        contains_bytes(&text[entry..end], &[0x48, 0x87]),
+        "swap_call must break the rdi<->rsi argument cycle with `xchg` (REX.W 87 = 48 87); \
+         bytes={:02x?}",
+        &text[entry..end]
+    );
+}
+
+/// x86_64 leaf-frame elision. A spill-free function that calls nothing
+/// and needs no callee-saved register must emit no prologue: no `push
+/// %rbp`, no `sub %rsp`, and no save of a scratch register. The emit
+/// reserves r10 / r11 as its fixed scratch pair; both are caller-saved,
+/// so a body that only uses scratch touches no callee-saved register and
+/// `gpr_used` stays empty, letting `is_full_leaf` fire. (Before, the
+/// secondary scratch was the callee-saved r13, saved unconditionally,
+/// which forced a frame on every function and elided none.) The body
+/// adds three arguments, so it exercises the `Binop` path that the old
+/// over-broad save predicate always flagged.
+#[test]
+fn x64_spillfree_leaf_elides_frame_and_scratch_save() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "long leaf_add(long a, long b, long c) { return a + b + c; } \
+         int main(void) { return (int)leaf_add(1, 2, 3); }"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    // Pin the full register file so the codegen_test pressure knobs do
+    // not spill the body and reintroduce a frame.
+    let obj =
+        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(
+                &program,
+                Target::LinuxX64,
+                NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                },
+            )
+        })
+        .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let entry = elf_func_value(&obj, "leaf_add").expect("leaf_add symbol") as usize;
+    // A frame prologue opens with `push %rbp` (0x55). A frameless leaf
+    // starts straight into the address arithmetic (lea / mov / add).
+    assert_ne!(
+        text[entry],
+        0x55,
+        "leaf_add must not push %rbp: a spill-free, call-free leaf elides its frame. \
+         text[entry..]={:02x?}",
+        &text[entry..(entry + 16).min(text.len())]
+    );
+    // It must also not save the secondary scratch r13 to the stack
+    // (`movq %r13, (%rsp)` = 4c 89 2c 24); r13 is now an ordinary
+    // callee-saved allocation target, saved only when it holds a value,
+    // and this leaf holds none there.
+    assert!(
+        !contains_bytes(text, &[0x4c, 0x89, 0x2c, 0x24]),
+        "leaf_add must not save r13; the scratch pair is the caller-saved r10/r11"
+    );
 }
 
 /// Microsoft ARM64 calling convention: a c5-internal variadic call on

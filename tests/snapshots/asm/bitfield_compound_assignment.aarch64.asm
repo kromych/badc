@@ -339,11 +339,8 @@ Disassembly of section .text:
                	asr	x0, x0, #8
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	mov	x1, #0x190              // =400
-               	mov	x2, #0x100              // =256
-               	udiv	x17, x1, x2
-               	msub	x1, x17, x2, x1
-               	eor	x0, x0, x1
+               	mov	x17, #0x90              // =144
+               	eor	x0, x0, x17
                	mov	w0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>

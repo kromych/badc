@@ -21,13 +21,15 @@ int main(void) {
     // Four divmods that produce values used after the last divmod;
     // the originals a/b/c/d are also kept live so the allocator has
     // pressure to place them in caller-saved registers, including
-    // RDX on x86_64.
-    int q1 = a / 8;
-    int q2 = b / 8;
-    int q3 = c / 8;
-    int q4 = d / 8;
+    // RDX on x86_64. The divisor must stay non-power-of-two so the
+    // pow2 strength reduction does not replace the idiv with shifts
+    // and the RDX-clobber path is still exercised.
+    int q1 = a / 7;
+    int q2 = b / 7;
+    int q3 = c / 7;
+    int q4 = d / 7;
     int total = q1 + q2 + q3 + q4 + a + b + c + d;
-    // expected: 12 + 6 + 3 + 1 + 100 + 50 + 25 + 12 = 209
+    // expected: 14 + 7 + 3 + 1 + 100 + 50 + 25 + 12 = 212
     printf("%d\n", total);
-    return total == 209 ? 0 : 1;
+    return total == 212 ? 0 : 1;
 }

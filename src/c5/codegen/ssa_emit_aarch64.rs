@@ -77,7 +77,8 @@ pub(super) struct Frame {
     /// Whether this function clobbers x19. x19 is callee-saved per
     /// AAPCS64 and is the scratch the writer's patch_adrp_add forces
     /// for address materialisation, so it is saved and restored only
-    /// when the function actually uses it (see [`function_clobbers_x19`]).
+    /// when the function actually uses it (see the aarch64 arm of
+    /// [`super::ssa_alloc::function_clobbers_scratch`]).
     pub uses_x19: bool,
     /// Total bytes the prologue allocates above the saved fp/lr
     /// for c5 cdecl parameter slots and host-stack overflow. The
@@ -114,7 +115,12 @@ pub(super) struct Frame {
 }
 
 impl Frame {
-    pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
+    pub fn for_function(
+        func: &FunctionSsa,
+        alloc: &Allocation,
+        abi: super::Abi,
+        target: Target,
+    ) -> Self {
         let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
         // After mem2reg + dead-store elimination, every reference to
         // user-local slots (negative `off`) may be gone. The
@@ -138,23 +144,16 @@ impl Frame {
         let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
         let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
         // Reserve the x19 slot only when the function actually
-        // clobbers x19; the prologue / epilogue's store / load
-        // already gates on the same condition, so a function that
-        // leaves x19 alone needs no slot and can drop the 16 bytes.
-        // A spilling function with a modulo may need x19 as a third
-        // scratch when its dividend, divisor and result all spill, so
-        // reserve it in that case too.
-        let mod_under_spill = alloc.spill_count > 0
-            && func.insts.iter().any(|inst| {
-                matches!(
-                    inst,
-                    Inst::Binop {
-                        op: BinOp::Mod | BinOp::Modu,
-                        ..
-                    }
-                )
-            });
-        let uses_x19 = function_clobbers_x19(func) || mod_under_spill;
+        // clobbers x19; the prologue / epilogue's store / load already
+        // gates on the same condition, so a function that leaves x19
+        // alone needs no slot and can drop the 16 bytes. The clobber
+        // decision (TLS / indirect-call / intrinsic address scratch, or
+        // a third modulo operand under spill) lives in the shared
+        // `function_clobbers_scratch`, which knows each target's
+        // reserved scratch set.
+        let uses_x19 =
+            !super::ssa_alloc::function_clobbers_scratch(func, target, alloc.spill_count)
+                .is_empty();
         let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
         let frame_bytes =
             locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
@@ -412,25 +411,6 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
     reg_bytes + overflow_bytes
 }
 
-/// x19 is overwritten only by the lowerings that route through it:
-/// the indirect-call environment setup, the setjmp / longjmp
-/// intrinsics, TLS address loads, and external call thunks. A
-/// function touching none of these leaves x19 untouched, so its
-/// prologue need not save the caller's value. `Inst::ImmData` and
-/// `Inst::ImmCode` route the adrp/add through the allocator's chosen
-/// destination, so they no longer participate.
-fn function_clobbers_x19(func: &FunctionSsa) -> bool {
-    func.insts.iter().any(|inst| {
-        matches!(
-            inst,
-            Inst::TlsAddr(_)
-                | Inst::CallIndirect { .. }
-                | Inst::CallExt { .. }
-                | Inst::Intrinsic { .. }
-        )
-    })
-}
-
 /// A function that meets every condition to skip the standard
 /// stp fp/lr / mov fp,sp / ldp prologue triple: no callee it
 /// must save lr for, no frame to allocate, no param spill, no
@@ -678,7 +658,7 @@ pub(super) fn emit_function(
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
     let abi = target.abi();
-    let frame = Frame::for_function(func, alloc, abi);
+    let frame = Frame::for_function(func, alloc, abi, target);
     let scratch = ScratchPool::new();
     let snapshot = code.len();
     // Snapshot every fixup vector at function entry so a partial
@@ -762,7 +742,12 @@ pub(super) fn emit_function(
             moves.push((Place::IntReg(src), dst));
             vids.push(vid);
             homes.push(dst);
-            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32) {
+            // Sign-extend on entry only when a consumer reads the
+            // parameter's upper bits; otherwise the low word already
+            // holds the C99 6.5.2.2p4-converted value.
+            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32)
+                && alloc.high_observed.get(vid).copied().unwrap_or(true)
+            {
                 exts.push((dst, *kind));
             }
         }
@@ -791,6 +776,50 @@ pub(super) fn emit_function(
                 }
             }
             for vid in vids {
+                param_prebatched[vid] = true;
+            }
+        }
+    }
+
+    // Floating-point parameters: the same parallel-copy hazard applies in
+    // the FP bank when one parameter's home d-register is a later
+    // parameter's incoming argument register -- the per-inst `fmov dst,
+    // arg` then clobbers that source before it is read. Schedule the FP
+    // parameters as an FP parallel copy with d16 / d17 cycle-breaking
+    // (mirroring the integer batch); the per-inst path handles any not
+    // placed here (stack-passed, dead, or a non-permutation home set).
+    {
+        let param_plan = param_placements(func, abi);
+        let mut fp_moves: Vec<(Place, Place)> = Vec::new();
+        let mut fp_vids: Vec<usize> = Vec::new();
+        let mut fp_homes: Vec<Place> = Vec::new();
+        for (vid, inst) in func.insts.iter().enumerate() {
+            let Inst::ParamRef { idx, kind } = inst else {
+                continue;
+            };
+            if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                continue;
+            }
+            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+                continue;
+            }
+            let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
+            if !matches!(dst, Place::FpReg(_) | Place::Spill(_)) {
+                continue;
+            }
+            let i = *idx as usize;
+            let Some(super::ArgPlacement::FpReg(src)) = param_plan.get(i).copied() else {
+                continue;
+            };
+            fp_moves.push((Place::FpReg(src), dst));
+            fp_vids.push(vid);
+            fp_homes.push(dst);
+        }
+        let homes_distinct = (0..fp_homes.len())
+            .all(|a| ((a + 1)..fp_homes.len()).all(|b| !place_same_loc(fp_homes[a], fp_homes[b])));
+        if !fp_moves.is_empty() && homes_distinct {
+            schedule_fp_place_moves(code, &mut fp_moves, frame, 17, 16);
+            for vid in fp_vids {
                 param_prebatched[vid] = true;
             }
         }
@@ -1468,11 +1497,20 @@ fn emit_prologue(
         if n_stack > 0 {
             let overflow_bytes = (n_stack as u32) * 16;
             emit_sub_sp_imm(code, overflow_bytes);
-            for i in 0..n_stack {
-                let host_off = (i as u32) * 8 + overflow_bytes;
-                let c5_off = (i as u32) * 16;
-                emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
-                emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
+            // Each scalar stack parameter's incoming offset is the
+            // planner's placement offset, which accounts for any by-value
+            // aggregate stack parameter (StructStack) that precedes it. A
+            // plain index assumes an 8-byte stride and would read an
+            // aggregate's bytes instead of the scalar.
+            let mut slot_i = 0u32;
+            for p in &placements {
+                if let super::ArgPlacement::Stack(off) = p {
+                    let host_off = *off + overflow_bytes;
+                    let c5_off = slot_i * 16;
+                    emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
+                    emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
+                    slot_i += 1;
+                }
             }
         }
         let mut seeded_params: alloc::collections::BTreeSet<u32> =
@@ -1603,34 +1641,88 @@ fn emit_struct_param_scatter(
         let Some(agg_idx) = agg else {
             continue;
         };
-        let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
-            continue;
-        };
         let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
         if slot >= 0 {
             continue;
         }
-        // Materialise the body local's address into x16, then store each
-        // unit from its argument register. An integer eightbyte stores at
-        // offset 8k; an HFA member stores at its own offset with its
-        // natural size (d-register for 8 bytes, s-register for 4). x16/x17
-        // are never argument registers, so the source `regs` are untouched.
-        let hfa = super::abi_classify::hfa_member_layout(&func.agg_descs[*agg_idx as usize].fields);
-        emit_local_addr(code, Place::IntReg(16), slot, frame);
-        for (k, cr) in regs.iter().take(*n as usize).enumerate() {
-            if cr.is_fp {
-                let (off, msize) = hfa
-                    .as_ref()
-                    .and_then(|m| m.get(k).copied())
-                    .unwrap_or(((k as u32) * 8, 8));
-                if msize == 8 {
-                    emit(code, super::aarch64::enc_str_d_imm(cr.reg, Reg(16), off));
-                } else {
-                    emit(code, super::aarch64::enc_str_s_imm(cr.reg, Reg(16), off));
+        match placements.get(i) {
+            Some(super::ArgPlacement::StructRegs { regs, n }) => {
+                // Materialise the body local's address into x16, then store
+                // each unit from its argument register. An integer
+                // eightbyte stores at offset 8k; an HFA member stores at
+                // its own offset with its natural size (d-register for 8
+                // bytes, s-register for 4). x16/x17 are never argument
+                // registers, so the source `regs` are untouched.
+                let hfa = super::abi_classify::hfa_member_layout(
+                    &func.agg_descs[*agg_idx as usize].fields,
+                );
+                emit_local_addr(code, Place::IntReg(16), slot, frame);
+                for (k, cr) in regs.iter().take(*n as usize).enumerate() {
+                    if cr.is_fp {
+                        let (off, msize) = hfa
+                            .as_ref()
+                            .and_then(|m| m.get(k).copied())
+                            .unwrap_or(((k as u32) * 8, 8));
+                        if msize == 8 {
+                            emit(code, super::aarch64::enc_str_d_imm(cr.reg, Reg(16), off));
+                        } else {
+                            emit(code, super::aarch64::enc_str_s_imm(cr.reg, Reg(16), off));
+                        }
+                    } else {
+                        emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
+                    }
                 }
-            } else {
-                emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
             }
+            Some(super::ArgPlacement::StructStack { off, size }) => {
+                // The aggregate spilled to the caller's stack argument
+                // area, which sits above the saved fp/lr (16 bytes) and
+                // the callee's c5 parameter cells (`param_spill_bytes`).
+                // Copy its bytes from there into the body local the
+                // parameter is read from; the cell reserved for this
+                // parameter (param_reg_stack_split counts a StructStack as
+                // a register slot, so a 16-byte cell is reserved) stays
+                // unused. AAPCS64 5.4.2 rounds the stack slot up to 8
+                // bytes; copy each whole eightbyte then a sub-eightbyte
+                // tail. x17 is the value temp, fp the source base; x16 the
+                // destination base, so no argument register is disturbed.
+                let src = 16 + frame.param_spill_bytes + *off;
+                let size = *size;
+                debug_assert!(
+                    src + size <= 4096 * 8,
+                    "stack-arg offset beyond ldr imm12 reach"
+                );
+                emit_local_addr(code, Place::IntReg(16), slot, frame);
+                let mut o = 0u32;
+                while o + 8 <= size {
+                    emit(code, enc_ldr_imm(Reg(17), Reg(29), src + o));
+                    emit(code, enc_str_imm(Reg(17), Reg(16), o));
+                    o += 8;
+                }
+                if o + 4 <= size {
+                    emit(
+                        code,
+                        super::aarch64::enc_ldr32_imm(Reg(17), Reg(29), src + o),
+                    );
+                    emit(code, super::aarch64::enc_str32_imm(Reg(17), Reg(16), o));
+                    o += 4;
+                }
+                if o + 2 <= size {
+                    emit(
+                        code,
+                        super::aarch64::enc_ldrh_imm(Reg(17), Reg(29), src + o),
+                    );
+                    emit(code, super::aarch64::enc_strh_imm(Reg(17), Reg(16), o));
+                    o += 2;
+                }
+                if o < size {
+                    emit(
+                        code,
+                        super::aarch64::enc_ldrb_imm(Reg(17), Reg(29), src + o),
+                    );
+                    emit(code, super::aarch64::enc_strb_imm(Reg(17), Reg(16), o));
+                }
+            }
+            _ => continue,
         }
     }
 }
@@ -1830,10 +1922,14 @@ fn emit_inst(
                 return false;
             };
             // The encoding to write `dst <- sign-extend(arg_reg)`.
-            // For full-width kinds (I64), it is a plain mov.
+            // For full-width kinds (I64), it is a plain mov. The
+            // sign-extension is skipped when no consumer reads the
+            // parameter's upper bits.
+            let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
             let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
                 let rn = Reg(arg_reg);
                 match kind {
+                    _ if high_dead => emit_mov_reg(code, rd, rn),
                     LoadKind::I8 => emit(code, super::aarch64::enc_sxtb(rd, rn)),
                     LoadKind::I16 => emit(code, super::aarch64::enc_sxth(rd, rn)),
                     LoadKind::I32 => emit(code, super::aarch64::enc_sxtw(rd, rn)),
@@ -5562,14 +5658,38 @@ fn emit_binop_imm(
         None
     };
     let imm12 = u32::try_from(rhs_imm).ok().filter(|v| *v < (1u32 << 12));
+    // Magnitude of a negative immediate that fits the 12-bit field.
+    // `x + (-k) == x - k` and `x - (-k) == x + k` in two's complement,
+    // so an Add / Sub with a small negative immediate swaps to the
+    // other form's direct encoding instead of materialising the
+    // sign-extended constant (movz + 3x movk) into a scratch register.
+    let imm12_neg = if rhs_imm < 0 {
+        let m = rhs_imm.unsigned_abs();
+        if m < (1u64 << 12) {
+            u32::try_from(m).ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let used_peephole = match op {
         BinOp::Shl => shift_amount.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
         BinOp::Shr => shift_amount.map(|s| super::aarch64::enc_asr_imm(rd, rn, s)),
         BinOp::Shru => shift_amount.map(|s| super::aarch64::enc_lsr_imm(rd, rn, s)),
         BinOp::Ror => shift_amount.map(|s| super::aarch64::enc_ror_imm(rd, rn, s)),
         BinOp::Mul => imm_pow2_shift.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
-        BinOp::Add => imm12.map(|v| enc_add_imm(rd, rn, v)),
-        BinOp::Sub => imm12.map(|v| enc_sub_imm(rd, rn, v)),
+        BinOp::Add => imm12
+            .map(|v| enc_add_imm(rd, rn, v))
+            .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v))),
+        BinOp::Sub => imm12
+            .map(|v| enc_sub_imm(rd, rn, v))
+            .or_else(|| imm12_neg.map(|v| enc_add_imm(rd, rn, v))),
+        // `x ^ -1` is bitwise NOT -> `mvn`, one instruction instead of
+        // materialising the all-ones constant (movz + 3x movk) into a
+        // scratch and xoring. `mvn` reads the same operand, so the
+        // allocator's liveness is unchanged.
+        BinOp::Xor if rhs_imm == -1 => Some(super::aarch64::enc_mvn(rd, rn)),
         // `x & 0xffffffff` zero-extends the low word; a 32-bit move does
         // it in one instruction, avoiding the load-imm64 + and-register
         // pair (the immediate has no logical-immediate-AND short form
@@ -6213,6 +6333,47 @@ fn marshal_args(
         }
     }
 
+    // Aggregates passed on the caller's stack (AAPCS64 5.4.2): copy the
+    // source bytes to [sp + off] here, before the register-argument
+    // marshal below. The source address is read from a value register
+    // that the register marshal can overwrite, so it must be consumed
+    // while still live; x16/x17 are scratch and hold no argument value
+    // at this point.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::StructStack { off, size } = placement {
+            let src = match materialize_int_shifted(
+                code,
+                arg_place(i),
+                scratch.primary,
+                frame,
+                plan.scratch_bytes,
+            ) {
+                Some(r) => r,
+                None => return false,
+            };
+            if src.0 != scratch.primary.0 {
+                emit_mov_reg(code, scratch.primary, src);
+            }
+            let mut copied = 0u32;
+            while copied + 8 <= size {
+                emit(
+                    code,
+                    enc_ldr_imm(scratch.secondary, scratch.primary, copied),
+                );
+                emit(code, enc_str_imm(scratch.secondary, Reg(31), off + copied));
+                copied += 8;
+            }
+            while copied < size {
+                emit(
+                    code,
+                    enc_ldrb_imm(scratch.secondary, scratch.primary, copied),
+                );
+                emit(code, enc_strb_imm(scratch.secondary, Reg(31), off + copied));
+                copied += 1;
+            }
+        }
+    }
+
     // FP args before int args: an FP value can sit in an integer
     // register as a raw bit pattern (`Inst::Imm` with the f64 bit
     // pattern, allocator places it in an IntReg). The int marshal
@@ -6390,7 +6551,7 @@ fn marshal_args(
     // last, overwritten by its own eightbyte. Integer-only here
     // (homogeneous floating-point aggregates are excluded upstream),
     // so every eightbyte register is general-purpose.
-    for (i, &placement) in plan.placements.iter().enumerate() {
+    for &placement in plan.placements.iter() {
         match placement {
             // Integer-class aggregate: load the eightbytes from the base in
             // regs[0]. An HFA (regs[0] is an FP register) loaded above.
@@ -6403,41 +6564,6 @@ fn marshal_args(
                     );
                 }
                 emit(code, enc_ldr_imm(Reg(base), Reg(base), 0));
-            }
-            super::ArgPlacement::StructStack { off, size } => {
-                let ap = arg_place(i);
-                let src = match materialize_int_shifted(
-                    code,
-                    ap,
-                    scratch.primary,
-                    frame,
-                    plan.scratch_bytes,
-                ) {
-                    Some(r) => r,
-                    None => return false,
-                };
-                if src.0 != scratch.primary.0 {
-                    emit_mov_reg(code, scratch.primary, src);
-                }
-                // Copy `size` bytes from [scratch.primary] to
-                // [sp + off] in 8-byte words plus a sub-word tail.
-                let mut copied = 0u32;
-                while copied + 8 <= size {
-                    emit(
-                        code,
-                        enc_ldr_imm(scratch.secondary, scratch.primary, copied),
-                    );
-                    emit(code, enc_str_imm(scratch.secondary, Reg(31), off + copied));
-                    copied += 8;
-                }
-                while copied < size {
-                    emit(
-                        code,
-                        enc_ldrb_imm(scratch.secondary, scratch.primary, copied),
-                    );
-                    emit(code, enc_strb_imm(scratch.secondary, Reg(31), off + copied));
-                    copied += 1;
-                }
             }
             super::ArgPlacement::StructByRefReg(_) | super::ArgPlacement::StructByRefStack(_) => {
                 // Not produced for AAPCS64 in this phase: >16-byte
@@ -6753,7 +6879,7 @@ mod tests {
         // The frame must reserve the three slots the test forces, or the
         // spill-offset computation underflows.
         alloc.spill_count = alloc.spill_count.max(3);
-        let frame = Frame::for_function(&func, &alloc, target.abi());
+        let frame = Frame::for_function(&func, &alloc, target.abi(), target);
         let scratch = ScratchPool {
             primary: Reg(16),
             secondary: Reg(17),

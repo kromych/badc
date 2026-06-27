@@ -32,8 +32,7 @@ Disassembly of section .text:
                	sxtw	x23, w23
                	sxtw	x21, w21
                	ldrsw	x22, [x20, x21, lsl #2]
-               	sub	x0, x23, #0x1
-               	sxtw	x24, w0
+               	sub	x24, x23, #0x1
                	sxtw	x0, w23
                	cmp	x0, x21
                	b.ge	<addr>
@@ -46,16 +45,14 @@ Disassembly of section .text:
                	cmp	x0, x22
                	b.gt	<addr>
                	b	<addr>
-               	sxtw	x0, w24
-               	add	x0, x0, #0x1
+               	add	x0, x24, #0x1
                	sxtw	x0, w0
                	lsl	x0, x0, #2
                	add	x0, x20, x0
                	lsl	x1, x21, #2
                	add	x1, x20, x1
                	bl	<addr>
-               	sxtw	x0, w24
-               	add	x0, x0, #0x1
+               	add	x0, x24, #0x1
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -65,8 +62,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w24
-               	add	x24, x0, #0x1
+               	add	x24, x24, #0x1
                	sxtw	x0, w24
                	lsl	x0, x0, #2
                	add	x0, x20, x0
@@ -97,14 +93,12 @@ Disassembly of section .text:
                	mov	x1, x21
                	bl	<addr>
                	mov	x23, x0
-               	sxtw	x0, w23
-               	sub	x0, x0, #0x1
+               	sub	x0, x23, #0x1
                	sxtw	x2, w0
                	mov	x0, x20
                	mov	x1, x21
                	bl	<addr>
-               	sxtw	x0, w23
-               	add	x0, x0, #0x1
+               	add	x0, x23, #0x1
                	sxtw	x1, w0
                	mov	x0, x20
                	mov	x2, x22

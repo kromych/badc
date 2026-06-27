@@ -696,9 +696,21 @@ impl Compiler {
         }
         let mut off = self.symbols[sym_idx].val;
         let mut cur_ty = self.symbols[sym_idx].type_;
-        // Stride for the next `[index]`: one element of the current
-        // array. For the base symbol that is the element type's size.
-        let mut elem_stride = self.size_of_type(cur_ty) as i64;
+        // A subscript at level `i` of a multi-dimensional array strides by
+        // `product(array_dims[i+1..]) * sizeof(element)` -- the first index
+        // spans whole sub-arrays, the innermost one element (C99
+        // 6.5.2.1p2). An empty `array_dims` is the 1D case. A `.field`
+        // selection resets the dimension ladder to the field's own type.
+        let mut cur_dims = self.symbols[sym_idx].array_dims.clone();
+        let mut level = 0usize;
+        let elem_stride_at = |cur_ty: i64, cur_dims: &[i64], level: usize, this: &Self| -> i64 {
+            let elem = this.size_of_type(cur_ty) as i64;
+            if level < cur_dims.len() {
+                cur_dims[level + 1..].iter().product::<i64>() * elem
+            } else {
+                elem
+            }
+        };
         self.next()?; // consume the identifier
         loop {
             if self.lex.tk == Token::Brak {
@@ -710,7 +722,8 @@ impl Compiler {
                     return Ok(None);
                 }
                 self.next()?;
-                off += n * elem_stride;
+                off += n * elem_stride_at(cur_ty, &cur_dims, level, self);
+                level += 1;
             } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
                 self.next()?;
                 if self.lex.tk != Token::Id
@@ -734,17 +747,19 @@ impl Compiler {
                 let field = self.structs[sid].fields[fpos].clone();
                 off += field.offset as i64;
                 cur_ty = field.ty;
-                elem_stride = self.size_of_type(field.ty) as i64;
+                cur_dims = field.array_dims.clone();
+                level = 0;
                 self.next()?;
             } else if self.lex.tk == Token::AddOp || self.lex.tk == Token::SubOp {
                 // C99 6.6: `&object + integer-constant`. The stride is
                 // the cast's pointee size when present (the common
-                // `(uint8_t*)&g + offset` byte form), else the symbol's
-                // element size.
+                // `(uint8_t*)&g + offset` byte form), else the size of the
+                // current sub-object (one element at the current level).
                 let subtract = self.lex.tk == Token::SubOp;
                 self.next()?;
                 let n = self.parse_constant_int()?;
-                let stride = cast_stride.unwrap_or(elem_stride);
+                let stride =
+                    cast_stride.unwrap_or_else(|| elem_stride_at(cur_ty, &cur_dims, level, self));
                 off += if subtract { -n } else { n } * stride;
             } else if self.lex.tk == ')' && group_depth > 0 {
                 group_depth -= 1;
@@ -2047,10 +2062,19 @@ impl Compiler {
                 }
             } else if is_struct_ty(field.ty)
                 && struct_ptr_depth(field.ty) == 0
-                && self.lex.tk == '{'
+                && (self.lex.tk == '{' || !self.structs[struct_id_of(field.ty)].is_union)
             {
                 let nested_sid = struct_id_of(field.ty);
-                self.collect_struct_initializer(nested_sid, field_base as i64)?;
+                if self.lex.tk == '{' {
+                    self.collect_struct_initializer(nested_sid, field_base as i64)?;
+                } else {
+                    // C99 6.7.8p20: a nested struct field's braces may be
+                    // elided, filling its members from the surrounding flat
+                    // list. Mirrors the array-of-struct element path. An
+                    // unbraced union takes only its first member, handled by
+                    // the single-value path below.
+                    self.fill_struct_fields(nested_sid, field_base as i64, false)?;
+                }
             } else if field.bit_width > 0 {
                 // Bitfield brace-initializer entry. C99 6.7.8 says
                 // the initializer's value is converted to the

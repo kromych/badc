@@ -59,6 +59,8 @@ Disassembly of section .text:
                	mov	x1, #0x20               // =32
                	sub	x0, x1, x0
                	mov	x1, #0x1f               // =31
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -106,6 +108,8 @@ Disassembly of section .text:
                	mov	x1, #0x20               // =32
                	sub	x0, x1, x0
                	mov	x1, #0x0                // =0
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -153,6 +157,8 @@ Disassembly of section .text:
                	mov	x1, #0x20               // =32
                	sub	x0, x1, x0
                	mov	x1, #0xf                // =15
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -202,6 +208,8 @@ Disassembly of section .text:
                	mov	x1, #0x20               // =32
                	sub	x0, x1, x0
                	mov	x1, #0x0                // =0
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -241,6 +249,8 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	mov	x17, #0x7f              // =127
                	and	x1, x1, x17
+               	sxtw	x1, w1
+               	sxtw	x0, w0
                	cmp	x1, x0
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -282,6 +292,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x1f               // =31
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -322,6 +334,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x10               // =16
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -363,6 +377,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x1e               // =30
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -392,6 +408,8 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	mov	x17, #0x7f              // =127
                	and	x1, x1, x17
+               	sxtw	x1, w1
+               	sxtw	x0, w0
                	cmp	x1, x0
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -425,6 +443,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x20               // =32
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -458,6 +478,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x10               // =16
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -489,6 +511,8 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -547,6 +571,8 @@ Disassembly of section .text:
                	mov	x1, #0x40               // =64
                	sub	x0, x1, x0
                	mov	x1, #0x3f               // =63
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -605,6 +631,8 @@ Disassembly of section .text:
                	mov	x1, #0x40               // =64
                	sub	x0, x1, x0
                	mov	x1, #0x0                // =0
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -663,6 +691,8 @@ Disassembly of section .text:
                	mov	x1, #0x40               // =64
                	sub	x0, x1, x0
                	mov	x1, #0x1f               // =31
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -711,6 +741,8 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	mov	x17, #0x7f              // =127
                	and	x1, x1, x17
+               	sxtw	x1, w1
+               	sxtw	x0, w0
                	cmp	x1, x0
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -759,6 +791,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x3f               // =63
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -809,6 +843,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x20               // =32
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -854,6 +890,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x40               // =64
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -897,6 +935,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x23               // =35
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -932,6 +972,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x1, x1, x17
                	mov	x2, #0x10               // =16
+               	sxtw	x1, w1
+               	sxtw	x2, w2
                	cmp	x1, x2
                	cset	x1, eq
                	cmp	x1, #0x0
@@ -978,6 +1020,8 @@ Disassembly of section .text:
                	mov	x2, #0x20               // =32
                	sub	x1, x2, x1
                	mov	x2, #0x8                // =8
+               	sxtw	x1, w1
+               	sxtw	x2, w2
                	cmp	x1, x2
                	cset	x1, eq
                	cmp	x1, #0x0
@@ -987,11 +1031,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x0, #0x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x0, x0, x17
+               	mvn	x0, x0
                	and	x0, x1, x0
                	mov	w0, w0
                	lsr	x1, x0, #1
@@ -1019,6 +1059,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x0                // =0
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -1067,6 +1109,8 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	mov	x17, #0x7f              // =127
                	and	x1, x1, x17
+               	sxtw	x1, w1
+               	sxtw	x0, w0
                	cmp	x1, x0
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -1116,6 +1160,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x10               // =16
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -1155,6 +1201,8 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -1196,6 +1244,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x10               // =16
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0
@@ -1241,6 +1291,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x1, x1, x17
                	mov	x2, #0x10               // =16
+               	sxtw	x1, w1
+               	sxtw	x2, w2
                	cmp	x1, x2
                	cset	x1, eq
                	cmp	x1, #0x0
@@ -1250,11 +1302,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x0, #0x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x0, x0, x17
+               	mvn	x0, x0
                	and	x0, x1, x0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845
@@ -1291,6 +1339,8 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
                	mov	x1, #0x0                // =0
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
                	cmp	x0, #0x0

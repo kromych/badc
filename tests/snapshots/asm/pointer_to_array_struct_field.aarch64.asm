@@ -56,10 +56,9 @@ Disassembly of section .text:
                	sxtw	x4, w2
                	mov	x17, #0x64              // =100
                	mul	x3, x3, x17
-               	sxtw	x3, w3
                	add	x3, x3, x4
-               	sxtw	x3, w3
-               	strh	w3, [x0, x4, lsl #1]
+               	sxtw	x5, w3
+               	strh	w5, [x0, x4, lsl #1]
                	b	<addr>
                	b	<addr>
                	sxtw	x0, w1
@@ -104,21 +103,16 @@ Disassembly of section .text:
                	ldrsh	x0, [x0, x4, lsl #1]
                	mov	x17, #0x64              // =100
                	mul	x3, x3, x17
-               	sxtw	x3, w3
                	add	x3, x3, x4
-               	sxtw	x3, w3
-               	sxth	x3, w3
+               	sxtw	x4, w3
+               	sxth	x3, w4
                	cmp	x0, x3
                	b.eq	<addr>
                	b	<addr>
                	b	<addr>
-               	sxtw	x0, w1
-               	lsl	x0, x0, #3
-               	sxtw	x0, w0
+               	lsl	x0, x1, #3
                	add	x0, x0, #0xa
-               	sxtw	x0, w0
-               	sxtw	x1, w2
-               	add	x0, x0, x1
+               	add	x0, x0, x2
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]

@@ -10,13 +10,11 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
 
 <two>:
-               	sxtw	x0, w0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	lsl	x0, x0, #1
@@ -30,8 +28,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	str	x20, [sp]
                	mov	x0, #0xa                // =10
-               	bl	<addr>
-               	mov	x20, x0
+               	add	x0, x0, #0x1
+               	sxtw	x20, w0
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	sxtw	x1, w20

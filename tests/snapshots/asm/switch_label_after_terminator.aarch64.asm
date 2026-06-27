@@ -40,8 +40,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	b	<addr>
                	b	<addr>
-               	sxtw	x0, w1
-               	add	x0, x0, #0x64
+               	add	x0, x1, #0x64
                	sxtw	x0, w0
                	ret
 

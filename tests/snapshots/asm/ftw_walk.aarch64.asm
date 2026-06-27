@@ -10,7 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	sxtw	x2, w2
                	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

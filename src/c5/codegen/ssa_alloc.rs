@@ -6,24 +6,22 @@
 //!
 //! ## Algorithm
 //!
-//! 1. Compute last-use PC per SSA value via a single backward
-//!    pass: every `Inst` that reads a `ValueId` extends the
-//!    target's live range to its own PC.
-//! 2. Walk insts forward. Maintain a free pool of integer and FP
-//!    registers (callee-saved + caller-saved, minus a small set
-//!    reserved for scratch + frame).
-//! 3. At each `Inst` that defines a value, expire any active
-//!    interval whose `last_use < current_pc`, then pick a free
-//!    register of the right bank (FP vs int). On register
-//!    pressure, spill the active interval with the furthest next
-//!    use to a fresh frame slot and reuse its register.
-//! 4. At call instructions (`Call` / `CallIndirect` / `CallExt`),
-//!    spill every active caller-saved register before the call
-//!    site -- the allocator marks these values as live in their
-//!    spill slot for the remainder of their range. Pre-coloring
-//!    of the call's argument values into host arg regs is left
-//!    to the per-arch emit pass; the allocator just ensures the
-//!    args are available somewhere reachable.
+//! 1. Compute last-use PC per SSA value via a single backward pass.
+//! 2. Union each phi result with its incoming values into congruence
+//!    classes; every member of a class shares one `Place`. With no
+//!    phis each class is a singleton and the step is identity.
+//! 3. Compute CFG liveness and build an interference graph over the
+//!    class roots: two values ever simultaneously live get an edge.
+//! 4. Derive per-value constraints -- register bank (int vs FP), a
+//!    must-be-callee-saved flag when the live range crosses a call,
+//!    and a coalescing hint from the return / parameter / phi /
+//!    call-argument / call-result hint passes.
+//! 5. Color the graph greedily (`color_graph`): for each node forbid
+//!    the registers held by its live neighbours, then take the hinted
+//!    register if free, else a free register of the right bank
+//!    (caller-saved first unless the value must survive a call), else
+//!    a fresh spill slot. Pre-coloring of call arguments into the host
+//!    argument registers is left to the per-arch emit pass.
 //!
 //! The output is intentionally minimal: each `Place` is either
 //! one of the host's GPRs / FP regs or a stack slot's byte offset
@@ -151,6 +149,12 @@ pub(super) struct Allocation {
     /// reinterpret an f32-typed `Imm` through a 32-bit `fmov` / `movd`.
     /// Empty (all-false) for SSA built outside the walker.
     pub f32_values: Vec<bool>,
+    /// Per-value upper-bit observation (see
+    /// `ssa_drop_redundant_extend::compute_high_observed`). The emit
+    /// consults this to skip a `ParamRef` entry sign-extension when no
+    /// consumer reads the parameter's bits above bit 31. Empty or
+    /// out-of-range entries default to observed, keeping the extension.
+    pub high_observed: Vec<bool>,
 }
 
 impl Allocation {
@@ -202,7 +206,7 @@ impl RegBanks {
                 // (large-immediate and adrp / add fixups), x18 is the
                 // Windows platform register, x19 is the writer's
                 // address-materialisation scratch (see
-                // [[function_clobbers_x19]]); all stay reserved.
+                // `function_clobbers_scratch`); all stay reserved.
                 // AAPCS64 callee-saved (non-volatile) GPRs are
                 // x19..x28; x19 is the writer's scratch so the bank
                 // starts at x20 and runs through x28.
@@ -212,29 +216,34 @@ impl RegBanks {
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
             },
             Target::LinuxX64 => Self {
-                // System V x86_64. Callee-saved: rbx, r12, r14, r15.
-                // r13 stays reserved as the writer's scratch / legacy
-                // accumulator. r10 stays reserved as `SCRATCH_R10`
-                // in ssa_emit_x86_64 -- many handlers
-                // (int_or_spill_dst, materialize_int for spilled
-                // sources, the Va* / call-arg marshallers) write r10
-                // unconditionally to land a value in a known register,
-                // so the allocator must not park another SSA value
-                // there. Caller-saved opens up to the SysV arg regs
-                // (rdi, rsi, rdx, rcx, r8, r9) plus rax, r11.
-                callee_gprs: &[3, 12, 14, 15],
-                caller_gprs: &[0, 1, 2, 6, 7, 8, 9, 11],
+                // System V x86_64. Callee-saved: rbx, r12, r13, r14,
+                // r15. r10 and r11 stay reserved as the writer's fixed
+                // scratch (`SCRATCH_R10` / `SCRATCH_R11` in
+                // ssa_emit_x86_64) -- many handlers (int_or_spill_dst,
+                // materialize_int for spilled sources, the Va* /
+                // call-arg marshallers) write them unconditionally to
+                // land a value in a known register, so the allocator
+                // must not park another SSA value there. Both are
+                // caller-saved, so reserving them forces no prologue
+                // save and a scratch-only body stays leaf-elidable. r13
+                // is an ordinary callee-saved allocation target, saved
+                // only when colored. Caller-saved opens up to the SysV
+                // arg regs (rdi, rsi, rdx, rcx, r8, r9) plus rax.
+                callee_gprs: &[3, 12, 13, 14, 15],
+                caller_gprs: &[0, 1, 2, 6, 7, 8, 9],
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
             },
             Target::WindowsX64 => Self {
-                // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r14,
-                // r15. r13 / r10 stay reserved as the writer's
+                // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r13, r14,
+                // r15. r10 / r11 stay reserved as the writer's fixed
                 // scratch (see the LinuxX64 comment for the SCRATCH_R10
-                // contract). Caller-saved opens up to the Win64 arg
-                // regs (rcx, rdx, r8, r9) plus rax, r11.
-                callee_gprs: &[3, 6, 7, 12, 14, 15],
-                caller_gprs: &[0, 1, 2, 8, 9, 11],
+                // / SCRATCH_R11 contract); both are caller-saved. r13 is
+                // an ordinary callee-saved allocation target. Caller-
+                // saved opens up to the Win64 arg regs (rcx, rdx, r8,
+                // r9) plus rax.
+                callee_gprs: &[3, 6, 7, 12, 13, 14, 15],
+                caller_gprs: &[0, 1, 2, 8, 9],
                 // Win64 marks xmm6..xmm15 non-volatile (callee-saved),
                 // but the x86_64 prologue/epilogue and `Frame` layout
                 // reserve no space for and emit no save/restore of FP
@@ -255,51 +264,56 @@ impl RegBanks {
 
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
-/// Whether an x86_64 function body writes r13, the writer's reserved
-/// secondary scratch (`SCRATCH_R13` in ssa_emit_x86_64). r13 is
-/// callee-saved under System V / Win64, so the prologue must preserve
-/// the caller's value when the body clobbers it. The predicate is
-/// safe-by-default: it returns `true` for any instruction outside a
-/// short whitelist of lowerings that target their destination register
-/// directly and never need a second scratch (immediates, address
-/// materialisation, loads, sign/zero extension, parameter reads). A
-/// spilled operand materialises through r13, and block-argument moves
-/// (`emit_phi_predecessor_moves`) route through it, so any spill or any
-/// control-flow join also forces the save. A new `Inst` variant that is
-/// not whitelisted defaults to forcing the save rather than risking a
-/// silent unsaved clobber.
-fn function_clobbers_r13(func: &FunctionSsa, spill_count: u32) -> bool {
-    // A tail-call forwarder (`Terminator::TailExt`, the synthetic libc
-    // trampolines) exits through a `jmp` with no epilogue, so a saved
-    // r13 could never be restored -- the callee's `ret` would pop the
-    // trampoline's frame as its return address. These forwarders do not
-    // clobber r13 either: their arguments are already in the host ABI
-    // registers when control reaches them. Leave them frame-less.
-    if func
-        .blocks
-        .iter()
-        .any(|b| matches!(b.terminator, Terminator::TailExt(_)))
-    {
-        return false;
+/// Callee-saved registers the emit pass reserves as fixed scratch and
+/// must preserve when the body clobbers them. The allocator's
+/// `gpr_used` callee-saved filter cannot see a reserved scratch -- it
+/// is never an allocator value -- so the save decision lives here.
+///
+/// x86_64 reserves r10/r11 (`SCRATCH_R10` / `SCRATCH_R11`), both
+/// caller-saved, so it has nothing to preserve: a body that only
+/// touches scratch stays leaf-elidable. aarch64 reserves x19
+/// (callee-saved) as the address scratch the TLS / indirect-call /
+/// intrinsic lowerings route through, and as a third modulo operand
+/// when a dividend, divisor and result all spill.
+///
+/// The returned slice is the set of such registers actually clobbered.
+/// Each target consumes it through its own prologue/epilogue path
+/// (x86_64 folds it into `gpr_used_callee`; aarch64 reserves a
+/// dedicated slot via `Frame::uses_x19`).
+pub(super) fn function_clobbers_scratch(
+    func: &FunctionSsa,
+    target: Target,
+    spill_count: u32,
+) -> &'static [u8] {
+    match target {
+        Target::LinuxX64 | Target::WindowsX64 => &[],
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            let routes_through_x19 = func.insts.iter().any(|inst| {
+                matches!(
+                    inst,
+                    Inst::TlsAddr(_)
+                        | Inst::CallIndirect { .. }
+                        | Inst::CallExt { .. }
+                        | Inst::Intrinsic { .. }
+                )
+            });
+            let mod_under_spill = spill_count > 0
+                && func.insts.iter().any(|inst| {
+                    matches!(
+                        inst,
+                        Inst::Binop {
+                            op: BinOp::Mod | BinOp::Modu,
+                            ..
+                        }
+                    )
+                });
+            if routes_through_x19 || mod_under_spill {
+                &[19]
+            } else {
+                &[]
+            }
+        }
     }
-    if spill_count > 0 || func.blocks.len() > 1 {
-        return true;
-    }
-    func.insts.iter().any(|inst| {
-        !matches!(
-            inst,
-            Inst::Imm(_)
-                | Inst::ImmData(_)
-                | Inst::ImmCode(_)
-                | Inst::ImmExtCode(_)
-                | Inst::BlockAddr(_)
-                | Inst::LocalAddr(_)
-                | Inst::Load { .. }
-                | Inst::LoadLocal { .. }
-                | Inst::ParamRef { .. }
-                | Inst::Extend { .. }
-        )
-    })
 }
 
 /// Win64 non-volatile xmm registers the x86_64 emit pass uses as fixed
@@ -355,6 +369,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             branch_fused: Vec::new(),
             hints,
             f32_values: Vec::new(),
+            high_observed: Vec::new(),
         };
     }
 
@@ -366,8 +381,8 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // the same `Place`. For a function with no phis every class is a
     // singleton and the lookup degenerates to identity, so the path
     // collapses to today's per-value behaviour. Class-level
-    // last-use is the max over all members so the active-list entry
-    // expires only when every member is dead.
+    // last-use is the max over all members so a value stays live
+    // until every member of its class is dead.
     let liveness = super::ssa_liveness::Liveness::compute(func);
     let mut classes = super::ssa_phi_class::PhiClasses::build(func, &liveness);
     let class_last_use: Vec<u32> = {
@@ -416,6 +431,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         .map(|v| classes.find(v))
         .collect();
     let interference = liveness.interference(func, &node_of);
+    let param_incoming_forbid = compute_param_incoming_forbid(func, target);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
         if !produces_value(inst) {
@@ -426,12 +442,14 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             is_fp: false,
             must_callee: false,
             hint: None,
+            forbid: 0,
         });
         entry.is_fp = produces_fp_result(inst);
         entry.must_callee |= calls_after_def[v];
         if entry.hint.is_none() {
             entry.hint = hints[v];
         }
+        entry.forbid |= param_incoming_forbid[v];
     }
     let (max_gpr, max_fpr) = pool_size_limits();
     let coloring = color_graph(
@@ -457,26 +475,17 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // prologue's `str xN, [sp, ...]` sequence to exactly the
     // registers AAPCS64 / SysV / Win64 require the callee to
     // preserve.
-    let mut gpr_used_callee: Vec<u8> = gpr_used
+    let gpr_used_callee: Vec<u8> = gpr_used
         .into_iter()
         .filter(|r| banks.callee_gprs.contains(r))
         .collect();
-    // The x86_64 writer borrows r13 as its reserved secondary scratch
-    // (`SCRATCH_R13` in ssa_emit_x86_64). r13 is callee-saved under both
-    // System V and Win64, so a function that clobbers it must save and
-    // restore the caller's value -- otherwise a foreign (clang/gcc)
-    // caller holding a live value in r13 across a call into c5 code sees
-    // it corrupted. r13 sits outside `callee_gprs` (it is never an
-    // allocator value), so the filter above drops it; list it here when
-    // the body actually touches it so the prologue / epilogue's
-    // callee-save loop preserves it exactly as it does rbx / r12 / r14 /
-    // r15. The aarch64 writer handles its own callee-saved scratch (x19)
-    // through the analogous `function_clobbers_x19` path.
-    if matches!(target, Target::LinuxX64 | Target::WindowsX64)
-        && function_clobbers_r13(func, spill_count)
-    {
-        gpr_used_callee.push(13);
-    }
+    // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
+    // it needs no save: `function_clobbers_scratch` returns empty for
+    // x86_64 and r13 -- now an ordinary callee-saved allocation target --
+    // is already captured by the `callee_gprs` filter above when colored.
+    // The aarch64 writer reserves the callee-saved x19; it consumes
+    // `function_clobbers_scratch` through its own `Frame::uses_x19` path,
+    // not this list, so adding it here would double-count the save.
     let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r))
@@ -616,6 +625,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         branch_fused,
         hints,
         f32_values: func.f32_values.clone(),
+        high_observed: super::ssa_drop_redundant_extend::compute_high_observed(func),
     }
 }
 
@@ -855,6 +865,11 @@ pub(super) struct NodeConstraints {
     pub must_callee: bool,
     /// Preferred register, honoured when free and bank-legal.
     pub hint: Option<u8>,
+    /// Physical registers (in this node's bank) the colorer must not
+    /// assign, beyond interference. Bit `r` set forbids register `r`.
+    /// Used to keep a `ParamRef` off the incoming argument register of a
+    /// later same-bank `ParamRef`, whose incoming value is still live.
+    pub forbid: u64,
 }
 
 /// Result of coloring the interference graph.
@@ -947,16 +962,38 @@ pub(super) fn color_graph(
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
     let mut spill_count: u32 = 0;
+    // Per-slot "stamp" marking which slots interfering neighbours hold,
+    // refreshed per node by bumping `stamp` instead of clearing. Slot
+    // indices are bounded by `spill_count <= n`, so `n` entries suffice.
+    // This keeps the free-slot search O(spill_count) per node rather than
+    // O(spill_count * neighbours): the membership test is an array read,
+    // not a linear scan of the neighbour list.
+    let mut slot_used: Vec<u32> = vec![0u32; n];
+    let mut stamp: u32 = 0;
     for node in 0..n {
         let Some(c) = constraints[node] else {
             continue;
         };
+        stamp += 1;
         let mut forbidden: [bool; 64] = [false; 64];
+        // A spill slot is 8 bytes of stack shared bank-agnostically (FP
+        // and integer spills both store/reload 8 bytes), so a slot held
+        // by any interfering neighbour is off-limits regardless of bank.
         for &nb in interference.neighbors(node as ValueId) {
             match color[nb as usize] {
                 Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
                 Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
+                Place::Spill(s) => slot_used[s as usize] = stamp,
                 _ => {}
+            }
+        }
+        // Registers excluded beyond interference: the incoming argument
+        // registers of later same-bank `ParamRef`s whose values are still
+        // live at this node's definition. The forbid mask is in this
+        // node's bank (set only for matching `is_fp`).
+        for r in 0..64u8 {
+            if (c.forbid >> r) & 1 != 0 {
+                forbidden[r as usize] = true;
             }
         }
         // Bank size cap: BADC_MAX_GPR / BADC_MAX_FPR truncate each bank
@@ -992,8 +1029,22 @@ pub(super) fn color_graph(
             Some(r) if c.is_fp => Place::FpReg(r),
             Some(r) => Place::IntReg(r),
             None => {
-                let slot = spill_count;
-                spill_count += 1;
+                // Reuse the lowest existing slot held by no interfering
+                // neighbour; allocate a fresh slot only when every one
+                // collides. Two values share a slot only when no
+                // interference edge joins them -- i.e. they are never
+                // simultaneously live -- so the slot holds at most one
+                // live value at any point. Edges are bidirectional, so a
+                // later-coloured value that interferes excludes this
+                // slot, preserving distinct storage for live ranges that
+                // overlap.
+                let slot = (0..spill_count)
+                    .find(|&s| slot_used[s as usize] != stamp)
+                    .unwrap_or_else(|| {
+                        let s = spill_count;
+                        spill_count += 1;
+                        s
+                    });
                 Place::Spill(slot)
             }
         };
@@ -1104,6 +1155,7 @@ fn is_pure_inst(inst: &Inst) -> bool {
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::FpCast { .. }
+            | Inst::Extend { .. }
     )
 }
 
@@ -1525,6 +1577,104 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
     }
 }
 
+/// Per-value mask of physical registers the colorer must not assign,
+/// to keep each `Inst::ParamRef` off the incoming argument register of a
+/// later same-bank `ParamRef`. A `ParamRef` reads its incoming argument
+/// register, which stays live from function entry until that `ParamRef`
+/// materializes. `ParamRef`s materialize in value-id order; an earlier
+/// one placed in a later one's incoming register overwrites that
+/// register before the later `ParamRef` reads it. The own-incoming-
+/// register hint ([`populate_param_ref_hints`]) avoids this at full
+/// register pressure, but is rejected once the incoming register falls
+/// beyond a truncated bank, so the colorer parks the early `ParamRef` on
+/// a low register that is another parameter's incoming register. Forbid
+/// that placement: the colorer then picks a free register or spills, and
+/// a spilled `ParamRef` stores its incoming register straight to the
+/// slot, which never clobbers.
+fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
+    let mut forbid = alloc::vec![0u64; func.insts.len()];
+    if func.is_variadic {
+        return forbid;
+    }
+    let int_args: &[u8] = match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            &[0, 1, 2, 3, 4, 5, 6, 7]
+        }
+        Target::LinuxX64 => &[7, 6, 2, 1, 8, 9],
+        Target::WindowsX64 => &[1, 2, 8, 9],
+    };
+    let fp_args: &[u8] = match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 | Target::LinuxX64 => {
+            &[0, 1, 2, 3, 4, 5, 6, 7]
+        }
+        Target::WindowsX64 => &[0, 1, 2, 3],
+    };
+    // Only protect parameters that are read: an unused `ParamRef` is not
+    // materialized, so its incoming register need not survive.
+    let mut used = alloc::vec![false; func.insts.len()];
+    for inst in &func.insts {
+        for_each_operand(inst, |op| {
+            if (op as usize) < used.len() {
+                used[op as usize] = true;
+            }
+        });
+    }
+    for block in &func.blocks {
+        match &block.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
+                if (*cond as usize) < used.len() {
+                    used[*cond as usize] = true;
+                }
+            }
+            Terminator::Return(v) if (*v as usize) < used.len() => used[*v as usize] = true,
+            Terminator::GotoIndirect { target } if (*target as usize) < used.len() => {
+                used[*target as usize] = true;
+            }
+            _ => {}
+        }
+    }
+    // (value id, is_fp, incoming register) for each used ParamRef, in
+    // value-id (materialization) order.
+    let mut params: Vec<(usize, bool, u8)> = Vec::new();
+    for (vid, inst) in func.insts.iter().enumerate() {
+        let Inst::ParamRef { idx, .. } = inst else {
+            continue;
+        };
+        if !used[vid] {
+            continue;
+        }
+        let pi = *idx as usize;
+        let is_fp = (func.param_fp_mask & (1u32 << pi)) != 0;
+        let (rank, bank): (usize, &[u8]) = if is_fp {
+            (
+                (0..pi)
+                    .filter(|&j| (func.param_fp_mask & (1u32 << j)) != 0)
+                    .count(),
+                fp_args,
+            )
+        } else {
+            (
+                (0..pi)
+                    .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
+                    .count(),
+                int_args,
+            )
+        };
+        if let Some(&r) = bank.get(rank) {
+            params.push((vid, is_fp, r));
+        }
+    }
+    for a in 0..params.len() {
+        let (vid_a, fp_a, _) = params[a];
+        for &(_, fp_b, reg_b) in &params[a + 1..] {
+            if fp_a == fp_b {
+                forbid[vid_a] |= 1u64 << reg_b;
+            }
+        }
+    }
+    forbid
+}
+
 fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
     // Hint each `Inst::ParamRef(i)` to its incoming integer-argument
     // register. The per-arch emit reads the argument register
@@ -1569,16 +1719,37 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // point a later integer ParamRef at the wrong arg register -- one an
     // earlier integer parameter actually arrives in -- reintroducing the
     // very cross-clobber this pass exists to remove.
+    // Floating-point parameters arrive in the FP argument bank and the
+    // same cross-clobber hazard applies there; hint each FP parameter to
+    // its own incoming FP argument register (by its rank within the FP
+    // bank, which on every supported target is the d/xmm index). The FP
+    // banks: AAPCS64 d0-d7, System V xmm0-7, Win64 xmm0-3.
+    let fp_args: &[u8] = match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 | Target::LinuxX64 => {
+            &[0, 1, 2, 3, 4, 5, 6, 7]
+        }
+        Target::WindowsX64 => &[0, 1, 2, 3],
+    };
     for (idx, inst) in func.insts.iter().enumerate() {
         if let Inst::ParamRef { idx: i, .. } = inst {
             let pi = *i as usize;
-            if (func.param_fp_mask & (1u32 << pi)) != 0 {
-                continue;
-            }
-            let int_rank = (0..pi)
-                .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
-                .count();
-            if let Some(&r) = int_args.get(int_rank)
+            let is_fp = (func.param_fp_mask & (1u32 << pi)) != 0;
+            let (rank, bank): (usize, &[u8]) = if is_fp {
+                (
+                    (0..pi)
+                        .filter(|&j| (func.param_fp_mask & (1u32 << j)) != 0)
+                        .count(),
+                    fp_args,
+                )
+            } else {
+                (
+                    (0..pi)
+                        .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
+                        .count(),
+                    int_args,
+                )
+            };
+            if let Some(&r) = bank.get(rank)
                 && idx < hints.len()
                 && hints[idx].is_none()
             {
@@ -1876,23 +2047,6 @@ fn promote_calls_after_def_to_classes(
     }
 }
 
-fn expire(
-    active: &mut Vec<(ValueId, u32, u8)>,
-    free: &mut Vec<u8>,
-    current_pc: u32,
-    _places: &[Place],
-) {
-    let mut i = 0;
-    while i < active.len() {
-        if active[i].1 < current_pc {
-            let (_id, _end, reg) = active.remove(i);
-            free.push(reg);
-        } else {
-            i += 1;
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1925,6 +2079,7 @@ mod tests {
             is_fp: false,
             must_callee,
             hint,
+            forbid: 0,
         })
     }
 

@@ -34,8 +34,8 @@ Disassembly of section .text:
                	mov	x23, x22
                	cmp	x22, x20
                	b.ge	<addr>
-               	mov	x0, x22
-               	bl	<addr>
+               	lsl	x0, x22, #1
+               	add	x0, x0, #0x1
                	add	x23, x23, x0
                	mov	x9, x21
                	str	x22, [sp, #-0x10]!

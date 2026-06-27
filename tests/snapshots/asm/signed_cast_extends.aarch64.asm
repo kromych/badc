@@ -191,7 +191,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	sxtb	x0, w0
                	lsl	x0, x0, #8
-               	sxtw	x0, w0
                	sub	x1, x29, #0xb8
                	ldrb	w1, [x1, #0x1]
                	orr	x0, x0, x1

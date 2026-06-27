@@ -35,9 +35,9 @@ Disassembly of section .text:
                	str	x10, [x0, #0x38]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x40               // =64
-               	mov	x1, #0x4                // =4
-               	sdiv	x0, x0, x1
                	mov	x2, #0x0                // =0
+               	add	x0, x0, x2
+               	asr	x0, x0, #2
                	sxtw	x1, w2
                	sxtw	x3, w0
                	cmp	x1, x3
@@ -60,8 +60,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x1, w2
-               	add	x1, x1, #0x1
+               	add	x1, x2, #0x1
                	sxtw	x3, w1
                	sxtw	x1, w3
                	sxtw	x4, w0

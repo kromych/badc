@@ -1,27 +1,218 @@
-//! Drop `Inst::Extend { value: v_load, kind: K }` when `v_load` is
-//! a sign-extending load whose own `kind` already matches `K`.
+//! Drop a redundant `Inst::Extend { value, kind }` by redirecting its
+//! consumers to `value`. An extend is redundant in two cases:
 //!
-//! `Load { kind: I8 | I16 | I32 }`, `LoadLocal { kind: I8 | I16 | I32 }`,
-//! and `LoadIndexed { kind: I8 | I16 | I32 }` lower to `ldrsb` /
-//! `ldrsh` / `ldrsw` on AArch64 and to the `movsx` family on x86_64,
-//! both of which deposit a 64-bit sign-extended value in the
-//! destination register. The walker's per-load `Inst::Extend`
-//! wrapper then re-applies the same sign extension via `sxtw`
-//! (or `movsxd`), producing a no-op on the same register.
+//!   1. `value` is a sign-extending load of the same `kind`
+//!      (`Load` / `LoadLocal` / `LoadIndexed` with `I8` / `I16` / `I32`).
+//!      Those lower to `ldrsb` / `ldrsh` / `ldrsw` (AArch64) or the
+//!      `movsx` family (x86_64), already depositing a 64-bit
+//!      sign-extended value, so the extend re-applies the same
+//!      extension and is a no-op.
 //!
-//! The pass redirects every consumer of the Extend's id to the
-//! load's id. Use counts in the allocator track this naturally
-//! through `for_each_operand`; the dead Extend is left in place
-//! and the per-arch emit's `is_dead_pure` skip drops the
-//! instruction.
+//!   2. The extend is an `I32` sign-extend whose upper 32 bits no
+//!      consumer reads (`compute_high_observed`). Every consumer sees
+//!      the same low 32 bits in `value`, and the extend only differs in
+//!      the unread upper half, so it can be dropped. This removes the
+//!      per-op renormalization left over from a chain of low-word
+//!      integer arithmetic.
+//!
+//! The dead Extend is left in place; the allocator's dead-pure DCE and
+//! the per-arch emit's `is_dead_pure` skip drop it. `resolve` walks
+//! redirect chains so stacked extends collapse.
 
-use super::super::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{
+    BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+};
 use alloc::vec::Vec;
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs {
         run_one(func);
     }
+}
+
+/// Mark `v`'s upper bits as observed and enqueue it for propagation.
+fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
+    if (v as usize) < hi.len() && !hi[v as usize] {
+        hi[v as usize] = true;
+        work.push(v);
+    }
+}
+
+/// For every value, whether any consumer reads bits at or above bit 32.
+///
+/// An `Add`/`Sub`/`Mul`/`And`/`Or`/`Xor`/`Shl` result's low 32 bits depend only
+/// on its operands' low 32 bits (C99 6.2.5p9 / 6.5p5: two's-complement low-word
+/// arithmetic), and a `Phi` selects one operand, so these forward the consumer's
+/// observation to their operands and are transparent to the low word. A right
+/// shift, divide/modulo, rotate, ordered/equality compare, 64-bit store, address
+/// operand, call argument, FP cast, atomic, return, or branch condition reads the
+/// full register, so it observes the upper bits directly. `Inst::Extend` reads
+/// only the low `kind`-width bits, so it never observes its source's upper bits.
+/// Anything not positively classified as low-word-only is treated as observing,
+/// so the result is a conservative over-approximation. Shared with the allocator,
+/// which consults it to skip a `ParamRef` entry sign-extension whose result is
+/// never read above bit 31 (the parameter's low word already holds the C99
+/// 6.5.2.2p4-converted value; the return boundary stays conservative, so a value
+/// feeding the return keeps its canonicalization).
+pub(super) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
+    let n = func.insts.len();
+    let mut hi = alloc::vec![false; n];
+    let mut work: Vec<ValueId> = Vec::new();
+
+    for inst in &func.insts {
+        match inst {
+            Inst::Imm(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::TlsAddr(_)
+            | Inst::LoadLocal { .. }
+            | Inst::TailExt(_)
+            | Inst::AllocaInit(_)
+            | Inst::ParamRef { .. }
+            | Inst::Extend { .. } => {}
+            Inst::Load { addr, .. } => observe(&mut hi, &mut work, *addr),
+            Inst::LoadIndexed { base, index, .. } => {
+                observe(&mut hi, &mut work, *base);
+                observe(&mut hi, &mut work, *index);
+            }
+            Inst::Store {
+                addr, value, kind, ..
+            } => {
+                observe(&mut hi, &mut work, *addr);
+                if *kind == StoreKind::I64 {
+                    observe(&mut hi, &mut work, *value);
+                }
+            }
+            Inst::StoreLocal { value, kind, .. } => {
+                if *kind == StoreKind::I64 {
+                    observe(&mut hi, &mut work, *value);
+                }
+            }
+            Inst::StoreIndexed {
+                base,
+                index,
+                value,
+                kind,
+                ..
+            } => {
+                observe(&mut hi, &mut work, *base);
+                observe(&mut hi, &mut work, *index);
+                if *kind == StoreKind::I64 {
+                    observe(&mut hi, &mut work, *value);
+                }
+            }
+            Inst::Binop { op, lhs, rhs } => match op {
+                BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor => {}
+                BinOp::Shl => observe(&mut hi, &mut work, *rhs),
+                _ => {
+                    observe(&mut hi, &mut work, *lhs);
+                    observe(&mut hi, &mut work, *rhs);
+                }
+            },
+            Inst::BinopI { op, lhs, .. } => match op {
+                BinOp::Add
+                | BinOp::Sub
+                | BinOp::Mul
+                | BinOp::And
+                | BinOp::Or
+                | BinOp::Xor
+                | BinOp::Shl => {}
+                _ => observe(&mut hi, &mut work, *lhs),
+            },
+            Inst::FpCast { value, .. } => observe(&mut hi, &mut work, *value),
+            Inst::Fneg(v) => observe(&mut hi, &mut work, *v),
+            Inst::Fma { a, b, c, .. } => {
+                observe(&mut hi, &mut work, *a);
+                observe(&mut hi, &mut work, *b);
+                observe(&mut hi, &mut work, *c);
+            }
+            Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+                for a in args {
+                    observe(&mut hi, &mut work, *a);
+                }
+            }
+            Inst::CallIndirect { target, args, .. } => {
+                observe(&mut hi, &mut work, *target);
+                for a in args {
+                    observe(&mut hi, &mut work, *a);
+                }
+            }
+            Inst::Mcpy { dst, src, .. } => {
+                observe(&mut hi, &mut work, *dst);
+                observe(&mut hi, &mut work, *src);
+            }
+            Inst::AtomicRmw { addr, value, .. } => {
+                observe(&mut hi, &mut work, *addr);
+                observe(&mut hi, &mut work, *value);
+            }
+            Inst::AtomicCas {
+                addr,
+                expected_addr,
+                desired,
+                ..
+            } => {
+                observe(&mut hi, &mut work, *addr);
+                observe(&mut hi, &mut work, *expected_addr);
+                observe(&mut hi, &mut work, *desired);
+            }
+            Inst::Phi { .. } => {}
+        }
+    }
+    for block in &func.blocks {
+        if block.exit_acc != NO_VALUE {
+            observe(&mut hi, &mut work, block.exit_acc);
+        }
+        match &block.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
+                observe(&mut hi, &mut work, *cond);
+            }
+            Terminator::GotoIndirect { target } => observe(&mut hi, &mut work, *target),
+            Terminator::Return(v) if *v != NO_VALUE => observe(&mut hi, &mut work, *v),
+            _ => {}
+        }
+    }
+
+    // Propagate: an observed transparent result observes its operands.
+    while let Some(r) = work.pop() {
+        match &func.insts[r as usize] {
+            Inst::Binop {
+                op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor,
+                lhs,
+                rhs,
+            } => {
+                observe(&mut hi, &mut work, *lhs);
+                observe(&mut hi, &mut work, *rhs);
+            }
+            Inst::Binop {
+                op: BinOp::Shl,
+                lhs,
+                ..
+            } => observe(&mut hi, &mut work, *lhs),
+            Inst::BinopI {
+                op:
+                    BinOp::Add
+                    | BinOp::Sub
+                    | BinOp::Mul
+                    | BinOp::And
+                    | BinOp::Or
+                    | BinOp::Xor
+                    | BinOp::Shl,
+                lhs,
+                ..
+            } => observe(&mut hi, &mut work, *lhs),
+            Inst::Phi { incoming, .. } => {
+                let ops: Vec<ValueId> = incoming.iter().map(|(_, v)| *v).collect();
+                for v in ops {
+                    observe(&mut hi, &mut work, v);
+                }
+            }
+            _ => {}
+        }
+    }
+    hi
 }
 
 fn is_signed_load(insts: &[Inst], v: ValueId) -> Option<LoadKind> {
@@ -45,22 +236,26 @@ fn is_signed_load(insts: &[Inst], v: ValueId) -> Option<LoadKind> {
 }
 
 fn run_one(func: &mut FunctionSsa) {
-    // Map every Extend whose operand is a sign-extending load of
-    // the same kind to that operand id. `resolve` walks redirect
-    // chains so a chain of `Extend(Extend(load))` collapses.
     let n = func.insts.len();
+    if !func.insts.iter().any(|i| matches!(i, Inst::Extend { .. })) {
+        return;
+    }
+    // An Extend is redundant when (1) its operand is a sign-extending load of
+    // the same kind, so the extend re-applies the load's own sign extension; or
+    // (2) it is an i32 sign-extend whose upper bits no consumer reads, so every
+    // consumer sees the same low 32 bits in the operand. Both redirect the
+    // extend's consumers to the operand; `resolve` walks redirect chains.
+    let high = compute_high_observed(func);
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     for (idx, inst) in func.insts.iter().enumerate() {
         let Inst::Extend { value, kind } = inst else {
             continue;
         };
-        let Some(load_kind) = is_signed_load(&func.insts, *value) else {
-            continue;
-        };
-        if load_kind != *kind {
-            continue;
+        if is_signed_load(&func.insts, *value) == Some(*kind)
+            || (*kind == LoadKind::I32 && !high[idx])
+        {
+            redirect[idx] = Some(*value);
         }
-        redirect[idx] = Some(*value);
     }
     if redirect.iter().all(|r| r.is_none()) {
         return;
@@ -192,7 +387,9 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::ir::{Block, FunctionSsa, Inst, LoadKind, Terminator};
+    use super::super::super::ir::{
+        BinOp, Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator,
+    };
     use super::*;
     use alloc::vec;
 
@@ -329,5 +526,105 @@ mod tests {
         );
         run_one(&mut f);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(0)));
+    }
+
+    /// v0 Imm(addr); v1 Load I32; v2 Add(v1,v1); v3 Extend(v2,I32);
+    /// v4 Store(v3, kind). A 4-byte store reads only the low 32 bits,
+    /// so the extend's upper half is dead and v4 redirects to v2; a
+    /// 8-byte store reads the full value, so the extend stays.
+    fn extend_over_add_feeding_store(store_kind: StoreKind) -> FunctionSsa {
+        fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I32,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs: 1,
+                },
+                Inst::Extend {
+                    value: 2,
+                    kind: LoadKind::I32,
+                },
+                Inst::Store {
+                    addr: 0,
+                    disp: 0,
+                    value: 3,
+                    kind: store_kind,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..5,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+        )
+    }
+
+    #[test]
+    fn extend_with_dead_high_bits_is_dropped() {
+        let mut f = extend_over_add_feeding_store(StoreKind::I32);
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[4], Inst::Store { value: 2, .. }),
+            "narrow store should read the pre-extend add directly; got {:?}",
+            f.insts[4],
+        );
+    }
+
+    #[test]
+    fn extend_feeding_wide_store_is_kept() {
+        let mut f = extend_over_add_feeding_store(StoreKind::I64);
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[4], Inst::Store { value: 3, .. }),
+            "8-byte store observes the upper bits; extend must stay",
+        );
+    }
+
+    #[test]
+    fn extend_feeding_signed_compare_is_kept() {
+        // v3 Extend(v2) feeds a signed `Lt` compare, which reads the
+        // sign bit in the high half, so it must not be dropped.
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I32,
+                },
+                Inst::Binop {
+                    op: BinOp::Mul,
+                    lhs: 1,
+                    rhs: 1,
+                },
+                Inst::Extend {
+                    value: 2,
+                    kind: LoadKind::I32,
+                },
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 3,
+                    rhs_imm: 0,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..5,
+                terminator: Terminator::Return(4),
+                exit_acc: 4,
+            }],
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[4], Inst::BinopI { lhs: 3, .. }),
+            "signed compare must keep reading the sign-extended value",
+        );
     }
 }

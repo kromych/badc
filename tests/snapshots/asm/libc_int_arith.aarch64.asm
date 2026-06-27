@@ -164,10 +164,13 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	mov	x1, #0x5                // =5
-               	bl	<addr>
-               	sub	x16, x29, #0x48
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
+               	sub	x2, x29, #0x48
+               	sdiv	x3, x0, x1
+               	str	x3, [x2]
+               	sub	x2, x29, #0x48
+               	sdiv	x17, x0, x1
+               	msub	x0, x17, x1, x0
+               	str	x0, [x2, #0x8]
                	sub	x0, x29, #0x48
                	sub	x1, x29, #0x10
                	str	x10, [sp, #-0x10]!

@@ -37,8 +37,7 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x0
                	b.eq	<addr>
-               	sxtw	x1, w22
-               	add	x22, x1, #0x1
+               	add	x22, x22, #0x1
                	add	x0, x0, #0x13
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

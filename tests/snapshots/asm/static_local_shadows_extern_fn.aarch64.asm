@@ -17,37 +17,29 @@ Disassembly of section .text:
                	ret
 
 <driver>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x20, [sp]
-               	str	x21, [sp, #0x8]
-               	mov	x20, x0
-               	sxtw	x20, w20
-               	mov	x21, #0x0               // =0
-               	cmp	x20, #0x2
+               	sxtw	x0, w0
+               	mov	x2, #0x0                // =0
+               	cmp	x0, #0x2
                	b.lt	<addr>
                	b	<addr>
-               	sxtw	x0, w21
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	sxtw	x0, w2
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	bl	<addr>
-               	mov	x21, x0
+               	ldrb	w1, [x0]
+               	ldrb	w0, [x0, #0x1]
+               	add	x0, x1, x0
+               	sxtw	x2, w0
                	b	<addr>
-               	mov	x21, #0xffff            // =65535
-               	movk	x21, #0xffff, lsl #16
-               	movk	x21, #0xffff, lsl #32
-               	movk	x21, #0xffff, lsl #48
+               	mov	x2, #0xffff             // =65535
+               	movk	x2, #0xffff, lsl #16
+               	movk	x2, #0xffff, lsl #32
+               	movk	x2, #0xffff, lsl #48
                	b	<addr>
-               	cmp	x20, #0x1
+               	cmp	x0, #0x1
                	b.eq	<addr>
                	b	<addr>
-               	cmp	x20, #0x2
+               	cmp	x0, #0x2
                	b.eq	<addr>
                	b	<addr>
                	b	<addr>

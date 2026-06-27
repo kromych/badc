@@ -15,12 +15,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	str	x19, [sp]
                	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	add	x1, x0, #0x2
-               	sxtw	x0, w1
-               	add	x1, x0, #0x4
+               	add	x1, x1, #0x1
+               	add	x1, x1, #0x2
+               	add	x1, x1, #0x4
                	sxtw	x0, w1
                	cmp	x0, #0x7
                	b.eq	<addr>

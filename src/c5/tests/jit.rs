@@ -340,6 +340,74 @@ fn modulo_with_spilled_divisor_under_pressure() {
 }
 
 #[test]
+fn fp_param_incoming_reg_clobber_under_pressure() {
+    // Each Inst::ParamRef reads its incoming FP argument register, which
+    // stays live from function entry until that ParamRef materializes.
+    // Under FP register pressure the hint that homes each parameter in
+    // its own incoming register is rejected (the register lies beyond the
+    // truncated bank), so the colorer could park an earlier ParamRef on a
+    // later ParamRef's incoming register; the earlier parameter's
+    // materialization then overwrote the later parameter's argument before
+    // it was read. sum4 mixes float and double parameters: the double in
+    // d3 is routed through d0, the float parameter a's incoming register,
+    // clobbering a before its spill. The allocator now forbids placing a
+    // ParamRef on a later same-bank ParamRef's incoming register.
+    let src = r#"
+        static double sum4(float a, double b, float c, double d) {
+            return a + b + c + d;
+        }
+        int main(void) {
+            return sum4(1.0f, 2.0, 3.0f, 4.0) == 10.0 ? 0 : 5;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["fp-param-incoming-clobber"])
+    });
+    assert_eq!(
+        result, 0,
+        "a float parameter in an earlier FP argument register was clobbered \
+         by a later double routed through it under register pressure"
+    );
+}
+
+#[test]
+fn indirect_call_spilled_target_under_pressure() {
+    // A six-argument indirect call. Under register pressure the target
+    // pointer is spilled to a stack slot above the marshal's scratch
+    // window; the marshaller reloads spilled argument sources relative to
+    // the adjusted stack pointer, and that shift must include the target
+    // slot. Without it a reloaded pointer argument reads the wrong stack
+    // offset and the callee dereferences a corrupt pointer (x86_64 only;
+    // surfaces under the low-GPR pressure CI exercises).
+    let src = r#"
+        typedef long (*cmp)(void *, int *, long *, long, long *, long);
+        struct task { cmp fn; };
+        static long do_cmp(void *t, int *cached, long *k1, long n1, long *k2, long n2) {
+            (void)t; *cached = 1;
+            return *k1 * 1000 + *k2 * 10 + n1 + n2;
+        }
+        static long run(struct task *pt, long *p1, long n1, long *p2, long n2) {
+            int cached = 0;
+            long r = pt->fn(pt, &cached, p1 + 2, n1, p2 + 2, n2);
+            return r + cached;
+        }
+        int main(void) {
+            struct task t; t.fn = do_cmp;
+            long a[4]; long b[4];
+            a[2] = 3; b[2] = 7;
+            return run(&t, a, 5, b, 9) == 3085 ? 0 : 1;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(3, 3, || {
+        jit_exit_native_optimized(src, &["indirect-spill-target"])
+    });
+    assert_eq!(
+        result, 0,
+        "indirect-call target-slot spill desynced a spilled argument reload under pressure"
+    );
+}
+
+#[test]
 fn division_with_spilled_dividend_under_pressure() {
     // On x86_64 the divmod lowering stages the dividend into the
     // destination register; when the allocator reuses the divisor's
@@ -1007,6 +1075,8 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("mem2reg_value_across_call.c", 33),
     ("mem2reg_param_promoted.c", 0),
     ("inline_forward_ref_value.c", 0),
+    ("inline_phi_caller_leaf_helper.c", 0),
+    ("inline_phi_narrow_param_return.c", 0),
     ("natural_width_local.c", 0),
     ("arithmetic.c", 60),
     ("goto.c", 5),
@@ -1017,6 +1087,24 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("variadic_struct_arg.c", 18),
     ("variadic_struct_arg_16b.c", 51),
     ("libc_div.c", 0),
+    ("strength_reduce_pow2_divmod.c", 0),
+    ("return_callee_saved_value.c", 0),
+    ("spill_slot_reuse_disjoint_calls.c", 0),
+    ("rotate_variable_count.c", 0),
+    ("bitwise_not_mvn.c", 0),
+    ("add_three_operand_lea.c", 0),
+    ("add_sub_negative_imm.c", 0),
+    ("assign_expr_value_narrowed.c", 0),
+    ("struct_copy_comma_side_effect.c", 0),
+    ("inline_two_reg_struct_param.c", 0),
+    ("struct_param_stack_spill.c", 0),
+    ("struct_stack_arg_then_scalar.c", 0),
+    ("mixed_struct_gpr_abi.c", 0),
+    ("unary_plus_preserves_type.c", 0),
+    ("local_multidim_aggregate_array_init.c", 0),
+    ("nested_aggregate_brace_elision.c", 0),
+    ("const_addr_multidim_array_elem.c", 0),
+    ("unsigned_signed_relational_compare.c", 0),
     ("wide_string_literal_alignment.c", 0),
     ("va_arg_through_pointer.c", 0),
     ("pthread_key_once_width.c", 0),
@@ -1048,6 +1136,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("predefined_constants.c", 0),
     ("c99_qualifiers.c", 0),
     ("integer_suffixes.c", 0),
+    ("int32_sign_extend_elision.c", 0),
+    ("arg_register_cycle.c", 0),
+    ("indirect_call_six_args_spilled_target.c", 0),
     ("predefined_macros.c", 0),
     ("macro_multiline_comment_body.c", 0),
     ("compound_literal_paren_init.c", 0),
@@ -1191,8 +1282,12 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("float_arithmetic.c", 0),
     ("float_single_precision.c", 0),
     ("fp_arg_passed_in_fp_reg.c", 0),
+    ("fp_param_float_before_double.c", 0),
     ("float_arg_single_precision.c", 0),
     ("fp_return_value.c", 0),
+    ("global_addr_multidim_index.c", 0),
+    ("global_addr_struct_member.c", 0),
+    ("local_array_runtime_nested_init.c", 0),
     ("many_fp_args.c", 0),
     ("fp_param_after_int_overflow.c", 0),
     ("float_double_mix.c", 0),
@@ -1283,6 +1378,14 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("duff_switch_into_loop.c", 0),
     ("empty_macro_arg_and_string_rows.c", 0),
     ("inline_arg_count_mismatch.c", 0),
+    ("inline_into_computed_goto.c", 0),
+    ("inline_one_word_struct.c", 0),
+    ("inline_one_word_struct_return.c", 0),
+    ("inline_struct_return_reg.c", 0),
+    ("inline_two_word_struct_return.c", 0),
+    ("struct_return_reg_computed_goto.c", 0),
+    ("inline_struct_return_escape.c", 0),
+    ("inline_struct_param_mutated.c", 0),
     ("block_scope_extern.c", 0),
     ("extern_incomplete_struct_completion.c", 0),
     ("const_member_address_init.c", 0),
@@ -1353,6 +1456,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_multi_byval.c", 0),
     ("struct_arg_two_eightbyte.c", 0),
     ("struct_return_by_value.c", 0),
+    ("struct_return_to_global.c", 0),
     ("cast_fn_ptr_call.c", 0),
     ("fma_numeric_kernels.c", 0),
     ("fp_unary_intrinsic.c", 0),

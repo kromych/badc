@@ -26,7 +26,6 @@ Disassembly of section .text:
                	ret
 
 <set_b>:
-               	sxtw	x1, w1
                	str	w1, [x0, #0x4]
                	mov	x0, #0x0                // =0
                	ret
@@ -37,7 +36,6 @@ Disassembly of section .text:
                	ret
 
 <rmw_b>:
-               	sxtw	x1, w1
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x2, x1
                	str	w1, [x0, #0x4]

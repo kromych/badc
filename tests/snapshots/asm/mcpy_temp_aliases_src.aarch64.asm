@@ -24,21 +24,13 @@ Disassembly of section .text:
                	mov	x8, #0x9                // =9
                	mov	x9, #0xa                // =10
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	add	x0, x0, x2
-               	sxtw	x0, w0
                	add	x0, x0, x3
-               	sxtw	x0, w0
                	add	x0, x0, x4
-               	sxtw	x0, w0
                	add	x0, x0, x5
-               	sxtw	x0, w0
                	add	x0, x0, x6
-               	sxtw	x0, w0
                	add	x0, x0, x7
-               	sxtw	x0, w0
                	add	x0, x0, x8
-               	sxtw	x0, w0
                	add	x0, x0, x9
                	sxtw	x0, w0
                	sub	x1, x29, #0x20
@@ -54,7 +46,6 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x18]
                	str	x10, [x1, #0x18]
                	ldr	x10, [sp], #0x10
-               	sxtw	x0, w0
                	cmp	x0, #0x37
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

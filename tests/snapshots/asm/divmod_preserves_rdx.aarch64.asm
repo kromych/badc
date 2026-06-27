@@ -19,36 +19,25 @@ Disassembly of section .text:
                	mov	x1, #0x32               // =50
                	mov	x2, #0x19               // =25
                	mov	x3, #0xc                // =12
-               	mov	x4, #0x8                // =8
+               	mov	x4, #0x7                // =7
                	sdiv	x5, x0, x4
                	sdiv	x6, x1, x4
                	sdiv	x7, x2, x4
                	sdiv	x4, x3, x4
-               	sxtw	x5, w5
-               	sxtw	x6, w6
                	add	x5, x5, x6
-               	sxtw	x5, w5
-               	sxtw	x6, w7
-               	add	x5, x5, x6
-               	sxtw	x5, w5
-               	sxtw	x4, w4
+               	add	x5, x5, x7
                	add	x4, x5, x4
-               	sxtw	x4, w4
                	add	x0, x4, x0
-               	sxtw	x0, w0
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	add	x0, x0, x2
-               	sxtw	x0, w0
                	add	x0, x0, x3
                	sxtw	x20, w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	sxtw	x1, w20
+               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	sxtw	x0, w20
-               	cmp	x0, #0xd1
+               	cmp	x20, #0xd4
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
                	b	<addr>

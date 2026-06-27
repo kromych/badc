@@ -673,11 +673,7 @@ Disassembly of section .text:
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	eor	x21, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x0, x0, x17
+               	mvn	x0, x0
                	mov	w22, w0
                	b	<addr>
                	adrp	x0, <page>

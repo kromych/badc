@@ -14,7 +14,6 @@ Disassembly of section .text:
                	ret
 
 <g>:
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	sxtw	x0, w0
                	ret
@@ -25,6 +24,7 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	str	w1, [x0]
                	mov	x1, #0x3                // =3
+               	sxtw	x1, w1
                	cmp	x1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

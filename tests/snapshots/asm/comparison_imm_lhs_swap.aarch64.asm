@@ -24,38 +24,31 @@ Disassembly of section .text:
                	sxtw	x21, w0
                	cmp	x20, #0x0
                	b.lt	<addr>
-               	sxtw	x0, w21
-               	add	x0, x0, #0x1
+               	add	x0, x21, #0x1
                	sxtw	x21, w0
                	cmp	x20, #0xa
                	b.ge	<addr>
-               	sxtw	x0, w21
-               	add	x0, x0, #0x1
+               	add	x0, x21, #0x1
                	sxtw	x21, w0
                	cmp	x20, #0xa
                	b.gt	<addr>
-               	sxtw	x0, w21
-               	add	x0, x0, #0x1
+               	add	x0, x21, #0x1
                	sxtw	x21, w0
                	cmp	x20, #0x0
                	b.ls	<addr>
-               	sxtw	x0, w21
-               	add	x0, x0, #0x1
+               	add	x0, x21, #0x1
                	sxtw	x21, w0
                	cmp	x20, #0x0
                	b.lo	<addr>
-               	sxtw	x0, w21
-               	add	x0, x0, #0x1
+               	add	x0, x21, #0x1
                	sxtw	x21, w0
                	cmp	x20, #0xa
                	b.hs	<addr>
-               	sxtw	x0, w21
-               	add	x0, x0, #0x1
+               	add	x0, x21, #0x1
                	sxtw	x21, w0
                	cmp	x20, #0xa
                	b.hi	<addr>
-               	sxtw	x0, w21
-               	add	x0, x0, #0x1
+               	add	x0, x21, #0x1
                	sxtw	x21, w0
                	cmp	x20, #0xa
                	b.le	<addr>

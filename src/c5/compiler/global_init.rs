@@ -21,7 +21,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of};
+use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     /// After a leading `(TYPE)` cast in a global initializer, returns
@@ -429,37 +429,78 @@ impl Compiler {
                 ));
             }
             let mut target_offset = self.symbols[target_idx].val;
-            // For an array global, scale subsequent `[N]` indexes
-            // by the element size; for a scalar global the index
-            // (if any) is just byte-additive, and there usually
-            // isn't one.
-            // An array target (complete `T a[N]` or incomplete extern
-            // `T a[]`, `array_size == -1`) scales the index by the element
-            // size; a scalar has no index, so the stride is unused.
-            let elem_size = if self.symbols[target_idx].array_size != 0 {
-                self.size_of_type(self.symbols[target_idx].type_) as i64
-            } else {
-                1
-            };
             self.next()?;
-            // Optional `[const_expr]` -- `&array[N]` and
-            // `&array[N+M]` etc. The constant-expression evaluator
-            // handles `+`, `-`, `*`, parens, `Token::Num`-class
-            // identifiers (enum / `#define`d constants).
-            if self.lex.tk == Token::Brak {
-                self.next()?;
-                let n = self.parse_constant_int()?;
-                if self.lex.tk != ']' {
-                    return Err(self.compile_err_at(
-                        line,
-                        format!(
-                            "close bracket expected in `&{}[...]`",
-                            self.symbols[target_idx].name
-                        ),
-                    ));
+            // C99 6.6: the address of any array element or struct member of
+            // a static-storage object is an address constant. Walk the
+            // designator suffix -- a sequence of `[const]` subscripts and
+            // `.field` selections -- tracking the current type and its
+            // array dimensions. A subscript at level `i` strides by
+            // `product(array_dims[i+1..]) * sizeof(element)` (the first
+            // index spans whole sub-arrays, the innermost an element, C99
+            // 6.5.2.1p2; an empty `array_dims` is the 1D case); a member
+            // adds its byte offset and moves the current type to the
+            // field. The accumulated byte offset is the address constant.
+            let mut cur_ty = self.symbols[target_idx].type_;
+            let mut cur_dims = self.symbols[target_idx].array_dims.clone();
+            let mut level = 0usize;
+            loop {
+                if self.lex.tk == Token::Brak {
+                    self.next()?;
+                    let n = self.parse_constant_int()?;
+                    if self.lex.tk != ']' {
+                        return Err(self.compile_err_at(
+                            line,
+                            format!(
+                                "close bracket expected in `&{}[...]`",
+                                self.symbols[target_idx].name
+                            ),
+                        ));
+                    }
+                    self.next()?;
+                    let elem_size = self.size_of_type(cur_ty) as i64;
+                    let stride = if level < cur_dims.len() {
+                        cur_dims[level + 1..].iter().product::<i64>() * elem_size
+                    } else {
+                        elem_size
+                    };
+                    target_offset += n * stride;
+                    level += 1;
+                } else if self.lex.tk == Token::Dot {
+                    if !is_struct_ty(cur_ty) || struct_ptr_depth(cur_ty) != 0 {
+                        return Err(self.compile_err_at(
+                            line,
+                            "`.` on a non-struct value in a constant address",
+                        ));
+                    }
+                    self.next()?;
+                    if self.lex.tk != Token::Id {
+                        return Err(self
+                            .compile_err_at(line, "field name expected after `.` in initializer"));
+                    }
+                    let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                    let sid = struct_id_of(cur_ty);
+                    let Some(field) = self.structs[sid]
+                        .fields
+                        .iter()
+                        .find(|f| f.name == field_name)
+                        .cloned()
+                    else {
+                        return Err(self.compile_err_at(
+                            line,
+                            format!(
+                                "struct {} has no field {field_name}",
+                                self.structs[sid].name
+                            ),
+                        ));
+                    };
+                    target_offset += field.offset as i64;
+                    cur_ty = field.ty;
+                    cur_dims = field.array_dims.clone();
+                    level = 0;
+                    self.next()?;
+                } else {
+                    break;
                 }
-                self.next()?;
-                target_offset += n * elem_size;
             }
             // A target defined in another translation unit (`extern T g;`
             // with no definition here) is resolved by name at link time;

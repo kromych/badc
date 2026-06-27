@@ -1451,6 +1451,42 @@ impl<'a> Walker<'a> {
                 let op = &op_remapped;
                 let mask = unsigned_narrow_mask(*ty);
                 let needs_divmod_mask = mask != 0 && matches!(*op, BinOp::Divu | BinOp::Modu);
+                // An unsigned relational compare at a common type narrower
+                // than the register where one operand is signed: the signed
+                // operand carries its sign-extended high bits in the 64-bit
+                // register, but C99 6.3.1.8 converts it to the unsigned
+                // common type (zero-extended), so those bits must be cleared
+                // or the unsigned compare reads a huge value. The common
+                // type is unsigned (the front end picked the U-op) and
+                // 4-byte unless an operand is 8 bytes, in which case the
+                // value already fills the register. Two unsigned operands
+                // are already zero-extended and need no mask. Mask both
+                // operands to the common width.
+                let cmp_mask = if matches!(*op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge) {
+                    // An operand carries sign-extended high bits only when it
+                    // is signed and not a non-negative literal: an unsigned
+                    // operand is zero-extended, and a non-negative constant
+                    // has no high bits set. The latter keeps the common
+                    // `unsigned < positive-literal` loop test on the
+                    // immediate path.
+                    let needs = |id: ExprId, this: &Self| -> (bool, usize) {
+                        let e = this.ast.expr(id);
+                        let ty = expr_ty(e);
+                        let sz = ty.map_or(8, |t| type_size_bytes(t, this.target));
+                        let signed = ty.is_some_and(|t| t & UNSIGNED_BIT == 0);
+                        let nonneg_lit = matches!(e, Expr::IntLit { val, .. } if *val >= 0);
+                        (signed && !nonneg_lit, sz)
+                    };
+                    let (l_needs, lsz) = needs(*lhs, self);
+                    let (r_needs, rsz) = needs(*rhs, self);
+                    if lsz <= 4 && rsz <= 4 && (l_needs || r_needs) {
+                        0xffff_ffffi64
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
                 // Constant-rhs short-circuit: when the AST rhs is
                 // an integer literal and the per-arch BinopI
                 // lowering covers `*op`, route through
@@ -1484,6 +1520,9 @@ impl<'a> Walker<'a> {
                         | BinOp::Ule
                         | BinOp::Uge
                 );
+                // Operands that need masking take the register path so the
+                // mask below applies; the immediate fast paths skip it.
+                let imm_safe_op = imm_safe_op && cmp_mask == 0;
                 // C99 6.6: a constant expression evaluates at
                 // translation time. The parser doesn't fold the
                 // synthesised pointer-arithmetic scaling
@@ -1615,9 +1654,18 @@ impl<'a> Walker<'a> {
                 // half in the 64-bit register; without the mask,
                 // `udiv` / `umod` operate on the wider pattern
                 // and produce the wrong order of magnitude.
-                if needs_divmod_mask {
-                    lv = b.binop_imm(BinOp::And, lv, mask);
-                    rv = b.binop_imm(BinOp::And, rv, mask);
+                if needs_divmod_mask || cmp_mask != 0 {
+                    let m = if needs_divmod_mask { mask } else { cmp_mask };
+                    lv = b.binop_imm(BinOp::And, lv, m);
+                    rv = b.binop_imm(BinOp::And, rv, m);
+                }
+                // Strength-reduce divide / modulo by a constant power of
+                // two to shifts / masks. This is the only constant-
+                // divisor fast path: the per-arch `BinopI` emit does not
+                // lower Div / Mod, so they are otherwise excluded from
+                // `imm_safe_op` and divide through the register path.
+                if let Some(reduced) = b.divmod_pow2(*op, lv, rv) {
+                    return Ok(reduced);
                 }
                 // The parser's `maybe_mask_to_unsigned_width`
                 // already pushes the explicit narrow mask /
@@ -1741,7 +1789,13 @@ impl<'a> Walker<'a> {
                         value = b.fp_narrow_to_f32(value);
                     }
                     b.store_local(slot, value, kind);
-                    return Ok(value);
+                    // C99 6.5.16p3: the assignment expression's value has
+                    // the converted type of the left operand. The store
+                    // truncated the stored bytes; the value carried
+                    // forward to an enclosing expression must also be
+                    // narrowed (the F32 case did so above).
+                    let rhs_ty = expr_ty(self.ast.expr(*rhs)).unwrap_or(*ty);
+                    return Ok(self.narrow_int_to_ty(b, value, rhs_ty, *ty));
                 }
                 let addr = self.walk_expr_lvalue(b, *lhs)?;
                 let mut value = self.walk_expr_rvalue(b, *rhs)?;
@@ -1755,10 +1809,13 @@ impl<'a> Walker<'a> {
                     value = b.fp_narrow_to_f32(value);
                 }
                 b.store(addr, value, kind);
-                // C99 6.5.16p3: the assignment's value is the
-                // value stored, after any conversion the rhs walker
-                // already applied.
-                Ok(value)
+                // C99 6.5.16p3: the assignment expression's value has the
+                // converted type of the left operand. The store truncated
+                // the stored bytes; the value carried forward to an
+                // enclosing expression must also be narrowed (the F32 case
+                // did so above). A dead value drops out in DCE.
+                let rhs_ty = expr_ty(self.ast.expr(*rhs)).unwrap_or(*ty);
+                Ok(self.narrow_int_to_ty(b, value, rhs_ty, *ty))
             }
             Expr::Ternary {
                 cond,
@@ -2793,32 +2850,7 @@ impl<'a> Walker<'a> {
                 //     shift-pair Shl K; Shr K to sign-extend the
                 //     truncated value (clang / gcc-compatible UB
                 //     handling).
-                let target_size = type_size_bytes(*to_ty, self.target);
-                let source_size = type_size_bytes(src_ty, self.target);
-                if target_size == 0 || target_size >= 8 {
-                    return Ok(v);
-                }
-                let source_unsigned = (src_ty & UNSIGNED_BIT) != 0;
-                let target_unsigned = (*to_ty & UNSIGNED_BIT) != 0;
-                if target_unsigned {
-                    let mask: i64 = match target_size {
-                        1 => 0xff,
-                        2 => 0xffff,
-                        4 => 0xffff_ffff,
-                        _ => return Ok(v),
-                    };
-                    Ok(b.binop_imm(BinOp::And, v, mask))
-                } else {
-                    let needs_extend = target_size < source_size
-                        || (target_size == source_size && source_unsigned);
-                    if needs_extend {
-                        let bits = 64i64 - (target_size as i64) * 8;
-                        let shifted = b.binop_imm(BinOp::Shl, v, bits);
-                        Ok(b.binop_imm(BinOp::Shr, shifted, bits))
-                    } else {
-                        Ok(v)
-                    }
-                }
+                Ok(self.narrow_int_to_ty(b, v, src_ty, *to_ty))
             }
             Expr::CompoundAssign { op, lhs, rhs, ty } => {
                 // C99 6.5.16.2p3: `E1 op= E2` is `E1 = E1 op E2`
@@ -3156,6 +3188,54 @@ impl<'a> Walker<'a> {
     /// element type's representation (C99 6.3.1.3): zero-extend an
     /// unsigned narrow type, sign-extend a signed one. A 4- or 8-byte
     /// type and a pointer ride the register at full width unchanged.
+    /// Narrow an integer value of type `src_ty` to `to_ty`'s storage
+    /// width per C99 6.3.1.3. An unsigned target masks to width; a
+    /// signed narrowing (or a same-width signed view of an unsigned
+    /// source) sign-extends the truncated value via the shift pair.
+    /// A wider-or-equal signed conversion, a non-integer target, or a
+    /// target of 8 bytes or more needs no op. Shared by the cast path
+    /// and by assignment / compound-assignment / increment expressions,
+    /// whose value has the converted type of the left operand
+    /// (6.5.16p3 / 6.5.16.2 / 6.5.2.4 / 6.5.3.1) and so must carry the
+    /// narrowed value when a wider enclosing expression reads it.
+    fn narrow_int_to_ty(
+        &self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        v: super::super::ir::ValueId,
+        src_ty: i64,
+        to_ty: i64,
+    ) -> super::super::ir::ValueId {
+        if is_floating_scalar(to_ty) || is_struct_ty(to_ty) {
+            return v;
+        }
+        let target_size = type_size_bytes(to_ty, self.target);
+        let source_size = type_size_bytes(src_ty, self.target);
+        if target_size == 0 || target_size >= 8 {
+            return v;
+        }
+        let source_unsigned = (src_ty & UNSIGNED_BIT) != 0;
+        let target_unsigned = (to_ty & UNSIGNED_BIT) != 0;
+        if target_unsigned {
+            let mask: i64 = match target_size {
+                1 => 0xff,
+                2 => 0xffff,
+                4 => 0xffff_ffff,
+                _ => return v,
+            };
+            b.binop_imm(BinOp::And, v, mask)
+        } else {
+            let needs_extend =
+                target_size < source_size || (target_size == source_size && source_unsigned);
+            if needs_extend {
+                let bits = 64i64 - (target_size as i64) * 8;
+                let shifted = b.binop_imm(BinOp::Shl, v, bits);
+                b.binop_imm(BinOp::Shr, shifted, bits)
+            } else {
+                v
+            }
+        }
+    }
+
     fn extend_atomic_result(
         &self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,

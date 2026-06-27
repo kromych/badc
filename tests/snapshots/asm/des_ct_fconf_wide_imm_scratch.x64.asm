@@ -11,17 +11,13 @@ Disassembly of section .text:
                	ud2
 
 <rotl>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
                	movslq	%esi, %rsi
                	movl	%edi, %eax
                	movq	%rax, %rcx
-               	movq	%rcx, %r13
+               	movq	%rcx, %r11
                	movq	%rsi, %rcx
-               	shlq	%cl, %r13
-               	movq	%r13, %rcx
+               	shlq	%cl, %r11
+               	movq	%r11, %rcx
                	movl	%ecx, %ecx
                	movl	$0x20, %edx
                	subq	%rsi, %rdx
@@ -31,22 +27,17 @@ Disassembly of section .text:
                	shrq	%cl, %rax
                	popq	%rcx
                	orq	%rcx, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <Fconf>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x600, %rsp            # imm = 0x600
+               	subq	$0x100, %rsp            # imm = 0x100
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%r14, 0x10(%rsp)
-               	movq	%r15, 0x18(%rsp)
-               	movq	%r13, 0x20(%rsp)
+               	movq	%r13, 0x10(%rsp)
+               	movq	%r14, 0x18(%rsp)
+               	movq	%r15, 0x20(%rsp)
                	movl	%edi, %eax
                	movq	%rax, %rcx
                	andq	$0x11111111, %rcx       # imm = 0x11111111
@@ -100,28 +91,28 @@ Disassembly of section .text:
                	movl	%ecx, %ecx
                	movq	%rcx, %r9
                	shrq	$0x4, %r9
-               	movq	%rcx, %r11
-               	shlq	$0x1c, %r11
-               	movl	%r11d, %r11d
-               	orq	%r11, %r9
+               	movq	%rcx, %rbx
+               	shlq	$0x1c, %rbx
+               	movl	%ebx, %ebx
+               	orq	%rbx, %r9
                	movl	%r8d, %r8d
-               	movl	(%rsi), %r11d
-               	xorq	%r11, %r8
+               	movl	(%rsi), %ebx
+               	xorq	%rbx, %r8
                	movl	%r8d, %r8d
-               	movl	0x4(%rsi), %r11d
-               	xorq	%r11, %rcx
+               	movl	0x4(%rsi), %ebx
+               	xorq	%rbx, %rcx
                	movl	%ecx, %ecx
                	movl	%edx, %edx
-               	movl	0x8(%rsi), %r11d
-               	xorq	%r11, %rdx
+               	movl	0x8(%rsi), %ebx
+               	xorq	%rbx, %rdx
                	movl	%edx, %edx
                	movl	%edi, %edi
-               	movl	$0xc, %r11d
-               	movl	0xc(%rsi), %ebx
-               	xorq	%rbx, %rdi
+               	movl	$0xc, %ebx
+               	movl	0xc(%rsi), %r12d
+               	xorq	%r12, %rdi
                	movl	%edi, %edi
-               	movl	0x10(%rsi), %ebx
-               	xorq	%rbx, %rax
+               	movl	0x10(%rsi), %r12d
+               	xorq	%r12, %rax
                	movl	%eax, %eax
                	movl	%r9d, %r9d
                	movl	0x14(%rsi), %esi
@@ -129,315 +120,315 @@ Disassembly of section .text:
                	movl	%esi, %esi
                	movl	$0xec7ac69c, %r9d       # imm = 0xEC7AC69C
                	andq	%r8, %r9
-               	movl	$0xefa72c4d, %r13d      # imm = 0xEFA72C4D
-               	xorq	%r13, %r9
-               	movq	%r8, %rbx
-               	andq	$0x500fb821, %rbx       # imm = 0x500FB821
-               	movl	$0xaeaaedff, %r13d      # imm = 0xAEAAEDFF
-               	xorq	%r13, %rbx
+               	movl	$0xefa72c4d, %r11d      # imm = 0xEFA72C4D
+               	xorq	%r11, %r9
                	movq	%r8, %r12
-               	andq	$0x40efa809, %r12       # imm = 0x40EFA809
-               	xorq	$0x37396665, %r12       # imm = 0x37396665
+               	andq	$0x500fb821, %r12       # imm = 0x500FB821
+               	movl	$0xaeaaedff, %r11d      # imm = 0xAEAAEDFF
+               	xorq	%r11, %r12
+               	movq	%r8, %r13
+               	andq	$0x40efa809, %r13       # imm = 0x40EFA809
+               	xorq	$0x37396665, %r13       # imm = 0x37396665
                	movl	$0xa5ec0b28, %r14d      # imm = 0xA5EC0B28
                	andq	%r8, %r14
                	xorq	$0x68d7b833, %r14       # imm = 0x68D7B833
                	movq	%r8, %r15
                	andq	$0x252cf820, %r15       # imm = 0x252CF820
-               	movl	$0xc9c755bb, %r13d      # imm = 0xC9C755BB
-               	xorq	%r13, %r15
+               	movl	$0xc9c755bb, %r11d      # imm = 0xC9C755BB
+               	xorq	%r11, %r15
                	movq	%r8, %r10
                	andq	$0x40205801, %r10       # imm = 0x40205801
-               	movq	%r10, 0x5e0(%rsp)
-               	movq	0x5e0(%rsp), %r10
+               	movq	%r10, 0xf8(%rsp)
+               	movq	0xf8(%rsp), %r10
                	xorq	$0x73fc3606, %r10       # imm = 0x73FC3606
-               	movq	%r10, 0x5d8(%rsp)
+               	movq	%r10, 0xf8(%rsp)
                	movl	$0xe220f929, %r10d      # imm = 0xE220F929
                	andq	%r8, %r10
-               	movq	%r10, 0x5b8(%rsp)
-               	movq	0x5b8(%rsp), %r10
-               	movl	$0xa2a0a918, %r13d      # imm = 0xA2A0A918
-               	xorq	%r13, %r10
-               	movq	%r10, 0x5b0(%rsp)
+               	movq	%r10, 0xf0(%rsp)
+               	movq	0xf0(%rsp), %r10
+               	movl	$0xa2a0a918, %r11d      # imm = 0xA2A0A918
+               	xorq	%r11, %r10
+               	movq	%r10, 0xf0(%rsp)
                	movq	%r8, %r10
                	andq	$0x44a3f9e1, %r10       # imm = 0x44A3F9E1
-               	movq	%r10, 0x590(%rsp)
-               	movq	0x590(%rsp), %r10
-               	movl	$0x8222bd90, %r13d      # imm = 0x8222BD90
-               	xorq	%r13, %r10
-               	movq	%r10, 0x588(%rsp)
+               	movq	%r10, 0xe8(%rsp)
+               	movq	0xe8(%rsp), %r10
+               	movl	$0x8222bd90, %r11d      # imm = 0x8222BD90
+               	xorq	%r11, %r10
+               	movq	%r10, 0xe8(%rsp)
                	movq	%r8, %r10
                	andq	$0x794f104a, %r10       # imm = 0x794F104A
-               	movq	%r10, 0x568(%rsp)
-               	movq	0x568(%rsp), %r10
-               	movl	$0xd6b6ac77, %r13d      # imm = 0xD6B6AC77
-               	xorq	%r13, %r10
-               	movq	%r10, 0x560(%rsp)
+               	movq	%r10, 0xe0(%rsp)
+               	movq	0xe0(%rsp), %r10
+               	movl	$0xd6b6ac77, %r11d      # imm = 0xD6B6AC77
+               	xorq	%r11, %r10
+               	movq	%r10, 0xe0(%rsp)
                	movq	%r8, %r10
                	andq	$0x26f320b, %r10        # imm = 0x26F320B
-               	movq	%r10, 0x540(%rsp)
-               	movq	0x540(%rsp), %r10
+               	movq	%r10, 0xd8(%rsp)
+               	movq	0xd8(%rsp), %r10
                	xorq	$0x3069300c, %r10       # imm = 0x3069300C
-               	movq	%r10, 0x538(%rsp)
+               	movq	%r10, 0xd8(%rsp)
                	movq	%r8, %r10
                	andq	$0x7640b01a, %r10       # imm = 0x7640B01A
-               	movq	%r10, 0x518(%rsp)
-               	movq	0x518(%rsp), %r10
+               	movq	%r10, 0xd0(%rsp)
+               	movq	0xd0(%rsp), %r10
                	xorq	$0x6ce0d5cc, %r10       # imm = 0x6CE0D5CC
-               	movq	%r10, 0x510(%rsp)
+               	movq	%r10, 0xd0(%rsp)
                	movq	%r8, %r10
                	andq	$0x238f1572, %r10       # imm = 0x238F1572
-               	movq	%r10, 0x4f0(%rsp)
-               	movq	0x4f0(%rsp), %r10
+               	movq	%r10, 0xc8(%rsp)
+               	movq	0xc8(%rsp), %r10
                	xorq	$0x59a9a22d, %r10       # imm = 0x59A9A22D
-               	movq	%r10, 0x4e8(%rsp)
+               	movq	%r10, 0xc8(%rsp)
                	movq	%r8, %r10
                	andq	$0x7a63c083, %r10       # imm = 0x7A63C083
-               	movq	%r10, 0x4c8(%rsp)
-               	movq	0x4c8(%rsp), %r10
-               	movl	$0xac6d0bd4, %r13d      # imm = 0xAC6D0BD4
-               	xorq	%r13, %r10
-               	movq	%r10, 0x4c0(%rsp)
+               	movq	%r10, 0xc0(%rsp)
+               	movq	0xc0(%rsp), %r10
+               	movl	$0xac6d0bd4, %r11d      # imm = 0xAC6D0BD4
+               	xorq	%r11, %r10
+               	movq	%r10, 0xc0(%rsp)
                	movq	%r8, %r10
                	andq	$0x11cca000, %r10       # imm = 0x11CCA000
-               	movq	%r10, 0x4a0(%rsp)
-               	movq	0x4a0(%rsp), %r10
+               	movq	%r10, 0xb8(%rsp)
+               	movq	0xb8(%rsp), %r10
                	xorq	$0x21c83200, %r10       # imm = 0x21C83200
-               	movq	%r10, 0x498(%rsp)
+               	movq	%r10, 0xb8(%rsp)
                	movq	%r8, %r10
                	andq	$0x202f69aa, %r10       # imm = 0x202F69AA
-               	movq	%r10, 0x478(%rsp)
-               	movq	0x478(%rsp), %r10
-               	movl	$0xa0e62188, %r13d      # imm = 0xA0E62188
-               	xorq	%r13, %r10
-               	movq	%r10, 0x470(%rsp)
+               	movq	%r10, 0xb0(%rsp)
+               	movq	0xb0(%rsp), %r10
+               	movl	$0xa0e62188, %r11d      # imm = 0xA0E62188
+               	xorq	%r11, %r10
+               	movq	%r10, 0xb0(%rsp)
                	movq	%r8, %r10
                	andq	$0x51b33be9, %r10       # imm = 0x51B33BE9
-               	movq	%r10, 0x450(%rsp)
-               	movq	0x450(%rsp), %r10
-               	movl	$0xaf7d655a, %r13d      # imm = 0xAF7D655A
-               	xorq	%r13, %r10
-               	movq	%r10, 0x448(%rsp)
+               	movq	%r10, 0xa8(%rsp)
+               	movq	0xa8(%rsp), %r10
+               	movl	$0xaf7d655a, %r11d      # imm = 0xAF7D655A
+               	xorq	%r11, %r10
+               	movq	%r10, 0xa8(%rsp)
                	movq	%r8, %r10
                	andq	$0x3b0fe8ae, %r10       # imm = 0x3B0FE8AE
-               	movq	%r10, 0x428(%rsp)
-               	movq	0x428(%rsp), %r10
-               	movl	$0xf0168aa3, %r13d      # imm = 0xF0168AA3
-               	xorq	%r13, %r10
-               	movq	%r10, 0x420(%rsp)
+               	movq	%r10, 0xa0(%rsp)
+               	movq	0xa0(%rsp), %r10
+               	movl	$0xf0168aa3, %r11d      # imm = 0xF0168AA3
+               	xorq	%r11, %r10
+               	movq	%r10, 0xa0(%rsp)
                	movl	$0x90bf8816, %r10d      # imm = 0x90BF8816
                	andq	%r8, %r10
-               	movq	%r10, 0x400(%rsp)
-               	movq	0x400(%rsp), %r10
-               	movl	$0x90aa30c6, %r13d      # imm = 0x90AA30C6
-               	xorq	%r13, %r10
-               	movq	%r10, 0x3f8(%rsp)
+               	movq	%r10, 0x98(%rsp)
+               	movq	0x98(%rsp), %r10
+               	movl	$0x90aa30c6, %r11d      # imm = 0x90AA30C6
+               	xorq	%r11, %r10
+               	movq	%r10, 0x98(%rsp)
                	movq	%r8, %r10
                	andq	$0x9e34f9b, %r10        # imm = 0x9E34F9B
-               	movq	%r10, 0x3d8(%rsp)
-               	movq	0x3d8(%rsp), %r10
+               	movq	%r10, 0x90(%rsp)
+               	movq	0x90(%rsp), %r10
                	xorq	$0x5ab2750a, %r10       # imm = 0x5AB2750A
-               	movq	%r10, 0x3d0(%rsp)
+               	movq	%r10, 0x90(%rsp)
                	movq	%r8, %r10
                	andq	$0x103be88, %r10        # imm = 0x103BE88
-               	movq	%r10, 0x3b0(%rsp)
-               	movq	0x3b0(%rsp), %r10
+               	movq	%r10, 0x88(%rsp)
+               	movq	0x88(%rsp), %r10
                	xorq	$0x5391be65, %r10       # imm = 0x5391BE65
-               	movq	%r10, 0x3a8(%rsp)
+               	movq	%r10, 0x88(%rsp)
                	movq	%r8, %r10
                	andq	$0x49ac8e25, %r10       # imm = 0x49AC8E25
-               	movq	%r10, 0x388(%rsp)
-               	movq	0x388(%rsp), %r10
-               	movl	$0x93372baf, %r13d      # imm = 0x93372BAF
-               	xorq	%r13, %r10
-               	movq	%r10, 0x380(%rsp)
+               	movq	%r10, 0x80(%rsp)
+               	movq	0x80(%rsp), %r10
+               	movl	$0x93372baf, %r11d      # imm = 0x93372BAF
+               	xorq	%r11, %r10
+               	movq	%r10, 0x80(%rsp)
                	movl	$0x922c313d, %r10d      # imm = 0x922C313D
                	andq	%r8, %r10
-               	movq	%r10, 0x360(%rsp)
-               	movq	0x360(%rsp), %r10
-               	movl	$0xf288210c, %r13d      # imm = 0xF288210C
-               	xorq	%r13, %r10
-               	movq	%r10, 0x358(%rsp)
+               	movq	%r10, 0x78(%rsp)
+               	movq	0x78(%rsp), %r10
+               	movl	$0xf288210c, %r11d      # imm = 0xF288210C
+               	xorq	%r11, %r10
+               	movq	%r10, 0x78(%rsp)
                	movq	%r8, %r10
                	andq	$0x70ef31b0, %r10       # imm = 0x70EF31B0
-               	movq	%r10, 0x338(%rsp)
-               	movq	0x338(%rsp), %r10
-               	movl	$0x920af5c0, %r13d      # imm = 0x920AF5C0
-               	xorq	%r13, %r10
-               	movq	%r10, 0x330(%rsp)
+               	movq	%r10, 0x70(%rsp)
+               	movq	0x70(%rsp), %r10
+               	movl	$0x920af5c0, %r11d      # imm = 0x920AF5C0
+               	xorq	%r11, %r10
+               	movq	%r10, 0x70(%rsp)
                	movq	%r8, %r10
                	andq	$0x6a707100, %r10       # imm = 0x6A707100
-               	movq	%r10, 0x310(%rsp)
-               	movq	0x310(%rsp), %r10
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x68(%rsp), %r10
                	xorq	$0x63d312c0, %r10       # imm = 0x63D312C0
-               	movq	%r10, 0x308(%rsp)
+               	movq	%r10, 0x68(%rsp)
                	movl	$0xb97c9011, %r10d      # imm = 0xB97C9011
                	andq	%r8, %r10
-               	movq	%r10, 0x2e8(%rsp)
-               	movq	0x2e8(%rsp), %r10
+               	movq	%r10, 0x60(%rsp)
+               	movq	0x60(%rsp), %r10
                	xorq	$0x537b3006, %r10       # imm = 0x537B3006
-               	movq	%r10, 0x2e0(%rsp)
+               	movq	%r10, 0x60(%rsp)
                	movl	$0xa320c959, %r10d      # imm = 0xA320C959
                	andq	%r8, %r10
-               	movq	%r10, 0x2c0(%rsp)
-               	movq	0x2c0(%rsp), %r10
-               	movl	$0xa2efb0a5, %r13d      # imm = 0xA2EFB0A5
-               	xorq	%r13, %r10
-               	movq	%r10, 0x2b8(%rsp)
+               	movq	%r10, 0x58(%rsp)
+               	movq	0x58(%rsp), %r10
+               	movl	$0xa2efb0a5, %r11d      # imm = 0xA2EFB0A5
+               	xorq	%r11, %r10
+               	movq	%r10, 0x58(%rsp)
                	movq	%r8, %r10
                	andq	$0x6ea0ab4a, %r10       # imm = 0x6EA0AB4A
-               	movq	%r10, 0x298(%rsp)
-               	movq	0x298(%rsp), %r10
-               	movl	$0xbc8f96a5, %r13d      # imm = 0xBC8F96A5
-               	xorq	%r13, %r10
-               	movq	%r10, 0x290(%rsp)
+               	movq	%r10, 0x50(%rsp)
+               	movq	0x50(%rsp), %r10
+               	movl	$0xbc8f96a5, %r11d      # imm = 0xBC8F96A5
+               	xorq	%r11, %r10
+               	movq	%r10, 0x50(%rsp)
                	movq	%r8, %r10
                	andq	$0x6953ddf8, %r10       # imm = 0x6953DDF8
-               	movq	%r10, 0x270(%rsp)
-               	movq	0x270(%rsp), %r10
-               	movl	$0xfad176a5, %r13d      # imm = 0xFAD176A5
-               	xorq	%r13, %r10
-               	movq	%r10, 0x268(%rsp)
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x48(%rsp), %r10
+               	movl	$0xfad176a5, %r11d      # imm = 0xFAD176A5
+               	xorq	%r11, %r10
+               	movq	%r10, 0x48(%rsp)
                	movl	$0xf74f3e2b, %r10d      # imm = 0xF74F3E2B
                	andq	%r8, %r10
-               	movq	%r10, 0x248(%rsp)
-               	movq	0x248(%rsp), %r10
+               	movq	%r10, 0x40(%rsp)
+               	movq	0x40(%rsp), %r10
                	xorq	$0x665a14a3, %r10       # imm = 0x665A14A3
-               	movq	%r10, 0x240(%rsp)
-               	movl	$0xf0306cad, %r13d      # imm = 0xF0306CAD
-               	andq	%r13, %r8
-               	movl	$0xf2eff0cc, %r13d      # imm = 0xF2EFF0CC
-               	xorq	%r13, %r8
+               	movq	%r10, 0x40(%rsp)
+               	movl	$0xf0306cad, %r11d      # imm = 0xF0306CAD
+               	andq	%r11, %r8
+               	movl	$0xf2eff0cc, %r11d      # imm = 0xF2EFF0CC
+               	xorq	%r11, %r8
                	movl	%r9d, %r9d
-               	movl	%ebx, %ebx
-               	andq	%rcx, %rbx
-               	xorq	%rbx, %r9
-               	movl	%r12d, %ebx
-               	movl	%r14d, %r12d
+               	movl	%r12d, %r12d
                	andq	%rcx, %r12
-               	xorq	%r12, %rbx
-               	movl	%r15d, %r12d
-               	movq	0x5d8(%rsp), %r14
+               	xorq	%r12, %r9
+               	movl	%r13d, %r12d
+               	movl	%r14d, %r13d
+               	andq	%rcx, %r13
+               	xorq	%r13, %r12
+               	movl	%r15d, %r13d
+               	movq	0xf8(%rsp), %r14
                	movl	%r14d, %r14d
                	andq	%rcx, %r14
-               	xorq	%r14, %r12
-               	movq	0x5b0(%rsp), %r14
+               	xorq	%r14, %r13
+               	movq	0xf0(%rsp), %r14
                	movl	%r14d, %r14d
-               	movq	0x588(%rsp), %r15
+               	movq	0xe8(%rsp), %r15
                	movl	%r15d, %r15d
                	andq	%rcx, %r15
                	xorq	%r15, %r14
-               	movq	0x560(%rsp), %r15
+               	movq	0xe0(%rsp), %r15
                	movl	%r15d, %r15d
-               	movq	0x538(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x218(%rsp)
-               	movq	%rcx, %r10
-               	andq	0x218(%rsp), %r10
-               	movq	%r10, 0x210(%rsp)
-               	xorq	0x210(%rsp), %r15
-               	movq	0x510(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x200(%rsp)
-               	movq	0x4e8(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x1f8(%rsp)
-               	movq	%rcx, %r10
-               	andq	0x1f8(%rsp), %r10
-               	movq	%r10, 0x1f0(%rsp)
-               	movq	0x200(%rsp), %r10
-               	xorq	0x1f0(%rsp), %r10
-               	movq	%r10, 0x1e8(%rsp)
-               	movq	0x4c0(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x1d8(%rsp)
-               	movq	0x498(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x1d0(%rsp)
-               	movq	%rcx, %r10
-               	andq	0x1d0(%rsp), %r10
-               	movq	%r10, 0x1c8(%rsp)
-               	movq	0x1d8(%rsp), %r10
-               	xorq	0x1c8(%rsp), %r10
-               	movq	%r10, 0x1c0(%rsp)
-               	movq	0x470(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x1b0(%rsp)
-               	movq	0x448(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x1a0(%rsp)
-               	movq	0x420(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x198(%rsp)
-               	movq	%rcx, %r10
-               	andq	0x198(%rsp), %r10
-               	movq	%r10, 0x190(%rsp)
-               	movq	0x1a0(%rsp), %r10
-               	xorq	0x190(%rsp), %r10
-               	movq	%r10, 0x188(%rsp)
-               	movq	0x3f8(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x178(%rsp)
-               	movq	0x3d0(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x170(%rsp)
-               	movq	%rcx, %r10
-               	andq	0x170(%rsp), %r10
-               	movq	%r10, 0x168(%rsp)
-               	movq	0x178(%rsp), %r10
-               	xorq	0x168(%rsp), %r10
-               	movq	%r10, 0x160(%rsp)
-               	movq	0x3a8(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x150(%rsp)
-               	movq	0x380(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x148(%rsp)
-               	movq	%rcx, %r10
-               	andq	0x148(%rsp), %r10
-               	movq	%r10, 0x140(%rsp)
-               	movq	0x150(%rsp), %r10
-               	xorq	0x140(%rsp), %r10
-               	movq	%r10, 0x138(%rsp)
-               	movq	0x358(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x128(%rsp)
-               	movq	0x330(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x120(%rsp)
-               	movq	%rcx, %r10
-               	andq	0x120(%rsp), %r10
-               	movq	%r10, 0x118(%rsp)
-               	movq	0x128(%rsp), %r10
-               	xorq	0x118(%rsp), %r10
-               	movq	%r10, 0x110(%rsp)
-               	movq	0x308(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x100(%rsp)
-               	movq	0x2e0(%rsp), %r10
+               	movq	0xd8(%rsp), %r10
                	movl	%r10d, %r10d
                	movq	%r10, 0xf8(%rsp)
                	movq	%rcx, %r10
                	andq	0xf8(%rsp), %r10
+               	movq	%r10, 0xf8(%rsp)
+               	xorq	0xf8(%rsp), %r15
+               	movq	0xd0(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xf8(%rsp)
+               	movq	0xc8(%rsp), %r10
+               	movl	%r10d, %r10d
                	movq	%r10, 0xf0(%rsp)
-               	movq	0x100(%rsp), %r10
+               	movq	%rcx, %r10
+               	andq	0xf0(%rsp), %r10
+               	movq	%r10, 0xf0(%rsp)
+               	movq	0xf8(%rsp), %r10
                	xorq	0xf0(%rsp), %r10
+               	movq	%r10, 0xf8(%rsp)
+               	movq	0xc0(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xf0(%rsp)
+               	movq	0xb8(%rsp), %r10
+               	movl	%r10d, %r10d
                	movq	%r10, 0xe8(%rsp)
-               	movq	0x2b8(%rsp), %r10
+               	movq	%rcx, %r10
+               	andq	0xe8(%rsp), %r10
+               	movq	%r10, 0xe8(%rsp)
+               	movq	0xf0(%rsp), %r10
+               	xorq	0xe8(%rsp), %r10
+               	movq	%r10, 0xf0(%rsp)
+               	movq	0xb0(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xe8(%rsp)
+               	movq	0xa8(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xe0(%rsp)
+               	movq	0xa0(%rsp), %r10
                	movl	%r10d, %r10d
                	movq	%r10, 0xd8(%rsp)
-               	movq	0x290(%rsp), %r10
+               	movq	%rcx, %r10
+               	andq	0xd8(%rsp), %r10
+               	movq	%r10, 0xd8(%rsp)
+               	movq	0xe0(%rsp), %r10
+               	xorq	0xd8(%rsp), %r10
+               	movq	%r10, 0xe0(%rsp)
+               	movq	0x98(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xd8(%rsp)
+               	movq	0x90(%rsp), %r10
                	movl	%r10d, %r10d
                	movq	%r10, 0xd0(%rsp)
                	movq	%rcx, %r10
                	andq	0xd0(%rsp), %r10
-               	movq	%r10, 0xc8(%rsp)
+               	movq	%r10, 0xd0(%rsp)
                	movq	0xd8(%rsp), %r10
+               	xorq	0xd0(%rsp), %r10
+               	movq	%r10, 0xd8(%rsp)
+               	movq	0x88(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xd0(%rsp)
+               	movq	0x80(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xc8(%rsp)
+               	movq	%rcx, %r10
+               	andq	0xc8(%rsp), %r10
+               	movq	%r10, 0xc8(%rsp)
+               	movq	0xd0(%rsp), %r10
                	xorq	0xc8(%rsp), %r10
+               	movq	%r10, 0xd0(%rsp)
+               	movq	0x78(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xc8(%rsp)
+               	movq	0x70(%rsp), %r10
+               	movl	%r10d, %r10d
                	movq	%r10, 0xc0(%rsp)
-               	movq	0x268(%rsp), %r10
+               	movq	%rcx, %r10
+               	andq	0xc0(%rsp), %r10
+               	movq	%r10, 0xc0(%rsp)
+               	movq	0xc8(%rsp), %r10
+               	xorq	0xc0(%rsp), %r10
+               	movq	%r10, 0xc8(%rsp)
+               	movq	0x68(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xc0(%rsp)
+               	movq	0x60(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xb8(%rsp)
+               	movq	%rcx, %r10
+               	andq	0xb8(%rsp), %r10
+               	movq	%r10, 0xb8(%rsp)
+               	movq	0xc0(%rsp), %r10
+               	xorq	0xb8(%rsp), %r10
+               	movq	%r10, 0xc0(%rsp)
+               	movq	0x58(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xb8(%rsp)
+               	movq	0x50(%rsp), %r10
                	movl	%r10d, %r10d
                	movq	%r10, 0xb0(%rsp)
-               	movq	0x240(%rsp), %r10
+               	movq	%rcx, %r10
+               	andq	0xb0(%rsp), %r10
+               	movq	%r10, 0xb0(%rsp)
+               	movq	0xb8(%rsp), %r10
+               	xorq	0xb0(%rsp), %r10
+               	movq	%r10, 0xb8(%rsp)
+               	movq	0x48(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xb0(%rsp)
+               	movq	0x40(%rsp), %r10
                	movl	%r10d, %r10d
                	movq	%r10, 0xa8(%rsp)
                	andq	0xa8(%rsp), %rcx
@@ -446,79 +437,79 @@ Disassembly of section .text:
                	xorq	%r10, %rcx
                	movl	%r8d, %r8d
                	movl	%r9d, %r9d
-               	movl	%ebx, %ebx
-               	andq	%rdx, %rbx
-               	xorq	%rbx, %r9
-               	movl	%r12d, %ebx
-               	movl	%r14d, %r12d
+               	movl	%r12d, %r12d
                	andq	%rdx, %r12
-               	xorq	%r12, %rbx
-               	movl	%r15d, %r12d
-               	movq	0x1e8(%rsp), %r14
+               	xorq	%r12, %r9
+               	movl	%r13d, %r12d
+               	movl	%r14d, %r13d
+               	andq	%rdx, %r13
+               	xorq	%r13, %r12
+               	movl	%r15d, %r13d
+               	movq	0xf8(%rsp), %r14
                	movl	%r14d, %r14d
                	andq	%rdx, %r14
-               	xorq	%r14, %r12
-               	movq	0x1c0(%rsp), %r14
+               	xorq	%r14, %r13
+               	movq	0xf0(%rsp), %r14
                	movl	%r14d, %r14d
-               	movq	0x1b0(%rsp), %r15
+               	movq	0xe8(%rsp), %r15
                	movl	%r15d, %r15d
                	andq	%rdx, %r15
                	xorq	%r15, %r14
-               	movq	0x188(%rsp), %r15
+               	movq	0xe0(%rsp), %r15
                	movl	%r15d, %r15d
-               	movq	0x160(%rsp), %r10
+               	movq	0xd8(%rsp), %r10
                	movl	%r10d, %r10d
-               	movq	%r10, 0x90(%rsp)
+               	movq	%r10, 0xf8(%rsp)
                	movq	%rdx, %r10
-               	andq	0x90(%rsp), %r10
-               	movq	%r10, 0x88(%rsp)
-               	xorq	0x88(%rsp), %r15
-               	movq	0x138(%rsp), %r10
+               	andq	0xf8(%rsp), %r10
+               	movq	%r10, 0xf8(%rsp)
+               	xorq	0xf8(%rsp), %r15
+               	movq	0xd0(%rsp), %r10
                	movl	%r10d, %r10d
-               	movq	%r10, 0x78(%rsp)
-               	movq	0x110(%rsp), %r10
+               	movq	%r10, 0xf8(%rsp)
+               	movq	0xc8(%rsp), %r10
                	movl	%r10d, %r10d
-               	movq	%r10, 0x70(%rsp)
+               	movq	%r10, 0xf0(%rsp)
                	movq	%rdx, %r10
-               	andq	0x70(%rsp), %r10
-               	movq	%r10, 0x68(%rsp)
-               	movq	0x78(%rsp), %r10
-               	xorq	0x68(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
-               	movq	0xe8(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x50(%rsp)
+               	andq	0xf0(%rsp), %r10
+               	movq	%r10, 0xf0(%rsp)
+               	movq	0xf8(%rsp), %r10
+               	xorq	0xf0(%rsp), %r10
+               	movq	%r10, 0xf8(%rsp)
                	movq	0xc0(%rsp), %r10
                	movl	%r10d, %r10d
-               	movq	%r10, 0x48(%rsp)
+               	movq	%r10, 0xf0(%rsp)
+               	movq	0xb8(%rsp), %r10
+               	movl	%r10d, %r10d
+               	movq	%r10, 0xe8(%rsp)
                	movq	%rdx, %r10
-               	andq	0x48(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	movq	0x50(%rsp), %r10
-               	xorq	0x40(%rsp), %r10
-               	movq	%r10, 0x38(%rsp)
+               	andq	0xe8(%rsp), %r10
+               	movq	%r10, 0xe8(%rsp)
+               	movq	0xf0(%rsp), %r10
+               	xorq	0xe8(%rsp), %r10
+               	movq	%r10, 0xf0(%rsp)
                	movl	%ecx, %ecx
                	movl	%r8d, %r8d
                	andq	%r8, %rdx
                	xorq	%rdx, %rcx
                	movl	%r9d, %edx
-               	movl	%ebx, %r8d
+               	movl	%r12d, %r8d
                	andq	%rdi, %r8
                	xorq	%r8, %rdx
-               	movl	%r12d, %r8d
+               	movl	%r13d, %r8d
                	movl	%r14d, %r9d
                	andq	%rdi, %r9
                	xorq	%r9, %r8
                	movl	%r15d, %r9d
-               	movq	0x60(%rsp), %rbx
-               	movl	%ebx, %ebx
-               	andq	%rdi, %rbx
-               	xorq	%rbx, %r9
-               	movq	0x38(%rsp), %rbx
-               	movl	%ebx, %ebx
+               	movq	0xf8(%rsp), %r12
+               	movl	%r12d, %r12d
+               	andq	%rdi, %r12
+               	xorq	%r12, %r9
+               	movq	0xf0(%rsp), %r12
+               	movl	%r12d, %r12d
                	movl	%ecx, %ecx
                	andq	%rdi, %rcx
-               	xorq	%rbx, %rcx
+               	xorq	%r12, %rcx
                	movl	%edx, %edx
                	movl	%r8d, %edi
                	andq	%rax, %rdi
@@ -545,6 +536,7 @@ Disassembly of section .text:
                	movl	%edx, %edx
                	andq	$0x12020120, %rcx       # imm = 0x12020120
                	movl	$0x5, %esi
+               	movslq	%esi, %rsi
                	movl	%ecx, %ecx
                	movq	%rcx, %rdi
                	pushq	%rcx
@@ -557,10 +549,10 @@ Disassembly of section .text:
                	movq	%r8, %rsi
                	subq	%r10, %rsi
                	movslq	%esi, %rsi
-               	movq	%rcx, %r13
+               	movq	%rcx, %r11
                	movq	%rsi, %rcx
-               	shrq	%cl, %r13
-               	movq	%r13, %rcx
+               	shrq	%cl, %r11
+               	movq	%r11, %rcx
                	orq	%rdi, %rcx
                	orq	%rdx, %rcx
                	movl	%ecx, %ecx
@@ -589,21 +581,24 @@ Disassembly of section .text:
                	orq	%rsi, %rcx
                	movl	%ecx, %ecx
                	andq	$0x20000200, %rdx       # imm = 0x20000200
+               	movslq	%ebx, %rsi
                	movl	%edx, %edx
-               	movq	%rdx, %rsi
+               	movq	%rdx, %rdi
                	pushq	%rcx
-               	movq	%r11, %rcx
-               	shlq	%cl, %rsi
+               	movq	%rsi, %rcx
+               	shlq	%cl, %rdi
                	popq	%rcx
-               	movl	%esi, %esi
-               	movl	$0x20, %edi
-               	subq	%r11, %rdi
-               	movslq	%edi, %rdi
+               	movl	%edi, %edi
+               	movl	$0x20, %r8d
+               	movq	%rsi, %r10
+               	movq	%r8, %rsi
+               	subq	%r10, %rsi
+               	movslq	%esi, %rsi
                	pushq	%rcx
-               	movq	%rdi, %rcx
+               	movq	%rsi, %rcx
                	shrq	%cl, %rdx
                	popq	%rcx
-               	orq	%rsi, %rdx
+               	orq	%rdi, %rdx
                	orq	%rdx, %rcx
                	movl	%ecx, %ecx
                	movl	%eax, %edx
@@ -632,6 +627,7 @@ Disassembly of section .text:
                	movl	%ecx, %ecx
                	andq	$0x40801800, %rdx       # imm = 0x40801800
                	movl	$0x11, %esi
+               	movslq	%esi, %rsi
                	movl	%edx, %edx
                	movq	%rdx, %rdi
                	pushq	%rcx
@@ -668,9 +664,10 @@ Disassembly of section .text:
                	shrq	$0xa, %rsi
                	orq	%rsi, %rcx
                	movl	%ecx, %ecx
-               	movl	$0x88000008, %r13d      # imm = 0x88000008
-               	andq	%r13, %rdx
+               	movl	$0x88000008, %r11d      # imm = 0x88000008
+               	andq	%r11, %rdx
                	movl	$0x18, %esi
+               	movslq	%esi, %rsi
                	movl	%edx, %edx
                	movq	%rdx, %rdi
                	pushq	%rcx
@@ -700,14 +697,12 @@ Disassembly of section .text:
                	shrq	$0x6, %rax
                	orq	%rcx, %rax
                	movl	%eax, %eax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r15
-               	movq	0x20(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x600, %rsp            # imm = 0x600
+               	movq	0x10(%rsp), %r13
+               	movq	0x18(%rsp), %r14
+               	movq	0x20(%rsp), %r15
+               	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
 
@@ -717,31 +712,29 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%r14, 0x10(%rsp)
-               	movq	%r13, 0x18(%rsp)
+               	movq	%r13, 0x10(%rsp)
                	xorq	%rbx, %rbx
                	movl	$0xa5a5a5a5, %r12d      # imm = 0xA5A5A5A5
-               	movq	%rbx, %r14
+               	movq	%rbx, %r13
                	movslq	%ebx, %rax
                	cmpq	$0x10, %rax
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ebx, %rax
-               	movq	%rax, %rbx
-               	incq	%rbx
+               	leaq	0x1(%rax), %rbx
                	jmp	<addr>
-               	movl	%r14d, %r14d
+               	movl	%r13d, %r13d
                	movl	%r12d, %edi
                	leaq	<rip>, %rsi
                	callq	<addr>
-               	xorq	%rax, %r14
+               	xorq	%rax, %r13
                	movl	%r12d, %eax
                	imulq	$0x19660d, %rax, %rax   # imm = 0x19660D
                	movl	%eax, %eax
                	addq	$0x3c6ef35f, %rax       # imm = 0x3C6EF35F
                	movl	%eax, %r12d
                	jmp	<addr>
-               	movl	%r14d, %eax
+               	movl	%r13d, %eax
                	movq	%rax, %rcx
                	shrq	$0x8, %rcx
                	xorq	%rax, %rcx
@@ -752,13 +745,11 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	andq	$0xff, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r13
-               	movq	%rcx, %rax
+               	movq	0x10(%rsp), %r13
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

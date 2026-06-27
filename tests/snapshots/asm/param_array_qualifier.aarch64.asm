@@ -13,7 +13,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0
@@ -23,7 +22,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0
@@ -33,7 +31,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0
@@ -43,7 +40,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0
@@ -72,7 +68,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0
@@ -86,7 +81,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0
@@ -100,7 +94,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0
@@ -125,7 +118,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0

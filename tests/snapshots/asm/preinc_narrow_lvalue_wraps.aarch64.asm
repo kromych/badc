@@ -204,20 +204,15 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	mov	x20, #0x0               // =0
                	bl	<addr>
-               	orr	x0, x20, x0
-               	sxtw	x20, w0
+               	orr	x20, x20, x0
                	bl	<addr>
-               	orr	x0, x20, x0
-               	sxtw	x20, w0
+               	orr	x20, x20, x0
                	bl	<addr>
-               	orr	x0, x20, x0
-               	sxtw	x20, w0
+               	orr	x20, x20, x0
                	bl	<addr>
-               	orr	x0, x20, x0
-               	sxtw	x20, w0
+               	orr	x20, x20, x0
                	bl	<addr>
-               	orr	x0, x20, x0
-               	sxtw	x20, w0
+               	orr	x20, x20, x0
                	bl	<addr>
                	orr	x20, x20, x0
                	sxtw	x1, w20

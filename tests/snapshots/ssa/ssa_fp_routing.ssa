@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=fadd
 fn ent_pc=1 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -15,7 +15,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=fsub
 fn ent_pc=2 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -29,7 +29,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=fmul
 fn ent_pc=3 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -43,7 +43,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=fdiv
 fn ent_pc=4 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -57,7 +57,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=fneg
 fn ent_pc=5 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -68,7 +68,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=feq
 fn ent_pc=6 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -82,7 +82,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=fne
 fn ent_pc=7 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -96,7 +96,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=flt
 fn ent_pc=8 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -110,7 +110,7 @@ fn ent_pc=8 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=fgt
 fn ent_pc=9 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -124,7 +124,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=fle
 fn ent_pc=10 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -138,7 +138,7 @@ fn ent_pc=10 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=fge
 fn ent_pc=11 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -152,7 +152,7 @@ fn ent_pc=11 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=12 ---
 ; name=itof
 fn ent_pc=12 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -163,7 +163,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=ftoi
 fn ent_pc=13 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -174,7 +174,7 @@ fn ent_pc=13 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=round_through_f32
 fn ent_pc=14 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -188,7 +188,7 @@ fn ent_pc=14 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=main
 fn ent_pc=15 n_params=0 variadic=false locals=2
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4609434218613702656)                         -> x0
@@ -404,73 +404,75 @@ fn ent_pc=15 n_params=0 variadic=false locals=2
     terminator Return(v132)   (exit_acc=v132)
   block 40  start_pc=0
     v133 Imm(42)                                          -> x0
-    v134 Imm(0)                                           -> x1
-    v135 FpCast { kind=IntToFp, value=v133 }              -> d0
-    v136 Imm(4631107791820423168)                         -> x0
-    v137 Binop { op=fne, lhs=v135, rhs=v136 }             -> x0
-    terminator Bz { cond=v137, target=b42, fall=b41 }   (exit_acc=v137)
+    v134 Extend { value=v133, kind=I32 }                  -> x0
+    v135 Imm(0)                                           -> x1
+    v136 FpCast { kind=IntToFp, value=v134 }              -> d0
+    v137 Imm(4631107791820423168)                         -> x0
+    v138 Binop { op=fne, lhs=v136, rhs=v137 }             -> x0
+    terminator Bz { cond=v138, target=b42, fall=b41 }   (exit_acc=v138)
   block 41  start_pc=0
-    v138 Imm(21)                                          -> x0
-    terminator Return(v138)   (exit_acc=v138)
+    v139 Imm(21)                                          -> x0
+    terminator Return(v139)   (exit_acc=v139)
   block 42  start_pc=0
-    v139 Imm(-3)                                          -> x0
-    v140 Imm(0)                                           -> x1
-    v141 FpCast { kind=IntToFp, value=v139 }              -> d0
-    v142 Imm(4613937818241073152)                         -> x0
-    v143 Fneg(v142)                                       -> d1
-    v144 Binop { op=fne, lhs=v141, rhs=v143 }             -> x0
-    terminator Bz { cond=v144, target=b44, fall=b43 }   (exit_acc=v144)
+    v140 Imm(-3)                                          -> x0
+    v141 Extend { value=v140, kind=I32 }                  -> x0
+    v142 Imm(0)                                           -> x1
+    v143 FpCast { kind=IntToFp, value=v141 }              -> d0
+    v144 Imm(4613937818241073152)                         -> x0
+    v145 Fneg(v144)                                       -> d1
+    v146 Binop { op=fne, lhs=v143, rhs=v145 }             -> x0
+    terminator Bz { cond=v146, target=b44, fall=b43 }   (exit_acc=v146)
   block 43  start_pc=0
-    v145 Imm(22)                                          -> x0
-    terminator Return(v145)   (exit_acc=v145)
+    v147 Imm(22)                                          -> x0
+    terminator Return(v147)   (exit_acc=v147)
   block 44  start_pc=0
-    v146 Imm(4615626668101337088)                         -> x0
-    v147 Imm(0)                                           -> x1
-    v148 FpCast { kind=FpToInt, value=v146 }              -> x0
-    v149 BinopI { op=ne, lhs=v148, rhs_imm=3 }            -> x0
-    terminator Bz { cond=v149, target=b46, fall=b45 }   (exit_acc=v149)
+    v148 Imm(4615626668101337088)                         -> x0
+    v149 Imm(0)                                           -> x1
+    v150 FpCast { kind=FpToInt, value=v148 }              -> x0
+    v151 BinopI { op=ne, lhs=v150, rhs_imm=3 }            -> x0
+    terminator Bz { cond=v151, target=b46, fall=b45 }   (exit_acc=v151)
   block 45  start_pc=0
-    v150 Imm(23)                                          -> x0
-    terminator Return(v150)   (exit_acc=v150)
+    v152 Imm(23)                                          -> x0
+    terminator Return(v152)   (exit_acc=v152)
   block 46  start_pc=0
-    v151 Imm(4615626668101337088)                         -> x0
-    v152 Fneg(v151)                                       -> d0
-    v153 Imm(0)                                           -> x0
-    v154 FpCast { kind=FpToInt, value=v152 }              -> x0
-    v155 BinopI { op=ne, lhs=v154, rhs_imm=-3 }           -> x0
-    terminator Bz { cond=v155, target=b48, fall=b47 }   (exit_acc=v155)
+    v153 Imm(4615626668101337088)                         -> x0
+    v154 Fneg(v153)                                       -> d0
+    v155 Imm(0)                                           -> x0
+    v156 FpCast { kind=FpToInt, value=v154 }              -> x0
+    v157 BinopI { op=ne, lhs=v156, rhs_imm=-3 }           -> x0
+    terminator Bz { cond=v157, target=b48, fall=b47 }   (exit_acc=v157)
   block 47  start_pc=0
-    v156 Imm(24)                                          -> x0
-    terminator Return(v156)   (exit_acc=v156)
+    v158 Imm(24)                                          -> x0
+    terminator Return(v158)   (exit_acc=v158)
   block 48  start_pc=0
-    v157 Imm(4591870180066957722)                         -> x0
-    v158 Imm(0)                                           -> x1
-    v159 FpCast { kind=F64ToF32, value=v157 }             -> d0 [f32]
+    v159 Imm(4591870180066957722)                         -> x0
     v160 Imm(0)                                           -> x1
-    v161 FpCast { kind=F32ToF64, value=v159 }             -> d0
-    v162 Binop { op=feq, lhs=v161, rhs=v157 }             -> x0
-    terminator Bz { cond=v162, target=b50, fall=b49 }   (exit_acc=v162)
+    v161 FpCast { kind=F64ToF32, value=v159 }             -> d0 [f32]
+    v162 Imm(0)                                           -> x1
+    v163 FpCast { kind=F32ToF64, value=v161 }             -> d0
+    v164 Binop { op=feq, lhs=v163, rhs=v159 }             -> x0
+    terminator Bz { cond=v164, target=b50, fall=b49 }   (exit_acc=v164)
   block 49  start_pc=0
-    v163 Imm(25)                                          -> x0
-    terminator Return(v163)   (exit_acc=v163)
+    v165 Imm(25)                                          -> x0
+    terminator Return(v165)   (exit_acc=v165)
   block 50  start_pc=0
-    v164 Imm(4611686018427387904)                         -> x0
-    v165 Imm(0)                                           -> x1
-    v166 FpCast { kind=F64ToF32, value=v164 }             -> d0 [f32]
+    v166 Imm(4611686018427387904)                         -> x0
     v167 Imm(0)                                           -> x1
-    v168 FpCast { kind=F32ToF64, value=v166 }             -> d0
-    v169 Binop { op=fne, lhs=v168, rhs=v164 }             -> x0
-    terminator Bz { cond=v169, target=b52, fall=b51 }   (exit_acc=v169)
+    v168 FpCast { kind=F64ToF32, value=v166 }             -> d0 [f32]
+    v169 Imm(0)                                           -> x1
+    v170 FpCast { kind=F32ToF64, value=v168 }             -> d0
+    v171 Binop { op=fne, lhs=v170, rhs=v166 }             -> x0
+    terminator Bz { cond=v171, target=b52, fall=b51 }   (exit_acc=v171)
   block 51  start_pc=0
-    v170 Imm(26)                                          -> x0
-    terminator Return(v170)   (exit_acc=v170)
+    v172 Imm(26)                                          -> x0
+    terminator Return(v172)   (exit_acc=v172)
   block 52  start_pc=0
-    v171 Imm(0)                                           -> x0
-    terminator Return(v171)   (exit_acc=v171)
+    v173 Imm(0)                                           -> x0
+    terminator Return(v173)   (exit_acc=v173)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[13] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -482,7 +484,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=__c5_entry
 fn ent_pc=1 n_params=2 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -496,21 +498,21 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v9   LoadLocal { off=-1, kind=I64 }                   -> x0
     v10  Imm(0)                                           -> x3
     v11  Load { addr=v1, disp=0, kind=I64 }               -> x0
-    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x0
-    v13  BinopI { op=shr, lhs=v12, rhs_imm=32 }           -> x0
+    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
+    v13  Extend { value=v11, kind=I32 }                   -> x0
     v14  Imm(0)                                           -> x1
     v15  Imm(8)                                           -> x1
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
     v17  Imm(0)                                           -> x1
     v18  ImmData(24)                                      -> x1
     v19  LoadLocal { off=-3, kind=I64 }                   -> x2
-    v20  Extend { value=v13, kind=I32 }                   -> x2
-    v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x2
+    v20  LoadLocal { off=-2, kind=I32 }                   -> x2
+    v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x2
     v22  Binop { op=add, lhs=v16, rhs=v21 }               -> x2
     v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x2
     v24  Store { addr=v18, disp=0, value=v23, kind=I64 }  -> -
-    v25  Extend { value=v13, kind=I32 }                   -> x7
-    v26  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v27  Call { target_pc=3, args=[v25, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
+    v25  LoadLocal { off=-2, kind=I32 }                   -> x1
+    v26  LoadLocal { off=-3, kind=I64 }                   -> x1
+    v27  Call { target_pc=3, args=[v13, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
     v28  Call { target_pc=0, args=[v27], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Return(v10)   (exit_acc=v10)

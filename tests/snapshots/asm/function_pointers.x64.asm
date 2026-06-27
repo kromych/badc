@@ -11,69 +11,38 @@ Disassembly of section .text:
                	ud2
 
 <add>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
-               	movq	%rdi, %rax
-               	addq	%rsi, %rax
+               	leaq	(%rdi,%rsi), %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <sub>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%r13, (%rsp)
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	subq	%rsi, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
                	leaq	-<rip>, %rax       # <addr>
                	movl	$0xa, %ebx
                	movl	$0x14, %esi
-               	movq	%rax, %r11
                	movq	%rbx, %rdi
-               	callq	*%r11
-               	movslq	%eax, %r12
+               	callq	*%rax
+               	movq	%rax, %r12
                	leaq	-<rip>, %rax       # <addr>
                	movl	$0x5, %esi
-               	movq	%rax, %r11
                	movq	%rbx, %rdi
-               	callq	*%r11
+               	callq	*%rax
+               	imulq	%r12, %rax
                	movslq	%eax, %rax
-               	movslq	%r12d, %rcx
-               	movslq	%eax, %rax
-               	imulq	%rcx, %rax
-               	movslq	%eax, %rax
-               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

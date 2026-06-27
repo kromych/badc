@@ -988,13 +988,15 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
 
 /// A foreign (system-cc) caller that keeps a live value in r13 across a
 /// call into a badc-compiled callee must find it intact on return. r13
-/// is callee-saved under System V AMD64; badc borrows it as its reserved
-/// secondary scratch (`SCRATCH_R13`), so a callee that clobbers it must
-/// save and restore the caller's value. The badc callee here computes
-/// `x + <large immediate>`, which materialises the immediate through r13
-/// (`emit_binop_imm`), so without the prologue/epilogue save it would
-/// overwrite the caller's r13. The cc caller pins a sentinel in r13
-/// across the call via inline asm and checks it survives. Links a badc
+/// is callee-saved under System V AMD64. badc reserves r10 / r11 (both
+/// caller-saved) as its fixed scratch, so r13 is an ordinary
+/// callee-saved allocation target: the prologue / epilogue save and
+/// restore it exactly when the allocator colors a value into it, via the
+/// same callee-save loop that covers rbx / r12 / r14 / r15. The badc
+/// callee here computes `x + <large immediate>`; whether r13 ends up
+/// untouched or holding an allocated value, a miss in the save loop would
+/// corrupt the caller's r13. The cc caller pins a sentinel in r13 across
+/// the call via inline asm and checks it survives. Links a badc
 /// relocatable object with a cc-compiled `main` through the system
 /// driver, so it exercises the real ABI boundary the c5-to-c5 lanes
 /// cannot.

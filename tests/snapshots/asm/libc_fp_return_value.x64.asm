@@ -15,7 +15,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r13, 0x8(%rsp)
                	movl	$0x1, %ebx
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movq	%rax, %xmm0
@@ -205,7 +204,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rcx, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r13
                	movq	%rcx, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
@@ -221,3 +219,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

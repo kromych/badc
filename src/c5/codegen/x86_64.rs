@@ -661,6 +661,19 @@ pub(super) fn emit_xchg_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg: Reg
     emit_modrm_mem(code, reg, base, disp);
 }
 
+/// `XCHG r64, r64` -- exchange two registers (Intel SDM Vol.2,
+/// `REX.W + 87 /r`). A register operand carries no implicit LOCK (that
+/// applies only to a memory operand), so this is a plain register swap.
+/// Used to break a register-register parallel-move cycle with no scratch.
+pub(super) fn emit_xchg_rr(code: &mut Vec<u8>, a: Reg, b: Reg) {
+    if a == b {
+        return;
+    }
+    emit_byte(code, rex(true, b.high(), false, a.high()));
+    emit_byte(code, 0x87);
+    emit_byte(code, modrm(0b11, b.lo(), a.lo()));
+}
+
 /// `LOCK CMPXCHG [base + disp], reg` -- compare RAX with the memory
 /// operand; on equality store `reg` and set ZF, else load the memory
 /// operand into RAX and clear ZF (Intel SDM Vol.2 CMPXCHG with the
@@ -1956,7 +1969,14 @@ pub(super) fn lower(
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.
         super::ssa_emit_common::time_pass("ssa_inline::run (x86_64)", || {
-            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap);
+            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
+        });
+        // Forward an inlined one-word struct return out of its frame slot:
+        // a single full-width store + slot reads collapse to the stored
+        // register value. Runs after the inliner produces the slot and
+        // before store-forwarding cleans up any second-hop reload.
+        super::ssa_emit_common::time_pass("ssa_struct_return_reg::run (x86_64)", || {
+            super::ssa_struct_return_reg::run(&mut ssa_funcs);
         });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner

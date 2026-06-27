@@ -13,22 +13,21 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x2040, %rsp           # imm = 0x2040
-               	movq	%r13, (%rsp)
+               	subq	$0x2030, %rsp           # imm = 0x2030
                	leaq	-0x28(%rbp), %r10
                	movq	%r10, (%r10)
                	movl	$0x1f40, %edx           # imm = 0x1F40
                	movq	%rdx, %r10
                	addq	$0xf, %r10
                	andq	$-0x10, %r10
-               	leaq	-0x28(%rbp), %r13
-               	movq	(%r13), %rax
+               	leaq	-0x28(%rbp), %r11
+               	movq	(%r11), %rax
                	subq	%r10, %rax
-               	leaq	-0x2000(%r13), %r10
+               	leaq	-0x2000(%r11), %r10
                	cmpq	%r10, %rax
                	jae	<addr>
                	ud2
-               	movq	%rax, (%r13)
+               	movq	%rax, (%r11)
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rdi
                	movl	$0x3, %esi
@@ -62,10 +61,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movq	%rax, -0x2030(%rbp)
                	movq	-0x2030(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r13
-               	movq	%rcx, %rax
-               	addq	$0x2040, %rsp           # imm = 0x2040
+               	addq	$0x2030, %rsp           # imm = 0x2030
                	popq	%rbp
                	retq
                	addb	%al, 0x41(%rdx)

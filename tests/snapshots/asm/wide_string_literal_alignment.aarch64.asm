@@ -18,9 +18,8 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
-               	mov	x0, #0x4                // =4
-               	udiv	x17, x21, x0
-               	msub	x0, x17, x0, x21
+               	mov	x17, #0x3               // =3
+               	and	x0, x21, x17
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

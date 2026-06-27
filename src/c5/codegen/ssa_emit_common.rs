@@ -5,6 +5,24 @@
 //! (`ssa_emit_x86_64.rs`, `ssa_emit_aarch64.rs`) don't carry
 //! parallel copies.
 
+/// Mutable emit output the two backends thread identically through their
+/// per-instruction lowering: the machine-code buffer and the relocation/fixup
+/// vectors whose element types are target-neutral. Bundling them collapses the
+/// long `&mut` argument lists the emit helpers used to carry one at a time.
+/// Target-specific output that one backend has and the other does not -- the
+/// branch-`Fixup` vector (the `BranchKind` differs), x86 `got_fixups` /
+/// `fn_unwind`, aarch64 `macho_tlv_*` -- stays a separate argument, so this
+/// type is non-generic. Holds `&mut` field references so a per-function caller
+/// constructs it from its own output vectors; grows as more helpers adopt it.
+pub(super) struct EmitCtx<'a> {
+    pub(super) code: &'a mut alloc::vec::Vec<u8>,
+    pub(super) plt_call_fixups: &'a mut alloc::vec::Vec<super::PltCallFixup>,
+    pub(super) data_fixups: &'a mut alloc::vec::Vec<super::DataFixup>,
+    pub(super) pending_func_fixups: &'a mut alloc::vec::Vec<(usize, usize)>,
+    pub(super) tls_index_fixups: &'a mut alloc::vec::Vec<super::TlsIndexFixup>,
+    pub(super) elf_tpoff_fixups: &'a mut alloc::vec::Vec<super::ElfTpoffFixup>,
+}
+
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
 /// AMD64, and Win64 all require the call-site stack pointer to
 /// hold 16-byte alignment after the prologue's frame allocation;

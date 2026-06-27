@@ -895,31 +895,37 @@ pub(super) fn emit_function(
                 continue;
             }
             let data_fixups_pre_inst = data_fixups.len();
-            if !emit_inst(
-                code,
-                func,
-                inst,
-                v,
-                place,
-                alloc,
-                frame,
-                &scratch,
-                abi,
-                target,
-                fixups,
-                plt_call_fixups,
-                data_fixups,
-                pending_func_fixups,
-                imports,
-                variadic_targets,
-                tls_index_fixups,
-                macho_tlv_fixups,
-                macho_tlv_descriptors,
-                elf_tpoff_fixups,
-                extern_tls_names,
-                &mut current_alloca_top,
-                &emit_param_plan,
-            ) {
+            let inst_ok = {
+                let mut cx = super::ssa_emit_common::EmitCtx {
+                    code: &mut *code,
+                    plt_call_fixups: &mut *plt_call_fixups,
+                    data_fixups: &mut *data_fixups,
+                    pending_func_fixups: &mut *pending_func_fixups,
+                    tls_index_fixups: &mut *tls_index_fixups,
+                    elf_tpoff_fixups: &mut *elf_tpoff_fixups,
+                };
+                emit_inst(
+                    &mut cx,
+                    func,
+                    inst,
+                    v,
+                    place,
+                    alloc,
+                    frame,
+                    &scratch,
+                    abi,
+                    target,
+                    fixups,
+                    imports,
+                    variadic_targets,
+                    macho_tlv_fixups,
+                    macho_tlv_descriptors,
+                    extern_tls_names,
+                    &mut current_alloca_top,
+                    &emit_param_plan,
+                )
+            };
+            if !inst_ok {
                 #[cfg(feature = "codegen_test")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
                     eprintln!(
@@ -1826,7 +1832,7 @@ fn fused_branch_cond(
 /// slice doesn't handle yet so the caller can fall back.
 #[allow(clippy::too_many_arguments)]
 fn emit_inst(
-    code: &mut Vec<u8>,
+    cx: &mut super::ssa_emit_common::EmitCtx,
     func: &FunctionSsa,
     inst: &Inst,
     v: super::super::ir::ValueId,
@@ -1837,19 +1843,22 @@ fn emit_inst(
     abi: super::Abi,
     target: Target,
     fixups: &mut Vec<Fixup>,
-    plt_call_fixups: &mut Vec<PltCallFixup>,
-    data_fixups: &mut Vec<DataFixup>,
-    pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
-    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
-    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     current_alloca_top: &mut u32,
     param_plan: &[super::ArgPlacement],
 ) -> bool {
+    // The bundled emit output now arrives in `cx`; recreate the per-field
+    // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
+    let code = &mut *cx.code;
+    let plt_call_fixups = &mut *cx.plt_call_fixups;
+    let data_fixups = &mut *cx.data_fixups;
+    let pending_func_fixups = &mut *cx.pending_func_fixups;
+    let tls_index_fixups = &mut *cx.tls_index_fixups;
+    let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca; emit

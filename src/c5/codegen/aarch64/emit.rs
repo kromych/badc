@@ -61,8 +61,8 @@ use super::encode::{
     enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv,
     load_imm64,
 };
-use super::ssa::alloc::{Allocation, Place};
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
+use super::ssa::reg_alloc::{Allocation, Place};
 
 /// Compute the aarch64 stack-frame layout for `func`. Fills the shared
 /// [`Frame`]'s aarch64 fields; the x86_64-only fields stay at their defaults.
@@ -106,7 +106,8 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
     // `function_clobbers_scratch`, which knows each target's
     // reserved scratch set.
     let uses_x19 =
-        !super::ssa::alloc::function_clobbers_scratch(func, target, alloc.spill_count).is_empty();
+        !super::ssa::reg_alloc::function_clobbers_scratch(func, target, alloc.spill_count)
+            .is_empty();
     let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
     let frame_bytes =
         locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
@@ -6332,7 +6333,7 @@ fn emit_return(
         // register file even when the allocator spilled it.
         let returns_fp = func.ret_is_fp
             || ((value as usize) < func.insts.len()
-                && super::ssa::alloc::produces_fp_result(&func.insts[value as usize]));
+                && super::ssa::reg_alloc::produces_fp_result(&func.insts[value as usize]));
         if let Place::FpReg(r) = place {
             if r != 0 {
                 emit(code, super::encode::enc_fmov_d_d(0, r));
@@ -6427,7 +6428,7 @@ mod tests {
         let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target)
             .expect("produce_ssa_funcs");
         let main = funcs.into_iter().next().expect("at least one function");
-        let alloc = super::super::ssa::alloc::allocate(&main, target);
+        let alloc = super::super::ssa::reg_alloc::allocate(&main, target);
         (main, alloc)
     }
 
@@ -6549,7 +6550,7 @@ mod tests {
                 _ => None,
             })
             .expect("StoreIndexed operands");
-        let mut alloc = super::super::ssa::alloc::allocate(&func, target);
+        let mut alloc = super::super::ssa::reg_alloc::allocate(&func, target);
         alloc.places[base as usize] = Place::Spill(0);
         alloc.places[index as usize] = Place::Spill(1);
         alloc.places[value as usize] = Place::Spill(2);

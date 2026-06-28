@@ -55,7 +55,7 @@ pub(crate) fn slots16(n_slots: u32) -> u32 {
 /// (C99 6.2.4p2). Param cells use non-negative `off` and are sized separately.
 pub(crate) fn compute_frame_base(
     func: &super::super::ir::FunctionSsa,
-    alloc: &super::alloc::Allocation,
+    alloc: &super::reg_alloc::Allocation,
 ) -> (u32, u32, u32) {
     use super::super::ir::Inst;
     let declared_locals_bytes = slots16(func.locals.max(0) as u32);
@@ -82,7 +82,7 @@ pub(crate) fn compute_frame_base(
 #[allow(clippy::type_complexity)]
 pub(crate) fn scan_param_slot_usage(
     func: &super::super::ir::FunctionSsa,
-    alloc: &super::alloc::Allocation,
+    alloc: &super::reg_alloc::Allocation,
 ) -> (
     alloc::collections::BTreeSet<u32>,
     alloc::collections::BTreeSet<i64>,
@@ -136,8 +136,8 @@ pub(crate) fn function_makes_no_calls(func: &super::super::ir::FunctionSsa) -> b
 
 /// Whether two resolved locations name the same physical place. A move
 /// between identical locations is elided by the move schedulers.
-pub(crate) fn place_same_loc(a: super::alloc::Place, b: super::alloc::Place) -> bool {
-    use super::alloc::Place;
+pub(crate) fn place_same_loc(a: super::reg_alloc::Place, b: super::reg_alloc::Place) -> bool {
+    use super::reg_alloc::Place;
     match (a, b) {
         (Place::IntReg(x), Place::IntReg(y)) => x == y,
         (Place::Spill(x), Place::Spill(y)) => x == y,
@@ -218,7 +218,7 @@ pub(crate) trait EmitBackend {
     fn break_place_cycle(
         &self,
         code: &mut alloc::vec::Vec<u8>,
-        moves: &mut alloc::vec::Vec<(super::alloc::Place, super::alloc::Place)>,
+        moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
         frame: Self::Frame,
         hold: u8,
         stage: u8,
@@ -237,12 +237,12 @@ pub(crate) struct Aarch64Backend;
 pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    src: super::alloc::Place,
-    dst: super::alloc::Place,
+    src: super::reg_alloc::Place,
+    dst: super::reg_alloc::Place,
     frame: B::Frame,
     stage: u8,
 ) {
-    use super::alloc::Place;
+    use super::reg_alloc::Place;
     match (src, dst) {
         (Place::FpReg(s), Place::FpReg(t)) => b.fp_reg_mov(code, t, s),
         (Place::FpReg(s), Place::Spill(slot)) => b.fp_spill_store(code, frame, slot, s),
@@ -263,13 +263,13 @@ pub(crate) fn emit_fp_place_move<B: EmitBackend>(
 pub(crate) fn emit_place_move<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    src: super::alloc::Place,
-    dst: super::alloc::Place,
+    src: super::reg_alloc::Place,
+    dst: super::reg_alloc::Place,
     frame: B::Frame,
     stage: u8,
     hold: u8,
 ) {
-    use super::alloc::Place;
+    use super::reg_alloc::Place;
     match (src, dst) {
         (Place::IntReg(s), Place::IntReg(t)) => b.int_reg_mov(code, t, s),
         (Place::IntReg(s), Place::Spill(slot)) => b.int_spill_store(code, frame, slot, s, stage),
@@ -288,12 +288,12 @@ pub(crate) fn emit_place_move<B: EmitBackend>(
 pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    moves: &mut alloc::vec::Vec<(super::alloc::Place, super::alloc::Place)>,
+    moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
     frame: B::Frame,
     hold: u8,
     stage: u8,
 ) {
-    use super::alloc::Place;
+    use super::reg_alloc::Place;
     moves.retain(|(s, t)| !place_same_loc(*s, *t));
     while !moves.is_empty() {
         let mut progress = false;
@@ -335,12 +335,12 @@ pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
 pub(crate) fn schedule_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    moves: &mut alloc::vec::Vec<(super::alloc::Place, super::alloc::Place)>,
+    moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
     frame: B::Frame,
     hold: u8,
     stage: u8,
 ) -> bool {
-    use super::alloc::Place;
+    use super::reg_alloc::Place;
     moves.retain(|(s, t)| !place_same_loc(*s, *t));
     if moves.iter().any(|(s, t)| {
         matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
@@ -373,11 +373,11 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
 pub(crate) fn write_atomic_result<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    dst: super::alloc::Place,
+    dst: super::reg_alloc::Place,
     src: u8,
     frame: B::Frame,
 ) {
-    use super::alloc::Place;
+    use super::reg_alloc::Place;
     match dst {
         Place::IntReg(r) => b.int_reg_mov(code, r, src),
         Place::Spill(slot) => b.int_spill_store_auto(code, frame, slot, src),
@@ -396,7 +396,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     code: &mut alloc::vec::Vec<u8>,
     self_block: super::super::ir::BlockId,
     func: &super::super::ir::FunctionSsa,
-    alloc: &super::alloc::Allocation,
+    alloc: &super::reg_alloc::Allocation,
     frame: B::Frame,
     int_hold: u8,
     int_stage: u8,
@@ -404,7 +404,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     fp_stage: u8,
 ) -> bool {
     use super::super::ir::{Inst, LoadKind, Terminator};
-    use super::alloc::Place;
+    use super::reg_alloc::Place;
     let succs: alloc::vec::Vec<super::super::ir::BlockId> =
         match func.blocks[self_block as usize].terminator {
             Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
@@ -705,7 +705,7 @@ pub(crate) fn record_post_prologue_pc(
 pub(crate) fn is_dead_pure(
     inst: &super::super::ir::Inst,
     v: super::super::ir::ValueId,
-    alloc: &super::alloc::Allocation,
+    alloc: &super::reg_alloc::Allocation,
 ) -> bool {
     use super::super::ir::Inst::*;
     let pure = matches!(

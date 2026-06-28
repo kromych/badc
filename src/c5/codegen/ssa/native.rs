@@ -41,7 +41,7 @@ pub(crate) fn compile_function_to_bytes(
     func: &FunctionSsa,
     target: Target,
 ) -> Result<Vec<u8>, String> {
-    let alloc = super::alloc::allocate(func, target);
+    let alloc = super::reg_alloc::allocate(func, target);
     let imports = ResolvedImports::default();
     let variadic_targets: BTreeSet<usize> = BTreeSet::new();
     let mut pc_to_native: Vec<usize> = alloc::vec![0usize; func.end_pc + 1];

@@ -76,8 +76,8 @@ impl PhiClasses {
                 // operands are FP, so this normally never fires, but it
                 // guards against an FP-classed operand merging with an
                 // integer-classed one (a class-crossing location share).
-                if super::alloc::produces_fp_result(&func.insts[idx])
-                    != super::alloc::produces_fp_result(&func.insts[src as usize])
+                if super::reg_alloc::produces_fp_result(&func.insts[idx])
+                    != super::reg_alloc::produces_fp_result(&func.insts[src as usize])
                 {
                     continue;
                 }

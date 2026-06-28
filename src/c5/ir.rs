@@ -1,7 +1,7 @@
 //! Per-function SSA IR.
 //!
 //! The shape consumed by the linear-scan allocator
-//! ([`super::codegen::ssa::alloc::allocate`]) and the per-arch SSA
+//! ([`super::codegen::ssa::reg_alloc::allocate`]) and the per-arch SSA
 //! emitters. Two producers:
 //!
 //!   * The AST walker ([`super::ast::walk::walk_function`]) -- the

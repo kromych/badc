@@ -36,7 +36,7 @@ use alloc::string::String;
 use super::super::ir::{
     BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
 };
-use super::alloc::{Allocation, Place};
+use super::reg_alloc::{Allocation, Place};
 
 /// Format an entire function. Newline-terminated; one call per
 /// function in `BADC_DUMP_SSA` mode.

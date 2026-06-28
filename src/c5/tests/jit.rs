@@ -262,7 +262,7 @@ fn phi_predecessor_parallel_copy_handles_reg_spill_conflict() {
     path.push("ssa_call_result_spill.c");
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(3, 2, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(3, 2, || {
         jit_exit(&src, &["phi-parallel-copy"])
     });
     assert_eq!(
@@ -302,7 +302,7 @@ fn spill_slot_beyond_imm12_reach() {
     src.push_str(&format!("  return s == {expected} ? 7 : 0;\n"));
     src.push_str("}\n");
     src.push_str("int main() { return (int)f(); }\n");
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit_native_optimized(&src, &["spill-imm12-reach"])
     });
     assert_eq!(
@@ -330,7 +330,7 @@ fn modulo_with_spilled_divisor_under_pressure() {
             return s; // 1 + 3 + 5 = 9
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit(src, &["mod-spill"])
     });
     assert_eq!(
@@ -360,7 +360,7 @@ fn fp_param_incoming_reg_clobber_under_pressure() {
             return sum4(1.0f, 2.0, 3.0f, 4.0) == 10.0 ? 0 : 5;
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(2, 2, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
         jit_exit(src, &["fp-param-incoming-clobber"])
     });
     assert_eq!(
@@ -398,7 +398,7 @@ fn indirect_call_spilled_target_under_pressure() {
             return run(&t, a, 5, b, 9) == 3085 ? 0 : 1;
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(3, 3, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(3, 3, || {
         jit_exit_native_optimized(src, &["indirect-spill-target"])
     });
     assert_eq!(
@@ -426,7 +426,7 @@ fn division_with_spilled_dividend_under_pressure() {
             return s; // 100+50+33+25+20+16 = 244
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit(src, &["div-spill"])
     });
     assert_eq!(
@@ -472,7 +472,7 @@ fn variadic_va_list_survives_spilled_operands_under_pressure() {
             return sum(3, 11, 22, 33); // 2 * 66 = 132
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit(src, &["va-spill"])
     });
     assert_eq!(
@@ -567,7 +567,7 @@ fn division_with_call_result_divisor_and_spilled_dst_under_pressure() {
             return (int)(acc + g[3]); // 1000/3/3/3/3/3/3 = 1
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit_native_optimized(src, &["div-call-spill"])
     });
     assert_eq!(
@@ -594,7 +594,7 @@ fn multiply_by_immediate_with_spilled_result_under_pressure() {
             return s; // 7 * (0+1+2+3+4+5) = 105
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit(src, &["mul-imm-spill"])
     });
     assert_eq!(
@@ -629,7 +629,7 @@ fn and_with_low_32_bit_mask_lowers_without_scratch() {
             return (int)(s & 0xffffffffUL); // 0x44657799
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit(src, &["and-lo32-mask"])
     });
     assert_eq!(
@@ -752,7 +752,7 @@ fn fp_diamond_phi_under_pressure() {
             return (int)t; // 15 + 15 = 30
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(8, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(8, 1, || {
         jit_exit(src, &["fp-diamond"])
     });
     assert_eq!(
@@ -782,7 +782,7 @@ fn fp_loop_carried_phi_under_pressure() {
             return (int)sum; // 1.5+2.5+3+4+9 = 20
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(8, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(8, 1, || {
         jit_exit(src, &["fp-loop-acc"])
     });
     assert_eq!(
@@ -856,14 +856,14 @@ fn fp_load_into_spill_preserves_live_operand_under_pressure() {
             return (int)r;
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit(src, &["fp-load-spill-operand"])
     });
     assert_eq!(
         result, 22,
         "an FP load into a spill slot staged through a pooled d-register and clobbered a live operand"
     );
-    let result_opt = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result_opt = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit_native_optimized(src, &["fp-load-spill-operand-opt"])
     });
     assert_eq!(
@@ -912,14 +912,14 @@ fn mcpy_src_scratch_preserves_live_pointer_under_pressure() {
             return (g_seen == &ctx) ? 42 : 7;
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(2, 8, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 8, || {
         jit_exit(src, &["mcpy-src-scratch"])
     });
     assert_eq!(
         result, 42,
         "Mcpy source scratch clobbered a live pointer the allocator parked in rcx"
     );
-    let result_opt = crate::c5::codegen::ssa::alloc::with_pool_size_override(2, 8, || {
+    let result_opt = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 8, || {
         jit_exit_native_optimized(src, &["mcpy-src-scratch-opt"])
     });
     assert_eq!(
@@ -941,7 +941,7 @@ fn fp_load_f64_into_spill_preserves_live_operand_under_pressure() {
             return (int)r;
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit(src, &["fp-load-f64-spill-operand"])
     });
     assert_eq!(
@@ -977,14 +977,14 @@ fn fp_inttofp_cast_into_spill_preserves_live_operand_under_pressure() {
             return (int)(g_phase[2] * -1000.0);
         }
     "#;
-    let result = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit(src, &["fp-inttofp-spill-operand"])
     });
     assert_eq!(
         result, 2748,
         "an IntToFp cast into a spill slot staged through a pooled d-register and clobbered a live operand"
     );
-    let result_opt = crate::c5::codegen::ssa::alloc::with_pool_size_override(1, 1, || {
+    let result_opt = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(1, 1, || {
         jit_exit_native_optimized(src, &["fp-inttofp-spill-operand-opt"])
     });
     assert_eq!(
@@ -1690,7 +1690,7 @@ fn variable_shift_to_spill_under_pressure() {
             return (int)(r & 0xffu); // 200
         }
     "#;
-    let cap = crate::c5::codegen::ssa::alloc::with_pool_size_override(3, 2, || {
+    let cap = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(3, 2, || {
         jit_exit(src, &["shift-spill-cap"])
     });
     assert_eq!(

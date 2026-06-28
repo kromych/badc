@@ -57,7 +57,7 @@ impl Liveness {
                 if matches!(func.insts[idx as usize], Inst::Phi { .. }) {
                     continue;
                 }
-                super::alloc::for_each_operand(&func.insts[idx as usize], |op| {
+                super::reg_alloc::for_each_operand(&func.insts[idx as usize], |op| {
                     if (op as usize) < n && last_use_pos[op as usize] < idx {
                         last_use_pos[op as usize] = idx;
                     }
@@ -117,7 +117,7 @@ impl Liveness {
                     }
                     continue;
                 }
-                super::alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+                super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
             }
             if blk.exit_acc != NO_VALUE {
                 mark(blk.exit_acc);
@@ -237,7 +237,7 @@ impl Liveness {
                 continue;
             }
             let mut found = false;
-            super::alloc::for_each_operand(&func.insts[idx as usize], |op| {
+            super::reg_alloc::for_each_operand(&func.insts[idx as usize], |op| {
                 if op == x {
                     found = true;
                 }
@@ -323,7 +323,7 @@ impl Liveness {
             }
             for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
                 let inst = &func.insts[idx as usize];
-                if super::alloc::produces_value(inst) {
+                if super::reg_alloc::produces_value(inst) {
                     let di = node_of[idx as usize];
                     for &x in &live {
                         let xi = node_of[x as usize];
@@ -335,7 +335,7 @@ impl Liveness {
                     live.remove(&idx);
                 }
                 if !matches!(inst, Inst::Phi { .. }) {
-                    super::alloc::for_each_operand(inst, |op| {
+                    super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op);
                         }
@@ -404,7 +404,7 @@ impl Liveness {
                     inst,
                     Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
                 ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)));
-                if super::alloc::produces_value(inst) {
+                if super::reg_alloc::produces_value(inst) {
                     live.remove(&idx);
                 }
                 // After removing the call's own result (its definition
@@ -417,7 +417,7 @@ impl Liveness {
                     }
                 }
                 if !matches!(inst, Inst::Phi { .. }) {
-                    super::alloc::for_each_operand(inst, |op| {
+                    super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op);
                         }

@@ -2,7 +2,7 @@
 //!
 //! Mirrors the structure of [`super::aarch64`]. Per-function code
 //! generation routes through [`super::ssa::shadow::produce_ssa_funcs`]
-//! + [`super::ssa::alloc::allocate`] + `super::ssa_emit_x86_64`; this
+//! + [`super::ssa::reg_alloc::allocate`] + `super::emit`; this
 //! module owns the encoder catalogue, the start-stub, the PLT
 //! trampoline emit, and the post-pass fixup walks that the SSA emit
 //! defers to.
@@ -2058,11 +2058,11 @@ pub(crate) fn lower(
             }
         }
     }
-    let ssa_allocs: alloc::vec::Vec<super::ssa::alloc::Allocation> =
-        super::ssa::emit_common::time_pass("ssa::alloc::allocate (x86_64)", || {
+    let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
+        super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (x86_64)", || {
             ssa_funcs
                 .iter()
-                .map(|f| super::ssa::alloc::allocate(f, target))
+                .map(|f| super::ssa::reg_alloc::allocate(f, target))
                 .collect()
         });
     #[cfg(feature = "std")]

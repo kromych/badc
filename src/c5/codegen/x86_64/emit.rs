@@ -60,8 +60,8 @@ use super::encode::{
     emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
     emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
 };
-use super::ssa::alloc::{Allocation, Place};
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
+use super::ssa::reg_alloc::{Allocation, Place};
 
 /// Per-function frame layout. Bytes are 16-aligned at every
 /// region boundary so SysV / Win64's sp-at-call invariant holds.
@@ -7361,7 +7361,7 @@ fn emit_return(
         || matches!(return_place, Place::FpReg(_))
         || (value != super::super::ir::NO_VALUE
             && (value as usize) < func.insts.len()
-            && super::ssa::alloc::produces_fp_result(&func.insts[value as usize]));
+            && super::ssa::reg_alloc::produces_fp_result(&func.insts[value as usize]));
     let needs_staging = matches!(return_place, Place::IntReg(r) if alloc.gpr_used.contains(&r));
     // An integer return value sitting in a callee-saved register goes
     // straight to rax BEFORE the restore loop: rax is caller-saved (never

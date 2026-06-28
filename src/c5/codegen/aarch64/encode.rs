@@ -4,7 +4,7 @@
 //! supported OS, which makes the encoder a flat catalogue of
 //! `fn enc_xxx(...) -> u32`. Per-function code generation routes
 //! through [`super::ssa::shadow::produce_ssa_funcs`] +
-//! [`super::ssa::alloc::allocate`] + `super::ssa_emit_aarch64`; this
+//! [`super::ssa::reg_alloc::allocate`] + `super::emit`; this
 //! module's `lower()` is the shell that drives the SSA pipeline and
 //! the post-pass fixups (PLT trampolines, branch fixups,
 //! data-relocation patching).
@@ -1614,11 +1614,11 @@ pub(crate) fn lower(
             }
         }
     }
-    let ssa_allocs: alloc::vec::Vec<super::ssa::alloc::Allocation> =
-        super::ssa::emit_common::time_pass("ssa::alloc::allocate (aarch64)", || {
+    let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
+        super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (aarch64)", || {
             ssa_funcs
                 .iter()
-                .map(|f| super::ssa::alloc::allocate(f, target))
+                .map(|f| super::ssa::reg_alloc::allocate(f, target))
                 .collect()
         });
     #[cfg(feature = "std")]

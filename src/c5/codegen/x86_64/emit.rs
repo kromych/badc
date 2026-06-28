@@ -1674,24 +1674,27 @@ pub(crate) fn emit_function(
                         pc_to_native: &mut *pc_to_native,
                         prologue_native: &mut *prologue_native,
                     };
-                    emit_inst(
-                        &mut cx,
-                        inst,
-                        v,
-                        place,
+                    let fcx = FnCtx {
                         func,
                         alloc,
                         frame,
                         abi,
                         target,
-                        fixups,
                         imports,
                         variadic_targets,
                         extern_tls_names,
                         tls_total_size,
+                        param_from_home: &param_from_home,
+                        param_plan: &param_plan,
+                    };
+                    emit_inst(
+                        &mut cx,
+                        inst,
+                        v,
+                        place,
+                        &fcx,
+                        fixups,
                         &mut current_alloca_top,
-                        &param_from_home,
-                        &param_plan,
                     )
                 };
                 if !inst_ok {
@@ -2619,25 +2622,48 @@ fn fused_branch_cc(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Read-only per-function context threaded through the per-instruction
+/// lowering. Bundles the loop-invariant inputs so emit_inst's signature stays
+/// short; Copy (references and small scalars).
+#[derive(Clone, Copy)]
+struct FnCtx<'a> {
+    func: &'a FunctionSsa,
+    alloc: &'a Allocation,
+    frame: Frame,
+    abi: super::Abi,
+    target: Target,
+    imports: &'a super::ResolvedImports,
+    variadic_targets: &'a alloc::collections::BTreeSet<usize>,
+    extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    tls_total_size: usize,
+    param_from_home: &'a [bool],
+    param_plan: &'a [super::ArgPlacement],
+}
+
 fn emit_inst(
     cx: &mut super::ssa_emit_common::EmitCtx,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    frame: Frame,
-    abi: super::Abi,
-    target: Target,
+    fcx: &FnCtx,
     fixups: &mut Vec<Fixup>,
-    imports: &super::ResolvedImports,
-    variadic_targets: &alloc::collections::BTreeSet<usize>,
-    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    tls_total_size: usize,
     current_alloca_top: &mut u32,
-    param_from_home: &[bool],
-    param_plan: &[super::ArgPlacement],
 ) -> bool {
+    // Unpack the read-only per-function context into the per-field names the
+    // lowering below uses, so the body is unchanged.
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        abi,
+        target,
+        imports,
+        variadic_targets,
+        extern_tls_names,
+        tls_total_size,
+        param_from_home,
+        param_plan,
+    } = *fcx;
     // The bundled emit output now arrives in `cx`; recreate the per-field
     // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
     let code = &mut *cx.code;

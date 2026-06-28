@@ -201,7 +201,7 @@ impl Compiler {
         }
     }
 
-    fn parse_const_expr_or_val(&mut self) -> Result<ConstVal, C5Error> {
+    pub(super) fn parse_const_expr_or_val(&mut self) -> Result<ConstVal, C5Error> {
         let mut left = self.parse_const_expr_and_val()?;
         while self.lex.tk == Token::Lor {
             self.next()?;

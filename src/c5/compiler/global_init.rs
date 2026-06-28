@@ -593,20 +593,22 @@ impl Compiler {
         // integer literals, unary `+`/`-`, casts (`(size_t)expr`),
         // arithmetic, parens, identifiers bound as `Token::Num`
         // (enum / `#define`d constants), and the offsetof shape.
-        let value = self.parse_const_expr_or()?;
+        let cv = self.parse_const_expr_or_val()?;
 
-        // C99 6.7.8p11 / 6.3.1.4: an integer constant initializing a
-        // floating object is converted to the floating value; storing
-        // the integer's bit pattern would leave a denormal. Narrow to
-        // the slot's width (f32 for `float`, f64 for `double`).
+        // C99 6.7.8p11 / 6.3.1.4: a constant initializing a floating
+        // object takes the floating value. Coerce the ConstVal to f64
+        // here rather than through `as_int` first, which truncated the
+        // fraction of a float-valued expression whose leading token is
+        // an integer (e.g. `3 * 0.5`). Narrow to the slot width (f32
+        // for `float`, f64 for `double`).
         let value = if var_is_float {
             self.to_storage_bits(
-                (value as f64).to_bits() as i64,
+                cv.as_float().to_bits() as i64,
                 super::initializer::InitElemReloc::Float64Bits,
                 var_ty,
             )
         } else {
-            value
+            cv.as_int()
         };
         let write_size = if var_is_float {
             self.size_of_type(var_ty)

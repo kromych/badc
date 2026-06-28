@@ -7,6 +7,13 @@ static double pos_inf = 1.0 / 0.0;
 static double neg_inf = -1.0 / 0.0;
 static double not_a_num = 0.0 / 0.0;
 
+// The integer-constant-expression evaluator (the _Static_assert /
+// array-size / case-label path) follows the same Annex F rule, not a
+// fold-to-zero. These compile only when 1.0/0.0 folds to +infinity and
+// 0.0/0.0 to NaN.
+_Static_assert((1.0 / 0.0) > 1e308, "1.0/0.0 must fold to +infinity");
+_Static_assert((0.0 / 0.0) != (0.0 / 0.0), "0.0/0.0 must fold to NaN");
+
 int main(void) {
     if (!(pos_inf > 1e308)) return 1;
     if (!(neg_inf < -1e308)) return 2;

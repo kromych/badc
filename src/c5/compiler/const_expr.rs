@@ -393,9 +393,10 @@ impl Compiler {
                 self.next()?;
                 let r = self.parse_const_expr_unary_val()?;
                 left = if left.is_float() || r.is_float() {
-                    let rf = r.as_float();
-                    let v = if rf == 0.0 { 0.0 } else { left.as_float() / rf };
-                    ConstVal::Float(v)
+                    // C99 Annex F / IEEE 754: floating division by zero
+                    // yields +/-infinity for a non-zero numerator and NaN
+                    // for 0.0/0.0, not a fold to zero.
+                    ConstVal::Float(left.as_float() / r.as_float())
                 } else {
                     let ri = r.as_int();
                     let v = if ri == 0 { 0 } else { left.as_int() / ri };

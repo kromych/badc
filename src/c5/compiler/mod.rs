@@ -923,8 +923,8 @@ pub struct Compiler {
     /// Drives data-model picks: `long` is 8 bytes on LP64
     /// (Linux / macOS) and 4 bytes on LLP64 (Windows). Stored
     /// here so per-`ty` helpers (`size_of_type`, `align_of_type`,
-    /// `load_op_for`, `store_op_for`) can pick the right width
-    /// without threading the target through every call site.
+    /// `load_op_for`) can pick the right width without threading the
+    /// target through every call site.
     target: Target,
 
     /// Side-channel state shared between parser layers -- the

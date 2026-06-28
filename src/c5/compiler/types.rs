@@ -599,15 +599,17 @@ pub(super) fn is_type_start_token(tk: Tok) -> bool {
 /// picks between the sign- and zero-extending load ops; the
 /// matching store widths (1 / 2 / 4 / 8 bytes) don't care
 /// about signedness.
-pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
+/// Load-instruction kind for a scalar `ty`. Every arm is
+/// consumer-independent except the `double` leaf, which differs by
+/// backend: the parser's trailing-load classifier carries the f64 bit
+/// pattern in a GPR (it passes `LoadKind::I64`), while the SSA backend
+/// loads a `double` into an FP register (it passes `LoadKind::F64`).
+pub(crate) fn load_kind(ty: i64, target: super::super::Target, double_kind: LoadKind) -> LoadKind {
     let unsigned = is_unsigned_ty(ty);
     let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
-        // Pointers are always 8 bytes (slot + native register
-        // width). The Long-vs-LongLong distinction here would
-        // wrongly route `long *` through Lw on Windows; the
-        // Float-vs-Double distinction would wrongly route
-        // `float *` through LoadKind::F32.
+        // Pointers are always 8 bytes; the Long-vs-LongLong and
+        // Float-vs-Double distinctions must not narrow a pointer load.
         return LoadKind::I64;
     }
     if stripped == Ty::Bool as i64 {
@@ -629,11 +631,10 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
             LoadKind::I32
         }
     } else if stripped == Ty::Float as i64 {
-        // 4-byte single-precision load that widens to f64 in the
-        // accumulator. `double` falls through to `LoadKind::I64` since
-        // c5's f64 arithmetic ops carry the bit pattern verbatim
-        // and the 8-byte slot needs no narrowing.
+        // 4-byte single-precision load that widens to f64.
         LoadKind::F32
+    } else if stripped == Ty::Double as i64 {
+        double_kind
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         // LLP64: `long` is 32 bits, same load path as int.
         if unsigned {
@@ -644,6 +645,12 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
     } else {
         LoadKind::I64
     }
+}
+
+pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
+    // The parser carries a `double` as its 8-byte f64 bit pattern in a
+    // GPR, so the double leaf is I64.
+    load_kind(ty, target, LoadKind::I64)
 }
 
 #[cfg(test)]

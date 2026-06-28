@@ -12,7 +12,8 @@ use alloc::string::String;
 
 use super::super::codegen::Target;
 use super::super::compiler::types::{
-    STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_ptr_depth,
+    STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, is_pointer_ty, is_struct_ty, load_kind,
+    struct_ptr_depth,
 };
 use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind};
 use super::super::symbol::Symbol;
@@ -3860,41 +3861,8 @@ impl RmwPlace {
 /// Map a c5 type tag to the matching `LoadKind`. Mirrors
 /// `compiler::types::load_op_for`.
 fn load_kind_for(ty: i64, target: Target) -> LoadKind {
-    let unsigned = (ty & UNSIGNED_BIT) != 0;
-    let stripped = ty & !UNSIGNED_BIT;
-    if is_pointer_ty(ty) {
-        return LoadKind::I64;
-    }
-    if stripped == Ty::Bool as i64 {
-        // 1-byte `_Bool`, always zero-extends (holds only 0 / 1).
-        LoadKind::U8
-    } else if stripped == Ty::Char as i64 {
-        if unsigned { LoadKind::U8 } else { LoadKind::I8 }
-    } else if stripped == Ty::Short as i64 {
-        if unsigned {
-            LoadKind::U16
-        } else {
-            LoadKind::I16
-        }
-    } else if stripped == Ty::Int as i64 {
-        if unsigned {
-            LoadKind::U32
-        } else {
-            LoadKind::I32
-        }
-    } else if stripped == Ty::Float as i64 {
-        LoadKind::F32
-    } else if stripped == Ty::Double as i64 {
-        LoadKind::F64
-    } else if stripped == Ty::Long as i64 && target.is_windows() {
-        if unsigned {
-            LoadKind::U32
-        } else {
-            LoadKind::I32
-        }
-    } else {
-        LoadKind::I64
-    }
+    // The SSA backend loads a `double` into an FP register.
+    load_kind(ty, target, LoadKind::F64)
 }
 
 /// Mirror of [`load_kind_for`] for stores.

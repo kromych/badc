@@ -136,11 +136,7 @@ impl Compiler {
             // offset in `lex.ival`. Read the bytes back so we can
             // surface the message inline; adjacent literals are
             // already glued by the lexer's `"a" "b"` rule.
-            let addr = self.lex.ival as usize;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
+            let addr = self.take_concat_string_literal()?;
             // Walk the staged bytes up to the first NUL.
             let mut p = addr;
             while p < self.data.len() && self.data[p] != 0 {

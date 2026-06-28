@@ -329,11 +329,7 @@ impl Compiler {
             // per element plus a terminator at the target's `wchar_t`
             // width; read them back at that stride.
             let w = self.lex.wchar_bytes;
-            let start_addr = self.lex.ival as usize;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
+            let start_addr = self.take_concat_string_literal()?;
             let byte_count = self.data.len() - start_addr;
             let mut elem_count = byte_count / w;
             // The trailing NUL is dropped when the literal exactly fills
@@ -364,11 +360,7 @@ impl Compiler {
             return Ok(elems);
         }
         if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
-            let start_addr = self.lex.ival as usize;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
+            let start_addr = self.take_concat_string_literal()?;
             let char_count = self.data.len() - start_addr;
             // C99 6.7.8p14: a string-literal initializer for a
             // bounded char array stores the literal's bytes
@@ -496,11 +488,7 @@ impl Compiler {
                 && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64
             {
                 let row = inner_dims[0] as usize;
-                let start_addr = self.lex.ival as usize;
-                self.next()?;
-                while self.lex.tk == '"' {
-                    self.next()?;
-                }
+                let start_addr = self.take_concat_string_literal()?;
                 let avail = self.data.len() - start_addr;
                 let before = cursor;
                 if elements.len() < before + row {
@@ -1629,11 +1617,7 @@ impl Compiler {
             }
         };
         if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
-            let start_addr = self.lex.ival as usize;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
+            let start_addr = self.take_concat_string_literal()?;
             self.data.push(0); // ensure NUL terminator in the literal's bytes
             let mut idx = 0usize;
             while start_addr + idx < self.data.len() {
@@ -1898,11 +1882,7 @@ impl Compiler {
                 // single-value path and writes the *pointer* to the
                 // string's data-segment slot into the field's first
                 // 8 bytes, which produces garbage at read time.
-                let start_addr = self.lex.ival as usize;
-                self.next()?;
-                while self.lex.tk == '"' {
-                    self.next()?;
-                }
+                let start_addr = self.take_concat_string_literal()?;
                 self.data.push(0); // ensure NUL terminator
                 let max = field.array_size as usize;
                 let mut idx = 0usize;

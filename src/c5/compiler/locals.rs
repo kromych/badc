@@ -1533,11 +1533,7 @@ impl Compiler {
                     && !self.lex.str_is_wide
                     && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
                 {
-                    let start_addr = self.lex.ival as usize;
-                    self.next()?;
-                    while self.lex.tk == '"' {
-                        self.next()?;
-                    }
+                    let start_addr = self.take_concat_string_literal()?;
                     self.data.push(0); // ensure NUL terminator
                     let max = field.array_size as usize;
                     let base = extra_offset + field.offset as i64;

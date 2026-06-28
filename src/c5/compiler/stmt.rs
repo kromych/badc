@@ -1155,6 +1155,19 @@ impl Compiler {
         }
     }
 
+    /// Capture the data-segment offset of the current string literal,
+    /// then step past it and any adjacent string literals (the lexer
+    /// has already concatenated their bytes into one run, C99 5.1.1.2).
+    /// Returns the offset of the first byte.
+    pub(super) fn take_concat_string_literal(&mut self) -> Result<usize, C5Error> {
+        let start = self.lex.ival as usize;
+        self.next()?;
+        while self.lex.tk == '"' {
+            self.next()?;
+        }
+        Ok(start)
+    }
+
     /// Consume a single-byte token, returning a labelled compile error otherwise.
     pub(super) fn consume(&mut self, expected: u8, msg: &str) -> Result<(), C5Error> {
         if self.lex.tk == expected {

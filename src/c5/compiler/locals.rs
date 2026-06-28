@@ -34,6 +34,46 @@ use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
+    /// Drain the three pending local-initializer carriers into a single
+    /// `LocalInit`: a scalar AST expression, a runtime per-element store
+    /// list (over an optional aggregate zero-fill), an aggregate Mcpy
+    /// source, or nothing. Takes the carriers, leaving them empty.
+    fn drain_pending_local_init(&mut self) -> super::super::ast::LocalInit {
+        let scalar = self.pending_local_init_ast.take();
+        let aggregate = self.pending_local_aggregate_ast.take();
+        let runtime_elements = core::mem::take(&mut self.pending_local_runtime_elements);
+        if let Some(e) = scalar {
+            super::super::ast::LocalInit::Scalar(e)
+        } else if !runtime_elements.is_empty() {
+            super::super::ast::LocalInit::Runtime {
+                zero_init: aggregate,
+                elements: runtime_elements,
+            }
+        } else if let Some((src, size)) = aggregate {
+            super::super::ast::LocalInit::Aggregate {
+                src_data_off: src,
+                size_bytes: size,
+            }
+        } else {
+            super::super::ast::LocalInit::None
+        }
+    }
+
+    /// Assemble the pending initializer for a just-parsed declarator and
+    /// emit its local declaration. A non-`Loc` binding (a redeclaration
+    /// that resolved elsewhere) discards the carriers without emitting.
+    pub(super) fn finalize_local_init(&mut self, loc_idx: usize) {
+        if self.symbols[loc_idx].class == Token::Loc as i64 {
+            let slot_off = self.symbols[loc_idx].val;
+            let init = self.drain_pending_local_init();
+            self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
+        } else {
+            self.pending_local_init_ast = None;
+            self.pending_local_aggregate_ast = None;
+            self.pending_local_runtime_elements.clear();
+        }
+    }
+
     pub(super) fn parse_function_body_local_decl(
         &mut self,
         maybe_unused: bool,
@@ -194,33 +234,7 @@ impl Compiler {
                 // Static locals (promoted to Glo class) skip --
                 // their storage is laid out in .data at TU-load
                 // time, not in the function's frame.
-                if self.symbols[loc_idx].class == Token::Loc as i64 {
-                    let slot_off = self.symbols[loc_idx].val;
-                    let scalar = self.pending_local_init_ast.take();
-                    let aggregate = self.pending_local_aggregate_ast.take();
-                    let runtime_elements =
-                        core::mem::take(&mut self.pending_local_runtime_elements);
-                    let init = if let Some(e) = scalar {
-                        super::super::ast::LocalInit::Scalar(e)
-                    } else if !runtime_elements.is_empty() {
-                        super::super::ast::LocalInit::Runtime {
-                            zero_init: aggregate,
-                            elements: runtime_elements,
-                        }
-                    } else if let Some((src, size)) = aggregate {
-                        super::super::ast::LocalInit::Aggregate {
-                            src_data_off: src,
-                            size_bytes: size,
-                        }
-                    } else {
-                        super::super::ast::LocalInit::None
-                    };
-                    self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
-                } else {
-                    self.pending_local_init_ast = None;
-                    self.pending_local_aggregate_ast = None;
-                    self.pending_local_runtime_elements.clear();
-                }
+                self.finalize_local_init(loc_idx);
             }
             // Unconditional write: a stale fn-ptr lineage from a
             // prior binding of this name must not leak into a
@@ -1091,24 +1105,7 @@ impl Compiler {
             value_ty = t;
         }
 
-        let scalar = self.pending_local_init_ast.take();
-        let aggregate = self.pending_local_aggregate_ast.take();
-        let runtime_elements = core::mem::take(&mut self.pending_local_runtime_elements);
-        let init = if let Some(e) = scalar {
-            super::super::ast::LocalInit::Scalar(e)
-        } else if !runtime_elements.is_empty() {
-            super::super::ast::LocalInit::Runtime {
-                zero_init: aggregate,
-                elements: runtime_elements,
-            }
-        } else if let Some((src, size)) = aggregate {
-            super::super::ast::LocalInit::Aggregate {
-                src_data_off: src,
-                size_bytes: size,
-            }
-        } else {
-            super::super::ast::LocalInit::None
-        };
+        let init = self.drain_pending_local_init();
 
         self.ast_vstack.truncate(vstack_depth);
         self.ast_emit_compound_literal(slot, t, final_array_size, init);

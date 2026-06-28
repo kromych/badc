@@ -434,33 +434,7 @@ impl Compiler {
                 self.pending_local_aggregate_ast = None;
                 self.pending_local_runtime_elements.clear();
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
-                if self.symbols[loc_idx].class == Token::Loc as i64 {
-                    let slot_off = self.symbols[loc_idx].val;
-                    let scalar = self.pending_local_init_ast.take();
-                    let aggregate = self.pending_local_aggregate_ast.take();
-                    let runtime_elements =
-                        core::mem::take(&mut self.pending_local_runtime_elements);
-                    let init = if let Some(e) = scalar {
-                        super::super::ast::LocalInit::Scalar(e)
-                    } else if !runtime_elements.is_empty() {
-                        super::super::ast::LocalInit::Runtime {
-                            zero_init: aggregate,
-                            elements: runtime_elements,
-                        }
-                    } else if let Some((src, size)) = aggregate {
-                        super::super::ast::LocalInit::Aggregate {
-                            src_data_off: src,
-                            size_bytes: size,
-                        }
-                    } else {
-                        super::super::ast::LocalInit::None
-                    };
-                    self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
-                } else {
-                    self.pending_local_init_ast = None;
-                    self.pending_local_aggregate_ast = None;
-                    self.pending_local_runtime_elements.clear();
-                }
+                self.finalize_local_init(loc_idx);
             }
             // Write the lineage tag after `allocate_local_with_init`
             // (which may have parsed an initializer) so it can't be

@@ -190,17 +190,17 @@ pub(super) fn format_signature(
     format!("{} ({inside})", format_type(return_ty, structs))
 }
 
-pub(super) fn is_struct_ty(ty: i64) -> bool {
+pub(crate) fn is_struct_ty(ty: i64) -> bool {
     let ty = strip_unsigned(ty);
     ty >= STRUCT_BASE
 }
 
-pub(super) fn struct_id_of(ty: i64) -> usize {
+pub(crate) fn struct_id_of(ty: i64) -> usize {
     let ty = strip_unsigned(ty);
     ((ty - STRUCT_BASE) / STRUCT_STRIDE) as usize
 }
 
-pub(super) fn struct_ptr_depth(ty: i64) -> i64 {
+pub(crate) fn struct_ptr_depth(ty: i64) -> i64 {
     let ty = strip_unsigned(ty);
     ((ty - STRUCT_BASE) % STRUCT_STRIDE) / Ty::Ptr as i64
 }
@@ -643,5 +643,75 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
         }
     } else {
         LoadKind::I64
+    }
+}
+
+#[cfg(test)]
+mod ty_tag {
+    use super::*;
+    // The +2-per-level even-stride pointer encoding -- the shape the
+    // AST->SSA walker and DWARF emitter open-coded before they shared
+    // `is_pointer_ty`. The base band ([0, 100): char / int) admits any
+    // offset >= Ty::Ptr; every other band reserves even offsets.
+    fn pointer_by_even_stride(ty: i64) -> bool {
+        let stripped = ty & !UNSIGNED_BIT;
+        let base = stripped - (stripped % 100);
+        let off = stripped - base;
+        if base == 0 {
+            off >= Ty::Ptr as i64
+        } else {
+            off >= 2 && (off % 2) == 0
+        }
+    }
+
+    // Every tag a declarator actually emits: the char/int base band,
+    // and the float/double/long/short/longlong/bool/struct bands at the
+    // +2-per-level even stride.
+    fn producible_tags() -> alloc::vec::Vec<i64> {
+        let mut tags = alloc::vec::Vec::new();
+        for t in 0..100i64 {
+            tags.push(t);
+        }
+        for band in [
+            Ty::Float as i64,
+            Ty::Double as i64,
+            Ty::Long as i64,
+            Ty::Short as i64,
+            Ty::LongLong as i64,
+            Ty::Bool as i64,
+        ] {
+            for d in 0..40i64 {
+                tags.push(band + d * Ty::Ptr as i64);
+            }
+        }
+        for id in 0..8i64 {
+            let sb = STRUCT_BASE + id * STRUCT_STRIDE;
+            for d in 0..40i64 {
+                tags.push(sb + d * Ty::Ptr as i64);
+            }
+        }
+        tags
+    }
+
+    #[test]
+    fn is_pointer_ty_matches_producible_tags() {
+        for &ty in &producible_tags() {
+            for u in [0i64, UNSIGNED_BIT] {
+                let t = ty | u;
+                assert_eq!(
+                    is_pointer_ty(t),
+                    pointer_by_even_stride(t),
+                    "is_pointer_ty disagrees on producible tag {t}"
+                );
+            }
+        }
+        // The even-stride approximation misreads a struct pointer whose
+        // depth is a multiple of STRUCT_STRIDE / Ty::Ptr (50): the offset
+        // wraps to 0 mod 100. is_pointer_ty decodes the struct band
+        // directly and is correct. No declarator emits 50 levels, so the
+        // difference is unreachable, but it pins the canonical answer.
+        let deep = STRUCT_BASE + 50 * Ty::Ptr as i64;
+        assert!(is_pointer_ty(deep));
+        assert!(!pointer_by_even_stride(deep));
     }
 }

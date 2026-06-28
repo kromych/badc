@@ -14,17 +14,17 @@
 /// `fn_unwind`, aarch64 `macho_tlv_*` -- stays a separate argument, so this
 /// type is non-generic. Holds `&mut` field references so a per-function caller
 /// constructs it from its own output vectors; grows as more helpers adopt it.
-pub(super) struct EmitCtx<'a> {
-    pub(super) code: &'a mut alloc::vec::Vec<u8>,
-    pub(super) plt_call_fixups: &'a mut alloc::vec::Vec<super::PltCallFixup>,
-    pub(super) data_fixups: &'a mut alloc::vec::Vec<super::DataFixup>,
-    pub(super) user_extern_data_refs: &'a mut alloc::vec::Vec<super::UserExternDataRef>,
-    pub(super) pending_func_fixups: &'a mut alloc::vec::Vec<(usize, usize)>,
-    pub(super) tls_index_fixups: &'a mut alloc::vec::Vec<super::TlsIndexFixup>,
-    pub(super) elf_tpoff_fixups: &'a mut alloc::vec::Vec<super::ElfTpoffFixup>,
-    pub(super) ssa_line_rows: &'a mut alloc::vec::Vec<(usize, u32, u32)>,
-    pub(super) pc_to_native: &'a mut [usize],
-    pub(super) prologue_native: &'a mut alloc::collections::BTreeMap<usize, usize>,
+pub(crate) struct EmitCtx<'a> {
+    pub(crate) code: &'a mut alloc::vec::Vec<u8>,
+    pub(crate) plt_call_fixups: &'a mut alloc::vec::Vec<super::PltCallFixup>,
+    pub(crate) data_fixups: &'a mut alloc::vec::Vec<super::DataFixup>,
+    pub(crate) user_extern_data_refs: &'a mut alloc::vec::Vec<super::UserExternDataRef>,
+    pub(crate) pending_func_fixups: &'a mut alloc::vec::Vec<(usize, usize)>,
+    pub(crate) tls_index_fixups: &'a mut alloc::vec::Vec<super::TlsIndexFixup>,
+    pub(crate) elf_tpoff_fixups: &'a mut alloc::vec::Vec<super::ElfTpoffFixup>,
+    pub(crate) ssa_line_rows: &'a mut alloc::vec::Vec<(usize, u32, u32)>,
+    pub(crate) pc_to_native: &'a mut [usize],
+    pub(crate) prologue_native: &'a mut alloc::collections::BTreeMap<usize, usize>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -33,7 +33,7 @@ pub(super) struct EmitCtx<'a> {
 /// every frame-region byte count routes through this helper so
 /// the alignment guarantee is one source of truth.
 #[inline(never)]
-pub(super) fn align16(n: u32) -> u32 {
+pub(crate) fn align16(n: u32) -> u32 {
     (n + 15) & !15
 }
 
@@ -43,7 +43,7 @@ pub(super) fn align16(n: u32) -> u32 {
 /// frame must end on a 16-byte boundary -- hence the unified
 /// helper.
 #[inline(never)]
-pub(super) fn slots16(n_slots: u32) -> u32 {
+pub(crate) fn slots16(n_slots: u32) -> u32 {
     align16(n_slots * 8)
 }
 
@@ -53,9 +53,9 @@ pub(super) fn slots16(n_slots: u32) -> u32 {
 /// references a user local (negative `off`); after mem2reg and dead-store
 /// elimination such an object is never observed and needs no storage
 /// (C99 6.2.4p2). Param cells use non-negative `off` and are sized separately.
-pub(super) fn compute_frame_base(
+pub(crate) fn compute_frame_base(
     func: &super::super::ir::FunctionSsa,
-    alloc: &super::ssa_alloc::Allocation,
+    alloc: &super::alloc::Allocation,
 ) -> (u32, u32, u32) {
     use super::super::ir::Inst;
     let declared_locals_bytes = slots16(func.locals.max(0) as u32);
@@ -80,9 +80,9 @@ pub(super) fn compute_frame_base(
 /// by a store. A cell's incoming spill is elidable only when its parameter is
 /// seeded and the cell is neither address-taken nor needed.
 #[allow(clippy::type_complexity)]
-pub(super) fn scan_param_slot_usage(
+pub(crate) fn scan_param_slot_usage(
     func: &super::super::ir::FunctionSsa,
-    alloc: &super::ssa_alloc::Allocation,
+    alloc: &super::alloc::Allocation,
 ) -> (
     alloc::collections::BTreeSet<u32>,
     alloc::collections::BTreeSet<i64>,
@@ -119,7 +119,7 @@ pub(super) fn scan_param_slot_usage(
 /// intrinsic or TLS access, so a leaf prologue/epilogue may be elided. The
 /// frame and register-file conditions a leaf also requires are target-specific
 /// and checked by the caller.
-pub(super) fn function_makes_no_calls(func: &super::super::ir::FunctionSsa) -> bool {
+pub(crate) fn function_makes_no_calls(func: &super::super::ir::FunctionSsa) -> bool {
     use super::super::ir::Inst;
     !func.insts.iter().any(|inst| {
         matches!(
@@ -136,8 +136,8 @@ pub(super) fn function_makes_no_calls(func: &super::super::ir::FunctionSsa) -> b
 
 /// Whether two resolved locations name the same physical place. A move
 /// between identical locations is elided by the move schedulers.
-pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Place) -> bool {
-    use super::ssa_alloc::Place;
+pub(crate) fn place_same_loc(a: super::alloc::Place, b: super::alloc::Place) -> bool {
+    use super::alloc::Place;
     match (a, b) {
         (Place::IntReg(x), Place::IntReg(y)) => x == y,
         (Place::Spill(x), Place::Spill(y)) => x == y,
@@ -151,7 +151,7 @@ pub(super) fn place_same_loc(a: super::ssa_alloc::Place, b: super::ssa_alloc::Pl
 /// supplies the target-specific register/memory transfers. Leaves take raw
 /// register numbers; each backend wraps them in its own register newtype.
 /// Grows as more emit families adopt it.
-pub(super) trait EmitBackend {
+pub(crate) trait EmitBackend {
     /// The target's per-function stack-frame layout. Each backend defines its
     /// own fields; the shared helpers thread a value through to the leaves
     /// without inspecting it.
@@ -218,7 +218,7 @@ pub(super) trait EmitBackend {
     fn break_place_cycle(
         &self,
         code: &mut alloc::vec::Vec<u8>,
-        moves: &mut alloc::vec::Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)>,
+        moves: &mut alloc::vec::Vec<(super::alloc::Place, super::alloc::Place)>,
         frame: Self::Frame,
         hold: u8,
         stage: u8,
@@ -228,21 +228,21 @@ pub(super) trait EmitBackend {
 /// Stateless backend selectors. The per-target leaf implementations live in the
 /// respective emitter modules; the shared generic helpers dispatch through one
 /// of these.
-pub(super) struct X64Backend;
-pub(super) struct Aarch64Backend;
+pub(crate) struct X64Backend;
+pub(crate) struct Aarch64Backend;
 
 /// Emit a resolved FP location-to-location move. The four source/target
 /// combinations are shared; the backend supplies the register and spill-slot
 /// transfers. `stage` carries the value for a spill-to-spill move.
-pub(super) fn emit_fp_place_move<B: EmitBackend>(
+pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    src: super::ssa_alloc::Place,
-    dst: super::ssa_alloc::Place,
+    src: super::alloc::Place,
+    dst: super::alloc::Place,
     frame: B::Frame,
     stage: u8,
 ) {
-    use super::ssa_alloc::Place;
+    use super::alloc::Place;
     match (src, dst) {
         (Place::FpReg(s), Place::FpReg(t)) => b.fp_reg_mov(code, t, s),
         (Place::FpReg(s), Place::Spill(slot)) => b.fp_spill_store(code, frame, slot, s),
@@ -260,16 +260,16 @@ pub(super) fn emit_fp_place_move<B: EmitBackend>(
 /// Emit a resolved integer location-to-location move. The four source/target
 /// combinations are shared; `stage` carries a spill-to-spill value and `hold`
 /// backs an out-of-reach destination address on backends that need it.
-pub(super) fn emit_place_move<B: EmitBackend>(
+pub(crate) fn emit_place_move<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    src: super::ssa_alloc::Place,
-    dst: super::ssa_alloc::Place,
+    src: super::alloc::Place,
+    dst: super::alloc::Place,
     frame: B::Frame,
     stage: u8,
     hold: u8,
 ) {
-    use super::ssa_alloc::Place;
+    use super::alloc::Place;
     match (src, dst) {
         (Place::IntReg(s), Place::IntReg(t)) => b.int_reg_mov(code, t, s),
         (Place::IntReg(s), Place::Spill(slot)) => b.int_spill_store(code, frame, slot, s, stage),
@@ -285,15 +285,15 @@ pub(super) fn emit_place_move<B: EmitBackend>(
 /// Sequentialize parallel FP location-to-location moves, breaking a cycle by
 /// staging one source through the `hold` register. Each move is emitted via
 /// [`emit_fp_place_move`]; `stage` backs a spill-to-spill transfer.
-pub(super) fn schedule_fp_place_moves<B: EmitBackend>(
+pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    moves: &mut alloc::vec::Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)>,
+    moves: &mut alloc::vec::Vec<(super::alloc::Place, super::alloc::Place)>,
     frame: B::Frame,
     hold: u8,
     stage: u8,
 ) {
-    use super::ssa_alloc::Place;
+    use super::alloc::Place;
     moves.retain(|(s, t)| !place_same_loc(*s, *t));
     while !moves.is_empty() {
         let mut progress = false;
@@ -332,15 +332,15 @@ pub(super) fn schedule_fp_place_moves<B: EmitBackend>(
 /// FP register or None. Each move is emitted via [`emit_place_move`]; a
 /// residual cycle is broken by the backend's [`EmitBackend::break_place_cycle`].
 /// `hold`/`stage` are scratch registers outside the allocator's bank.
-pub(super) fn schedule_place_moves<B: EmitBackend>(
+pub(crate) fn schedule_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    moves: &mut alloc::vec::Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)>,
+    moves: &mut alloc::vec::Vec<(super::alloc::Place, super::alloc::Place)>,
     frame: B::Frame,
     hold: u8,
     stage: u8,
 ) -> bool {
-    use super::ssa_alloc::Place;
+    use super::alloc::Place;
     moves.retain(|(s, t)| !place_same_loc(*s, *t));
     if moves.iter().any(|(s, t)| {
         matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
@@ -370,14 +370,14 @@ pub(super) fn schedule_place_moves<B: EmitBackend>(
 
 /// Write an atomic operation's result register `src` to its destination
 /// `dst`: a register copy (self-moves elide) or a spill-slot store.
-pub(super) fn write_atomic_result<B: EmitBackend>(
+pub(crate) fn write_atomic_result<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    dst: super::ssa_alloc::Place,
+    dst: super::alloc::Place,
     src: u8,
     frame: B::Frame,
 ) {
-    use super::ssa_alloc::Place;
+    use super::alloc::Place;
     match dst {
         Place::IntReg(r) => b.int_reg_mov(code, r, src),
         Place::Spill(slot) => b.int_spill_store_auto(code, frame, slot, src),
@@ -391,12 +391,12 @@ pub(super) fn write_atomic_result<B: EmitBackend>(
 /// integer copy cannot be scheduled, so the caller bails. `int_*` / `fp_*` are
 /// the reserved scratch registers each parallel copy may use.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn emit_phi_predecessor_moves<B: EmitBackend>(
+pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
     self_block: super::super::ir::BlockId,
     func: &super::super::ir::FunctionSsa,
-    alloc: &super::ssa_alloc::Allocation,
+    alloc: &super::alloc::Allocation,
     frame: B::Frame,
     int_hold: u8,
     int_stage: u8,
@@ -404,7 +404,7 @@ pub(super) fn emit_phi_predecessor_moves<B: EmitBackend>(
     fp_stage: u8,
 ) -> bool {
     use super::super::ir::{Inst, LoadKind, Terminator};
-    use super::ssa_alloc::Place;
+    use super::alloc::Place;
     let succs: alloc::vec::Vec<super::super::ir::BlockId> =
         match func.blocks[self_block as usize].terminator {
             Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
@@ -474,7 +474,7 @@ pub(super) fn emit_phi_predecessor_moves<B: EmitBackend>(
 /// the loop continues. `emit_mov(code, dst, src)` emits the backend's register
 /// copy. Used by every move scheduler whose backend breaks cycles with a
 /// scratch register; the x86_64 integer scheduler uses `xchg` instead.
-pub(super) fn schedule_reg_moves_via_scratch(
+pub(crate) fn schedule_reg_moves_via_scratch(
     code: &mut alloc::vec::Vec<u8>,
     moves: &mut alloc::vec::Vec<(u8, u8)>,
     scratch: u8,
@@ -516,7 +516,7 @@ pub(super) fn schedule_reg_moves_via_scratch(
 /// scalar planner when no parameter is an aggregate, else through the
 /// struct-aware planner. The backend supplies the guard (x86_64 skips variadic
 /// callees; aarch64 consults `spills_named_params_on_entry`).
-pub(super) fn param_placements_common(
+pub(crate) fn param_placements_common(
     func: &super::super::ir::FunctionSsa,
     abi: super::Abi,
 ) -> alloc::vec::Vec<super::ArgPlacement> {
@@ -529,7 +529,7 @@ pub(super) fn param_placements_common(
 
 /// Resolve each call argument's aggregate descriptor to its ABI classification
 /// for the marshalling pass. Empty when no argument is an aggregate.
-pub(super) fn build_arg_aggs(
+pub(crate) fn build_arg_aggs(
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
     abi: super::Abi,
@@ -559,12 +559,12 @@ pub(super) fn build_arg_aggs(
 /// and never reads the environment or pays the per-pass
 /// `std::time::Instant` cost.
 #[cfg(feature = "codegen_test")]
-pub(super) fn time_passes_enabled() -> bool {
+pub(crate) fn time_passes_enabled() -> bool {
     std::env::var("BADC_TIME_PASSES").is_ok()
 }
 
 #[cfg(all(feature = "std", not(feature = "codegen_test")))]
-pub(super) fn time_passes_enabled() -> bool {
+pub(crate) fn time_passes_enabled() -> bool {
     false
 }
 
@@ -574,7 +574,7 @@ pub(super) fn time_passes_enabled() -> bool {
 /// value-producing closure in place. A no-op (the closure still runs)
 /// outside the `codegen_test` feature.
 #[cfg(feature = "codegen_test")]
-pub(super) fn time_pass<R>(label: &str, f: impl FnOnce() -> R) -> R {
+pub(crate) fn time_pass<R>(label: &str, f: impl FnOnce() -> R) -> R {
     if !time_passes_enabled() {
         return f();
     }
@@ -586,7 +586,7 @@ pub(super) fn time_pass<R>(label: &str, f: impl FnOnce() -> R) -> R {
 }
 
 #[cfg(not(feature = "codegen_test"))]
-pub(super) fn time_pass<R>(_label: &str, f: impl FnOnce() -> R) -> R {
+pub(crate) fn time_pass<R>(_label: &str, f: impl FnOnce() -> R) -> R {
     f()
 }
 
@@ -597,7 +597,7 @@ pub(super) fn time_pass<R>(_label: &str, f: impl FnOnce() -> R) -> R {
 /// builds never read the environment. The caller passes its own
 /// backend tag (`"x86_64"`, `"aarch64"`) so logs from a single run
 /// with both targets emit can be disambiguated by source.
-pub(super) fn bail_msg(backend: &str, reason: &str) {
+pub(crate) fn bail_msg(backend: &str, reason: &str) {
     #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_DUMP_SSA").is_ok() {
         eprintln!("ssa emit {backend}: bailed -- {reason}");
@@ -626,7 +626,7 @@ pub(super) fn bail_msg(backend: &str, reason: &str) {
 /// prologue's cell allocation and this offset must use the same
 /// stride; passing `Frame::param_cell_stride` keeps them in
 /// agreement. At stride 16 the result equals `(off - 1) * 16`.
-pub(super) fn c5_slot_to_fp_offset(off: i64, param_stride: i64) -> i64 {
+pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64) -> i64 {
     if off >= 2 {
         16 + (off - 2) * param_stride
     } else {
@@ -641,7 +641,7 @@ pub(super) fn c5_slot_to_fp_offset(off: i64, param_stride: i64) -> i64 {
 /// Slot 0 sits 8 bytes below `alloc_spill_base`; slot N sits a
 /// further `N * 8` bytes down. The fp + sp relationship
 /// `sp = fp - frame_bytes` then yields the SP-relative offset.
-pub(super) fn spill_slot_sp_offset(frame_bytes: u32, alloc_spill_base: u32, slot: u32) -> u32 {
+pub(crate) fn spill_slot_sp_offset(frame_bytes: u32, alloc_spill_base: u32, slot: u32) -> u32 {
     frame_bytes - alloc_spill_base - (slot + 1) * 8
 }
 
@@ -654,7 +654,7 @@ pub(super) fn spill_slot_sp_offset(frame_bytes: u32, alloc_spill_base: u32, slot
 /// didn't stamp, e.g. lift-produced functions) and adjacent
 /// duplicates (consecutive insts that came from the same
 /// statement compress into one row).
-pub(super) fn record_inst_src(
+pub(crate) fn record_inst_src(
     func: &super::super::ir::FunctionSsa,
     v: super::super::ir::ValueId,
     code_len: usize,
@@ -688,7 +688,7 @@ pub(super) fn record_inst_src(
 /// `ent_pc` (unique per function) so a neighbouring function's PC
 /// can't alias the entry, which a derived `pc_to_native` slot
 /// allowed for adjacent small functions.
-pub(super) fn record_post_prologue_pc(
+pub(crate) fn record_post_prologue_pc(
     func: &super::super::ir::FunctionSsa,
     prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
     code_len: usize,
@@ -702,10 +702,10 @@ pub(super) fn record_post_prologue_pc(
 /// dead pure values produce no machine code. Side-effectful insts
 /// (stores, calls, intrinsics, alloca init, vstack spills) are
 /// always emitted regardless of use count.
-pub(super) fn is_dead_pure(
+pub(crate) fn is_dead_pure(
     inst: &super::super::ir::Inst,
     v: super::super::ir::ValueId,
-    alloc: &super::ssa_alloc::Allocation,
+    alloc: &super::alloc::Allocation,
 ) -> bool {
     use super::super::ir::Inst::*;
     let pure = matches!(
@@ -737,7 +737,7 @@ pub(super) fn is_dead_pure(
 /// function's entry PC to the prologue start; overwriting
 /// it would redirect every `bl <function>` to land past the
 /// prologue's setup.
-pub(super) fn record_block_start_pc(
+pub(crate) fn record_block_start_pc(
     block_idx: usize,
     block_start_pc: usize,
     pc_to_native: &mut [usize],

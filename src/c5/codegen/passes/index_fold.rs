@@ -68,7 +68,7 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
         }
     };
     for inst in &func.insts {
-        crate::c5::codegen::ssa_alloc::for_each_operand(inst, |v| bump(v, &mut counts));
+        crate::c5::codegen::ssa::alloc::for_each_operand(inst, |v| bump(v, &mut counts));
     }
     for block in &func.blocks {
         match block.terminator {

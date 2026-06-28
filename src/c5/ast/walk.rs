@@ -3,7 +3,7 @@
 //! Drives `SsaBuilder` from a per-function AST. The walker is the
 //! production SSA source for every parsed function. An AST shape
 //! the walker can't lower comes back as `WalkError` so the
-//! caller (`codegen::ssa_shadow::produce_ssa_funcs`) can surface
+//! caller (`codegen::ssa::shadow::produce_ssa_funcs`) can surface
 //! the offending node.
 
 #![allow(dead_code)]
@@ -77,7 +77,7 @@ pub(crate) fn walk_function(
     return_ty: i64,
     alloca_top_slot: i64,
 ) -> Result<FunctionSsa, WalkError> {
-    let mut b = super::super::codegen::ssa_build::SsaBuilder::new(ent_pc, n_params, is_variadic);
+    let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
     // C99 6.8: the function's stack frame holds the declared
     // locals plus, when the body calls `alloca`, the per-frame
@@ -722,7 +722,7 @@ impl<'a> Walker<'a> {
     /// would otherwise emit dead code.
     fn walk_stmt(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         id: StmtId,
     ) -> Result<bool, WalkError> {
         let src = self.ast.stmt_src[id as usize];
@@ -1145,7 +1145,7 @@ impl<'a> Walker<'a> {
     ///   a compile-time constant.
     fn walk_decl(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         id: super::super::ast::DeclId,
     ) -> Result<(), WalkError> {
         match self.ast.decl(id) {
@@ -1184,7 +1184,7 @@ impl<'a> Walker<'a> {
     /// shapes into the same slot.
     fn emit_local_init(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         slot: i64,
         ty: i64,
         init: &super::super::ast::LocalInit,
@@ -1262,7 +1262,7 @@ impl<'a> Walker<'a> {
     /// stmt both look up through this so they share the same block.
     fn block_for_label(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         label: super::super::ast::LabelId,
     ) -> super::super::ir::BlockId {
         if let Some(&(_, blk)) = self.label_blocks.iter().find(|(l, _)| *l == label) {
@@ -1285,7 +1285,7 @@ impl<'a> Walker<'a> {
     /// discriminant matches no case.
     fn emit_switch_search(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         disc: super::super::ir::ValueId,
         cases: &[(i64, super::super::ir::BlockId)],
         lt_op: BinOp,
@@ -1314,7 +1314,7 @@ impl<'a> Walker<'a> {
 
     fn collect_switch_cases(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         stmt_id: super::super::ast::StmtId,
         cases: &mut alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
         default_blk: &mut Option<super::super::ir::BlockId>,
@@ -1370,7 +1370,7 @@ impl<'a> Walker<'a> {
     /// of the expression.
     fn walk_expr_rvalue(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         id: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
         match self.ast.expr(id) {
@@ -1851,7 +1851,7 @@ impl<'a> Walker<'a> {
                 // F64 path lowers it in a single `movsd` / `ldr d`.
                 let is_f32 = matches!(load_kind, super::super::ir::LoadKind::F32);
                 let is_f64 = matches!(load_kind, super::super::ir::LoadKind::F64);
-                let arm_store = |b: &mut super::super::codegen::ssa_build::SsaBuilder, v| {
+                let arm_store = |b: &mut super::super::codegen::ssa::build::SsaBuilder, v| {
                     if is_f32 {
                         let addr = b.local_addr(slot);
                         b.store(addr, v, store_kind);
@@ -3133,7 +3133,7 @@ impl<'a> Walker<'a> {
     /// element type in bytes.
     fn walk_atomic(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         kind: AtomicKind,
         args: &[ExprId],
         elem_ty: i64,
@@ -3200,7 +3200,7 @@ impl<'a> Walker<'a> {
     /// narrowed value when a wider enclosing expression reads it.
     fn narrow_int_to_ty(
         &self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         v: super::super::ir::ValueId,
         src_ty: i64,
         to_ty: i64,
@@ -3238,7 +3238,7 @@ impl<'a> Walker<'a> {
 
     fn extend_atomic_result(
         &self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         v: super::super::ir::ValueId,
         elem_ty: i64,
     ) -> super::super::ir::ValueId {
@@ -3272,7 +3272,7 @@ impl<'a> Walker<'a> {
     /// path, since `BinOp::Add` would operate on the bit pattern.
     fn increment_value(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         old: super::super::ir::ValueId,
         by: i64,
         ty: i64,
@@ -3304,7 +3304,7 @@ impl<'a> Walker<'a> {
     /// not just `i = i + k`.
     fn rmw_place(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         lvalue: ExprId,
         store_kind: StoreKind,
     ) -> Result<RmwPlace, WalkError> {
@@ -3345,7 +3345,7 @@ impl<'a> Walker<'a> {
 
     fn walk_expr_lvalue(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         id: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
         match self.ast.expr(id) {
@@ -3429,7 +3429,7 @@ impl<'a> Walker<'a> {
     /// false; an integer operand passes through and is tested directly.
     fn cond_truthy(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         val: super::super::ir::ValueId,
         cond: ExprId,
     ) -> super::super::ir::ValueId {
@@ -3444,7 +3444,7 @@ impl<'a> Walker<'a> {
 
     fn walk_short_circuit(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         id: ExprId,
         normalize: bool,
     ) -> Result<super::super::ir::ValueId, WalkError> {
@@ -3499,7 +3499,7 @@ impl<'a> Walker<'a> {
     /// any other expression is walked normally.
     fn walk_cond_value(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         cond: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
         if matches!(self.ast.expr(cond), Expr::ShortCircuit { .. }) {
@@ -3517,7 +3517,7 @@ impl<'a> Walker<'a> {
     /// immediate.
     fn walk_unary(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         op: UnOp,
         child: ExprId,
         ty: i64,
@@ -3573,7 +3573,7 @@ impl<'a> Walker<'a> {
     /// their walker arms land.
     fn ident_address(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         id: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
         let Expr::Ident {
@@ -3652,7 +3652,7 @@ impl<'a> Walker<'a> {
     #[allow(clippy::too_many_arguments)]
     fn load_ident_rvalue(
         &mut self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         id: ExprId,
         _sym: u32,
         ty: i64,
@@ -3776,7 +3776,7 @@ enum RmwPlace {
 impl RmwPlace {
     fn load(
         &self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         kind: LoadKind,
     ) -> super::super::ir::ValueId {
         match *self {
@@ -3813,7 +3813,7 @@ impl RmwPlace {
 
     fn store(
         &self,
-        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
         value: super::super::ir::ValueId,
         kind: StoreKind,
     ) {
@@ -3999,7 +3999,7 @@ fn is_bool_scalar(ty: i64) -> bool {
 /// value. Floating-point, pointer, `_Bool`, struct, and full-width
 /// integer results are left unchanged.
 fn extend_scalar_call_result(
-    b: &mut super::super::codegen::ssa_build::SsaBuilder,
+    b: &mut super::super::codegen::ssa::build::SsaBuilder,
     v: super::super::ir::ValueId,
     ty: i64,
     target: Target,
@@ -4041,7 +4041,7 @@ const UNSIGNED_BIT: i64 = 1 << 30;
 // low 32 bits (the operand reaches here zero-extended from the parser's
 // unsigned cast).
 
-type Bld = super::super::codegen::ssa_build::SsaBuilder;
+type Bld = super::super::codegen::ssa::build::SsaBuilder;
 type Val = super::super::ir::ValueId;
 
 /// Count set bits via the standard SWAR reduction. Right shifts are

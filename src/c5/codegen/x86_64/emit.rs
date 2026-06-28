@@ -60,8 +60,8 @@ use super::encode::{
     emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
     emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
 };
-use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::{build_arg_aggs, place_same_loc};
+use super::ssa::alloc::{Allocation, Place};
+use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 
 /// Per-function frame layout. Bytes are 16-aligned at every
 /// region boundary so SysV / Win64's sp-at-call invariant holds.
@@ -90,7 +90,7 @@ pub(crate) struct Frame {
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
     let (locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
-        super::ssa_emit_common::compute_frame_base(func, alloc);
+        super::ssa::emit_common::compute_frame_base(func, alloc);
     // System V variadic callees reserve the 176-byte register save
     // area (System V AMD64 3.5.7) at the bottom of the frame. It is
     // added to `frame_bytes` only; `alloc_spill_base` (and thus the
@@ -304,7 +304,7 @@ fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation, abi: super
     if !alloc.fp_used.is_empty() {
         return false;
     }
-    super::ssa_emit_common::function_makes_no_calls(func)
+    super::ssa::emit_common::function_makes_no_calls(func)
 }
 
 /// Per-parameter elidability scan. Returns the `(elidable, n_reg,
@@ -329,7 +329,7 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
     if func.is_variadic || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
-    super::ssa_emit_common::param_placements_common(func, abi)
+    super::ssa::emit_common::param_placements_common(func, abi)
 }
 
 /// `(n_reg, n_stack)` split of the declared parameters: how many land
@@ -373,7 +373,7 @@ fn param_elidable_mask(
     // integer parameters), so the count is derived from the plan
     // rather than `n_params.min(int_arg_regs.len())`.
     let (n_reg, n_stack) = param_reg_stack_split(func, abi);
-    let (seeded, addr_taken, needed) = super::ssa_emit_common::scan_param_slot_usage(func, alloc);
+    let (seeded, addr_taken, needed) = super::ssa::emit_common::scan_param_slot_usage(func, alloc);
     // A parameter whose incoming argument register the per-inst
     // `ParamRef` path clobbers before it is read must keep its c5 cdecl
     // home cell so it can read the value back from that cell rather than
@@ -453,7 +453,8 @@ fn param_home_clobber_set(
             if i >= n_reg {
                 continue;
             }
-            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
+            {
                 continue;
             }
             let Some(super::ArgPlacement::FpReg(arg_reg)) = param_plan.get(i).copied() else {
@@ -480,7 +481,7 @@ fn param_home_clobber_set(
         if (*idx as usize) >= n_reg {
             continue;
         }
-        if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+        if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
             continue;
         }
         let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
@@ -566,7 +567,7 @@ fn compute_param_from_home(
 }
 
 fn bail_msg(reason: &str) {
-    super::ssa_emit_common::bail_msg("x86_64", reason);
+    super::ssa::emit_common::bail_msg("x86_64", reason);
 }
 
 /// Extract the int reg from a `Place`, or `None` if it's not an
@@ -753,7 +754,7 @@ fn int_or_spill_dst(dst: Place) -> Option<Reg> {
 /// - (N+1)*8` is `frame_bytes - alloc_spill_base - (N+1)*8` from
 /// rsp. Mirror of the aarch64 module's formula.
 fn spill_slot_sp_offset(frame: Frame, slot: u32) -> i32 {
-    super::ssa_emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
+    super::ssa::emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
         as i32
 }
 
@@ -875,8 +876,8 @@ fn emit_phi_predecessor_moves(
 ) -> bool {
     // r10 / r11 (int) and xmm15 / xmm14 (fp) are reserved scratch outside the
     // allocator's banks, so they hold no value live across the terminator.
-    super::ssa_emit_common::emit_phi_predecessor_moves(
-        &super::ssa_emit_common::X64Backend,
+    super::ssa::emit_common::emit_phi_predecessor_moves(
+        &super::ssa::emit_common::X64Backend,
         code,
         self_block,
         func,
@@ -911,8 +912,8 @@ fn schedule_place_moves(
     hold: Reg,
     stage: Reg,
 ) -> bool {
-    super::ssa_emit_common::schedule_place_moves(
-        &super::ssa_emit_common::X64Backend,
+    super::ssa::emit_common::schedule_place_moves(
+        &super::ssa::emit_common::X64Backend,
         code,
         moves,
         frame,
@@ -929,9 +930,12 @@ fn schedule_place_moves(
 /// allocator's xmm pool so it collides with no pending source or
 /// target.
 fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
-    super::ssa_emit_common::schedule_reg_moves_via_scratch(code, moves, scratch.0, |code, t, s| {
-        emit_movapd_xmm_xmm(code, Reg(t), Reg(s))
-    });
+    super::ssa::emit_common::schedule_reg_moves_via_scratch(
+        code,
+        moves,
+        scratch.0,
+        |code, t, s| emit_movapd_xmm_xmm(code, Reg(t), Reg(s)),
+    );
 }
 
 /// Emit a single resolved FP location-to-location move over `FpReg`
@@ -939,7 +943,7 @@ fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 /// spill-to-spill case (load then store); it must lie outside the
 /// allocator's xmm pool. `IntReg` and `None` places never reach here
 /// (an FP phi's home and its operands are FP-classed).
-impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend {
+impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backend {
     type Frame = Frame;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_movapd_xmm_xmm(code, Reg(dst), Reg(src));
@@ -1009,7 +1013,7 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::X64Backend 
                 .map(|(s, _)| *s)
                 .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
                 .unwrap_or(moves[0].0);
-            super::ssa_emit_common::emit_place_move(
+            super::ssa::emit_common::emit_place_move(
                 self,
                 code,
                 cyc,
@@ -1403,7 +1407,7 @@ pub(crate) fn emit_function(
     func: &FunctionSsa,
     alloc: &Allocation,
     target: Target,
-    cx: &mut super::ssa_emit_common::EmitCtx,
+    cx: &mut super::ssa::emit_common::EmitCtx,
     fixups: &mut Vec<Fixup>,
     _got_fixups: &mut Vec<GotFixup>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
@@ -1463,7 +1467,7 @@ pub(crate) fn emit_function(
 
     let mut uw = emit_prologue(code, func, alloc, frame, abi, snapshot);
     uw.begin = snapshot as u32;
-    super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
+    super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     // Place the entry `Inst::ParamRef` values from their host argument
     // registers into the allocator's chosen locations. Emitting each
@@ -1507,7 +1511,8 @@ pub(crate) fn emit_function(
             // homes are scheduled as a parallel copy; an FP-register
             // home (a floating-point parameter) stays on the per-inst
             // path.
-            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
+            {
                 continue;
             }
             let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
@@ -1603,7 +1608,7 @@ pub(crate) fn emit_function(
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
             block_offsets[block_idx] = code.len();
-            super::ssa_emit_common::record_block_start_pc(
+            super::ssa::emit_common::record_block_start_pc(
                 block_idx,
                 block.start_pc,
                 pc_to_native,
@@ -1620,7 +1625,7 @@ pub(crate) fn emit_function(
             for v in block.inst_range.clone() {
                 let inst = &func.insts[v as usize];
                 let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
-                if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
+                if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
                     continue;
                 }
                 // ParamRef already placed by the entry parallel copy.
@@ -1635,7 +1640,7 @@ pub(crate) fn emit_function(
                 {
                     continue;
                 }
-                super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+                super::ssa::emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
                 // GCC `&&label`: materialize the block's address with a
                 // PC-relative lea. Handled here (not emit_inst) because the
                 // disp32 resolves against this function's local
@@ -1662,7 +1667,7 @@ pub(crate) fn emit_function(
                 }
                 let data_fixups_pre_inst = data_fixups.len();
                 let inst_ok = {
-                    let mut cx = super::ssa_emit_common::EmitCtx {
+                    let mut cx = super::ssa::emit_common::EmitCtx {
                         code: &mut *code,
                         plt_call_fixups: &mut *plt_call_fixups,
                         data_fixups: &mut *data_fixups,
@@ -2641,7 +2646,7 @@ struct FnCtx<'a> {
 }
 
 fn emit_inst(
-    cx: &mut super::ssa_emit_common::EmitCtx,
+    cx: &mut super::ssa::emit_common::EmitCtx,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -3280,7 +3285,7 @@ fn emit_tls_addr(
     }
 }
 
-use super::ssa_emit_common::c5_slot_to_fp_offset;
+use super::ssa::emit_common::c5_slot_to_fp_offset;
 
 /// rbp-relative byte offset of the c5 cdecl slot `off` for the
 /// current callee, accounting for the System V variadic register
@@ -6881,8 +6886,8 @@ fn emit_mcpy(
 /// `Place`. Runs after the borrowed registers are restored so the
 /// spill slot's rsp offset is the unshifted one.
 fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
-    super::ssa_emit_common::write_atomic_result(
-        &super::ssa_emit_common::X64Backend,
+    super::ssa::emit_common::write_atomic_result(
+        &super::ssa::emit_common::X64Backend,
         code,
         dst,
         src.0,
@@ -7356,7 +7361,7 @@ fn emit_return(
         || matches!(return_place, Place::FpReg(_))
         || (value != super::super::ir::NO_VALUE
             && (value as usize) < func.insts.len()
-            && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));
+            && super::ssa::alloc::produces_fp_result(&func.insts[value as usize]));
     let needs_staging = matches!(return_place, Place::IntReg(r) if alloc.gpr_used.contains(&r));
     // An integer return value sitting in a callee-saved register goes
     // straight to rax BEFORE the restore loop: rax is caller-saved (never

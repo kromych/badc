@@ -802,7 +802,7 @@ fn dead_local_only_function_skips_frame_sub_sp() {
     // codegen_test pressure knobs (BADC_MAX_GPR / BADC_MAX_FPR) do not
     // perturb it.
     let bytes =
-        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        crate::c5::codegen::ssa::alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
             emit_native_with_options(
                 &program,
                 Target::MacOSAarch64,
@@ -865,7 +865,7 @@ fn x64_arg_permutation_cycle_uses_xchg() {
     .compile()
     .expect("compile");
     let obj =
-        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        crate::c5::codegen::ssa::alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
             emit_native_with_options(
                 &program,
                 Target::LinuxX64,
@@ -911,7 +911,7 @@ fn x64_spillfree_leaf_elides_frame_and_scratch_save() {
     // Pin the full register file so the codegen_test pressure knobs do
     // not spill the body and reintroduce a frame.
     let obj =
-        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        crate::c5::codegen::ssa::alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
             emit_native_with_options(
                 &program,
                 Target::LinuxX64,
@@ -978,7 +978,7 @@ fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
     // the allocator to the full pool so the codegen_test pressure knobs
     // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
     let bytes =
-        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        crate::c5::codegen::ssa::alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
             crate::c5::codegen::emit_native_single_tu_for_test(
                 &program,
                 Target::WindowsAarch64,

@@ -58,17 +58,7 @@ mod passes;
 mod pe;
 #[cfg(feature = "std")]
 mod so_versions;
-pub(crate) mod ssa_alloc;
-pub(crate) mod ssa_build;
-#[cfg(feature = "std")]
-mod ssa_dump;
-mod ssa_emit_common;
-mod ssa_liveness;
-pub(crate) mod ssa_mem2reg;
-mod ssa_native;
-mod ssa_phi_class;
-pub(crate) mod ssa_shadow;
-mod ssa_slot_coalesce;
+pub(crate) mod ssa;
 mod x86_64;
 
 /// Re-exported for the multi-TU link path, which recovers Win64
@@ -2059,7 +2049,7 @@ pub fn emit_native_with_options_named(
     // compaction feeds both the backend lowering (which bakes data-relative
     // fixups) and the container writer (which emits the symbol table), so
     // the emitted `.data` and its symbols stay consistent.
-    let (compacted, bss_size) = crate::c5::codegen::ssa_shadow::compact_program_data(
+    let (compacted, bss_size) = crate::c5::codegen::ssa::shadow::compact_program_data(
         program,
         target,
         options.bss_segregate && !bss_segregation_disabled(),
@@ -2086,7 +2076,7 @@ pub(crate) fn emit_native_single_tu_for_test(
     target: Target,
     options: NativeOptions,
 ) -> Result<alloc::vec::Vec<u8>, C5Error> {
-    let (compacted, bss_size) = crate::c5::codegen::ssa_shadow::compact_program_data(
+    let (compacted, bss_size) = crate::c5::codegen::ssa::shadow::compact_program_data(
         program,
         target,
         options.bss_segregate && !bss_segregation_disabled(),

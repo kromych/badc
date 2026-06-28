@@ -47,7 +47,7 @@ fn as_fmul(func: &FunctionSsa, idx: ValueId, want_f32: bool) -> Option<(ValueId,
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
     let mut counts = alloc::vec![0u32; func.insts.len()];
     for inst in &func.insts {
-        crate::c5::codegen::ssa_alloc::for_each_operand(inst, |v| {
+        crate::c5::codegen::ssa::alloc::for_each_operand(inst, |v| {
             if let Some(slot) = counts.get_mut(v as usize) {
                 *slot += 1;
             }

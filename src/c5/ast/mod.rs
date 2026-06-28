@@ -2,7 +2,7 @@
 //!
 //! Built by the parser (`c5::compiler`) one function at a time and
 //! consumed by `c5::ast::walk` to drive
-//! `c5::codegen::ssa_build::SsaBuilder`. The canonical
+//! `c5::codegen::ssa::build::SsaBuilder`. The canonical
 //! function-shaped IR the walker descends to produce
 //! `FunctionSsa`.
 //!

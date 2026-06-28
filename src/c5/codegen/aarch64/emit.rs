@@ -61,8 +61,8 @@ use super::encode::{
     enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv,
     load_imm64,
 };
-use super::ssa_alloc::{Allocation, Place};
-use super::ssa_emit_common::{build_arg_aggs, place_same_loc};
+use super::ssa::alloc::{Allocation, Place};
+use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 
 /// Compute the aarch64 stack-frame layout for `func`. Fills the shared
 /// [`Frame`]'s aarch64 fields; the x86_64-only fields stay at their defaults.
@@ -95,8 +95,8 @@ pub(crate) struct Frame {
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
     let (locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
-        super::ssa_emit_common::compute_frame_base(func, alloc);
-    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
+        super::ssa::emit_common::compute_frame_base(func, alloc);
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     // Reserve the x19 slot only when the function actually
     // clobbers x19; the prologue / epilogue's store / load already
     // gates on the same condition, so a function that leaves x19
@@ -106,7 +106,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
     // `function_clobbers_scratch`, which knows each target's
     // reserved scratch set.
     let uses_x19 =
-        !super::ssa_alloc::function_clobbers_scratch(func, target, alloc.spill_count).is_empty();
+        !super::ssa::alloc::function_clobbers_scratch(func, target, alloc.spill_count).is_empty();
     let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
     let frame_bytes =
         locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
@@ -236,7 +236,7 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
     if !spills_named_params_on_entry(func, abi) || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
-    super::ssa_emit_common::param_placements_common(func, abi)
+    super::ssa::emit_common::param_placements_common(func, abi)
 }
 
 /// `(n_reg, n_stack)` split of the declared parameters: how many land
@@ -302,7 +302,7 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
     }
     let (n_reg, n_stack) = param_reg_stack_split(func, abi);
 
-    let (seeded, addr_taken, needed) = super::ssa_emit_common::scan_param_slot_usage(func, alloc);
+    let (seeded, addr_taken, needed) = super::ssa::emit_common::scan_param_slot_usage(func, alloc);
 
     // Elision is safe only when the entire register-passed
     // stripe is skippable. Host-stack overflow shifts slot
@@ -338,11 +338,11 @@ fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
     if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {
         return false;
     }
-    super::ssa_emit_common::function_makes_no_calls(func)
+    super::ssa::emit_common::function_makes_no_calls(func)
 }
 
 fn bail_msg(reason: &str) {
-    super::ssa_emit_common::bail_msg("aarch64", reason);
+    super::ssa::emit_common::bail_msg("aarch64", reason);
 }
 
 fn bail(reason: &str, value: u32, place: Place) {
@@ -361,7 +361,7 @@ fn bail(reason: &str, value: u32, place: Place) {
 /// math helper so the per-call sites read as `spill_off(frame,
 /// slot)` rather than the four-argument call.
 fn spill_off(frame: Frame, slot: u32) -> u32 {
-    super::ssa_emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
+    super::ssa::emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
 }
 
 /// Largest byte displacement reachable by the scaled-imm12 unsigned-
@@ -541,7 +541,7 @@ pub(crate) fn emit_function(
     func: &FunctionSsa,
     alloc: &Allocation,
     target: Target,
-    cx: &mut super::ssa_emit_common::EmitCtx,
+    cx: &mut super::ssa::emit_common::EmitCtx,
     fixups: &mut Vec<Fixup>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
@@ -583,7 +583,7 @@ pub(crate) fn emit_function(
     let elf_tpoff_snapshot = elf_tpoff_fixups.len();
 
     emit_prologue(code, func, alloc, frame, abi);
-    super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
+    super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     // Per-parameter incoming-register plan; consumed by the per-inst
     // `Inst::ParamRef` lowering to source each parameter from its
@@ -631,7 +631,8 @@ pub(crate) fn emit_function(
             // homes are scheduled as a parallel copy; an FP-register
             // home (a floating-point parameter) stays on the per-inst
             // path.
-            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
+            {
                 continue;
             }
             let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
@@ -706,7 +707,8 @@ pub(crate) fn emit_function(
             if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
                 continue;
             }
-            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
+            {
                 continue;
             }
             let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
@@ -724,8 +726,8 @@ pub(crate) fn emit_function(
         let homes_distinct = (0..fp_homes.len())
             .all(|a| ((a + 1)..fp_homes.len()).all(|b| !place_same_loc(fp_homes[a], fp_homes[b])));
         if !fp_moves.is_empty() && homes_distinct {
-            super::ssa_emit_common::schedule_fp_place_moves(
-                &super::ssa_emit_common::Aarch64Backend,
+            super::ssa::emit_common::schedule_fp_place_moves(
+                &super::ssa::emit_common::Aarch64Backend,
                 code,
                 &mut fp_moves,
                 frame,
@@ -751,7 +753,7 @@ pub(crate) fn emit_function(
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
-        super::ssa_emit_common::record_block_start_pc(
+        super::ssa::emit_common::record_block_start_pc(
             block_idx,
             block.start_pc,
             pc_to_native,
@@ -766,14 +768,14 @@ pub(crate) fn emit_function(
             // upstream `Add` / `BinopI` dead; the result
             // computation produces no machine code if no one
             // will read it.
-            if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
             }
             // ParamRef already placed by the entry parallel copy.
             if param_prebatched[v as usize] {
                 continue;
             }
-            super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+            super::ssa::emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
             // GCC `&&label`: materialize the block's address with a
             // PC-relative ADR. Handled here (not emit_inst) because the
             // fixup resolves against this function's local block_offsets
@@ -808,7 +810,7 @@ pub(crate) fn emit_function(
             }
             let data_fixups_pre_inst = data_fixups.len();
             let inst_ok = {
-                let mut cx = super::ssa_emit_common::EmitCtx {
+                let mut cx = super::ssa::emit_common::EmitCtx {
                     code: &mut *code,
                     plt_call_fixups: &mut *plt_call_fixups,
                     data_fixups: &mut *data_fixups,
@@ -1440,7 +1442,7 @@ fn emit_prologue(
             }
         }
         let (seeded_params, addr_taken_slots, needed_slots) =
-            super::ssa_emit_common::scan_param_slot_usage(func, alloc);
+            super::ssa::emit_common::scan_param_slot_usage(func, alloc);
         let mut pending_sub: u32 = 0;
         for i in (0..n_reg).rev() {
             let slot = (i as i64) + 2;
@@ -1638,13 +1640,13 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
         let off = (i as u32) * 8;
         emit(code, enc_str_d_imm(r, Reg(31), off));
     }
-    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = saved_fpr_bytes + (i as u32) * 8;
         emit(code, enc_str_imm(Reg(r), Reg(31), off));
     }
     if frame.uses_x19 {
-        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
+        let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
         let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
         emit(code, enc_str_imm(Reg(19), Reg(31), x19_save_off));
     }
@@ -1653,8 +1655,8 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
 /// Byte offset (positive) from fp to the start of the saved-reg
 /// region. The region is the lowest portion of the frame.
 fn alloc_save_base(frame: Frame, alloc: &Allocation) -> u32 {
-    let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
-    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
+    let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     // fp is at frame top; the saved-reg region sits at the
     // bottom. Distance from fp = frame_bytes - saved-region size.
     frame
@@ -1738,7 +1740,7 @@ struct FnCtx<'a> {
 }
 
 fn emit_inst(
-    cx: &mut super::ssa_emit_common::EmitCtx,
+    cx: &mut super::ssa::emit_common::EmitCtx,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -4067,8 +4069,8 @@ fn atomic_operand_into(
 /// `Place`. Run after the working registers are restored so a spilled
 /// result lands at the unshifted sp offset.
 fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
-    super::ssa_emit_common::write_atomic_result(
-        &super::ssa_emit_common::Aarch64Backend,
+    super::ssa::emit_common::write_atomic_result(
+        &super::ssa::emit_common::Aarch64Backend,
         code,
         dst,
         src.0,
@@ -4225,7 +4227,7 @@ fn emit_atomic_cas(
 /// Translate a c5-stack slot index (the operand of an
 /// address-of-local emit) into a byte offset relative to fp.
 /// Mirror of the pool path's
-use super::ssa_emit_common::c5_slot_to_fp_offset;
+use super::ssa::emit_common::c5_slot_to_fp_offset;
 
 /// fp-relative byte offset of a c5 slot. Locals (`off < 0`) and the
 /// ordinary parameter cells go through `c5_slot_to_fp_offset` at the
@@ -5768,9 +5770,12 @@ fn fp_reg(place: Place) -> Option<u8> {
 /// `scratch` that lives outside the allocator's bank so it cannot
 /// collide with any pending source or target.
 fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
-    super::ssa_emit_common::schedule_reg_moves_via_scratch(code, moves, scratch.0, |code, t, s| {
-        emit_mov_reg(code, Reg(t), Reg(s))
-    });
+    super::ssa::emit_common::schedule_reg_moves_via_scratch(
+        code,
+        moves,
+        scratch.0,
+        |code, t, s| emit_mov_reg(code, Reg(t), Reg(s)),
+    );
 }
 
 /// Sequentialize a parallel copy over d-registers. Mirrors
@@ -5778,9 +5783,12 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 /// copies. `scratch_d` must lie outside the allocator's d-register
 /// pool so it collides with no pending source or target.
 fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch_d: u8) {
-    super::ssa_emit_common::schedule_reg_moves_via_scratch(code, moves, scratch_d, |code, t, s| {
-        emit(code, super::encode::enc_fmov_d_d(t, s))
-    });
+    super::ssa::emit_common::schedule_reg_moves_via_scratch(
+        code,
+        moves,
+        scratch_d,
+        |code, t, s| emit(code, super::encode::enc_fmov_d_d(t, s)),
+    );
 }
 
 /// Emit the predecessor-exit moves for each `Inst::Phi` at the head
@@ -5805,8 +5813,8 @@ fn emit_phi_predecessor_moves(
 ) -> bool {
     // d16 / d17 are reserved FP scratch outside the allocator's d0..d15 pool;
     // `scratch.primary` / `secondary` are the reserved integer scratch.
-    super::ssa_emit_common::emit_phi_predecessor_moves(
-        &super::ssa_emit_common::Aarch64Backend,
+    super::ssa::emit_common::emit_phi_predecessor_moves(
+        &super::ssa::emit_common::Aarch64Backend,
         code,
         self_block,
         func,
@@ -5843,8 +5851,8 @@ fn schedule_place_moves(
     hold: Reg,
     stage: Reg,
 ) -> bool {
-    super::ssa_emit_common::schedule_place_moves(
-        &super::ssa_emit_common::Aarch64Backend,
+    super::ssa::emit_common::schedule_place_moves(
+        &super::ssa::emit_common::Aarch64Backend,
         code,
         moves,
         frame,
@@ -5858,7 +5866,7 @@ fn schedule_place_moves(
 /// spill-to-spill case (load then store); it must lie outside the
 /// allocator's FP pool. `IntReg` and `None` places never reach here
 /// (an FP phi's home and its operands are FP-classed).
-impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Backend {
+impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Backend {
     type Frame = Frame;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit(code, super::encode::enc_fmov_d_d(dst, src));
@@ -5913,7 +5921,7 @@ impl super::ssa_emit_common::EmitBackend for super::ssa_emit_common::Aarch64Back
             .map(|(s, _)| *s)
             .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
             .unwrap_or(moves[0].0);
-        super::ssa_emit_common::emit_place_move(
+        super::ssa::emit_common::emit_place_move(
             self,
             code,
             cyc,
@@ -6324,7 +6332,7 @@ fn emit_return(
         // register file even when the allocator spilled it.
         let returns_fp = func.ret_is_fp
             || ((value as usize) < func.insts.len()
-                && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));
+                && super::ssa::alloc::produces_fp_result(&func.insts[value as usize]));
         if let Place::FpReg(r) = place {
             if r != 0 {
                 emit(code, super::encode::enc_fmov_d_d(0, r));
@@ -6358,7 +6366,7 @@ fn emit_return(
     // 12-bit scaled immediate (range 0..32760 in multiples of
     // 8); the matching prologue uses `enc_str_imm` at the same
     // offsets.
-    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = saved_fpr_bytes + (i as u32) * 8;
         emit(code, enc_ldr_imm(Reg(r), Reg(31), off));
@@ -6371,7 +6379,7 @@ fn emit_return(
     // mirror of the prologue's save, emitted only when the function
     // clobbers x19.
     if frame.uses_x19 {
-        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
+        let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
         let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
         emit(code, enc_ldr_imm(Reg(19), Reg(31), x19_save_off));
     }
@@ -6416,10 +6424,10 @@ mod tests {
 
     fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, Allocation) {
         let program = Compiler::new(src.into()).compile().expect("compile");
-        let funcs = crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target)
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target)
             .expect("produce_ssa_funcs");
         let main = funcs.into_iter().next().expect("at least one function");
-        let alloc = super::super::ssa_alloc::allocate(&main, target);
+        let alloc = super::super::ssa::alloc::allocate(&main, target);
         (main, alloc)
     }
 
@@ -6453,7 +6461,7 @@ mod tests {
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
         let ok = {
-            let mut cx = super::super::ssa_emit_common::EmitCtx {
+            let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
                 plt_call_fixups: &mut plt,
                 data_fixups: &mut data_fx,
@@ -6515,7 +6523,7 @@ mod tests {
         .compile()
         .expect("compile");
         let mut funcs =
-            crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target).expect("ssa");
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
         // StoreIndexed is produced by the index fold, which the lowering
         // runs after `produce_ssa_funcs`.
         crate::c5::codegen::passes::index_fold::run(&mut funcs);
@@ -6541,7 +6549,7 @@ mod tests {
                 _ => None,
             })
             .expect("StoreIndexed operands");
-        let mut alloc = super::super::ssa_alloc::allocate(&func, target);
+        let mut alloc = super::super::ssa::alloc::allocate(&func, target);
         alloc.places[base as usize] = Place::Spill(0);
         alloc.places[index as usize] = Place::Spill(1);
         alloc.places[value as usize] = Place::Spill(2);
@@ -6620,7 +6628,7 @@ mod tests {
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
         let ok = {
-            let mut cx = super::super::ssa_emit_common::EmitCtx {
+            let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
                 plt_call_fixups: &mut plt,
                 data_fixups: &mut data_fx,
@@ -6686,7 +6694,7 @@ mod tests {
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
         let ok = {
-            let mut cx = super::super::ssa_emit_common::EmitCtx {
+            let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
                 plt_call_fixups: &mut plt,
                 data_fixups: &mut data_fx,

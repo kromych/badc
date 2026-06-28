@@ -3,8 +3,8 @@
 //! All AArch64 instructions are 32 bits wide and little-endian on every
 //! supported OS, which makes the encoder a flat catalogue of
 //! `fn enc_xxx(...) -> u32`. Per-function code generation routes
-//! through [`super::ssa_shadow::produce_ssa_funcs`] +
-//! [`super::ssa_alloc::allocate`] + `super::ssa_emit_aarch64`; this
+//! through [`super::ssa::shadow::produce_ssa_funcs`] +
+//! [`super::ssa::alloc::allocate`] + `super::ssa_emit_aarch64`; this
 //! module's `lower()` is the shell that drives the SSA pipeline and
 //! the post-pass fixups (PLT trampolines, branch fixups,
 //! data-relocation patching).
@@ -1476,8 +1476,8 @@ pub(crate) fn lower(
     // immediately. `--dump-ssa` prints the IR + allocation for
     // each function.
     let mut ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
-        super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
-            super::ssa_shadow::produce_ssa_funcs(program, target)
+        super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
+            super::ssa::shadow::produce_ssa_funcs(program, target)
         })?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
@@ -1496,8 +1496,8 @@ pub(crate) fn lower(
     // info so the emitted code is identical with and without -g.
     if !native.optimize {
         let coalesce_dwarf =
-            super::ssa_emit_common::time_pass("ssa_slot_coalesce::run (aarch64)", || {
-                super::ssa_slot_coalesce::run(&mut ssa_funcs)
+            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run (aarch64)", || {
+                super::ssa::slot_coalesce::run(&mut ssa_funcs)
             });
         for (ent_pc, map) in coalesce_dwarf {
             for (orig, new) in map {
@@ -1518,9 +1518,9 @@ pub(crate) fn lower(
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
     if native.optimize {
-        super::ssa_emit_common::time_pass("ssa_mem2reg::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("ssa::mem2reg::run (aarch64)", || {
             for f in &mut ssa_funcs {
-                let promoted = super::ssa_mem2reg::run(f);
+                let promoted = super::ssa::mem2reg::run(f);
                 if !promoted.is_empty() {
                     promoted_local_slots.insert(f.ent_pc, promoted);
                 }
@@ -1528,7 +1528,7 @@ pub(crate) fn lower(
         });
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
-        super::ssa_emit_common::time_pass("passes::inline::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::inline::run (aarch64)", || {
             crate::c5::codegen::passes::inline::run(
                 &mut ssa_funcs,
                 native.inline_cap,
@@ -1537,35 +1537,35 @@ pub(crate) fn lower(
         });
         // Forward an inlined one-word struct return out of its frame slot;
         // see x86_64.rs's matching block for the rationale.
-        super::ssa_emit_common::time_pass("passes::struct_return_reg::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::struct_return_reg::run (aarch64)", || {
             crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("passes::rotate::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::rotate::run (aarch64)", || {
             crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
         });
         // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
         // -O). Runs after the inliner so products exposed by parameter
         // substitution into an add/sub become contractible.
-        super::ssa_emit_common::time_pass("passes::fma::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::fma::run (aarch64)", || {
             crate::c5::codegen::passes::fma::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("passes::constfold_branch::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::constfold_branch::run (aarch64)", || {
             crate::c5::codegen::passes::constfold_branch::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("passes::split_crit_edges::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::split_crit_edges::run (aarch64)", || {
             crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("passes::dedup_imm::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::dedup_imm::run (aarch64)", || {
             crate::c5::codegen::passes::dedup_imm::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("passes::drop_redundant_extend::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::drop_redundant_extend::run (aarch64)", || {
             crate::c5::codegen::passes::drop_redundant_extend::run(&mut ssa_funcs);
         });
         // Scaled-index addressing: fold `base + index*scale` into the
         // load / store. Runs last so it sees the final address shape;
         // the optimizer passes never traverse `LoadIndexed` /
         // `StoreIndexed`, so the per-arch emit is the only later consumer.
-        super::ssa_emit_common::time_pass("passes::index_fold::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::index_fold::run (aarch64)", || {
             crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
         });
         // Store-to-load and load-to-load forwarding within a block. Runs
@@ -1573,7 +1573,7 @@ pub(crate) fn lower(
         // are both normalised to the same `(base, disp)`. Bounded by
         // live-range extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
-        super::ssa_emit_common::time_pass("passes::store_forward::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("passes::store_forward::run (aarch64)", || {
             crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
         });
     }
@@ -1614,15 +1614,15 @@ pub(crate) fn lower(
             }
         }
     }
-    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
-        super::ssa_emit_common::time_pass("ssa_alloc::allocate (aarch64)", || {
+    let ssa_allocs: alloc::vec::Vec<super::ssa::alloc::Allocation> =
+        super::ssa::emit_common::time_pass("ssa::alloc::allocate (aarch64)", || {
             ssa_funcs
                 .iter()
-                .map(|f| super::ssa_alloc::allocate(f, target))
+                .map(|f| super::ssa::alloc::allocate(f, target))
                 .collect()
         });
     #[cfg(feature = "std")]
-    if super::ssa_dump::enabled(native) {
+    if super::ssa::dump::enabled(native) {
         let name_by_ent: alloc::collections::BTreeMap<usize, &str> = program
             .finished_functions
             .iter()
@@ -1632,7 +1632,7 @@ pub(crate) fn lower(
             if let Some(name) = name_by_ent.get(&f.ent_pc) {
                 eprintln!("; name={name}");
             }
-            eprint!("{}", super::ssa_dump::dump_function(f, a));
+            eprint!("{}", super::ssa::dump::dump_function(f, a));
         }
     }
     #[cfg(feature = "std")]
@@ -1658,7 +1658,7 @@ pub(crate) fn lower(
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
             .collect();
         let ok = {
-            let mut cx = super::ssa_emit_common::EmitCtx {
+            let mut cx = super::ssa::emit_common::EmitCtx {
                 code: &mut code,
                 plt_call_fixups: &mut plt_call_fixups,
                 data_fixups: &mut data_fixups,
@@ -1694,7 +1694,7 @@ pub(crate) fn lower(
         }
     }
     #[cfg(feature = "std")]
-    if super::ssa_emit_common::time_passes_enabled() {
+    if super::ssa::emit_common::time_passes_enabled() {
         let us = _ssa_emit_pass_start.elapsed().as_micros();
         eprintln!("pass: ssa_emit_aarch64 (block walk) -- {us}us");
     }

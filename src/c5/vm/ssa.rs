@@ -1941,7 +1941,7 @@ mod tests {
         let program = Compiler::new(src.to_string())
             .compile()
             .expect("compile fixture");
-        let funcs = super::super::super::codegen::ssa_shadow::produce_ssa_funcs(
+        let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             super::super::super::Target::MacOSAarch64,
         )
@@ -1956,7 +1956,7 @@ mod tests {
         let program = Compiler::new(src.to_string())
             .compile()
             .expect("compile fixture");
-        let funcs = super::super::super::codegen::ssa_shadow::produce_ssa_funcs(
+        let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             super::super::super::Target::MacOSAarch64,
         )
@@ -2093,7 +2093,7 @@ mod tests {
         let program = Compiler::new(src.to_string())
             .compile()
             .expect("compile fixture");
-        let funcs = super::super::super::codegen::ssa_shadow::produce_ssa_funcs(
+        let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             super::super::super::Target::MacOSAarch64,
         )
@@ -2175,7 +2175,7 @@ mod tests {
         )
         .compile()
         .expect("compile fixture");
-        let funcs = super::super::super::codegen::ssa_shadow::produce_ssa_funcs(
+        let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             super::super::super::Target::MacOSAarch64,
         )

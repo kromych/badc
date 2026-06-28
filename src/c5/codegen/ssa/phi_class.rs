@@ -12,7 +12,7 @@
 //! to merge the result's class with each operand's class, allowing the
 //! merge only when no member of one class interferes with any member of
 //! the other. The interference test is the value-liveness query in
-//! [`super::ssa_liveness`]. An operand whose class cannot merge keeps
+//! [`super::liveness`]. An operand whose class cannot merge keeps
 //! its own location, and the per-arch emit materialises it with a real
 //! move on the phi's predecessor edge.
 //!
@@ -22,13 +22,13 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{FunctionSsa, Inst, NO_VALUE, ValueId};
-use super::ssa_liveness::Liveness;
+use super::liveness::Liveness;
 
 /// Union-find over `ValueId`s. Two values share a class when a chain
 /// of non-interfering phi merges connects them.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub(super) struct PhiClasses {
+pub(crate) struct PhiClasses {
     /// Parent pointer per value. `parent[v] == v` marks `v` as a root.
     parent: Vec<ValueId>,
 }
@@ -41,7 +41,7 @@ impl PhiClasses {
     /// interference-free. Processing preserves the invariant that every
     /// class is internally interference-free, so the allocator may
     /// assign one location per class.
-    pub(super) fn build(func: &FunctionSsa, live: &Liveness) -> Self {
+    pub(crate) fn build(func: &FunctionSsa, live: &Liveness) -> Self {
         let n = func.insts.len();
         let mut classes = Self {
             parent: (0..n as ValueId).collect(),
@@ -76,8 +76,8 @@ impl PhiClasses {
                 // operands are FP, so this normally never fires, but it
                 // guards against an FP-classed operand merging with an
                 // integer-classed one (a class-crossing location share).
-                if super::ssa_alloc::produces_fp_result(&func.insts[idx])
-                    != super::ssa_alloc::produces_fp_result(&func.insts[src as usize])
+                if super::alloc::produces_fp_result(&func.insts[idx])
+                    != super::alloc::produces_fp_result(&func.insts[src as usize])
                 {
                     continue;
                 }
@@ -102,7 +102,7 @@ impl PhiClasses {
 
     /// Find the root of `v`'s class, compressing the path on the way.
     /// Iterative to avoid recursion overflow on deeply chained phis.
-    pub(super) fn find(&mut self, v: ValueId) -> ValueId {
+    pub(crate) fn find(&mut self, v: ValueId) -> ValueId {
         let mut cur = v;
         while self.parent[cur as usize] != cur {
             cur = self.parent[cur as usize];
@@ -119,7 +119,7 @@ impl PhiClasses {
 
     /// Number of values the union-find tracks. Equals
     /// `func.insts.len()` at construction time.
-    pub(super) fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.parent.len()
     }
 }

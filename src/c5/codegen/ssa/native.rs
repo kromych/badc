@@ -34,14 +34,14 @@ use super::{ResolvedImports, Target};
 /// * it uses TLS (`TlsAddr`) or macOS thread-local descriptors,
 /// * the host emit bails for any other reason (unsupported shape).
 ///
-/// Used by the [`super::ssa_build::SsaBuilder`] regression tests and
+/// Used by the [`super::build::SsaBuilder`] regression tests and
 /// by future parser-side SSA emit work; production codegen still
 /// flows through [`super::emit_native`].
 pub(crate) fn compile_function_to_bytes(
     func: &FunctionSsa,
     target: Target,
 ) -> Result<Vec<u8>, String> {
-    let alloc = super::ssa_alloc::allocate(func, target);
+    let alloc = super::alloc::allocate(func, target);
     let imports = ResolvedImports::default();
     let variadic_targets: BTreeSet<usize> = BTreeSet::new();
     let mut pc_to_native: Vec<usize> = alloc::vec![0usize; func.end_pc + 1];
@@ -69,7 +69,7 @@ pub(crate) fn compile_function_to_bytes(
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
             let ok = {
-                let mut cx = super::ssa_emit_common::EmitCtx {
+                let mut cx = super::emit_common::EmitCtx {
                     code: &mut code,
                     plt_call_fixups: &mut plt_call_fixups,
                     data_fixups: &mut data_fixups,
@@ -133,7 +133,7 @@ pub(crate) fn compile_function_to_bytes(
             // descriptor is discarded.
             let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
             let ok = {
-                let mut cx = super::ssa_emit_common::EmitCtx {
+                let mut cx = super::emit_common::EmitCtx {
                     code: &mut code,
                     plt_call_fixups: &mut plt_call_fixups,
                     data_fixups: &mut data_fixups,
@@ -183,7 +183,7 @@ pub(crate) fn compile_function_to_bytes(
 #[cfg(test)]
 mod tests {
     use super::super::super::ir::{BinOp, LoadKind};
-    use super::super::ssa_build::SsaBuilder;
+    use super::super::build::SsaBuilder;
     use super::*;
 
     /// Hand-build `long sum3(int a, int b, int c) { return a + b + c; }`

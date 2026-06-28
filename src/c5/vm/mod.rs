@@ -80,7 +80,7 @@ impl<H: Host> Vm<H> {
         // dispatch into the interpreter directly. Failures here
         // (walker compile errors, etc.) are deferred to `run`
         // because `with_host` doesn't return `Result`.
-        let ssa_funcs = super::codegen::ssa_shadow::produce_ssa_funcs(&program, Target::host());
+        let ssa_funcs = super::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host());
         let binding_names = program
             .dylibs
             .iter()

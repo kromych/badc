@@ -704,7 +704,7 @@ fn slot_class(func: &FunctionSsa, slot: i64) -> Option<SlotClass> {
             Inst::StoreLocal {
                 off, value, kind, ..
             } if *off == slot => {
-                if super::ssa_alloc::produces_fp_result(&func.insts[*value as usize]) {
+                if super::alloc::produces_fp_result(&func.insts[*value as usize]) {
                     // A full-width FP store kind selects the slot's
                     // width. A narrowing FP store cannot occur (there is
                     // no sub-width FP store kind), so the store kind is

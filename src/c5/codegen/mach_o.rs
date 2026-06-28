@@ -3184,7 +3184,7 @@ mod tests {
             .compile()
             .expect("compile");
         let (compacted, bss_size) =
-            super::super::ssa_shadow::compact_program_data(&program, target, true)
+            super::super::ssa::shadow::compact_program_data(&program, target, true)
                 .expect("compact");
         let mut build =
             super::super::lower_for(&compacted, target, super::super::NativeOptions::default())

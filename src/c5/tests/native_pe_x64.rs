@@ -517,7 +517,7 @@ fn build_pe_bytes(src: &str) -> Vec<u8> {
     // Byte-exact assertions hold only with the full register file; pin
     // the allocator to the full pool so the codegen_test pressure knobs
     // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
-    crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+    crate::c5::codegen::ssa::alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
         crate::c5::codegen::emit_native_single_tu_for_test(
             &program,
             Target::WindowsX64,

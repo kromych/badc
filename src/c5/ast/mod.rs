@@ -2,7 +2,7 @@
 //!
 //! Built by the parser (`c5::compiler`) one function at a time and
 //! consumed by `c5::ast::walk` to drive
-//! `c5::codegen::ssa_build::SsaBuilder`. The canonical
+//! `c5::codegen::ssa::build::SsaBuilder`. The canonical
 //! function-shaped IR the walker descends to produce
 //! `FunctionSsa`.
 //!
@@ -495,7 +495,7 @@ pub(crate) struct FinishedFunction {
     /// True if the source declarator carried an `inline` /
     /// `__inline` / `__inline__` function specifier (C99 6.7.4).
     /// The walker propagates this onto `FunctionSsa::is_inline` so
-    /// `ssa_inline` bypasses its body-size cap for these.
+    /// `inline` bypasses its body-size cap for these.
     pub is_inline: bool,
     pub n_locals: i64,
     /// Per-parameter type tags in declared order. The walker

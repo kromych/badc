@@ -47,7 +47,7 @@ use alloc::vec::Vec;
 use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::DataFixup;
 use super::Target;
-use super::aarch64::{
+use super::encode::{
     BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
     enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
@@ -61,135 +61,88 @@ use super::aarch64::{
     enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv,
     load_imm64,
 };
-use super::ssa_alloc::{Allocation, Place};
+use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
+use super::ssa::reg_alloc::{Allocation, Place};
 
-/// Per-function frame layout. Bytes are 16-aligned at every
-/// region boundary so AAPCS64's sp-at-call-site invariant holds.
+/// Compute the aarch64 stack-frame layout for `func`. Fills the shared
+/// [`Frame`]'s aarch64 fields; the x86_64-only fields stay at their defaults.
+/// Per-function stack-frame layout for aarch64. Every region is an explicit
+/// byte count so the prologue and epilogue read the same values.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Frame {
-    /// Total frame size below fp, sub-spilled once at prologue
-    /// entry. Includes locals, allocator spills, and saved
-    /// callee-saved regs.
+pub(crate) struct Frame {
+    /// Total frame the prologue allocates: locals + allocator spills + saved
+    /// callee-saved registers + any register-save area.
     pub frame_bytes: u32,
-    /// Byte distance from fp down to the start of the
-    /// allocator-managed spill region.
+    /// Byte distance from the frame base down to the allocator spill region.
     pub alloc_spill_base: u32,
-    /// Whether this function clobbers x19. x19 is callee-saved per
-    /// AAPCS64 and is the scratch the writer's patch_adrp_add forces
-    /// for address materialisation, so it is saved and restored only
-    /// when the function actually uses it (see the aarch64 arm of
-    /// [`super::ssa_alloc::function_clobbers_scratch`]).
-    pub uses_x19: bool,
-    /// Total bytes the prologue allocates above the saved fp/lr
-    /// for c5 cdecl parameter slots and host-stack overflow. The
-    /// epilogue reads this directly so prologue and epilogue
-    /// agree on one byte count regardless of which branch the
-    /// prologue took (variadic, host-stack overflow,
-    /// ParamRef-elided, per-slot pending_sub flush).
+    /// Total bytes reserved for c5 cdecl parameter cells and host-stack overflow.
     pub param_spill_bytes: u32,
-    /// Byte stride between adjacent parameter cells in the callee
-    /// frame. 16 today (the c5 cdecl cell width the prologue
-    /// allocates and `va_arg` walks). Carried on the frame so a
-    /// later phase can shrink non-variadic cells in one place;
-    /// `c5_slot_to_fp_offset` and the prologue both read it.
+    /// Byte stride between adjacent parameter cells: 16 for the c5 cdecl cell,
+    /// 8 for a host variadic callee's contiguous argument region.
     pub param_cell_stride: i64,
-    /// True for an AAPCS64 host variadic callee (Linux aarch64): the
-    /// named parameters live in the prologue-spilled general / vector
-    /// register save area rather than 16-byte cdecl cells, so
-    /// `local_slot_off` redirects a positive c5 slot to that area
-    /// instead of using `param_cell_stride`. Carried on the frame so the
-    /// slot-addressing helpers stay independent of `func` / `abi`.
+    /// Whether the function clobbers (and therefore saves) x19.
+    pub uses_x19: bool,
+    /// AAPCS64 variadic callee reads named parameters from the register save
+    /// area rather than cdecl cells.
     pub va_named_redirect: bool,
-    /// Copy of `FunctionSsa::param_fp_mask` for the named-parameter
-    /// redirect: bit i set means named parameter i is floating-point and
-    /// reads from the vector save area. Meaningful only when
-    /// `va_named_redirect` is set.
+    /// `FunctionSsa::param_fp_mask` for the named-parameter redirect.
     pub va_param_fp_mask: u32,
-    /// Named-parameter count and ABI carried for the redirect's
-    /// `plan_param_regs` call, so `local_slot_off` and `va_start` can map a
-    /// named parameter to its argument-register-bank slot or its
-    /// incoming-stack overflow slot without `func` / `abi` in scope.
-    /// Meaningful only when `va_named_redirect` is set.
+    /// Named-parameter count for the redirect's `plan_param_regs`.
     pub va_n_params: usize,
+    /// ABI carried for the redirect's slot mapping.
     pub va_abi: super::Abi,
 }
 
-impl Frame {
-    pub fn for_function(
-        func: &FunctionSsa,
-        alloc: &Allocation,
-        abi: super::Abi,
-        target: Target,
-    ) -> Self {
-        let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
-        // After mem2reg + dead-store elimination, every reference to
-        // user-local slots (negative `off`) may be gone. The
-        // surviving `func.insts` is the source of truth; when no
-        // `LoadLocal` / `StoreLocal` / `LocalAddr` references a
-        // negative slot the prologue need not allocate locals
-        // storage (C99 6.2.4p2: a never-observed object needs no
-        // storage). Param cells use non-negative `off` and are
-        // sized by `param_spill_bytes`, so they are not affected.
-        let any_local_access = func.insts.iter().any(|i| match i {
-            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
-            Inst::LocalAddr(off) => *off < 0,
-            _ => false,
-        });
-        let locals_bytes = if any_local_access {
-            declared_locals_bytes
-        } else {
-            0
-        };
-        let alloc_spill_bytes = super::ssa_emit_common::slots16(alloc.spill_count);
-        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
-        let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
-        // Reserve the x19 slot only when the function actually
-        // clobbers x19; the prologue / epilogue's store / load already
-        // gates on the same condition, so a function that leaves x19
-        // alone needs no slot and can drop the 16 bytes. The clobber
-        // decision (TLS / indirect-call / intrinsic address scratch, or
-        // a third modulo operand under spill) lives in the shared
-        // `function_clobbers_scratch`, which knows each target's
-        // reserved scratch set.
-        let uses_x19 =
-            !super::ssa_alloc::function_clobbers_scratch(func, target, alloc.spill_count)
-                .is_empty();
-        let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
-        let frame_bytes =
-            locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
-        // A Windows-on-ARM64 variadic callee (Microsoft ARM64 calling
-        // convention) receives every argument (named and variadic) in a
-        // contiguous 8-byte-per-argument region: the first eight in
-        // x0..x7 (spilled by the prologue into a 64-byte gr-save area
-        // above the saved fp/lr), the rest on the incoming stack just
-        // above it. The body reads its named parameters and `va_arg`
-        // walks the variadic tail with a single 8-byte stride across
-        // that region, so the cell stride is 8 rather than the 16-byte
-        // c5 cdecl cell width, and the prologue allocates a fixed
-        // 64-byte gr-save area. Every other aarch64 callee keeps the
-        // 16-byte stride and its `prologue_param_spill_bytes` count.
-        let (param_spill_bytes, param_cell_stride) = if win_arm64_variadic_callee(func, abi) {
-            (WIN_ARM64_GR_SAVE_BYTES, 8)
-        } else if aarch64_host_variadic_callee(func, abi) {
-            // The AAPCS64 variadic callee reserves the 192-byte general +
-            // vector register save area above the saved fp/lr. Named
-            // parameters read from it through `local_slot_off`, not the
-            // 16-byte cdecl cell, so the cell stride is unused here.
-            (AARCH64_VA_SAVE_BYTES, 16)
-        } else {
-            (prologue_param_spill_bytes(func, alloc, abi), 16)
-        };
-        Self {
-            frame_bytes,
-            alloc_spill_base: locals_bytes,
-            uses_x19,
-            param_spill_bytes,
-            param_cell_stride,
-            va_named_redirect: aarch64_host_variadic_callee(func, abi),
-            va_param_fp_mask: func.param_fp_mask,
-            va_n_params: func.n_params,
-            va_abi: abi,
-        }
+fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
+    let (locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
+        super::ssa::emit_common::compute_frame_base(func, alloc);
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
+    // Reserve the x19 slot only when the function actually
+    // clobbers x19; the prologue / epilogue's store / load already
+    // gates on the same condition, so a function that leaves x19
+    // alone needs no slot and can drop the 16 bytes. The clobber
+    // decision (TLS / indirect-call / intrinsic address scratch, or
+    // a third modulo operand under spill) lives in the shared
+    // `function_clobbers_scratch`, which knows each target's
+    // reserved scratch set.
+    let uses_x19 =
+        !super::ssa::reg_alloc::function_clobbers_scratch(func, target, alloc.spill_count)
+            .is_empty();
+    let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
+    let frame_bytes =
+        locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
+    // A Windows-on-ARM64 variadic callee (Microsoft ARM64 calling
+    // convention) receives every argument (named and variadic) in a
+    // contiguous 8-byte-per-argument region: the first eight in
+    // x0..x7 (spilled by the prologue into a 64-byte gr-save area
+    // above the saved fp/lr), the rest on the incoming stack just
+    // above it. The body reads its named parameters and `va_arg`
+    // walks the variadic tail with a single 8-byte stride across
+    // that region, so the cell stride is 8 rather than the 16-byte
+    // c5 cdecl cell width, and the prologue allocates a fixed
+    // 64-byte gr-save area. Every other aarch64 callee keeps the
+    // 16-byte stride and its `prologue_param_spill_bytes` count.
+    let (param_spill_bytes, param_cell_stride) = if win_arm64_variadic_callee(func, abi) {
+        (WIN_ARM64_GR_SAVE_BYTES, 8)
+    } else if aarch64_host_variadic_callee(func, abi) {
+        // The AAPCS64 variadic callee reserves the 192-byte general +
+        // vector register save area above the saved fp/lr. Named
+        // parameters read from it through `local_slot_off`, not the
+        // 16-byte cdecl cell, so the cell stride is unused here.
+        (AARCH64_VA_SAVE_BYTES, 16)
+    } else {
+        (prologue_param_spill_bytes(func, alloc, abi), 16)
+    };
+    Frame {
+        frame_bytes,
+        alloc_spill_base: locals_bytes,
+        uses_x19,
+        param_spill_bytes,
+        param_cell_stride,
+        va_named_redirect: aarch64_host_variadic_callee(func, abi),
+        va_param_fp_mask: func.param_fp_mask,
+        va_n_params: func.n_params,
+        va_abi: abi,
     }
 }
 
@@ -284,25 +237,7 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
     if !spills_named_params_on_entry(func, abi) || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
-    if func.param_aggs.iter().all(Option::is_none) {
-        return super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements;
-    }
-    let aggs: Vec<Option<super::ArgAgg>> = func
-        .param_aggs
-        .iter()
-        .map(|o| {
-            o.map(|idx| {
-                let d = &func.agg_descs[idx as usize];
-                super::ArgAgg {
-                    class: super::abi_classify::classify_aggregate(
-                        d.size, d.align, &d.fields, abi, false,
-                    ),
-                    size: d.size,
-                }
-            })
-        })
-        .collect();
-    super::plan_param_regs_aggs(func.n_params, func.param_fp_mask, abi, &aggs).placements
+    super::ssa::emit_common::param_placements_common(func, abi)
 }
 
 /// `(n_reg, n_stack)` split of the declared parameters: how many land
@@ -368,29 +303,7 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
     }
     let (n_reg, n_stack) = param_reg_stack_split(func, abi);
 
-    let mut seeded: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
-    let mut addr_taken: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
-    let mut needed: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
-    for (idx, inst) in func.insts.iter().enumerate() {
-        match inst {
-            Inst::ParamRef { idx: i, .. } => {
-                seeded.insert(*i);
-            }
-            Inst::LocalAddr(off) if *off >= 2 => {
-                addr_taken.insert(*off);
-            }
-            Inst::LoadLocal { off, .. } if *off >= 2 => {
-                let alive = alloc.use_counts.get(idx).copied().unwrap_or(0) > 0;
-                if alive {
-                    needed.insert(*off);
-                }
-            }
-            Inst::StoreLocal { off, .. } if *off >= 2 => {
-                needed.insert(*off);
-            }
-            _ => {}
-        }
-    }
+    let (seeded, addr_taken, needed) = super::ssa::emit_common::scan_param_slot_usage(func, alloc);
 
     // Elision is safe only when the entire register-passed
     // stripe is skippable. Host-stack overflow shifts slot
@@ -426,21 +339,11 @@ fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
     if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {
         return false;
     }
-    !func.insts.iter().any(|inst| {
-        matches!(
-            inst,
-            Inst::Call { .. }
-                | Inst::CallIndirect { .. }
-                | Inst::CallExt { .. }
-                | Inst::TailExt(_)
-                | Inst::Intrinsic { .. }
-                | Inst::TlsAddr(_)
-        )
-    })
+    super::ssa::emit_common::function_makes_no_calls(func)
 }
 
 fn bail_msg(reason: &str) {
-    super::ssa_emit_common::bail_msg("aarch64", reason);
+    super::ssa::emit_common::bail_msg("aarch64", reason);
 }
 
 fn bail(reason: &str, value: u32, place: Place) {
@@ -459,7 +362,7 @@ fn bail(reason: &str, value: u32, place: Place) {
 /// math helper so the per-call sites read as `spill_off(frame,
 /// slot)` rather than the four-argument call.
 fn spill_off(frame: Frame, slot: u32) -> u32 {
-    super::ssa_emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
+    super::ssa::emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
 }
 
 /// Largest byte displacement reachable by the scaled-imm12 unsigned-
@@ -484,7 +387,7 @@ fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
     if hi != 0 {
         emit(
             code,
-            super::aarch64::enc_add_imm_lsl12(dst, Reg(31), hi >> 12),
+            super::encode::enc_add_imm_lsl12(dst, Reg(31), hi >> 12),
         );
         if lo != 0 {
             emit(code, enc_add_imm(dst, dst, lo));
@@ -505,7 +408,7 @@ fn emit_sp_plus_off_from_fp(code: &mut Vec<u8>, dst: Reg, off: u32) {
     if hi != 0 {
         emit(
             code,
-            super::aarch64::enc_add_imm_lsl12(dst, Reg(29), hi >> 12),
+            super::encode::enc_add_imm_lsl12(dst, Reg(29), hi >> 12),
         );
         if lo != 0 {
             emit(code, enc_add_imm(dst, dst, lo));
@@ -561,10 +464,10 @@ fn emit_sp_str_x_borrow(code: &mut Vec<u8>, rt: Reg, off: u32, borrow: Reg) {
         return;
     }
     debug_assert_ne!(rt.0, borrow.0, "sp str borrow: borrow aliases data");
-    emit(code, super::aarch64::enc_str_pre(borrow, Reg(31), -16));
+    emit(code, super::encode::enc_str_pre(borrow, Reg(31), -16));
     emit_sp_plus_off(code, borrow, off + 16);
     emit(code, enc_str_imm(rt, borrow, 0));
-    emit(code, super::aarch64::enc_ldr_post(borrow, Reg(31), 16));
+    emit(code, super::encode::enc_ldr_post(borrow, Reg(31), 16));
 }
 
 /// SP-relative 8-byte FP load into d-reg `dt`. The base address is
@@ -635,30 +538,34 @@ enum LocalBranchKind {
 /// `Fixup::Bl` per `Inst::Call`; the `apply_fixups` post-pass
 /// resolves them once `pc_to_native` is final.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn emit_function(
+pub(crate) fn emit_function(
     func: &FunctionSsa,
     alloc: &Allocation,
     target: Target,
-    code: &mut Vec<u8>,
+    cx: &mut super::ssa::emit_common::EmitCtx,
     fixups: &mut Vec<Fixup>,
-    plt_call_fixups: &mut Vec<PltCallFixup>,
-    data_fixups: &mut Vec<DataFixup>,
-    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
-    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
-    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
-    pc_to_native: &mut [usize],
-    prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
-    ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
+    // The bundled emit output arrives in `cx`; recreate the per-field names as
+    // disjoint reborrows so the body below (including the per-`Inst` `cx` it
+    // rebuilds for `emit_inst`) is unchanged.
+    let code = &mut *cx.code;
+    let plt_call_fixups = &mut *cx.plt_call_fixups;
+    let data_fixups = &mut *cx.data_fixups;
+    let user_extern_data_refs = &mut *cx.user_extern_data_refs;
+    let pending_func_fixups = &mut *cx.pending_func_fixups;
+    let tls_index_fixups = &mut *cx.tls_index_fixups;
+    let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
+    let ssa_line_rows = &mut *cx.ssa_line_rows;
+    let pc_to_native = &mut *cx.pc_to_native;
+    let prologue_native = &mut *cx.prologue_native;
     let abi = target.abi();
-    let frame = Frame::for_function(func, alloc, abi, target);
+    let frame = compute_frame(func, alloc, abi, target);
     let scratch = ScratchPool::new();
     let snapshot = code.len();
     // Snapshot every fixup vector at function entry so a partial
@@ -677,7 +584,7 @@ pub(super) fn emit_function(
     let elf_tpoff_snapshot = elf_tpoff_fixups.len();
 
     emit_prologue(code, func, alloc, frame, abi);
-    super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
+    super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     // Per-parameter incoming-register plan; consumed by the per-inst
     // `Inst::ParamRef` lowering to source each parameter from its
@@ -725,7 +632,8 @@ pub(super) fn emit_function(
             // homes are scheduled as a parallel copy; an FP-register
             // home (a floating-point parameter) stays on the per-inst
             // path.
-            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
+            {
                 continue;
             }
             let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
@@ -759,9 +667,9 @@ pub(super) fn emit_function(
             }
             for (dst, kind) in exts {
                 let ext = |code: &mut Vec<u8>, r: Reg| match kind {
-                    LoadKind::I8 => emit(code, super::aarch64::enc_sxtb(r, r)),
-                    LoadKind::I16 => emit(code, super::aarch64::enc_sxth(r, r)),
-                    LoadKind::I32 => emit(code, super::aarch64::enc_sxtw(r, r)),
+                    LoadKind::I8 => emit(code, super::encode::enc_sxtb(r, r)),
+                    LoadKind::I16 => emit(code, super::encode::enc_sxth(r, r)),
+                    LoadKind::I32 => emit(code, super::encode::enc_sxtw(r, r)),
                     _ => {}
                 };
                 match dst {
@@ -800,7 +708,8 @@ pub(super) fn emit_function(
             if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
                 continue;
             }
-            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
+            {
                 continue;
             }
             let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
@@ -818,7 +727,14 @@ pub(super) fn emit_function(
         let homes_distinct = (0..fp_homes.len())
             .all(|a| ((a + 1)..fp_homes.len()).all(|b| !place_same_loc(fp_homes[a], fp_homes[b])));
         if !fp_moves.is_empty() && homes_distinct {
-            schedule_fp_place_moves(code, &mut fp_moves, frame, 17, 16);
+            super::ssa::emit_common::schedule_fp_place_moves(
+                &super::ssa::emit_common::Aarch64Backend,
+                code,
+                &mut fp_moves,
+                frame,
+                17,
+                16,
+            );
             for vid in fp_vids {
                 param_prebatched[vid] = true;
             }
@@ -838,7 +754,7 @@ pub(super) fn emit_function(
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
-        super::ssa_emit_common::record_block_start_pc(
+        super::ssa::emit_common::record_block_start_pc(
             block_idx,
             block.start_pc,
             pc_to_native,
@@ -853,14 +769,14 @@ pub(super) fn emit_function(
             // upstream `Add` / `BinopI` dead; the result
             // computation produces no machine code if no one
             // will read it.
-            if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
             }
             // ParamRef already placed by the entry parallel copy.
             if param_prebatched[v as usize] {
                 continue;
             }
-            super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+            super::ssa::emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
             // GCC `&&label`: materialize the block's address with a
             // PC-relative ADR. Handled here (not emit_inst) because the
             // fixup resolves against this function's local block_offsets
@@ -894,31 +810,44 @@ pub(super) fn emit_function(
                 continue;
             }
             let data_fixups_pre_inst = data_fixups.len();
-            if !emit_inst(
-                code,
-                func,
-                inst,
-                v,
-                place,
-                alloc,
-                frame,
-                &scratch,
-                abi,
-                target,
-                fixups,
-                plt_call_fixups,
-                data_fixups,
-                pending_func_fixups,
-                imports,
-                variadic_targets,
-                tls_index_fixups,
-                macho_tlv_fixups,
-                macho_tlv_descriptors,
-                elf_tpoff_fixups,
-                extern_tls_names,
-                &mut current_alloca_top,
-                &emit_param_plan,
-            ) {
+            let inst_ok = {
+                let mut cx = super::ssa::emit_common::EmitCtx {
+                    code: &mut *code,
+                    plt_call_fixups: &mut *plt_call_fixups,
+                    data_fixups: &mut *data_fixups,
+                    user_extern_data_refs: &mut *user_extern_data_refs,
+                    pending_func_fixups: &mut *pending_func_fixups,
+                    tls_index_fixups: &mut *tls_index_fixups,
+                    elf_tpoff_fixups: &mut *elf_tpoff_fixups,
+                    ssa_line_rows: &mut *ssa_line_rows,
+                    pc_to_native: &mut *pc_to_native,
+                    prologue_native: &mut *prologue_native,
+                };
+                let fcx = FnCtx {
+                    func,
+                    alloc,
+                    frame,
+                    scratch: &scratch,
+                    abi,
+                    target,
+                    imports,
+                    variadic_targets,
+                    extern_tls_names,
+                    param_plan: &emit_param_plan,
+                };
+                emit_inst(
+                    &mut cx,
+                    inst,
+                    v,
+                    place,
+                    &fcx,
+                    fixups,
+                    macho_tlv_fixups,
+                    macho_tlv_descriptors,
+                    &mut current_alloca_top,
+                )
+            };
+            if !inst_ok {
                 #[cfg(feature = "codegen_test")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
                     eprintln!(
@@ -1197,7 +1126,7 @@ pub(super) fn emit_function(
                         return false;
                     }
                 };
-                super::aarch64::emit_got_tail_jump(code, plt_call_fixups, import_index);
+                super::encode::emit_got_tail_jump(code, plt_call_fixups, import_index);
             }
         }
     }
@@ -1362,21 +1291,21 @@ fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi, counter: Re
     }
     let n_pages = bytes >> 12;
     let remainder = bytes & 0xfff;
-    super::aarch64::load_imm64(code, counter, n_pages as u64);
+    super::encode::load_imm64(code, counter, n_pages as u64);
     // loop: sub sp, sp, #PAGE; str counter, [sp]; subs counter, #1; b.ne loop
     let loop_start = code.len();
-    emit(code, super::aarch64::enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
-    emit(code, super::aarch64::enc_str_imm(counter, Reg::SP, 0));
-    emit(code, super::aarch64::enc_subs_imm(counter, counter, 1));
+    emit(code, super::encode::enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
+    emit(code, super::encode::enc_str_imm(counter, Reg::SP, 0));
+    emit(code, super::encode::enc_subs_imm(counter, counter, 1));
     let off = ((loop_start as i64) - (code.len() as i64)) / 4;
     emit(
         code,
-        super::aarch64::enc_b_cond(super::aarch64::Cond::Ne, off as i32),
+        super::encode::enc_b_cond(super::encode::Cond::Ne, off as i32),
     );
     if remainder != 0 {
         emit(
             code,
-            super::aarch64::enc_sub_imm(Reg::SP, Reg::SP, remainder),
+            super::encode::enc_sub_imm(Reg::SP, Reg::SP, remainder),
         );
     }
 }
@@ -1513,32 +1442,8 @@ fn emit_prologue(
                 }
             }
         }
-        let mut seeded_params: alloc::collections::BTreeSet<u32> =
-            alloc::collections::BTreeSet::new();
-        let mut addr_taken_slots: alloc::collections::BTreeSet<i64> =
-            alloc::collections::BTreeSet::new();
-        let mut needed_slots: alloc::collections::BTreeSet<i64> =
-            alloc::collections::BTreeSet::new();
-        for (idx, inst) in func.insts.iter().enumerate() {
-            match inst {
-                Inst::ParamRef { idx: i, .. } => {
-                    seeded_params.insert(*i);
-                }
-                Inst::LocalAddr(off) if *off >= 2 => {
-                    addr_taken_slots.insert(*off);
-                }
-                Inst::LoadLocal { off, .. } if *off >= 2 => {
-                    let alive = alloc.use_counts.get(idx).copied().unwrap_or(0) > 0;
-                    if alive {
-                        needed_slots.insert(*off);
-                    }
-                }
-                Inst::StoreLocal { off, .. } if *off >= 2 => {
-                    needed_slots.insert(*off);
-                }
-                _ => {}
-            }
-        }
+        let (seeded_params, addr_taken_slots, needed_slots) =
+            super::ssa::emit_common::scan_param_slot_usage(func, alloc);
         let mut pending_sub: u32 = 0;
         for i in (0..n_reg).rev() {
             let slot = (i as i64) + 2;
@@ -1664,9 +1569,9 @@ fn emit_struct_param_scatter(
                             .and_then(|m| m.get(k).copied())
                             .unwrap_or(((k as u32) * 8, 8));
                         if msize == 8 {
-                            emit(code, super::aarch64::enc_str_d_imm(cr.reg, Reg(16), off));
+                            emit(code, super::encode::enc_str_d_imm(cr.reg, Reg(16), off));
                         } else {
-                            emit(code, super::aarch64::enc_str_s_imm(cr.reg, Reg(16), off));
+                            emit(code, super::encode::enc_str_s_imm(cr.reg, Reg(16), off));
                         }
                     } else {
                         emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
@@ -1701,25 +1606,19 @@ fn emit_struct_param_scatter(
                 if o + 4 <= size {
                     emit(
                         code,
-                        super::aarch64::enc_ldr32_imm(Reg(17), Reg(29), src + o),
+                        super::encode::enc_ldr32_imm(Reg(17), Reg(29), src + o),
                     );
-                    emit(code, super::aarch64::enc_str32_imm(Reg(17), Reg(16), o));
+                    emit(code, super::encode::enc_str32_imm(Reg(17), Reg(16), o));
                     o += 4;
                 }
                 if o + 2 <= size {
-                    emit(
-                        code,
-                        super::aarch64::enc_ldrh_imm(Reg(17), Reg(29), src + o),
-                    );
-                    emit(code, super::aarch64::enc_strh_imm(Reg(17), Reg(16), o));
+                    emit(code, super::encode::enc_ldrh_imm(Reg(17), Reg(29), src + o));
+                    emit(code, super::encode::enc_strh_imm(Reg(17), Reg(16), o));
                     o += 2;
                 }
                 if o < size {
-                    emit(
-                        code,
-                        super::aarch64::enc_ldrb_imm(Reg(17), Reg(29), src + o),
-                    );
-                    emit(code, super::aarch64::enc_strb_imm(Reg(17), Reg(16), o));
+                    emit(code, super::encode::enc_ldrb_imm(Reg(17), Reg(29), src + o));
+                    emit(code, super::encode::enc_strb_imm(Reg(17), Reg(16), o));
                 }
             }
             _ => continue,
@@ -1742,13 +1641,13 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
         let off = (i as u32) * 8;
         emit(code, enc_str_d_imm(r, Reg(31), off));
     }
-    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = saved_fpr_bytes + (i as u32) * 8;
         emit(code, enc_str_imm(Reg(r), Reg(31), off));
     }
     if frame.uses_x19 {
-        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
+        let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
         let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
         emit(code, enc_str_imm(Reg(19), Reg(31), x19_save_off));
     }
@@ -1757,8 +1656,8 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
 /// Byte offset (positive) from fp to the start of the saved-reg
 /// region. The region is the lowest portion of the frame.
 fn alloc_save_base(frame: Frame, alloc: &Allocation) -> u32 {
-    let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
-    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
+    let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     // fp is at frame top; the saved-reg region sits at the
     // bottom. Distance from fp = frame_bytes - saved-region size.
     frame
@@ -1776,8 +1675,8 @@ fn fused_branch_cond(
     alloc: &Allocation,
     cond: super::super::ir::ValueId,
     negate: bool,
-) -> Option<super::aarch64::Cond> {
-    use super::aarch64::Cond;
+) -> Option<super::encode::Cond> {
+    use super::encode::Cond;
     if !alloc
         .branch_fused
         .get(cond as usize)
@@ -1824,31 +1723,56 @@ fn fused_branch_cond(
 /// Emit one SSA instruction. Returns `false` for any op the thin
 /// slice doesn't handle yet so the caller can fall back.
 #[allow(clippy::too_many_arguments)]
+/// Read-only per-function context threaded through the per-instruction
+/// lowering. Bundles the loop-invariant inputs so emit_inst's signature stays
+/// short; Copy (references and small scalars).
+#[derive(Clone, Copy)]
+struct FnCtx<'a> {
+    func: &'a FunctionSsa,
+    alloc: &'a Allocation,
+    frame: Frame,
+    scratch: &'a ScratchPool,
+    abi: super::Abi,
+    target: Target,
+    imports: &'a super::ResolvedImports,
+    variadic_targets: &'a alloc::collections::BTreeSet<usize>,
+    extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    param_plan: &'a [super::ArgPlacement],
+}
+
 fn emit_inst(
-    code: &mut Vec<u8>,
-    func: &FunctionSsa,
+    cx: &mut super::ssa::emit_common::EmitCtx,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
-    alloc: &Allocation,
-    frame: Frame,
-    scratch: &ScratchPool,
-    abi: super::Abi,
-    target: Target,
+    fcx: &FnCtx,
     fixups: &mut Vec<Fixup>,
-    plt_call_fixups: &mut Vec<PltCallFixup>,
-    data_fixups: &mut Vec<DataFixup>,
-    pending_func_fixups: &mut Vec<(usize, usize)>,
-    imports: &super::ResolvedImports,
-    variadic_targets: &alloc::collections::BTreeSet<usize>,
-    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
-    elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
-    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     current_alloca_top: &mut u32,
-    param_plan: &[super::ArgPlacement],
 ) -> bool {
+    // Unpack the read-only per-function context into the per-field names the
+    // lowering below uses, so the body is unchanged.
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        scratch,
+        abi,
+        target,
+        imports,
+        variadic_targets,
+        extern_tls_names,
+        param_plan,
+    } = *fcx;
+    // The bundled emit output now arrives in `cx`; recreate the per-field
+    // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
+    let code = &mut *cx.code;
+    let plt_call_fixups = &mut *cx.plt_call_fixups;
+    let data_fixups = &mut *cx.data_fixups;
+    let pending_func_fixups = &mut *cx.pending_func_fixups;
+    let tls_index_fixups = &mut *cx.tls_index_fixups;
+    let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca; emit
@@ -1870,7 +1794,7 @@ fn emit_inst(
                 let low = top_offset & 0xfff;
                 emit(
                     code,
-                    super::aarch64::enc_sub_imm_lsl12(Reg(16), Reg(29), high >> 12),
+                    super::encode::enc_sub_imm_lsl12(Reg(16), Reg(29), high >> 12),
                 );
                 if low != 0 {
                     emit(code, enc_sub_imm(Reg(16), Reg(16), low));
@@ -1903,7 +1827,7 @@ fn emit_inst(
                 match dst {
                     Place::FpReg(r) => {
                         if r != d {
-                            emit(code, super::aarch64::enc_fmov_d_d(r, d));
+                            emit(code, super::encode::enc_fmov_d_d(r, d));
                         }
                     }
                     Place::Spill(slot) => {
@@ -1930,9 +1854,9 @@ fn emit_inst(
                 let rn = Reg(arg_reg);
                 match kind {
                     _ if high_dead => emit_mov_reg(code, rd, rn),
-                    LoadKind::I8 => emit(code, super::aarch64::enc_sxtb(rd, rn)),
-                    LoadKind::I16 => emit(code, super::aarch64::enc_sxth(rd, rn)),
-                    LoadKind::I32 => emit(code, super::aarch64::enc_sxtw(rd, rn)),
+                    LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
+                    LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
+                    LoadKind::I32 => emit(code, super::encode::enc_sxtw(rd, rn)),
                     _ => emit_mov_reg(code, rd, rn),
                 }
             };
@@ -2015,7 +1939,7 @@ fn emit_inst(
                     return false;
                 }
             };
-            plt_call_fixups.push(super::aarch64::PltCallFixup {
+            plt_call_fixups.push(super::encode::PltCallFixup {
                 instr_offset: code.len(),
                 import_index,
                 is_tail: false,
@@ -2224,7 +2148,7 @@ fn emit_inst(
                 _ => return false,
             };
             if is_f32 {
-                emit(code, super::aarch64::enc_fneg_s(dd, dn));
+                emit(code, super::encode::enc_fneg_s(dd, dn));
             } else {
                 emit(code, enc_fneg_d(dd, dn));
             }
@@ -2287,7 +2211,7 @@ fn emit_inst(
             };
             emit(
                 code,
-                super::aarch64::enc_fma(dd, da, dm, dc, is_f32, *neg_product, *neg_addend),
+                super::encode::enc_fma(dd, da, dm, dc, is_f32, *neg_product, *neg_addend),
             );
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
@@ -2441,7 +2365,7 @@ fn emit_tls_addr(
     // offset) rather than by the placeholder `offset`.
     tls_extern_sym: Option<&str>,
 ) -> bool {
-    use super::aarch64::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
+    use super::encode::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
     let Some(rd) = int_reg(dst) else {
         bail_msg("TlsAddr: dst not int reg");
         return false;
@@ -2718,7 +2642,7 @@ fn emit_va_arg_aapcs64(
 }
 
 /// `Inst::Intrinsic` lowering. Each variant matches the pool
-/// path's shape in [`super::aarch64::lower_op`] but pulls its
+/// path's shape in [`super::encode::lower_op`] but pulls its
 /// operands from the allocator's `Place`s rather than off the c5
 /// stack / accumulator.
 fn emit_intrinsic(
@@ -3092,7 +3016,7 @@ fn emit_intrinsic(
             emit(code, enc_add_imm(scratch.secondary, n, 15));
             emit(
                 code,
-                super::aarch64::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
+                super::encode::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
             );
             // x16 = &arena_top -- the bookkeeping slot's address.
             let top_offset = current_alloca_top;
@@ -3103,7 +3027,7 @@ fn emit_intrinsic(
                 let low = top_offset & 0xfff;
                 emit(
                     code,
-                    super::aarch64::enc_sub_imm_lsl12(scratch.primary, Reg(29), high >> 12),
+                    super::encode::enc_sub_imm_lsl12(scratch.primary, Reg(29), high >> 12),
                 );
                 if low != 0 {
                     emit(code, enc_sub_imm(scratch.primary, scratch.primary, low));
@@ -3120,17 +3044,14 @@ fn emit_intrinsic(
             let arena_bytes = (crate::c5::op::ALLOCA_ARENA_SLOTS * 8) as u32;
             emit(
                 code,
-                super::aarch64::enc_sub_imm_lsl12(
+                super::encode::enc_sub_imm_lsl12(
                     scratch.secondary,
                     scratch.primary,
                     arena_bytes >> 12,
                 ),
             );
-            emit(code, super::aarch64::enc_cmp_reg(rd, scratch.secondary));
-            emit(
-                code,
-                super::aarch64::enc_b_cond(super::aarch64::Cond::Hs, 2),
-            );
+            emit(code, super::encode::enc_cmp_reg(rd, scratch.secondary));
+            emit(code, super::encode::enc_b_cond(super::encode::Cond::Hs, 2));
             emit(code, 0xD420_0020); // brk #1
             emit(code, enc_str_imm(rd, scratch.primary, 0));
             true
@@ -3290,7 +3211,7 @@ fn emit_intrinsic(
                 Place::Spill(_) => SCRATCH_FP1,
                 _ => return false,
             };
-            use super::aarch64::{
+            use super::encode::{
                 enc_fabs_d, enc_fabs_s, enc_frintm_d, enc_frintm_s, enc_frintp_d, enc_frintp_s,
                 enc_frintz_d, enc_frintz_s, enc_fsqrt_d, enc_fsqrt_s,
             };
@@ -3547,35 +3468,6 @@ fn target_for_ext(abi: super::Abi) -> Target {
 /// pass to resolve. Result lands in x0; the SSA emit moves it to
 /// the inst's `dst` if needed.
 #[allow(clippy::too_many_arguments)]
-/// Build the per-argument aggregate classification slice the
-/// struct-aware planner consumes: `arg_aggs[k] = Some(i)` resolves
-/// to `agg_descs[i]` classified for `abi`. Returns an empty vector
-/// when no argument is an aggregate (the scalar fast path).
-fn build_arg_aggs(
-    arg_aggs: &[Option<u32>],
-    agg_descs: &[super::super::ir::AggDesc],
-    abi: super::Abi,
-) -> Vec<Option<super::ArgAgg>> {
-    if arg_aggs.iter().all(Option::is_none) {
-        return Vec::new();
-    }
-    arg_aggs
-        .iter()
-        .map(|o| {
-            o.map(|idx| {
-                let d = &agg_descs[idx as usize];
-                super::ArgAgg {
-                    class: super::abi_classify::classify_aggregate(
-                        d.size, d.align, &d.fields, abi, false,
-                    ),
-                    size: d.size,
-                }
-            })
-        })
-        .collect()
-}
-
-#[allow(clippy::too_many_arguments)]
 fn emit_call(
     code: &mut Vec<u8>,
     dst: Place,
@@ -3758,12 +3650,12 @@ fn finish_call_result(
                 if *msize == 8 {
                     emit(
                         code,
-                        super::aarch64::enc_str_d_imm(k as u8, scratch.primary, *off),
+                        super::encode::enc_str_d_imm(k as u8, scratch.primary, *off),
                     );
                 } else {
                     emit(
                         code,
-                        super::aarch64::enc_str_s_imm(k as u8, scratch.primary, *off),
+                        super::encode::enc_str_s_imm(k as u8, scratch.primary, *off),
                     );
                 }
             }
@@ -3795,7 +3687,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
         match dst {
             Place::FpReg(r) => {
                 if r != 0 {
-                    emit(code, super::aarch64::enc_fmov_d_d(r, 0));
+                    emit(code, super::encode::enc_fmov_d_d(r, 0));
                 }
             }
             Place::IntReg(r) => emit(code, enc_fmov_d_to_x(Reg(r), 0)),
@@ -4129,7 +4021,7 @@ fn atomic_save_working(code: &mut Vec<u8>) {
     // offset 0 would overwrite x9/x10's slot.
     emit(
         code,
-        super::aarch64::enc_stp_off(Reg(11), Reg(12), Reg(31), 16),
+        super::encode::enc_stp_off(Reg(11), Reg(12), Reg(31), 16),
     );
 }
 
@@ -4139,7 +4031,7 @@ fn atomic_save_working(code: &mut Vec<u8>) {
 fn atomic_restore_working(code: &mut Vec<u8>) {
     emit(
         code,
-        super::aarch64::enc_ldp_off(Reg(11), Reg(12), Reg(31), 16),
+        super::encode::enc_ldp_off(Reg(11), Reg(12), Reg(31), 16),
     );
     emit(
         code,
@@ -4178,14 +4070,13 @@ fn atomic_operand_into(
 /// `Place`. Run after the working registers are restored so a spilled
 /// result lands at the unshifted sp offset.
 fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
-    if let Some(rd) = int_reg(dst) {
-        if rd.0 != src.0 {
-            emit_mov_reg(code, rd, src);
-        }
-    } else if let Place::Spill(slot) = dst {
-        let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, src, sp_off);
-    }
+    super::ssa::emit_common::write_atomic_result(
+        &super::ssa::emit_common::Aarch64Backend,
+        code,
+        dst,
+        src.0,
+        frame,
+    );
 }
 
 /// C11 7.17.7.2-7.17.7.5 atomic read-modify-write via an LDAXR / STLXR
@@ -4337,7 +4228,7 @@ fn emit_atomic_cas(
 /// Translate a c5-stack slot index (the operand of an
 /// address-of-local emit) into a byte offset relative to fp.
 /// Mirror of the pool path's
-use super::ssa_emit_common::c5_slot_to_fp_offset;
+use super::ssa::emit_common::c5_slot_to_fp_offset;
 
 /// fp-relative byte offset of a c5 slot. Locals (`off < 0`) and the
 /// ordinary parameter cells go through `c5_slot_to_fp_offset` at the
@@ -4426,7 +4317,7 @@ fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bo
             if hi != 0 {
                 emit(
                     code,
-                    super::aarch64::enc_add_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
+                    super::encode::enc_add_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
                 );
             }
             if lo != 0 {
@@ -4437,7 +4328,7 @@ fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bo
             if hi != 0 {
                 emit(
                     code,
-                    super::aarch64::enc_sub_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
+                    super::encode::enc_sub_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
                 );
             }
             if lo != 0 {
@@ -4509,9 +4400,9 @@ fn emit_extend(
         }
     };
     let enc = match kind {
-        LoadKind::I8 => super::aarch64::enc_sxtb(rd, rn),
-        LoadKind::I16 => super::aarch64::enc_sxth(rd, rn),
-        LoadKind::I32 => super::aarch64::enc_sxtw(rd, rn),
+        LoadKind::I8 => super::encode::enc_sxtb(rd, rn),
+        LoadKind::I16 => super::encode::enc_sxth(rd, rn),
+        LoadKind::I32 => super::encode::enc_sxtw(rd, rn),
         _ => {
             bail_msg("Extend: unsupported kind");
             return false;
@@ -4534,7 +4425,7 @@ fn emit_load(
     scratch: &ScratchPool,
 ) -> bool {
     // `disp` is a byte offset folded from a constant pointer addition.
-    // ssa_index_fold only emits a displacement that is a multiple of the
+    // index_fold only emits a displacement that is a multiple of the
     // access width and within the scaled-immediate range, so it passes
     // straight to the immediate-offset encoders below.
     let disp = disp as u32;
@@ -4647,17 +4538,14 @@ fn emit_load_local(
             && (disp as u32).is_multiple_of(4)
             && (disp as u32) <= 16380
         {
-            emit(
-                code,
-                super::aarch64::enc_ldr_s_imm(dd, Reg(29), disp as u32),
-            );
+            emit(code, super::encode::enc_ldr_s_imm(dd, Reg(29), disp as u32));
         } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
             return false;
         } else {
-            emit(code, super::aarch64::enc_ldr_s_imm(dd, scratch.primary, 0));
+            emit(code, super::encode::enc_ldr_s_imm(dd, scratch.primary, 0));
         }
         if !keep_f32 {
-            emit(code, super::aarch64::enc_fcvt_d_s(dd, dd));
+            emit(code, super::encode::enc_fcvt_d_s(dd, dd));
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
@@ -4681,14 +4569,11 @@ fn emit_load_local(
             && (disp as u32).is_multiple_of(8)
             && (disp as u32) < 32760
         {
-            emit(
-                code,
-                super::aarch64::enc_ldr_d_imm(dd, Reg(29), disp as u32),
-            );
+            emit(code, super::encode::enc_ldr_d_imm(dd, Reg(29), disp as u32));
         } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
             return false;
         } else {
-            emit(code, super::aarch64::enc_ldr_d_imm(dd, scratch.primary, 0));
+            emit(code, super::encode::enc_ldr_d_imm(dd, scratch.primary, 0));
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
@@ -4708,13 +4593,13 @@ fn emit_load_local(
         // Fits the unscaled 9-bit signed field; load directly
         // with the kind-specific unscaled encoder.
         let word = match kind {
-            LoadKind::I64 => super::aarch64::enc_ldur(rd, Reg(29), disp),
-            LoadKind::I32 => super::aarch64::enc_ldursw(rd, Reg(29), disp),
-            LoadKind::U32 => super::aarch64::enc_ldur32(rd, Reg(29), disp),
-            LoadKind::I16 => super::aarch64::enc_ldursh(rd, Reg(29), disp),
-            LoadKind::U16 => super::aarch64::enc_ldurh(rd, Reg(29), disp),
-            LoadKind::I8 => super::aarch64::enc_ldursb(rd, Reg(29), disp),
-            LoadKind::U8 => super::aarch64::enc_ldurb(rd, Reg(29), disp),
+            LoadKind::I64 => super::encode::enc_ldur(rd, Reg(29), disp),
+            LoadKind::I32 => super::encode::enc_ldursw(rd, Reg(29), disp),
+            LoadKind::U32 => super::encode::enc_ldur32(rd, Reg(29), disp),
+            LoadKind::I16 => super::encode::enc_ldursh(rd, Reg(29), disp),
+            LoadKind::U16 => super::encode::enc_ldurh(rd, Reg(29), disp),
+            LoadKind::I8 => super::encode::enc_ldursb(rd, Reg(29), disp),
+            LoadKind::U8 => super::encode::enc_ldurb(rd, Reg(29), disp),
             LoadKind::F32 | LoadKind::F64 => unreachable!(),
         };
         emit(code, word);
@@ -4731,13 +4616,13 @@ fn emit_load_local(
         return false;
     }
     let word = match kind {
-        LoadKind::I64 => super::aarch64::enc_ldr_imm(rd, scratch.primary, 0),
-        LoadKind::I32 => super::aarch64::enc_ldrsw_imm(rd, scratch.primary, 0),
-        LoadKind::U32 => super::aarch64::enc_ldr32_imm(rd, scratch.primary, 0),
-        LoadKind::I16 => super::aarch64::enc_ldrsh_imm(rd, scratch.primary, 0),
-        LoadKind::U16 => super::aarch64::enc_ldrh_imm(rd, scratch.primary, 0),
-        LoadKind::I8 => super::aarch64::enc_ldrsb_imm(rd, scratch.primary, 0),
-        LoadKind::U8 => super::aarch64::enc_ldrb_imm(rd, scratch.primary, 0),
+        LoadKind::I64 => super::encode::enc_ldr_imm(rd, scratch.primary, 0),
+        LoadKind::I32 => super::encode::enc_ldrsw_imm(rd, scratch.primary, 0),
+        LoadKind::U32 => super::encode::enc_ldr32_imm(rd, scratch.primary, 0),
+        LoadKind::I16 => super::encode::enc_ldrsh_imm(rd, scratch.primary, 0),
+        LoadKind::U16 => super::encode::enc_ldrh_imm(rd, scratch.primary, 0),
+        LoadKind::I8 => super::encode::enc_ldrsb_imm(rd, scratch.primary, 0),
+        LoadKind::U8 => super::encode::enc_ldrb_imm(rd, scratch.primary, 0),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     };
     emit(code, word);
@@ -4781,18 +4666,12 @@ fn emit_store_local(
                 && (disp as u32).is_multiple_of(4)
                 && (disp as u32) < 16380
             {
-                emit(
-                    code,
-                    super::aarch64::enc_str_s_imm(sn, Reg(29), disp as u32),
-                );
+                emit(code, super::encode::enc_str_s_imm(sn, Reg(29), disp as u32));
                 true
             } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
                 false
             } else {
-                emit(
-                    code,
-                    super::aarch64::enc_str_s_imm(sn, scratch.secondary, 0),
-                );
+                emit(code, super::encode::enc_str_s_imm(sn, scratch.secondary, 0));
                 true
             }
         };
@@ -4809,7 +4688,7 @@ fn emit_store_local(
             }
             if let Some(rd) = fp_reg(dst) {
                 if rd != sn {
-                    emit(code, super::aarch64::enc_fmov_s_s(rd, sn));
+                    emit(code, super::encode::enc_fmov_s_s(rd, sn));
                 }
             } else if let Place::Spill(slot) = dst {
                 emit_sp_str_d_auto(code, sn, spill_off(frame, slot));
@@ -4834,7 +4713,7 @@ fn emit_store_local(
                 return false;
             }
         };
-        emit(code, super::aarch64::enc_fcvt_s_d(SCRATCH_FP1, dn));
+        emit(code, super::encode::enc_fcvt_s_d(SCRATCH_FP1, dn));
         if !store_to_slot(code, SCRATCH_FP1) {
             return false;
         }
@@ -4865,23 +4744,17 @@ fn emit_store_local(
             && (disp as u32).is_multiple_of(8)
             && (disp as u32) < 32760
         {
-            emit(
-                code,
-                super::aarch64::enc_str_d_imm(dn, Reg(29), disp as u32),
-            );
+            emit(code, super::encode::enc_str_d_imm(dn, Reg(29), disp as u32));
         } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
             return false;
         } else {
-            emit(
-                code,
-                super::aarch64::enc_str_d_imm(dn, scratch.secondary, 0),
-            );
+            emit(code, super::encode::enc_str_d_imm(dn, scratch.secondary, 0));
         }
         // c5 store-op leaves the value in the accumulator; propagate
         // to dst if the allocator parked it elsewhere.
         match dst {
             Place::FpReg(r) if r != dn => {
-                emit(code, super::aarch64::enc_fmov_d_d(r, dn));
+                emit(code, super::encode::enc_fmov_d_d(r, dn));
             }
             Place::Spill(slot) => {
                 let sp_off = spill_off(frame, slot);
@@ -4905,7 +4778,7 @@ fn emit_store_local(
     // `fmov d -> x` into a GPR before the store; otherwise it
     // routes through the normal int materialisation.
     let rv = if let Place::FpReg(dr) = value_place {
-        emit(code, super::aarch64::enc_fmov_d_to_x(scratch.primary, dr));
+        emit(code, super::encode::enc_fmov_d_to_x(scratch.primary, dr));
         scratch.primary
     } else {
         match materialize_int(code, value_place, scratch.primary, frame) {
@@ -4921,10 +4794,10 @@ fn emit_store_local(
             // an assignment expression yields the stored value before
             // any re-narrowing on read-back (C99 6.5.16p3).
             let enc = match kind {
-                StoreKind::I64 => super::aarch64::enc_stur(rv, Reg(29), disp),
-                StoreKind::I32 => super::aarch64::enc_stur32(rv, Reg(29), disp),
-                StoreKind::I16 => super::aarch64::enc_sturh(rv, Reg(29), disp),
-                StoreKind::I8 => super::aarch64::enc_sturb(rv, Reg(29), disp),
+                StoreKind::I64 => super::encode::enc_stur(rv, Reg(29), disp),
+                StoreKind::I32 => super::encode::enc_stur32(rv, Reg(29), disp),
+                StoreKind::I16 => super::encode::enc_sturh(rv, Reg(29), disp),
+                StoreKind::I8 => super::encode::enc_sturb(rv, Reg(29), disp),
                 StoreKind::F32 | StoreKind::F64 => unreachable!(),
             };
             emit(code, enc);
@@ -4967,10 +4840,10 @@ fn emit_store_local_large_disp(
         return false;
     }
     let enc = match kind {
-        StoreKind::I64 => super::aarch64::enc_str_imm(rv, scratch.secondary, 0),
-        StoreKind::I32 => super::aarch64::enc_str32_imm(rv, scratch.secondary, 0),
-        StoreKind::I16 => super::aarch64::enc_strh_imm(rv, scratch.secondary, 0),
-        StoreKind::I8 => super::aarch64::enc_strb_imm(rv, scratch.secondary, 0),
+        StoreKind::I64 => super::encode::enc_str_imm(rv, scratch.secondary, 0),
+        StoreKind::I32 => super::encode::enc_str32_imm(rv, scratch.secondary, 0),
+        StoreKind::I16 => super::encode::enc_strh_imm(rv, scratch.secondary, 0),
+        StoreKind::I8 => super::encode::enc_strb_imm(rv, scratch.secondary, 0),
         StoreKind::F32 | StoreKind::F64 => unreachable!(),
     };
     emit(code, enc);
@@ -5034,13 +4907,13 @@ fn emit_load_indexed(
         return false;
     }
     let word = match kind {
-        LoadKind::I64 => super::aarch64::enc_ldr_reg_lsl3(rd, rn, rm),
-        LoadKind::I32 => super::aarch64::enc_ldrsw_reg_lsl2(rd, rn, rm),
-        LoadKind::U32 => super::aarch64::enc_ldr32_reg_lsl2(rd, rn, rm),
-        LoadKind::I16 => super::aarch64::enc_ldrsh_reg_lsl1(rd, rn, rm),
-        LoadKind::U16 => super::aarch64::enc_ldrh_reg_lsl1(rd, rn, rm),
-        LoadKind::I8 => super::aarch64::enc_ldrsb_reg(rd, rn, rm),
-        LoadKind::U8 => super::aarch64::enc_ldrb_reg(rd, rn, rm),
+        LoadKind::I64 => super::encode::enc_ldr_reg_lsl3(rd, rn, rm),
+        LoadKind::I32 => super::encode::enc_ldrsw_reg_lsl2(rd, rn, rm),
+        LoadKind::U32 => super::encode::enc_ldr32_reg_lsl2(rd, rn, rm),
+        LoadKind::I16 => super::encode::enc_ldrsh_reg_lsl1(rd, rn, rm),
+        LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm),
+        LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm),
+        LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     };
     emit(code, word);
@@ -5120,7 +4993,7 @@ fn emit_store_indexed(
         let shift = scale.trailing_zeros();
         emit(
             code,
-            super::aarch64::enc_add_reg_lsl(scratch.primary, rn, rm, shift),
+            super::encode::enc_add_reg_lsl(scratch.primary, rn, rm, shift),
         );
         addr_reg = Some(scratch.primary);
         vscratch = scratch.secondary;
@@ -5130,7 +5003,7 @@ fn emit_store_indexed(
     let rv = if let StoreKind::I64 = kind
         && let Place::FpReg(dr) = value_place
     {
-        emit(code, super::aarch64::enc_fmov_d_to_x(vscratch, dr));
+        emit(code, super::encode::enc_fmov_d_to_x(vscratch, dr));
         vscratch
     } else {
         match materialize_int(code, value_place, vscratch, frame) {
@@ -5139,14 +5012,14 @@ fn emit_store_indexed(
         }
     };
     let word = match (kind, addr_reg) {
-        (StoreKind::I64, None) => super::aarch64::enc_str_reg_lsl3(rv, rn, rm),
-        (StoreKind::I32, None) => super::aarch64::enc_str32_reg_lsl2(rv, rn, rm),
-        (StoreKind::I16, None) => super::aarch64::enc_strh_reg_lsl1(rv, rn, rm),
-        (StoreKind::I8, None) => super::aarch64::enc_strb_reg(rv, rn, rm),
-        (StoreKind::I64, Some(a)) => super::aarch64::enc_str_imm(rv, a, 0),
-        (StoreKind::I32, Some(a)) => super::aarch64::enc_str32_imm(rv, a, 0),
-        (StoreKind::I16, Some(a)) => super::aarch64::enc_strh_imm(rv, a, 0),
-        (StoreKind::I8, Some(a)) => super::aarch64::enc_strb_imm(rv, a, 0),
+        (StoreKind::I64, None) => super::encode::enc_str_reg_lsl3(rv, rn, rm),
+        (StoreKind::I32, None) => super::encode::enc_str32_reg_lsl2(rv, rn, rm),
+        (StoreKind::I16, None) => super::encode::enc_strh_reg_lsl1(rv, rn, rm),
+        (StoreKind::I8, None) => super::encode::enc_strb_reg(rv, rn, rm),
+        (StoreKind::I64, Some(a)) => super::encode::enc_str_imm(rv, a, 0),
+        (StoreKind::I32, Some(a)) => super::encode::enc_str32_imm(rv, a, 0),
+        (StoreKind::I16, Some(a)) => super::encode::enc_strh_imm(rv, a, 0),
+        (StoreKind::I8, Some(a)) => super::encode::enc_strb_imm(rv, a, 0),
         (StoreKind::F32 | StoreKind::F64, _) => unreachable!(),
     };
     emit(code, word);
@@ -5217,7 +5090,7 @@ fn emit_store(
             // Propagate the f32 accumulator to `dst` if parked elsewhere.
             if let Some(rd) = fp_reg(dst) {
                 if rd != sn {
-                    emit(code, super::aarch64::enc_fmov_s_s(rd, sn));
+                    emit(code, super::encode::enc_fmov_s_s(rd, sn));
                 }
             } else if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
@@ -5266,10 +5139,10 @@ fn emit_store(
         let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
             return false;
         };
-        emit(code, super::aarch64::enc_str_d_imm(dn, rn, disp));
+        emit(code, super::encode::enc_str_d_imm(dn, rn, disp));
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
-                emit(code, super::aarch64::enc_fmov_d_d(rd, dn));
+                emit(code, super::encode::enc_fmov_d_d(rd, dn));
             }
         } else if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
@@ -5364,10 +5237,10 @@ fn emit_binop(
         };
         let word = if is_f32 {
             match op {
-                BinOp::Fadd => super::aarch64::enc_fadd_s(dd, dn, dm),
-                BinOp::Fsub => super::aarch64::enc_fsub_s(dd, dn, dm),
-                BinOp::Fmul => super::aarch64::enc_fmul_s(dd, dn, dm),
-                BinOp::Fdiv => super::aarch64::enc_fdiv_s(dd, dn, dm),
+                BinOp::Fadd => super::encode::enc_fadd_s(dd, dn, dm),
+                BinOp::Fsub => super::encode::enc_fsub_s(dd, dn, dm),
+                BinOp::Fmul => super::encode::enc_fmul_s(dd, dn, dm),
+                BinOp::Fdiv => super::encode::enc_fdiv_s(dd, dn, dm),
                 _ => return false,
             }
         } else {
@@ -5448,9 +5321,9 @@ fn emit_binop(
         };
         let k = alloc.sxtw_k.get(v as usize).copied().unwrap_or(0);
         let word = match k {
-            32 => super::aarch64::enc_sxtw(rd, rn),
-            48 => super::aarch64::enc_sxth(rd, rn),
-            56 => super::aarch64::enc_sxtb(rd, rn),
+            32 => super::encode::enc_sxtw(rd, rn),
+            48 => super::encode::enc_sxth(rd, rn),
+            56 => super::encode::enc_sxtb(rd, rn),
             _ => return false,
         };
         emit(code, word);
@@ -5521,7 +5394,7 @@ fn emit_binop(
         BinOp::Shl => enc_lslv(rd, rn, rm),
         BinOp::Shr => enc_asrv(rd, rn, rm),
         BinOp::Shru => enc_lsrv(rd, rn, rm),
-        BinOp::Ror => super::aarch64::enc_rorv(rd, rn, rm),
+        BinOp::Ror => super::encode::enc_rorv(rd, rn, rm),
         _ => return false,
     };
     emit(code, word);
@@ -5621,9 +5494,9 @@ fn emit_binop_imm(
             None => return false,
         };
         let word = match rhs_imm {
-            32 => super::aarch64::enc_sxtw(rd, rn),
-            48 => super::aarch64::enc_sxth(rd, rn),
-            56 => super::aarch64::enc_sxtb(rd, rn),
+            32 => super::encode::enc_sxtw(rd, rn),
+            48 => super::encode::enc_sxth(rd, rn),
+            56 => super::encode::enc_sxtb(rd, rn),
             _ => unreachable!(),
         };
         emit(code, word);
@@ -5674,11 +5547,11 @@ fn emit_binop_imm(
         None
     };
     let used_peephole = match op {
-        BinOp::Shl => shift_amount.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
-        BinOp::Shr => shift_amount.map(|s| super::aarch64::enc_asr_imm(rd, rn, s)),
-        BinOp::Shru => shift_amount.map(|s| super::aarch64::enc_lsr_imm(rd, rn, s)),
-        BinOp::Ror => shift_amount.map(|s| super::aarch64::enc_ror_imm(rd, rn, s)),
-        BinOp::Mul => imm_pow2_shift.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
+        BinOp::Shl => shift_amount.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
+        BinOp::Shr => shift_amount.map(|s| super::encode::enc_asr_imm(rd, rn, s)),
+        BinOp::Shru => shift_amount.map(|s| super::encode::enc_lsr_imm(rd, rn, s)),
+        BinOp::Ror => shift_amount.map(|s| super::encode::enc_ror_imm(rd, rn, s)),
+        BinOp::Mul => imm_pow2_shift.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
         BinOp::Add => imm12
             .map(|v| enc_add_imm(rd, rn, v))
             .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v))),
@@ -5689,12 +5562,12 @@ fn emit_binop_imm(
         // materialising the all-ones constant (movz + 3x movk) into a
         // scratch and xoring. `mvn` reads the same operand, so the
         // allocator's liveness is unchanged.
-        BinOp::Xor if rhs_imm == -1 => Some(super::aarch64::enc_mvn(rd, rn)),
+        BinOp::Xor if rhs_imm == -1 => Some(super::encode::enc_mvn(rd, rn)),
         // `x & 0xffffffff` zero-extends the low word; a 32-bit move does
         // it in one instruction, avoiding the load-imm64 + and-register
         // pair (the immediate has no logical-immediate-AND short form
         // the rest of this path would otherwise use).
-        BinOp::And if rhs_imm as u64 == 0xffff_ffff => Some(super::aarch64::enc_mov_w_w(rd, rn)),
+        BinOp::And if rhs_imm as u64 == 0xffff_ffff => Some(super::encode::enc_mov_w_w(rd, rn)),
         _ => None,
     };
     if let Some(word) = used_peephole {
@@ -5760,7 +5633,7 @@ fn emit_binop_imm(
         BinOp::Shl => enc_lslv(rd, rn, rm),
         BinOp::Shr => enc_asrv(rd, rn, rm),
         BinOp::Shru => enc_lsrv(rd, rn, rm),
-        BinOp::Ror => super::aarch64::enc_rorv(rd, rn, rm),
+        BinOp::Ror => super::encode::enc_rorv(rd, rn, rm),
         _ => return false,
     };
     emit(code, word);
@@ -5898,50 +5771,12 @@ fn fp_reg(place: Place) -> Option<u8> {
 /// `scratch` that lives outside the allocator's bank so it cannot
 /// collide with any pending source or target.
 fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
-    moves.retain(|(s, t)| s != t);
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(other_s, _)| *other_s == t);
-            if !tgt_still_a_source {
-                emit_mov_reg(code, Reg(t), Reg(s));
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            // Worklist contains only cycle members. Save one source
-            // into the scratch and redirect every move that read
-            // from it; the redirected `(scratch, ...)` move now
-            // breaks the cycle.
-            //
-            // Pick a source whose register is not the scratch
-            // itself. Without the filter, if any cycle member's
-            // source equals `scratch`, the cycle-break emits
-            // `mov scratch, scratch` (no-op) and the rewrite
-            // returns sources to their original values -- the
-            // outer loop never makes progress and the function
-            // spins forever. The relaxed calls_after_def bound
-            // surfaces this shape by parking more values in
-            // caller-saved registers, occasionally landing one on
-            // the same physical register as the scratch.
-            let cycle_src = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|&s| s != scratch.0)
-                .unwrap_or(moves[0].0);
-            emit_mov_reg(code, scratch, Reg(cycle_src));
-            for m in moves.iter_mut() {
-                if m.0 == cycle_src {
-                    m.0 = scratch.0;
-                }
-            }
-        }
-    }
+    super::ssa::emit_common::schedule_reg_moves_via_scratch(
+        code,
+        moves,
+        scratch.0,
+        |code, t, s| emit_mov_reg(code, Reg(t), Reg(s)),
+    );
 }
 
 /// Sequentialize a parallel copy over d-registers. Mirrors
@@ -5949,35 +5784,12 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 /// copies. `scratch_d` must lie outside the allocator's d-register
 /// pool so it collides with no pending source or target.
 fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch_d: u8) {
-    moves.retain(|(s, t)| s != t);
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(other_s, _)| *other_s == t);
-            if !tgt_still_a_source {
-                emit(code, super::aarch64::enc_fmov_d_d(t, s));
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            let cycle_src = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|&s| s != scratch_d)
-                .unwrap_or(moves[0].0);
-            emit(code, super::aarch64::enc_fmov_d_d(scratch_d, cycle_src));
-            for m in moves.iter_mut() {
-                if m.0 == cycle_src {
-                    m.0 = scratch_d;
-                }
-            }
-        }
-    }
+    super::ssa::emit_common::schedule_reg_moves_via_scratch(
+        code,
+        moves,
+        scratch_d,
+        |code, t, s| emit(code, super::encode::enc_fmov_d_d(t, s)),
+    );
 }
 
 /// Emit the predecessor-exit moves for each `Inst::Phi` at the head
@@ -6000,135 +5812,30 @@ fn emit_phi_predecessor_moves(
     scratch: &ScratchPool,
     frame: Frame,
 ) -> bool {
-    use super::super::ir::Terminator;
-    let succs: Vec<super::super::ir::BlockId> = match func.blocks[self_block as usize].terminator {
-        Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
-        Terminator::Bz {
-            target,
-            fall_through,
-            ..
-        }
-        | Terminator::Bnz {
-            target,
-            fall_through,
-            ..
-        } => alloc::vec![target, fall_through],
-        Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
-        Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
-    };
-    for succ in succs {
-        let head = func.blocks[succ as usize].inst_range.start;
-        let end = func.blocks[succ as usize].inst_range.end;
-        // Collect every phi's predecessor-exit move as one
-        // location-to-location parallel copy. Splitting the set into
-        // a register pass and a separate spill-store pass is unsound:
-        // a register reg-to-reg move can overwrite a register that a
-        // pending spill store still needs as its source. Scheduling
-        // all locations together preserves the parallel-copy
-        // semantics across both register and stack-slot operands.
-        let mut moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
-        let mut fp_moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
-        for id in head..end {
-            let inst = &func.insts[id as usize];
-            let super::super::ir::Inst::Phi { incoming, kind } = inst else {
-                break;
-            };
-            let Some((_, src_v)) = incoming.iter().find(|(b, _)| *b == self_block) else {
-                continue;
-            };
-            let dst_place = alloc
-                .places
-                .get(id as usize)
-                .copied()
-                .unwrap_or(super::ssa_alloc::Place::None);
-            let src_place = alloc
-                .places
-                .get(*src_v as usize)
-                .copied()
-                .unwrap_or(super::ssa_alloc::Place::None);
-            use super::ssa_alloc::Place;
-            // The predecessor-exit move must stay within one register
-            // file. An FP phi (kind F32 / F64) has its home and operands
-            // FP-classed; its move is scheduled over the FP locations
-            // (d-registers and spill slots). Every other phi is
-            // integer-classed and scheduled over the integer locations.
-            // The two files do not alias, so the two parallel copies are
-            // independent.
-            let phi_is_fp = matches!(
-                kind,
-                super::super::ir::LoadKind::F32 | super::super::ir::LoadKind::F64
-            );
-            if phi_is_fp {
-                match (src_place, dst_place) {
-                    (Place::None, _) | (_, Place::None) => {}
-                    _ => fp_moves.push((src_place, dst_place)),
-                }
-            } else {
-                match (src_place, dst_place) {
-                    (Place::None, _) | (_, Place::None) => {}
-                    _ => moves.push((src_place, dst_place)),
-                }
-            }
-        }
-        if !schedule_place_moves(code, &mut moves, frame, scratch.primary, scratch.secondary) {
-            return false;
-        }
-        // FP phi edges: d16 / d17 are reserved scratch outside the
-        // allocator's d-register pool (d0..d15), so they hold no live
-        // FP value across the terminator.
-        schedule_fp_place_moves(code, &mut fp_moves, frame, 17, 16);
-    }
-    true
+    // d16 / d17 are reserved FP scratch outside the allocator's d0..d15 pool;
+    // `scratch.primary` / `secondary` are the reserved integer scratch.
+    super::ssa::emit_common::emit_phi_predecessor_moves(
+        &super::ssa::emit_common::Aarch64Backend,
+        code,
+        self_block,
+        func,
+        alloc,
+        frame,
+        scratch.primary.0,
+        scratch.secondary.0,
+        17,
+        16,
+    )
 }
 
 /// Compare two `Place`s by physical location identity. Distinct
 /// `Place` variants never alias; same-variant places alias when their
 /// register number or spill slot matches.
-fn place_same_loc(a: Place, b: Place) -> bool {
-    match (a, b) {
-        (Place::IntReg(x), Place::IntReg(y)) => x == y,
-        (Place::Spill(x), Place::Spill(y)) => x == y,
-        (Place::FpReg(x), Place::FpReg(y)) => x == y,
-        _ => false,
-    }
-}
-
 /// Emit a single resolved location-to-location move. `stage` is a
 /// scratch register used only for the spill-to-spill case (load then
 /// store); `hold` is borrowed (saved/restored on the stack) to carry
 /// the base when a spill-to-spill destination slot lies beyond the
 /// scaled-imm12 reach. Both must lie outside the allocator's bank.
-fn emit_place_move(
-    code: &mut Vec<u8>,
-    src: Place,
-    dst: Place,
-    frame: Frame,
-    stage: Reg,
-    hold: Reg,
-) {
-    match (src, dst) {
-        (Place::IntReg(s), Place::IntReg(t)) => emit_mov_reg(code, Reg(t), Reg(s)),
-        (Place::IntReg(s), Place::Spill(slot)) => {
-            // `stage` is unused on this arm, so it is free to carry the
-            // base when the slot is beyond the scaled-imm12 reach.
-            emit_sp_str_x(code, Reg(s), spill_off(frame, slot), stage);
-        }
-        (Place::Spill(slot), Place::IntReg(t)) => {
-            emit_sp_ldr_x(code, Reg(t), spill_off(frame, slot));
-        }
-        (Place::Spill(ss), Place::Spill(ts)) => {
-            emit_sp_ldr_x(code, stage, spill_off(frame, ss));
-            // The value occupies `stage` and `hold` may carry a live
-            // cycle source, so the store borrows `hold` via a stack
-            // save/restore when the destination slot is out of reach.
-            emit_sp_str_x_borrow(code, stage, spill_off(frame, ts), hold);
-        }
-        // FP and None locations are filtered by the caller before
-        // scheduling; they never reach this point.
-        _ => {}
-    }
-}
-
 /// Sequentialize a parallel copy over physical locations (integer
 /// registers and stack spill slots). Leaves -- destinations that are
 /// not the source of any other pending move -- are emitted first;
@@ -6145,49 +5852,14 @@ fn schedule_place_moves(
     hold: Reg,
     stage: Reg,
 ) -> bool {
-    moves.retain(|(s, t)| !place_same_loc(*s, *t));
-    if moves.iter().any(|(s, t)| {
-        matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
-    }) {
-        return false;
-    }
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
-            if !tgt_still_a_source {
-                emit_place_move(code, s, t, frame, stage, hold);
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            // Only cycle members remain. Save one cycle source into
-            // `hold` and redirect every move that reads it. A single
-            // cycle drains completely before the next break, so a
-            // single persistent `hold` register suffices.
-            let cyc = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|s| !place_same_loc(*s, Place::IntReg(hold.0)))
-                .unwrap_or(moves[0].0);
-            // Copy the cycle source into `hold` (a register move or a
-            // spill reload). `materialize_int` is unsuitable here: for
-            // an `IntReg` source it returns the register without
-            // emitting anything, leaving `hold` unloaded.
-            emit_place_move(code, cyc, Place::IntReg(hold.0), frame, stage, hold);
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, cyc) {
-                    m.0 = Place::IntReg(hold.0);
-                }
-            }
-        }
-    }
-    true
+    super::ssa::emit_common::schedule_place_moves(
+        &super::ssa::emit_common::Aarch64Backend,
+        code,
+        moves,
+        frame,
+        hold.0,
+        stage.0,
+    )
 }
 
 /// Emit a single resolved FP location-to-location move over `FpReg`
@@ -6195,73 +5867,73 @@ fn schedule_place_moves(
 /// spill-to-spill case (load then store); it must lie outside the
 /// allocator's FP pool. `IntReg` and `None` places never reach here
 /// (an FP phi's home and its operands are FP-classed).
-fn emit_fp_place_move(code: &mut Vec<u8>, src: Place, dst: Place, frame: Frame, stage_d: u8) {
-    match (src, dst) {
-        (Place::FpReg(s), Place::FpReg(t)) => emit(code, super::aarch64::enc_fmov_d_d(t, s)),
-        (Place::FpReg(s), Place::Spill(slot)) => {
-            // FP phi moves keep all values in d-regs, so the GPR scratch
-            // x16 is free to carry the base for out-of-reach slots.
-            emit_sp_str_d_auto(code, s, spill_off(frame, slot));
-        }
-        (Place::Spill(slot), Place::FpReg(t)) => {
-            emit_sp_ldr_d_auto(code, t, spill_off(frame, slot));
-        }
-        (Place::Spill(ss), Place::Spill(ts)) => {
-            emit_sp_ldr_d_auto(code, stage_d, spill_off(frame, ss));
-            emit_sp_str_d_auto(code, stage_d, spill_off(frame, ts));
-        }
-        // Integer and None locations never reach here: an FP phi edge
-        // is FP-classed on both ends.
-        _ => {}
+impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Backend {
+    type Frame = Frame;
+    fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        emit(code, super::encode::enc_fmov_d_d(dst, src));
     }
-}
-
-/// Sequentialize a parallel copy over FP locations (d-registers and
-/// stack spill slots) for FP-classed phi predecessor moves. Mirrors
-/// [`schedule_place_moves`] with `fmov d, d` / `ldr d` / `str d`:
-/// leaves first, then break a residual cycle by holding one cycle
-/// source in `hold_d`. `hold_d` and `stage_d` must lie outside the
-/// allocator's FP pool so they collide with no pending source or
-/// destination.
-fn schedule_fp_place_moves(
-    code: &mut Vec<u8>,
-    moves: &mut Vec<(Place, Place)>,
-    frame: Frame,
-    hold_d: u8,
-    stage_d: u8,
-) {
-    moves.retain(|(s, t)| !place_same_loc(*s, *t));
-    while !moves.is_empty() {
-        let mut progress = false;
-        let mut i = 0;
-        while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
-            if !tgt_still_a_source {
-                emit_fp_place_move(code, s, t, frame, stage_d);
-                moves.swap_remove(i);
-                progress = true;
-            } else {
-                i += 1;
-            }
-        }
-        if !progress {
-            // Only cycle members remain. Save one cycle source into
-            // the `hold_d` d-reg and redirect every move that reads it.
-            let cyc = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|s| !place_same_loc(*s, Place::FpReg(hold_d)))
-                .unwrap_or(moves[0].0);
-            // Copy the cycle source into `hold_d` (a register move or a
-            // spill reload). `materialize_fp` is unsuitable: for an
-            // `FpReg` source it returns the register without emitting,
-            // leaving `hold_d` unloaded.
-            emit_fp_place_move(code, cyc, Place::FpReg(hold_d), frame, stage_d);
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, cyc) {
-                    m.0 = Place::FpReg(hold_d);
-                }
+    fn fp_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+        // FP phi moves keep all values in d-regs, so the GPR scratch x16 is
+        // free to carry the base for out-of-reach slots.
+        emit_sp_str_d_auto(code, src, spill_off(frame, slot));
+    }
+    fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+        emit_sp_ldr_d_auto(code, dst, spill_off(frame, slot));
+    }
+    fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        emit_mov_reg(code, Reg(dst), Reg(src));
+    }
+    fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, base: u8) {
+        emit_sp_str_x(code, Reg(src), spill_off(frame, slot), Reg(base));
+    }
+    fn int_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+        emit_sp_ldr_x(code, Reg(dst), spill_off(frame, slot));
+    }
+    fn int_spill_to_spill(
+        &self,
+        code: &mut Vec<u8>,
+        frame: Frame,
+        src: u32,
+        dst: u32,
+        stage: u8,
+        hold: u8,
+    ) {
+        emit_sp_ldr_x(code, Reg(stage), spill_off(frame, src));
+        // The value occupies `stage` and `hold` may carry a live cycle
+        // source, so the store borrows `hold` via a stack save/restore when
+        // the destination slot is out of reach.
+        emit_sp_str_x_borrow(code, Reg(stage), spill_off(frame, dst), Reg(hold));
+    }
+    fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+        emit_sp_str_x_auto(code, Reg(src), spill_off(frame, slot));
+    }
+    fn break_place_cycle(
+        &self,
+        code: &mut Vec<u8>,
+        moves: &mut Vec<(Place, Place)>,
+        frame: Frame,
+        hold: u8,
+        stage: u8,
+    ) {
+        // Stage one cycle source into `hold` and redirect every move that
+        // reads it. A single cycle drains completely before the next break.
+        let cyc = moves
+            .iter()
+            .map(|(s, _)| *s)
+            .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
+            .unwrap_or(moves[0].0);
+        super::ssa::emit_common::emit_place_move(
+            self,
+            code,
+            cyc,
+            Place::IntReg(hold),
+            frame,
+            stage,
+            hold,
+        );
+        for m in moves.iter_mut() {
+            if place_same_loc(m.0, cyc) {
+                m.0 = Place::IntReg(hold);
             }
         }
     }
@@ -6409,7 +6081,7 @@ fn marshal_args(
                         None => return false,
                     };
                     if src != r {
-                        emit(code, super::aarch64::enc_fmov_d_d(r, src));
+                        emit(code, super::encode::enc_fmov_d_d(r, src));
                     }
                 }
             }
@@ -6450,9 +6122,9 @@ fn marshal_args(
                 .and_then(|m| m.get(k).copied())
                 .unwrap_or(((k as u32) * 8, 8));
             if msize == 8 {
-                emit(code, super::aarch64::enc_ldr_d_imm(cr.reg, base, off));
+                emit(code, super::encode::enc_ldr_d_imm(cr.reg, base, off));
             } else {
-                emit(code, super::aarch64::enc_ldr_s_imm(cr.reg, base, off));
+                emit(code, super::encode::enc_ldr_s_imm(cr.reg, base, off));
             }
         }
     }
@@ -6613,9 +6285,9 @@ fn emit_return(
             // for an F32). Load each from its byte offset in the source.
             for (k, (off, msize)) in members.iter().enumerate() {
                 if *msize == 8 {
-                    emit(code, super::aarch64::enc_ldr_d_imm(k as u8, base, *off));
+                    emit(code, super::encode::enc_ldr_d_imm(k as u8, base, *off));
                 } else {
-                    emit(code, super::aarch64::enc_ldr_s_imm(k as u8, base, *off));
+                    emit(code, super::encode::enc_ldr_s_imm(k as u8, base, *off));
                 }
             }
         } else if size <= 16 {
@@ -6661,10 +6333,10 @@ fn emit_return(
         // register file even when the allocator spilled it.
         let returns_fp = func.ret_is_fp
             || ((value as usize) < func.insts.len()
-                && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));
+                && super::ssa::reg_alloc::produces_fp_result(&func.insts[value as usize]));
         if let Place::FpReg(r) = place {
             if r != 0 {
-                emit(code, super::aarch64::enc_fmov_d_d(0, r));
+                emit(code, super::encode::enc_fmov_d_d(0, r));
             }
         } else if returns_fp {
             // The function returns a floating-point scalar in d0 but the
@@ -6695,7 +6367,7 @@ fn emit_return(
     // 12-bit scaled immediate (range 0..32760 in multiples of
     // 8); the matching prologue uses `enc_str_imm` at the same
     // offsets.
-    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = saved_fpr_bytes + (i as u32) * 8;
         emit(code, enc_ldr_imm(Reg(r), Reg(31), off));
@@ -6708,7 +6380,7 @@ fn emit_return(
     // mirror of the prologue's save, emitted only when the function
     // clobbers x19.
     if frame.uses_x19 {
-        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
+        let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
         let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
         emit(code, enc_ldr_imm(Reg(19), Reg(31), x19_save_off));
     }
@@ -6753,10 +6425,10 @@ mod tests {
 
     fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, Allocation) {
         let program = Compiler::new(src.into()).compile().expect("compile");
-        let funcs = crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target)
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target)
             .expect("produce_ssa_funcs");
         let main = funcs.into_iter().next().expect("at least one function");
-        let alloc = super::super::ssa_alloc::allocate(&main, target);
+        let alloc = super::super::ssa::reg_alloc::allocate(&main, target);
         (main, alloc)
     }
 
@@ -6788,28 +6460,34 @@ mod tests {
         let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
-        let ok = emit_function(
-            &func,
-            &alloc,
-            Target::MacOSAarch64,
-            &mut code,
-            &mut fx,
-            &mut plt,
-            &mut data_fx,
-            &mut user_data_refs,
-            &extern_data_names,
-            &extern_tls_names,
-            &mut pf_fx,
-            &imps,
-            &variadic_targets,
-            &mut tls_idx,
-            &mut tlv_fx,
-            &mut tlv_desc,
-            &mut Vec::new(),
-            &mut pc_to_native,
-            &mut prologue_native,
-            &mut ssa_line_rows,
-        );
+        let mut elf_tpoff = Vec::new();
+        let ok = {
+            let mut cx = super::super::ssa::emit_common::EmitCtx {
+                code: &mut code,
+                plt_call_fixups: &mut plt,
+                data_fixups: &mut data_fx,
+                user_extern_data_refs: &mut user_data_refs,
+                pending_func_fixups: &mut pf_fx,
+                tls_index_fixups: &mut tls_idx,
+                elf_tpoff_fixups: &mut elf_tpoff,
+                ssa_line_rows: &mut ssa_line_rows,
+                pc_to_native: &mut pc_to_native,
+                prologue_native: &mut prologue_native,
+            };
+            emit_function(
+                &func,
+                &alloc,
+                Target::MacOSAarch64,
+                &mut cx,
+                &mut fx,
+                &extern_data_names,
+                &extern_tls_names,
+                &imps,
+                &variadic_targets,
+                &mut tlv_fx,
+                &mut tlv_desc,
+            )
+        };
         assert!(
             ok,
             "expected SSA emit to handle a single-return function; got fallback"
@@ -6846,10 +6524,10 @@ mod tests {
         .compile()
         .expect("compile");
         let mut funcs =
-            crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target).expect("ssa");
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
         // StoreIndexed is produced by the index fold, which the lowering
         // runs after `produce_ssa_funcs`.
-        super::super::ssa_index_fold::run(&mut funcs);
+        crate::c5::codegen::passes::index_fold::run(&mut funcs);
         let func = funcs
             .into_iter()
             .find(|f| {
@@ -6872,14 +6550,14 @@ mod tests {
                 _ => None,
             })
             .expect("StoreIndexed operands");
-        let mut alloc = super::super::ssa_alloc::allocate(&func, target);
+        let mut alloc = super::super::ssa::reg_alloc::allocate(&func, target);
         alloc.places[base as usize] = Place::Spill(0);
         alloc.places[index as usize] = Place::Spill(1);
         alloc.places[value as usize] = Place::Spill(2);
         // The frame must reserve the three slots the test forces, or the
         // spill-offset computation underflows.
         alloc.spill_count = alloc.spill_count.max(3);
-        let frame = Frame::for_function(&func, &alloc, target.abi(), target);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
         let scratch = ScratchPool {
             primary: Reg(16),
             secondary: Reg(17),
@@ -6949,28 +6627,34 @@ mod tests {
         let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
-        let ok = emit_function(
-            &func,
-            &alloc,
-            Target::MacOSAarch64,
-            &mut code,
-            &mut fx,
-            &mut plt,
-            &mut data_fx,
-            &mut user_data_refs,
-            &extern_data_names,
-            &extern_tls_names,
-            &mut pf_fx,
-            &imps,
-            &variadic_targets,
-            &mut tls_idx,
-            &mut tlv_fx,
-            &mut tlv_desc,
-            &mut Vec::new(),
-            &mut pc_to_native,
-            &mut prologue_native,
-            &mut ssa_line_rows,
-        );
+        let mut elf_tpoff = Vec::new();
+        let ok = {
+            let mut cx = super::super::ssa::emit_common::EmitCtx {
+                code: &mut code,
+                plt_call_fixups: &mut plt,
+                data_fixups: &mut data_fx,
+                user_extern_data_refs: &mut user_data_refs,
+                pending_func_fixups: &mut pf_fx,
+                tls_index_fixups: &mut tls_idx,
+                elf_tpoff_fixups: &mut elf_tpoff,
+                ssa_line_rows: &mut ssa_line_rows,
+                pc_to_native: &mut pc_to_native,
+                prologue_native: &mut prologue_native,
+            };
+            emit_function(
+                &func,
+                &alloc,
+                Target::MacOSAarch64,
+                &mut cx,
+                &mut fx,
+                &extern_data_names,
+                &extern_tls_names,
+                &imps,
+                &variadic_targets,
+                &mut tlv_fx,
+                &mut tlv_desc,
+            )
+        };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
         assert_eq!(code.len() % 4, 0);
     }
@@ -7009,28 +6693,34 @@ mod tests {
         let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
-        let ok = emit_function(
-            &func,
-            &alloc,
-            Target::MacOSAarch64,
-            &mut code,
-            &mut fx,
-            &mut plt,
-            &mut data_fx,
-            &mut user_data_refs,
-            &extern_data_names,
-            &extern_tls_names,
-            &mut pf_fx,
-            &imps,
-            &variadic_targets,
-            &mut tls_idx,
-            &mut tlv_fx,
-            &mut tlv_desc,
-            &mut Vec::new(),
-            &mut pc_to_native,
-            &mut prologue_native,
-            &mut ssa_line_rows,
-        );
+        let mut elf_tpoff = Vec::new();
+        let ok = {
+            let mut cx = super::super::ssa::emit_common::EmitCtx {
+                code: &mut code,
+                plt_call_fixups: &mut plt,
+                data_fixups: &mut data_fx,
+                user_extern_data_refs: &mut user_data_refs,
+                pending_func_fixups: &mut pf_fx,
+                tls_index_fixups: &mut tls_idx,
+                elf_tpoff_fixups: &mut elf_tpoff,
+                ssa_line_rows: &mut ssa_line_rows,
+                pc_to_native: &mut pc_to_native,
+                prologue_native: &mut prologue_native,
+            };
+            emit_function(
+                &func,
+                &alloc,
+                Target::MacOSAarch64,
+                &mut cx,
+                &mut fx,
+                &extern_data_names,
+                &extern_tls_names,
+                &imps,
+                &variadic_targets,
+                &mut tlv_fx,
+                &mut tlv_desc,
+            )
+        };
         assert!(
             ok,
             "`test` should emit via the thin slice (cmp + cset + cbz + ldr params)"

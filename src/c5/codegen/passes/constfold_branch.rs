@@ -17,7 +17,7 @@
 //! fixed-point loop is needed because folding a terminator can
 //! only make code unreachable, never expose a new constant.
 
-use super::super::ir::{FunctionSsa, Inst, Terminator};
+use crate::c5::ir::{FunctionSsa, Inst, Terminator};
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs {
@@ -56,7 +56,7 @@ fn run_one(func: &mut FunctionSsa) {
 
 /// Resolve `v` to a constant if it names an `Inst::Imm`. Returns
 /// `None` for any other producer or for `NO_VALUE`.
-fn fold(insts: &[Inst], v: super::super::ir::ValueId) -> Option<i64> {
+fn fold(insts: &[Inst], v: crate::c5::ir::ValueId) -> Option<i64> {
     let v = v as usize;
     if v >= insts.len() {
         return None;
@@ -69,8 +69,8 @@ fn fold(insts: &[Inst], v: super::super::ir::ValueId) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::ir::{Block, FunctionSsa, NO_VALUE, ValueId};
     use super::*;
+    use crate::c5::ir::{Block, FunctionSsa, NO_VALUE, ValueId};
     use alloc::vec;
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {

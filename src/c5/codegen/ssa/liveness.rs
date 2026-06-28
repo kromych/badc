@@ -21,7 +21,7 @@ use alloc::vec::Vec;
 
 use super::super::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 
-pub(super) struct Liveness {
+pub(crate) struct Liveness {
     words: usize,
     /// `live_in[b*words .. ]` / `live_out[b*words .. ]`: bitset of
     /// values live on entry to / exit from block `b`.
@@ -38,7 +38,7 @@ pub(super) struct Liveness {
 }
 
 impl Liveness {
-    pub(super) fn compute(func: &FunctionSsa) -> Self {
+    pub(crate) fn compute(func: &FunctionSsa) -> Self {
         let nblocks = func.blocks.len();
         let n = func.insts.len();
         let words = n.div_ceil(64).max(1);
@@ -57,7 +57,7 @@ impl Liveness {
                 if matches!(func.insts[idx as usize], Inst::Phi { .. }) {
                     continue;
                 }
-                super::ssa_alloc::for_each_operand(&func.insts[idx as usize], |op| {
+                super::reg_alloc::for_each_operand(&func.insts[idx as usize], |op| {
                     if (op as usize) < n && last_use_pos[op as usize] < idx {
                         last_use_pos[op as usize] = idx;
                     }
@@ -117,7 +117,7 @@ impl Liveness {
                     }
                     continue;
                 }
-                super::ssa_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+                super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
             }
             if blk.exit_acc != NO_VALUE {
                 mark(blk.exit_acc);
@@ -139,7 +139,7 @@ impl Liveness {
             for b in (0..nblocks).rev() {
                 let base = b * words;
                 scratch.iter_mut().for_each(|w| *w = 0);
-                for s in super::ssa_mem2reg::successors(
+                for s in super::mem2reg::successors(
                     &func.blocks[b].terminator,
                     &func.computed_goto_targets,
                 ) {
@@ -237,7 +237,7 @@ impl Liveness {
                 continue;
             }
             let mut found = false;
-            super::ssa_alloc::for_each_operand(&func.insts[idx as usize], |op| {
+            super::reg_alloc::for_each_operand(&func.insts[idx as usize], |op| {
                 if op == x {
                     found = true;
                 }
@@ -260,14 +260,14 @@ impl Liveness {
     /// later than the call and is still live once it returns, so a
     /// caller-saved register holding v would be clobbered.
     #[allow(dead_code)]
-    pub(super) fn live_after(&self, func: &FunctionSsa, v: ValueId, point: ValueId) -> bool {
+    pub(crate) fn live_after(&self, func: &FunctionSsa, v: ValueId, point: ValueId) -> bool {
         self.live_just_after_def(func, v, point)
     }
 
     /// Whether `a` and `b` are ever simultaneously live. Two
     /// single-definition values interfere iff one definition lies in
     /// the other's live range.
-    pub(super) fn interfere(&self, func: &FunctionSsa, a: ValueId, b: ValueId) -> bool {
+    pub(crate) fn interfere(&self, func: &FunctionSsa, a: ValueId, b: ValueId) -> bool {
         if a == b {
             return false;
         }
@@ -291,7 +291,7 @@ impl Liveness {
     /// here. The cost is linear in code size times the live-set width,
     /// not quadratic in the value count.
     #[allow(dead_code)]
-    pub(super) fn interference(&self, func: &FunctionSsa, node_of: &[ValueId]) -> Interference {
+    pub(crate) fn interference(&self, func: &FunctionSsa, node_of: &[ValueId]) -> Interference {
         let n = func.insts.len();
         let mut adj: Vec<BTreeSet<ValueId>> = (0..n).map(|_| BTreeSet::new()).collect();
         for (b, blk) in func.blocks.iter().enumerate() {
@@ -323,7 +323,7 @@ impl Liveness {
             }
             for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
                 let inst = &func.insts[idx as usize];
-                if super::ssa_alloc::produces_value(inst) {
+                if super::reg_alloc::produces_value(inst) {
                     let di = node_of[idx as usize];
                     for &x in &live {
                         let xi = node_of[x as usize];
@@ -335,7 +335,7 @@ impl Liveness {
                     live.remove(&idx);
                 }
                 if !matches!(inst, Inst::Phi { .. }) {
-                    super::ssa_alloc::for_each_operand(inst, |op| {
+                    super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op);
                         }
@@ -364,7 +364,7 @@ impl Liveness {
     /// loop is exactly that shape: a value defined in the loop body and
     /// used again after the back-edge crosses the body's calls without
     /// the linear interval covering them.
-    pub(super) fn values_live_across_calls(
+    pub(crate) fn values_live_across_calls(
         &self,
         func: &FunctionSsa,
         tls_addr_is_call: bool,
@@ -404,7 +404,7 @@ impl Liveness {
                     inst,
                     Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
                 ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)));
-                if super::ssa_alloc::produces_value(inst) {
+                if super::reg_alloc::produces_value(inst) {
                     live.remove(&idx);
                 }
                 // After removing the call's own result (its definition
@@ -417,7 +417,7 @@ impl Liveness {
                     }
                 }
                 if !matches!(inst, Inst::Phi { .. }) {
-                    super::ssa_alloc::for_each_operand(inst, |op| {
+                    super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op);
                         }
@@ -432,26 +432,26 @@ impl Liveness {
 /// Interference graph over register-allocation nodes (phi-congruence
 /// roots). `adj[node]` lists the nodes that must not share a register
 /// with `node`. Non-node value ids have empty entries.
-pub(super) struct Interference {
+pub(crate) struct Interference {
     adj: Vec<BTreeSet<ValueId>>,
 }
 
 #[allow(dead_code)]
 impl Interference {
     /// Nodes that interfere with `node`.
-    pub(super) fn neighbors(&self, node: ValueId) -> &BTreeSet<ValueId> {
+    pub(crate) fn neighbors(&self, node: ValueId) -> &BTreeSet<ValueId> {
         &self.adj[node as usize]
     }
 
     /// Number of nodes that interfere with `node`.
-    pub(super) fn degree(&self, node: ValueId) -> usize {
+    pub(crate) fn degree(&self, node: ValueId) -> usize {
         self.adj[node as usize].len()
     }
 
     /// Build a graph directly from an edge list, for unit tests that
     /// exercise coloring without constructing a whole function.
     #[cfg(test)]
-    pub(super) fn from_edges(n: usize, edges: &[(ValueId, ValueId)]) -> Self {
+    pub(crate) fn from_edges(n: usize, edges: &[(ValueId, ValueId)]) -> Self {
         let mut adj: Vec<BTreeSet<ValueId>> = (0..n).map(|_| BTreeSet::new()).collect();
         for &(a, b) in edges {
             adj[a as usize].insert(b);

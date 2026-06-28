@@ -1,8 +1,8 @@
 //! x86_64 instruction encoder + per-function lowering shell.
 //!
 //! Mirrors the structure of [`super::aarch64`]. Per-function code
-//! generation routes through [`super::ssa_shadow::produce_ssa_funcs`]
-//! + [`super::ssa_alloc::allocate`] + `super::ssa_emit_x86_64`; this
+//! generation routes through [`super::ssa::shadow::produce_ssa_funcs`]
+//! + [`super::ssa::reg_alloc::allocate`] + `super::emit`; this
 //! module owns the encoder catalogue, the start-stub, the PLT
 //! trampoline emit, and the post-pass fixup walks that the SSA emit
 //! defers to.
@@ -39,7 +39,7 @@ use super::{Abi, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 /// One of the 16 x86_64 GPRs. The byte holds the architectural
 /// register number 0..15.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct Reg(pub u8);
+pub(crate) struct Reg(pub u8);
 
 impl Reg {
     pub const RAX: Reg = Reg(0);
@@ -179,7 +179,7 @@ fn emit_i64(code: &mut Vec<u8>, v: i64) {
 /// dynamically-chosen register pairs (e.g. moving a popped pool
 /// register into r13), so guarding here catches every emit site
 /// without the lowering having to spell out the check.
-pub(super) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     if dst == src {
         return;
     }
@@ -194,7 +194,7 @@ pub(super) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// REX prefix is emitted only when either operand is a high (r8..r15)
 /// register; for low registers the 32-bit form needs no REX so the
 /// upper-half clear stays intact.
-pub(super) fn emit_mov_r32_r32(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_mov_r32_r32(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     if src.high() || dst.high() {
         emit_byte(code, rex(false, src.high(), false, dst.high()));
     }
@@ -209,7 +209,7 @@ pub(super) fn emit_mov_r32_r32(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// accumulator need this before reading. Encodings are spelled
 /// out as raw bytes -- the dst/src are always RAX/EAX/AX/AL so
 /// the ModR/M byte is fixed.
-pub(super) fn emit_extend_rax_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
+pub(crate) fn emit_extend_rax_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
     use super::ReturnExt;
     match ext {
         ReturnExt::None => {}
@@ -236,7 +236,7 @@ pub(super) fn emit_extend_rax_for_return(code: &mut Vec<u8>, ext: super::ReturnE
 ///                              implicitly zero-extends to 64
 ///                              bits, per the Intel SDM).
 /// * otherwise               -> `REX.W + B8+rd io` (10 bytes).
-pub(super) fn emit_mov_r_imm64(code: &mut Vec<u8>, dst: Reg, imm: i64) {
+pub(crate) fn emit_mov_r_imm64(code: &mut Vec<u8>, dst: Reg, imm: i64) {
     if imm == 0 {
         emit_xor_rr(code, dst, dst);
         return;
@@ -255,7 +255,7 @@ pub(super) fn emit_mov_r_imm64(code: &mut Vec<u8>, dst: Reg, imm: i64) {
 }
 
 /// `PUSH r64`. Encoding: `50+rd`, plus REX.B if `dst` is R8..R15.
-pub(super) fn emit_push_r(code: &mut Vec<u8>, r: Reg) {
+pub(crate) fn emit_push_r(code: &mut Vec<u8>, r: Reg) {
     if r.high() {
         emit_byte(code, rex(false, false, false, true));
     }
@@ -263,7 +263,7 @@ pub(super) fn emit_push_r(code: &mut Vec<u8>, r: Reg) {
 }
 
 /// `POP r64`. Encoding: `58+rd`, plus REX.B if `dst` is R8..R15.
-pub(super) fn emit_pop_r(code: &mut Vec<u8>, r: Reg) {
+pub(crate) fn emit_pop_r(code: &mut Vec<u8>, r: Reg) {
     if r.high() {
         emit_byte(code, rex(false, false, false, true));
     }
@@ -271,13 +271,13 @@ pub(super) fn emit_pop_r(code: &mut Vec<u8>, r: Reg) {
 }
 
 /// `RET`. The near-return form, no operand.
-pub(super) fn emit_ret(code: &mut Vec<u8>) {
+pub(crate) fn emit_ret(code: &mut Vec<u8>) {
     emit_byte(code, 0xC3);
 }
 
 /// `SYSCALL`. Linux x86_64 intrinsic entry; nr in `rax`, args in
 /// `rdi/rsi/rdx/r10/r8/r9`, return in `rax`.
-pub(super) fn emit_syscall(code: &mut Vec<u8>) {
+pub(crate) fn emit_syscall(code: &mut Vec<u8>) {
     emit_bytes(code, &[0x0F, 0x05]);
 }
 
@@ -285,7 +285,7 @@ pub(super) fn emit_syscall(code: &mut Vec<u8>) {
 /// Encoding: `REX.W + 8B /r` with the addressing form chosen by
 /// `disp`'s magnitude. Handles `[rsp + disp]` (which always needs a
 /// SIB byte) and `[rbp + disp]` (which always needs `mod >= 01`).
-pub(super) fn emit_mov_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_mov_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
     emit_byte(code, 0x8B);
     emit_modrm_mem(code, dst, base, disp);
@@ -293,14 +293,14 @@ pub(super) fn emit_mov_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32)
 
 /// `MOV [base + disp], r64` -- 64-bit memory store.
 /// Encoding: `REX.W + 89 /r`.
-pub(super) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+pub(crate) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     emit_byte(code, rex(true, src.high(), false, base.high()));
     emit_byte(code, 0x89);
     emit_modrm_mem(code, src, base, disp);
 }
 
 /// `MOV [base + disp], r32` -- 32-bit store.
-pub(super) fn emit_mov_mem_r32(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+pub(crate) fn emit_mov_mem_r32(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     if src.high() || base.high() {
         emit_byte(code, rex(false, src.high(), false, base.high()));
     }
@@ -309,7 +309,7 @@ pub(super) fn emit_mov_mem_r32(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
 }
 
 /// `MOV [base + disp], r16` -- 16-bit store.
-pub(super) fn emit_mov_mem_r16(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+pub(crate) fn emit_mov_mem_r16(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     emit_byte(code, 0x66);
     if src.high() || base.high() {
         emit_byte(code, rex(false, src.high(), false, base.high()));
@@ -321,7 +321,7 @@ pub(super) fn emit_mov_mem_r16(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
 /// `MOV [base + disp], r8` -- 8-bit store. The REX prefix (even empty)
 /// selects the uniform byte registers so `sil` / `dil` and the high
 /// extensions encode rather than `ah` / `ch`.
-pub(super) fn emit_mov_mem_r8(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+pub(crate) fn emit_mov_mem_r8(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     emit_byte(code, rex(false, src.high(), false, base.high()));
     emit_byte(code, 0x88);
     emit_modrm_mem(code, src, base, disp);
@@ -331,7 +331,7 @@ pub(super) fn emit_mov_mem_r8(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg
 /// 64-bit destination. Encoding: `REX.W + 63 /r`. Used by [`LoadKind::I32`]
 /// for signed `int` lvalue reads -- C signed semantics require the
 /// high bit of the 4-byte slot to propagate.
-pub(super) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
     emit_byte(code, 0x63);
     emit_modrm_mem(code, dst, base, disp);
@@ -342,7 +342,7 @@ pub(super) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i
 /// register, so this doubles as a zero-extending u32 load. Used by
 /// [`LoadKind::U32`] for `unsigned int` lvalue reads. Encoding: no REX.W,
 /// just `8B /r` (with REX only if any operand needs the high bank).
-pub(super) fn emit_mov_r32_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_mov_r32_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     let needs_rex = dst.high() || base.high();
     if needs_rex {
         emit_byte(code, rex(false, dst.high(), false, base.high()));
@@ -355,7 +355,7 @@ pub(super) fn emit_mov_r32_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i3
 /// of `src`. Encoding: no REX.W, just `89 /r` (with REX only if any
 /// operand register needs the high bank). Companion to
 /// [`emit_movsxd_r_mem`] for the `StoreKind::I32` lowering.
-pub(super) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+pub(crate) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     let needs_rex = src.high() || base.high();
     if needs_rex {
         emit_byte(code, rex(false, src.high(), false, base.high()));
@@ -368,7 +368,7 @@ pub(super) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
 /// Encoding: `C7 /0 id` (with REX only when `base` needs the high
 /// bank). Used to initialise the System V `__va_list_tag`
 /// `gp_offset` / `fp_offset` (4-byte each) in `va_start`.
-pub(super) fn emit_mov_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
+pub(crate) fn emit_mov_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
     if base.high() {
         emit_byte(code, rex(false, false, false, base.high()));
     }
@@ -380,7 +380,7 @@ pub(super) fn emit_mov_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm
 
 /// `ADD dword [base + disp], imm32` -- add an immediate to a 32-bit
 /// memory operand in place. Encoding: `81 /0 id`.
-pub(super) fn emit_add_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
+pub(crate) fn emit_add_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
     if base.high() {
         emit_byte(code, rex(false, false, false, base.high()));
     }
@@ -391,7 +391,7 @@ pub(super) fn emit_add_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm
 
 /// `ADD qword [base + disp], imm32` -- add a sign-extended immediate to
 /// a 64-bit memory operand in place. Encoding: `REX.W 81 /0 id`.
-pub(super) fn emit_add_mem64_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
+pub(crate) fn emit_add_mem64_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
     emit_byte(code, rex(true, false, false, base.high()));
     emit_byte(code, 0x81);
     emit_modrm_mem(code, Reg(0), base, disp);
@@ -401,7 +401,7 @@ pub(super) fn emit_add_mem64_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm
 /// `MOVSX r64, [base + disp]` (16-bit memory source) -- 16-bit load
 /// sign-extended into a 64-bit register. Used by [`LoadKind::I16`] for
 /// `short` lvalue reads. Encoding: `REX.W + 0F BF /r`.
-pub(super) fn emit_movsx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_movsx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xBF);
@@ -411,7 +411,7 @@ pub(super) fn emit_movsx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: 
 /// `MOVZX r64, [base + disp]` (16-bit memory source) -- 16-bit load
 /// zero-extended into a 64-bit register. Used by [`LoadKind::U16`] for
 /// `unsigned short` / `u16` lvalue reads. Encoding: `REX.W + 0F B7 /r`.
-pub(super) fn emit_movzx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_movzx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xB7);
@@ -423,7 +423,7 @@ pub(super) fn emit_movzx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: 
 /// 16-bit) + optional REX (no W) + `89 /r`. Companion to
 /// [`emit_movsx_r_mem16`] / [`emit_movzx_r_mem16`] for the
 /// `StoreKind::I16` lowering.
-pub(super) fn emit_mov_mem16_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+pub(crate) fn emit_mov_mem16_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     emit_byte(code, 0x66);
     let needs_rex = src.high() || base.high();
     if needs_rex {
@@ -435,7 +435,7 @@ pub(super) fn emit_mov_mem16_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
 
 /// `LEA r64, [base + disp]` -- compute effective address.
 /// Encoding: `REX.W + 8D /r`.
-pub(super) fn emit_lea_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_lea_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
     emit_byte(code, 0x8D);
     emit_modrm_mem(code, dst, base, disp);
@@ -445,7 +445,7 @@ pub(super) fn emit_lea_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32)
 /// (mod=00, r/m=101). 7 bytes total. The writer patches `disp32`
 /// after layout to point at a data-segment address or another
 /// function inside the code blob.
-pub(super) fn emit_lea_r_rip32(code: &mut Vec<u8>, dst: Reg, disp32: i32) {
+pub(crate) fn emit_lea_r_rip32(code: &mut Vec<u8>, dst: Reg, disp32: i32) {
     emit_byte(code, rex(true, dst.high(), false, false));
     emit_byte(code, 0x8D);
     // mod=00, reg=dst.lo(), r/m=101 -- the RIP-relative r/m
@@ -457,18 +457,18 @@ pub(super) fn emit_lea_r_rip32(code: &mut Vec<u8>, dst: Reg, disp32: i32) {
 /// Byte length of [`emit_lea_r_rip32`]. The writer needs this to
 /// compute the RIP that the disp32 is measured from (i.e. the byte
 /// just after the lea, which is `instr_offset + LEA_RIP32_LEN`).
-pub(super) const LEA_RIP32_LEN: usize = 7;
+pub(crate) const LEA_RIP32_LEN: usize = 7;
 
 /// `CALL rel32`. The 5-byte direct-call form. `rel32` is a signed
 /// 32-bit displacement from the byte *after* the instruction.
-pub(super) fn emit_call_rel32(code: &mut Vec<u8>, rel32: i32) {
+pub(crate) fn emit_call_rel32(code: &mut Vec<u8>, rel32: i32) {
     emit_byte(code, 0xE8);
     emit_i32(code, rel32);
 }
 
 /// `SUB rsp, imm32`. Used by the function prologue to reserve local
 /// stack space. Encoding: `REX.W + 81 /5 id`.
-pub(super) fn emit_sub_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
+pub(crate) fn emit_sub_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
     emit_byte(code, rex(true, false, false, false));
     emit_byte(code, 0x81);
     // `/5` means ModR/M.reg = 5 (the opcode-extension digit for
@@ -479,7 +479,7 @@ pub(super) fn emit_sub_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
 
 /// `ADD rsp, imm32`. Used by epilogue / Adj. Encoding: `REX.W + 81
 /// /0 id`.
-pub(super) fn emit_add_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
+pub(crate) fn emit_add_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
     emit_byte(code, rex(true, false, false, false));
     emit_byte(code, 0x81);
     emit_byte(code, modrm(0b11, 0, Reg::RSP.lo()));
@@ -491,32 +491,32 @@ pub(super) fn emit_add_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
 //      r/m=dst.
 
 /// `ADD dst, src` -- 64-bit, `dst += src`.
-pub(super) fn emit_add_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_add_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_alu_rr(code, 0x01, dst, src);
 }
 
 /// `SUB dst, src` -- 64-bit, `dst -= src`.
-pub(super) fn emit_sub_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_sub_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_alu_rr(code, 0x29, dst, src);
 }
 
 /// `AND dst, src` -- 64-bit, `dst &= src`.
-pub(super) fn emit_and_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_and_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_alu_rr(code, 0x21, dst, src);
 }
 
 /// `OR dst, src` -- 64-bit, `dst |= src`.
-pub(super) fn emit_or_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_or_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_alu_rr(code, 0x09, dst, src);
 }
 
 /// `XOR dst, src` -- 64-bit, `dst ^= src`.
-pub(super) fn emit_xor_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_xor_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_alu_rr(code, 0x31, dst, src);
 }
 
 /// `CMP dst, src` -- 64-bit; sets flags = `dst - src` without storing.
-pub(super) fn emit_cmp_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_cmp_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_alu_rr(code, 0x39, dst, src);
 }
 
@@ -525,7 +525,7 @@ pub(super) fn emit_cmp_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// compare-with-zero that replaces a 7-byte `cmp reg, imm32` against 0:
 /// ZF / SF / CF / OF match, so every dependent `jcc` / `setcc` is
 /// unchanged.
-pub(super) fn emit_test_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_test_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_alu_rr(code, 0x85, dst, src);
 }
 
@@ -537,7 +537,7 @@ fn emit_alu_rr(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
 
 /// `IMUL dst, src` -- two-operand signed multiply, `dst = dst * src`.
 /// Encoding: `REX.W + 0F AF /r`.
-pub(super) fn emit_imul_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_imul_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, rex(true, dst.high(), false, src.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xAF);
@@ -557,38 +557,38 @@ fn emit_alu_r_mem(code: &mut Vec<u8>, opcode: u8, dst: Reg, base: Reg, disp: i32
 }
 
 /// `ADD dst, [base + disp]` -- 64-bit, `dst += [mem]`.
-pub(super) fn emit_add_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_add_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_alu_r_mem(code, 0x03, dst, base, disp);
 }
 
 /// `SUB dst, [base + disp]` -- 64-bit, `dst -= [mem]`.
-pub(super) fn emit_sub_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_sub_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_alu_r_mem(code, 0x2B, dst, base, disp);
 }
 
 /// `AND dst, [base + disp]` -- 64-bit, `dst &= [mem]`.
-pub(super) fn emit_and_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_and_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_alu_r_mem(code, 0x23, dst, base, disp);
 }
 
 /// `OR dst, [base + disp]` -- 64-bit, `dst |= [mem]`.
-pub(super) fn emit_or_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_or_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_alu_r_mem(code, 0x0B, dst, base, disp);
 }
 
 /// `XOR dst, [base + disp]` -- 64-bit, `dst ^= [mem]`.
-pub(super) fn emit_xor_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_xor_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_alu_r_mem(code, 0x33, dst, base, disp);
 }
 
 /// `CMP dst, [base + disp]` -- 64-bit; flags = `dst - [mem]`.
-pub(super) fn emit_cmp_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_cmp_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_alu_r_mem(code, 0x3B, dst, base, disp);
 }
 
 /// `IMUL dst, [base + disp]` -- two-operand signed multiply with a
 /// memory source. Encoding: `REX.W + 0F AF /r`.
-pub(super) fn emit_imul_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_imul_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xAF);
@@ -601,7 +601,7 @@ pub(super) fn emit_imul_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32
 /// and `src` may be the same register, so no staging mov or scratch
 /// is needed for a multiply by a constant that fits a signed 32-bit
 /// immediate.
-pub(super) fn emit_imul_r_r_imm32(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: i32) {
+pub(crate) fn emit_imul_r_r_imm32(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: i32) {
     emit_byte(code, rex(true, dst.high(), false, src.high()));
     emit_byte(code, 0x69);
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
@@ -611,7 +611,7 @@ pub(super) fn emit_imul_r_r_imm32(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: i
 /// `NEG r64` -- two's-complement negate (Intel SDM Vol.2, group 3
 /// `F7 /3`). Used by the atomic subtract lowering, which negates the
 /// operand before a `LOCK XADD`.
-pub(super) fn emit_neg_r(code: &mut Vec<u8>, r: Reg) {
+pub(crate) fn emit_neg_r(code: &mut Vec<u8>, r: Reg) {
     emit_byte(code, rex(true, false, false, r.high()));
     emit_byte(code, 0xF7);
     emit_byte(code, modrm(0b11, 3, r.lo()));
@@ -643,7 +643,7 @@ fn atomic_prefix(code: &mut Vec<u8>, width: u8, reg: Reg, base: Reg) {
 /// operand and load the prior contents into `reg` (Intel SDM Vol.2,
 /// XADD with the `F0` LOCK prefix). Encoding: `F0 [66] [REX] 0F C0/C1
 /// /r`, byte opcode `C0` else `C1`.
-pub(super) fn emit_lock_xadd_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg: Reg, width: u8) {
+pub(crate) fn emit_lock_xadd_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg: Reg, width: u8) {
     emit_byte(code, 0xF0);
     atomic_prefix(code, width, reg, base);
     emit_byte(code, 0x0F);
@@ -655,7 +655,7 @@ pub(super) fn emit_lock_xadd_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg
 /// memory operand (Intel SDM Vol.2; a memory operand makes XCHG
 /// implicitly LOCK-ed, so no `F0` prefix is emitted). Encoding:
 /// `[66] [REX] 86/87 /r`, byte opcode `86` else `87`.
-pub(super) fn emit_xchg_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg: Reg, width: u8) {
+pub(crate) fn emit_xchg_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg: Reg, width: u8) {
     atomic_prefix(code, width, reg, base);
     emit_byte(code, if width == 1 { 0x86 } else { 0x87 });
     emit_modrm_mem(code, reg, base, disp);
@@ -665,7 +665,7 @@ pub(super) fn emit_xchg_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, reg: Reg
 /// `REX.W + 87 /r`). A register operand carries no implicit LOCK (that
 /// applies only to a memory operand), so this is a plain register swap.
 /// Used to break a register-register parallel-move cycle with no scratch.
-pub(super) fn emit_xchg_rr(code: &mut Vec<u8>, a: Reg, b: Reg) {
+pub(crate) fn emit_xchg_rr(code: &mut Vec<u8>, a: Reg, b: Reg) {
     if a == b {
         return;
     }
@@ -679,7 +679,7 @@ pub(super) fn emit_xchg_rr(code: &mut Vec<u8>, a: Reg, b: Reg) {
 /// operand into RAX and clear ZF (Intel SDM Vol.2 CMPXCHG with the
 /// `F0` LOCK prefix). Encoding: `F0 [66] [REX] 0F B0/B1 /r`, byte
 /// opcode `B0` else `B1`.
-pub(super) fn emit_lock_cmpxchg_mem_r(
+pub(crate) fn emit_lock_cmpxchg_mem_r(
     code: &mut Vec<u8>,
     base: Reg,
     disp: i32,
@@ -696,7 +696,7 @@ pub(super) fn emit_lock_cmpxchg_mem_r(
 /// `IDIV r/m64` -- signed divide `rdx:rax / r`. Quotient -> rax,
 /// remainder -> rdx. The caller must sign-extend rax into rdx with
 /// [`emit_cqo`] first.
-pub(super) fn emit_idiv_r(code: &mut Vec<u8>, divisor: Reg) {
+pub(crate) fn emit_idiv_r(code: &mut Vec<u8>, divisor: Reg) {
     emit_byte(code, rex(true, false, false, divisor.high()));
     emit_byte(code, 0xF7);
     emit_byte(code, modrm(0b11, 7, divisor.lo()));
@@ -705,7 +705,7 @@ pub(super) fn emit_idiv_r(code: &mut Vec<u8>, divisor: Reg) {
 /// `DIV r/m64` -- unsigned divide `rdx:rax / r`. Quotient -> rax,
 /// remainder -> rdx. The caller must zero rdx (e.g. `xor edx, edx`)
 /// instead of sign-extending with [`emit_cqo`].
-pub(super) fn emit_div_r(code: &mut Vec<u8>, divisor: Reg) {
+pub(crate) fn emit_div_r(code: &mut Vec<u8>, divisor: Reg) {
     emit_byte(code, rex(true, false, false, divisor.high()));
     emit_byte(code, 0xF7);
     emit_byte(code, modrm(0b11, 6, divisor.lo()));
@@ -713,14 +713,14 @@ pub(super) fn emit_div_r(code: &mut Vec<u8>, divisor: Reg) {
 
 /// `IDIV r/m64` with a memory divisor at `[base + disp]`. The reg
 /// field carries the `/7` opcode extension; REX.R is therefore clear.
-pub(super) fn emit_idiv_m(code: &mut Vec<u8>, base: Reg, disp: i32) {
+pub(crate) fn emit_idiv_m(code: &mut Vec<u8>, base: Reg, disp: i32) {
     emit_byte(code, rex(true, false, false, base.high()));
     emit_byte(code, 0xF7);
     emit_modrm_mem(code, Reg(7), base, disp);
 }
 
 /// `DIV r/m64` with a memory divisor at `[base + disp]` (`/6`).
-pub(super) fn emit_div_m(code: &mut Vec<u8>, base: Reg, disp: i32) {
+pub(crate) fn emit_div_m(code: &mut Vec<u8>, base: Reg, disp: i32) {
     emit_byte(code, rex(true, false, false, base.high()));
     emit_byte(code, 0xF7);
     emit_modrm_mem(code, Reg(6), base, disp);
@@ -738,7 +738,7 @@ pub(super) fn emit_div_m(code: &mut Vec<u8>, base: Reg, disp: i32) {
 
 /// `MOVQ xmm, r64` -- move 64 bits from a GPR into the low quad of
 /// an XMM register. Encoding: `66 REX.W 0F 6E /r`.
-pub(super) fn emit_movq_xmm_r(code: &mut Vec<u8>, xmm: Reg, src: Reg) {
+pub(crate) fn emit_movq_xmm_r(code: &mut Vec<u8>, xmm: Reg, src: Reg) {
     emit_byte(code, 0x66);
     emit_byte(code, rex(true, xmm.high(), false, src.high()));
     emit_byte(code, 0x0F);
@@ -749,7 +749,7 @@ pub(super) fn emit_movq_xmm_r(code: &mut Vec<u8>, xmm: Reg, src: Reg) {
 /// `MOVQ r64, xmm` -- move 64 bits from an XMM low quad to a GPR.
 /// Encoding: `66 REX.W 0F 7E /r` (note `/r` field carries the
 /// XMM source, the `r/m` carries the destination GPR).
-pub(super) fn emit_movq_r_xmm(code: &mut Vec<u8>, dst: Reg, xmm: Reg) {
+pub(crate) fn emit_movq_r_xmm(code: &mut Vec<u8>, dst: Reg, xmm: Reg) {
     emit_byte(code, 0x66);
     emit_byte(code, rex(true, xmm.high(), false, dst.high()));
     emit_byte(code, 0x0F);
@@ -762,7 +762,7 @@ pub(super) fn emit_movq_r_xmm(code: &mut Vec<u8>, dst: Reg, xmm: Reg) {
 /// byte for `[base+disp]`. Used by the variadic-FP packer to feed
 /// arg slots straight from the c5 stack into the FP-arg registers
 /// without a GPR roundtrip.
-pub(super) fn emit_movq_xmm_r_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_movq_xmm_r_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
     emit_byte(code, 0xF3);
     if xmm.high() || base.high() {
         emit_byte(code, rex(false, xmm.high(), false, base.high()));
@@ -779,7 +779,7 @@ pub(super) fn emit_movq_xmm_r_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp:
 /// the low quad of an XMM register, zeroing the rest. Encoding:
 /// `F2 0F 10 /r`. SIB-driven mod=10/disp32 form matches the other
 /// xmm memory helpers.
-pub(super) fn emit_movsd_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_movsd_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
     emit_byte(code, 0xF2);
     if xmm.high() || base.high() {
         emit_byte(code, rex(false, xmm.high(), false, base.high()));
@@ -793,7 +793,7 @@ pub(super) fn emit_movsd_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: 
 
 /// `MOVSD [base+disp32], xmm` -- store 8 bytes from the low quad of
 /// an XMM register. Encoding: `F2 0F 11 /r`.
-pub(super) fn emit_movsd_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
+pub(crate) fn emit_movsd_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
     emit_byte(code, 0xF2);
     if xmm.high() || base.high() {
         emit_byte(code, rex(false, xmm.high(), false, base.high()));
@@ -810,7 +810,7 @@ pub(super) fn emit_movsd_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: 
 /// (xmm6..xmm15) the emit pass uses as FP scratch; the whole 128 bits
 /// are saved because the caller's value may occupy the upper lanes.
 /// Encoding: `0F 11 /r` with a `[base + disp32]` SIB operand.
-pub(super) fn emit_movups_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
+pub(crate) fn emit_movups_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
     if xmm.high() || base.high() {
         emit_byte(code, rex(false, xmm.high(), false, base.high()));
     }
@@ -824,7 +824,7 @@ pub(super) fn emit_movups_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm:
 /// `MOVUPS xmm, m128` -- load a full 128-bit xmm from memory with no
 /// alignment requirement. Restores a saved Win64 non-volatile xmm.
 /// Encoding: `0F 10 /r` with a `[base + disp32]` SIB operand.
-pub(super) fn emit_movups_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_movups_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
     if xmm.high() || base.high() {
         emit_byte(code, rex(false, xmm.high(), false, base.high()));
     }
@@ -840,7 +840,7 @@ pub(super) fn emit_movups_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp:
 /// instruction-size identical to MOVSD and avoids the
 /// merge-with-upper-half semantics of `MOVSD reg, reg`.
 /// Encoding: `66 0F 28 /r`.
-pub(super) fn emit_movapd_xmm_xmm(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_movapd_xmm_xmm(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, 0x66);
     if dst.high() || src.high() {
         emit_byte(code, rex(false, dst.high(), false, src.high()));
@@ -853,7 +853,7 @@ pub(super) fn emit_movapd_xmm_xmm(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// `MOV AL, imm8` -- set the low byte of rax to a constant. Used
 /// to seed the SysV variadic-ABI XMM-register count in AL just
 /// before a `printf`-style call.
-pub(super) fn emit_mov_al_imm8(code: &mut Vec<u8>, imm: u8) {
+pub(crate) fn emit_mov_al_imm8(code: &mut Vec<u8>, imm: u8) {
     emit_byte(code, 0xB0);
     emit_byte(code, imm);
 }
@@ -862,7 +862,7 @@ pub(super) fn emit_mov_al_imm8(code: &mut Vec<u8>, imm: u8) {
 /// variadic-ABI XMM-register count rides AL (3.2.3); a variadic
 /// callee's prologue tests it to skip the XMM save when the caller
 /// passed no floating-point arguments (`al == 0`).
-pub(super) fn emit_test_al_al(code: &mut Vec<u8>) {
+pub(crate) fn emit_test_al_al(code: &mut Vec<u8>) {
     // 84 /r -- TEST r/m8, r8 with both operands AL.
     emit_byte(code, 0x84);
     emit_byte(code, modrm(0b11, Reg::RAX.lo(), Reg::RAX.lo()));
@@ -893,28 +893,28 @@ fn emit_sse_ss(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
 }
 
 /// `ADDSS xmm, xmm` -- single-precision add (C99 6.3.1.8).
-pub(super) fn emit_addss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_addss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse_ss(code, 0x58, dst, src);
 }
 
 /// `SUBSS xmm, xmm` -- `dst = dst - src`.
-pub(super) fn emit_subss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_subss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse_ss(code, 0x5C, dst, src);
 }
 
 /// `MULSS xmm, xmm`.
-pub(super) fn emit_mulss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_mulss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse_ss(code, 0x59, dst, src);
 }
 
 /// `DIVSS xmm, xmm` -- `dst = dst / src`.
-pub(super) fn emit_divss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_divss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse_ss(code, 0x5E, dst, src);
 }
 
 /// `UCOMISS xmm, xmm` -- ordered scalar single-precision compare,
 /// sets EFLAGS. Encoding: `0F 2E /r` (no mandatory prefix).
-pub(super) fn emit_ucomiss(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
+pub(crate) fn emit_ucomiss(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
     if lhs.high() || rhs.high() {
         emit_byte(code, rex(false, lhs.high(), false, rhs.high()));
     }
@@ -924,38 +924,38 @@ pub(super) fn emit_ucomiss(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
 }
 
 /// `ADDSD xmm, xmm`.
-pub(super) fn emit_addsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_addsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x58, dst, src);
 }
 
 /// `SUBSD xmm, xmm` -- `dst = dst - src`.
-pub(super) fn emit_subsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_subsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x5C, dst, src);
 }
 
 /// `MULSD xmm, xmm`.
-pub(super) fn emit_mulsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_mulsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x59, dst, src);
 }
 
 /// `DIVSD xmm, xmm` -- `dst = dst / src`.
-pub(super) fn emit_divsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_divsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x5E, dst, src);
 }
 
 /// `SQRTSD xmm, xmm` -- `dst = sqrt(src)`, scalar double. `F2 0F 51 /r`.
-pub(super) fn emit_sqrtsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_sqrtsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x51, dst, src);
 }
 
 /// `SQRTSS xmm, xmm` -- `dst = sqrt(src)`, scalar single. `F3 0F 51 /r`.
-pub(super) fn emit_sqrtss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_sqrtss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse_ss(code, 0x51, dst, src);
 }
 
 /// `ANDPD xmm, xmm` -- bitwise AND of two doubles. `66 0F 54 /r`. Used
 /// for `FABS` (AND with the inverted sign-bit mask in another XMM).
-pub(super) fn emit_andpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_andpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, 0x66);
     if dst.high() || src.high() {
         emit_byte(code, rex(false, dst.high(), false, src.high()));
@@ -969,7 +969,7 @@ pub(super) fn emit_andpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// rounding mode (SSE4.1). `66 0F 3A 0B /r ib`. The mode bits: 0x09
 /// floor (round down), 0x0A ceil (round up), 0x0B truncate; each sets
 /// bit 3 to suppress the precision exception.
-pub(super) fn emit_roundsd(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
+pub(crate) fn emit_roundsd(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
     emit_byte(code, 0x66);
     if dst.high() || src.high() {
         emit_byte(code, rex(false, dst.high(), false, src.high()));
@@ -983,7 +983,7 @@ pub(super) fn emit_roundsd(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
 
 /// `ROUNDSS xmm, xmm, imm8` -- scalar single-precision form. `66 0F 3A
 /// 0A /r ib`.
-pub(super) fn emit_roundss(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
+pub(crate) fn emit_roundss(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
     emit_byte(code, 0x66);
     if dst.high() || src.high() {
         emit_byte(code, rex(false, dst.high(), false, src.high()));
@@ -998,7 +998,7 @@ pub(super) fn emit_roundss(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
 /// `XORPD xmm, xmm` -- bitwise XOR of two doubles. With identical
 /// operands it zeroes the register, used as a building block for
 /// `FNEG` (we XOR with the sign-bit mask in another XMM).
-pub(super) fn emit_xorpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_xorpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, 0x66);
     if dst.high() || src.high() {
         emit_byte(code, rex(false, dst.high(), false, src.high()));
@@ -1010,7 +1010,7 @@ pub(super) fn emit_xorpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 
 /// `UCOMISD xmm, xmm` -- ordered scalar double-precision compare,
 /// sets EFLAGS. Encoding: `66 0F 2E /r`.
-pub(super) fn emit_ucomisd(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
+pub(crate) fn emit_ucomisd(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
     emit_byte(code, 0x66);
     if lhs.high() || rhs.high() {
         emit_byte(code, rex(false, lhs.high(), false, rhs.high()));
@@ -1042,48 +1042,48 @@ fn emit_vex_fma231(code: &mut Vec<u8>, opcode: u8, w64: bool, dst: Reg, a: Reg, 
 }
 
 /// `VFMADD231SD dst, a, b` -- `dst = a*b + dst` (double, single round).
-pub(super) fn emit_vfmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+pub(crate) fn emit_vfmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
     emit_vex_fma231(code, 0xB9, true, dst, a, b);
 }
 
 /// `VFMSUB231SD dst, a, b` -- `dst = a*b - dst`.
-pub(super) fn emit_vfmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+pub(crate) fn emit_vfmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
     emit_vex_fma231(code, 0xBB, true, dst, a, b);
 }
 
 /// `VFNMADD231SD dst, a, b` -- `dst = -(a*b) + dst`.
-pub(super) fn emit_vfnmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+pub(crate) fn emit_vfnmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
     emit_vex_fma231(code, 0xBD, true, dst, a, b);
 }
 
 /// `VFNMSUB231SD dst, a, b` -- `dst = -(a*b) - dst`.
-pub(super) fn emit_vfnmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+pub(crate) fn emit_vfnmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
     emit_vex_fma231(code, 0xBF, true, dst, a, b);
 }
 
 /// `VFMADD231SS dst, a, b` -- `dst = a*b + dst` (single, single round).
-pub(super) fn emit_vfmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+pub(crate) fn emit_vfmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
     emit_vex_fma231(code, 0xB9, false, dst, a, b);
 }
 
 /// `VFMSUB231SS dst, a, b` -- `dst = a*b - dst`.
-pub(super) fn emit_vfmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+pub(crate) fn emit_vfmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
     emit_vex_fma231(code, 0xBB, false, dst, a, b);
 }
 
 /// `VFNMADD231SS dst, a, b` -- `dst = -(a*b) + dst`.
-pub(super) fn emit_vfnmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+pub(crate) fn emit_vfnmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
     emit_vex_fma231(code, 0xBD, false, dst, a, b);
 }
 
 /// `VFNMSUB231SS dst, a, b` -- `dst = -(a*b) - dst`.
-pub(super) fn emit_vfnmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+pub(crate) fn emit_vfnmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
     emit_vex_fma231(code, 0xBF, false, dst, a, b);
 }
 
 /// `CVTSI2SD xmm, r64` -- signed 64-bit int to double, with REX.W.
 /// Encoding: `F2 REX.W 0F 2A /r`.
-pub(super) fn emit_cvtsi2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_cvtsi2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, 0xF2);
     emit_byte(code, rex(true, dst.high(), false, src.high()));
     emit_byte(code, 0x0F);
@@ -1093,7 +1093,7 @@ pub(super) fn emit_cvtsi2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 
 /// `CVTTSD2SI r64, xmm` -- truncating double-to-signed-int.
 /// Encoding: `F2 REX.W 0F 2C /r`.
-pub(super) fn emit_cvttsd2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_cvttsd2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, 0xF2);
     emit_byte(code, rex(true, dst.high(), false, src.high()));
     emit_byte(code, 0x0F);
@@ -1105,7 +1105,7 @@ pub(super) fn emit_cvttsd2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// the low dword of an XMM register, zeroing the rest. Encoding:
 /// `F3 0F 10 /r`. Used by [`LoadKind::F32`] to pull a `float`-typed lvalue
 /// out of its 4-byte storage before the widening `cvtss2sd`.
-pub(super) fn emit_movss_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_movss_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
     emit_byte(code, 0xF3);
     if xmm.high() || base.high() {
         emit_byte(code, rex(false, xmm.high(), false, base.high()));
@@ -1123,7 +1123,7 @@ pub(super) fn emit_movss_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: 
 /// an XMM register. Encoding: `F3 0F 11 /r`. Companion to
 /// [`emit_movss_xmm_mem`]; the `StoreKind::F32` lowering uses
 /// this for the final narrowed store.
-pub(super) fn emit_movss_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
+pub(crate) fn emit_movss_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
     emit_byte(code, 0xF3);
     if xmm.high() || base.high() {
         emit_byte(code, rex(false, xmm.high(), false, base.high()));
@@ -1138,7 +1138,7 @@ pub(super) fn emit_movss_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: 
 /// `CVTSS2SD xmm, xmm` -- widen single-precision to double-precision.
 /// Encoding: `F3 0F 5A /r`. The IEEE 754 single -> double widening
 /// is bit-exact for every finite source value.
-pub(super) fn emit_cvtss2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_cvtss2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, 0xF3);
     if dst.high() || src.high() {
         emit_byte(code, rex(false, dst.high(), false, src.high()));
@@ -1153,7 +1153,7 @@ pub(super) fn emit_cvtss2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// VM's `f64 as f32` semantics). Encoding: `F2 0F 5A /r`. Used
 /// by the `StoreKind::F32` lowering before the single-precision
 /// store.
-pub(super) fn emit_cvtsd2ss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_cvtsd2ss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, 0xF2);
     if dst.high() || src.high() {
         emit_byte(code, rex(false, dst.high(), false, src.high()));
@@ -1165,7 +1165,7 @@ pub(super) fn emit_cvtsd2ss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 
 /// `CQO` -- sign-extend rax into rdx:rax (the 64-bit form;
 /// `CDQE` is the 32-bit counterpart). Encoding: `REX.W + 99`.
-pub(super) fn emit_cqo(code: &mut Vec<u8>) {
+pub(crate) fn emit_cqo(code: &mut Vec<u8>) {
     emit_byte(code, rex(true, false, false, false));
     emit_byte(code, 0x99);
 }
@@ -1176,7 +1176,7 @@ pub(super) fn emit_cqo(code: &mut Vec<u8>) {
 //      from the immediate path.
 
 /// `SHL r/m64, cl`. ModR/M.reg = 4. `cl` is implicit.
-pub(super) fn emit_shl_r_cl(code: &mut Vec<u8>, dst: Reg) {
+pub(crate) fn emit_shl_r_cl(code: &mut Vec<u8>, dst: Reg) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xD3);
     emit_byte(code, modrm(0b11, 4, dst.lo()));
@@ -1184,7 +1184,7 @@ pub(super) fn emit_shl_r_cl(code: &mut Vec<u8>, dst: Reg) {
 
 /// `SAR r/m64, cl` -- arithmetic right shift (signed; sign bit
 /// replicates). ModR/M.reg = 7.
-pub(super) fn emit_sar_r_cl(code: &mut Vec<u8>, dst: Reg) {
+pub(crate) fn emit_sar_r_cl(code: &mut Vec<u8>, dst: Reg) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xD3);
     emit_byte(code, modrm(0b11, 7, dst.lo()));
@@ -1192,14 +1192,14 @@ pub(super) fn emit_sar_r_cl(code: &mut Vec<u8>, dst: Reg) {
 
 /// `SHR r/m64, cl` -- logical right shift (zero fills high bits).
 /// ModR/M.reg = 5. Used by [`BinOp::Shru`] / unsigned `>>`.
-pub(super) fn emit_shr_r_cl(code: &mut Vec<u8>, dst: Reg) {
+pub(crate) fn emit_shr_r_cl(code: &mut Vec<u8>, dst: Reg) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xD3);
     emit_byte(code, modrm(0b11, 5, dst.lo()));
 }
 
 /// `SHL r/m64, imm8`. ModR/M.reg = 4, imm at end.
-pub(super) fn emit_shl_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
+pub(crate) fn emit_shl_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xC1);
     emit_byte(code, modrm(0b11, 4, dst.lo()));
@@ -1207,7 +1207,7 @@ pub(super) fn emit_shl_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
 }
 
 /// `SAR r/m64, imm8`. ModR/M.reg = 7, imm at end.
-pub(super) fn emit_sar_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
+pub(crate) fn emit_sar_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xC1);
     emit_byte(code, modrm(0b11, 7, dst.lo()));
@@ -1215,7 +1215,7 @@ pub(super) fn emit_sar_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
 }
 
 /// `SHR r/m64, imm8` (logical right shift). ModR/M.reg = 5, imm at end.
-pub(super) fn emit_shr_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
+pub(crate) fn emit_shr_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xC1);
     emit_byte(code, modrm(0b11, 5, dst.lo()));
@@ -1223,7 +1223,7 @@ pub(super) fn emit_shr_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
 }
 
 /// `ROR r/m64, imm8` (bit-rotate right). ModR/M.reg = 1, imm at end.
-pub(super) fn emit_ror_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
+pub(crate) fn emit_ror_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xC1);
     emit_byte(code, modrm(0b11, 1, dst.lo()));
@@ -1231,7 +1231,7 @@ pub(super) fn emit_ror_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
 }
 
 /// `ROR r/m64, cl` (bit-rotate right by `cl`). ModR/M.reg = 1.
-pub(super) fn emit_ror_r_cl(code: &mut Vec<u8>, dst: Reg) {
+pub(crate) fn emit_ror_r_cl(code: &mut Vec<u8>, dst: Reg) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xD3);
     emit_byte(code, modrm(0b11, 1, dst.lo()));
@@ -1248,47 +1248,47 @@ fn emit_alu_r_imm32(code: &mut Vec<u8>, digit: u8, dst: Reg, imm: i32) {
 }
 
 /// `ADD r64, imm32` -- 32-bit immediate, sign-extended to 64.
-pub(super) fn emit_add_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+pub(crate) fn emit_add_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 0, dst, imm);
 }
 
 /// `SUB r64, imm32`.
-pub(super) fn emit_sub_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+pub(crate) fn emit_sub_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 5, dst, imm);
 }
 
 /// `INC r64` -- `REX.W FF /0`. The single-byte `40+rd` encoding is a
 /// REX prefix in 64-bit mode, so the `FF` form is the only one.
-pub(super) fn emit_inc_r(code: &mut Vec<u8>, dst: Reg) {
+pub(crate) fn emit_inc_r(code: &mut Vec<u8>, dst: Reg) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xFF);
     emit_byte(code, modrm(0b11, 0, dst.lo()));
 }
 
 /// `DEC r64` -- `REX.W FF /1`.
-pub(super) fn emit_dec_r(code: &mut Vec<u8>, dst: Reg) {
+pub(crate) fn emit_dec_r(code: &mut Vec<u8>, dst: Reg) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xFF);
     emit_byte(code, modrm(0b11, 1, dst.lo()));
 }
 
 /// `AND r64, imm32`.
-pub(super) fn emit_and_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+pub(crate) fn emit_and_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 4, dst, imm);
 }
 
 /// `OR r64, imm32`.
-pub(super) fn emit_or_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+pub(crate) fn emit_or_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 1, dst, imm);
 }
 
 /// `XOR r64, imm32`.
-pub(super) fn emit_xor_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+pub(crate) fn emit_xor_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 6, dst, imm);
 }
 
 /// `CMP r64, imm32` -- sets flags = `dst - imm`.
-pub(super) fn emit_cmp_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+pub(crate) fn emit_cmp_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 7, dst, imm);
 }
 
@@ -1300,7 +1300,7 @@ pub(super) fn emit_cmp_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
 /// encoding so the opcode byte for `Jcc` is `0F 8X+cc` and for
 /// `setcc` it is `0F 9X+cc`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Cc {
+pub(crate) enum Cc {
     /// Equal / zero.
     E = 0x4,
     /// Not equal.
@@ -1368,7 +1368,7 @@ impl Cc {
 /// upper bits of the destination are *not* zeroed; the caller is
 /// expected to pre-zero the register (the emit path uses
 /// `xor r, r`).
-pub(super) fn emit_setcc_r8(code: &mut Vec<u8>, cc: Cc, dst: Reg) {
+pub(crate) fn emit_setcc_r8(code: &mut Vec<u8>, cc: Cc, dst: Reg) {
     // SET<cc> r/m8 needs a REX prefix to address SPL/BPL/SIL/DIL or
     // R8B..R15B; REX with the low GPRs disables the AH/CH/DH/BH
     // high-byte aliases, which matches the encoder's requirement.
@@ -1380,7 +1380,7 @@ pub(super) fn emit_setcc_r8(code: &mut Vec<u8>, cc: Cc, dst: Reg) {
 
 /// `MOVZX r64, byte ptr [base + disp]` -- load a byte zero-extended
 /// into a 64-bit register. Encoding: `REX.W + 0F B6 /r`.
-pub(super) fn emit_movzx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_movzx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xB6);
@@ -1390,7 +1390,7 @@ pub(super) fn emit_movzx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i
 /// `MOVSX r64, byte ptr [base + disp]` -- load a byte sign-extended
 /// into a 64-bit register. Used by [`LoadKind::I8`] for `signed char`
 /// lvalue reads. Encoding: `REX.W + 0F BE /r`.
-pub(super) fn emit_movsx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+pub(crate) fn emit_movsx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xBE);
@@ -1401,7 +1401,7 @@ pub(super) fn emit_movsx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i
 /// register. Encoding: `REX.W + 0F B6 /r` with `mod=11`. The REX
 /// prefix also disables the AH/CH/DH/BH high-byte aliases so we
 /// can treat any of the 16 GPRs as an 8-bit source.
-pub(super) fn emit_movzx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_movzx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, rex(true, dst.high(), false, src.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xB6);
@@ -1411,7 +1411,7 @@ pub(super) fn emit_movzx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// `MOV byte ptr [base + disp], r8` -- store the low byte of `src`.
 /// Encoding: `MOV r/m8, r8` = `88 /r`. REX is mandatory when storing
 /// from one of the upper or new low-byte registers.
-pub(super) fn emit_mov_mem8_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+pub(crate) fn emit_mov_mem8_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     emit_byte(code, rex(false, src.high(), false, base.high()));
     emit_byte(code, 0x88);
     emit_modrm_mem(code, src, base, disp);
@@ -1422,13 +1422,13 @@ pub(super) fn emit_mov_mem8_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg
 //      rel32` is 6.
 
 /// `JMP rel32` -- unconditional branch, 5 bytes.
-pub(super) fn emit_jmp_rel32(code: &mut Vec<u8>, rel32: i32) {
+pub(crate) fn emit_jmp_rel32(code: &mut Vec<u8>, rel32: i32) {
     emit_byte(code, 0xE9);
     emit_i32(code, rel32);
 }
 
 /// `Jcc rel32` -- conditional branch, 6 bytes.
-pub(super) fn emit_jcc_rel32(code: &mut Vec<u8>, cc: Cc, rel32: i32) {
+pub(crate) fn emit_jcc_rel32(code: &mut Vec<u8>, cc: Cc, rel32: i32) {
     emit_byte(code, 0x0F);
     emit_byte(code, 0x80 | (cc as u8));
     emit_i32(code, rel32);
@@ -1437,7 +1437,7 @@ pub(super) fn emit_jcc_rel32(code: &mut Vec<u8>, cc: Cc, rel32: i32) {
 /// `Jmp rel8` -- short unconditional branch, 2 bytes. The target must
 /// be within -128..127 of the byte after the rel8 field; the caller
 /// (branch relaxation) guarantees the range.
-pub(super) fn emit_jmp_rel8(code: &mut Vec<u8>, rel8: i8) {
+pub(crate) fn emit_jmp_rel8(code: &mut Vec<u8>, rel8: i8) {
     emit_byte(code, 0xEB);
     emit_byte(code, rel8 as u8);
 }
@@ -1445,14 +1445,14 @@ pub(super) fn emit_jmp_rel8(code: &mut Vec<u8>, rel8: i8) {
 /// `Jcc rel8` -- short conditional branch, 2 bytes. The opcode is
 /// `0x70 | cc`, the one-byte-displacement form of the `0x0F 0x80 | cc`
 /// rel32 encoding.
-pub(super) fn emit_jcc_rel8(code: &mut Vec<u8>, cc: Cc, rel8: i8) {
+pub(crate) fn emit_jcc_rel8(code: &mut Vec<u8>, cc: Cc, rel8: i8) {
     emit_byte(code, 0x70 | (cc as u8));
     emit_byte(code, rel8 as u8);
 }
 
 /// `CALL r64` -- indirect call through a register. Encoding:
 /// `FF /2`.
-pub(super) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
+pub(crate) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
     if target.high() {
         emit_byte(code, rex(false, false, false, true));
     }
@@ -1463,7 +1463,7 @@ pub(super) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
 /// `JMP r64` -- indirect branch through a register (GCC computed
 /// goto). Same `FF` opcode family as the indirect `CALL` above; only
 /// the ModR/M `/4` extension changes (4 = JMP, 2 = CALL).
-pub(super) fn emit_jmp_r(code: &mut Vec<u8>, target: Reg) {
+pub(crate) fn emit_jmp_r(code: &mut Vec<u8>, target: Reg) {
     if target.high() {
         emit_byte(code, rex(false, false, false, true));
     }
@@ -1477,7 +1477,7 @@ pub(super) fn emit_jmp_r(code: &mut Vec<u8>, target: Reg) {
 /// Intel SDM Vol. 2A, Table 2-7) + disp32. 6 bytes total. Used
 /// for GOT calls on Linux x86_64; the writer patches `disp32` so
 /// the load points at the right `.got` slot.
-pub(super) fn emit_call_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
+pub(crate) fn emit_call_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
     emit_byte(code, 0xFF);
     emit_byte(code, modrm(0b00, 2, 0b101));
     emit_i32(code, disp32);
@@ -1485,7 +1485,7 @@ pub(super) fn emit_call_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
 
 /// Byte length of [`emit_call_qword_rip32`]. Used by the writer to
 /// compute the `disp32` measurement origin (just after the call).
-pub(super) const CALL_QWORD_RIP32_LEN: usize = 6;
+pub(crate) const CALL_QWORD_RIP32_LEN: usize = 6;
 
 /// `JMP qword ptr [rip+disp32]` -- 6-byte indirect tail-jump
 /// through a memory operand. Same `FF /4` opcode family as the
@@ -1498,7 +1498,7 @@ pub(super) const CALL_QWORD_RIP32_LEN: usize = 6;
 /// instruction; the writer (PE / ELF / Mach-O) patches `disp32`
 /// to the resolved IAT / GOT slot RVA, identical to how
 /// `emit_call_qword_rip32`'s site is patched.
-pub(super) fn emit_jmp_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
+pub(crate) fn emit_jmp_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
     emit_byte(code, 0xFF);
     emit_byte(code, modrm(0b00, 4, 0b101));
     emit_i32(code, disp32);
@@ -1506,12 +1506,12 @@ pub(super) fn emit_jmp_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
 
 /// Byte length of [`emit_jmp_qword_rip32`]. Same encoding family
 /// as the indirect call, so the length is also 6.
-pub(super) const JMP_QWORD_RIP32_LEN: usize = 6;
+pub(crate) const JMP_QWORD_RIP32_LEN: usize = 6;
 
 /// `XOR eax, eax` -- 32-bit form, zero-extends to 64 (sets rax = 0).
 /// Used as the System V variadic-ABI "no XMM args" marker before
 /// printf-shape calls: AL must be 0 going in.
-pub(super) fn emit_xor_eax_eax(code: &mut Vec<u8>) {
+pub(crate) fn emit_xor_eax_eax(code: &mut Vec<u8>) {
     emit_byte(code, 0x31);
     emit_byte(code, 0xC0);
 }
@@ -1530,14 +1530,14 @@ pub(super) fn emit_xor_eax_eax(code: &mut Vec<u8>) {
 
 /// `MOVSXD r64, r32` -- sign-extend a 32-bit register to 64 bits.
 /// Reg-to-reg form of [`emit_movsxd_r_mem`].
-pub(super) fn emit_movsxd_r_r(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_movsxd_r_r(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, rex(true, dst.high(), false, src.high()));
     emit_byte(code, 0x63);
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
 /// `MOVSX r64, r/m16` (register form) -- sign-extend low 16 bits.
-pub(super) fn emit_movsx_r_r16(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_movsx_r_r16(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, rex(true, dst.high(), false, src.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xBF);
@@ -1547,7 +1547,7 @@ pub(super) fn emit_movsx_r_r16(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// `MOVSX r64, r/m8` (register form) -- sign-extend low 8 bits.
 /// REX is always emitted to access the new-encoding 8-bit subregs
 /// (`sil` / `dil` / `bpl` / `spl`) instead of the legacy AH/CH/etc.
-pub(super) fn emit_movsx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+pub(crate) fn emit_movsx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, rex(true, dst.high(), false, src.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xBE);
@@ -1588,21 +1588,21 @@ fn emit_modrm_sib_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, index: Reg, scale
 }
 
 /// `MOVSXD r64, [base + index * scale]` -- 32-bit signed indexed load.
-pub(super) fn emit_movsxd_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
+pub(crate) fn emit_movsxd_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
     emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
     emit_byte(code, 0x63);
     emit_modrm_sib_mem(code, dst, base, index, scale, 0);
 }
 
 /// `MOV r64, [base + index * scale]` -- 64-bit indexed load.
-pub(super) fn emit_mov_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
+pub(crate) fn emit_mov_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
     emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
     emit_byte(code, 0x8B);
     emit_modrm_sib_mem(code, dst, base, index, scale, 0);
 }
 
 /// `LEA r64, [base + index * scale]` -- compute the effective address.
-pub(super) fn emit_lea_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
+pub(crate) fn emit_lea_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
     emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
     emit_byte(code, 0x8D);
     emit_modrm_sib_mem(code, dst, base, index, scale, 0);
@@ -1610,7 +1610,7 @@ pub(super) fn emit_lea_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg
 
 /// `MOV r32, [base + index * scale]` -- 32-bit zero-extending indexed
 /// load.
-pub(super) fn emit_mov_r32_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
+pub(crate) fn emit_mov_r32_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
     let needs_rex = dst.high() || index.high() || base.high();
     if needs_rex {
         emit_byte(code, rex(false, dst.high(), index.high(), base.high()));
@@ -1621,7 +1621,7 @@ pub(super) fn emit_mov_r32_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: R
 
 /// `MOVSX r64, [base + index * scale]` (16-bit) -- 16-bit signed
 /// indexed load.
-pub(super) fn emit_movsx_r_sib16(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
+pub(crate) fn emit_movsx_r_sib16(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
     emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xBF);
@@ -1630,7 +1630,7 @@ pub(super) fn emit_movsx_r_sib16(code: &mut Vec<u8>, dst: Reg, base: Reg, index:
 
 /// `MOVZX r64, [base + index * scale]` (16-bit) -- 16-bit unsigned
 /// indexed load.
-pub(super) fn emit_movzx_r_sib16(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
+pub(crate) fn emit_movzx_r_sib16(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
     emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xB7);
@@ -1639,7 +1639,7 @@ pub(super) fn emit_movzx_r_sib16(code: &mut Vec<u8>, dst: Reg, base: Reg, index:
 
 /// `MOVSX r64, [base + index * scale]` (8-bit) -- 8-bit signed
 /// indexed load.
-pub(super) fn emit_movsx_r_sib8(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
+pub(crate) fn emit_movsx_r_sib8(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
     emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xBE);
@@ -1648,7 +1648,7 @@ pub(super) fn emit_movsx_r_sib8(code: &mut Vec<u8>, dst: Reg, base: Reg, index: 
 
 /// `MOVZX r64, [base + index * scale]` (8-bit) -- 8-bit unsigned
 /// indexed load.
-pub(super) fn emit_movzx_r_sib8(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
+pub(crate) fn emit_movzx_r_sib8(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
     emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0xB6);
@@ -1656,14 +1656,14 @@ pub(super) fn emit_movzx_r_sib8(code: &mut Vec<u8>, dst: Reg, base: Reg, index: 
 }
 
 /// `MOV [base + index * scale], r64` -- 64-bit indexed store.
-pub(super) fn emit_mov_sib_r(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
+pub(crate) fn emit_mov_sib_r(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
     emit_byte(code, rex(true, src.high(), index.high(), base.high()));
     emit_byte(code, 0x89);
     emit_modrm_sib_mem(code, src, base, index, scale, 0);
 }
 
 /// `MOV [base + index * scale], r32` -- 32-bit indexed store.
-pub(super) fn emit_mov_sib_r32(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
+pub(crate) fn emit_mov_sib_r32(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
     let needs_rex = src.high() || index.high() || base.high();
     if needs_rex {
         emit_byte(code, rex(false, src.high(), index.high(), base.high()));
@@ -1675,7 +1675,7 @@ pub(super) fn emit_mov_sib_r32(code: &mut Vec<u8>, base: Reg, index: Reg, scale:
 /// `MOV [base + index * scale], r16` -- 16-bit indexed store.
 /// Operand-size prefix 66h selects 16-bit, then the standard REX is
 /// optional based on register banks.
-pub(super) fn emit_mov_sib_r16(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
+pub(crate) fn emit_mov_sib_r16(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
     emit_byte(code, 0x66);
     let needs_rex = src.high() || index.high() || base.high();
     if needs_rex {
@@ -1689,7 +1689,7 @@ pub(super) fn emit_mov_sib_r16(code: &mut Vec<u8>, base: Reg, index: Reg, scale:
 /// Uses opcode 88h (MOV r/m8, r8). Any high-bank operand forces a
 /// REX byte (which also picks the new-8-bit subreg encoding for
 /// rsi/rdi/rbp/rsp instead of their legacy AH/BH/CH/DH halves).
-pub(super) fn emit_mov_sib_r8(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
+pub(crate) fn emit_mov_sib_r8(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
     let needs_rex = src.high() || index.high() || base.high() || src.lo() >= 4;
     if needs_rex {
         emit_byte(code, rex(false, src.high(), index.high(), base.high()));
@@ -1744,12 +1744,12 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
 /// keeps the caller-side `0 mod 16` SysV requires before `call`:
 /// the call's return-address push then lands main at
 /// `(%rsp + 8) % 16 == 0` per ABI 3.4.1.
-pub(super) const START_STUB_LEN: u64 = 23;
+pub(crate) const START_STUB_LEN: u64 = 23;
 /// Length of the syscall-tail `_start` stub. One byte
 /// longer than the libc tail because `mov eax, 231` (5 bytes) +
 /// `syscall` (2 bytes) totals 7 vs. the libc tail's `call
 /// qword [rip+disp32]` (6 bytes).
-pub(super) const START_STUB_LEN_SYSCALL: u64 = 24;
+pub(crate) const START_STUB_LEN_SYSCALL: u64 = 24;
 
 /// Emit the `_start` prologue. When `use_libc_exit` is true, the
 /// stub's tail is `call qword [rip+disp32]` through the libc
@@ -1758,7 +1758,7 @@ pub(super) const START_STUB_LEN_SYSCALL: u64 = 24;
 /// #69), the stub direct-syscalls `sys_exit_group` (Linux
 /// x86_64 syscall 231) and we return `None` -- the resulting
 /// binary has no libc dependency.
-pub(super) fn emit_start_stub(
+pub(crate) fn emit_start_stub(
     code: &mut Vec<u8>,
     abi: Abi,
     main_offset_in_code: u64,
@@ -1842,18 +1842,18 @@ pub(super) fn emit_start_stub(
 // ------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy)]
-pub(super) enum BranchKind {
+pub(crate) enum BranchKind {
     Jmp,
     Jcc(Cc),
     Call,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Fixup {
+pub(crate) struct Fixup {
     /// Byte offset within `code` of the placeholder's first byte.
-    pub(super) native_offset: usize,
-    pub(super) target_ent_pc: usize,
-    pub(super) kind: BranchKind,
+    pub(crate) native_offset: usize,
+    pub(crate) target_ent_pc: usize,
+    pub(crate) kind: BranchKind,
 }
 
 /// Translate a c5 address-of-local offset (in 8-byte VM-slot
@@ -1876,7 +1876,7 @@ fn lea_offset_bytes(offset: i64) -> i64 {
 // aarch64::lower.
 // ------------------------------------------------------------------
 
-pub(super) fn lower(
+pub(crate) fn lower(
     program: &Program,
     target: Target,
     #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
@@ -1915,8 +1915,8 @@ pub(super) fn lower(
     // is a hard error so any IR + emit coverage gap surfaces
     // immediately.
     let mut ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
-        super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
-            super::ssa_shadow::produce_ssa_funcs(program, target)
+        super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
+            super::ssa::shadow::produce_ssa_funcs(program, target)
         })?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
@@ -1935,8 +1935,8 @@ pub(super) fn lower(
     // info so the emitted code is identical with and without -g.
     if !native.optimize {
         let coalesce_dwarf =
-            super::ssa_emit_common::time_pass("ssa_slot_coalesce::run (x86_64)", || {
-                super::ssa_slot_coalesce::run(&mut ssa_funcs)
+            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run (x86_64)", || {
+                super::ssa::slot_coalesce::run(&mut ssa_funcs)
             });
         for (ent_pc, map) in coalesce_dwarf {
             for (orig, new) in map {
@@ -1957,9 +1957,9 @@ pub(super) fn lower(
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
     if native.optimize {
-        super::ssa_emit_common::time_pass("ssa_mem2reg::run (x86_64)", || {
+        super::ssa::emit_common::time_pass("ssa::mem2reg::run (x86_64)", || {
             for f in &mut ssa_funcs {
-                let promoted = super::ssa_mem2reg::run(f);
+                let promoted = super::ssa::mem2reg::run(f);
                 if !promoted.is_empty() {
                     promoted_local_slots.insert(f.ent_pc, promoted);
                 }
@@ -1968,55 +1968,59 @@ pub(super) fn lower(
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.
-        super::ssa_emit_common::time_pass("ssa_inline::run (x86_64)", || {
-            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
+        super::ssa::emit_common::time_pass("passes::inline::run (x86_64)", || {
+            crate::c5::codegen::passes::inline::run(
+                &mut ssa_funcs,
+                native.inline_cap,
+                target.abi(),
+            );
         });
         // Forward an inlined one-word struct return out of its frame slot:
         // a single full-width store + slot reads collapse to the stored
         // register value. Runs after the inliner produces the slot and
         // before store-forwarding cleans up any second-hop reload.
-        super::ssa_emit_common::time_pass("ssa_struct_return_reg::run (x86_64)", || {
-            super::ssa_struct_return_reg::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::struct_return_reg::run (x86_64)", || {
+            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
         });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
         // so post-inline parameter substitutions expose the constant
         // rotate counts.
-        super::ssa_emit_common::time_pass("ssa_rotate::run (x86_64)", || {
-            super::ssa_rotate::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::rotate::run (x86_64)", || {
+            crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
         });
         // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
         // -O). Runs after the inliner so products exposed by parameter
         // substitution into an add/sub become contractible.
-        super::ssa_emit_common::time_pass("ssa_fma::run (x86_64)", || {
-            super::ssa_fma::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::fma::run (x86_64)", || {
+            crate::c5::codegen::passes::fma::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_constfold_branch::run (x86_64)", || {
-            super::ssa_constfold_branch::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::constfold_branch::run (x86_64)", || {
+            crate::c5::codegen::passes::constfold_branch::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_split_crit_edges::run (x86_64)", || {
-            super::ssa_split_crit_edges::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::split_crit_edges::run (x86_64)", || {
+            crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_dedup_imm::run (x86_64)", || {
-            super::ssa_dedup_imm::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::dedup_imm::run (x86_64)", || {
+            crate::c5::codegen::passes::dedup_imm::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (x86_64)", || {
-            super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::drop_redundant_extend::run (x86_64)", || {
+            crate::c5::codegen::passes::drop_redundant_extend::run(&mut ssa_funcs);
         });
         // Scaled-index addressing: fold `base + index*scale` into the
         // load / store. Runs last so it sees the final address shape;
         // the optimizer passes never traverse `LoadIndexed` /
         // `StoreIndexed`, so the per-arch emit is the only later consumer.
-        super::ssa_emit_common::time_pass("ssa_index_fold::run (x86_64)", || {
-            super::ssa_index_fold::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::index_fold::run (x86_64)", || {
+            crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
         });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
         // are both normalised to the same `(base, disp)`. Bounded by
         // live-range extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
-        super::ssa_emit_common::time_pass("ssa_store_forward::run (x86_64)", || {
-            super::ssa_store_forward::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::store_forward::run (x86_64)", || {
+            crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
         });
     }
     // Upper bound on ent_pcs the lowering will reference. The
@@ -2054,11 +2058,11 @@ pub(super) fn lower(
             }
         }
     }
-    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
-        super::ssa_emit_common::time_pass("ssa_alloc::allocate (x86_64)", || {
+    let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
+        super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (x86_64)", || {
             ssa_funcs
                 .iter()
-                .map(|f| super::ssa_alloc::allocate(f, target))
+                .map(|f| super::ssa::reg_alloc::allocate(f, target))
                 .collect()
         });
     #[cfg(feature = "std")]
@@ -2081,38 +2085,43 @@ pub(super) fn lower(
             .iter()
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
             .collect();
-        let ok = super::ssa_emit_x86_64::emit_function(
-            func_ssa,
-            alloc_for,
-            target,
-            &mut code,
-            &mut fixups,
-            &mut plt_call_fixups,
-            &mut got_fixups,
-            &mut data_fixups,
-            &mut user_extern_data_refs,
-            &extern_data_names,
-            &extern_tls_names,
-            &mut pending_func_fixups,
-            imports,
-            &variadic_targets,
-            &mut tls_index_fixups,
-            &mut elf_tpoff_fixups,
-            program.tls_data.len(),
-            &mut pc_to_native,
-            &mut func_prologue_native,
-            &mut ssa_line_rows,
-            &mut fn_unwind,
-        );
+        let ok = {
+            let mut cx = super::ssa::emit_common::EmitCtx {
+                code: &mut code,
+                plt_call_fixups: &mut plt_call_fixups,
+                data_fixups: &mut data_fixups,
+                user_extern_data_refs: &mut user_extern_data_refs,
+                pending_func_fixups: &mut pending_func_fixups,
+                tls_index_fixups: &mut tls_index_fixups,
+                elf_tpoff_fixups: &mut elf_tpoff_fixups,
+                ssa_line_rows: &mut ssa_line_rows,
+                pc_to_native: &mut pc_to_native,
+                prologue_native: &mut func_prologue_native,
+            };
+            super::emit::emit_function(
+                func_ssa,
+                alloc_for,
+                target,
+                &mut cx,
+                &mut fixups,
+                &mut got_fixups,
+                &extern_data_names,
+                &extern_tls_names,
+                imports,
+                &variadic_targets,
+                program.tls_data.len(),
+                &mut fn_unwind,
+            )
+        };
         #[cfg(feature = "std")]
-        if super::ssa_dump::enabled(native) {
+        if super::ssa::dump::enabled(native) {
             eprintln!(
                 "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---",
                 ok = ok,
                 ent_pc = ent_pc,
             );
             eprintln!("; name={}", func_ssa.name);
-            eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
+            eprint!("{}", super::ssa::dump::dump_function(func_ssa, alloc_for),);
         }
         if !ok {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -2124,7 +2133,7 @@ pub(super) fn lower(
         }
     }
     #[cfg(feature = "std")]
-    if super::ssa_emit_common::time_passes_enabled() {
+    if super::ssa::emit_common::time_passes_enabled() {
         let us = _ssa_emit_pass_start.elapsed().as_micros();
         eprintln!("pass: ssa_emit_x86_64 (block walk) -- {us}us");
     }
@@ -2379,31 +2388,7 @@ fn apply_fixups(
     Ok(())
 }
 
-/// Per-call-site placeholder for the post-pass that
-/// patches `CALL rel32` / `JMP rel32` displacements once
-/// trampolines have been laid out at the tail of `code`. Mirror
-/// of the aarch64 type with the same name.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct PltCallFixup {
-    /// Byte offset within `code` of the CALL/JMP instruction
-    /// (the opcode byte, not the disp32 field).
-    pub(super) instr_offset: usize,
-    /// Import slot the call should reach via its trampoline.
-    pub(super) import_index: usize,
-    /// `true` -> emit `JMP rel32` (tail jump from
-    /// `Terminator::TailExt`); `false` -> emit `CALL rel32`
-    /// (regular `Inst::CallExt` site).
-    /// Both are 5 bytes, both use the same disp32 measurement
-    /// origin (one byte past the instruction).
-    pub(super) is_tail: bool,
-    /// `true` -> the site is a `LEA r, [rip+disp32]` that takes
-    /// the import's address (`Inst::ImmExtCode`, `&strcmp`) rather
-    /// than a CALL/JMP that transfers control. The disp32 still
-    /// resolves to the import's shared stub, but it sits three
-    /// bytes past `instr_offset` (REX + opcode + modrm) instead of
-    /// one, and `is_tail` is irrelevant.
-    pub(super) is_addr: bool,
-}
+pub(crate) use super::PltCallFixup;
 
 /// Append one PLT trampoline per import. Each trampoline is a
 /// single 6-byte `JMP qword ptr [rip + disp32]` whose disp32 is

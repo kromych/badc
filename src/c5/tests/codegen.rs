@@ -40,7 +40,7 @@ fn output_marker_is_version_only_and_present_in_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let bytes = crate::c5::codegen::emit_native_single_tu_for_test(
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
             &program,
             target,
             NativeOptions::default(),
@@ -79,7 +79,7 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let on = crate::c5::codegen::emit_native_single_tu_for_test(
+        let on = crate::c5::object::emit_native_single_tu_for_test(
             &program,
             target,
             NativeOptions::new().with_debug_info(true),
@@ -89,7 +89,7 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
             on.windows(needle.len()).any(|w| w == needle),
             "{target:?}: expected `debug_info` section name in the DWARF-on (`-g`) image"
         );
-        let off = crate::c5::codegen::emit_native_single_tu_for_test(
+        let off = crate::c5::object::emit_native_single_tu_for_test(
             &program,
             target,
             NativeOptions::new().with_debug_info(false),
@@ -142,7 +142,7 @@ fn plt_trampoline_local_names_appear_in_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let bytes = crate::c5::codegen::emit_native_single_tu_for_test(
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
             &program,
             target,
             NativeOptions::default(),
@@ -561,7 +561,7 @@ fn jmp_to_next_block_falls_through() {
         "int f(int x){ int r; if(x>0){r=1;}else{r=2;} return r+x; } \
          int main(){ return f(3); }",
     );
-    let bytes = crate::c5::codegen::emit_native_single_tu_for_test(
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
         &program,
         Target::LinuxX64,
         NativeOptions::new().with_optimize(),
@@ -802,7 +802,7 @@ fn dead_local_only_function_skips_frame_sub_sp() {
     // codegen_test pressure knobs (BADC_MAX_GPR / BADC_MAX_FPR) do not
     // perturb it.
     let bytes =
-        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
             emit_native_with_options(
                 &program,
                 Target::MacOSAarch64,
@@ -865,7 +865,7 @@ fn x64_arg_permutation_cycle_uses_xchg() {
     .compile()
     .expect("compile");
     let obj =
-        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
             emit_native_with_options(
                 &program,
                 Target::LinuxX64,
@@ -911,7 +911,7 @@ fn x64_spillfree_leaf_elides_frame_and_scratch_save() {
     // Pin the full register file so the codegen_test pressure knobs do
     // not spill the body and reintroduce a frame.
     let obj =
-        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
             emit_native_with_options(
                 &program,
                 Target::LinuxX64,
@@ -978,8 +978,8 @@ fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
     // the allocator to the full pool so the codegen_test pressure knobs
     // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
     let bytes =
-        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
-            crate::c5::codegen::emit_native_single_tu_for_test(
+        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            crate::c5::object::emit_native_single_tu_for_test(
                 &program,
                 Target::WindowsAarch64,
                 NativeOptions::default(),

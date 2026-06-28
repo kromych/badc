@@ -1,5 +1,5 @@
 //! Recognise `(x >> c) | (x << (W - c))` shapes and fold them to a
-//! single `Ror`. Runs after `ssa_inline` so post-inline rotates
+//! single `Ror`. Runs after `inline` so post-inline rotates
 //! exposed by parameter substitution become recognisable. Only the
 //! 64-bit form (`W == 64`) is matched; the per-arch emit rotates the
 //! full register.
@@ -40,7 +40,7 @@
 
 use alloc::vec::Vec;
 
-use super::super::ir::{BinOp, FunctionSsa, Inst, LoadKind, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, ValueId};
 
 /// Look at `idx`'s def in `func`; return `Some(C)` when it is
 /// `Inst::Imm(C)`. Conservatively returns `None` otherwise.
@@ -206,7 +206,7 @@ fn match_rotate(func: &FunctionSsa, or_idx: usize) -> Option<(ValueId, RotateBy)
 }
 
 /// Walk every function, rewrite recognised rotates to `Ror`.
-pub(super) fn run(funcs: &mut [FunctionSsa]) {
+pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let n = func.insts.len();
         let mut rewrites: Vec<(usize, ValueId, RotateBy)> = Vec::new();

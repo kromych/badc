@@ -43,6 +43,8 @@ mod native_pe_x64;
 mod parser;
 mod pointer_tracking;
 mod programs;
+#[cfg(feature = "full")]
+mod reloc_golden;
 mod types;
 
 /// Absolute path of `tests/fixtures/c/<name>` relative to the crate root.

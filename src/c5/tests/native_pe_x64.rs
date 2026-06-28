@@ -517,8 +517,8 @@ fn build_pe_bytes(src: &str) -> Vec<u8> {
     // Byte-exact assertions hold only with the full register file; pin
     // the allocator to the full pool so the codegen_test pressure knobs
     // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
-    crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
-        crate::c5::codegen::emit_native_single_tu_for_test(
+    crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        crate::c5::object::emit_native_single_tu_for_test(
             &program,
             Target::WindowsX64,
             NativeOptions::default(),
@@ -1051,7 +1051,7 @@ fn dll_export_load_unload_reload_cycle() {
     let dll_name = format!("badc-pe64-ansdll-{uniq}.dll");
     // Record the DLL's own name in its export directory, as the CLI
     // does from the `-o` basename.
-    let dll_bytes = super::super::codegen::emit_native_with_options_named(
+    let dll_bytes = super::super::object::emit_native_with_options_named(
         &dll_prog,
         Target::WindowsX64,
         NativeOptions::new().with_shared_library(),

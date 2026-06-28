@@ -32,9 +32,7 @@
 
 use alloc::vec::Vec;
 
-use super::super::ir::{
-    BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
-};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
 
 /// Access width in bytes for a load kind, or `None` for the floating
 /// kinds (the indexed emit handles integers only).
@@ -70,7 +68,7 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
         }
     };
     for inst in &func.insts {
-        super::ssa_alloc::for_each_operand(inst, |v| bump(v, &mut counts));
+        crate::c5::codegen::ssa::reg_alloc::for_each_operand(inst, |v| bump(v, &mut counts));
     }
     for block in &func.blocks {
         match block.terminator {
@@ -304,7 +302,7 @@ fn narrow_store_values(func: &mut FunctionSsa) {
     }
 }
 
-pub(super) fn run(funcs: &mut [FunctionSsa]) {
+pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         narrow_store_values(func);
         let counts = use_counts(func);

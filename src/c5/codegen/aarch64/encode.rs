@@ -3,8 +3,8 @@
 //! All AArch64 instructions are 32 bits wide and little-endian on every
 //! supported OS, which makes the encoder a flat catalogue of
 //! `fn enc_xxx(...) -> u32`. Per-function code generation routes
-//! through [`super::ssa_shadow::produce_ssa_funcs`] +
-//! [`super::ssa_alloc::allocate`] + `super::ssa_emit_aarch64`; this
+//! through [`super::ssa::shadow::produce_ssa_funcs`] +
+//! [`super::ssa::reg_alloc::allocate`] + `super::emit`; this
 //! module's `lower()` is the shell that drives the SSA pipeline and
 //! the post-pass fixups (PLT trampolines, branch fixups,
 //! data-relocation patching).
@@ -48,7 +48,7 @@ use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 /// the "I passed `1` for a register and `1` for an immediate to the
 /// same encoder" bug class.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct Reg(pub u8);
+pub(crate) struct Reg(pub u8);
 
 // Some Reg constants here aren't reached by every lowering path
 // but are kept for completeness so the assembler-style API stays
@@ -100,7 +100,7 @@ impl Reg {
 ///
 /// `hw` selects which 16-bit lane: 0 = bits[15:0], 1 = bits[31:16],
 /// 2 = bits[47:32], 3 = bits[63:48].
-pub(super) fn enc_movz(rd: Reg, imm16: u16, hw: u8) -> u32 {
+pub(crate) fn enc_movz(rd: Reg, imm16: u16, hw: u8) -> u32 {
     debug_assert!(hw < 4, "movz: hw must be 0..=3");
     0xD280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32)
 }
@@ -109,7 +109,7 @@ pub(super) fn enc_movz(rd: Reg, imm16: u16, hw: u8) -> u32 {
 /// `Xd` with `imm16`, leaving the other lanes intact. Combined with
 /// `movz` it builds an arbitrary 64-bit constant in 1-4 instructions
 /// (see [`load_imm64`]).
-pub(super) fn enc_movk(rd: Reg, imm16: u16, hw: u8) -> u32 {
+pub(crate) fn enc_movk(rd: Reg, imm16: u16, hw: u8) -> u32 {
     debug_assert!(hw < 4, "movk: hw must be 0..=3");
     0xF280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32)
 }
@@ -117,7 +117,7 @@ pub(super) fn enc_movk(rd: Reg, imm16: u16, hw: u8) -> u32 {
 /// `RET <Xn>` -- branch to the address in `Xn` (default `x30`/`lr`).
 /// AAPCS64 puts the return address in `x30` on entry, so the bare form
 /// `ret` (= `ret x30`) is the usual one.
-pub(super) fn enc_ret(rn: Reg) -> u32 {
+pub(crate) fn enc_ret(rn: Reg) -> u32 {
     0xD65F_0000 | ((rn.0 as u32) << 5)
 }
 
@@ -127,7 +127,7 @@ pub(super) fn enc_ret(rn: Reg) -> u32 {
 /// bytes/4); ARM ARM allows the range +/-128 MiB. We sign-mask down
 /// to 26 bits so a negative offset (calling backwards) emits the
 /// right two's-complement bits.
-pub(super) fn enc_bl(imm26: i32) -> u32 {
+pub(crate) fn enc_bl(imm26: i32) -> u32 {
     debug_assert!(
         (-(1 << 25)..(1 << 25)).contains(&imm26),
         "bl: offset {imm26} out of range (must fit in signed 26 bits)"
@@ -141,7 +141,7 @@ pub(super) fn enc_bl(imm26: i32) -> u32 {
 ///
 /// Used in function prologues: `stp x29, x30, [sp, #-16]!` saves the
 /// caller's frame pointer + link register and bumps sp in one go.
-pub(super) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
     let imm7 = imm / 8;
     debug_assert!(
@@ -158,7 +158,7 @@ pub(super) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- load-pair, post-indexed.
 /// Mirror of [`enc_stp_pre`] for function epilogues:
 /// `ldp x29, x30, [sp], #16` restores fp/lr and bumps sp back.
-pub(super) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
     let imm7 = imm / 8;
     debug_assert!(
@@ -174,7 +174,7 @@ pub(super) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset
 /// (no writeback). Same scaling / range as [`enc_stp_pre`].
-pub(super) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
     let imm7 = imm / 8;
     debug_assert!(
@@ -190,7 +190,7 @@ pub(super) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset
 /// (no writeback). Mirror of [`enc_stp_off`].
-pub(super) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
     let imm7 = imm / 8;
     debug_assert!(
@@ -209,21 +209,21 @@ pub(super) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
 /// `Rn` field 31 means XZR) and `add xd, sp, #0` (which is what you
 /// need when the source is SP itself, because in `add` field 31 means
 /// SP). Use [`enc_add_imm`] with `imm=0` for the `mov xd, sp` case.
-pub(super) fn enc_mov_reg(rd: Reg, rn: Reg) -> u32 {
+pub(crate) fn enc_mov_reg(rd: Reg, rn: Reg) -> u32 {
     0xAA00_0000 | ((rn.0 as u32) << 16) | ((Reg::SP.0 as u32) << 5) | (rd.0 as u32)
 }
 
 /// `ADD <Xd>, <Xn|SP>, #imm12` -- 12-bit unsigned immediate, no shift.
 /// Larger immediates need either the `lsl #12` shift form or the
 /// load-into-register-and-add long form; we don't need either yet.
-pub(super) fn enc_add_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_add_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     debug_assert!(imm12 < 4096, "add imm: {imm12} > 12-bit max");
     0x9100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
 /// `SUB <Xd>, <Xn|SP>, #imm12` -- 12-bit unsigned immediate, no shift.
 /// Used to allocate stack space in function prologues.
-pub(super) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     debug_assert!(imm12 < 4096, "sub imm: {imm12} > 12-bit max");
     0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
@@ -232,7 +232,7 @@ pub(super) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
 /// Used by the stack-probe loop's counter decrement so the
 /// trailing `b.ne` can read the flags. Top 8 bits flip from
 /// `1101_0001` (SUB) to `1111_0001` (SUBS).
-pub(super) fn enc_subs_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_subs_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     debug_assert!(imm12 < 4096, "subs imm: {imm12} > 12-bit max");
     0xF100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
@@ -241,7 +241,7 @@ pub(super) fn enc_subs_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
 /// extends the reach of the immediate to multiples of 4096 up
 /// to ~16 MiB, used together with the unshifted form to cover
 /// any 24-bit byte count in two instructions.
-pub(super) fn enc_sub_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_sub_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     debug_assert!(imm12 < 4096, "sub imm lsl12: {imm12} > 12-bit max");
     0xD140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
@@ -249,7 +249,7 @@ pub(super) fn enc_sub_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
 /// `ADD <Xd>, <Xn|SP>, #imm12, LSL #12`. Mirror of
 /// [`enc_sub_imm_lsl12`] -- used to fold large
 /// stack-restoration adjustments into two instructions.
-pub(super) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     debug_assert!(imm12 < 4096, "add imm lsl12: {imm12} > 12-bit max");
     0x9140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
@@ -263,7 +263,7 @@ pub(super) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
 /// for the remainder. Anything beyond 24 bits would need a
 /// register-form `SUB` -- not seen in practice, so we panic
 /// with a clear message rather than silently truncating.
-pub(super) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
+pub(crate) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
     if bytes == 0 {
         return;
     }
@@ -285,7 +285,7 @@ pub(super) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
 /// [`emit_sub_sp_imm`]. Used for stack-arg cleanup after a call
 /// and by anything else that needs to grow the stack pointer
 /// back by more than 4 KiB in one go.
-pub(super) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
+pub(crate) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
     if bytes == 0 {
         return;
     }
@@ -307,14 +307,20 @@ pub(super) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
 // Each follows the same template: a base opcode | Rm<<16 | Rn<<5 | Rd.
 // Verified against `clang -c -arch arm64` on Apple Silicon.
 
+/// 3-register data-processing word: `base | Rm<<16 | Rn<<5 | Rd`. Any baked
+/// field (e.g. MUL's `Ra = XZR`) is part of `base`.
+fn enc_rrr(base: u32, rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    base | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `ADD <Xd>, <Xn>, <Xm>` -- 64-bit register add, no shift.
-pub(super) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x8B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x8B00_0000, rd, rn, rm)
 }
 
 /// `ADD <Xd>, <Xn>, <Xm>, LSL #<shift>` -- 64-bit add of a left-shifted
 /// register. `shift` is a 6-bit amount.
-pub(super) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> u32 {
+pub(crate) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> u32 {
     0x8B00_0000
         | ((rm.0 as u32) << 16)
         | ((shift & 0x3f) << 10)
@@ -323,13 +329,13 @@ pub(super) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> u32 {
 }
 
 /// `SUB <Xd>, <Xn>, <Xm>` -- 64-bit register subtract.
-pub(super) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0xCB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0xCB00_0000, rd, rn, rm)
 }
 
 /// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
-pub(super) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x8A00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x8A00_0000, rd, rn, rm)
 }
 
 /// `AND <Xd>, <Xn>, #~15` -- mask off the low four bits so the
@@ -342,56 +348,56 @@ pub(super) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 /// the four zero bits land at the bottom. `immr=0` encodes
 /// `0x0FFFFFFFFFFFFFFF` instead (the zeros at the top), which fails
 /// to clear the low bits and leaves the arena pointer unaligned.
-pub(super) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
+pub(crate) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
     0x927C_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
-pub(super) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0xAA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0xAA00_0000, rd, rn, rm)
 }
 
 /// `MOV <Wd>, <Wn>` (`ORR Wd, WZR, Wn`) -- 32-bit register move. A write
 /// to a W register clears the upper 32 bits of the X register, so this is
 /// also the one-instruction zero-extension of the low word (`x & 0xffffffff`).
-pub(super) fn enc_mov_w_w(rd: Reg, rn: Reg) -> u32 {
+pub(crate) fn enc_mov_w_w(rd: Reg, rn: Reg) -> u32 {
     0x2A00_03E0 | ((rn.0 as u32) << 16) | (rd.0 as u32)
 }
 
 /// `EOR <Xd>, <Xn>, <Xm>` -- bitwise xor.
-pub(super) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0xCA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0xCA00_0000, rd, rn, rm)
 }
 
 /// `MVN <Xd>, <Xm>` (`ORN Xd, XZR, Xm`) -- bitwise NOT. `Rn` is baked
 /// to XZR (31); ORN is ORR with the N bit set.
-pub(super) fn enc_mvn(rd: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_mvn(rd: Reg, rm: Reg) -> u32 {
     0xAA20_03E0 | ((rm.0 as u32) << 16) | (rd.0 as u32)
 }
 
 /// `MUL <Xd>, <Xn>, <Xm>` -- alias for `MADD Xd, Xn, Xm, XZR`.
 /// We bake in `Ra = XZR (31)` so this stays a 3-register helper.
-pub(super) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9B00_7C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9B00_7C00, rd, rn, rm)
 }
 
 /// `SDIV <Xd>, <Xn>, <Xm>` -- signed integer division. Pairs with
 /// [`enc_msub`] when computing modulo.
-pub(super) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_0C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9AC0_0C00, rd, rn, rm)
 }
 
 /// `UDIV <Xd>, <Xn>, <Xm>` -- unsigned integer division. Differs from
 /// SDIV only in the opcode2 field (bit 10 cleared). Pairs with
 /// [`enc_msub`] when computing unsigned modulo.
-pub(super) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_0800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9AC0_0800, rd, rn, rm)
 }
 
 /// `MSUB <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa - (Xn * Xm)`. The
 /// AArch64 idiom for `mod` is `sdiv q, a, b ; msub r, q, b, a`,
 /// which yields `r = a - (a/b)*b`.
-pub(super) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
+pub(crate) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
     0x9B00_8000
         | ((rm.0 as u32) << 16)
         | ((ra.0 as u32) << 10)
@@ -401,29 +407,29 @@ pub(super) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
 
 /// `LSLV <Xd>, <Xn>, <Xm>` -- variable left shift, masking the shift
 /// amount to 6 bits (i.e., shifting by `Xm % 64`).
-pub(super) fn enc_lslv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_2000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_lslv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9AC0_2000, rd, rn, rm)
 }
 
 /// `LSRV <Xd>, <Xn>, <Xm>` -- variable logical right shift.
-pub(super) fn enc_lsrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_2400 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_lsrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9AC0_2400, rd, rn, rm)
 }
 
 /// `ASRV <Xd>, <Xn>, <Xm>` -- variable arithmetic right shift. The
 /// signed counterpart to `LSRV`
-pub(super) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_2800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9AC0_2800, rd, rn, rm)
 }
 
 /// `RORV <Xd>, <Xn>, <Xm>` -- variable rotate right.
-pub(super) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x9AC0_2C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9AC0_2C00, rd, rn, rm)
 }
 
 /// `ROR <Xd>, <Xs>, #<shift>` -- bit-rotate-right by constant. Encoded
 /// as the EXTR alias `EXTR Xd, Xs, Xs, #shift`.
-pub(super) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+pub(crate) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     0x93C0_0000
         | ((rn.0 as u32) << 16)
         | (((shift as u32) & 63) << 10)
@@ -445,13 +451,13 @@ pub(super) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
 /// `FMOV <Dd>, <Xn>` -- copy the 64 low bits of `Xn` into `Dd`. Used
 /// to stage a c5-stack slot (raw `f64::to_bits()`) into an FP register
 /// before arithmetic.
-pub(super) fn enc_fmov_x_to_d(dd: u8, xn: Reg) -> u32 {
+pub(crate) fn enc_fmov_x_to_d(dd: u8, xn: Reg) -> u32 {
     debug_assert!(dd < 32);
     0x9E67_0000 | ((xn.0 as u32) << 5) | (dd as u32)
 }
 
 /// `FMOV <Xd>, <Dn>` -- copy the 64 low bits of `Dn` back into `Xd`.
-pub(super) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> u32 {
+pub(crate) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> u32 {
     debug_assert!(dn < 32);
     0x9E66_0000 | ((dn as u32) << 5) | (rd.0 as u32)
 }
@@ -459,92 +465,95 @@ pub(super) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> u32 {
 /// `FMOV <Dd>, <Dn>` -- copy a double-precision register. Used to
 /// move a `double` value into the allocator's chosen d-register
 /// when the producer wrote a different one.
-pub(super) fn enc_fmov_d_d(dd: u8, dn: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32);
-    0x1E60_4000 | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_fmov_d_d(dd: u8, dn: u8) -> u32 {
+    enc_fp1(0x1E60_4000, dd, dn)
+}
+
+/// FP data-processing (2 source) word: `base | Rm<<16 | Rn<<5 | Rd`, V-register
+/// operands. The ptype/opcode bits are part of `base`.
+fn enc_fp2(base: u32, dd: u8, dn: u8, dm: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32 && dm < 32);
+    base | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+}
+
+/// FP data-processing (1 source) word: `base | Rn<<5 | Rd`, V-register operands.
+fn enc_fp1(base: u32, d: u8, n: u8) -> u32 {
+    debug_assert!(d < 32 && n < 32);
+    base | ((n as u32) << 5) | (d as u32)
 }
 
 /// `FADD <Dd>, <Dn>, <Dm>` -- double-precision add. `Dd = Dn + Dm`.
-pub(super) fn enc_fadd_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32 && dm < 32);
-    0x1E60_2800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_fadd_d(dd: u8, dn: u8, dm: u8) -> u32 {
+    enc_fp2(0x1E60_2800, dd, dn, dm)
 }
 
 /// `FSUB <Dd>, <Dn>, <Dm>`. `Dd = Dn - Dm`.
-pub(super) fn enc_fsub_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32 && dm < 32);
-    0x1E60_3800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_fsub_d(dd: u8, dn: u8, dm: u8) -> u32 {
+    enc_fp2(0x1E60_3800, dd, dn, dm)
 }
 
 /// `FMUL <Dd>, <Dn>, <Dm>`. `Dd = Dn * Dm`.
-pub(super) fn enc_fmul_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32 && dm < 32);
-    0x1E60_0800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_fmul_d(dd: u8, dn: u8, dm: u8) -> u32 {
+    enc_fp2(0x1E60_0800, dd, dn, dm)
 }
 
 /// `FDIV <Dd>, <Dn>, <Dm>`. `Dd = Dn / Dm`.
-pub(super) fn enc_fdiv_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32 && dm < 32);
-    0x1E60_1800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_fdiv_d(dd: u8, dn: u8, dm: u8) -> u32 {
+    enc_fp2(0x1E60_1800, dd, dn, dm)
 }
 
 /// `FNEG <Dd>, <Dn>`. `Dd = -Dn`.
-pub(super) fn enc_fneg_d(dd: u8, dn: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32);
-    0x1E61_4000 | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_fneg_d(dd: u8, dn: u8) -> u32 {
+    enc_fp1(0x1E61_4000, dd, dn)
 }
 
 /// `FSQRT <Dd>, <Dn>` -- scalar double square root. FP data-processing
 /// (1 source), ptype=01, opcode=000011.
-pub(super) fn enc_fsqrt_d(dd: u8, dn: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32);
-    0x1E61_C000 | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_fsqrt_d(dd: u8, dn: u8) -> u32 {
+    enc_fp1(0x1E61_C000, dd, dn)
 }
 
 /// `FSQRT <Sd>, <Sn>` -- scalar single square root. ptype=00.
-pub(super) fn enc_fsqrt_s(sd: u8, sn: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32);
-    0x1E21_C000 | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_fsqrt_s(sd: u8, sn: u8) -> u32 {
+    enc_fp1(0x1E21_C000, sd, sn)
 }
 
 /// `FABS <Dd>, <Dn>` -- scalar double absolute value. opcode=000001.
-pub(super) fn enc_fabs_d(dd: u8, dn: u8) -> u32 {
-    debug_assert!(dd < 32 && dn < 32);
-    0x1E60_C000 | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_fabs_d(dd: u8, dn: u8) -> u32 {
+    enc_fp1(0x1E60_C000, dd, dn)
 }
 
 /// `FABS <Sd>, <Sn>` -- scalar single absolute value.
-pub(super) fn enc_fabs_s(sd: u8, sn: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32);
-    0x1E20_C000 | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_fabs_s(sd: u8, sn: u8) -> u32 {
+    enc_fp1(0x1E20_C000, sd, sn)
 }
 
 /// `FRINTM <Dd>, <Dn>` -- round to integral toward -inf (floor).
 /// FP-1-source opcode 001010.
-pub(super) fn enc_frintm_d(dd: u8, dn: u8) -> u32 {
-    0x1E65_4000 | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_frintm_d(dd: u8, dn: u8) -> u32 {
+    enc_fp1(0x1E65_4000, dd, dn)
 }
 /// `FRINTM <Sd>, <Sn>`.
-pub(super) fn enc_frintm_s(sd: u8, sn: u8) -> u32 {
-    0x1E25_4000 | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_frintm_s(sd: u8, sn: u8) -> u32 {
+    enc_fp1(0x1E25_4000, sd, sn)
 }
 /// `FRINTP <Dd>, <Dn>` -- round to integral toward +inf (ceil).
 /// FP-1-source opcode 001001.
-pub(super) fn enc_frintp_d(dd: u8, dn: u8) -> u32 {
-    0x1E64_C000 | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_frintp_d(dd: u8, dn: u8) -> u32 {
+    enc_fp1(0x1E64_C000, dd, dn)
 }
 /// `FRINTP <Sd>, <Sn>`.
-pub(super) fn enc_frintp_s(sd: u8, sn: u8) -> u32 {
-    0x1E24_C000 | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_frintp_s(sd: u8, sn: u8) -> u32 {
+    enc_fp1(0x1E24_C000, sd, sn)
 }
 /// `FRINTZ <Dd>, <Dn>` -- round to integral toward zero (trunc).
 /// FP-1-source opcode 001011.
-pub(super) fn enc_frintz_d(dd: u8, dn: u8) -> u32 {
-    0x1E65_C000 | ((dn as u32) << 5) | (dd as u32)
+pub(crate) fn enc_frintz_d(dd: u8, dn: u8) -> u32 {
+    enc_fp1(0x1E65_C000, dd, dn)
 }
 /// `FRINTZ <Sd>, <Sn>`.
-pub(super) fn enc_frintz_s(sd: u8, sn: u8) -> u32 {
-    0x1E25_C000 | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_frintz_s(sd: u8, sn: u8) -> u32 {
+    enc_fp1(0x1E25_C000, sd, sn)
 }
 
 /// `FCMP <Dn>, <Dm>` -- set NZCV per the IEEE comparison of `Dn`
@@ -552,7 +561,7 @@ pub(super) fn enc_frintz_s(sd: u8, sn: u8) -> u32 {
 /// unordered (NaN) operand sets N=0, Z=0, C=1, V=1; the condition
 /// codes `fp_compare_cond` selects yield the C99 result for that
 /// state (`==` false, `!=` true, every relational form false).
-pub(super) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
+pub(crate) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
     debug_assert!(dn < 32 && dm < 32);
     0x1E60_2000 | ((dm as u32) << 16) | ((dn as u32) << 5)
 }
@@ -561,7 +570,7 @@ pub(super) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
 /// single-precision view `Sd`. Used to stage an f32 constant (the
 /// allocator parks it in a GPR as the int-encoded f32 bit pattern)
 /// into an FP register before single-precision arithmetic.
-pub(super) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
+pub(crate) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
     debug_assert!(sd < 32);
     0x1E27_0000 | ((wn.0 as u32) << 5) | (sd as u32)
 }
@@ -569,40 +578,34 @@ pub(super) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
 /// `FMOV <Sd>, <Sn>` -- copy a single-precision register. Used to
 /// move an `float` value into the allocator's chosen register when
 /// the producer wrote a different one.
-pub(super) fn enc_fmov_s_s(sd: u8, sn: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32);
-    0x1E20_4000 | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_fmov_s_s(sd: u8, sn: u8) -> u32 {
+    enc_fp1(0x1E20_4000, sd, sn)
 }
 
 /// `FADD <Sd>, <Sn>, <Sm>` -- single-precision add. `Sd = Sn + Sm`
 /// (C99 6.3.1.8: `float op float` has type `float`).
-pub(super) fn enc_fadd_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32 && sm < 32);
-    0x1E20_2800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_fadd_s(sd: u8, sn: u8, sm: u8) -> u32 {
+    enc_fp2(0x1E20_2800, sd, sn, sm)
 }
 
 /// `FSUB <Sd>, <Sn>, <Sm>`. `Sd = Sn - Sm`.
-pub(super) fn enc_fsub_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32 && sm < 32);
-    0x1E20_3800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_fsub_s(sd: u8, sn: u8, sm: u8) -> u32 {
+    enc_fp2(0x1E20_3800, sd, sn, sm)
 }
 
 /// `FMUL <Sd>, <Sn>, <Sm>`. `Sd = Sn * Sm`.
-pub(super) fn enc_fmul_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32 && sm < 32);
-    0x1E20_0800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_fmul_s(sd: u8, sn: u8, sm: u8) -> u32 {
+    enc_fp2(0x1E20_0800, sd, sn, sm)
 }
 
 /// `FDIV <Sd>, <Sn>, <Sm>`. `Sd = Sn / Sm`.
-pub(super) fn enc_fdiv_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32 && sm < 32);
-    0x1E20_1800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_fdiv_s(sd: u8, sn: u8, sm: u8) -> u32 {
+    enc_fp2(0x1E20_1800, sd, sn, sm)
 }
 
 /// `FNEG <Sd>, <Sn>`. `Sd = -Sn`.
-pub(super) fn enc_fneg_s(sd: u8, sn: u8) -> u32 {
-    debug_assert!(sd < 32 && sn < 32);
-    0x1E21_4000 | ((sn as u32) << 5) | (sd as u32)
+pub(crate) fn enc_fneg_s(sd: u8, sn: u8) -> u32 {
+    enc_fp1(0x1E21_4000, sd, sn)
 }
 
 /// Floating-point fused multiply-add (3 source). `Dd = (neg_product ?
@@ -611,7 +614,7 @@ pub(super) fn enc_fneg_s(sd: u8, sn: u8) -> u32 {
 /// The four sign combinations select FMADD / FNMSUB / FMSUB / FNMADD:
 /// the o0 bit (15) and the negate-product bit (21) encode the variant
 /// per the ARM "Floating-point data-processing (3 source)" group.
-pub(super) fn enc_fma(
+pub(crate) fn enc_fma(
     dd: u8,
     dn: u8,
     dm: u8,
@@ -643,7 +646,7 @@ pub(super) fn enc_fma(
 
 /// `FCMP <Sn>, <Sm>` -- single-precision compare, setting NZCV.
 /// Same NaN caveat as [`enc_fcmp_d`].
-pub(super) fn enc_fcmp_s(sn: u8, sm: u8) -> u32 {
+pub(crate) fn enc_fcmp_s(sn: u8, sm: u8) -> u32 {
     debug_assert!(sn < 32 && sm < 32);
     0x1E20_2000 | ((sm as u32) << 16) | ((sn as u32) << 5)
 }
@@ -651,7 +654,7 @@ pub(super) fn enc_fcmp_s(sn: u8, sm: u8) -> u32 {
 /// `FCVTZS <Xd>, <Dn>` -- truncating signed FP-to-int. Matches the
 /// C `(int)f` semantics: discard the fractional part; out-of-range
 /// values saturate.
-pub(super) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> u32 {
+pub(crate) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> u32 {
     debug_assert!(dn < 32);
     0x9E78_0000 | ((dn as u32) << 5) | (rd.0 as u32)
 }
@@ -659,14 +662,14 @@ pub(super) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> u32 {
 /// `FCVTZU <Xd>, <Dn>` -- truncating unsigned FP-to-int. The
 /// `FCVTZS` encoding with the opcode low bit set, so a double in
 /// [2^63, 2^64) converts to the correct u64 rather than saturating.
-pub(super) fn enc_fcvtzu_x_d(rd: Reg, dn: u8) -> u32 {
+pub(crate) fn enc_fcvtzu_x_d(rd: Reg, dn: u8) -> u32 {
     debug_assert!(dn < 32);
     0x9E79_0000 | ((dn as u32) << 5) | (rd.0 as u32)
 }
 
 /// `SCVTF <Dd>, <Xn>` -- signed int-to-FP. Emits the round-to-
 /// nearest-ties-to-even mantissa.
-pub(super) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {
+pub(crate) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {
     debug_assert!(dd < 32);
     0x9E62_0000 | ((xn.0 as u32) << 5) | (dd as u32)
 }
@@ -674,7 +677,7 @@ pub(super) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {
 /// `UCVTF <Dd>, <Xn>` -- unsigned int-to-FP. The `SCVTF` encoding
 /// with the opcode low bit set, so a u64 with bit 63 set converts
 /// to a positive double rather than a negative one.
-pub(super) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> u32 {
+pub(crate) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> u32 {
     debug_assert!(dd < 32);
     0x9E63_0000 | ((xn.0 as u32) << 5) | (dd as u32)
 }
@@ -684,7 +687,7 @@ pub(super) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> u32 {
 /// with the address of `struct pthread`, and the TLS image (our
 /// `.tdata` / `.tbss`) follows immediately after the TCB header.
 /// `var_addr = TPIDR_EL0 + TLS_TCB_HEAD (16) + offset_in_block`.
-pub(super) fn enc_mrs_tpidr_el0(rt: Reg) -> u32 {
+pub(crate) fn enc_mrs_tpidr_el0(rt: Reg) -> u32 {
     // 1101_0101_0011_0011_1101_0000_0100_0000 + Rt
     // (op0=11, op1=011, CRn=1101, CRm=0000, op2=010)
     0xD53B_D040 | (rt.0 as u32)
@@ -695,7 +698,7 @@ pub(super) fn enc_mrs_tpidr_el0(rt: Reg) -> u32 {
 /// caller passes raw bytes (must be multiple of 8 in 0..32760).
 /// Used by the variadic-FP packer to pull a c5-stack slot
 /// straight into a `dN` register before a libc call.
-pub(super) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(dt < 32);
     debug_assert!(imm.is_multiple_of(8) && imm < 32760);
     0xFD40_0000 | ((imm / 8) << 10) | ((rn.0 as u32) << 5) | (dt as u32)
@@ -706,7 +709,7 @@ pub(super) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
 /// caller passes raw bytes (must be multiple of 4 in 0..16380).
 /// Used by [`LoadKind::F32`] to load a `float`-typed lvalue's storage
 /// directly into the `sN` half of `dN` before the widening fcvt.
-pub(super) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(st < 32);
     debug_assert!(imm.is_multiple_of(4) && imm < 16380);
     0xBD40_0000 | ((imm / 4) << 10) | ((rn.0 as u32) << 5) | (st as u32)
@@ -715,7 +718,7 @@ pub(super) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
 /// `STR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
 /// store. Same encoding family as [`enc_ldr_s_imm`]; companion
 /// to the `StoreKind::F32` lowering.
-pub(super) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(st < 32);
     debug_assert!(imm.is_multiple_of(4) && imm < 16380);
     0xBD00_0000 | ((imm / 4) << 10) | ((rn.0 as u32) << 5) | (st as u32)
@@ -724,7 +727,7 @@ pub(super) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
 /// `STR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
 /// store, the partner of [`enc_ldr_d_imm`]. Used by the AArch64
 /// setjmp intrinsic to spill d8-d15 into the user's `jmp_buf`.
-pub(super) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(dt < 32);
     debug_assert!(imm.is_multiple_of(8) && imm < 32760);
     0xFD00_0000 | ((imm / 8) << 10) | ((rn.0 as u32) << 5) | (dt as u32)
@@ -734,7 +737,7 @@ pub(super) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
 /// 21-bit offset) into `Xd`. Used by the AArch64 setjmp intrinsic
 /// to capture the resume address that a later longjmp branches to.
 /// Offset is in bytes from the ADR's own PC.
-pub(super) fn enc_adr(rd: Reg, off_bytes: i32) -> u32 {
+pub(crate) fn enc_adr(rd: Reg, off_bytes: i32) -> u32 {
     debug_assert!((-(1 << 20)..(1 << 20)).contains(&off_bytes), "adr off");
     let off = (off_bytes as u32) & 0x001F_FFFF;
     let immlo = off & 0x3;
@@ -747,7 +750,7 @@ pub(super) fn enc_adr(rd: Reg, off_bytes: i32) -> u32 {
 /// `Xn + 1`; otherwise write `Xn`. Used by the longjmp intrinsic to
 /// turn a 0 value into 1 per C99 7.13.2.1 ("if the function returns
 /// 0 it is as if longjmp had been called with the value 1").
-pub(super) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> u32 {
+pub(crate) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> u32 {
     let inv = (cond as u32) ^ 1;
     0x9A80_0400 | ((rn.0 as u32) << 16) | (inv << 12) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
@@ -756,7 +759,7 @@ pub(super) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> u32 {
 /// (bit-exact for any finite single value, matching the IEEE
 /// short-to-long conversion). Used by [`LoadKind::F32`] after the
 /// single-precision load.
-pub(super) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
+pub(crate) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
     debug_assert!(dd < 32 && sn < 32);
     0x1E22_C000 | ((sn as u32) << 5) | (dd as u32)
 }
@@ -765,7 +768,7 @@ pub(super) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
 /// with round-to-nearest-ties-to-even (matching IEEE 754 and the
 /// VM's `f64 as f32` semantics). Used by the `StoreKind::F32`
 /// lowering before the single-precision store.
-pub(super) fn enc_fcvt_s_d(sd: u8, dn: u8) -> u32 {
+pub(crate) fn enc_fcvt_s_d(sd: u8, dn: u8) -> u32 {
     debug_assert!(sd < 32 && dn < 32);
     0x1E62_4000 | ((dn as u32) << 5) | (sd as u32)
 }
@@ -774,7 +777,7 @@ pub(super) fn enc_fcvt_s_d(sd: u8, dn: u8) -> u32 {
 
 /// `CMP <Xn>, <Xm>` = `SUBS XZR, <Xn>, <Xm>` -- compare two registers,
 /// updating the NZCV flags but discarding the result.
-pub(super) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
     0xEB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32)
 }
 
@@ -785,7 +788,7 @@ pub(super) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
 /// (mi/ls) rather than the signed-arithmetic lt/le, because
 /// FCMP's flag layout differs from SUBS's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Cond {
+pub(crate) enum Cond {
     Eq = 0,
     Ne = 1,
     /// Unsigned `>=` (HS = CS). After SUBS, set when no borrow occurred.
@@ -842,7 +845,7 @@ impl Cond {
 
 /// `CSET <Xd>, <cond>` = `CSINC Xd, XZR, XZR, invert(cond)`.
 /// Sets `Xd` to 1 if `cond` holds, 0 otherwise.
-pub(super) fn enc_cset(rd: Reg, cond: Cond) -> u32 {
+pub(crate) fn enc_cset(rd: Reg, cond: Cond) -> u32 {
     0x9A80_0400
         | ((Reg::SP.0 as u32) << 16) // Rm = XZR
         | (cond.invert() << 12)
@@ -854,7 +857,7 @@ pub(super) fn enc_cset(rd: Reg, cond: Cond) -> u32 {
 
 /// `B <label>` -- unconditional branch, PC-relative offset measured
 /// in instructions. Same encoding family as `BL` minus the link bit.
-pub(super) fn enc_b(imm26: i32) -> u32 {
+pub(crate) fn enc_b(imm26: i32) -> u32 {
     debug_assert!(
         (-(1 << 25)..(1 << 25)).contains(&imm26),
         "b: offset {imm26} out of range"
@@ -864,7 +867,7 @@ pub(super) fn enc_b(imm26: i32) -> u32 {
 
 /// `CBZ <Xt>, <label>` -- compare `Xt` with zero and branch if equal.
 /// `imm19` is signed, in instructions. +/-1 MiB range.
-pub(super) fn enc_cbz(rt: Reg, imm19: i32) -> u32 {
+pub(crate) fn enc_cbz(rt: Reg, imm19: i32) -> u32 {
     debug_assert!(
         (-(1 << 18)..(1 << 18)).contains(&imm19),
         "cbz: offset {imm19} out of range (must fit in signed 19 bits)"
@@ -873,7 +876,7 @@ pub(super) fn enc_cbz(rt: Reg, imm19: i32) -> u32 {
 }
 
 /// `CBNZ <Xt>, <label>` -- branch if `Xt` is not zero.
-pub(super) fn enc_cbnz(rt: Reg, imm19: i32) -> u32 {
+pub(crate) fn enc_cbnz(rt: Reg, imm19: i32) -> u32 {
     debug_assert!(
         (-(1 << 18)..(1 << 18)).contains(&imm19),
         "cbnz: offset {imm19} out of range"
@@ -885,7 +888,7 @@ pub(super) fn enc_cbnz(rt: Reg, imm19: i32) -> u32 {
 /// `imm19` is signed, in instructions; same +/-1 MiB range as
 /// `CBZ`/`CBNZ`. The encoder builds the canonical form
 /// `0101_0100 imm19 0 cond`.
-pub(super) fn enc_b_cond(cond: Cond, imm19: i32) -> u32 {
+pub(crate) fn enc_b_cond(cond: Cond, imm19: i32) -> u32 {
     debug_assert!(
         (-(1 << 18)..(1 << 18)).contains(&imm19),
         "b.cond: offset {imm19} out of range (must fit in signed 19 bits)"
@@ -895,7 +898,7 @@ pub(super) fn enc_b_cond(cond: Cond, imm19: i32) -> u32 {
 
 /// `BLR <Xn>` -- branch with link to the address in `Xn`. Used for
 /// indirect calls (function pointer through GOT).
-pub(super) fn enc_blr(rn: Reg) -> u32 {
+pub(crate) fn enc_blr(rn: Reg) -> u32 {
     0xD63F_0000 | ((rn.0 as u32) << 5)
 }
 
@@ -904,65 +907,68 @@ pub(super) fn enc_blr(rn: Reg) -> u32 {
 /// IAT/GOT-resolved libc address without saving a return point:
 /// the libc fn's `RET` lands back at the c5 caller's post-call
 /// continuation instead of bouncing back through the trampoline.
-pub(super) fn enc_br(rn: Reg) -> u32 {
+pub(crate) fn enc_br(rn: Reg) -> u32 {
     0xD61F_0000 | ((rn.0 as u32) << 5)
 }
 
 /// `SVC #imm16` -- supervisor call (system call). On Linux/aarch64
 /// the kernel reads the intrinsic number from `x8` and the arguments
 /// from `x0..x5`; the immediate is conventionally zero.
-pub(super) fn enc_svc(imm16: u16) -> u32 {
+pub(crate) fn enc_svc(imm16: u16) -> u32 {
     0xD400_0001 | ((imm16 as u32) << 5)
 }
 
 // ---- Loads / stores (scaled 12-bit unsigned offset). ----
 
+/// Load/store with a scaled 12-bit unsigned immediate offset:
+/// `base | (imm >> scale_log2) << 10 | Rn<<5 | Rt`. `scale_log2` is the
+/// access-size shift (0 byte, 1 half, 2 word, 3 doubleword); `imm` is the byte
+/// offset and must be a multiple of the access size within the scaled range.
+fn enc_ldst_scaled(base: u32, scale_log2: u32, rt: Reg, rn: Reg, imm: u32) -> u32 {
+    let stride = 1u32 << scale_log2;
+    debug_assert!(
+        imm & (stride - 1) == 0,
+        "ldst imm {imm} not aligned to {stride}"
+    );
+    let scaled = imm >> scale_log2;
+    debug_assert!(
+        scaled < 4096,
+        "ldst imm {imm} out of range for stride {stride}"
+    );
+    base | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDR <Xt>, [<Xn|SP>, #imm]` -- 64-bit load, immediate offset
 /// scaled by 8. `imm` is the byte offset; range `[0, 32760]`.
-pub(super) fn enc_ldr_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(8), "ldr imm: {imm} not 8-byte aligned");
-    let scaled = imm / 8;
-    debug_assert!(scaled < 4096, "ldr imm: {imm} > 32760");
-    0xF940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldr_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0xF940_0000, 3, rt, rn, imm)
 }
 
 /// `STR <Xt>, [<Xn|SP>, #imm]` -- 64-bit store. Same scaling as `LDR`.
-pub(super) fn enc_str_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(8), "str imm: {imm} not 8-byte aligned");
-    let scaled = imm / 8;
-    debug_assert!(scaled < 4096, "str imm: {imm} > 32760");
-    0xF900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_str_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0xF900_0000, 3, rt, rn, imm)
 }
 
 /// `LDR <Wt>, [<Xn|SP>, #imm]` -- 32-bit load (zero-extended into
 /// `Xt`), immediate offset scaled by 4. Used by the Win64 TLS
 /// lowering to read the 4-byte `_tls_index` slot.
-pub(super) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(4), "ldr32 imm: {imm} not 4-byte aligned");
-    let scaled = imm / 4;
-    debug_assert!(scaled < 4096, "ldr32 imm: {imm} > 16380");
-    0xB940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0xB940_0000, 2, rt, rn, imm)
 }
 
 /// `LDRSW <Xt>, [<Xn|SP>, #imm]` -- 32-bit load sign-extended into
 /// the full 64-bit `Xt`, immediate offset scaled by 4. Used by
 /// [`LoadKind::I32`] for signed `int` lvalue reads -- the C signed-int
 /// model requires the high bit of the 4-byte slot to propagate.
-pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(4), "ldrsw imm: {imm} not 4-byte aligned");
-    let scaled = imm / 4;
-    debug_assert!(scaled < 4096, "ldrsw imm: {imm} > 16380");
-    0xB980_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0xB980_0000, 2, rt, rn, imm)
 }
 
 /// `STR <Wt>, [<Xn|SP>, #imm]` -- 32-bit store (low half of `Xt`),
 /// immediate offset scaled by 4. Companion to [`enc_ldrsw_imm`] /
 /// [`enc_ldr32_imm`] for the `StoreKind::I32` lowering.
-pub(super) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(4), "str32 imm: {imm} not 4-byte aligned");
-    let scaled = imm / 4;
-    debug_assert!(scaled < 4096, "str32 imm: {imm} > 16380");
-    0xB900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0xB900_0000, 2, rt, rn, imm)
 }
 
 /// `LDR <Xt>, [<Xn|SP>, <Xm>, LSL #3]` -- 64-bit load, base-plus-
@@ -970,7 +976,7 @@ pub(super) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// `tls_array[_tls_index]` (each entry is 8 bytes, hence LSL #3).
 /// Encoded via the "load/store register, register" form with
 /// option = 011 (LSL/UXTX) and S = 1 (scale by access size).
-pub(super) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // Base opcode: 11_111_000_011 Rm 011 S 10 Rn Rt
     // option=011 (LSL/UXTX) for 64-bit Xm; S=1 means shift by
     // log2(access_size)=3 (since access_size=8). Verified against
@@ -983,7 +989,7 @@ pub(super) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
 /// `LDRSW Xt, [Xn, Xm, LSL #2]` -- sign-extending 32-bit load with
 /// scaled register index. The c5 indexed-load fold uses this for
 /// `int arr[]; arr[i]` reads.
-pub(super) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=10 (word), opc=10 (LDRS, sign-extend to 64-bit),
     // option=011 (LSL/UXTX), S=1 (scale by access_size=4).
     0xB8A0_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -992,55 +998,55 @@ pub(super) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
 /// `LDR Wt, [Xn, Xm, LSL #2]` -- 32-bit zero-extending load with
 /// scaled register index. Used by the indexed-load fold for
 /// `unsigned int arr[]; arr[i]`.
-pub(super) fn enc_ldr32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_ldr32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=10, opc=01 (LDR), option=011, S=1.
     0xB860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `LDRSH Xt, [Xn, Xm, LSL #1]` -- 16-bit sign-extending load.
-pub(super) fn enc_ldrsh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_ldrsh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=01, opc=10, option=011, S=1.
     0x78A0_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `LDRH Wt, [Xn, Xm, LSL #1]` -- 16-bit zero-extending load.
-pub(super) fn enc_ldrh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_ldrh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=01, opc=01, option=011, S=1.
     0x7860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `LDRSB Xt, [Xn, Xm]` -- 8-bit sign-extending load. No scale.
-pub(super) fn enc_ldrsb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_ldrsb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=00, opc=10, option=011, S=0 (byte access has no shift).
     0x38A0_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `LDRB Wt, [Xn, Xm]` -- 8-bit zero-extending load. No scale.
-pub(super) fn enc_ldrb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_ldrb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=00, opc=01, option=011, S=0.
     0x3860_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `STR Xt, [Xn, Xm, LSL #3]` -- 8-byte store with scaled index.
-pub(super) fn enc_str_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_str_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=11, opc=00 (STR), option=011, S=1.
     0xF820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `STR Wt, [Xn, Xm, LSL #2]` -- 4-byte store with scaled index.
-pub(super) fn enc_str32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_str32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=10, opc=00, option=011, S=1.
     0xB820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `STRH Wt, [Xn, Xm, LSL #1]` -- 2-byte store with scaled index.
-pub(super) fn enc_strh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_strh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=01, opc=00, option=011, S=1.
     0x7820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `STRB Wt, [Xn, Xm]` -- 1-byte store, no scale.
-pub(super) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+pub(crate) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     // size=00, opc=00, option=011, S=0.
     0x3820_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
@@ -1049,56 +1055,44 @@ pub(super) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
 /// the full 64-bit `Xt`, immediate offset scaled by 2. Used by
 /// [`LoadKind::I16`] for `short` lvalue reads. Encoding: opc=10
 /// (sign-extend to 64-bit), size=01 (halfword).
-pub(super) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(2), "ldrsh imm: {imm} not 2-byte aligned");
-    let scaled = imm / 2;
-    debug_assert!(scaled < 4096, "ldrsh imm: {imm} > 8190");
-    0x7980_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0x7980_0000, 1, rt, rn, imm)
 }
 
 /// `LDRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit load zero-extended into
 /// `Wt` (which clears the high 32 bits of `Xt`), immediate offset
 /// scaled by 2. Used by [`LoadKind::U16`] for `unsigned short` lvalue
 /// reads. Encoding: opc=01 (load), size=01.
-pub(super) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(2), "ldrh imm: {imm} not 2-byte aligned");
-    let scaled = imm / 2;
-    debug_assert!(scaled < 4096, "ldrh imm: {imm} > 8190");
-    0x7940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0x7940_0000, 1, rt, rn, imm)
 }
 
 /// `STRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit store (low half of `Wt`),
 /// immediate offset scaled by 2. Companion to [`enc_ldrsh_imm`] /
 /// [`enc_ldrh_imm`] for the `StoreKind::I16` lowering.
-pub(super) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm.is_multiple_of(2), "strh imm: {imm} not 2-byte aligned");
-    let scaled = imm / 2;
-    debug_assert!(scaled < 4096, "strh imm: {imm} > 8190");
-    0x7900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0x7900_0000, 1, rt, rn, imm)
 }
 
 /// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
 /// 32-bit register (which on AArch64 means the high 32 bits of the
 /// 64-bit register are also cleared).
-pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm < 4096, "ldrb imm: {imm} > 4095");
-    0x3940_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0x3940_0000, 0, rt, rn, imm)
 }
 
 /// `LDRSB <Xt>, [<Xn|SP>, #imm]` -- byte load sign-extended into
 /// the full 64-bit `Xt`. Used by [`LoadKind::I8`] for `signed char`
 /// lvalue reads. Encoding: opc=10 (sign-extend to 64-bit),
 /// size=00 (byte). Imm is unscaled (byte stride).
-pub(super) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm < 4096, "ldrsb imm: {imm} > 4095");
-    0x3980_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0x3980_0000, 0, rt, rn, imm)
 }
 
 /// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
 /// of `Wt` and ignores the rest.
-pub(super) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(imm < 4096, "strb imm: {imm} > 4095");
-    0x3900_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    enc_ldst_scaled(0x3900_0000, 0, rt, rn, imm)
 }
 
 // ---- Exclusive-monitor load / store (ARM ARM C6.2). Used by the
@@ -1122,14 +1116,14 @@ fn excl_size(width: u8) -> u32 {
 
 /// `LDAXR{B,H} <Wt>, [<Xn|SP>]` / `LDAXR <Wt|Xt>, [<Xn|SP>]` --
 /// load-acquire exclusive register of `width` bytes. No offset.
-pub(super) fn enc_ldaxr(rt: Reg, rn: Reg, width: u8) -> u32 {
+pub(crate) fn enc_ldaxr(rt: Reg, rn: Reg, width: u8) -> u32 {
     0x085F_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `STLXR{B,H} <Ws>, <Wt>, [<Xn|SP>]` / `STLXR <Ws>, <Wt|Xt>,
 /// [<Xn|SP>]` -- store-release exclusive register of `width` bytes.
 /// `rs` receives 0 on success and 1 when the monitor was lost.
-pub(super) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
+pub(crate) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
     0x0800_FC00
         | (excl_size(width) << 30)
         | ((rs.0 as u32) << 16)
@@ -1144,7 +1138,7 @@ pub(super) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
 /// Range `[-256, 255]`. Locals sit at `fp - 8`, `fp - 16`, ... so we
 /// reach for this whenever `LDR`'s unsigned scaled form can't fit
 /// the negative offset.
-pub(super) fn enc_ldur(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldur(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "ldur imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0xF840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1152,7 +1146,7 @@ pub(super) fn enc_ldur(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `STUR <Xt>, [<Xn|SP>, #imm]` -- unscaled 9-bit signed offset.
 /// Mirror of [`enc_ldur`].
-pub(super) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "stur imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0xF800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1160,7 +1154,7 @@ pub(super) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `LDURSW <Xt>, [<Xn|SP>, #imm]` -- load 4 bytes, sign-extend to
 /// 64. Unscaled 9-bit signed offset.
-pub(super) fn enc_ldursw(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldursw(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "ldursw imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0xB880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1168,7 +1162,7 @@ pub(super) fn enc_ldursw(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `LDUR <Wt>, [<Xn|SP>, #imm]` -- load 4 bytes into a 32-bit
 /// register, zero-extending to the full 64-bit Xt.
-pub(super) fn enc_ldur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "ldur32 imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0xB840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1176,7 +1170,7 @@ pub(super) fn enc_ldur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `LDURSH <Xt>, [<Xn|SP>, #imm]` -- load 2 bytes, sign-extend to
 /// 64. Unscaled 9-bit signed offset.
-pub(super) fn enc_ldursh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldursh(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "ldursh imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0x7880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1184,7 +1178,7 @@ pub(super) fn enc_ldursh(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `LDURH <Wt>, [<Xn|SP>, #imm]` -- load 2 bytes, zero-extend
 /// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
-pub(super) fn enc_ldurh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldurh(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "ldurh imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0x7840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1192,7 +1186,7 @@ pub(super) fn enc_ldurh(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `LDURSB <Xt>, [<Xn|SP>, #imm]` -- load 1 byte, sign-extend to
 /// 64. Unscaled 9-bit signed offset.
-pub(super) fn enc_ldursb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldursb(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "ldursb imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0x3880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1200,28 +1194,28 @@ pub(super) fn enc_ldursb(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `LDURB <Wt>, [<Xn|SP>, #imm]` -- load 1 byte, zero-extend
 /// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
-pub(super) fn enc_ldurb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldurb(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "ldurb imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0x3840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `STUR <Wt>, [<Xn|SP>, #imm]` -- store low 32 bits of Xt.
-pub(super) fn enc_stur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_stur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "stur32 imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0xB800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `STURH <Wt>, [<Xn|SP>, #imm]` -- store low 16 bits of Xt.
-pub(super) fn enc_sturh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_sturh(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "sturh imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0x7800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `STURB <Wt>, [<Xn|SP>, #imm]` -- store low 8 bits of Xt.
-pub(super) fn enc_sturb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_sturb(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!((-256..256).contains(&imm), "sturb imm: {imm} out of range");
     let imm9 = (imm as u32) & 0x1FF;
     0x3800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1229,7 +1223,7 @@ pub(super) fn enc_sturb(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `LSL <Xd>, <Xn>, #shift` -- logical shift left by immediate.
 /// Encoded as `UBFM Xd, Xn, #(-shift mod 64), #(63-shift)`.
-pub(super) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+pub(crate) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     debug_assert!(shift < 64, "lsl imm: {shift} >= 64");
     let immr = ((64 - shift as u32) & 63) << 16;
     let imms = ((63 - shift as u32) & 63) << 10;
@@ -1238,7 +1232,7 @@ pub(super) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
 
 /// `LSR <Xd>, <Xn>, #shift` -- logical shift right by immediate.
 /// Encoded as `UBFM Xd, Xn, #shift, #63`.
-pub(super) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+pub(crate) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     debug_assert!(shift < 64, "lsr imm: {shift} >= 64");
     let immr = ((shift as u32) & 63) << 16;
     0xD340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
@@ -1246,7 +1240,7 @@ pub(super) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
 
 /// `ASR <Xd>, <Xn>, #shift` -- arithmetic shift right by immediate.
 /// Encoded as `SBFM Xd, Xn, #shift, #63`.
-pub(super) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+pub(crate) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     debug_assert!(shift < 64, "asr imm: {shift} >= 64");
     let immr = ((shift as u32) & 63) << 16;
     0x9340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
@@ -1255,7 +1249,7 @@ pub(super) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
 /// `SXTW <Xd>, <Wn>` -- sign-extend low 32 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #31`. Used by the sxtw peephole that
 /// folds c5's `Shl 32; Shr 32` sign-narrow shape into one inst.
-pub(super) fn enc_sxtw(rd: Reg, rn: Reg) -> u32 {
+pub(crate) fn enc_sxtw(rd: Reg, rn: Reg) -> u32 {
     // sf=1, opc=00 (SBFM), immr=0, imms=31, Rn, Rd.
     0x9340_7C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
@@ -1263,14 +1257,14 @@ pub(super) fn enc_sxtw(rd: Reg, rn: Reg) -> u32 {
 /// `SXTH <Xd>, <Wn>` -- sign-extend low 16 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #15`. Companion to `enc_sxtw` for the
 /// short-narrow shape (`Shl 48; Shr 48`).
-pub(super) fn enc_sxth(rd: Reg, rn: Reg) -> u32 {
+pub(crate) fn enc_sxth(rd: Reg, rn: Reg) -> u32 {
     0x9340_3C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
 /// `SXTB <Xd>, <Wn>` -- sign-extend low 8 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #7`. Companion to `enc_sxtw` for the
 /// char-narrow shape (`Shl 56; Shr 56`).
-pub(super) fn enc_sxtb(rd: Reg, rn: Reg) -> u32 {
+pub(crate) fn enc_sxtb(rd: Reg, rn: Reg) -> u32 {
     0x9340_1C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
@@ -1282,7 +1276,7 @@ pub(super) fn enc_sxtb(rd: Reg, rn: Reg) -> u32 {
 /// accumulator and bump sp down by 16 bytes (the VM stack stays
 /// 16-byte aligned even for 8-byte pushes so calls into libc
 /// satisfy AAPCS64).
-pub(super) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!(
         (-256..256).contains(&imm),
         "str-pre imm: {imm} out of range"
@@ -1293,7 +1287,7 @@ pub(super) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `LDR <Xt>, [<Xn|SP>], #imm` -- post-indexed load with writeback.
 /// Mirror for VM pop.
-pub(super) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!(
         (-256..256).contains(&imm),
         "ldr-post imm: {imm} out of range"
@@ -1312,7 +1306,7 @@ pub(super) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
 /// PC-relative label. `imm21` is signed, in *pages* (4096 bytes).
 /// Pair with [`enc_add_imm`] using the in-page offset to get the
 /// final address.
-pub(super) fn enc_adrp(rd: Reg, imm21: i32) -> u32 {
+pub(crate) fn enc_adrp(rd: Reg, imm21: i32) -> u32 {
     debug_assert!(
         (-(1 << 20)..(1 << 20)).contains(&imm21),
         "adrp: page offset {imm21} out of signed 21-bit range"
@@ -1326,7 +1320,7 @@ pub(super) fn enc_adrp(rd: Reg, imm21: i32) -> u32 {
 /// Build an arbitrary 64-bit immediate into `rd` using a `movz` plus
 /// up to three `movk`s. Picks the shortest sequence by skipping
 /// 16-bit lanes that are zero.
-pub(super) fn load_imm64(code: &mut Vec<u8>, rd: Reg, value: u64) {
+pub(crate) fn load_imm64(code: &mut Vec<u8>, rd: Reg, value: u64) {
     let lanes = [
         (value & 0xFFFF) as u16,
         ((value >> 16) & 0xFFFF) as u16,
@@ -1366,7 +1360,7 @@ pub(super) fn load_imm64(code: &mut Vec<u8>, rd: Reg, value: u64) {
 /// Append a 32-bit instruction to a code buffer in little-endian
 /// byte order. Every encoder in this module funnels through here so
 /// the byte order can't get accidentally inverted.
-pub(super) fn emit(code: &mut Vec<u8>, word: u32) {
+pub(crate) fn emit(code: &mut Vec<u8>, word: u32) {
     code.extend_from_slice(&word.to_le_bytes());
 }
 
@@ -1377,7 +1371,7 @@ pub(super) fn emit(code: &mut Vec<u8>, word: u32) {
 /// destination and source happen to coincide (e.g. a future change
 /// that lets the regalloc pool overlap with the accumulator) collapses
 /// to zero bytes instead of a wasted instruction.
-pub(super) fn emit_mov_reg(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
+pub(crate) fn emit_mov_reg(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
     if rd == rn {
         return;
     }
@@ -1392,7 +1386,7 @@ pub(super) fn emit_mov_reg(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
 //      after lowering completes.
 
 #[derive(Debug, Clone, Copy)]
-pub(super) enum BranchKind {
+pub(crate) enum BranchKind {
     /// Unconditional `B` (PC-relative, 26-bit signed offset).
     B,
     /// Conditional `CBZ <Xt>` (compare-and-branch on zero).
@@ -1408,12 +1402,12 @@ pub(super) enum BranchKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Fixup {
+pub(crate) struct Fixup {
     /// Byte offset within `code` where the placeholder branch lives.
-    pub(super) native_offset: usize,
+    pub(crate) native_offset: usize,
     /// Bytecode PC the branch is supposed to land on.
-    pub(super) target_ent_pc: usize,
-    pub(super) kind: BranchKind,
+    pub(crate) target_ent_pc: usize,
+    pub(crate) kind: BranchKind,
 }
 
 /// Lower a [`Program`]'s SSA functions to AArch64 machine code.
@@ -1434,7 +1428,7 @@ pub(super) struct Fixup {
 ///
 /// Syscall ops (`Open`...`Senv`) lower to `adrp + ldr + blr` through
 /// a __got slot the writer fills in at link time.
-pub(super) fn lower(
+pub(crate) fn lower(
     program: &Program,
     target: Target,
     #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
@@ -1482,8 +1476,8 @@ pub(super) fn lower(
     // immediately. `--dump-ssa` prints the IR + allocation for
     // each function.
     let mut ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
-        super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
-            super::ssa_shadow::produce_ssa_funcs(program, target)
+        super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
+            super::ssa::shadow::produce_ssa_funcs(program, target)
         })?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
@@ -1502,8 +1496,8 @@ pub(super) fn lower(
     // info so the emitted code is identical with and without -g.
     if !native.optimize {
         let coalesce_dwarf =
-            super::ssa_emit_common::time_pass("ssa_slot_coalesce::run (aarch64)", || {
-                super::ssa_slot_coalesce::run(&mut ssa_funcs)
+            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run (aarch64)", || {
+                super::ssa::slot_coalesce::run(&mut ssa_funcs)
             });
         for (ent_pc, map) in coalesce_dwarf {
             for (orig, new) in map {
@@ -1524,9 +1518,9 @@ pub(super) fn lower(
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
     if native.optimize {
-        super::ssa_emit_common::time_pass("ssa_mem2reg::run (aarch64)", || {
+        super::ssa::emit_common::time_pass("ssa::mem2reg::run (aarch64)", || {
             for f in &mut ssa_funcs {
-                let promoted = super::ssa_mem2reg::run(f);
+                let promoted = super::ssa::mem2reg::run(f);
                 if !promoted.is_empty() {
                     promoted_local_slots.insert(f.ent_pc, promoted);
                 }
@@ -1534,49 +1528,53 @@ pub(super) fn lower(
         });
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
-        super::ssa_emit_common::time_pass("ssa_inline::run (aarch64)", || {
-            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap, target.abi());
+        super::ssa::emit_common::time_pass("passes::inline::run (aarch64)", || {
+            crate::c5::codegen::passes::inline::run(
+                &mut ssa_funcs,
+                native.inline_cap,
+                target.abi(),
+            );
         });
         // Forward an inlined one-word struct return out of its frame slot;
         // see x86_64.rs's matching block for the rationale.
-        super::ssa_emit_common::time_pass("ssa_struct_return_reg::run (aarch64)", || {
-            super::ssa_struct_return_reg::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::struct_return_reg::run (aarch64)", || {
+            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_rotate::run (aarch64)", || {
-            super::ssa_rotate::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::rotate::run (aarch64)", || {
+            crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
         });
         // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
         // -O). Runs after the inliner so products exposed by parameter
         // substitution into an add/sub become contractible.
-        super::ssa_emit_common::time_pass("ssa_fma::run (aarch64)", || {
-            super::ssa_fma::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::fma::run (aarch64)", || {
+            crate::c5::codegen::passes::fma::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_constfold_branch::run (aarch64)", || {
-            super::ssa_constfold_branch::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::constfold_branch::run (aarch64)", || {
+            crate::c5::codegen::passes::constfold_branch::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_split_crit_edges::run (aarch64)", || {
-            super::ssa_split_crit_edges::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::split_crit_edges::run (aarch64)", || {
+            crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_dedup_imm::run (aarch64)", || {
-            super::ssa_dedup_imm::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::dedup_imm::run (aarch64)", || {
+            crate::c5::codegen::passes::dedup_imm::run(&mut ssa_funcs);
         });
-        super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (aarch64)", || {
-            super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::drop_redundant_extend::run (aarch64)", || {
+            crate::c5::codegen::passes::drop_redundant_extend::run(&mut ssa_funcs);
         });
         // Scaled-index addressing: fold `base + index*scale` into the
         // load / store. Runs last so it sees the final address shape;
         // the optimizer passes never traverse `LoadIndexed` /
         // `StoreIndexed`, so the per-arch emit is the only later consumer.
-        super::ssa_emit_common::time_pass("ssa_index_fold::run (aarch64)", || {
-            super::ssa_index_fold::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::index_fold::run (aarch64)", || {
+            crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
         });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
         // are both normalised to the same `(base, disp)`. Bounded by
         // live-range extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
-        super::ssa_emit_common::time_pass("ssa_store_forward::run (aarch64)", || {
-            super::ssa_store_forward::run(&mut ssa_funcs);
+        super::ssa::emit_common::time_pass("passes::store_forward::run (aarch64)", || {
+            crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
         });
     }
     // Upper bound on ent_pcs the lowering will reference. The
@@ -1616,15 +1614,15 @@ pub(super) fn lower(
             }
         }
     }
-    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
-        super::ssa_emit_common::time_pass("ssa_alloc::allocate (aarch64)", || {
+    let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
+        super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (aarch64)", || {
             ssa_funcs
                 .iter()
-                .map(|f| super::ssa_alloc::allocate(f, target))
+                .map(|f| super::ssa::reg_alloc::allocate(f, target))
                 .collect()
         });
     #[cfg(feature = "std")]
-    if super::ssa_dump::enabled(native) {
+    if super::ssa::dump::enabled(native) {
         let name_by_ent: alloc::collections::BTreeMap<usize, &str> = program
             .finished_functions
             .iter()
@@ -1634,7 +1632,7 @@ pub(super) fn lower(
             if let Some(name) = name_by_ent.get(&f.ent_pc) {
                 eprintln!("; name={name}");
             }
-            eprint!("{}", super::ssa_dump::dump_function(f, a));
+            eprint!("{}", super::ssa::dump::dump_function(f, a));
         }
     }
     #[cfg(feature = "std")]
@@ -1659,28 +1657,33 @@ pub(super) fn lower(
             .iter()
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
             .collect();
-        let ok = super::ssa_emit_aarch64::emit_function(
-            func_ssa,
-            alloc_for,
-            target,
-            &mut code,
-            &mut fixups,
-            &mut plt_call_fixups,
-            &mut data_fixups,
-            &mut user_extern_data_refs,
-            &extern_data_names,
-            &extern_tls_names,
-            &mut pending_func_fixups,
-            imports,
-            &variadic_targets,
-            &mut tls_index_fixups,
-            &mut macho_tlv_fixups,
-            &mut macho_tlv_descriptors,
-            &mut elf_tpoff_fixups,
-            &mut pc_to_native,
-            &mut func_prologue_native,
-            &mut ssa_line_rows,
-        );
+        let ok = {
+            let mut cx = super::ssa::emit_common::EmitCtx {
+                code: &mut code,
+                plt_call_fixups: &mut plt_call_fixups,
+                data_fixups: &mut data_fixups,
+                user_extern_data_refs: &mut user_extern_data_refs,
+                pending_func_fixups: &mut pending_func_fixups,
+                tls_index_fixups: &mut tls_index_fixups,
+                elf_tpoff_fixups: &mut elf_tpoff_fixups,
+                ssa_line_rows: &mut ssa_line_rows,
+                pc_to_native: &mut pc_to_native,
+                prologue_native: &mut func_prologue_native,
+            };
+            super::emit::emit_function(
+                func_ssa,
+                alloc_for,
+                target,
+                &mut cx,
+                &mut fixups,
+                &extern_data_names,
+                &extern_tls_names,
+                imports,
+                &variadic_targets,
+                &mut macho_tlv_fixups,
+                &mut macho_tlv_descriptors,
+            )
+        };
         if !ok {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &alloc::format!(
@@ -1691,7 +1694,7 @@ pub(super) fn lower(
         }
     }
     #[cfg(feature = "std")]
-    if super::ssa_emit_common::time_passes_enabled() {
+    if super::ssa::emit_common::time_passes_enabled() {
         let us = _ssa_emit_pass_start.elapsed().as_micros();
         eprintln!("pass: ssa_emit_aarch64 (block walk) -- {us}us");
     }
@@ -1976,31 +1979,14 @@ fn apply_fixups(
 ///
 /// Resolved by `lower()` once trampoline byte offsets are known --
 /// the call instruction's `imm26` is rewritten in place.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct PltCallFixup {
-    /// Byte offset within the lower-pass `code` of the BL/B
-    /// instruction whose `imm26` the fixup pass backfills.
-    pub(super) instr_offset: usize,
-    /// Import slot the call should reach via its trampoline.
-    pub(super) import_index: usize,
-    /// `true` -> emit `B <tramp>` (tail jump); `false` -> emit
-    /// `BL <tramp>` (call). Both share the same imm26 encoding;
-    /// only the link bit at 0x80000000 differs.
-    pub(super) is_tail: bool,
-    /// `true` -> the site is an `adrp + add` pair that takes the
-    /// import's address (`Inst::ImmExtCode`, `&strcmp`) rather than
-    /// a BL/B. The pair resolves to the import's shared stub via the
-    /// page-relative reloc rather than the imm26 branch; `is_tail`
-    /// is irrelevant.
-    pub(super) is_addr: bool,
-}
+pub(crate) use super::PltCallFixup;
 
 /// Tail-jump variant of [`emit_got_call`]: emits a 4-byte
 /// `B <plt_trampoline>` placeholder. libc's `RET` returns
 /// directly to the c5 caller of the trampoline, skipping
 /// both this `B` and the trampoline entirely on the way back.
 /// Used by the `Terminator::TailExt` lowering.
-pub(super) fn emit_got_tail_jump(
+pub(crate) fn emit_got_tail_jump(
     code: &mut Vec<u8>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     import_index: usize,
@@ -2090,11 +2076,11 @@ fn apply_plt_call_fixups(
 /// resume PC, SP, and 8 callee-saved d-regs. Total 168 bytes;
 /// the `<setjmp.h>` typedef reserves 256 to leave slack for
 /// future additions.
-pub(super) const JB_X19_OFF: u32 = 0;
-pub(super) const JB_X29_OFF: u32 = 80;
-pub(super) const JB_PC_OFF: u32 = 88;
-pub(super) const JB_SP_OFF: u32 = 96;
-pub(super) const JB_D8_OFF: u32 = 104;
+pub(crate) const JB_X19_OFF: u32 = 0;
+pub(crate) const JB_X29_OFF: u32 = 80;
+pub(crate) const JB_PC_OFF: u32 = 88;
+pub(crate) const JB_SP_OFF: u32 = 96;
+pub(crate) const JB_D8_OFF: u32 = 104;
 /// Total instruction count emitted by `emit_setjmp_aarch64` --
 /// every entry is one 4-byte AArch64 word. Used to compute the
 /// PC-relative offset the ADR captures so a matching longjmp
@@ -2102,8 +2088,8 @@ pub(super) const JB_D8_OFF: u32 = 104;
 /// Layout: 1 mov + 10 str(x19-x28) + 1 str(x29) + 1 adr + 1
 /// str(pc) + 1 add(sp) + 1 str(sp) + 8 str(d8-d15) + 1 movz =
 /// 25 instructions; ADR sits at zero-based index 12.
-pub(super) const SETJMP_AARCH64_INSN_COUNT: i32 = 25;
-pub(super) const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
+pub(crate) const SETJMP_AARCH64_INSN_COUNT: i32 = 25;
+pub(crate) const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
 
 /// AArch64 setjmp inlined at the call site. The `env` pointer
 /// arrives in `x19` (c5's accumulator). On the initial call this
@@ -2115,7 +2101,7 @@ pub(super) const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
 /// `longjmp` routes through SEH and refuses an SEH-free
 /// `jmp_buf`. The Linux / macOS bindings continue to use the
 /// host libc setjmp -- that's already CRT-independent.
-pub(super) fn emit_setjmp_aarch64(code: &mut Vec<u8>) {
+pub(crate) fn emit_setjmp_aarch64(code: &mut Vec<u8>) {
     let start = code.len();
     emit(code, enc_mov_reg(Reg::X16, Reg::X19));
     for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {

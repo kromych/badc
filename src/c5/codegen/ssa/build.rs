@@ -1398,7 +1398,7 @@ mod tests {
             super::super::Target::LinuxX64,
             super::super::Target::LinuxAarch64,
         ] {
-            let alloc = super::super::ssa_alloc::allocate(&func, target);
+            let alloc = super::super::reg_alloc::allocate(&func, target);
             assert_eq!(
                 alloc.places.len(),
                 func.insts.len(),
@@ -1499,7 +1499,7 @@ mod tests {
             super::super::Target::LinuxX64,
             super::super::Target::LinuxAarch64,
         ] {
-            let alloc = super::super::ssa_alloc::allocate(&func, target);
+            let alloc = super::super::reg_alloc::allocate(&func, target);
             assert_eq!(alloc.places.len(), func.insts.len());
         }
     }

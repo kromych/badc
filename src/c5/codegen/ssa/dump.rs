@@ -36,11 +36,11 @@ use alloc::string::String;
 use super::super::ir::{
     BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
 };
-use super::ssa_alloc::{Allocation, Place};
+use super::reg_alloc::{Allocation, Place};
 
 /// Format an entire function. Newline-terminated; one call per
 /// function in `BADC_DUMP_SSA` mode.
-pub(super) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
+pub(crate) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "fn ent_pc={} n_params={} variadic={} locals={}\n",
@@ -353,7 +353,7 @@ fn _block_check(_b: BlockId) {}
 /// (`NativeOptions::dump_ssa`). Under the `codegen_test` feature the
 /// `BADC_DUMP_SSA` environment variable is also honoured; a production
 /// build relies solely on the flag and never reads the environment.
-pub(super) fn enabled(options: super::NativeOptions) -> bool {
+pub(crate) fn enabled(options: super::NativeOptions) -> bool {
     if options.dump_ssa {
         return true;
     }

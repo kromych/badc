@@ -170,7 +170,7 @@ impl Compiler {
     /// because the cast at the use site lines up with the fixed
     /// prefix the trampoline does forward.
     pub(super) fn emit_sys_trampolines(&mut self) {
-        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::codegen::ssa::build::SsaBuilder;
         use crate::c5::ir::{LoadKind, NO_VALUE};
 
         let entries: Vec<(usize, usize)> = self

@@ -32,7 +32,7 @@
 //! frame address holds it for the whole scope.
 
 use super::super::ir::{FunctionSsa, Inst, ValueId};
-use super::ssa_mem2reg::successors;
+use super::mem2reg::successors;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 

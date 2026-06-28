@@ -41,7 +41,7 @@ use super::Target;
 
 /// Where the allocator placed an SSA value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Place {
+pub(crate) enum Place {
     /// Integer / pointer GPR. Index is into the per-arch GPR
     /// table (see [`Allocation::int_pool`]).
     IntReg(u8),
@@ -59,7 +59,7 @@ impl Place {
     /// Integer-register index when the place is `IntReg`, else
     /// `None`. The per-arch backends wrap the returned `u8` in
     /// their own `Reg` newtype before encoding.
-    pub(super) fn int_reg_u8(self) -> Option<u8> {
+    pub(crate) fn int_reg_u8(self) -> Option<u8> {
         if let Place::IntReg(r) = self {
             Some(r)
         } else {
@@ -68,7 +68,7 @@ impl Place {
     }
 
     /// FP-register index when the place is `FpReg`, else `None`.
-    pub(super) fn fp_reg_u8(self) -> Option<u8> {
+    pub(crate) fn fp_reg_u8(self) -> Option<u8> {
         if let Place::FpReg(r) = self {
             Some(r)
         } else {
@@ -77,7 +77,7 @@ impl Place {
     }
 
     /// Spill-slot index when the place is `Spill`, else `None`.
-    pub(super) fn spill_slot(self) -> Option<u32> {
+    pub(crate) fn spill_slot(self) -> Option<u32> {
         if let Place::Spill(s) = self {
             Some(s)
         } else {
@@ -88,7 +88,7 @@ impl Place {
 
 /// Per-function allocation result. Indexed by `ValueId`.
 #[derive(Debug, Clone)]
-pub(super) struct Allocation {
+pub(crate) struct Allocation {
     /// Where each SSA value lives.
     pub places: Vec<Place>,
     /// Total spill slots reserved (in 8-byte units). The emit
@@ -150,7 +150,7 @@ pub(super) struct Allocation {
     /// Empty (all-false) for SSA built outside the walker.
     pub f32_values: Vec<bool>,
     /// Per-value upper-bit observation (see
-    /// `ssa_drop_redundant_extend::compute_high_observed`). The emit
+    /// `drop_redundant_extend::compute_high_observed`). The emit
     /// consults this to skip a `ParamRef` entry sign-extension when no
     /// consumer reads the parameter's bits above bit 31. Empty or
     /// out-of-range entries default to observed, keeping the extension.
@@ -160,7 +160,7 @@ pub(super) struct Allocation {
 impl Allocation {
     /// True when value `v` holds a single-precision `f32` pattern.
     /// Out-of-range / unmarked values are double-precision.
-    pub(super) fn is_f32(&self, v: ValueId) -> bool {
+    pub(crate) fn is_f32(&self, v: ValueId) -> bool {
         self.f32_values.get(v as usize).copied().unwrap_or(false)
     }
 }
@@ -168,7 +168,7 @@ impl Allocation {
 /// Set of available registers for the host target. The emit pass
 /// keys off this to map allocator indices to encoding bits.
 #[derive(Debug, Clone)]
-pub(super) struct RegBanks {
+pub(crate) struct RegBanks {
     /// Callee-saved GPRs available for general use (excluding
     /// fp, lr, sp, scratch).
     pub callee_gprs: &'static [u8],
@@ -280,7 +280,7 @@ impl RegBanks {
 /// Each target consumes it through its own prologue/epilogue path
 /// (x86_64 folds it into `gpr_used_callee`; aarch64 reserves a
 /// dedicated slot via `Frame::uses_x19`).
-pub(super) fn function_clobbers_scratch(
+pub(crate) fn function_clobbers_scratch(
     func: &FunctionSsa,
     target: Target,
     spill_count: u32,
@@ -349,7 +349,7 @@ fn function_clobbers_xmm_scratch(func: &FunctionSsa) -> Vec<u8> {
     regs
 }
 
-pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
+pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
@@ -383,8 +383,8 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // collapses to today's per-value behaviour. Class-level
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
-    let liveness = super::ssa_liveness::Liveness::compute(func);
-    let mut classes = super::ssa_phi_class::PhiClasses::build(func, &liveness);
+    let liveness = super::liveness::Liveness::compute(func);
+    let mut classes = super::phi_class::PhiClasses::build(func, &liveness);
     let class_last_use: Vec<u32> = {
         let n = func.insts.len();
         let mut cl = alloc::vec![0u32; n];
@@ -625,7 +625,9 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         branch_fused,
         hints,
         f32_values: func.f32_values.clone(),
-        high_observed: super::ssa_drop_redundant_extend::compute_high_observed(func),
+        high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
+            func,
+        ),
     }
 }
 
@@ -654,7 +656,7 @@ fn verify_allocation(
     func: &FunctionSsa,
     places: &[Place],
     target: Target,
-    liveness: &super::ssa_liveness::Liveness,
+    liveness: &super::liveness::Liveness,
 ) {
     if std::env::var("BADC_VERIFY_ALLOC").is_err() {
         return;
@@ -856,7 +858,7 @@ fn verify_allocation(
 /// root). Absent for values that are not the root of their class or
 /// that define no placed value.
 #[derive(Clone, Copy)]
-pub(super) struct NodeConstraints {
+pub(crate) struct NodeConstraints {
     /// The node's value lives in the FP register file.
     pub is_fp: bool,
     /// The node's live range crosses a call, so a caller-saved
@@ -873,7 +875,7 @@ pub(super) struct NodeConstraints {
 }
 
 /// Result of coloring the interference graph.
-pub(super) struct Coloring {
+pub(crate) struct Coloring {
     /// Placement per value. Non-root values inherit their root's
     /// placement; nodes with no constraint stay `Place::None`.
     pub places: Vec<Place>,
@@ -951,8 +953,8 @@ fn pool_size_limits() -> (usize, usize) {
 /// no free register. The interference graph (built from CFG liveness)
 /// is the sole source of conflicts, so a value live across a back-edge
 /// passthrough block is never given a register that block reuses.
-pub(super) fn color_graph(
-    interference: &super::ssa_liveness::Interference,
+pub(crate) fn color_graph(
+    interference: &super::liveness::Interference,
     node_of: &[ValueId],
     constraints: &[Option<NodeConstraints>],
     banks: &RegBanks,
@@ -1160,7 +1162,7 @@ fn is_pure_inst(inst: &Inst) -> bool {
 }
 
 /// Invoke `f` for each operand `ValueId` referenced by `inst`.
-pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
+pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
     match inst {
         Inst::Imm(_)
         | Inst::ImmData(_)
@@ -1270,14 +1272,14 @@ enum ResultKind {
 /// Used by `ssa_mem2reg` to keep a register-file-consistent rewrite:
 /// an `I64` slot load is integer-classed, so a slot may be promoted
 /// only when its stored values are integer-classed too.
-pub(super) fn produces_fp_result(inst: &Inst) -> bool {
+pub(crate) fn produces_fp_result(inst: &Inst) -> bool {
     matches!(result_kind(inst), ResultKind::Fp)
 }
 
 /// Whether an instruction defines a value that needs a register or
 /// spill slot. `Store` / `AllocaInit` and other side-effect-only insts
 /// produce no placed value.
-pub(super) fn produces_value(inst: &Inst) -> bool {
+pub(crate) fn produces_value(inst: &Inst) -> bool {
     !matches!(result_kind(inst), ResultKind::None)
 }
 
@@ -1929,10 +1931,9 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
         for b in (0..nblocks).rev() {
             let base = b * words;
             scratch.iter_mut().for_each(|w| *w = 0);
-            for s in super::ssa_mem2reg::successors(
-                &func.blocks[b].terminator,
-                &func.computed_goto_targets,
-            ) {
+            for s in
+                super::mem2reg::successors(&func.blocks[b].terminator, &func.computed_goto_targets)
+            {
                 let sb = s as usize * words;
                 for w in 0..words {
                     scratch[w] |= live_in[sb + w];
@@ -1983,7 +1984,7 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
 /// instruction stream, so they stay outside the call set.
 fn compute_calls_after_def(
     func: &FunctionSsa,
-    liveness: &super::ssa_liveness::Liveness,
+    liveness: &super::liveness::Liveness,
     target: Target,
 ) -> Vec<bool> {
     // A value crosses a call when its live range spans the call, a
@@ -2002,7 +2003,7 @@ fn compute_calls_after_def(
 /// *class root* lives past a call would be placed in a caller-saved
 /// register and clobbered by that call.
 fn promote_calls_after_def_to_classes(
-    classes: &mut super::ssa_phi_class::PhiClasses,
+    classes: &mut super::phi_class::PhiClasses,
     func: &FunctionSsa,
     class_last_use: &[u32],
     target: Target,
@@ -2057,11 +2058,11 @@ mod tests {
         let src =
             std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
         let program = Compiler::new(src).compile().expect("compile");
-        crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, Target::host())
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host())
             .expect("produce_ssa_funcs")
     }
 
-    use super::super::ssa_liveness::Interference;
+    use super::super::liveness::Interference;
 
     // A tiny register file for coloring tests: two callee-saved and
     // two caller-saved integer registers, no FP.
@@ -2133,8 +2134,9 @@ double f(double a, double b, double c, double d, double e, double h) {
 int main(void) { return 0; }
 "#;
         let program = Compiler::new(src.to_string()).compile().expect("compile");
-        let funcs = crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, Target::WindowsX64)
-            .expect("produce_ssa_funcs");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64)
+                .expect("produce_ssa_funcs");
         for func in &funcs {
             let alloc = allocate(func, Target::WindowsX64);
             for place in &alloc.places {
@@ -2181,7 +2183,7 @@ int main(void) { return 0; }
             .expect("compile");
         for (target, want_scratch) in [(Target::WindowsX64, true), (Target::LinuxX64, false)] {
             let funcs =
-                crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target).expect("ssa");
+                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
             let f = funcs.iter().find(|f| f.name == "f").expect("f");
             let alloc = allocate(f, target);
             let saves_14_15 = alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15);
@@ -2197,8 +2199,9 @@ int main(void) { return 0; }
         let program = Compiler::new(int_src.to_string())
             .compile()
             .expect("compile");
-        let funcs = crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, Target::WindowsX64)
-            .expect("ssa");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64)
+                .expect("ssa");
         let g = funcs.iter().find(|f| f.name == "g").expect("g");
         assert!(
             allocate(g, Target::WindowsX64).fp_used.is_empty(),
@@ -2366,7 +2369,7 @@ int main(void) { return 0; }
     /// stays off.
     #[test]
     fn compute_calls_after_def_flags_tls_addr_on_macos_aarch64() {
-        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::codegen::ssa::build::SsaBuilder;
         use crate::c5::ir::StoreKind;
 
         let mut b = SsaBuilder::new(0, 0, false);
@@ -2387,7 +2390,7 @@ int main(void) { return 0; }
             last_use[v_imm_idx],
         );
 
-        let liveness = crate::c5::codegen::ssa_liveness::Liveness::compute(&func);
+        let liveness = crate::c5::codegen::ssa::liveness::Liveness::compute(&func);
 
         let on_macos = compute_calls_after_def(&func, &liveness, Target::MacOSAarch64);
         assert!(
@@ -2434,7 +2437,7 @@ int main(void) { return 0; }
     /// block, live into an earlier-laid-out block that makes a call.
     #[test]
     fn calls_after_def_flags_value_across_call_at_lower_pc() {
-        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::codegen::ssa::build::SsaBuilder;
 
         let mut b = SsaBuilder::new(0, 0, false);
         let mid = b.new_block();
@@ -2470,7 +2473,7 @@ int main(void) { return 0; }
             "test shape requires v's def pc ({v_idx}) above the call pc ({call_pc})",
         );
 
-        let liveness = crate::c5::codegen::ssa_liveness::Liveness::compute(&func);
+        let liveness = crate::c5::codegen::ssa::liveness::Liveness::compute(&func);
         let flags = compute_calls_after_def(&func, &liveness, Target::LinuxX64);
         assert!(
             flags[v_idx],
@@ -2484,7 +2487,7 @@ int main(void) { return 0; }
     /// path then folds the staging mov to `OP rd, lhs` directly.
     #[test]
     fn binop_rhs_coalesce_fires_when_lhs_outlives_rhs() {
-        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::codegen::ssa::build::SsaBuilder;
         use crate::c5::ir::StoreKind;
 
         // v_lhs lives past the binop (consumed by the Store addr and
@@ -2516,7 +2519,7 @@ int main(void) { return 0; }
     /// skip the load result so the in-loop coalesce gets the slot.
     #[test]
     fn load_addr_coalesce_fires_when_addr_dies_at_load() {
-        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::codegen::ssa::build::SsaBuilder;
         use crate::c5::ir::LoadKind;
         use crate::c5::ir::StoreKind;
 
@@ -2556,7 +2559,7 @@ int main(void) { return 0; }
     /// return-hint pass does not pre-empt the Mcpy result's slot.
     #[test]
     fn mcpy_dst_coalesce_fires_when_dst_dies_at_mcpy() {
-        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::codegen::ssa::build::SsaBuilder;
 
         let mut b = SsaBuilder::new(0, 0, false);
         let v_dst = b.imm(0x2000);
@@ -2727,8 +2730,8 @@ int main(void) { return 0; }
         ] {
             for f in &funcs {
                 let alloc = allocate(f, target);
-                let live = crate::c5::codegen::ssa_liveness::Liveness::compute(f);
-                let mut classes = crate::c5::codegen::ssa_phi_class::PhiClasses::build(f, &live);
+                let live = crate::c5::codegen::ssa::liveness::Liveness::compute(f);
+                let mut classes = crate::c5::codegen::ssa::phi_class::PhiClasses::build(f, &live);
                 let mut non_singleton_root = alloc::vec![false; f.insts.len()];
                 for v in 0..f.insts.len() {
                     let root = classes.find(v as ValueId) as usize;

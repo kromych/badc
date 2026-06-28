@@ -19,9 +19,7 @@
 //! the per-arch emit's `is_dead_pure` skip drop it. `resolve` walks
 //! redirect chains so stacked extends collapse.
 
-use super::super::ir::{
-    BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
-};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
 use alloc::vec::Vec;
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
@@ -54,7 +52,7 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
 /// never read above bit 31 (the parameter's low word already holds the C99
 /// 6.5.2.2p4-converted value; the return boundary stays conservative, so a value
 /// feeding the return keeps its canonicalization).
-pub(super) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
+pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
     let n = func.insts.len();
     let mut hi = alloc::vec![false; n];
     let mut work: Vec<ValueId> = Vec::new();
@@ -387,10 +385,8 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::ir::{
-        BinOp, Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator,
-    };
     use super::*;
+    use crate::c5::ir::{BinOp, Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
     use alloc::vec;
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {

@@ -418,6 +418,49 @@ impl Compiler {
         Ok(packed)
     }
 
+    /// Parse a scalar base-type keyword (`int` / `char` / `void` /
+    /// `float` / `double`) given the modifiers already collected in
+    /// `m`, consuming the keyword. Returns `None` without consuming
+    /// when the current token is not one of these. Sets the
+    /// `base_was_void` / `base_was_long_double` side channels the
+    /// function-declaration path reads. C99 6.7.2.
+    pub(super) fn parse_scalar_base_specifier(
+        &mut self,
+        m: &IntModifiers,
+    ) -> Result<Option<i64>, C5Error> {
+        let bt = if self.lex.tk == Token::Int {
+            self.next()?;
+            m.int_base()
+        } else if self.lex.tk == Token::Char {
+            self.next()?;
+            m.char_tag(self.target.plain_char_signed())
+        } else if self.lex.tk == Token::Void {
+            self.next()?;
+            // `void` shares the `unsigned char` encoding so void-pointer
+            // arithmetic / sizeof / fn-ptr tables match the legacy
+            // void-as-char path; the void-ness rides `base_was_void`,
+            // which the function-decl path reads for `returns_void`.
+            self.pending.base_was_void = true;
+            Ty::Char as i64 | UNSIGNED_BIT
+        } else if self.lex.tk == Token::Float {
+            self.next()?;
+            Ty::Float as i64
+        } else if self.lex.tk == Token::Double {
+            self.next()?;
+            // `long double` collapses to the f64 `double` encoding; the
+            // marker carries the spelling so the prototype path can stamp
+            // a libc binding's return convention (SysV x86_64 returns
+            // long double in x87 st(0), not XMM0).
+            if m.saw_long() {
+                self.pending.base_was_long_double = true;
+            }
+            Ty::Double as i64
+        } else {
+            return Ok(None);
+        };
+        Ok(Some(bt))
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -485,48 +528,8 @@ impl Compiler {
             return self.parse_typeof_specifier();
         }
 
-        let bt = if self.lex.tk == Token::Int {
-            self.next()?;
-            m.int_base()
-        } else if self.lex.tk == Token::Char {
-            self.next()?;
-            m.char_tag(self.target.plain_char_signed())
-        } else if self.lex.tk == Token::Void {
-            self.next()?;
-            // `void` collapses to the same type encoding as
-            // `unsigned char` so the existing void-pointer
-            // arithmetic (`void *p; p + 1` strides one byte),
-            // sizeof, struct-field layout, and function-pointer
-            // call-table encoding stay byte-for-byte identical to
-            // the legacy void-as-char desugaring. The void-vs-char
-            // distinction is carried out-of-band via
-            // `pending_base_was_void`: the function-decl path
-            // reads it after the declarator runs to mark the
-            // function symbol's `returns_void`. A prior attempt
-            // to give `void` its own type band leaked into the
-            // call-through-fn-ptr type comparison and rejected
-            // `void (*p)(...)` dispatch tables, so the encoding
-            // here stays unchanged and `returns_void` propagates
-            // through the side channel instead.
-            self.pending.base_was_void = true;
-            Ty::Char as i64 | UNSIGNED_BIT
-        } else if self.lex.tk == Token::Float {
-            self.next()?;
-            Ty::Float as i64
-        } else if self.lex.tk == Token::Double {
-            self.next()?;
-            // `long double` collapses to the same f64 encoding as
-            // plain `double` for storage and expression semantics
-            // -- c5 has no 80- or 128-bit FP scalar. The
-            // trailing-modifier loop silently consumes any extra
-            // `long`. The marker below carries the spelling out
-            // of band so the function-prototype path can stamp
-            // a libc binding's return-convention flag (SysV
-            // x86_64 returns long double in x87 st(0), not XMM0).
-            if m.saw_long() {
-                self.pending.base_was_long_double = true;
-            }
-            Ty::Double as i64
+        let bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
+            scalar
         } else if self.lex.tk == Token::Enum {
             // `enum [Tag] [{ ... }]` -- in c5 every enum collapses
             // to plain `int`. Capture any tag name and any

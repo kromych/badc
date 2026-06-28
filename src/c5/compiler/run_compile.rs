@@ -130,39 +130,8 @@ impl Compiler {
             }
             if let Some(inner) = atomic_base {
                 bt = inner;
-            } else if self.lex.tk == Token::Int {
-                self.next()?;
-                bt = m.int_base();
-            } else if self.lex.tk == Token::Char {
-                self.next()?;
-                bt = m.char_tag(self.target.plain_char_signed());
-            } else if self.lex.tk == Token::Void {
-                self.next()?;
-                // Bare `void` shares the `unsigned char` encoding
-                // (so void-pointer arithmetic / sizeof / fn-ptr
-                // tables stay identical to the legacy
-                // void-as-char path). The void-ness is captured
-                // out-of-band via `pending_base_was_void`, which
-                // the function-decl path consumes below to set
-                // `Symbol::returns_void`.
-                self.pending.base_was_void = true;
-                bt = Ty::Char as i64 | UNSIGNED_BIT;
-            } else if self.lex.tk == Token::Float {
-                self.next()?;
-                bt = Ty::Float as i64;
-            } else if self.lex.tk == Token::Double {
-                self.next()?;
-                // `long double` collapses to the same f64 encoding
-                // as plain `double` for storage / expression
-                // semantics. The marker carries the spelling out
-                // of band so the function-prototype path can
-                // stamp a libc binding's return-convention flag
-                // (SysV x86_64 returns long double in x87 st(0),
-                // not XMM0).
-                if m.saw_long() {
-                    self.pending.base_was_long_double = true;
-                }
-                bt = Ty::Double as i64;
+            } else if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
+                bt = scalar;
             } else if self.lex.tk == Token::Enum {
                 self.parse_enum_decl()?;
                 base_is_enum = true;

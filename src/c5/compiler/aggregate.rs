@@ -18,6 +18,7 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
+use super::decl_base;
 use super::types::{
     UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_ty, round_up, struct_id_of,
     struct_ptr_depth, struct_ty_for,
@@ -134,12 +135,7 @@ impl Compiler {
             // (`const`, `unsigned`, ...) are no-ops; track if any int
             // modifier appeared so a bare `unsigned x;` field still
             // produces an `int` field.
-            let mut saw_int_mod = false;
-            let mut saw_signed = false;
-            let mut saw_unsigned = false;
-            let mut long_count: u8 = 0;
-            let mut saw_short = false;
-            let mut saw_bool = false;
+            let mut mods = decl_base::IntModifiers::default();
             // Set when the field-type prefix is an anonymous
             // (no-tag) `struct { ... }` / `union { ... }` whose
             // members should promote into the enclosing struct
@@ -162,27 +158,11 @@ impl Compiler {
                     atomic_field_base = self.try_parse_atomic_type_specifier()?;
                     continue;
                 }
-                if self.lex.tk == Token::IntMod {
-                    // `_Bool` is the only keyword mapped to `IntMod`.
-                    saw_bool = true;
-                    saw_int_mod = true;
-                } else if self.lex.tk == Token::Signed {
-                    saw_signed = true;
-                    saw_int_mod = true;
-                } else if self.lex.tk == Token::Unsigned {
-                    saw_unsigned = true;
-                    saw_int_mod = true;
-                } else if self.lex.tk == Token::Long {
-                    long_count = long_count.saturating_add(1);
-                    saw_int_mod = true;
-                } else if self.lex.tk == Token::Short {
-                    saw_short = true;
-                    saw_int_mod = true;
+                if self.try_consume_int_modifier(&mut mods)? {
+                    continue;
                 }
                 self.next()?;
             }
-            let saw_long = long_count >= 1;
-            let saw_long_long = long_count >= 2;
             // Set when the field's base type is an `enum` (directly or
             // through an enum typedef). An enum bitfield reads as
             // unsigned, so a value with the field's high bit set
@@ -196,39 +176,10 @@ impl Compiler {
                 self.parse_typeof_specifier()?
             } else if self.lex.tk == Token::Int {
                 self.next()?;
-                let base = if saw_long_long {
-                    Ty::LongLong as i64
-                } else if saw_long {
-                    Ty::Long as i64
-                } else if saw_short {
-                    Ty::Short as i64
-                } else {
-                    Ty::Int as i64
-                };
-                if saw_unsigned {
-                    base | UNSIGNED_BIT
-                } else {
-                    base
-                }
+                mods.int_base()
             } else if self.lex.tk == Token::Char {
                 self.next()?;
-                // Mirror char_tag: `signed char` is signed,
-                // `unsigned char` unsigned, plain `char` follows the
-                // target's implementation-defined signedness
-                // (C99 6.2.5p15). UNSIGNED_BIT drives the load
-                // extension.
-                let signed = if saw_signed {
-                    true
-                } else if saw_unsigned {
-                    false
-                } else {
-                    self.target.plain_char_signed()
-                };
-                if signed {
-                    Ty::Char as i64
-                } else {
-                    Ty::Char as i64 | UNSIGNED_BIT
-                }
+                mods.char_tag(self.target.plain_char_signed())
             } else if self.lex.tk == Token::Void {
                 self.next()?;
                 // `void *p;` / `void (*fp)(...);` fields: routed
@@ -360,25 +311,8 @@ impl Compiler {
                 }
                 self.next()?;
                 aliased
-            } else if saw_int_mod {
-                if saw_bool {
-                    Ty::Bool as i64
-                } else {
-                    let base = if saw_long_long {
-                        Ty::LongLong as i64
-                    } else if saw_long {
-                        Ty::Long as i64
-                    } else if saw_short {
-                        Ty::Short as i64
-                    } else {
-                        Ty::Int as i64
-                    };
-                    if saw_unsigned {
-                        base | UNSIGNED_BIT
-                    } else {
-                        base
-                    }
-                }
+            } else if mods.saw_int_mod {
+                mods.int_base()
             } else {
                 return Err(self.compile_err("type expected in struct field"));
             };

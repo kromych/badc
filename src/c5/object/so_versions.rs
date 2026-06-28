@@ -24,7 +24,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use super::Machine;
+use crate::c5::codegen::Machine;
 
 const SHT_DYNSYM: u32 = 11;
 const SHT_GNU_VERDEF: u32 = 0x6fff_fffd;

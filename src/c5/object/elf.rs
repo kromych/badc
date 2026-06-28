@@ -2842,7 +2842,8 @@ mod tests {
     }
 
     fn tiny_build() -> Build {
-        use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
+        use super::super::{ResolvedImport, ResolvedImports};
+        use crate::c5::codegen::ResolvedDylib;
         Build {
             copy_relocs: Default::default(),
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],

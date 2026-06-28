@@ -100,7 +100,7 @@ fn reloc_bytes(src: &str, target: Target) -> alloc::vec::Vec<u8> {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
-    crate::c5::codegen::emit_native_with_options(&program, target, nopts)
+    crate::c5::object::emit_native_with_options(&program, target, nopts)
         .unwrap_or_else(|e| panic!("emit relocatable for {target:?}: {e}"))
 }
 

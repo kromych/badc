@@ -372,7 +372,7 @@ fn thread_local_compiles_to_op_tlslea() {
         super::super::codegen::Target::WindowsAarch64,
         super::super::codegen::Target::MacOSAarch64,
     ] {
-        super::super::codegen::emit_native_single_tu_for_test(
+        super::super::object::emit_native_single_tu_for_test(
             &p,
             target,
             super::super::NativeOptions::default(),

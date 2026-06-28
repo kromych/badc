@@ -2655,7 +2655,8 @@ mod tests {
     }
 
     fn tiny_build() -> Build {
-        use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
+        use super::super::{ResolvedImport, ResolvedImports};
+        use crate::c5::codegen::ResolvedDylib;
         Build {
             copy_relocs: Default::default(),
             // movz x0, #42 ; ret
@@ -2857,12 +2858,12 @@ mod tests {
         // the right section index, so a dlopen'd module can bind them.
         let mut build = tiny_build();
         build.dynamic_exports = vec![
-            super::super::DynamicExport {
+            crate::c5::codegen::DynamicExport {
                 name: "myfunc".into(),
                 section: super::super::DynamicExportSection::Text,
                 offset: 0,
             },
-            super::super::DynamicExport {
+            crate::c5::codegen::DynamicExport {
                 name: "myglobal".into(),
                 section: super::super::DynamicExportSection::Data,
                 offset: 8,
@@ -3184,7 +3185,7 @@ mod tests {
             .compile()
             .expect("compile");
         let (compacted, bss_size) =
-            super::super::ssa::shadow::compact_program_data(&program, target, true)
+            crate::c5::codegen::ssa::shadow::compact_program_data(&program, target, true)
                 .expect("compact");
         let mut build =
             super::super::lower_for(&compacted, target, super::super::NativeOptions::default())

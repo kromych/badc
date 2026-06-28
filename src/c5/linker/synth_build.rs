@@ -38,9 +38,10 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::{
     Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, FuncFixup, GotFixup,
-    OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target, write_native_image,
+    OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target,
 };
 use crate::c5::error::C5Error;
+use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
 use super::link::{MergedNative, PltTrampoline};

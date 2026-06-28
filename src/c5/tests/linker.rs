@@ -1138,7 +1138,7 @@ fn win64_dll_without_imports_leaves_import_and_iat_dirs_empty() {
     // Windows loader (ERROR_INVALID_PARAMETER) at LoadLibrary time,
     // though wine tolerates it. The writer must leave both directories
     // empty (RVA = 0, size = 0) in that case.
-    use crate::c5::codegen::emit_native_with_options_named;
+    use crate::c5::object::emit_native_with_options_named;
     use crate::c5::{NativeOptions, Target};
     let src = "#pragma export(answer)\nint answer(void) { return 42; }\n";
     for target in [Target::WindowsX64, Target::WindowsAarch64] {

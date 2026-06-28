@@ -531,24 +531,9 @@ impl Compiler {
         let bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
             scalar
         } else if self.lex.tk == Token::Enum {
-            // `enum [Tag] [{ ... }]` -- in c5 every enum collapses
-            // to plain `int`. Capture any tag name and any
-            // optional body's constants for DWARF; return Int as
-            // the underlying type.
-            self.next()?;
-            let tag_name = if self.lex.tk == Token::Id {
-                let id_idx = self.lex.curr_id_idx;
-                let name = self.symbols[id_idx].name.clone();
-                self.next()?;
-                name
-            } else {
-                alloc::string::String::new()
-            };
-            if self.lex.tk == '{' {
-                // Re-parse the body via the same constants-loop the
-                // file-scope path uses.
-                self.parse_enum_body(&tag_name)?;
-            }
+            // `enum [Tag] [{ ... }]` collapses to `int`; the shared
+            // parse_enum_decl captures the tag + body for DWARF.
+            self.parse_enum_decl()?;
             Ty::Int as i64
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?

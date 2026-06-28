@@ -560,7 +560,7 @@ impl Compiler {
             false
         };
         if init_is_float {
-            let bits = self.parse_const_float_expr()?;
+            let bits = self.parse_const_expr_add_val()?.as_float();
             // A `float` slot is 4 bytes: narrow the f64 constant to
             // the f32 pattern, otherwise the low 4 bytes of the f64
             // bits (zero for many values) land in the slot. `double`

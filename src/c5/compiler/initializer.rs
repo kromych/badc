@@ -37,6 +37,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::const_expr::ConstVal;
 use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 /// Relocation kind for one initializer-element value. Tracks
@@ -863,7 +864,9 @@ impl Compiler {
             let v = self.lex.ival;
             self.next()?;
             if self.tk_is_float_arith_op() {
-                let bits = self.parse_const_float_add_from(f64::from_bits(v as u64))?;
+                let bits = self
+                    .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(v as u64)))?
+                    .as_float();
                 return Ok((bits.to_bits() as i64, InitElemReloc::Float64Bits));
             }
             return Ok((v, InitElemReloc::Float64Bits));
@@ -889,7 +892,9 @@ impl Compiler {
                 let bits = self.lex.ival;
                 self.next()?;
                 if self.tk_is_float_arith_op() {
-                    let folded = self.parse_const_float_add_from(f64::from_bits(bits as u64))?;
+                    let folded = self
+                        .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(bits as u64)))?
+                        .as_float();
                     return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
                 }
                 return Ok((bits, InitElemReloc::Float64Bits));
@@ -911,7 +916,9 @@ impl Compiler {
                 let bits = (self.lex.ival as u64) ^ (1u64 << 63);
                 self.next()?;
                 if self.tk_is_float_arith_op() {
-                    let folded = self.parse_const_float_add_from(f64::from_bits(bits))?;
+                    let folded = self
+                        .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(bits)))?
+                        .as_float();
                     return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
                 }
                 return Ok((bits as i64, InitElemReloc::Float64Bits));
@@ -950,7 +957,7 @@ impl Compiler {
                 self.lex.tk == '(' && self.contents_until_close_paren_have_float()?;
             self.lex.restore(snap);
             if signed_float_paren {
-                let bits = self.parse_const_float_expr()?;
+                let bits = self.parse_const_expr_add_val()?.as_float();
                 return Ok((bits.to_bits() as i64, InitElemReloc::Float64Bits));
             }
         }
@@ -1065,8 +1072,8 @@ impl Compiler {
             // integer expression evaluator below so trailing
             // `<<`, `+`, ... operators after `)` are absorbed too.
             if self.contents_until_close_paren_have_float()? {
-                let seed = self.parse_const_float_unary()?;
-                let v = self.parse_const_float_add_from(seed)?;
+                let seed = self.parse_const_expr_unary_val()?;
+                let v = self.parse_const_expr_add_from(seed)?.as_float();
                 if self.lex.tk != ')' {
                     return Err(self.compile_err("close paren expected in initializer"));
                 }
@@ -1075,7 +1082,9 @@ impl Compiler {
                 // value; any trailing `+ / - / * / /` continues
                 // the float expression chain.
                 if self.tk_is_float_arith_op() {
-                    let folded = self.parse_const_float_add_from(v)?;
+                    let folded = self
+                        .parse_const_expr_add_from(ConstVal::Float(v))?
+                        .as_float();
                     return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
                 }
                 return Ok((v.to_bits() as i64, InitElemReloc::Float64Bits));
@@ -2346,148 +2355,11 @@ impl Compiler {
             || self.lex.tk == Token::DivOp
     }
 
-    /// Continue an in-flight float constant expression from a
-    /// seed `left` value. Used by `parse_constant_init_value`
-    /// after it consumed a leading `FloatNum` and noticed an
-    /// arithmetic operator next: the caller hands the already-
-    /// loaded value here and we drive the remaining `+ / - / *
-    /// / /` operators at the standard C precedences. Mixed
-    /// integer literals are widened to `f64`.
-    /// Entry point for callers that don't have an already-loaded
-    /// seed: read a float-typed constant expression starting from
-    /// the current token. Used by `parse_global_initializer` to
-    /// fold `static float x = 1.0f / 2.2f;` at parse time.
-    pub(super) fn parse_const_float_expr(&mut self) -> Result<f64, C5Error> {
-        let seed = self.parse_const_float_unary()?;
-        self.parse_const_float_add_from(seed)
-    }
-
     /// Public wrapper around `contents_until_close_paren_have_float`
     /// so `global_init.rs` can use the same peek when deciding
     /// between integer and float constant evaluators for a
     /// parenthesised initializer.
     pub(super) fn contents_until_close_paren_have_float_pub(&mut self) -> Result<bool, C5Error> {
         self.contents_until_close_paren_have_float()
-    }
-
-    fn parse_const_float_add_from(&mut self, left: f64) -> Result<f64, C5Error> {
-        let mut acc = self.parse_const_float_mul_from(left)?;
-        loop {
-            if self.lex.tk == Token::AddOp {
-                self.next()?;
-                let seed = self.parse_const_float_unary()?;
-                let r = self.parse_const_float_mul_from(seed)?;
-                acc += r;
-            } else if self.lex.tk == Token::SubOp {
-                self.next()?;
-                let seed = self.parse_const_float_unary()?;
-                let r = self.parse_const_float_mul_from(seed)?;
-                acc -= r;
-            } else {
-                break;
-            }
-        }
-        Ok(acc)
-    }
-
-    /// Continue a mul/div chain from a seed `left` value. Same
-    /// helper shape as `parse_const_float_add_from`; consumes
-    /// the current `* / /` operators and stops at the first
-    /// lower-precedence token.
-    fn parse_const_float_mul_from(&mut self, mut acc: f64) -> Result<f64, C5Error> {
-        loop {
-            if self.lex.tk == Token::MulOp {
-                self.next()?;
-                let r = self.parse_const_float_unary()?;
-                acc *= r;
-            } else if self.lex.tk == Token::DivOp {
-                self.next()?;
-                let r = self.parse_const_float_unary()?;
-                // IEEE 754 (C99 Annex F): floating division by zero yields
-                // +/-infinity for a non-zero numerator and NaN for 0.0/0.0,
-                // not a diagnostic. Rust's f64 division produces these
-                // directly, matching the `1.0 / 0.0` infinity idiom.
-                acc /= r;
-            } else {
-                break;
-            }
-        }
-        Ok(acc)
-    }
-
-    fn parse_const_float_unary(&mut self) -> Result<f64, C5Error> {
-        if self.lex.tk == Token::SubOp {
-            self.next()?;
-            return Ok(-self.parse_const_float_unary()?);
-        }
-        if self.lex.tk == Token::AddOp {
-            self.next()?;
-            return self.parse_const_float_unary();
-        }
-        self.parse_const_float_primary()
-    }
-
-    fn parse_const_float_primary(&mut self) -> Result<f64, C5Error> {
-        if self.lex.tk == '(' {
-            self.next()?;
-            // C-style cast in a constant float expression:
-            // `(float)EXPR` / `(double)EXPR`. C99 6.5.4 allows the
-            // operand of a cast in a constant expression; we
-            // recognise the form so the surrounding constant
-            // folder treats it as a pin on the result width.
-            // Pointer / non-arithmetic types in this position
-            // would be a type error.
-            if self.lex_is_type_start() {
-                let _ = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-                    self.next()?;
-                }
-                if self.lex.tk != ')' {
-                    return Err(self.compile_err(
-                        "close paren expected after cast in constant float expression",
-                    ));
-                }
-                self.next()?;
-                return self.parse_const_float_unary();
-            }
-            // Parenthesized sub-expression: recurse at the top of
-            // the precedence chain so a fully-nested `(a + b) * c`
-            // parses associativity-correctly.
-            let inner_left = self.parse_const_float_unary()?;
-            let v = self.parse_const_float_add_from(inner_left)?;
-            if self.lex.tk != ')' {
-                return Err(self.compile_err("close paren expected in constant float expression"));
-            }
-            self.next()?;
-            return Ok(v);
-        }
-        if self.lex.tk == Token::FloatNum {
-            let v = f64::from_bits(self.lex.ival as u64);
-            self.next()?;
-            return Ok(v);
-        }
-        if self.lex.tk == Token::Num {
-            // Integer literal in a float context -- promote to
-            // f64. The runtime conversion is exact for values
-            // that fit a double's mantissa (the only ones c5
-            // accepts as constant integers anyway).
-            let v = self.lex.ival as f64;
-            self.next()?;
-            return Ok(v);
-        }
-        if self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
-        {
-            // `#define`d integer constants and enum values used
-            // inside a float initializer (rare but legal). C99
-            // 6.6 lets a constant expression include any value
-            // that's a compile-time constant of arithmetic type.
-            let v = self.symbols[self.lex.curr_id_idx].val as f64;
-            self.next()?;
-            return Ok(v);
-        }
-        Err(self.compile_err(format!(
-            "constant float expression expected (got {})",
-            super::super::token::describe(self.lex.tk)
-        )))
     }
 }

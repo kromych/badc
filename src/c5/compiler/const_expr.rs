@@ -65,7 +65,7 @@ impl ConstVal {
     /// Coerce to an `f64`. Integer values widen exactly for any value
     /// within `f64`'s 53-bit mantissa range (which is every integer
     /// constant c5 currently lexes).
-    fn as_float(self) -> f64 {
+    pub(super) fn as_float(self) -> f64 {
         match self {
             ConstVal::Int(v) => v as f64,
             ConstVal::Float(v) => v,
@@ -352,8 +352,20 @@ impl Compiler {
         Ok(left)
     }
 
-    fn parse_const_expr_add_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_mul_val()?;
+    pub(super) fn parse_const_expr_add_val(&mut self) -> Result<ConstVal, C5Error> {
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_add_from(seed)
+    }
+
+    /// Continue an additive constant-expression chain from an already
+    /// parsed left operand. Shared by `parse_const_expr_add_val` and the
+    /// static-initializer constant folder, which consumes the leading
+    /// literal before it can tell the expression is floating.
+    pub(super) fn parse_const_expr_add_from(
+        &mut self,
+        seed: ConstVal,
+    ) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_mul_from(seed)?;
         loop {
             if self.lex.tk == Token::AddOp {
                 self.next()?;
@@ -379,7 +391,11 @@ impl Compiler {
     }
 
     fn parse_const_expr_mul_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_unary_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_mul_from(seed)
+    }
+
+    fn parse_const_expr_mul_from(&mut self, mut left: ConstVal) -> Result<ConstVal, C5Error> {
         loop {
             if self.lex.tk == Token::MulOp {
                 self.next()?;

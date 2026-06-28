@@ -140,9 +140,7 @@ impl Compiler {
                 self.next()?;
             } else {
                 let _ = self.parse_constant_int()?;
-                if self.lex.tk == ']' {
-                    self.next()?;
-                }
+                self.accept(']')?;
             }
         }
         Ok(nested_ptrs)
@@ -362,9 +360,7 @@ impl Compiler {
                         if m > 0 {
                             pointee_dims.push(m);
                         }
-                        if self.lex.tk == ']' {
-                            self.next()?;
-                        }
+                        self.accept(']')?;
                     }
                     inner_ty += Ty::Ptr as i64;
                 } else {

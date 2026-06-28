@@ -862,9 +862,7 @@ impl Compiler {
                         ast_arg_ids.push(self.ast_acc);
                         self.ast_assign();
                         nargs += 1;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                     }
                     // Push from temp slots right-to-left so the first
                     // declared param ends up on top of the c5 stack.
@@ -1338,9 +1336,7 @@ impl Compiler {
                         self.next()?;
                     } else {
                         cast_array_size = self.parse_constant_int()?;
-                        if self.lex.tk == ']' {
-                            self.next()?;
-                        }
+                        self.accept(']')?;
                     }
                 }
                 // Function-pointer cast inside a cast expression:
@@ -2064,9 +2060,7 @@ impl Compiler {
                     indirect_arg_ids.push(self.ast_acc);
                     self.ast_assign();
                     arg_idx += 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `)`
                 self.flush_pending_stores();

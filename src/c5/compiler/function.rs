@@ -126,9 +126,7 @@ impl Compiler {
                     } else {
                         // Eat the constant int + `]`.
                         let _ = self.parse_constant_int()?;
-                        if self.lex.tk == ']' {
-                            self.next()?;
-                        }
+                        self.accept(']')?;
                     }
                     ty += Ty::Ptr as i64;
                 }
@@ -137,9 +135,7 @@ impl Compiler {
                 }
                 self.ty = ty;
                 types.push(ty);
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
 
@@ -187,9 +183,7 @@ impl Compiler {
             // trip the duplicate-parameter check.
             if param_idx == usize::MAX || self.pending.parsing_fn_ptr_proto {
                 types.push(full_ty);
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // A name repeated within this parameter list is an error;
@@ -237,9 +231,7 @@ impl Compiler {
             args.push(param_idx);
             types.push(full_ty);
 
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?;
         Ok(ParsedParams {

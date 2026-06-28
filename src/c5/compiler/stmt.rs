@@ -25,7 +25,7 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::token::{Token, Ty};
+use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
 use super::types::{is_pointer_ty, is_struct_ty, struct_ptr_depth};
 
@@ -283,9 +283,7 @@ impl Compiler {
                 self.symbols[id_idx].params = pp.types;
                 self.symbols[id_idx].is_variadic = pp.is_variadic;
             }
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `;`
         Ok(())
@@ -485,9 +483,7 @@ impl Compiler {
                 self.symbols[loc_idx].is_variadic = true;
             }
 
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?;
         Ok(())
@@ -1142,6 +1138,21 @@ impl Compiler {
             self.consume(b';', "semicolon expected")?;
         }
         Ok(())
+    }
+
+    /// Advance past the current token when it equals `t`; return
+    /// whether it matched. Generic over the comparison so callers pass
+    /// a `Token` or a single-byte char, as `consume` does.
+    pub(super) fn accept<T>(&mut self, t: T) -> Result<bool, C5Error>
+    where
+        Tok: PartialEq<T>,
+    {
+        if self.lex.tk == t {
+            self.next()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     /// Consume a single-byte token, returning a labelled compile error otherwise.

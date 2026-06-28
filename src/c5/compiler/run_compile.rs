@@ -428,9 +428,7 @@ impl Compiler {
                             .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
                         self.symbols[id_idx].is_variadic = proto_variadic;
                     }
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     continue;
                 }
 
@@ -729,9 +727,7 @@ impl Compiler {
                         // On `,` consume it and let the outer loop parse
                         // the next declarator; on `;` the outer loop exits
                         // and `self.next()` after it consumes the `;`.
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                         continue;
                     }
 
@@ -792,13 +788,9 @@ impl Compiler {
                                     ));
                                 }
                             }
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                            }
+                            self.accept(',')?;
                         }
-                        if self.lex.tk == ';' {
-                            self.next()?;
-                        }
+                        self.accept(';')?;
                     }
                     // Re-record the signature now that old-style
                     // declarations may have refined the parameter types.
@@ -1322,9 +1314,7 @@ impl Compiler {
                         self.symbols[id_idx].is_extern_decl = true;
                         self.symbols[id_idx].defined_here = false;
                         self.symbols[id_idx].type_ = ty;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                         continue;
                     }
                     if was_extern_only_decl {
@@ -1356,9 +1346,7 @@ impl Compiler {
                             if extern_seen {
                                 self.symbols[id_idx].is_extern_decl = true;
                                 self.symbols[id_idx].defined_here = false;
-                                if self.lex.tk == ',' {
-                                    self.next()?;
-                                }
+                                self.accept(',')?;
                                 continue;
                             }
                             // C99 6.9.2: a file-scope `T x[];` with no
@@ -1383,9 +1371,7 @@ impl Compiler {
                                 self.data.push(0);
                             }
                             self.symbols[id_idx].defined_here = true;
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                            }
+                            self.accept(',')?;
                             continue;
                         }
                         if thread_local {
@@ -1488,9 +1474,7 @@ impl Compiler {
                                     self.fill_struct_fields(sid, here, false)?;
                                 }
                                 i += 1;
-                                if self.lex.tk == ',' {
-                                    self.next()?;
-                                }
+                                self.accept(',')?;
                             }
                             self.next()?; // consume `}`
                             self.symbols[id_idx].array_size = count;
@@ -1501,9 +1485,7 @@ impl Compiler {
                             }
                             self.symbols[id_idx].has_initializer = true;
                             self.symbols[id_idx].defined_here = true;
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                            }
+                            self.accept(',')?;
                             continue;
                         }
                         self.pending.init_inner_dims = self.inner_dims_of(id_idx);
@@ -1726,9 +1708,7 @@ impl Compiler {
                                         self.fill_struct_fields(sid, here, false)?;
                                     }
                                     idx += 1;
-                                    if self.lex.tk == ',' {
-                                        self.next()?;
-                                    }
+                                    self.accept(',')?;
                                 }
                                 self.next()?; // consume `}`
                             } else if array_size > 0 {
@@ -1764,9 +1744,7 @@ impl Compiler {
                         }
                     }
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
             }
             self.next()?;
         }

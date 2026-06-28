@@ -154,9 +154,7 @@ impl Compiler {
         self.next()?;
         // The trailing `;` is mandatory at file / block scope in
         // C11; we accept it and step past.
-        if self.lex.tk == ';' {
-            self.next()?;
-        }
+        self.accept(';')?;
         if value == 0 {
             let body = if message.is_empty() {
                 "static_assert failed".into()

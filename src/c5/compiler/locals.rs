@@ -245,9 +245,7 @@ impl Compiler {
                 self.symbols[loc_idx].is_variadic = true;
             }
 
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?;
         Ok(())
@@ -343,9 +341,7 @@ impl Compiler {
                             self.fill_struct_fields(sid, here, false)?;
                         }
                         i += 1;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                     }
                     self.next()?;
                     self.symbols[loc_idx].array_size = count;
@@ -405,9 +401,7 @@ impl Compiler {
                         self.fill_struct_fields(sid, here, false)?;
                     }
                     i += 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `}`
             } else if array_size > 0 {
@@ -563,9 +557,7 @@ impl Compiler {
                 }
             }
             i = range_end + 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         self.ast_acc = None;
@@ -673,9 +665,7 @@ impl Compiler {
                             braced,
                         )?;
                         i += 1;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                     }
                     self.next()?; // consume outer `}`
                     return Ok(());
@@ -694,9 +684,7 @@ impl Compiler {
                         self.fill_struct_fields(sid, here, false)?;
                     }
                     i += 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?;
                 self.symbols[loc_idx].array_size = count;
@@ -813,9 +801,7 @@ impl Compiler {
                                 braced,
                             )?;
                             i += 1;
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                            }
+                            self.accept(',')?;
                         }
                         self.next()?; // consume outer `}`
                         return Ok(());
@@ -855,9 +841,7 @@ impl Compiler {
                             self.fill_struct_fields(sid, here, false)?;
                         }
                         i += 1;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                     }
                     self.next()?; // consume `}`
                     self.emit_local_array_init(
@@ -1098,9 +1082,7 @@ impl Compiler {
             self.expr(Token::Assign as i64)?;
             self.convert_assign_rhs(t);
             self.pending_local_init_ast = self.ast_acc;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err("`}` expected to close compound literal"));
             }
@@ -1354,9 +1336,7 @@ impl Compiler {
                 self.emit_array_leaf_runtime(local_val, off, ty)?;
             }
             i += 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         Ok(())
@@ -1518,9 +1498,7 @@ impl Compiler {
                         );
                     }
                     pos = outer_idx + 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
@@ -1579,9 +1557,7 @@ impl Compiler {
                         );
                     }
                     pos = field_idx + 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     continue;
                 }
                 return Err(
@@ -1654,9 +1630,7 @@ impl Compiler {
                             );
                         }
                     }
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `}`
                 pos = field_idx + 1;
@@ -1665,9 +1639,7 @@ impl Compiler {
                 {
                     pos += 1;
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 && self.lex.tk == '{' {
@@ -1679,9 +1651,7 @@ impl Compiler {
                     true,
                 )?;
                 pos = field_idx + 1;
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // Scalar / pointer field. Address = &local +
@@ -1753,9 +1723,7 @@ impl Compiler {
                     });
             }
             pos = field_idx + 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         if braced {
             self.next()?; // consume `}`

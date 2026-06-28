@@ -85,9 +85,7 @@ impl Compiler {
             self.next()?;
             self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
             // A trailing `,` before `}` is allowed in C99.
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err_at(
                     line,
@@ -166,9 +164,7 @@ impl Compiler {
                 } else {
                     self.lex.restore(after_open);
                     self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
-                    if self.lex.tk == ')' {
-                        self.next()?;
-                    }
+                    self.accept(')')?;
                     return Ok(());
                 }
             }

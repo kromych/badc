@@ -231,9 +231,7 @@ impl Compiler {
     /// Consume the closing `}` (and an optional trailing comma) of a
     /// brace-wrapped string-literal array initializer (`{"abc"}`).
     fn expect_close_brace_after_wrapped_string(&mut self) -> Result<(), C5Error> {
-        if self.lex.tk == ',' {
-            self.next()?;
-        }
+        self.accept(',')?;
         if self.lex.tk != '}' {
             return Err(self.compile_err("`}` expected after brace-wrapped string initializer"));
         }
@@ -483,9 +481,7 @@ impl Compiler {
                     }
                     cursor += pad;
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // A string literal initializing a row of a multi-dimensional
@@ -523,9 +519,7 @@ impl Compiler {
                 // them to avoid an orphaned literal.
                 self.data.truncate(start_addr);
                 cursor = before + row;
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // Each element rides the same parser as struct field
@@ -544,9 +538,7 @@ impl Compiler {
             }
             elements[cursor..end].fill((value, reloc));
             cursor = end;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         Ok(elements)
@@ -1382,9 +1374,7 @@ impl Compiler {
                     self.fill_struct_fields(sid, here as i64, false)?;
                 }
                 idx += 1;
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
             }
             self.next()?; // consume the outer `}`
         } else {
@@ -1559,9 +1549,7 @@ impl Compiler {
                 self.collect_struct_array_data(struct_id, here, &dims[1..], struct_size)?;
             }
             i += 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         Ok(())
@@ -1681,9 +1669,7 @@ impl Compiler {
                 self.write_init_value(here, elem_size, value, reloc, elem_ty);
             }
             idx += 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         Ok(())
@@ -1742,9 +1728,7 @@ impl Compiler {
                     let size = self.size_of_type(final_ty);
                     self.write_init_value(final_offset as usize, size, value, reloc, final_ty);
                     pos = outer_idx + 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
@@ -1814,9 +1798,7 @@ impl Compiler {
                         let size = self.size_of_type(mem.ty);
                         self.write_init_value(mem_base, size, value, reloc, mem.ty);
                     }
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `}`
                 pos = field_idx + 1;
@@ -1826,13 +1808,9 @@ impl Compiler {
                     pos += 1;
                 }
                 for _ in 0..close_parens {
-                    if self.lex.tk == ')' {
-                        self.next()?;
-                    }
+                    self.accept(')')?;
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // Flexible array member (`T v[]`, array_size == -1) with a
@@ -1848,9 +1826,7 @@ impl Compiler {
             if field.array_size < 0 {
                 self.fill_flexible_array_member(field_base, field.ty)?;
                 pos = field_idx + 1;
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // Three field shapes get nested `{ ... }` initializers:
@@ -2038,9 +2014,7 @@ impl Compiler {
                         self.write_init_value(here, elem_size, value, reloc, field.ty);
                     }
                     idx += 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `}`
             } else if field.array_size > 0 {
@@ -2128,9 +2102,7 @@ impl Compiler {
                 let field_size = self.size_of_type(field.ty);
                 self.write_init_value(field_base, field_size, value, reloc, field.ty);
                 if braced_scalar {
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     if self.lex.tk != '}' {
                         return Err(self.compile_err(
                             "scalar initializer wrapped in `{ ... }` must hold a single value",
@@ -2143,9 +2115,7 @@ impl Compiler {
             // compound literal element (`((T){...})`), counted while the
             // cast was stripped above.
             for _ in 0..close_parens {
-                if self.lex.tk == ')' {
-                    self.next()?;
-                }
+                self.accept(')')?;
             }
             // A positional initializer fills the first member of an
             // anonymous union (C99 6.7.8); the remaining members share
@@ -2159,9 +2129,7 @@ impl Compiler {
                     pos += 1;
                 }
             }
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         Ok(())
     }
@@ -2260,9 +2228,7 @@ impl Compiler {
         self.expr(Token::Assign as i64)?;
         if braced {
             // A trailing `,` before `}` is allowed in C99.
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err(
                     "scalar initializer wrapped in `{ ... }` must hold a single value",

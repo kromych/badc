@@ -1115,6 +1115,14 @@ impl Compiler {
         target: Target,
         opts: CompileOptions,
     ) -> Result<String, C5Error> {
+        let mut pp = Self::configure_preprocessor(target, &opts);
+        pp.process(&source)
+    }
+
+    /// Construct a `Preprocessor` from `opts`. Shared by the `-E`
+    /// dump path and the compile path, which differ only in how they
+    /// drive `process()` afterward.
+    fn configure_preprocessor(target: Target, opts: &CompileOptions) -> Preprocessor {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         if opts.gnu {
             pp.enable_gnu();
@@ -1133,7 +1141,7 @@ impl Compiler {
         for name in &opts.undefines {
             pp.undef(name);
         }
-        pp.process(&source)
+        pp
     }
 
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
@@ -1165,24 +1173,7 @@ impl Compiler {
         // "no `#pragma binding(... ::printf, ...)` is in scope"
         // error out of the codegen's import resolver, not a
         // mysterious link-time mismatch.
-        let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
-        if opts.gnu {
-            pp.enable_gnu();
-        }
-        pp.set_source_label(&opts.source_label);
-        pp.set_show_includes(opts.show_includes);
-        for path in &opts.include_paths {
-            pp.add_search_path(path);
-        }
-        for name in &opts.force_includes {
-            pp.add_force_include(name);
-        }
-        for (name, body) in &opts.defines {
-            pp.define(name, body);
-        }
-        for name in &opts.undefines {
-            pp.undef(name);
-        }
+        let mut pp = Self::configure_preprocessor(target, &opts);
         #[cfg(feature = "codegen_test")]
         let pp_start = std::time::Instant::now();
         let (preprocessed, deferred_error) = match pp.process(&source) {

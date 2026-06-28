@@ -74,6 +74,47 @@ pub(super) fn compute_frame_base(
     (locals_bytes, alloc_spill_bytes, saved_gpr_bytes)
 }
 
+/// Classify the function's parameter cells (`off >= 2`) by how the body uses
+/// them: the parameter indices reached by a `ParamRef`, the cell offsets whose
+/// address is taken, and the cell offsets read by a surviving load or written
+/// by a store. A cell's incoming spill is elidable only when its parameter is
+/// seeded and the cell is neither address-taken nor needed.
+#[allow(clippy::type_complexity)]
+pub(super) fn scan_param_slot_usage(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &super::ssa_alloc::Allocation,
+) -> (
+    alloc::collections::BTreeSet<u32>,
+    alloc::collections::BTreeSet<i64>,
+    alloc::collections::BTreeSet<i64>,
+) {
+    use super::super::ir::Inst;
+    let mut seeded = alloc::collections::BTreeSet::new();
+    let mut addr_taken = alloc::collections::BTreeSet::new();
+    let mut needed = alloc::collections::BTreeSet::new();
+    for (idx, inst) in func.insts.iter().enumerate() {
+        match inst {
+            Inst::ParamRef { idx: i, .. } => {
+                seeded.insert(*i);
+            }
+            Inst::LocalAddr(off) if *off >= 2 => {
+                addr_taken.insert(*off);
+            }
+            Inst::LoadLocal { off, .. } if *off >= 2 => {
+                let alive = alloc.use_counts.get(idx).copied().unwrap_or(0) > 0;
+                if alive {
+                    needed.insert(*off);
+                }
+            }
+            Inst::StoreLocal { off, .. } if *off >= 2 => {
+                needed.insert(*off);
+            }
+            _ => {}
+        }
+    }
+    (seeded, addr_taken, needed)
+}
+
 /// Whether the function issues no call and needs no scratch-clobbering
 /// intrinsic or TLS access, so a leaf prologue/epilogue may be elided. The
 /// frame and register-file conditions a leaf also requires are target-specific

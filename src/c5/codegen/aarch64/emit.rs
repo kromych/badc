@@ -302,29 +302,7 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
     }
     let (n_reg, n_stack) = param_reg_stack_split(func, abi);
 
-    let mut seeded: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
-    let mut addr_taken: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
-    let mut needed: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
-    for (idx, inst) in func.insts.iter().enumerate() {
-        match inst {
-            Inst::ParamRef { idx: i, .. } => {
-                seeded.insert(*i);
-            }
-            Inst::LocalAddr(off) if *off >= 2 => {
-                addr_taken.insert(*off);
-            }
-            Inst::LoadLocal { off, .. } if *off >= 2 => {
-                let alive = alloc.use_counts.get(idx).copied().unwrap_or(0) > 0;
-                if alive {
-                    needed.insert(*off);
-                }
-            }
-            Inst::StoreLocal { off, .. } if *off >= 2 => {
-                needed.insert(*off);
-            }
-            _ => {}
-        }
-    }
+    let (seeded, addr_taken, needed) = super::ssa_emit_common::scan_param_slot_usage(func, alloc);
 
     // Elision is safe only when the entire register-passed
     // stripe is skippable. Host-stack overflow shifts slot
@@ -1458,32 +1436,8 @@ fn emit_prologue(
                 }
             }
         }
-        let mut seeded_params: alloc::collections::BTreeSet<u32> =
-            alloc::collections::BTreeSet::new();
-        let mut addr_taken_slots: alloc::collections::BTreeSet<i64> =
-            alloc::collections::BTreeSet::new();
-        let mut needed_slots: alloc::collections::BTreeSet<i64> =
-            alloc::collections::BTreeSet::new();
-        for (idx, inst) in func.insts.iter().enumerate() {
-            match inst {
-                Inst::ParamRef { idx: i, .. } => {
-                    seeded_params.insert(*i);
-                }
-                Inst::LocalAddr(off) if *off >= 2 => {
-                    addr_taken_slots.insert(*off);
-                }
-                Inst::LoadLocal { off, .. } if *off >= 2 => {
-                    let alive = alloc.use_counts.get(idx).copied().unwrap_or(0) > 0;
-                    if alive {
-                        needed_slots.insert(*off);
-                    }
-                }
-                Inst::StoreLocal { off, .. } if *off >= 2 => {
-                    needed_slots.insert(*off);
-                }
-                _ => {}
-            }
-        }
+        let (seeded_params, addr_taken_slots, needed_slots) =
+            super::ssa_emit_common::scan_param_slot_usage(func, alloc);
         let mut pending_sub: u32 = 0;
         for i in (0..n_reg).rev() {
             let slot = (i as i64) + 2;

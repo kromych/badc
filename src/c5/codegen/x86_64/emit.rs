@@ -373,29 +373,7 @@ fn param_elidable_mask(
     // integer parameters), so the count is derived from the plan
     // rather than `n_params.min(int_arg_regs.len())`.
     let (n_reg, n_stack) = param_reg_stack_split(func, abi);
-    let mut seeded: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
-    let mut addr_taken: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
-    let mut needed: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
-    for (idx, inst) in func.insts.iter().enumerate() {
-        match inst {
-            Inst::ParamRef { idx: i, .. } => {
-                seeded.insert(*i);
-            }
-            Inst::LocalAddr(off) if *off >= 2 => {
-                addr_taken.insert(*off);
-            }
-            Inst::LoadLocal { off, .. } if *off >= 2 => {
-                let alive = alloc.use_counts.get(idx).copied().unwrap_or(0) > 0;
-                if alive {
-                    needed.insert(*off);
-                }
-            }
-            Inst::StoreLocal { off, .. } if *off >= 2 => {
-                needed.insert(*off);
-            }
-            _ => {}
-        }
-    }
+    let (seeded, addr_taken, needed) = super::ssa_emit_common::scan_param_slot_usage(func, alloc);
     // A parameter whose incoming argument register the per-inst
     // `ParamRef` path clobbers before it is read must keep its c5 cdecl
     // home cell so it can read the value back from that cell rather than

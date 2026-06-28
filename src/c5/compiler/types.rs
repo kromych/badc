@@ -136,17 +136,17 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .unwrap_or_else(|| format!("@{id}"));
         return format!("{prefix}struct {name}{}", "*".repeat(depth));
     }
-    let (base, leaf) = if (Ty::Float as i64..Ty::Float as i64 + FP_BAND_SIZE).contains(&bare) {
+    let (base, leaf) = if in_band(bare, Ty::Float as i64) {
         (Ty::Float as i64, "float")
-    } else if (Ty::Double as i64..Ty::Double as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::Double as i64) {
         (Ty::Double as i64, "double")
-    } else if (Ty::Long as i64..Ty::Long as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::Long as i64) {
         (Ty::Long as i64, "long")
-    } else if (Ty::Short as i64..Ty::Short as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::Short as i64) {
         (Ty::Short as i64, "short")
-    } else if (Ty::LongLong as i64..Ty::LongLong as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::LongLong as i64) {
         (Ty::LongLong as i64, "long long")
-    } else if (Ty::Bool as i64..Ty::Bool as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::Bool as i64) {
         (Ty::Bool as i64, "_Bool")
     } else if (0..100).contains(&bare) {
         // Integer family: char = 0, int = 1, then +2 per `*` level.

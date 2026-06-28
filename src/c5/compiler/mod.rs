@@ -1144,6 +1144,17 @@ impl Compiler {
         pp
     }
 
+    /// Reserve `n_slots` eight-byte frame cells and return the
+    /// negative base offset, bumping the high-water mark. Callers
+    /// own any `multi_cell_temps` push and any `loc_offs` recycle.
+    fn reserve_slots(&mut self, n_slots: i64) -> i64 {
+        self.loc_offs += n_slots;
+        if self.loc_offs > self.max_loc_offs {
+            self.max_loc_offs = self.loc_offs;
+        }
+        -self.loc_offs
+    }
+
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
         Self::with_options_inner(source, target, opts, true)
     }

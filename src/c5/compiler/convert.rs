@@ -100,11 +100,7 @@ impl Compiler {
         // Stash RHS to a scratch local so we can pop the LHS off the
         // c5 stack into the accumulator, mask it, push it back, and
         // reload RHS for the divide.
-        self.loc_offs += 1;
-        if self.loc_offs > self.max_loc_offs {
-            self.max_loc_offs = self.loc_offs;
-        }
-        let temp = -self.loc_offs;
+        let temp = self.reserve_slots(1);
         self.mark_emit_other();
         // Pop LHS off the c5 stack into accumulator: `Imm 0; Or`
         // pops stack-top into acc by virtue of `BinOp::Or` ORing

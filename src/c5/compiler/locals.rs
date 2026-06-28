@@ -706,11 +706,8 @@ impl Compiler {
                 // uses. Mirrors the `struct V xs[N] = { ... }` handling.
                 if self.struct_init_needs_runtime()? {
                     self.symbols[loc_idx].array_size = count;
-                    self.loc_offs += self.local_storage_slots(ty, count);
-                    self.symbols[loc_idx].val = -self.loc_offs;
-                    if self.loc_offs > self.max_loc_offs {
-                        self.max_loc_offs = self.loc_offs;
-                    }
+                    self.symbols[loc_idx].val =
+                        self.reserve_slots(self.local_storage_slots(ty, count));
                     let local_val = self.symbols[loc_idx].val;
                     let var_name = self.symbols[loc_idx].name.clone();
                     // Zero the whole slot (6.7.8p19 omitted-entries rule),
@@ -769,11 +766,7 @@ impl Compiler {
                 }
                 self.next()?;
                 self.symbols[loc_idx].array_size = count;
-                self.loc_offs += self.local_storage_slots(ty, count);
-                self.symbols[loc_idx].val = -self.loc_offs;
-                if self.loc_offs > self.max_loc_offs {
-                    self.max_loc_offs = self.loc_offs;
-                }
+                self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, count));
                 let local_val = self.symbols[loc_idx].val;
                 self.emit_local_array_init(local_val, staged_off, elem_size * count as usize);
                 return Ok(());
@@ -791,11 +784,8 @@ impl Compiler {
                 let (final_size, needs_runtime) = self.scan_array_init()?;
                 if needs_runtime {
                     self.symbols[loc_idx].array_size = final_size;
-                    self.loc_offs += self.local_storage_slots(ty, final_size);
-                    self.symbols[loc_idx].val = -self.loc_offs;
-                    if self.loc_offs > self.max_loc_offs {
-                        self.max_loc_offs = self.loc_offs;
-                    }
+                    self.symbols[loc_idx].val =
+                        self.reserve_slots(self.local_storage_slots(ty, final_size));
                     let local_val = self.symbols[loc_idx].val;
                     let var_name = self.symbols[loc_idx].name.clone();
                     let inner = self.inner_dims_of(loc_idx);
@@ -815,11 +805,8 @@ impl Compiler {
             let elements = self.collect_array_initializer(ty)?;
             let final_size = elements.len() as i64;
             self.symbols[loc_idx].array_size = final_size;
-            self.loc_offs += self.local_storage_slots(ty, final_size);
-            self.symbols[loc_idx].val = -self.loc_offs;
-            if self.loc_offs > self.max_loc_offs {
-                self.max_loc_offs = self.loc_offs;
-            }
+            self.symbols[loc_idx].val =
+                self.reserve_slots(self.local_storage_slots(ty, final_size));
             let local_val = self.symbols[loc_idx].val;
             let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);
             self.emit_local_array_init(local_val, start_addr, total_bytes);
@@ -827,11 +814,8 @@ impl Compiler {
         }
 
         self.symbols[loc_idx].array_size = declared_array_size;
-        self.loc_offs += self.local_storage_slots(ty, declared_array_size);
-        self.symbols[loc_idx].val = -self.loc_offs;
-        if self.loc_offs > self.max_loc_offs {
-            self.max_loc_offs = self.loc_offs;
-        }
+        self.symbols[loc_idx].val =
+            self.reserve_slots(self.local_storage_slots(ty, declared_array_size));
 
         if self.lex.tk == Token::Assign {
             self.next()?;
@@ -1085,11 +1069,7 @@ impl Compiler {
                     return Err(self.compile_err("`{` expected in compound literal"));
                 }
                 let (count, needs_runtime) = self.scan_array_init()?;
-                self.loc_offs += self.local_storage_slots(elem_ty, count);
-                slot = -self.loc_offs;
-                if self.loc_offs > self.max_loc_offs {
-                    self.max_loc_offs = self.loc_offs;
-                }
+                slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if needs_runtime {
                     let full = elem_size * count as usize;
                     let zero_off = self.data.len();
@@ -1113,11 +1093,7 @@ impl Compiler {
             } else {
                 let count = decl_array_size;
                 let full = elem_size * count as usize;
-                self.loc_offs += self.local_storage_slots(elem_ty, count);
-                slot = -self.loc_offs;
-                if self.loc_offs > self.max_loc_offs {
-                    self.max_loc_offs = self.loc_offs;
-                }
+                slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if self.lex.tk == '{' && self.array_init_needs_runtime()? {
                     let zero_off = self.data.len();
                     for _ in 0..full {
@@ -1160,11 +1136,7 @@ impl Compiler {
             let sid = struct_id_of(t);
             let elem_size = self.size_of_type(t);
             let cl_slots = self.slots_of_type(t);
-            self.loc_offs += cl_slots;
-            slot = -self.loc_offs;
-            if self.loc_offs > self.max_loc_offs {
-                self.max_loc_offs = self.loc_offs;
-            }
+            slot = self.reserve_slots(cl_slots);
             if cl_slots > 1 {
                 self.multi_cell_temps.push((slot, cl_slots));
             }
@@ -1184,11 +1156,7 @@ impl Compiler {
             value_ty = t;
         } else {
             // Scalar compound literal `(T){ expr }`.
-            self.loc_offs += self.slots_of_type(t);
-            slot = -self.loc_offs;
-            if self.loc_offs > self.max_loc_offs {
-                self.max_loc_offs = self.loc_offs;
-            }
+            slot = self.reserve_slots(self.slots_of_type(t));
             if self.lex.tk != '{' {
                 return Err(self.compile_err("`{` expected in compound literal"));
             }

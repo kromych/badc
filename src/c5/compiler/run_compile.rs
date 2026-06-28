@@ -928,11 +928,7 @@ impl Compiler {
                         }
                         let slots = self.slots_of_type(pty);
                         let param_val = self.symbols[idx].val;
-                        self.loc_offs += slots;
-                        let local_val = -self.loc_offs;
-                        if self.loc_offs > self.max_loc_offs {
-                            self.max_loc_offs = self.loc_offs;
-                        }
+                        let local_val = self.reserve_slots(slots);
                         if slots > 1 {
                             self.multi_cell_temps.push((local_val, slots));
                         }
@@ -978,11 +974,7 @@ impl Compiler {
                             continue;
                         }
                         let param_val = self.symbols[idx].val;
-                        self.loc_offs += 1; // float local takes 1 slot
-                        let local_val = -self.loc_offs;
-                        if self.loc_offs > self.max_loc_offs {
-                            self.max_loc_offs = self.loc_offs;
-                        }
+                        let local_val = self.reserve_slots(1);
                         // dst = &local
                         self.emit_lea(local_val);
                         self.ast_psh();

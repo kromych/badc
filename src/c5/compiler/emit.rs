@@ -450,11 +450,7 @@ impl Compiler {
             // would otherwise clobber the accumulator.
             let binop = self.lex.ival;
             self.next()?; // consume the assign-op
-            self.loc_offs += 1;
-            if self.loc_offs > self.max_loc_offs {
-                self.max_loc_offs = self.loc_offs;
-            }
-            let _ov_temp = -self.loc_offs;
+            let _ov_temp = self.reserve_slots(1);
             // a = field_addr; stack: [...]
             self.ast_psh(); // stack: [..., field_addr]
             self.mark_emit_other(); // a = old_value

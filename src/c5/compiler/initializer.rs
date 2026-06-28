@@ -2354,12 +2354,4 @@ impl Compiler {
             || self.lex.tk == Token::MulOp
             || self.lex.tk == Token::DivOp
     }
-
-    /// Public wrapper around `contents_until_close_paren_have_float`
-    /// so `global_init.rs` can use the same peek when deciding
-    /// between integer and float constant evaluators for a
-    /// parenthesised initializer.
-    pub(super) fn contents_until_close_paren_have_float_pub(&mut self) -> Result<bool, C5Error> {
-        self.contents_until_close_paren_have_float()
-    }
 }

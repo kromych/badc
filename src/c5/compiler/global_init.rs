@@ -338,30 +338,7 @@ impl Compiler {
                 for _ in 0..aligned {
                     self.data.push(0);
                 }
-                let counter = self.next_compound_literal_id;
-                self.next_compound_literal_id += 1;
-                let sym_name = format!("__compound.{counter}");
-                let new_idx = self.symbols.len();
-                let hash = crate::c5::lexer::hash_name(sym_name.as_bytes());
-                let sym = crate::c5::symbol::Symbol {
-                    name: sym_name,
-                    token: Token::Id as i64,
-                    class: Token::Glo as i64,
-                    type_: cl_ty,
-                    val: off,
-                    linkage: crate::c5::symbol::Linkage::Internal,
-                    defined_here: true,
-                    has_initializer: true,
-                    ..Default::default()
-                };
-                self.symbols.push(sym);
-                // SymbolIndex must stay in lockstep with `symbols`,
-                // otherwise the next user identifier the lexer tries
-                // to register lands at a stale idx and unrelated
-                // identifiers vanish. The synthetic `__compound.N`
-                // name is unique per TU so it can't shadow anything
-                // user-visible.
-                self.symbol_index.record(hash);
+                let new_idx = self.intern_compound_literal_symbol(off, cl_ty);
                 self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
                 let bytes = (off as u64).to_le_bytes();
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);

@@ -1395,7 +1395,7 @@ impl Compiler {
     /// data offset `off`, used as the relocation target for an
     /// anonymous compound literal stored in the data segment. Returns
     /// its symbol index.
-    fn intern_compound_literal_symbol(&mut self, off: i64, ty: i64) -> usize {
+    pub(super) fn intern_compound_literal_symbol(&mut self, off: i64, ty: i64) -> usize {
         let counter = self.next_compound_literal_id;
         self.next_compound_literal_id += 1;
         let sym_name = alloc::format!("__compound.{counter}");

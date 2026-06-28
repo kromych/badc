@@ -209,37 +209,46 @@ pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }
 
-/// `ty` is a `_Bool` (or pointer to one). `_Bool` lives in its own
-/// 100-wide band starting at `Ty::Bool` (600); the same +2-per-`*`
-/// scheme as the integer family applies inside the band, so
-/// `_Bool*` = 602, `_Bool**` = 604, etc.
-pub(crate) fn is_bool_ty(ty: i64) -> bool {
+/// True when `ty` (unsigned bit stripped) lands in the 100-wide band
+/// starting at `base`. Each non-integer scalar family (`_Bool`, float,
+/// double, long, long long, short) reserves its own band; the +2-per-`*`
+/// scheme places pointers inside it.
+fn in_band(ty: i64, base: i64) -> bool {
     let ty = strip_unsigned(ty);
-    let base = Ty::Bool as i64;
     (base..base + FP_BAND_SIZE).contains(&ty)
 }
 
-/// Pointer depth within the bool band. Returns 0 for a scalar
-/// `_Bool`, 1 for `_Bool*`, etc.
-pub(super) fn bool_ptr_depth(ty: i64) -> i64 {
+/// Pointer depth within the band starting at `base`: 0 for the scalar,
+/// 1 for `*`, 2 for `**`, ...; 0 when `ty` is not in the band.
+fn band_ptr_depth(ty: i64, base: i64) -> i64 {
     let ty = strip_unsigned(ty);
-    if is_bool_ty(ty) {
-        (ty - Ty::Bool as i64) / Ty::Ptr as i64
+    if in_band(ty, base) {
+        (ty - base) / Ty::Ptr as i64
     } else {
         0
     }
 }
 
+/// `ty` is a `_Bool` (or pointer to one). `_Bool` lives in its own
+/// 100-wide band starting at `Ty::Bool` (600); the same +2-per-`*`
+/// scheme as the integer family applies inside the band, so
+/// `_Bool*` = 602, `_Bool**` = 604, etc.
+pub(crate) fn is_bool_ty(ty: i64) -> bool {
+    in_band(ty, Ty::Bool as i64)
+}
+
+/// Pointer depth within the bool band. Returns 0 for a scalar
+/// `_Bool`, 1 for `_Bool*`, etc.
+pub(super) fn bool_ptr_depth(ty: i64) -> i64 {
+    band_ptr_depth(ty, Ty::Bool as i64)
+}
+
 pub(crate) fn is_float_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::Float as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::Float as i64)
 }
 
 pub(crate) fn is_double_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::Double as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::Double as i64)
 }
 
 /// `ty` is a `long` (or pointer to one). Long lives in its own
@@ -247,20 +256,13 @@ pub(crate) fn is_double_ty(ty: i64) -> bool {
 /// scheme as the integer family applies inside the band, so
 /// `long*` = 302, `long**` = 304, etc.
 pub(crate) fn is_long_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::Long as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::Long as i64)
 }
 
 /// Pointer depth within the long band. Returns 0 for a scalar
 /// `long`, 1 for `long*`, 2 for `long**`, etc.
 pub(super) fn long_ptr_depth(ty: i64) -> i64 {
-    let ty = strip_unsigned(ty);
-    if is_long_ty(ty) {
-        (ty - Ty::Long as i64) / Ty::Ptr as i64
-    } else {
-        0
-    }
+    band_ptr_depth(ty, Ty::Long as i64)
 }
 
 /// `ty` is a `long long` (or pointer to one). Long-long lives in
@@ -268,20 +270,13 @@ pub(super) fn long_ptr_depth(ty: i64) -> i64 {
 /// same +2-per-`*` scheme as the integer family applies inside
 /// the band, so `long long*` = 502, `long long**` = 504, etc.
 pub(crate) fn is_long_long_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::LongLong as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::LongLong as i64)
 }
 
 /// Pointer depth within the long-long band. Returns 0 for a
 /// scalar `long long`, 1 for `long long*`, etc.
 pub(super) fn long_long_ptr_depth(ty: i64) -> i64 {
-    let ty = strip_unsigned(ty);
-    if is_long_long_ty(ty) {
-        (ty - Ty::LongLong as i64) / Ty::Ptr as i64
-    } else {
-        0
-    }
+    band_ptr_depth(ty, Ty::LongLong as i64)
 }
 
 /// C99 6.3.1.1 integer promotions: any operand whose rank is below
@@ -425,20 +420,13 @@ pub(super) fn usual_arith_common_ty(a: i64, b: i64, target: super::super::Target
 /// scheme as the integer family applies inside the band, so
 /// `short*` = 402, `short**` = 404, etc.
 pub(super) fn is_short_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::Short as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::Short as i64)
 }
 
 /// Pointer depth within the short band. Returns 0 for a scalar
 /// `short`, 1 for `short*`, 2 for `short**`, etc.
 pub(super) fn short_ptr_depth(ty: i64) -> i64 {
-    let ty = strip_unsigned(ty);
-    if is_short_ty(ty) {
-        (ty - Ty::Short as i64) / Ty::Ptr as i64
-    } else {
-        0
-    }
+    band_ptr_depth(ty, Ty::Short as i64)
 }
 
 /// `ty` is a value of any floating-point type (or pointer to one).

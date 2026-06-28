@@ -74,78 +74,12 @@ impl Compiler {
         let base_is_function_type = self.pending.base_is_function_type;
         let base_typedef_fn_proto = self.pending.typedef_fn_proto;
         let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
-        // Function declaration at function-body scope (C99 6.7p1):
-        // `T name(args);` or `T *name(args);` where the leading run
-        // of `*` qualifies the return type. C99 6.2.2p5: with no
-        // storage-class specifier or `extern` the name has external
-        // linkage, so register it as a function (the same shape as a
-        // file-scope prototype) and a call to it resolves; the
-        // definition is found at link time.
-        //
-        // Snapshot before the speculative `*` walk so a plain
-        // pointer-variable declaration with multiple declarators
-        // (`int *p, *q;`) doesn't get its leading `*` swallowed
-        // and rebound to a wider base type.
-        let proto_snap = self.lex.snapshot();
-        let mut ret_ptr_levels: i64 = 0;
-        while self.lex.tk == Token::MulOp {
-            ret_ptr_levels += 1;
-            self.next()?;
-        }
-        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
-            let id_idx = self.lex.curr_id_idx;
-            self.next()?; // consume name
-            self.next()?; // consume `(`
-            // A prototype's parameter names have no linkage and no scope
-            // beyond the declaration (C99 6.7.6.3). Parse them in no-bind
-            // mode so the names are not shadowed: shadowing one that
-            // already names an enclosing local would corrupt that local's
-            // single saved binding and leak it past the function.
-            let saved_proto = self.pending.parsing_fn_ptr_proto;
-            self.pending.parsing_fn_ptr_proto = true;
-            let params = self.parse_function_params();
-            self.pending.parsing_fn_ptr_proto = saved_proto;
-            let params = params?;
-            // Introduce a function symbol only for an as-yet-undeclared
-            // name. A name already bound -- a libc binding (`Sys`), a
-            // function declared elsewhere (`Fun`), or a variable
-            // (`Glo` / `Loc`) -- refers to the same entity, so leave it:
-            // overriding a `Sys` binding with an external user reference
-            // would make the call unresolvable at link time.
-            // Already a resolved entity (libc binding, function, or
-            // variable)?
-            let c = self.symbols[id_idx].class;
-            let known = c == Token::Sys as i64
-                || c == Token::Fun as i64
-                || c == Token::Glo as i64
-                || c == Token::Loc as i64;
-            if !known {
-                let sym = &mut self.symbols[id_idx];
-                sym.class = Token::Fun as i64;
-                sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
-                sym.params = params.types;
-                sym.is_variadic = params.is_variadic;
-                sym.is_extern_decl = true;
-                sym.linkage = if is_static {
-                    crate::c5::symbol::Linkage::Internal
-                } else {
-                    crate::c5::symbol::Linkage::External
-                };
-            }
-            // A trailing comma list of further prototypes is rare;
-            // skip any remainder to the terminator.
-            while self.lex.tk != ';' && self.lex.tk != 0 {
-                self.next()?;
-            }
-            self.next()?;
-            let _ = is_extern;
+        // C99 6.7p1 / 6.2.2p5: a block-scope `[*]name(params);` is a
+        // function declaration with external (internal if `static`)
+        // linkage; bind it and let the call resolve at link time.
+        if self.try_parse_block_fn_prototype(lbt, is_static)? {
             return Ok(());
         }
-        // Not a function prototype after all -- rewind so the
-        // declarator loop below sees the `*`s and consumes them
-        // per-declarator (the comma-separated path needs each
-        // declarator to walk its own `*` chain).
-        self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
             // Re-seed the base type's function-pointer lineage for this
             // declarator; the previous declarator's symbol creation took it.

@@ -32,6 +32,71 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 
 impl Compiler {
+    /// Speculatively parse a block-scope function prototype
+    /// `[*]name(params);`. C99 6.7p1 / 6.2.2p5: with no storage-class
+    /// specifier or `extern`, such a name has external linkage
+    /// (internal under `static`), so bind a function symbol and let
+    /// the call resolve at link time. Returns `true` with the cursor
+    /// past the terminator when a prototype was consumed, `false` with
+    /// the lexer restored when the tokens are an ordinary declarator.
+    pub(super) fn try_parse_block_fn_prototype(
+        &mut self,
+        lbt: i64,
+        is_static: bool,
+    ) -> Result<bool, C5Error> {
+        // Snapshot before the speculative `*` walk so a plain pointer
+        // declaration with multiple declarators (`int *p, *q;`) keeps
+        // its leading `*` for the caller's declarator loop.
+        let proto_snap = self.lex.snapshot();
+        let mut ret_ptr_levels: i64 = 0;
+        while self.lex.tk == Token::MulOp {
+            ret_ptr_levels += 1;
+            self.next()?;
+        }
+        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
+            let id_idx = self.lex.curr_id_idx;
+            self.next()?; // consume name
+            self.next()?; // consume `(`
+            // C99 6.7.6.3: a prototype's parameter names have no linkage
+            // and no scope past the declaration. Parse them in no-bind
+            // mode so an enclosing local of the same name is untouched.
+            let saved_proto = self.pending.parsing_fn_ptr_proto;
+            self.pending.parsing_fn_ptr_proto = true;
+            let params = self.parse_function_params();
+            self.pending.parsing_fn_ptr_proto = saved_proto;
+            let params = params?;
+            // Bind only an as-yet-undeclared name; one already bound to a
+            // libc binding, a function, or a variable is the same entity.
+            let c = self.symbols[id_idx].class;
+            let known = c == Token::Sys as i64
+                || c == Token::Fun as i64
+                || c == Token::Glo as i64
+                || c == Token::Loc as i64;
+            if !known {
+                let sym = &mut self.symbols[id_idx];
+                sym.class = Token::Fun as i64;
+                sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
+                sym.params = params.types;
+                sym.is_variadic = params.is_variadic;
+                sym.is_extern_decl = true;
+                sym.linkage = if is_static {
+                    crate::c5::symbol::Linkage::Internal
+                } else {
+                    crate::c5::symbol::Linkage::External
+                };
+            }
+            // A trailing comma list (`int foo(int), bar(int);`) is rare;
+            // skip any remainder to the terminator.
+            while self.lex.tk != ';' && self.lex.tk != 0 {
+                self.next()?;
+            }
+            self.next()?;
+            return Ok(true);
+        }
+        self.lex.restore(proto_snap);
+        Ok(false)
+    }
+
     /// Parse an abstract parenthesized declarator tail that follows a
     /// base type in a type-name (C99 6.7.6): the `(*)(args)` of
     /// `int (*)(int)`, the `(*)[N]` of `int (*)[N]`, and their nested

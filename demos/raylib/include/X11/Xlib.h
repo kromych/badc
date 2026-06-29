@@ -296,6 +296,24 @@ typedef struct {
 
 typedef struct {
     int type;
+    unsigned long serial;
+    Bool send_event;
+    Display *display;
+    Window window;
+    Window root;
+    Window subwindow;
+    Time time;
+    int x, y;
+    int x_root, y_root;
+    int mode;
+    int detail;
+    Bool same_screen;
+    Bool focus;
+    unsigned int state;
+} XCrossingEvent;
+
+typedef struct {
+    int type;
     int extension;
     unsigned long serial;
     Bool send_event;
@@ -311,6 +329,7 @@ typedef union _XEvent {
     XKeyEvent xkey;
     XButtonEvent xbutton;
     XMotionEvent xmotion;
+    XCrossingEvent xcrossing;
     XExposeEvent xexpose;
     XConfigureEvent xconfigure;
     XClientMessageEvent xclient;
@@ -369,6 +388,39 @@ typedef union _XEvent {
 #define GrabModeAsync 1
 
 #define Success 0
+#define CurrentTime 0L
+#define RevertToParent 2
+#define RevertToNone 0
+#define RevertToPointerRoot 1
+#define AnyButton 0L
+#define AnyKey 0L
+#define IsUnmapped 0
+#define IsUnviewable 1
+#define IsViewable 2
+#define PointerRoot 1L
+#define QueuedAlready 0
+#define QueuedAfterReading 1
+#define QueuedAfterFlush 2
+#define QLength(dpy) XEventsQueued((dpy), QueuedAlready)
+#define ShiftMask (1 << 0)
+#define LockMask (1 << 1)
+#define ControlMask (1 << 2)
+#define Mod1Mask (1 << 3)
+#define Mod2Mask (1 << 4)
+#define Mod3Mask (1 << 5)
+#define Mod4Mask (1 << 6)
+#define Mod5Mask (1 << 7)
+#define Button1Mask (1 << 8)
+#define Button2Mask (1 << 9)
+#define Button3Mask (1 << 10)
+#define Button4Mask (1 << 11)
+#define Button5Mask (1 << 12)
+#define Above 0
+#define Below 1
+#define AnyPropertyType 0L
+#define WithdrawnState 0
+#define NormalState 1
+#define IconicState 3
 
 Display *XOpenDisplay(const char *display_name);
 int XCloseDisplay(Display *display);
@@ -447,6 +499,53 @@ int XConvertSelection(Display *display, Atom selection, Atom target, Atom proper
 Bool XSetSelectionOwner(Display *display, Atom selection, Window owner, Time time);
 int XGetEventData(Display *display, XGenericEventCookie *cookie);
 void XFreeEventData(Display *display, XGenericEventCookie *cookie);
+
+typedef struct _XRegion *Region;
+typedef struct _XImage XImage;
+
+typedef struct {
+    long function;
+    unsigned long plane_mask;
+    unsigned long foreground, background;
+    int line_width, line_style, cap_style, join_style, fill_style, fill_rule;
+    int arc_mode;
+    Pixmap tile, stipple;
+    int ts_x_origin, ts_y_origin;
+    void *font;
+    int subwindow_mode;
+    Bool graphics_exposures;
+    int clip_x_origin, clip_y_origin;
+    Pixmap clip_mask;
+    int dash_offset;
+    char dashes;
+} XGCValues;
+
+typedef struct {
+    int key_click_percent;
+    int bell_percent;
+    unsigned int bell_pitch, bell_duration;
+    unsigned long led_mask;
+    int global_auto_repeat;
+    char auto_repeats[32];
+} XKeyboardState;
+
+Region XCreateRegion(void);
+int XDestroyRegion(Region r);
+GC XCreateGC(Display *display, Drawable d, unsigned long valuemask,
+             XGCValues *values);
+int XFreeGC(Display *display, GC gc);
+XImage *XCreateImage(Display *display, Visual *visual, unsigned int depth,
+                     int format, int offset, char *data, unsigned int width,
+                     unsigned int height, int bitmap_pad, int bytes_per_line);
+int XDestroyImage(XImage *ximage);
+int XPutImage(Display *display, Drawable d, GC gc, XImage *image, int src_x,
+              int src_y, int dest_x, int dest_y, unsigned int width,
+              unsigned int height);
+int XFreeColors(Display *display, Colormap colormap, unsigned long *pixels,
+                int npixels, unsigned long planes);
+int XGetKeyboardControl(Display *display, XKeyboardState *value_return);
+int XIconifyWindow(Display *display, Window w, int screen_number);
+void XSetWMSizeHints(Display *display, Window w, XSizeHints *hints, Atom property);
 
 /* Display accessors. Xlib spells these as struct-poking macros by
  * default; libX11 also exports the function equivalents, so map the

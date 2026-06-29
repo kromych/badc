@@ -12,11 +12,11 @@ Two layers:
 
 * The full standalone build compiles every raylib module + the renderer
   + game through badc and links against the platform's windowing / GL
-  libraries. It runs on macOS today (the RGFW Cocoa backend reached via
-  objc_msgSend is pure C, and the macOS platform headers ship under
-  `include/`). The X11 / Win32 header surface for the Linux and Windows
-  standalone builds is not yet authored, so those hosts run the
-  logic self-test only.
+  libraries. It runs on macOS (Cocoa via objc_msgSend) and Linux (X11 /
+  GLX); the platform headers ship as demo-local embedded headers under
+  `include/`. The windowed run needs a display server: macOS uses the
+  login session, Linux uses `Xvfb` when present (otherwise the run is
+  skipped, not failed). The Windows standalone surface is pending.
 
 Override the badc binary via `BADC` (default
 `target/release/badc[.exe]`).
@@ -25,6 +25,7 @@ Override the badc binary via `BADC` (default
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,14 +35,25 @@ RAYLIB_DIR = Path(__file__).resolve().parent
 REPO_ROOT = RAYLIB_DIR.parent.parent
 WIN = sys.platform == "win32"
 MAC = sys.platform == "darwin"
+LINUX = sys.platform.startswith("linux")
 EXE = ".exe" if WIN else ""
 
 RAYLIB_MODULES = ("rcore", "rshapes", "rtextures", "rtext", "utils")
-DEFINES = (
+
+# Defines common to every platform, then the per-platform additions. The
+# Linux lane forces the scalar stb_image decoder (x86_64 otherwise pulls
+# __m128i) and trims the RGFW surface to the parts the game needs.
+BASE_DEFINES = (
     "-DPLATFORM_DESKTOP_RGFW",
     "-DGRAPHICS_API_OPENGL_33",
     "-DSTBIR_NO_SIMD",
     "-DRGFW_NO_THREADS",
+)
+LINUX_DEFINES = (
+    "-DSTBI_NO_SIMD",
+    "-DRGFW_NO_X11_CURSOR",
+    "-DRGFW_NO_DPI",
+    "-DRGFW_NO_X11_XI_PRELOAD",
 )
 
 
@@ -93,20 +105,27 @@ def logic_self_test(badc: Path, work: Path) -> bool:
     return ok
 
 
-def build_standalone(badc: Path, work: Path) -> bool:
+def platform_build(badc: Path, work: Path) -> bool:
     """Compile raylib + the game through badc, link a standalone binary,
-    and auto-play it headless for a few frames. macOS only for now."""
-    # The raylib sources are needed only for the full build; the logic
-    # self-test references none of them.
+    and auto-play it headless for a few frames on macOS / Linux."""
     subprocess.run([sys.executable, str(RAYLIB_DIR / "setup.py")], check=True)
     src = RAYLIB_DIR / "src"
     inc = RAYLIB_DIR / "include"
+    defines = list(BASE_DEFINES)
+    # The rcore translation unit reaches the windowing / GL bindings.
+    if MAC:
+        rcore_extra = ["-include", "rgfw_macos_link.h"]
+    else:
+        defines += list(LINUX_DEFINES)
+        rcore_extra = ["-include", "rgfw_x11_link.h",
+                       "-include", "X11/extensions/Xrandr.h"]
+
     objs = []
     for mod in RAYLIB_MODULES:
         obj = work / f"{mod}.o"
-        cmd = [str(badc), "-c", *DEFINES]
+        cmd = [str(badc), "-c", *defines]
         if mod == "rcore":
-            cmd += ["-include", "rgfw_macos_link.h"]
+            cmd += rcore_extra
         cmd += ["-I", str(inc), "-I", str(src), "-o", str(obj), str(src / f"{mod}.c")]
         if run(cmd).returncode != 0:
             print(f"smoke FAIL: raylib module {mod} did not compile", file=sys.stderr)
@@ -120,7 +139,7 @@ def build_standalone(badc: Path, work: Path) -> bool:
 
     game_obj = work / "loderunner.o"
     logic_obj = work / "loderunner_logic.o"
-    if run([str(badc), "-c", *DEFINES, "-I", str(inc), "-I", str(src),
+    if run([str(badc), "-c", *defines, "-I", str(inc), "-I", str(src),
             "-o", str(game_obj), str(RAYLIB_DIR / "loderunner.c")]).returncode != 0:
         print("smoke FAIL: loderunner.c did not compile", file=sys.stderr)
         return False
@@ -129,30 +148,38 @@ def build_standalone(badc: Path, work: Path) -> bool:
         return False
 
     game = work / f"loderunner{EXE}"
-    if run([str(badc), *DEFINES, str(game_obj), str(logic_obj), str(archive),
+    if run([str(badc), *defines, str(game_obj), str(logic_obj), str(archive),
             "-o", str(game)]).returncode != 0:
         print("smoke FAIL: standalone link", file=sys.stderr)
         return False
     print(f"smoke OK: standalone build -> {game.name} ({game.stat().st_size} bytes)")
 
-    # Auto-play a few frames and dump the rendered framebuffer. A
-    # windowing session is required; if the run cannot reach the display
-    # server it is skipped, not failed.
+    return windowed_run(game, work)
+
+
+def windowed_run(game: Path, work: Path) -> bool:
+    """Auto-play a few frames and assert the rendered frame is not blank.
+    A windowing session is required; on Linux it is provided by Xvfb when
+    installed. Without one the run is skipped, not failed."""
     ppm = work / "frame.ppm"
-    proc = run([str(game), "--dump-frame", str(ppm)],
-               capture_output=True, text=True, timeout=30)
+    argv = [str(game), "--dump-frame", str(ppm)]
+    xvfb = shutil.which("xvfb-run") if LINUX else None
+    if LINUX and not xvfb:
+        print("smoke SKIP: Xvfb not installed (dnf install xorg-x11-server-Xvfb); "
+              "standalone built + linked but not run")
+        return True
+    if xvfb:
+        argv = [xvfb, "-a", "-s", "-screen 0 1024x768x24"] + argv
+
+    proc = run(argv, capture_output=True, text=True, timeout=60)
     if proc.returncode != 0:
-        if "DISPLAY" in proc.stderr or "WindowServer" in proc.stderr or proc.returncode is None:
+        if any(s in proc.stderr for s in ("DISPLAY", "WindowServer", "display")):
             print("smoke SKIP: no windowing session to run the game")
             return True
         print(f"smoke FAIL: standalone run exit {proc.returncode}\n{proc.stderr[-400:]}",
               file=sys.stderr)
         return False
 
-    # The level fills the frame with tiles, the player, guards and HUD
-    # text, so a correctly rendered frame carries many distinct colors.
-    # A blank / clear-only frame (the symptom of a render-path miscompile)
-    # has at most a couple. Assert real geometry reached the framebuffer.
     if not ppm.is_file():
         print("smoke SKIP: no windowing session to run the game")
         return True
@@ -193,10 +220,10 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="raylib-smoke-") as work_str:
         work = Path(work_str)
         ok = logic_self_test(badc, work)
-        if MAC:
-            ok &= build_standalone(badc, work)
+        if MAC or LINUX:
+            ok &= platform_build(badc, work)
         else:
-            print("smoke SKIP: standalone build (X11 / Win32 header surface pending); "
+            print("smoke SKIP: standalone build (Win32 surface pending); "
                   "logic self-test only on this host")
         return 0 if ok else 1
 

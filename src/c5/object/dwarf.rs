@@ -1029,9 +1029,8 @@ fn classify(ty: i64, target: Target) -> CatalogEntry {
     // Struct band: separate id + pointer-depth via the helpers
     // c5's frontend already uses (`struct_id_of`, `struct_ptr_depth`).
     if bare >= types::STRUCT_BASE {
-        let id = ((bare - types::STRUCT_BASE) / 1000) as u32;
-        let depth_in_band = (bare - types::STRUCT_BASE) % 1000;
-        let depth = (depth_in_band / Ty::Ptr as i64) as u8;
+        let id = types::struct_id_of(bare) as u32;
+        let depth = types::struct_ptr_depth(bare) as u8;
         return if depth == 0 {
             CatalogEntry::Struct { id }
         } else {

@@ -737,14 +737,11 @@ impl Compiler {
                     let saved_loc_offs_for_result = self.loc_offs;
                     let result_temp_off: i64 = if callee_returns_struct {
                         let slots = self.slots_of_type(callee_ret_ty);
-                        self.loc_offs += slots;
-                        if self.loc_offs > self.max_loc_offs {
-                            self.max_loc_offs = self.loc_offs;
-                        }
+                        let off = self.reserve_slots(slots);
                         if slots > 1 {
-                            self.multi_cell_temps.push((-self.loc_offs, slots));
+                            self.multi_cell_temps.push((off, slots));
                         }
-                        -self.loc_offs
+                        off
                     } else {
                         0
                     };
@@ -767,11 +764,7 @@ impl Compiler {
                     while self.lex.tk != ')' {
                         let arg_line = self.lex.line;
                         // Allocate a temp slot for this arg.
-                        self.loc_offs += 1;
-                        if self.loc_offs > self.max_loc_offs {
-                            self.max_loc_offs = self.loc_offs;
-                        }
-                        let temp_off = -self.loc_offs;
+                        let temp_off = self.reserve_slots(1);
                         temp_offsets.push(temp_off);
 
                         // Emit the `*temp = expr;` shape that c5's
@@ -869,9 +862,7 @@ impl Compiler {
                         ast_arg_ids.push(self.ast_acc);
                         self.ast_assign();
                         nargs += 1;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                     }
                     // Push from temp slots right-to-left so the first
                     // declared param ends up on top of the c5 stack.
@@ -1345,9 +1336,7 @@ impl Compiler {
                         self.next()?;
                     } else {
                         cast_array_size = self.parse_constant_int()?;
-                        if self.lex.tk == ']' {
-                            self.next()?;
-                        }
+                        self.accept(']')?;
                     }
                 }
                 // Function-pointer cast inside a cast expression:
@@ -2034,11 +2023,7 @@ impl Compiler {
                 // losing the accumulator, so the dialect carries a
                 // dedicated store-local op for the case where the
                 // accumulator already holds the value.
-                self.loc_offs += 1;
-                if self.loc_offs > self.max_loc_offs {
-                    self.max_loc_offs = self.loc_offs;
-                }
-                let fp_temp = -self.loc_offs;
+                let fp_temp = self.reserve_slots(1);
                 self.mark_emit_other();
                 // Each arg lands in its own temp slot first
                 // (left-to-right eval), then we push them
@@ -2063,11 +2048,7 @@ impl Compiler {
                 let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
                 let mut arg_idx: usize = 0;
                 while self.lex.tk != ')' {
-                    self.loc_offs += 1;
-                    if self.loc_offs > self.max_loc_offs {
-                        self.max_loc_offs = self.loc_offs;
-                    }
-                    let temp_off = -self.loc_offs;
+                    let temp_off = self.reserve_slots(1);
                     self.emit_lea(temp_off);
                     self.ast_psh();
                     self.expr(Token::Assign as i64)?;
@@ -2079,9 +2060,7 @@ impl Compiler {
                     indirect_arg_ids.push(self.ast_acc);
                     self.ast_assign();
                     arg_idx += 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `)`
                 self.flush_pending_stores();
@@ -2695,11 +2674,7 @@ impl Compiler {
                         if scale > self.pointee_size(rhs_ty) {
                             carry_stride = scale;
                         }
-                        self.loc_offs += 1;
-                        if self.loc_offs > self.max_loc_offs {
-                            self.max_loc_offs = self.loc_offs;
-                        }
-                        let rhs_temp = -self.loc_offs;
+                        let rhs_temp = self.reserve_slots(1);
                         self.mark_emit_other();
                         self.emit_imm(0);
                         self.ast_binop(crate::c5::ir::BinOp::Or);

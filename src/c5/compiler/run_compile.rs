@@ -130,39 +130,8 @@ impl Compiler {
             }
             if let Some(inner) = atomic_base {
                 bt = inner;
-            } else if self.lex.tk == Token::Int {
-                self.next()?;
-                bt = m.int_base();
-            } else if self.lex.tk == Token::Char {
-                self.next()?;
-                bt = m.char_tag(self.target.plain_char_signed());
-            } else if self.lex.tk == Token::Void {
-                self.next()?;
-                // Bare `void` shares the `unsigned char` encoding
-                // (so void-pointer arithmetic / sizeof / fn-ptr
-                // tables stay identical to the legacy
-                // void-as-char path). The void-ness is captured
-                // out-of-band via `pending_base_was_void`, which
-                // the function-decl path consumes below to set
-                // `Symbol::returns_void`.
-                self.pending.base_was_void = true;
-                bt = Ty::Char as i64 | UNSIGNED_BIT;
-            } else if self.lex.tk == Token::Float {
-                self.next()?;
-                bt = Ty::Float as i64;
-            } else if self.lex.tk == Token::Double {
-                self.next()?;
-                // `long double` collapses to the same f64 encoding
-                // as plain `double` for storage / expression
-                // semantics. The marker carries the spelling out
-                // of band so the function-prototype path can
-                // stamp a libc binding's return-convention flag
-                // (SysV x86_64 returns long double in x87 st(0),
-                // not XMM0).
-                if m.saw_long() {
-                    self.pending.base_was_long_double = true;
-                }
-                bt = Ty::Double as i64;
+            } else if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
+                bt = scalar;
             } else if self.lex.tk == Token::Enum {
                 self.parse_enum_decl()?;
                 base_is_enum = true;
@@ -459,9 +428,7 @@ impl Compiler {
                             .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
                         self.symbols[id_idx].is_variadic = proto_variadic;
                     }
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     continue;
                 }
 
@@ -760,9 +727,7 @@ impl Compiler {
                         // On `,` consume it and let the outer loop parse
                         // the next declarator; on `;` the outer loop exits
                         // and `self.next()` after it consumes the `;`.
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                         continue;
                     }
 
@@ -823,13 +788,9 @@ impl Compiler {
                                     ));
                                 }
                             }
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                            }
+                            self.accept(',')?;
                         }
-                        if self.lex.tk == ';' {
-                            self.next()?;
-                        }
+                        self.accept(';')?;
                     }
                     // Re-record the signature now that old-style
                     // declarations may have refined the parameter types.
@@ -928,11 +889,7 @@ impl Compiler {
                         }
                         let slots = self.slots_of_type(pty);
                         let param_val = self.symbols[idx].val;
-                        self.loc_offs += slots;
-                        let local_val = -self.loc_offs;
-                        if self.loc_offs > self.max_loc_offs {
-                            self.max_loc_offs = self.loc_offs;
-                        }
+                        let local_val = self.reserve_slots(slots);
                         if slots > 1 {
                             self.multi_cell_temps.push((local_val, slots));
                         }
@@ -978,11 +935,7 @@ impl Compiler {
                             continue;
                         }
                         let param_val = self.symbols[idx].val;
-                        self.loc_offs += 1; // float local takes 1 slot
-                        let local_val = -self.loc_offs;
-                        if self.loc_offs > self.max_loc_offs {
-                            self.max_loc_offs = self.loc_offs;
-                        }
+                        let local_val = self.reserve_slots(1);
                         // dst = &local
                         self.emit_lea(local_val);
                         self.ast_psh();
@@ -1361,9 +1314,7 @@ impl Compiler {
                         self.symbols[id_idx].is_extern_decl = true;
                         self.symbols[id_idx].defined_here = false;
                         self.symbols[id_idx].type_ = ty;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                         continue;
                     }
                     if was_extern_only_decl {
@@ -1395,9 +1346,7 @@ impl Compiler {
                             if extern_seen {
                                 self.symbols[id_idx].is_extern_decl = true;
                                 self.symbols[id_idx].defined_here = false;
-                                if self.lex.tk == ',' {
-                                    self.next()?;
-                                }
+                                self.accept(',')?;
                                 continue;
                             }
                             // C99 6.9.2: a file-scope `T x[];` with no
@@ -1422,9 +1371,7 @@ impl Compiler {
                                 self.data.push(0);
                             }
                             self.symbols[id_idx].defined_here = true;
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                            }
+                            self.accept(',')?;
                             continue;
                         }
                         if thread_local {
@@ -1527,9 +1474,7 @@ impl Compiler {
                                     self.fill_struct_fields(sid, here, false)?;
                                 }
                                 i += 1;
-                                if self.lex.tk == ',' {
-                                    self.next()?;
-                                }
+                                self.accept(',')?;
                             }
                             self.next()?; // consume `}`
                             self.symbols[id_idx].array_size = count;
@@ -1540,9 +1485,7 @@ impl Compiler {
                             }
                             self.symbols[id_idx].has_initializer = true;
                             self.symbols[id_idx].defined_here = true;
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                            }
+                            self.accept(',')?;
                             continue;
                         }
                         self.pending.init_inner_dims = self.inner_dims_of(id_idx);
@@ -1765,9 +1708,7 @@ impl Compiler {
                                         self.fill_struct_fields(sid, here, false)?;
                                     }
                                     idx += 1;
-                                    if self.lex.tk == ',' {
-                                        self.next()?;
-                                    }
+                                    self.accept(',')?;
                                 }
                                 self.next()?; // consume `}`
                             } else if array_size > 0 {
@@ -1803,9 +1744,7 @@ impl Compiler {
                         }
                     }
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
             }
             self.next()?;
         }

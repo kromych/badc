@@ -136,17 +136,17 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .unwrap_or_else(|| format!("@{id}"));
         return format!("{prefix}struct {name}{}", "*".repeat(depth));
     }
-    let (base, leaf) = if (Ty::Float as i64..Ty::Float as i64 + FP_BAND_SIZE).contains(&bare) {
+    let (base, leaf) = if in_band(bare, Ty::Float as i64) {
         (Ty::Float as i64, "float")
-    } else if (Ty::Double as i64..Ty::Double as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::Double as i64) {
         (Ty::Double as i64, "double")
-    } else if (Ty::Long as i64..Ty::Long as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::Long as i64) {
         (Ty::Long as i64, "long")
-    } else if (Ty::Short as i64..Ty::Short as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::Short as i64) {
         (Ty::Short as i64, "short")
-    } else if (Ty::LongLong as i64..Ty::LongLong as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::LongLong as i64) {
         (Ty::LongLong as i64, "long long")
-    } else if (Ty::Bool as i64..Ty::Bool as i64 + FP_BAND_SIZE).contains(&bare) {
+    } else if in_band(bare, Ty::Bool as i64) {
         (Ty::Bool as i64, "_Bool")
     } else if (0..100).contains(&bare) {
         // Integer family: char = 0, int = 1, then +2 per `*` level.
@@ -190,17 +190,17 @@ pub(super) fn format_signature(
     format!("{} ({inside})", format_type(return_ty, structs))
 }
 
-pub(super) fn is_struct_ty(ty: i64) -> bool {
+pub(crate) fn is_struct_ty(ty: i64) -> bool {
     let ty = strip_unsigned(ty);
     ty >= STRUCT_BASE
 }
 
-pub(super) fn struct_id_of(ty: i64) -> usize {
+pub(crate) fn struct_id_of(ty: i64) -> usize {
     let ty = strip_unsigned(ty);
     ((ty - STRUCT_BASE) / STRUCT_STRIDE) as usize
 }
 
-pub(super) fn struct_ptr_depth(ty: i64) -> i64 {
+pub(crate) fn struct_ptr_depth(ty: i64) -> i64 {
     let ty = strip_unsigned(ty);
     ((ty - STRUCT_BASE) % STRUCT_STRIDE) / Ty::Ptr as i64
 }
@@ -209,37 +209,46 @@ pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }
 
-/// `ty` is a `_Bool` (or pointer to one). `_Bool` lives in its own
-/// 100-wide band starting at `Ty::Bool` (600); the same +2-per-`*`
-/// scheme as the integer family applies inside the band, so
-/// `_Bool*` = 602, `_Bool**` = 604, etc.
-pub(crate) fn is_bool_ty(ty: i64) -> bool {
+/// True when `ty` (unsigned bit stripped) lands in the 100-wide band
+/// starting at `base`. Each non-integer scalar family (`_Bool`, float,
+/// double, long, long long, short) reserves its own band; the +2-per-`*`
+/// scheme places pointers inside it.
+fn in_band(ty: i64, base: i64) -> bool {
     let ty = strip_unsigned(ty);
-    let base = Ty::Bool as i64;
     (base..base + FP_BAND_SIZE).contains(&ty)
 }
 
-/// Pointer depth within the bool band. Returns 0 for a scalar
-/// `_Bool`, 1 for `_Bool*`, etc.
-pub(super) fn bool_ptr_depth(ty: i64) -> i64 {
+/// Pointer depth within the band starting at `base`: 0 for the scalar,
+/// 1 for `*`, 2 for `**`, ...; 0 when `ty` is not in the band.
+fn band_ptr_depth(ty: i64, base: i64) -> i64 {
     let ty = strip_unsigned(ty);
-    if is_bool_ty(ty) {
-        (ty - Ty::Bool as i64) / Ty::Ptr as i64
+    if in_band(ty, base) {
+        (ty - base) / Ty::Ptr as i64
     } else {
         0
     }
 }
 
+/// `ty` is a `_Bool` (or pointer to one). `_Bool` lives in its own
+/// 100-wide band starting at `Ty::Bool` (600); the same +2-per-`*`
+/// scheme as the integer family applies inside the band, so
+/// `_Bool*` = 602, `_Bool**` = 604, etc.
+pub(crate) fn is_bool_ty(ty: i64) -> bool {
+    in_band(ty, Ty::Bool as i64)
+}
+
+/// Pointer depth within the bool band. Returns 0 for a scalar
+/// `_Bool`, 1 for `_Bool*`, etc.
+pub(super) fn bool_ptr_depth(ty: i64) -> i64 {
+    band_ptr_depth(ty, Ty::Bool as i64)
+}
+
 pub(crate) fn is_float_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::Float as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::Float as i64)
 }
 
 pub(crate) fn is_double_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::Double as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::Double as i64)
 }
 
 /// `ty` is a `long` (or pointer to one). Long lives in its own
@@ -247,20 +256,13 @@ pub(crate) fn is_double_ty(ty: i64) -> bool {
 /// scheme as the integer family applies inside the band, so
 /// `long*` = 302, `long**` = 304, etc.
 pub(crate) fn is_long_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::Long as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::Long as i64)
 }
 
 /// Pointer depth within the long band. Returns 0 for a scalar
 /// `long`, 1 for `long*`, 2 for `long**`, etc.
 pub(super) fn long_ptr_depth(ty: i64) -> i64 {
-    let ty = strip_unsigned(ty);
-    if is_long_ty(ty) {
-        (ty - Ty::Long as i64) / Ty::Ptr as i64
-    } else {
-        0
-    }
+    band_ptr_depth(ty, Ty::Long as i64)
 }
 
 /// `ty` is a `long long` (or pointer to one). Long-long lives in
@@ -268,20 +270,13 @@ pub(super) fn long_ptr_depth(ty: i64) -> i64 {
 /// same +2-per-`*` scheme as the integer family applies inside
 /// the band, so `long long*` = 502, `long long**` = 504, etc.
 pub(crate) fn is_long_long_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::LongLong as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::LongLong as i64)
 }
 
 /// Pointer depth within the long-long band. Returns 0 for a
 /// scalar `long long`, 1 for `long long*`, etc.
 pub(super) fn long_long_ptr_depth(ty: i64) -> i64 {
-    let ty = strip_unsigned(ty);
-    if is_long_long_ty(ty) {
-        (ty - Ty::LongLong as i64) / Ty::Ptr as i64
-    } else {
-        0
-    }
+    band_ptr_depth(ty, Ty::LongLong as i64)
 }
 
 /// C99 6.3.1.1 integer promotions: any operand whose rank is below
@@ -425,20 +420,13 @@ pub(super) fn usual_arith_common_ty(a: i64, b: i64, target: super::super::Target
 /// scheme as the integer family applies inside the band, so
 /// `short*` = 402, `short**` = 404, etc.
 pub(super) fn is_short_ty(ty: i64) -> bool {
-    let ty = strip_unsigned(ty);
-    let base = Ty::Short as i64;
-    (base..base + FP_BAND_SIZE).contains(&ty)
+    in_band(ty, Ty::Short as i64)
 }
 
 /// Pointer depth within the short band. Returns 0 for a scalar
 /// `short`, 1 for `short*`, 2 for `short**`, etc.
 pub(super) fn short_ptr_depth(ty: i64) -> i64 {
-    let ty = strip_unsigned(ty);
-    if is_short_ty(ty) {
-        (ty - Ty::Short as i64) / Ty::Ptr as i64
-    } else {
-        0
-    }
+    band_ptr_depth(ty, Ty::Short as i64)
 }
 
 /// `ty` is a value of any floating-point type (or pointer to one).
@@ -599,15 +587,17 @@ pub(super) fn is_type_start_token(tk: Tok) -> bool {
 /// picks between the sign- and zero-extending load ops; the
 /// matching store widths (1 / 2 / 4 / 8 bytes) don't care
 /// about signedness.
-pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
+/// Load-instruction kind for a scalar `ty`. Every arm is
+/// consumer-independent except the `double` leaf, which differs by
+/// backend: the parser's trailing-load classifier carries the f64 bit
+/// pattern in a GPR (it passes `LoadKind::I64`), while the SSA backend
+/// loads a `double` into an FP register (it passes `LoadKind::F64`).
+pub(crate) fn load_kind(ty: i64, target: super::super::Target, double_kind: LoadKind) -> LoadKind {
     let unsigned = is_unsigned_ty(ty);
     let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
-        // Pointers are always 8 bytes (slot + native register
-        // width). The Long-vs-LongLong distinction here would
-        // wrongly route `long *` through Lw on Windows; the
-        // Float-vs-Double distinction would wrongly route
-        // `float *` through LoadKind::F32.
+        // Pointers are always 8 bytes; the Long-vs-LongLong and
+        // Float-vs-Double distinctions must not narrow a pointer load.
         return LoadKind::I64;
     }
     if stripped == Ty::Bool as i64 {
@@ -629,11 +619,10 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
             LoadKind::I32
         }
     } else if stripped == Ty::Float as i64 {
-        // 4-byte single-precision load that widens to f64 in the
-        // accumulator. `double` falls through to `LoadKind::I64` since
-        // c5's f64 arithmetic ops carry the bit pattern verbatim
-        // and the 8-byte slot needs no narrowing.
+        // 4-byte single-precision load that widens to f64.
         LoadKind::F32
+    } else if stripped == Ty::Double as i64 {
+        double_kind
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         // LLP64: `long` is 32 bits, same load path as int.
         if unsigned {
@@ -643,5 +632,81 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
         }
     } else {
         LoadKind::I64
+    }
+}
+
+pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
+    // The parser carries a `double` as its 8-byte f64 bit pattern in a
+    // GPR, so the double leaf is I64.
+    load_kind(ty, target, LoadKind::I64)
+}
+
+#[cfg(test)]
+mod ty_tag {
+    use super::*;
+    // The +2-per-level even-stride pointer encoding -- the shape the
+    // AST->SSA walker and DWARF emitter open-coded before they shared
+    // `is_pointer_ty`. The base band ([0, 100): char / int) admits any
+    // offset >= Ty::Ptr; every other band reserves even offsets.
+    fn pointer_by_even_stride(ty: i64) -> bool {
+        let stripped = ty & !UNSIGNED_BIT;
+        let base = stripped - (stripped % 100);
+        let off = stripped - base;
+        if base == 0 {
+            off >= Ty::Ptr as i64
+        } else {
+            off >= 2 && (off % 2) == 0
+        }
+    }
+
+    // Every tag a declarator actually emits: the char/int base band,
+    // and the float/double/long/short/longlong/bool/struct bands at the
+    // +2-per-level even stride.
+    fn producible_tags() -> alloc::vec::Vec<i64> {
+        let mut tags = alloc::vec::Vec::new();
+        for t in 0..100i64 {
+            tags.push(t);
+        }
+        for band in [
+            Ty::Float as i64,
+            Ty::Double as i64,
+            Ty::Long as i64,
+            Ty::Short as i64,
+            Ty::LongLong as i64,
+            Ty::Bool as i64,
+        ] {
+            for d in 0..40i64 {
+                tags.push(band + d * Ty::Ptr as i64);
+            }
+        }
+        for id in 0..8i64 {
+            let sb = STRUCT_BASE + id * STRUCT_STRIDE;
+            for d in 0..40i64 {
+                tags.push(sb + d * Ty::Ptr as i64);
+            }
+        }
+        tags
+    }
+
+    #[test]
+    fn is_pointer_ty_matches_producible_tags() {
+        for &ty in &producible_tags() {
+            for u in [0i64, UNSIGNED_BIT] {
+                let t = ty | u;
+                assert_eq!(
+                    is_pointer_ty(t),
+                    pointer_by_even_stride(t),
+                    "is_pointer_ty disagrees on producible tag {t}"
+                );
+            }
+        }
+        // The even-stride approximation misreads a struct pointer whose
+        // depth is a multiple of STRUCT_STRIDE / Ty::Ptr (50): the offset
+        // wraps to 0 mod 100. is_pointer_ty decodes the struct band
+        // directly and is correct. No declarator emits 50 levels, so the
+        // difference is unreachable, but it pins the canonical answer.
+        let deep = STRUCT_BASE + 50 * Ty::Ptr as i64;
+        assert!(is_pointer_ty(deep));
+        assert!(!pointer_by_even_stride(deep));
     }
 }

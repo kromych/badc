@@ -11,6 +11,10 @@
 use alloc::string::String;
 
 use super::super::codegen::Target;
+use super::super::compiler::types::{
+    STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, is_pointer_ty, is_struct_ty, load_kind,
+    struct_ptr_depth,
+};
 use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
@@ -3857,41 +3861,8 @@ impl RmwPlace {
 /// Map a c5 type tag to the matching `LoadKind`. Mirrors
 /// `compiler::types::load_op_for`.
 fn load_kind_for(ty: i64, target: Target) -> LoadKind {
-    let unsigned = (ty & UNSIGNED_BIT) != 0;
-    let stripped = ty & !UNSIGNED_BIT;
-    if is_pointer_ty(ty) {
-        return LoadKind::I64;
-    }
-    if stripped == Ty::Bool as i64 {
-        // 1-byte `_Bool`, always zero-extends (holds only 0 / 1).
-        LoadKind::U8
-    } else if stripped == Ty::Char as i64 {
-        if unsigned { LoadKind::U8 } else { LoadKind::I8 }
-    } else if stripped == Ty::Short as i64 {
-        if unsigned {
-            LoadKind::U16
-        } else {
-            LoadKind::I16
-        }
-    } else if stripped == Ty::Int as i64 {
-        if unsigned {
-            LoadKind::U32
-        } else {
-            LoadKind::I32
-        }
-    } else if stripped == Ty::Float as i64 {
-        LoadKind::F32
-    } else if stripped == Ty::Double as i64 {
-        LoadKind::F64
-    } else if stripped == Ty::Long as i64 && target.is_windows() {
-        if unsigned {
-            LoadKind::U32
-        } else {
-            LoadKind::I32
-        }
-    } else {
-        LoadKind::I64
-    }
+    // The SSA backend loads a `double` into an FP register.
+    load_kind(ty, target, LoadKind::F64)
 }
 
 /// Mirror of [`load_kind_for`] for stores.
@@ -3940,30 +3911,6 @@ fn is_comparison_op(op: BinOp) -> bool {
             | BinOp::Fle
             | BinOp::Fge
     )
-}
-
-/// Test for a pointer-shaped type tag. Mirrors
-/// `compiler::types::is_pointer_ty` -- each non-integer family
-/// (float, double, long, short, long long) reserves its own band
-/// and adds +2 per pointer level; the integer family (char / int)
-/// shares the base band so `char*` is encoded as `Ty::Ptr` (2),
-/// `int*` as `Ty::Int + Ty::Ptr` (3), `char**` as 4, `int**` as 5,
-/// and any `ty >= Ty::Ptr` in the base band is a pointer
-/// regardless of the parity. Earlier `(off % 2) == 0` test
-/// misclassified `int*` (off=3) as a non-pointer.
-fn is_pointer_ty(ty: i64) -> bool {
-    let stripped = ty & !UNSIGNED_BIT;
-    let base = stripped - (stripped % 100);
-    let off = stripped - base;
-    if base == 0 {
-        // char / int family: any tag at or beyond `Ty::Ptr` is a
-        // pointer (`char*`=2, `int*`=3, `char**`=4, `int**`=5, ...).
-        off >= Ty::Ptr as i64
-    } else {
-        // float / double / long / short / longlong: pointer levels
-        // are even offsets >= 2 from the band base.
-        off >= 2 && (off % 2) == 0
-    }
 }
 
 /// Test for floating-point scalar types.
@@ -4027,11 +3974,6 @@ fn extend_scalar_call_result(
         b.binop_imm(BinOp::Shr, shifted, bits)
     }
 }
-
-/// `Token::Ty` unsigned-bit position. The compiler-side helper is
-/// `pub(super)`-visible to the parser module only; the walker
-/// keeps a local copy to avoid coupling to the compiler module.
-const UNSIGNED_BIT: i64 = 1 << 30;
 
 // Portable lowering of the GCC bit-count builtins (`__builtin_clz` /
 // `ctz` / `popcount` and the 64-bit `ll` forms). Each expands to a
@@ -4148,12 +4090,6 @@ fn lower_bswap(b: &mut Bld, x: Val, n: i64) -> Val {
     acc.unwrap_or(x)
 }
 
-/// Struct-type band base + stride. Mirrors
-/// `compiler::types::{STRUCT_BASE, STRUCT_STRIDE}` so the walker
-/// can classify struct values without crossing the module boundary.
-const STRUCT_BASE: i64 = 1000;
-const STRUCT_STRIDE: i64 = 1000;
-
 /// Read the type tag off an expression node. Returns `None` for
 /// shapes that don't carry one (`Sizeof` is constant-evaluated
 /// and the walker doesn't peek into the result; intrinsics carry
@@ -4238,11 +4174,6 @@ fn unsigned_narrow_mask(ty: i64) -> i64 {
     }
 }
 
-/// Test whether `ty` lands in the struct band.
-fn is_struct_ty(ty: i64) -> bool {
-    (ty & !UNSIGNED_BIT) >= STRUCT_BASE
-}
-
 /// Fold an integer binop on two constant operands. C99 6.6
 /// permits this at translation time. Caller restricts `op` to
 /// the set the per-arch BinopI lowering covers (no Div / Divu /
@@ -4285,14 +4216,6 @@ fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
         BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
         _ => unreachable!("fold_int_binop reached on non-imm-safe op"),
     }
-}
-
-/// Pointer-depth count inside the struct band. Mirrors
-/// `compiler::types::struct_ptr_depth`. Zero means struct value;
-/// >= 1 means a pointer to the struct (or deeper indirection).
-fn struct_ptr_depth(ty: i64) -> i64 {
-    let stripped = ty & !UNSIGNED_BIT;
-    ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / Ty::Ptr as i64
 }
 
 fn lvalue_shape_label(expr: &Expr) -> &'static str {

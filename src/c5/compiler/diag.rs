@@ -461,11 +461,7 @@ impl Compiler {
         let rhs_ast = self.ast_acc.take();
         let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
         self.ast_vstack.push(None);
-        self.loc_offs += 1;
-        if self.loc_offs > self.max_loc_offs {
-            self.max_loc_offs = self.loc_offs;
-        }
-        let rhs_temp = -self.loc_offs;
+        let rhs_temp = self.reserve_slots(1);
         let rhs_ty = self.ty;
         self.mark_emit_other();
         // Pop LHS off the c5 stack into `a` via Imm 0; Or.

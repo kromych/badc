@@ -65,7 +65,7 @@ impl ConstVal {
     /// Coerce to an `f64`. Integer values widen exactly for any value
     /// within `f64`'s 53-bit mantissa range (which is every integer
     /// constant c5 currently lexes).
-    fn as_float(self) -> f64 {
+    pub(super) fn as_float(self) -> f64 {
         match self {
             ConstVal::Int(v) => v as f64,
             ConstVal::Float(v) => v,
@@ -136,11 +136,7 @@ impl Compiler {
             // offset in `lex.ival`. Read the bytes back so we can
             // surface the message inline; adjacent literals are
             // already glued by the lexer's `"a" "b"` rule.
-            let addr = self.lex.ival as usize;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
+            let addr = self.take_concat_string_literal()?;
             // Walk the staged bytes up to the first NUL.
             let mut p = addr;
             while p < self.data.len() && self.data[p] != 0 {
@@ -154,9 +150,7 @@ impl Compiler {
         self.next()?;
         // The trailing `;` is mandatory at file / block scope in
         // C11; we accept it and step past.
-        if self.lex.tk == ';' {
-            self.next()?;
-        }
+        self.accept(';')?;
         if value == 0 {
             let body = if message.is_empty() {
                 "static_assert failed".into()
@@ -201,7 +195,7 @@ impl Compiler {
         }
     }
 
-    fn parse_const_expr_or_val(&mut self) -> Result<ConstVal, C5Error> {
+    pub(super) fn parse_const_expr_or_val(&mut self) -> Result<ConstVal, C5Error> {
         let mut left = self.parse_const_expr_and_val()?;
         while self.lex.tk == Token::Lor {
             self.next()?;
@@ -352,8 +346,20 @@ impl Compiler {
         Ok(left)
     }
 
-    fn parse_const_expr_add_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_mul_val()?;
+    pub(super) fn parse_const_expr_add_val(&mut self) -> Result<ConstVal, C5Error> {
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_add_from(seed)
+    }
+
+    /// Continue an additive constant-expression chain from an already
+    /// parsed left operand. Shared by `parse_const_expr_add_val` and the
+    /// static-initializer constant folder, which consumes the leading
+    /// literal before it can tell the expression is floating.
+    pub(super) fn parse_const_expr_add_from(
+        &mut self,
+        seed: ConstVal,
+    ) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_mul_from(seed)?;
         loop {
             if self.lex.tk == Token::AddOp {
                 self.next()?;
@@ -379,7 +385,11 @@ impl Compiler {
     }
 
     fn parse_const_expr_mul_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_unary_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_mul_from(seed)
+    }
+
+    fn parse_const_expr_mul_from(&mut self, mut left: ConstVal) -> Result<ConstVal, C5Error> {
         loop {
             if self.lex.tk == Token::MulOp {
                 self.next()?;
@@ -393,9 +403,10 @@ impl Compiler {
                 self.next()?;
                 let r = self.parse_const_expr_unary_val()?;
                 left = if left.is_float() || r.is_float() {
-                    let rf = r.as_float();
-                    let v = if rf == 0.0 { 0.0 } else { left.as_float() / rf };
-                    ConstVal::Float(v)
+                    // C99 Annex F / IEEE 754: floating division by zero
+                    // yields +/-infinity for a non-zero numerator and NaN
+                    // for 0.0/0.0, not a fold to zero.
+                    ConstVal::Float(left.as_float() / r.as_float())
                 } else {
                     let ri = r.as_int();
                     let v = if ri == 0 { 0 } else { left.as_int() / ri };

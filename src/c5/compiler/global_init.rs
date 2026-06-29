@@ -85,9 +85,7 @@ impl Compiler {
             self.next()?;
             self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
             // A trailing `,` before `}` is allowed in C99.
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err_at(
                     line,
@@ -166,9 +164,7 @@ impl Compiler {
                 } else {
                     self.lex.restore(after_open);
                     self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
-                    if self.lex.tk == ')' {
-                        self.next()?;
-                    }
+                    self.accept(')')?;
                     return Ok(());
                 }
             }
@@ -338,30 +334,7 @@ impl Compiler {
                 for _ in 0..aligned {
                     self.data.push(0);
                 }
-                let counter = self.next_compound_literal_id;
-                self.next_compound_literal_id += 1;
-                let sym_name = format!("__compound.{counter}");
-                let new_idx = self.symbols.len();
-                let hash = crate::c5::lexer::hash_name(sym_name.as_bytes());
-                let sym = crate::c5::symbol::Symbol {
-                    name: sym_name,
-                    token: Token::Id as i64,
-                    class: Token::Glo as i64,
-                    type_: cl_ty,
-                    val: off,
-                    linkage: crate::c5::symbol::Linkage::Internal,
-                    defined_here: true,
-                    has_initializer: true,
-                    ..Default::default()
-                };
-                self.symbols.push(sym);
-                // SymbolIndex must stay in lockstep with `symbols`,
-                // otherwise the next user identifier the lexer tries
-                // to register lands at a stale idx and unrelated
-                // identifiers vanish. The synthetic `__compound.N`
-                // name is unique per TU so it can't shadow anything
-                // user-visible.
-                self.symbol_index.record(hash);
+                let new_idx = self.intern_compound_literal_symbol(off, cl_ty);
                 self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
                 let bytes = (off as u64).to_le_bytes();
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
@@ -559,77 +532,26 @@ impl Compiler {
             let stripped = var_ty & !UNSIGNED_BIT;
             stripped == Ty::Float as i64 || stripped == Ty::Double as i64
         };
-        // A float literal, a parenthesised float expression, or either of
-        // those behind a leading unary sign signals a float-valued
-        // initializer that must route through the f64 folder rather than
-        // the integer evaluator (whose `value as f64` would coerce a
-        // float result to an integer first). `-INFINITY` expands to
-        // `-(1.0e+308 * 10.0)`, so the sign precedes a parenthesised
-        // float expression.
-        let init_is_float = if !var_is_float {
-            false
-        } else if self.lex.tk == Token::FloatNum {
-            true
-        } else if self.lex.tk == '(' {
-            self.contents_until_close_paren_have_float_pub()?
-        } else if self.lex.tk == Token::SubOp || self.lex.tk == Token::AddOp {
-            let snap = self.lex.snapshot();
-            self.next()?;
-            let ahead = self.lex.tk == Token::FloatNum
-                || (self.lex.tk == '(' && self.contents_until_close_paren_have_float_pub()?);
-            self.lex.restore(snap);
-            ahead
-        } else {
-            false
-        };
-        if init_is_float {
-            let bits = self.parse_const_float_expr()?;
-            // A `float` slot is 4 bytes: narrow the f64 constant to
-            // the f32 pattern, otherwise the low 4 bytes of the f64
-            // bits (zero for many values) land in the slot. `double`
-            // keeps the full 8-byte pattern.
-            let value = self.to_storage_bits(
-                bits.to_bits() as i64,
-                super::initializer::InitElemReloc::Float64Bits,
-                var_ty,
-            );
-            let size = self.size_of_type(var_ty);
-            let bytes = value.to_le_bytes();
-            let segment = if is_thread_local {
-                &mut self.tls_data
-            } else {
-                &mut self.data
-            };
-            let off = var_offset as usize;
-            debug_assert!(off + size <= segment.len());
-            segment[off..off + size].copy_from_slice(&bytes[..size]);
-            if is_thread_local {
-                let end = off + size;
-                if end > self.tls_init_size {
-                    self.tls_init_size = end;
-                }
-            }
-            return Ok(());
-        }
-
         // Constant expression, evaluated at compile time. Handles
         // integer literals, unary `+`/`-`, casts (`(size_t)expr`),
         // arithmetic, parens, identifiers bound as `Token::Num`
         // (enum / `#define`d constants), and the offsetof shape.
-        let value = self.parse_const_expr_or()?;
+        let cv = self.parse_const_expr_or_val()?;
 
-        // C99 6.7.8p11 / 6.3.1.4: an integer constant initializing a
-        // floating object is converted to the floating value; storing
-        // the integer's bit pattern would leave a denormal. Narrow to
-        // the slot's width (f32 for `float`, f64 for `double`).
+        // C99 6.7.8p11 / 6.3.1.4: a constant initializing a floating
+        // object takes the floating value. Coerce the ConstVal to f64
+        // here rather than through `as_int` first, which truncated the
+        // fraction of a float-valued expression whose leading token is
+        // an integer (e.g. `3 * 0.5`). Narrow to the slot width (f32
+        // for `float`, f64 for `double`).
         let value = if var_is_float {
             self.to_storage_bits(
-                (value as f64).to_bits() as i64,
+                cv.as_float().to_bits() as i64,
                 super::initializer::InitElemReloc::Float64Bits,
                 var_ty,
             )
         } else {
-            value
+            cv.as_int()
         };
         let write_size = if var_is_float {
             self.size_of_type(var_ty)

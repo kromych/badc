@@ -37,6 +37,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::const_expr::ConstVal;
 use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 /// Relocation kind for one initializer-element value. Tracks
@@ -230,9 +231,7 @@ impl Compiler {
     /// Consume the closing `}` (and an optional trailing comma) of a
     /// brace-wrapped string-literal array initializer (`{"abc"}`).
     fn expect_close_brace_after_wrapped_string(&mut self) -> Result<(), C5Error> {
-        if self.lex.tk == ',' {
-            self.next()?;
-        }
+        self.accept(',')?;
         if self.lex.tk != '}' {
             return Err(self.compile_err("`}` expected after brace-wrapped string initializer"));
         }
@@ -330,11 +329,7 @@ impl Compiler {
             // per element plus a terminator at the target's `wchar_t`
             // width; read them back at that stride.
             let w = self.lex.wchar_bytes;
-            let start_addr = self.lex.ival as usize;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
+            let start_addr = self.take_concat_string_literal()?;
             let byte_count = self.data.len() - start_addr;
             let mut elem_count = byte_count / w;
             // The trailing NUL is dropped when the literal exactly fills
@@ -365,11 +360,7 @@ impl Compiler {
             return Ok(elems);
         }
         if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
-            let start_addr = self.lex.ival as usize;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
+            let start_addr = self.take_concat_string_literal()?;
             let char_count = self.data.len() - start_addr;
             // C99 6.7.8p14: a string-literal initializer for a
             // bounded char array stores the literal's bytes
@@ -482,9 +473,7 @@ impl Compiler {
                     }
                     cursor += pad;
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // A string literal initializing a row of a multi-dimensional
@@ -499,11 +488,7 @@ impl Compiler {
                 && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64
             {
                 let row = inner_dims[0] as usize;
-                let start_addr = self.lex.ival as usize;
-                self.next()?;
-                while self.lex.tk == '"' {
-                    self.next()?;
-                }
+                let start_addr = self.take_concat_string_literal()?;
                 let avail = self.data.len() - start_addr;
                 let before = cursor;
                 if elements.len() < before + row {
@@ -522,9 +507,7 @@ impl Compiler {
                 // them to avoid an orphaned literal.
                 self.data.truncate(start_addr);
                 cursor = before + row;
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // Each element rides the same parser as struct field
@@ -543,9 +526,7 @@ impl Compiler {
             }
             elements[cursor..end].fill((value, reloc));
             cursor = end;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         Ok(elements)
@@ -863,7 +844,9 @@ impl Compiler {
             let v = self.lex.ival;
             self.next()?;
             if self.tk_is_float_arith_op() {
-                let bits = self.parse_const_float_add_from(f64::from_bits(v as u64))?;
+                let bits = self
+                    .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(v as u64)))?
+                    .as_float();
                 return Ok((bits.to_bits() as i64, InitElemReloc::Float64Bits));
             }
             return Ok((v, InitElemReloc::Float64Bits));
@@ -889,7 +872,9 @@ impl Compiler {
                 let bits = self.lex.ival;
                 self.next()?;
                 if self.tk_is_float_arith_op() {
-                    let folded = self.parse_const_float_add_from(f64::from_bits(bits as u64))?;
+                    let folded = self
+                        .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(bits as u64)))?
+                        .as_float();
                     return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
                 }
                 return Ok((bits, InitElemReloc::Float64Bits));
@@ -911,7 +896,9 @@ impl Compiler {
                 let bits = (self.lex.ival as u64) ^ (1u64 << 63);
                 self.next()?;
                 if self.tk_is_float_arith_op() {
-                    let folded = self.parse_const_float_add_from(f64::from_bits(bits))?;
+                    let folded = self
+                        .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(bits)))?
+                        .as_float();
                     return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
                 }
                 return Ok((bits as i64, InitElemReloc::Float64Bits));
@@ -950,7 +937,7 @@ impl Compiler {
                 self.lex.tk == '(' && self.contents_until_close_paren_have_float()?;
             self.lex.restore(snap);
             if signed_float_paren {
-                let bits = self.parse_const_float_expr()?;
+                let bits = self.parse_const_expr_add_val()?.as_float();
                 return Ok((bits.to_bits() as i64, InitElemReloc::Float64Bits));
             }
         }
@@ -1065,8 +1052,8 @@ impl Compiler {
             // integer expression evaluator below so trailing
             // `<<`, `+`, ... operators after `)` are absorbed too.
             if self.contents_until_close_paren_have_float()? {
-                let seed = self.parse_const_float_unary()?;
-                let v = self.parse_const_float_add_from(seed)?;
+                let seed = self.parse_const_expr_unary_val()?;
+                let v = self.parse_const_expr_add_from(seed)?.as_float();
                 if self.lex.tk != ')' {
                     return Err(self.compile_err("close paren expected in initializer"));
                 }
@@ -1075,7 +1062,9 @@ impl Compiler {
                 // value; any trailing `+ / - / * / /` continues
                 // the float expression chain.
                 if self.tk_is_float_arith_op() {
-                    let folded = self.parse_const_float_add_from(v)?;
+                    let folded = self
+                        .parse_const_expr_add_from(ConstVal::Float(v))?
+                        .as_float();
                     return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
                 }
                 return Ok((v.to_bits() as i64, InitElemReloc::Float64Bits));
@@ -1373,9 +1362,7 @@ impl Compiler {
                     self.fill_struct_fields(sid, here as i64, false)?;
                 }
                 idx += 1;
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
             }
             self.next()?; // consume the outer `}`
         } else {
@@ -1395,7 +1382,7 @@ impl Compiler {
     /// data offset `off`, used as the relocation target for an
     /// anonymous compound literal stored in the data segment. Returns
     /// its symbol index.
-    fn intern_compound_literal_symbol(&mut self, off: i64, ty: i64) -> usize {
+    pub(super) fn intern_compound_literal_symbol(&mut self, off: i64, ty: i64) -> usize {
         let counter = self.next_compound_literal_id;
         self.next_compound_literal_id += 1;
         let sym_name = alloc::format!("__compound.{counter}");
@@ -1550,9 +1537,7 @@ impl Compiler {
                 self.collect_struct_array_data(struct_id, here, &dims[1..], struct_size)?;
             }
             i += 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         Ok(())
@@ -1632,11 +1617,7 @@ impl Compiler {
             }
         };
         if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
-            let start_addr = self.lex.ival as usize;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
+            let start_addr = self.take_concat_string_literal()?;
             self.data.push(0); // ensure NUL terminator in the literal's bytes
             let mut idx = 0usize;
             while start_addr + idx < self.data.len() {
@@ -1672,9 +1653,7 @@ impl Compiler {
                 self.write_init_value(here, elem_size, value, reloc, elem_ty);
             }
             idx += 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         Ok(())
@@ -1733,9 +1712,7 @@ impl Compiler {
                     let size = self.size_of_type(final_ty);
                     self.write_init_value(final_offset as usize, size, value, reloc, final_ty);
                     pos = outer_idx + 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
@@ -1805,9 +1782,7 @@ impl Compiler {
                         let size = self.size_of_type(mem.ty);
                         self.write_init_value(mem_base, size, value, reloc, mem.ty);
                     }
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `}`
                 pos = field_idx + 1;
@@ -1817,13 +1792,9 @@ impl Compiler {
                     pos += 1;
                 }
                 for _ in 0..close_parens {
-                    if self.lex.tk == ')' {
-                        self.next()?;
-                    }
+                    self.accept(')')?;
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // Flexible array member (`T v[]`, array_size == -1) with a
@@ -1839,9 +1810,7 @@ impl Compiler {
             if field.array_size < 0 {
                 self.fill_flexible_array_member(field_base, field.ty)?;
                 pos = field_idx + 1;
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // Three field shapes get nested `{ ... }` initializers:
@@ -1913,11 +1882,7 @@ impl Compiler {
                 // single-value path and writes the *pointer* to the
                 // string's data-segment slot into the field's first
                 // 8 bytes, which produces garbage at read time.
-                let start_addr = self.lex.ival as usize;
-                self.next()?;
-                while self.lex.tk == '"' {
-                    self.next()?;
-                }
+                let start_addr = self.take_concat_string_literal()?;
                 self.data.push(0); // ensure NUL terminator
                 let max = field.array_size as usize;
                 let mut idx = 0usize;
@@ -2029,9 +1994,7 @@ impl Compiler {
                         self.write_init_value(here, elem_size, value, reloc, field.ty);
                     }
                     idx += 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `}`
             } else if field.array_size > 0 {
@@ -2119,9 +2082,7 @@ impl Compiler {
                 let field_size = self.size_of_type(field.ty);
                 self.write_init_value(field_base, field_size, value, reloc, field.ty);
                 if braced_scalar {
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     if self.lex.tk != '}' {
                         return Err(self.compile_err(
                             "scalar initializer wrapped in `{ ... }` must hold a single value",
@@ -2134,9 +2095,7 @@ impl Compiler {
             // compound literal element (`((T){...})`), counted while the
             // cast was stripped above.
             for _ in 0..close_parens {
-                if self.lex.tk == ')' {
-                    self.next()?;
-                }
+                self.accept(')')?;
             }
             // A positional initializer fills the first member of an
             // anonymous union (C99 6.7.8); the remaining members share
@@ -2150,9 +2109,7 @@ impl Compiler {
                     pos += 1;
                 }
             }
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         Ok(())
     }
@@ -2251,9 +2208,7 @@ impl Compiler {
         self.expr(Token::Assign as i64)?;
         if braced {
             // A trailing `,` before `}` is allowed in C99.
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err(
                     "scalar initializer wrapped in `{ ... }` must hold a single value",
@@ -2344,150 +2299,5 @@ impl Compiler {
             || self.lex.tk == Token::SubOp
             || self.lex.tk == Token::MulOp
             || self.lex.tk == Token::DivOp
-    }
-
-    /// Continue an in-flight float constant expression from a
-    /// seed `left` value. Used by `parse_constant_init_value`
-    /// after it consumed a leading `FloatNum` and noticed an
-    /// arithmetic operator next: the caller hands the already-
-    /// loaded value here and we drive the remaining `+ / - / *
-    /// / /` operators at the standard C precedences. Mixed
-    /// integer literals are widened to `f64`.
-    /// Entry point for callers that don't have an already-loaded
-    /// seed: read a float-typed constant expression starting from
-    /// the current token. Used by `parse_global_initializer` to
-    /// fold `static float x = 1.0f / 2.2f;` at parse time.
-    pub(super) fn parse_const_float_expr(&mut self) -> Result<f64, C5Error> {
-        let seed = self.parse_const_float_unary()?;
-        self.parse_const_float_add_from(seed)
-    }
-
-    /// Public wrapper around `contents_until_close_paren_have_float`
-    /// so `global_init.rs` can use the same peek when deciding
-    /// between integer and float constant evaluators for a
-    /// parenthesised initializer.
-    pub(super) fn contents_until_close_paren_have_float_pub(&mut self) -> Result<bool, C5Error> {
-        self.contents_until_close_paren_have_float()
-    }
-
-    fn parse_const_float_add_from(&mut self, left: f64) -> Result<f64, C5Error> {
-        let mut acc = self.parse_const_float_mul_from(left)?;
-        loop {
-            if self.lex.tk == Token::AddOp {
-                self.next()?;
-                let seed = self.parse_const_float_unary()?;
-                let r = self.parse_const_float_mul_from(seed)?;
-                acc += r;
-            } else if self.lex.tk == Token::SubOp {
-                self.next()?;
-                let seed = self.parse_const_float_unary()?;
-                let r = self.parse_const_float_mul_from(seed)?;
-                acc -= r;
-            } else {
-                break;
-            }
-        }
-        Ok(acc)
-    }
-
-    /// Continue a mul/div chain from a seed `left` value. Same
-    /// helper shape as `parse_const_float_add_from`; consumes
-    /// the current `* / /` operators and stops at the first
-    /// lower-precedence token.
-    fn parse_const_float_mul_from(&mut self, mut acc: f64) -> Result<f64, C5Error> {
-        loop {
-            if self.lex.tk == Token::MulOp {
-                self.next()?;
-                let r = self.parse_const_float_unary()?;
-                acc *= r;
-            } else if self.lex.tk == Token::DivOp {
-                self.next()?;
-                let r = self.parse_const_float_unary()?;
-                // IEEE 754 (C99 Annex F): floating division by zero yields
-                // +/-infinity for a non-zero numerator and NaN for 0.0/0.0,
-                // not a diagnostic. Rust's f64 division produces these
-                // directly, matching the `1.0 / 0.0` infinity idiom.
-                acc /= r;
-            } else {
-                break;
-            }
-        }
-        Ok(acc)
-    }
-
-    fn parse_const_float_unary(&mut self) -> Result<f64, C5Error> {
-        if self.lex.tk == Token::SubOp {
-            self.next()?;
-            return Ok(-self.parse_const_float_unary()?);
-        }
-        if self.lex.tk == Token::AddOp {
-            self.next()?;
-            return self.parse_const_float_unary();
-        }
-        self.parse_const_float_primary()
-    }
-
-    fn parse_const_float_primary(&mut self) -> Result<f64, C5Error> {
-        if self.lex.tk == '(' {
-            self.next()?;
-            // C-style cast in a constant float expression:
-            // `(float)EXPR` / `(double)EXPR`. C99 6.5.4 allows the
-            // operand of a cast in a constant expression; we
-            // recognise the form so the surrounding constant
-            // folder treats it as a pin on the result width.
-            // Pointer / non-arithmetic types in this position
-            // would be a type error.
-            if self.lex_is_type_start() {
-                let _ = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-                    self.next()?;
-                }
-                if self.lex.tk != ')' {
-                    return Err(self.compile_err(
-                        "close paren expected after cast in constant float expression",
-                    ));
-                }
-                self.next()?;
-                return self.parse_const_float_unary();
-            }
-            // Parenthesized sub-expression: recurse at the top of
-            // the precedence chain so a fully-nested `(a + b) * c`
-            // parses associativity-correctly.
-            let inner_left = self.parse_const_float_unary()?;
-            let v = self.parse_const_float_add_from(inner_left)?;
-            if self.lex.tk != ')' {
-                return Err(self.compile_err("close paren expected in constant float expression"));
-            }
-            self.next()?;
-            return Ok(v);
-        }
-        if self.lex.tk == Token::FloatNum {
-            let v = f64::from_bits(self.lex.ival as u64);
-            self.next()?;
-            return Ok(v);
-        }
-        if self.lex.tk == Token::Num {
-            // Integer literal in a float context -- promote to
-            // f64. The runtime conversion is exact for values
-            // that fit a double's mantissa (the only ones c5
-            // accepts as constant integers anyway).
-            let v = self.lex.ival as f64;
-            self.next()?;
-            return Ok(v);
-        }
-        if self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
-        {
-            // `#define`d integer constants and enum values used
-            // inside a float initializer (rare but legal). C99
-            // 6.6 lets a constant expression include any value
-            // that's a compile-time constant of arithmetic type.
-            let v = self.symbols[self.lex.curr_id_idx].val as f64;
-            self.next()?;
-            return Ok(v);
-        }
-        Err(self.compile_err(format!(
-            "constant float expression expected (got {})",
-            super::super::token::describe(self.lex.tk)
-        )))
     }
 }

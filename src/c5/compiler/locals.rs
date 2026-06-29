@@ -34,6 +34,46 @@ use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
+    /// Drain the three pending local-initializer carriers into a single
+    /// `LocalInit`: a scalar AST expression, a runtime per-element store
+    /// list (over an optional aggregate zero-fill), an aggregate Mcpy
+    /// source, or nothing. Takes the carriers, leaving them empty.
+    fn drain_pending_local_init(&mut self) -> super::super::ast::LocalInit {
+        let scalar = self.pending_local_init_ast.take();
+        let aggregate = self.pending_local_aggregate_ast.take();
+        let runtime_elements = core::mem::take(&mut self.pending_local_runtime_elements);
+        if let Some(e) = scalar {
+            super::super::ast::LocalInit::Scalar(e)
+        } else if !runtime_elements.is_empty() {
+            super::super::ast::LocalInit::Runtime {
+                zero_init: aggregate,
+                elements: runtime_elements,
+            }
+        } else if let Some((src, size)) = aggregate {
+            super::super::ast::LocalInit::Aggregate {
+                src_data_off: src,
+                size_bytes: size,
+            }
+        } else {
+            super::super::ast::LocalInit::None
+        }
+    }
+
+    /// Assemble the pending initializer for a just-parsed declarator and
+    /// emit its local declaration. A non-`Loc` binding (a redeclaration
+    /// that resolved elsewhere) discards the carriers without emitting.
+    pub(super) fn finalize_local_init(&mut self, loc_idx: usize) {
+        if self.symbols[loc_idx].class == Token::Loc as i64 {
+            let slot_off = self.symbols[loc_idx].val;
+            let init = self.drain_pending_local_init();
+            self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
+        } else {
+            self.pending_local_init_ast = None;
+            self.pending_local_aggregate_ast = None;
+            self.pending_local_runtime_elements.clear();
+        }
+    }
+
     pub(super) fn parse_function_body_local_decl(
         &mut self,
         maybe_unused: bool,
@@ -74,78 +114,12 @@ impl Compiler {
         let base_is_function_type = self.pending.base_is_function_type;
         let base_typedef_fn_proto = self.pending.typedef_fn_proto;
         let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
-        // Function declaration at function-body scope (C99 6.7p1):
-        // `T name(args);` or `T *name(args);` where the leading run
-        // of `*` qualifies the return type. C99 6.2.2p5: with no
-        // storage-class specifier or `extern` the name has external
-        // linkage, so register it as a function (the same shape as a
-        // file-scope prototype) and a call to it resolves; the
-        // definition is found at link time.
-        //
-        // Snapshot before the speculative `*` walk so a plain
-        // pointer-variable declaration with multiple declarators
-        // (`int *p, *q;`) doesn't get its leading `*` swallowed
-        // and rebound to a wider base type.
-        let proto_snap = self.lex.snapshot();
-        let mut ret_ptr_levels: i64 = 0;
-        while self.lex.tk == Token::MulOp {
-            ret_ptr_levels += 1;
-            self.next()?;
-        }
-        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
-            let id_idx = self.lex.curr_id_idx;
-            self.next()?; // consume name
-            self.next()?; // consume `(`
-            // A prototype's parameter names have no linkage and no scope
-            // beyond the declaration (C99 6.7.6.3). Parse them in no-bind
-            // mode so the names are not shadowed: shadowing one that
-            // already names an enclosing local would corrupt that local's
-            // single saved binding and leak it past the function.
-            let saved_proto = self.pending.parsing_fn_ptr_proto;
-            self.pending.parsing_fn_ptr_proto = true;
-            let params = self.parse_function_params();
-            self.pending.parsing_fn_ptr_proto = saved_proto;
-            let params = params?;
-            // Introduce a function symbol only for an as-yet-undeclared
-            // name. A name already bound -- a libc binding (`Sys`), a
-            // function declared elsewhere (`Fun`), or a variable
-            // (`Glo` / `Loc`) -- refers to the same entity, so leave it:
-            // overriding a `Sys` binding with an external user reference
-            // would make the call unresolvable at link time.
-            // Already a resolved entity (libc binding, function, or
-            // variable)?
-            let c = self.symbols[id_idx].class;
-            let known = c == Token::Sys as i64
-                || c == Token::Fun as i64
-                || c == Token::Glo as i64
-                || c == Token::Loc as i64;
-            if !known {
-                let sym = &mut self.symbols[id_idx];
-                sym.class = Token::Fun as i64;
-                sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
-                sym.params = params.types;
-                sym.is_variadic = params.is_variadic;
-                sym.is_extern_decl = true;
-                sym.linkage = if is_static {
-                    crate::c5::symbol::Linkage::Internal
-                } else {
-                    crate::c5::symbol::Linkage::External
-                };
-            }
-            // A trailing comma list of further prototypes is rare;
-            // skip any remainder to the terminator.
-            while self.lex.tk != ';' && self.lex.tk != 0 {
-                self.next()?;
-            }
-            self.next()?;
-            let _ = is_extern;
+        // C99 6.7p1 / 6.2.2p5: a block-scope `[*]name(params);` is a
+        // function declaration with external (internal if `static`)
+        // linkage; bind it and let the call resolve at link time.
+        if self.try_parse_block_fn_prototype(lbt, is_static)? {
             return Ok(());
         }
-        // Not a function prototype after all -- rewind so the
-        // declarator loop below sees the `*`s and consumes them
-        // per-declarator (the comma-separated path needs each
-        // declarator to walk its own `*` chain).
-        self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
             // Re-seed the base type's function-pointer lineage for this
             // declarator; the previous declarator's symbol creation took it.
@@ -260,33 +234,7 @@ impl Compiler {
                 // Static locals (promoted to Glo class) skip --
                 // their storage is laid out in .data at TU-load
                 // time, not in the function's frame.
-                if self.symbols[loc_idx].class == Token::Loc as i64 {
-                    let slot_off = self.symbols[loc_idx].val;
-                    let scalar = self.pending_local_init_ast.take();
-                    let aggregate = self.pending_local_aggregate_ast.take();
-                    let runtime_elements =
-                        core::mem::take(&mut self.pending_local_runtime_elements);
-                    let init = if let Some(e) = scalar {
-                        super::super::ast::LocalInit::Scalar(e)
-                    } else if !runtime_elements.is_empty() {
-                        super::super::ast::LocalInit::Runtime {
-                            zero_init: aggregate,
-                            elements: runtime_elements,
-                        }
-                    } else if let Some((src, size)) = aggregate {
-                        super::super::ast::LocalInit::Aggregate {
-                            src_data_off: src,
-                            size_bytes: size,
-                        }
-                    } else {
-                        super::super::ast::LocalInit::None
-                    };
-                    self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
-                } else {
-                    self.pending_local_init_ast = None;
-                    self.pending_local_aggregate_ast = None;
-                    self.pending_local_runtime_elements.clear();
-                }
+                self.finalize_local_init(loc_idx);
             }
             // Unconditional write: a stale fn-ptr lineage from a
             // prior binding of this name must not leak into a
@@ -311,9 +259,7 @@ impl Compiler {
                 self.symbols[loc_idx].is_variadic = true;
             }
 
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?;
         Ok(())
@@ -409,9 +355,7 @@ impl Compiler {
                             self.fill_struct_fields(sid, here, false)?;
                         }
                         i += 1;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                     }
                     self.next()?;
                     self.symbols[loc_idx].array_size = count;
@@ -471,9 +415,7 @@ impl Compiler {
                         self.fill_struct_fields(sid, here, false)?;
                     }
                     i += 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `}`
             } else if array_size > 0 {
@@ -629,9 +571,7 @@ impl Compiler {
                 }
             }
             i = range_end + 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         self.ast_acc = None;
@@ -706,11 +646,8 @@ impl Compiler {
                 // uses. Mirrors the `struct V xs[N] = { ... }` handling.
                 if self.struct_init_needs_runtime()? {
                     self.symbols[loc_idx].array_size = count;
-                    self.loc_offs += self.local_storage_slots(ty, count);
-                    self.symbols[loc_idx].val = -self.loc_offs;
-                    if self.loc_offs > self.max_loc_offs {
-                        self.max_loc_offs = self.loc_offs;
-                    }
+                    self.symbols[loc_idx].val =
+                        self.reserve_slots(self.local_storage_slots(ty, count));
                     let local_val = self.symbols[loc_idx].val;
                     let var_name = self.symbols[loc_idx].name.clone();
                     // Zero the whole slot (6.7.8p19 omitted-entries rule),
@@ -742,9 +679,7 @@ impl Compiler {
                             braced,
                         )?;
                         i += 1;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                     }
                     self.next()?; // consume outer `}`
                     return Ok(());
@@ -763,17 +698,11 @@ impl Compiler {
                         self.fill_struct_fields(sid, here, false)?;
                     }
                     i += 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?;
                 self.symbols[loc_idx].array_size = count;
-                self.loc_offs += self.local_storage_slots(ty, count);
-                self.symbols[loc_idx].val = -self.loc_offs;
-                if self.loc_offs > self.max_loc_offs {
-                    self.max_loc_offs = self.loc_offs;
-                }
+                self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, count));
                 let local_val = self.symbols[loc_idx].val;
                 self.emit_local_array_init(local_val, staged_off, elem_size * count as usize);
                 return Ok(());
@@ -791,11 +720,8 @@ impl Compiler {
                 let (final_size, needs_runtime) = self.scan_array_init()?;
                 if needs_runtime {
                     self.symbols[loc_idx].array_size = final_size;
-                    self.loc_offs += self.local_storage_slots(ty, final_size);
-                    self.symbols[loc_idx].val = -self.loc_offs;
-                    if self.loc_offs > self.max_loc_offs {
-                        self.max_loc_offs = self.loc_offs;
-                    }
+                    self.symbols[loc_idx].val =
+                        self.reserve_slots(self.local_storage_slots(ty, final_size));
                     let local_val = self.symbols[loc_idx].val;
                     let var_name = self.symbols[loc_idx].name.clone();
                     let inner = self.inner_dims_of(loc_idx);
@@ -815,11 +741,8 @@ impl Compiler {
             let elements = self.collect_array_initializer(ty)?;
             let final_size = elements.len() as i64;
             self.symbols[loc_idx].array_size = final_size;
-            self.loc_offs += self.local_storage_slots(ty, final_size);
-            self.symbols[loc_idx].val = -self.loc_offs;
-            if self.loc_offs > self.max_loc_offs {
-                self.max_loc_offs = self.loc_offs;
-            }
+            self.symbols[loc_idx].val =
+                self.reserve_slots(self.local_storage_slots(ty, final_size));
             let local_val = self.symbols[loc_idx].val;
             let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);
             self.emit_local_array_init(local_val, start_addr, total_bytes);
@@ -827,11 +750,8 @@ impl Compiler {
         }
 
         self.symbols[loc_idx].array_size = declared_array_size;
-        self.loc_offs += self.local_storage_slots(ty, declared_array_size);
-        self.symbols[loc_idx].val = -self.loc_offs;
-        if self.loc_offs > self.max_loc_offs {
-            self.max_loc_offs = self.loc_offs;
-        }
+        self.symbols[loc_idx].val =
+            self.reserve_slots(self.local_storage_slots(ty, declared_array_size));
 
         if self.lex.tk == Token::Assign {
             self.next()?;
@@ -895,9 +815,7 @@ impl Compiler {
                                 braced,
                             )?;
                             i += 1;
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                            }
+                            self.accept(',')?;
                         }
                         self.next()?; // consume outer `}`
                         return Ok(());
@@ -937,9 +855,7 @@ impl Compiler {
                             self.fill_struct_fields(sid, here, false)?;
                         }
                         i += 1;
-                        if self.lex.tk == ',' {
-                            self.next()?;
-                        }
+                        self.accept(',')?;
                     }
                     self.next()?; // consume `}`
                     self.emit_local_array_init(
@@ -1085,11 +1001,7 @@ impl Compiler {
                     return Err(self.compile_err("`{` expected in compound literal"));
                 }
                 let (count, needs_runtime) = self.scan_array_init()?;
-                self.loc_offs += self.local_storage_slots(elem_ty, count);
-                slot = -self.loc_offs;
-                if self.loc_offs > self.max_loc_offs {
-                    self.max_loc_offs = self.loc_offs;
-                }
+                slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if needs_runtime {
                     let full = elem_size * count as usize;
                     let zero_off = self.data.len();
@@ -1113,11 +1025,7 @@ impl Compiler {
             } else {
                 let count = decl_array_size;
                 let full = elem_size * count as usize;
-                self.loc_offs += self.local_storage_slots(elem_ty, count);
-                slot = -self.loc_offs;
-                if self.loc_offs > self.max_loc_offs {
-                    self.max_loc_offs = self.loc_offs;
-                }
+                slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if self.lex.tk == '{' && self.array_init_needs_runtime()? {
                     let zero_off = self.data.len();
                     for _ in 0..full {
@@ -1160,11 +1068,7 @@ impl Compiler {
             let sid = struct_id_of(t);
             let elem_size = self.size_of_type(t);
             let cl_slots = self.slots_of_type(t);
-            self.loc_offs += cl_slots;
-            slot = -self.loc_offs;
-            if self.loc_offs > self.max_loc_offs {
-                self.max_loc_offs = self.loc_offs;
-            }
+            slot = self.reserve_slots(cl_slots);
             if cl_slots > 1 {
                 self.multi_cell_temps.push((slot, cl_slots));
             }
@@ -1184,11 +1088,7 @@ impl Compiler {
             value_ty = t;
         } else {
             // Scalar compound literal `(T){ expr }`.
-            self.loc_offs += self.slots_of_type(t);
-            slot = -self.loc_offs;
-            if self.loc_offs > self.max_loc_offs {
-                self.max_loc_offs = self.loc_offs;
-            }
+            slot = self.reserve_slots(self.slots_of_type(t));
             if self.lex.tk != '{' {
                 return Err(self.compile_err("`{` expected in compound literal"));
             }
@@ -1196,9 +1096,7 @@ impl Compiler {
             self.expr(Token::Assign as i64)?;
             self.convert_assign_rhs(t);
             self.pending_local_init_ast = self.ast_acc;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err("`}` expected to close compound literal"));
             }
@@ -1207,24 +1105,7 @@ impl Compiler {
             value_ty = t;
         }
 
-        let scalar = self.pending_local_init_ast.take();
-        let aggregate = self.pending_local_aggregate_ast.take();
-        let runtime_elements = core::mem::take(&mut self.pending_local_runtime_elements);
-        let init = if let Some(e) = scalar {
-            super::super::ast::LocalInit::Scalar(e)
-        } else if !runtime_elements.is_empty() {
-            super::super::ast::LocalInit::Runtime {
-                zero_init: aggregate,
-                elements: runtime_elements,
-            }
-        } else if let Some((src, size)) = aggregate {
-            super::super::ast::LocalInit::Aggregate {
-                src_data_off: src,
-                size_bytes: size,
-            }
-        } else {
-            super::super::ast::LocalInit::None
-        };
+        let init = self.drain_pending_local_init();
 
         self.ast_vstack.truncate(vstack_depth);
         self.ast_emit_compound_literal(slot, t, final_array_size, init);
@@ -1452,9 +1333,7 @@ impl Compiler {
                 self.emit_array_leaf_runtime(local_val, off, ty)?;
             }
             i += 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         Ok(())
@@ -1616,9 +1495,7 @@ impl Compiler {
                         );
                     }
                     pos = outer_idx + 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
@@ -1653,11 +1530,7 @@ impl Compiler {
                     && !self.lex.str_is_wide
                     && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
                 {
-                    let start_addr = self.lex.ival as usize;
-                    self.next()?;
-                    while self.lex.tk == '"' {
-                        self.next()?;
-                    }
+                    let start_addr = self.take_concat_string_literal()?;
                     self.data.push(0); // ensure NUL terminator
                     let max = field.array_size as usize;
                     let base = extra_offset + field.offset as i64;
@@ -1677,9 +1550,7 @@ impl Compiler {
                         );
                     }
                     pos = field_idx + 1;
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                     continue;
                 }
                 return Err(
@@ -1752,9 +1623,7 @@ impl Compiler {
                             );
                         }
                     }
-                    if self.lex.tk == ',' {
-                        self.next()?;
-                    }
+                    self.accept(',')?;
                 }
                 self.next()?; // consume `}`
                 pos = field_idx + 1;
@@ -1763,9 +1632,7 @@ impl Compiler {
                 {
                     pos += 1;
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 && self.lex.tk == '{' {
@@ -1777,9 +1644,7 @@ impl Compiler {
                     true,
                 )?;
                 pos = field_idx + 1;
-                if self.lex.tk == ',' {
-                    self.next()?;
-                }
+                self.accept(',')?;
                 continue;
             }
             // Scalar / pointer field. Address = &local +
@@ -1851,9 +1716,7 @@ impl Compiler {
                     });
             }
             pos = field_idx + 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         if braced {
             self.next()?; // consume `}`

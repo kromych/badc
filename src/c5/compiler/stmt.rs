@@ -25,7 +25,7 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::token::{Token, Ty};
+use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
 use super::types::{is_pointer_ty, is_struct_ty, struct_ptr_depth};
 
@@ -283,9 +283,7 @@ impl Compiler {
                 self.symbols[id_idx].params = pp.types;
                 self.symbols[id_idx].is_variadic = pp.is_variadic;
             }
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `;`
         Ok(())
@@ -324,76 +322,12 @@ impl Compiler {
         let base_is_function_type = self.pending.base_is_function_type;
         let base_typedef_fn_proto = self.pending.typedef_fn_proto;
         let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
-        // Function declaration at block scope (C99 6.7p1):
-        // `T name(args);` or `T *name(args);` where the leading run of
-        // `*` qualifies the return type. C99 6.2.2p5: with no
-        // storage-class specifier or `extern` the name has external
-        // linkage, so register it as a function (the same shape as a
-        // file-scope prototype) and a call to it resolves; the
-        // definition is found at link time.
-        //
-        // Snapshot before the speculative `*` walk so a plain
-        // pointer-variable declaration with multiple declarators
-        // (`int *p, *q;`) keeps its leading `*` for the declarator
-        // loop below.
-        let proto_snap = self.lex.snapshot();
-        let mut ret_ptr_levels: i64 = 0;
-        while self.lex.tk == Token::MulOp {
-            ret_ptr_levels += 1;
-            self.next()?;
-        }
-        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
-            let id_idx = self.lex.curr_id_idx;
-            self.next()?; // consume name
-            self.next()?; // consume `(`
-            // A prototype's parameter names have no linkage and no scope
-            // beyond the declaration (C99 6.7.6.3). Parse them in no-bind
-            // mode so the names are not shadowed: shadowing one that
-            // already names an enclosing local would corrupt that local's
-            // single saved binding and leak it past the function.
-            let saved_proto = self.pending.parsing_fn_ptr_proto;
-            self.pending.parsing_fn_ptr_proto = true;
-            let params = self.parse_function_params();
-            self.pending.parsing_fn_ptr_proto = saved_proto;
-            let params = params?;
-            // Introduce a function symbol only for an as-yet-undeclared
-            // name. A name already bound -- a libc binding (`Sys`), a
-            // function declared elsewhere (`Fun`), or a variable
-            // (`Glo` / `Loc`) -- refers to the same entity, so leave it:
-            // overriding a `Sys` binding with an external user reference
-            // would make the call unresolvable at link time.
-            // Already a resolved entity (libc binding, function, or
-            // variable)?
-            let c = self.symbols[id_idx].class;
-            let known = c == Token::Sys as i64
-                || c == Token::Fun as i64
-                || c == Token::Glo as i64
-                || c == Token::Loc as i64;
-            if !known {
-                let sym = &mut self.symbols[id_idx];
-                sym.class = Token::Fun as i64;
-                sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
-                sym.params = params.types;
-                sym.is_variadic = params.is_variadic;
-                sym.is_extern_decl = true;
-                sym.linkage = if is_static {
-                    crate::c5::symbol::Linkage::Internal
-                } else {
-                    crate::c5::symbol::Linkage::External
-                };
-            }
-            // A trailing comma list of further prototypes
-            // (`int foo(int), bar(int);`) is rare; skip any
-            // remainder to the terminator.
-            while self.lex.tk != ';' && self.lex.tk != 0 {
-                self.next()?;
-            }
-            self.next()?;
+        // C99 6.7p1 / 6.2.2p5: a block-scope `[*]name(params);` is a
+        // function declaration with external (internal if `static`)
+        // linkage; bind it and let the call resolve at link time.
+        if self.try_parse_block_fn_prototype(lbt, is_static)? {
             return Ok(());
         }
-        // Not a function declaration -- rewind so the declarator loop
-        // sees the leading `*`s and consumes them per declarator.
-        self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.base_is_function_type = base_is_function_type;
@@ -500,33 +434,7 @@ impl Compiler {
                 self.pending_local_aggregate_ast = None;
                 self.pending_local_runtime_elements.clear();
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
-                if self.symbols[loc_idx].class == Token::Loc as i64 {
-                    let slot_off = self.symbols[loc_idx].val;
-                    let scalar = self.pending_local_init_ast.take();
-                    let aggregate = self.pending_local_aggregate_ast.take();
-                    let runtime_elements =
-                        core::mem::take(&mut self.pending_local_runtime_elements);
-                    let init = if let Some(e) = scalar {
-                        super::super::ast::LocalInit::Scalar(e)
-                    } else if !runtime_elements.is_empty() {
-                        super::super::ast::LocalInit::Runtime {
-                            zero_init: aggregate,
-                            elements: runtime_elements,
-                        }
-                    } else if let Some((src, size)) = aggregate {
-                        super::super::ast::LocalInit::Aggregate {
-                            src_data_off: src,
-                            size_bytes: size,
-                        }
-                    } else {
-                        super::super::ast::LocalInit::None
-                    };
-                    self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
-                } else {
-                    self.pending_local_init_ast = None;
-                    self.pending_local_aggregate_ast = None;
-                    self.pending_local_runtime_elements.clear();
-                }
+                self.finalize_local_init(loc_idx);
             }
             // Write the lineage tag after `allocate_local_with_init`
             // (which may have parsed an initializer) so it can't be
@@ -549,9 +457,7 @@ impl Compiler {
                 self.symbols[loc_idx].is_variadic = true;
             }
 
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?;
         Ok(())
@@ -1206,6 +1112,34 @@ impl Compiler {
             self.consume(b';', "semicolon expected")?;
         }
         Ok(())
+    }
+
+    /// Advance past the current token when it equals `t`; return
+    /// whether it matched. Generic over the comparison so callers pass
+    /// a `Token` or a single-byte char, as `consume` does.
+    pub(super) fn accept<T>(&mut self, t: T) -> Result<bool, C5Error>
+    where
+        Tok: PartialEq<T>,
+    {
+        if self.lex.tk == t {
+            self.next()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Capture the data-segment offset of the current string literal,
+    /// then step past it and any adjacent string literals (the lexer
+    /// has already concatenated their bytes into one run, C99 5.1.1.2).
+    /// Returns the offset of the first byte.
+    pub(super) fn take_concat_string_literal(&mut self) -> Result<usize, C5Error> {
+        let start = self.lex.ival as usize;
+        self.next()?;
+        while self.lex.tk == '"' {
+            self.next()?;
+        }
+        Ok(start)
     }
 
     /// Consume a single-byte token, returning a labelled compile error otherwise.

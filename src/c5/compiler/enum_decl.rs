@@ -71,9 +71,7 @@ impl Compiler {
             self.symbols[idx].val = i;
             captured.push((name, i));
             i += 1;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
+            self.accept(',')?;
         }
         self.next()?; // consume `}`
         if !tag_name.is_empty() && !captured.is_empty() {

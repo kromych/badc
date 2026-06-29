@@ -135,19 +135,56 @@ def build_standalone(badc: Path, work: Path) -> bool:
         return False
     print(f"smoke OK: standalone build -> {game.name} ({game.stat().st_size} bytes)")
 
-    # Auto-play a few frames. A windowing session is required; if the run
-    # cannot reach the display server it is skipped, not failed.
-    proc = run([str(game), "--selftest", "--frames", "30"],
+    # Auto-play a few frames and dump the rendered framebuffer. A
+    # windowing session is required; if the run cannot reach the display
+    # server it is skipped, not failed.
+    ppm = work / "frame.ppm"
+    proc = run([str(game), "--dump-frame", str(ppm)],
                capture_output=True, text=True, timeout=30)
-    if proc.returncode == 0:
-        print("smoke OK: standalone game ran 30 frames")
-        return True
-    if "DISPLAY" in proc.stderr or "WindowServer" in proc.stderr or proc.returncode is None:
+    if proc.returncode != 0:
+        if "DISPLAY" in proc.stderr or "WindowServer" in proc.stderr or proc.returncode is None:
+            print("smoke SKIP: no windowing session to run the game")
+            return True
+        print(f"smoke FAIL: standalone run exit {proc.returncode}\n{proc.stderr[-400:]}",
+              file=sys.stderr)
+        return False
+
+    # The level fills the frame with tiles, the player, guards and HUD
+    # text, so a correctly rendered frame carries many distinct colors.
+    # A blank / clear-only frame (the symptom of a render-path miscompile)
+    # has at most a couple. Assert real geometry reached the framebuffer.
+    if not ppm.is_file():
         print("smoke SKIP: no windowing session to run the game")
         return True
-    print(f"smoke FAIL: standalone run exit {proc.returncode}\n{proc.stderr[-400:]}",
-          file=sys.stderr)
-    return False
+    colors = _distinct_colors(ppm)
+    if colors < 6:
+        print(f"smoke FAIL: rendered frame has only {colors} distinct colors "
+              "(blank / clear-only render)", file=sys.stderr)
+        return False
+    print(f"smoke OK: standalone game rendered a frame ({colors} distinct colors)")
+    return True
+
+
+def _distinct_colors(ppm: Path) -> int:
+    """Count distinct RGB triples in a binary P6 PPM."""
+    data = ppm.read_bytes()
+    i = 0
+
+    def tok(buf, j):
+        while buf[j] in b" \t\n\r":
+            j += 1
+        s = j
+        while buf[j] not in b" \t\n\r":
+            j += 1
+        return buf[s:j], j
+
+    _, i = tok(data, i)  # magic
+    w, i = tok(data, i)
+    h, i = tok(data, i)
+    _, i = tok(data, i)  # maxval
+    i += 1
+    px = data[i:i + int(w) * int(h) * 3]
+    return len({px[k:k + 3] for k in range(0, len(px), 3)})
 
 
 def main() -> int:

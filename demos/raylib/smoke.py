@@ -111,7 +111,12 @@ def platform_build(badc: Path, work: Path) -> bool:
     subprocess.run([sys.executable, str(RAYLIB_DIR / "setup.py")], check=True)
     src = RAYLIB_DIR / "src"
     inc = RAYLIB_DIR / "include"
-    defines = list(BASE_DEFINES)
+    # raylib gates the working `sinfl_bsr` bit-scan (and other correct
+    # paths) on a GCC/Clang/MSVC identity macro; `--gnu` makes badc claim
+    # __GNUC__ so the __builtin_clz path is taken instead of an empty
+    # function. The GNU surface raylib then reaches (compiler-barrier
+    # inline asm, GCC pragmas) is handled by badc.
+    defines = ["--gnu", *BASE_DEFINES]
     # The rcore translation unit reaches the windowing / GL bindings.
     if MAC:
         rcore_extra = ["-include", "rgfw_macos_link.h"]

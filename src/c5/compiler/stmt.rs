@@ -664,6 +664,27 @@ impl Compiler {
             self.data.truncate(tstart);
             return self.parse_x87_control_word_asm(kind);
         }
+        // An empty template is a compiler barrier: `__asm__("")`, or the
+        // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It emits no
+        // instruction, so its operands carry no machine effect; consume
+        // the whole `: outputs : inputs : clobbers` region (operand
+        // expressions included) and emit nothing. c5 does not reorder
+        // memory accesses across the statement.
+        if tmpl_lc.is_empty() {
+            let mut depth = 0i32;
+            while !(self.lex.tk == ')' && depth == 0) {
+                if self.lex.tk == '(' {
+                    depth += 1;
+                } else if self.lex.tk == ')' {
+                    depth -= 1;
+                }
+                self.next()?;
+            }
+            self.next()?; // consume ')'
+            self.consume(b';', "`;` expected after `asm(...)`")?;
+            self.data.truncate(tstart);
+            return Ok(());
+        }
         // Optional `: outputs : inputs : clobbers`. An operand binding
         // (`"constraint"(expr)`) introduces a `(` and is rejected; bare
         // clobber strings and the separating colons are accepted.
@@ -688,12 +709,6 @@ impl Compiler {
             .trim_end_matches(';')
             .trim()
             .to_ascii_lowercase();
-        if t.is_empty() {
-            // A compiler barrier with no instruction. c5 does not
-            // reorder memory accesses across the statement, so nothing
-            // is emitted.
-            return Ok(());
-        }
         if t == "pause" || t == "yield" {
             self.mark_emit_other();
             self.ty = Ty::Int as i64;

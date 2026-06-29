@@ -1981,10 +1981,16 @@ impl Preprocessor {
         if args.trim() == "warn" {
             return self.parse_pragma_warn("", line_no, filename);
         }
-        // `pack` and `once` are consumed elsewhere; everything
-        // else falls through to the unknown-pragma warning below.
+        // `pack` and `once` are consumed elsewhere. The `GCC` / `clang`
+        // vendor pragmas (diagnostic selection, `optimize`, `target`,
+        // `push_options`, `loop`, ...) and the C99 6.10.6 `STDC` pragmas
+        // (FP_CONTRACT, FENV_ACCESS, CX_LIMITED_RANGE) are compiler hints
+        // / evaluation modes c5 does not act on. Accept them silently
+        // rather than warning on every occurrence; everything else falls
+        // through to the unknown-pragma warning.
         let directive = args.split('(').next().unwrap_or(args).trim();
-        if matches!(directive, "pack" | "once") {
+        let head = directive.split_whitespace().next().unwrap_or("");
+        if matches!(head, "pack" | "once" | "STDC" | "GCC" | "clang") {
             return Ok(());
         }
         self.warnings.push(super::error::fmt_compile_warn(
@@ -4587,6 +4593,34 @@ mod tests {
             out.contains("G yes") && out.contains("S yes"),
             "--gnu: {out}"
         );
+    }
+
+    #[test]
+    fn vendor_and_stdc_pragmas_are_silent() {
+        // GCC/clang vendor pragmas and the C99 6.10.6 STDC pragmas carry
+        // no directive c5 acts on, so they must not warn.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.process(
+            "#pragma GCC diagnostic push\n\
+             #pragma GCC diagnostic ignored \"-Wunused\"\n\
+             #pragma GCC diagnostic pop\n\
+             #pragma GCC optimize(\"O2\")\n\
+             #pragma clang loop unroll(disable)\n\
+             #pragma STDC FP_CONTRACT OFF\n\
+             int x;\n",
+        )
+        .expect("preprocessor failed");
+        assert!(
+            pp.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            pp.warnings
+        );
+
+        // An unrecognised pragma still surfaces a warning.
+        let mut pp2 = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp2.process("#pragma frobnicate widgets\nint y;\n")
+            .expect("preprocessor failed");
+        assert!(!pp2.warnings.is_empty(), "unknown pragma should warn");
     }
 
     #[test]

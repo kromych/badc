@@ -36,6 +36,7 @@
 #pragma binding(libc::free,    "_free")
 #pragma binding(libc::atoi,    "_atoi")
 #pragma binding(libc::atol,    "_atol")
+#pragma binding(libc::atoll,   "_atoll")
 #pragma binding(libc::atof,    "_atof")
 #pragma binding(libc::strtol,  "_strtol")
 #pragma binding(libc::strtoll, "_strtoll")
@@ -84,6 +85,7 @@
 #pragma binding(libc::free,    "free")
 #pragma binding(libc::atoi,    "atoi")
 #pragma binding(libc::atol,    "atol")
+#pragma binding(libc::atoll,   "atoll")
 #pragma binding(libc::atof,    "atof")
 #pragma binding(libc::strtol,  "strtol")
 #pragma binding(libc::strtoll, "strtoll")
@@ -138,6 +140,8 @@
 #pragma binding(msvcrt::free,    "free")
 #pragma binding(msvcrt::atoi,    "atoi")
 #pragma binding(msvcrt::atol,    "atol")
+// MSVC spells the long-long parse `_atoi64`.
+#pragma binding(msvcrt::atoll,   "_atoi64")
 #pragma binding(msvcrt::atof,    "atof")
 #pragma binding(msvcrt::strtol,  "strtol")
 #pragma binding(msvcrt::strtoul, "strtoul")
@@ -222,6 +226,7 @@ int atoi(char *s);
 // declared type is truncated to that type, so declaring it `int`
 // would drop the high half on LP64.
 long atol(char *s);
+long long atoll(char *s);
 double atof(char *s);
 // C99 7.20.1.4: strtol/strtoll return long / long long; the declared
 // width must match so the 64-bit return register is not narrowed.

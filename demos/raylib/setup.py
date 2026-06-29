@@ -39,33 +39,6 @@ RAYLIB_DIR = Path(__file__).resolve().parent
 SRC_DIR = RAYLIB_DIR / "src"
 CACHE_DIR = RAYLIB_DIR / ".cache"
 
-# config.h flags flipped to 0 for the asset-free build. Everything else
-# in raylib's config.h (render-batch sizes, default font, image
-# generation) is left at its upstream value.
-DISABLE_FLAGS = (
-    "SUPPORT_MODULE_RAUDIO",
-    "SUPPORT_MODULE_RMODELS",
-    "SUPPORT_FILEFORMAT_PNG",
-    "SUPPORT_FILEFORMAT_BMP",
-    "SUPPORT_FILEFORMAT_TGA",
-    "SUPPORT_FILEFORMAT_JPG",
-    "SUPPORT_FILEFORMAT_GIF",
-    "SUPPORT_FILEFORMAT_QOI",
-    "SUPPORT_FILEFORMAT_PSD",
-    "SUPPORT_FILEFORMAT_DDS",
-    "SUPPORT_FILEFORMAT_HDR",
-    "SUPPORT_FILEFORMAT_PIC",
-    "SUPPORT_FILEFORMAT_PNM",
-    "SUPPORT_FILEFORMAT_KTX",
-    "SUPPORT_FILEFORMAT_ASTC",
-    "SUPPORT_FILEFORMAT_PKM",
-    "SUPPORT_FILEFORMAT_PVR",
-    "SUPPORT_FILEFORMAT_TTF",
-    "SUPPORT_FILEFORMAT_FNT",
-    "SUPPORT_FILEFORMAT_BDF",
-    "SUPPORT_IMAGE_MANIPULATION",
-    "SUPPORT_IMAGE_EXPORT",
-)
 
 
 def _download(url: str, dst: Path, log) -> None:
@@ -112,22 +85,6 @@ def _extract_src(tar_path: Path, log) -> None:
     log(f"extracted raylib src to {SRC_DIR}")
 
 
-def _patch_config(log) -> None:
-    config = SRC_DIR / "config.h"
-    text = config.read_text()
-    for flag in DISABLE_FLAGS:
-        # Match the upstream `#define <FLAG>  1` (any spacing) and set 0.
-        import re
-
-        text, n = re.subn(
-            rf"(#define\s+{flag}\s+)1\b", r"\g<1>0", text, count=1
-        )
-        if n == 0:
-            log(f"  note: flag {flag} not found (skipped)")
-    config.write_text(text)
-    log("patched config.h to the asset-free profile")
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -143,7 +100,6 @@ def main(argv: list[str] | None = None) -> int:
         _download(URL, tarball, log)
     _verify(tarball, TARBALL_SHA256)
     _extract_src(tarball, log)
-    _patch_config(log)
     return 0
 
 

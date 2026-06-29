@@ -6672,6 +6672,14 @@ fn emit_intrinsic(
             code.push(0x90);
             true
         }
+        I::AtomicThreadFence => {
+            // `mfence` (0F AE F0), a full barrier (C11 7.17.4 seq_cst).
+            // No operand, no result.
+            code.push(0x0F);
+            code.push(0xAE);
+            code.push(0xF0);
+            true
+        }
         I::X87StoreControlWord | I::X87LoadControlWord => {
             // `fnstcw m16` (D9 /7) stores the x87 control word, `fldcw m16`
             // (D9 /5) loads it. The single argument is the operand's

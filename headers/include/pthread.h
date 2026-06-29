@@ -55,6 +55,9 @@
 #pragma binding(libc::pthread_attr_setdetachstate, "_pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "_pthread_attr_setstacksize")
 #pragma binding(libc::pthread_attr_setscope,    "_pthread_attr_setscope")
+#pragma binding(libc::pthread_attr_setschedpolicy, "_pthread_attr_setschedpolicy")
+#pragma binding(libc::pthread_attr_setschedparam, "_pthread_attr_setschedparam")
+#pragma binding(libc::pthread_attr_getschedparam, "_pthread_attr_getschedparam")
 #pragma binding(libc::pthread_atfork,           "_pthread_atfork")
 #pragma binding(libc::pthread_key_create,       "_pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "_pthread_key_delete")
@@ -107,6 +110,9 @@
 #pragma binding(libc::pthread_attr_setdetachstate, "pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "pthread_attr_setstacksize")
 #pragma binding(libc::pthread_attr_setscope,    "pthread_attr_setscope")
+#pragma binding(libc::pthread_attr_setschedpolicy, "pthread_attr_setschedpolicy")
+#pragma binding(libc::pthread_attr_setschedparam, "pthread_attr_setschedparam")
+#pragma binding(libc::pthread_attr_getschedparam, "pthread_attr_getschedparam")
 // The Linux C library's pthread_atfork lives in libc_nonshared.a (a static stub),
 // not as a dynamic export of libc.so.6 -- x86_64 keeps a weak legacy
 // alias but aarch64 does not, so a dynamic import resolves on one and
@@ -268,6 +274,9 @@ int pthread_attr_destroy(char *attr);
 int pthread_attr_setdetachstate(char *attr, int detachstate);
 int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
 int pthread_attr_setscope(char *attr, int scope);
+int pthread_attr_setschedpolicy(char *attr, int policy);
+int pthread_attr_setschedparam(char *attr, const struct sched_param *param);
+int pthread_attr_getschedparam(const char *attr, struct sched_param *param);
 #ifdef __linux__
 // Linux names the calling-convention pair (pthread_t, name).
 int pthread_setname_np(pthread_t thread, const char *name);

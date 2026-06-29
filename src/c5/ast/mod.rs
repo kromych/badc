@@ -106,6 +106,22 @@ pub(crate) enum AtomicKind {
     /// if `*p == *expected`, store `desired` and yield 1; otherwise
     /// store `*p` into `*expected` and yield 0.
     CompareExchangeStrong,
+    /// GCC `__sync_add_and_fetch` / `_sub_` / `_and_` / `_or_` /
+    /// `_xor_and_fetch(p, v)` -- apply the operator and yield the NEW
+    /// `*p` (the post-operation value), as opposed to the `Fetch*`
+    /// forms which yield the prior value.
+    AddFetch,
+    SubFetch,
+    AndFetch,
+    OrFetch,
+    XorFetch,
+    /// GCC `__sync_val_compare_and_swap(p, old, new)` -- if `*p == old`
+    /// store `new`; yield the prior `*p` in either case. `args` are
+    /// `[p, old, new]` (`old`/`new` are by value, not pointers).
+    SyncCasVal,
+    /// GCC `__sync_bool_compare_and_swap(p, old, new)` -- as `SyncCasVal`
+    /// but yield 1 on a swap, 0 otherwise.
+    SyncCasBool,
 }
 
 /// Storage-unit width + bit position for a bitfield reference. The

@@ -3245,6 +3245,12 @@ fn emit_intrinsic(
             emit(code, 0xD503_203Fu32);
             true
         }
+        I::AtomicThreadFence => {
+            // `dmb ish` (0xD5033BBF), a full barrier across the inner
+            // shareable domain (C11 7.17.4 seq_cst). No operand, no result.
+            emit(code, 0xD503_3BBFu32);
+            true
+        }
         I::X87StoreControlWord | I::X87LoadControlWord => {
             // The x87 FPU control word is x86-only; AArch64 source never
             // reaches for it (the guarding HAVE_GCC_ASM_FOR_X87 is unset).

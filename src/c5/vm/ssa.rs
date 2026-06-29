@@ -1673,6 +1673,9 @@ fn run_intrinsic(
             frame.regs[v as usize] = 0;
             Ok(())
         }
+        // A memory barrier has no effect in the single-threaded
+        // interpreter; no operand, no result.
+        Intrinsic::AtomicThreadFence => Ok(()),
         Intrinsic::X87StoreControlWord => {
             // The interpreter evaluates floats with host doubles, so it
             // has no x87 control word to read; store the architectural

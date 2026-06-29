@@ -3205,6 +3205,45 @@ impl<'a> Walker<'a> {
                 let desired = self.walk_expr_rvalue(b, args[2])?;
                 Ok(b.atomic_cas(addr, exp_addr, desired, width))
             }
+            AtomicKind::AddFetch
+            | AtomicKind::SubFetch
+            | AtomicKind::AndFetch
+            | AtomicKind::OrFetch
+            | AtomicKind::XorFetch => {
+                // GCC `__sync_*_and_fetch`: the read-modify-write yields the
+                // prior value; recompute the post-operation value in plain
+                // IR so a value with side effects is evaluated once.
+                let value = self.walk_expr_rvalue(b, args[1])?;
+                let (rmw, bin) = match kind {
+                    AtomicKind::AddFetch => (AtomicRmwOp::Add, BinOp::Add),
+                    AtomicKind::SubFetch => (AtomicRmwOp::Sub, BinOp::Sub),
+                    AtomicKind::AndFetch => (AtomicRmwOp::And, BinOp::And),
+                    AtomicKind::OrFetch => (AtomicRmwOp::Or, BinOp::Or),
+                    AtomicKind::XorFetch => (AtomicRmwOp::Xor, BinOp::Xor),
+                    _ => unreachable!(),
+                };
+                let old = b.atomic_rmw(rmw, addr, value, width);
+                let old = self.extend_atomic_result(b, old, elem_ty);
+                let new = b.binop(bin, old, value);
+                Ok(self.extend_atomic_result(b, new, elem_ty))
+            }
+            AtomicKind::SyncCasVal | AtomicKind::SyncCasBool => {
+                // GCC `__sync_val/bool_compare_and_swap(p, old, new)`. The
+                // existing CAS expects the comparand by address and writes
+                // the current `*p` back through it on failure, so after the
+                // CAS the scratch slot holds the prior `*p` in both cases.
+                let old_val = self.walk_expr_rvalue(b, args[1])?;
+                let new_val = self.walk_expr_rvalue(b, args[2])?;
+                let slot = b.alloc_synthetic_local();
+                let exp_addr = b.local_addr(slot);
+                b.store(exp_addr, old_val, store_kind);
+                let swapped = b.atomic_cas(addr, exp_addr, new_val, width);
+                if matches!(kind, AtomicKind::SyncCasBool) {
+                    Ok(swapped)
+                } else {
+                    Ok(b.load(exp_addr, load_kind))
+                }
+            }
         }
     }
 

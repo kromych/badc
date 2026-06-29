@@ -435,6 +435,20 @@ impl Preprocessor {
         macros.insert("__STDC__".to_string(), "1".to_string());
         macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
         macros.insert("__STDC_VERSION__".to_string(), "201112L".to_string());
+        // Memory-order arguments to the __atomic_* builtins. badc always
+        // emits sequential consistency, so the value only has to satisfy
+        // the source's `#if`/comparison uses; the canonical GCC encoding
+        // (relaxed=0 .. seq_cst=5) keeps those exact.
+        for (name, val) in [
+            ("__ATOMIC_RELAXED", "0"),
+            ("__ATOMIC_CONSUME", "1"),
+            ("__ATOMIC_ACQUIRE", "2"),
+            ("__ATOMIC_RELEASE", "3"),
+            ("__ATOMIC_ACQ_REL", "4"),
+            ("__ATOMIC_SEQ_CST", "5"),
+        ] {
+            macros.insert(name.to_string(), val.to_string());
+        }
         // `__GNUC__` and the rest of the GCC identity are opt-in
         // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
         // extensions real code gates on `__GNUC__`, but not all of them

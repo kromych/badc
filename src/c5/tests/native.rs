@@ -788,6 +788,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("asm_empty_barrier.c", 0),
     ("syslimits_path_max.c", 0),
     ("libc_atoll_wcsrtombs.c", 0),
+    ("gcc_atomics.c", 0),
     ("float_double_mix.c", 0),
     // Variadic FP packer on macOS arm64. The Apple AAPCS64
     // quirk: variadic args spill to the stack regardless of

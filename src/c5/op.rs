@@ -169,6 +169,12 @@ pub enum Intrinsic {
     /// codegen emits `fldcw m16` (x86_64 only). A no-op in the
     /// interpreter.
     X87LoadControlWord = 42,
+    /// `__atomic_thread_fence` / `__atomic_signal_fence` /
+    /// `__sync_synchronize` -- a full memory barrier (C11 7.17.4,
+    /// GCC `__sync`/`__atomic` builtins). Emits `dmb ish` (AArch64) /
+    /// `mfence` (x86_64); takes no argument and produces no value.
+    /// A no-op in the single-threaded interpreter.
+    AtomicThreadFence = 43,
 }
 
 impl Intrinsic {
@@ -216,6 +222,7 @@ impl Intrinsic {
             40 => Some(Intrinsic::AtomicCompareExchangeStrong),
             41 => Some(Intrinsic::X87StoreControlWord),
             42 => Some(Intrinsic::X87LoadControlWord),
+            43 => Some(Intrinsic::AtomicThreadFence),
             _ => None,
         }
     }

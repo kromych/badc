@@ -2938,6 +2938,8 @@ fn emit_inst(
             args,
             fp_arg_mask,
             arg_aggs,
+            ret_agg,
+            ret_slot_local,
             ..
         } => emit_call_ext(
             code,
@@ -2953,6 +2955,9 @@ fn emit_inst(
             imports,
             arg_aggs,
             &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
+            func,
         ),
         Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
         Inst::ImmCode(target_ent_pc) => {
@@ -5681,6 +5686,9 @@ fn emit_call_ext(
     imports: &super::ResolvedImports,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+    func: &FunctionSsa,
 ) -> bool {
     let import_index = match imports.index_of_binding(binding_idx) {
         Some(i) => i,
@@ -5732,6 +5740,39 @@ fn emit_call_ext(
     super::encode::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
+    }
+    // Host-ABI aggregate return (System V AMD64 3.2.3): a <= 16-byte
+    // aggregate arrives in rax:rdx (INTEGER) / xmm0:xmm1 (SSE); store each
+    // eightbyte into the caller's result temp. The walker tags `ret_agg`
+    // for the register-returned class; > 16-byte returns use the OutPtr
+    // hidden-argument path and do not reach here.
+    if let Some(ai) = ret_agg {
+        let desc = &agg_descs[ai as usize];
+        let base = local_slot_off(ret_slot_local, func, frame, abi);
+        let eb_classes = match super::abi_classify::classify_aggregate(
+            desc.size,
+            desc.align,
+            &desc.fields,
+            abi,
+            true,
+        ) {
+            super::abi_classify::AggClass::Regs(c) => c,
+            _ => alloc::vec::Vec::new(),
+        };
+        let int_ret = [Reg::RAX, Reg::RDX];
+        let mut int_i = 0usize;
+        let mut sse_i = 0u8;
+        for (k, class) in eb_classes.iter().enumerate() {
+            let disp = (base + (k as i64) * 8) as i32;
+            if matches!(class, super::abi_classify::RegClass::Sse) {
+                emit_movsd_mem_xmm(code, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
+                sse_i += 1;
+            } else {
+                emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
+                int_i += 1;
+            }
+        }
+        return true;
     }
     // Sub-word integer returns get the standard sign / zero
     // extension into rax. FP returns arrive in xmm0 (SysV 3.2.3,

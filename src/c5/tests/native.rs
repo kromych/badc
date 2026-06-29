@@ -781,6 +781,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("many_fp_args.c", 0),
     ("fp_param_after_int_overflow.c", 0),
     ("hfa_param_interleave.c", 0),
+    ("libc_struct_return.c", 0),
+    ("global_struct_return_indirect.c", 0),
     ("float_double_mix.c", 0),
     // Variadic FP packer on macOS arm64. The Apple AAPCS64
     // quirk: variadic args spill to the stack regardless of

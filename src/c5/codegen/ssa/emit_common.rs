@@ -59,11 +59,17 @@ pub(crate) fn compute_frame_base(
 ) -> (u32, u32, u32) {
     use super::super::ir::Inst;
     let declared_locals_bytes = slots16(func.locals.max(0) as u32);
-    let any_local_access = func.insts.iter().any(|i| match i {
-        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
-        Inst::LocalAddr(off) => *off < 0,
-        _ => false,
-    });
+    // A function returning an aggregate larger than 16 bytes saves the
+    // caller-supplied indirect-result pointer into its `indirect_result_slot`
+    // in the prologue and reads it on return; that slot is reached through a
+    // FunctionSsa field rather than an instruction, so it counts as a local
+    // access even when no LoadLocal / StoreLocal / LocalAddr references it.
+    let any_local_access = func.indirect_result_slot < 0
+        || func.insts.iter().any(|i| match i {
+            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
+            Inst::LocalAddr(off) => *off < 0,
+            _ => false,
+        });
     let locals_bytes = if any_local_access {
         declared_locals_bytes
     } else {

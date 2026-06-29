@@ -145,6 +145,11 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
                 ret_slot_local,
                 ret_agg,
                 ..
+            }
+            | Inst::CallExt {
+                ret_slot_local,
+                ret_agg,
+                ..
             } => {
                 if let Some(ai) = ret_agg
                     && movable(*ret_slot_local)
@@ -194,9 +199,9 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
     for inst in &f.insts {
         let off = match inst {
             Inst::LocalAddr(off) | Inst::AllocaInit(off) => *off,
-            Inst::Call { ret_slot_local, .. } | Inst::CallIndirect { ret_slot_local, .. } => {
-                *ret_slot_local
-            }
+            Inst::Call { ret_slot_local, .. }
+            | Inst::CallIndirect { ret_slot_local, .. }
+            | Inst::CallExt { ret_slot_local, .. } => *ret_slot_local,
             _ => continue,
         };
         if movable(off) && !agg_cells.contains(&off) {
@@ -395,7 +400,9 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
                     *off = nn;
                 }
             }
-            Inst::Call { ret_slot_local, .. } | Inst::CallIndirect { ret_slot_local, .. } => {
+            Inst::Call { ret_slot_local, .. }
+            | Inst::CallIndirect { ret_slot_local, .. }
+            | Inst::CallExt { ret_slot_local, .. } => {
                 if let Some(&nn) = new_off.get(ret_slot_local) {
                     *ret_slot_local = nn;
                 }

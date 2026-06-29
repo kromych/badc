@@ -267,6 +267,14 @@ pub(crate) enum Inst {
         /// its bytes into the platform-ABI argument registers. Empty for the
         /// common scalar-only libc call.
         arg_aggs: Vec<Option<u32>>,
+        /// Host-ABI by-value struct return, as for [`Self::Call::ret_agg`]:
+        /// `Some(i)` marks the callee as returning `agg_descs[i]` by value in
+        /// the platform return registers, gathered into the result temp at
+        /// `ret_slot_local`. `None` for a scalar / void return.
+        ret_agg: Option<u32>,
+        /// Frame slot of the aggregate-return result temp. `0` unless
+        /// `ret_agg` is set.
+        ret_slot_local: i64,
     },
     /// Tail-jump to an external symbol. Used only as the body
     /// of an address-take trampoline; never has a defined value

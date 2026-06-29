@@ -2104,6 +2104,8 @@ fn emit_inst(
             args,
             fp_arg_mask,
             arg_aggs,
+            ret_agg,
+            ret_slot_local,
             ..
         } => emit_call_ext(
             code,
@@ -2120,6 +2122,8 @@ fn emit_inst(
             imports,
             arg_aggs,
             &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
         ),
         Inst::CallIndirect {
             target,
@@ -3369,6 +3373,8 @@ fn emit_call_ext(
     imports: &super::ResolvedImports,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_off: i64,
 ) -> bool {
     let import_index = match imports.index_of_binding(binding_idx) {
         Some(i) => i,
@@ -3400,6 +3406,7 @@ fn emit_call_ext(
     ) {
         return false;
     }
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
     plt_call_fixups.push(PltCallFixup {
         instr_offset: code.len(),
         import_index,
@@ -3447,6 +3454,19 @@ fn emit_call_ext(
     }
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
+    }
+    if ret_agg.is_some() {
+        finish_call_result(
+            code,
+            ret_agg,
+            ret_slot_off,
+            agg_descs,
+            dst,
+            frame,
+            scratch,
+            false,
+        );
+        return true;
     }
     use crate::c5::compiler::types as ty_helpers;
     let return_type_tag = imp.return_type_tag;

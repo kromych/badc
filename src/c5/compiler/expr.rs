@@ -692,27 +692,12 @@ impl Compiler {
                     let callee_returns_struct = self.symbols[id_idx].class == Token::Fun as i64
                         && is_struct_ty(callee_ret_ty)
                         && struct_ptr_depth(callee_ret_ty) == 0;
-                    // Token::Sys (libc) calls returning a struct by
-                    // value would need real platform-ABI register
-                    // packing -- SysV's two-register split for
-                    // 8 < size <= 16, Win64's hidden out-pointer for
-                    // size > 8, AAPCS64's HFA / two-GPR split, and so
-                    // on. The c5-internal "address-as-value, hidden
-                    // out-pointer at val=2" convention only works for
-                    // c5-to-c5 calls. Refuse the call up front rather
-                    // than emit a silently-broken sequence.
-                    if self.symbols[id_idx].class == Token::Sys as i64
-                        && is_struct_ty(callee_ret_ty)
-                        && struct_ptr_depth(callee_ret_ty) == 0
-                    {
-                        return Err(self.compile_err(format!(
-                            "`{}` returns a struct by value, but the \
-                         platform-ABI struct-return convention isn't \
-                         implemented for Token::Sys calls. Use a \
-                         pointer-returning variant or pass an out-buffer.",
-                            fn_name_for_warn
-                        )));
-                    }
+                    // A Token::Sys (dylib-bound) call returning a struct by
+                    // value is lowered through the native SSA path: the
+                    // walker tags the CallExt with `ret_agg` and the emitter
+                    // gathers the result from the platform-ABI return
+                    // registers into the result temp (HFA in v0..vN, x0/x1
+                    // for a small aggregate, x8 indirect for > 16 bytes).
                     let mut nargs = 0;
                     // Snapshot the AST parser-side vstack depth so
                     // the call's per-arg emit sequence (per-arg

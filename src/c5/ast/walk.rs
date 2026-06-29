@@ -2370,10 +2370,30 @@ impl<'a> Walker<'a> {
                                 ext_arg_aggs[i] = Some(b.intern_agg_desc(desc));
                             }
                         }
+                        // A by-value struct return follows the platform ABI:
+                        // reserve the result temp and tag the call's
+                        // `ret_agg` so the emitter gathers the return
+                        // registers (HFA in v0..vN, x0/x1 for a small
+                        // aggregate, x8 indirect for > 16 bytes). The Mcpy at
+                        // the use site copies from this temp's address.
+                        let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                        | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                            crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
+                        {
+                            let ridx = b.intern_agg_desc(desc.clone());
+                            let slot = b.alloc_synthetic_struct(desc.size as i64);
+                            Some((ridx, slot))
+                        } else {
+                            None
+                        };
                         let fp_return = is_floating_scalar(*ty);
                         let call = b.call_ext(*val, arg_vals, fp_arg_mask, fp_return);
                         if !ext_arg_aggs.is_empty() {
                             b.set_call_arg_aggs(call, ext_arg_aggs);
+                        }
+                        if let Some((ridx, slot)) = ret_temp {
+                            b.set_call_ret_agg(call, ridx, slot);
+                            return Ok(b.local_addr(slot));
                         }
                         if is_float_ty(*ty) {
                             return Ok(b.mark_f32(call));

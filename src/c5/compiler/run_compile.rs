@@ -302,12 +302,24 @@ impl Compiler {
                 // synthesising placeholder parameter types would feed the
                 // call-site argument type-check a spurious mismatch.
                 let fnptr_proto = self.pending.typedef_fn_proto.take();
-                if let Some(types) = self.pending.fn_ptr_param_types.take() {
-                    self.symbols[id_idx].params = types;
-                    self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
-                } else if let Some((proto_fixed, true)) = fnptr_proto {
-                    self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
-                    self.symbols[id_idx].is_variadic = true;
+                let fnptr_param_types = self.pending.fn_ptr_param_types.take();
+                // `fn_ptr_param_types` is the pointee signature of a
+                // fn-pointer typedef used as this declarator's type. It
+                // describes a fn-pointer OBJECT (`cb x;` -- a callback
+                // variable an indirect call reads its parameter shape
+                // from). A declarator that is itself a function whose
+                // return type is that typedef (`cb f(args)`) has its own
+                // parameter list, installed below; a following `(` marks
+                // it, so the return type's pointee params must not stand
+                // in as the function's own.
+                if self.lex.tk != '(' {
+                    if let Some(types) = fnptr_param_types {
+                        self.symbols[id_idx].params = types;
+                        self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
+                    } else if let Some((proto_fixed, true)) = fnptr_proto {
+                        self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
+                        self.symbols[id_idx].is_variadic = true;
+                    }
                 }
                 // Carry the bare-`void` side channel onto the
                 // declarator. `pending_base_was_void` was set if

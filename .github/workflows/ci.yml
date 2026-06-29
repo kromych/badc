@@ -826,7 +826,7 @@ jobs:
         run: |
           set -e
           export BADC="$PWD/target/release/badc"
-          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb quickjs; do
+          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb quickjs raylib; do
             echo "::group::$d (N=${{ matrix.pressure }})"
             python "demos/$d/smoke.py"
             echo "::endgroup::"

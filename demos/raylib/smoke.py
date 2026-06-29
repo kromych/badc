@@ -96,6 +96,9 @@ def logic_self_test(badc: Path, work: Path) -> bool:
 def build_standalone(badc: Path, work: Path) -> bool:
     """Compile raylib + the game through badc, link a standalone binary,
     and auto-play it headless for a few frames. macOS only for now."""
+    # The raylib sources are needed only for the full build; the logic
+    # self-test references none of them.
+    subprocess.run([sys.executable, str(RAYLIB_DIR / "setup.py")], check=True)
     src = RAYLIB_DIR / "src"
     inc = RAYLIB_DIR / "include"
     objs = []
@@ -149,7 +152,6 @@ def build_standalone(badc: Path, work: Path) -> bool:
 
 def main() -> int:
     badc = resolve_badc()
-    subprocess.run([sys.executable, str(RAYLIB_DIR / "setup.py")], check=True)
 
     with tempfile.TemporaryDirectory(prefix="raylib-smoke-") as work_str:
         work = Path(work_str)

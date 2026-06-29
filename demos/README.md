@@ -143,6 +143,15 @@ to all five supported targets; CI runs the smoke build-only
 since runners have no display server. See
 [`gui_hello/README.md`](./gui_hello/README.md).
 
+## raylib/
+
+badc compiles raylib 5.5 (RGFW desktop backend) from source and
+links a small game (Lode Runner) into a standalone binary. The
+pure game-logic self-test runs through badc on any host; the full
+standalone build + headless run is wired for macOS today (the X11
+/ Win32 header surface for the Linux / Windows ports is pending).
+See [`raylib/README.md`](./raylib/README.md).
+
 ## efi_hello/
 
 UEFI application that prints "Hello, EFI!" through

@@ -10,6 +10,7 @@
 
 #include "loderunner.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -109,17 +110,52 @@ static Input scripted_input(int frame) {
     return in;
 }
 
+/* rlgl's framebuffer read-back: returns width*height*4 RGBA bytes,
+ * bottom-up (OpenGL origin). Declared here rather than including rlgl.h. */
+extern unsigned char *rlReadScreenPixels(int width, int height);
+
+/* Write an RGB PPM from the framebuffer, flipping to a top-down image.
+ * Lets the rendered frame be inspected without a windowing session. */
+static int dump_frame_ppm(const char *path) {
+    int w = GetScreenWidth();
+    int h = GetScreenHeight();
+    unsigned char *rgba = rlReadScreenPixels(w, h);
+    if (!rgba) return 1;
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        free(rgba);
+        return 1;
+    }
+    fprintf(f, "P6\n%d %d\n255\n", w, h);
+    for (int y = h - 1; y >= 0; y--) {
+        for (int x = 0; x < w; x++) {
+            unsigned char *p = rgba + (y * w + x) * 4;
+            fputc(p[0], f);
+            fputc(p[1], f);
+            fputc(p[2], f);
+        }
+    }
+    fclose(f);
+    free(rgba);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     int selftest = 0;
     int frames = 0;
+    const char *dump_path = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--selftest") == 0) {
             selftest = 1;
         } else if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
             frames = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--dump-frame") == 0 && i + 1 < argc) {
+            dump_path = argv[++i];
+            selftest = 1;
         }
     }
     if (selftest && frames <= 0) frames = 300;
+    if (dump_path && frames > 8) frames = 8;
 
     GameState g;
     level_load(&g);
@@ -137,6 +173,11 @@ int main(int argc, char **argv) {
         EndDrawing();
 
         frame++;
+        if (dump_path && frame >= frames) {
+            if (dump_frame_ppm(dump_path) == 0)
+                TraceLog(LOG_INFO, "FRAME: dumped to %s", dump_path);
+            break;
+        }
         if (selftest && frame >= frames) break;
     }
 

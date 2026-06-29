@@ -255,23 +255,34 @@ fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) 
         .iter()
         .filter(|p| !matches!(p, super::ArgPlacement::Stack(_)))
         .count();
-    // An interleaved register / stack placement -- the integer bank
-    // exhausted before a trailing floating-point parameter -- does not
-    // fit the contiguous-prefix c5 cdecl cell layout. Fail in every
-    // build rather than emit a prologue that reads parameters from the
-    // wrong cells; the case is unreachable for the parameter lists the
-    // demos and fixtures exercise. TODO: support a non-prefix cell
-    // layout for this shape.
-    assert!(
-        placements[..n_reg]
-            .iter()
-            .all(|p| !matches!(p, super::ArgPlacement::Stack(_)))
-            && placements[n_reg..]
-                .iter()
-                .all(|p| matches!(p, super::ArgPlacement::Stack(_))),
-        "interleaved register / stack parameter placement is not yet supported"
+    // The contiguous-prefix (n_reg, n_stack) split is well defined only
+    // when every scalar Stack placement forms a suffix. Interleaved
+    // lists take the position-indexed cell spill in `emit_prologue` and
+    // never reach this split.
+    debug_assert!(
+        !params_interleaved(func, abi),
+        "param_reg_stack_split called on an interleaved placement"
     );
     (n_reg, placements.len() - n_reg)
+}
+
+/// True when a scalar stack-passed parameter precedes a register-passed
+/// one. AAPCS64's independent integer and FP register files (6.4.1) let
+/// an HFA exhaust the eight FP registers (NSRN = 8) while the integer
+/// file is still open, so a later integer parameter takes a register
+/// after an earlier scalar floating-point parameter has overflowed to
+/// the stack. The contiguous-prefix c5 cdecl cell layout cannot express
+/// that order; the interleaved prologue writes each parameter into its
+/// own position's cell instead.
+fn params_interleaved(func: &FunctionSsa, abi: super::Abi) -> bool {
+    let placements = param_placements(func, abi);
+    let first_stack = placements
+        .iter()
+        .position(|p| matches!(p, super::ArgPlacement::Stack(_)));
+    let last_non_stack = placements
+        .iter()
+        .rposition(|p| !matches!(p, super::ArgPlacement::Stack(_)));
+    matches!((first_stack, last_non_stack), (Some(fs), Some(ln)) if fs < ln)
 }
 
 /// Total bytes the prologue allocates above the saved fp/lr for
@@ -300,6 +311,12 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
     let entry_spill = func.n_params;
     if entry_spill == 0 {
         return 0;
+    }
+    // Interleaved lists use one position-indexed cell per parameter; no
+    // register-stripe elision (the rare shape does not warrant the
+    // seeded-slot scan).
+    if params_interleaved(func, abi) {
+        return entry_spill as u32 * 16;
     }
     let (n_reg, n_stack) = param_reg_stack_split(func, abi);
 
@@ -1421,81 +1438,85 @@ fn emit_prologue(
         0
     };
     if entry_spill > 0 && frame.param_spill_bytes > 0 {
-        let (n_reg, n_stack) = param_reg_stack_split(func, abi);
-        let placements = param_placements(func, abi);
-        if n_stack > 0 {
-            let overflow_bytes = (n_stack as u32) * 16;
-            emit_sub_sp_imm(code, overflow_bytes);
-            // Each scalar stack parameter's incoming offset is the
-            // planner's placement offset, which accounts for any by-value
-            // aggregate stack parameter (StructStack) that precedes it. A
-            // plain index assumes an 8-byte stride and would read an
-            // aggregate's bytes instead of the scalar.
-            let mut slot_i = 0u32;
-            for p in &placements {
-                if let super::ArgPlacement::Stack(off) = p {
-                    let host_off = *off + overflow_bytes;
-                    let c5_off = slot_i * 16;
-                    emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
-                    emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
-                    slot_i += 1;
+        if params_interleaved(func, abi) {
+            emit_interleaved_param_cells(code, func, abi);
+        } else {
+            let (n_reg, n_stack) = param_reg_stack_split(func, abi);
+            let placements = param_placements(func, abi);
+            if n_stack > 0 {
+                let overflow_bytes = (n_stack as u32) * 16;
+                emit_sub_sp_imm(code, overflow_bytes);
+                // Each scalar stack parameter's incoming offset is the
+                // planner's placement offset, which accounts for any by-value
+                // aggregate stack parameter (StructStack) that precedes it. A
+                // plain index assumes an 8-byte stride and would read an
+                // aggregate's bytes instead of the scalar.
+                let mut slot_i = 0u32;
+                for p in &placements {
+                    if let super::ArgPlacement::Stack(off) = p {
+                        let host_off = *off + overflow_bytes;
+                        let c5_off = slot_i * 16;
+                        emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
+                        emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
+                        slot_i += 1;
+                    }
                 }
             }
-        }
-        let (seeded_params, addr_taken_slots, needed_slots) =
-            super::ssa::emit_common::scan_param_slot_usage(func, alloc);
-        let mut pending_sub: u32 = 0;
-        for i in (0..n_reg).rev() {
-            let slot = (i as i64) + 2;
-            let skip = seeded_params.contains(&(i as u32))
-                && !addr_taken_slots.contains(&slot)
-                && !needed_slots.contains(&slot);
-            if skip {
-                pending_sub += 16;
-            } else {
-                if pending_sub > 0 {
-                    emit_sub_sp_imm(code, pending_sub);
-                    pending_sub = 0;
-                }
-                // Source the incoming value from the parameter's
-                // argument register per the plan. An integer parameter's
-                // register is `plan.IntReg`, not `int_arg_regs[i]`: a
-                // floating-point parameter earlier in the list consumes
-                // a d-register and does not shift the integer bank. A
-                // floating-point parameter (always a `double` here -- a
-                // `float` parameter's positive cell is unobserved and
-                // elided) arrives in a d-register; move its bits into
-                // x16 and store them through the same 16-byte pre-
-                // decrement cell push the integer path uses.
-                match placements.get(i).copied() {
-                    Some(super::ArgPlacement::FpReg(d)) => {
-                        emit(code, enc_fmov_d_to_x(Reg(16), d));
-                        emit(code, enc_str_pre(Reg(16), Reg(31), -16));
+            let (seeded_params, addr_taken_slots, needed_slots) =
+                super::ssa::emit_common::scan_param_slot_usage(func, alloc);
+            let mut pending_sub: u32 = 0;
+            for i in (0..n_reg).rev() {
+                let slot = (i as i64) + 2;
+                let skip = seeded_params.contains(&(i as u32))
+                    && !addr_taken_slots.contains(&slot)
+                    && !needed_slots.contains(&slot);
+                if skip {
+                    pending_sub += 16;
+                } else {
+                    if pending_sub > 0 {
+                        emit_sub_sp_imm(code, pending_sub);
+                        pending_sub = 0;
                     }
-                    Some(super::ArgPlacement::IntReg(r)) => {
-                        emit(code, enc_str_pre(Reg(r), Reg(31), -16))
+                    // Source the incoming value from the parameter's
+                    // argument register per the plan. An integer parameter's
+                    // register is `plan.IntReg`, not `int_arg_regs[i]`: a
+                    // floating-point parameter earlier in the list consumes
+                    // a d-register and does not shift the integer bank. A
+                    // floating-point parameter (always a `double` here -- a
+                    // `float` parameter's positive cell is unobserved and
+                    // elided) arrives in a d-register; move its bits into
+                    // x16 and store them through the same 16-byte pre-
+                    // decrement cell push the integer path uses.
+                    match placements.get(i).copied() {
+                        Some(super::ArgPlacement::FpReg(d)) => {
+                            emit(code, enc_fmov_d_to_x(Reg(16), d));
+                            emit(code, enc_str_pre(Reg(16), Reg(31), -16));
+                        }
+                        Some(super::ArgPlacement::IntReg(r)) => {
+                            emit(code, enc_str_pre(Reg(r), Reg(31), -16))
+                        }
+                        // Aggregate parameter passed in registers: reserve
+                        // its 16-byte cell here but leave the incoming
+                        // argument registers untouched. The body reads the
+                        // aggregate from a parser-reserved body local, not
+                        // from this cell; `emit_struct_param_scatter` (run
+                        // after the frame is established) stores the
+                        // argument registers straight into that local. The
+                        // cell is reserved only so the surrounding
+                        // `LocalAddr` slot offsets stay stable.
+                        Some(super::ArgPlacement::StructRegs { .. }) => {
+                            emit_sub_sp_imm(code, 16);
+                        }
+                        // No register source (stack-passed or out of range):
+                        // the overflow restripe above already filled the
+                        // cell; reserve its 16 bytes without a store.
+                        _ => emit_sub_sp_imm(code, 16),
                     }
-                    // Aggregate parameter passed in registers: reserve
-                    // its 16-byte cell here but leave the incoming
-                    // argument registers untouched. The body reads the
-                    // aggregate from a parser-reserved body local, not
-                    // from this cell; `emit_struct_param_scatter` (run
-                    // after the frame is established) stores the
-                    // argument registers straight into that local. The
-                    // cell is reserved only so the surrounding
-                    // `LocalAddr` slot offsets stay stable.
-                    Some(super::ArgPlacement::StructRegs { .. }) => {
-                        emit_sub_sp_imm(code, 16);
-                    }
-                    // No register source (stack-passed or out of range):
-                    // the overflow restripe above already filled the
-                    // cell; reserve its 16 bytes without a store.
-                    _ => emit_sub_sp_imm(code, 16),
                 }
             }
-        }
-        if pending_sub > 0 {
-            emit_sub_sp_imm(code, pending_sub);
+            if pending_sub > 0 {
+                emit_sub_sp_imm(code, pending_sub);
+            }
         }
     }
     // Leaf-function elision: a function that makes no calls
@@ -1520,6 +1541,50 @@ fn emit_prologue(
         // aggregate result through it.
         emit_local_addr(code, Place::IntReg(16), func.indirect_result_slot, frame);
         emit(code, enc_str_imm(Reg(8), Reg(16), 0));
+    }
+}
+
+/// Position-indexed parameter cell spill for an interleaved register /
+/// stack placement (`params_interleaved`). Allocates one 16-byte cell
+/// per declared parameter in a single block, then writes each scalar
+/// parameter into the cell for its own position: an integer register
+/// stores directly, an FP register routes its bits through x16, a
+/// stack-passed scalar copies from the incoming overflow slot just
+/// above the cell block. Aggregate parameters get a reserved cell and
+/// are filled from their argument registers / incoming stack slot by
+/// `emit_struct_param_scatter` once the frame is established; x16 is the
+/// only scratch, so no argument register that scatter still needs is
+/// disturbed. The single up-front allocation keeps every parameter's
+/// cell at `[fp + 16 + position*16]`, matching `local_slot_off`, which
+/// the two-phase contiguous-prefix layout cannot do for an interleaved
+/// order.
+fn emit_interleaved_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, abi: super::Abi) {
+    let placements = param_placements(func, abi);
+    let cells = func.n_params as u32 * 16;
+    emit_sub_sp_imm(code, cells);
+    for (i, p) in placements.iter().enumerate() {
+        let c5_off = (i as u32) * 16;
+        match p {
+            super::ArgPlacement::IntReg(r) => {
+                emit(code, enc_str_imm(Reg(*r), Reg(31), c5_off));
+            }
+            super::ArgPlacement::FpReg(d) => {
+                emit(code, enc_fmov_d_to_x(Reg(16), *d));
+                emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
+            }
+            super::ArgPlacement::Stack(off) => {
+                // The incoming overflow argument sits just above the
+                // freshly allocated cell block.
+                let host_off = cells + *off;
+                emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
+                emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
+            }
+            // StructRegs / StructStack reserve their cell here and are
+            // filled by `emit_struct_param_scatter`. By-reference
+            // aggregate parameters are rejected upstream on AAPCS64, so
+            // they do not reach this path.
+            _ => {}
+        }
     }
 }
 

@@ -6,6 +6,18 @@
 *.obj
 *.o
 .DS_Store
+# raylib source -- not committed; `demos/raylib/setup.py` fetches the
+# upstream 5.5 tarball into src/ (RGFW backend). The game sources,
+# headers, runner scripts and README ARE committed.
+demos/raylib/*
+!demos/raylib/setup.py
+!demos/raylib/smoke.py
+!demos/raylib/README.md
+!demos/raylib/loderunner.c
+!demos/raylib/loderunner_logic.c
+!demos/raylib/loderunner.h
+!demos/raylib/test_loderunner.c
+!demos/raylib/include
 # SQLite amalgamation -- not committed; `demos/sqlite3/setup.py`
 # fetches the upstream tarball and leaves the four .c/.h files
 # behind. The build/smoke scripts and the README ARE committed

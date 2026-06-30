@@ -14,6 +14,45 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Optional assets, loaded when `--assets <dir>` is passed: a 64x16
+ * sprite sheet (four 16x16 tiles) and a pickup sound. When absent the
+ * game draws procedurally and runs silent, so it still builds and runs
+ * on a host without an audio backend. */
+static Texture2D g_sheet;
+static int g_assets;
+#ifdef GAME_AUDIO
+static Sound g_pickup;
+#endif
+
+static void load_assets(const char *dir) {
+    char path[1024];
+    snprintf(path, sizeof path, "%s/tiles.png", dir);
+    g_sheet = LoadTexture(path);
+    g_assets = (g_sheet.id != 0);
+#ifdef GAME_AUDIO
+    // Real playback is wired where the audio backend is built (macOS
+    // CoreAudio today); elsewhere the sprites still load and draw.
+    InitAudioDevice();
+    snprintf(path, sizeof path, "%s/pickup.wav", dir);
+    g_pickup = LoadSound(path);
+#endif
+}
+
+static void unload_assets(void) {
+    if (g_assets) UnloadTexture(g_sheet);
+#ifdef GAME_AUDIO
+    UnloadSound(g_pickup);
+    if (IsAudioDeviceReady()) CloseAudioDevice();
+#endif
+}
+
+/* Draw sprite tile `idx` (0..3) from the sheet at the tile cell. */
+static void draw_sprite(int idx, int px, int py) {
+    Rectangle src = {idx * 16.0f, 0, 16, 16};
+    Rectangle dst = {(float)px, (float)py, TILE_PX, TILE_PX};
+    DrawTexturePro(g_sheet, src, dst, (Vector2){0, 0}, 0, WHITE);
+}
+
 static Color tile_fill(int t, int exit_open) {
     switch (t) {
         case TILE_BRICK: return BROWN;
@@ -54,10 +93,14 @@ static void level_draw(const GameState *g) {
                     DrawLine(px, py + 4, px + TILE_PX, py + 4, GOLD);
                     break;
                 case TILE_GOLD:
-                    DrawRectangle(px + 7, py + 7, TILE_PX - 14, TILE_PX - 14,
-                                  GOLD);
-                    DrawRectangleLines(px + 7, py + 7, TILE_PX - 14,
-                                       TILE_PX - 14, ORANGE);
+                    if (g_assets) {
+                        draw_sprite(1, px, py);
+                    } else {
+                        DrawRectangle(px + 7, py + 7, TILE_PX - 14,
+                                      TILE_PX - 14, GOLD);
+                        DrawRectangleLines(px + 7, py + 7, TILE_PX - 14,
+                                           TILE_PX - 14, ORANGE);
+                    }
                     break;
                 default:
                     break;
@@ -70,8 +113,11 @@ static void level_draw(const GameState *g) {
         DrawRectangle(g->guard[i].x * TILE_PX + 3, g->guard[i].y * TILE_PX + 3,
                       TILE_PX - 6, TILE_PX - 6, RED);
     }
-    DrawRectangle(g->player.x * TILE_PX + 3, g->player.y * TILE_PX + 3,
-                  TILE_PX - 6, TILE_PX - 6, LIME);
+    if (g_assets)
+        draw_sprite(0, g->player.x * TILE_PX, g->player.y * TILE_PX);
+    else
+        DrawRectangle(g->player.x * TILE_PX + 3, g->player.y * TILE_PX + 3,
+                      TILE_PX - 6, TILE_PX - 6, LIME);
 
     int hud_y = MAP_H * TILE_PX + 8;
     DrawText(TextFormat("GOLD %d / %d", g->gold_taken, g->gold_total), 8, hud_y,
@@ -144,6 +190,7 @@ int main(int argc, char **argv) {
     int selftest = 0;
     int frames = 0;
     const char *dump_path = NULL;
+    const char *assets_dir = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--selftest") == 0) {
             selftest = 1;
@@ -152,6 +199,8 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "--dump-frame") == 0 && i + 1 < argc) {
             dump_path = argv[++i];
             selftest = 1;
+        } else if (strcmp(argv[i], "--assets") == 0 && i + 1 < argc) {
+            assets_dir = argv[++i];
         }
     }
     if (selftest && frames <= 0) frames = 300;
@@ -162,11 +211,17 @@ int main(int argc, char **argv) {
 
     InitWindow(MAP_W * TILE_PX, MAP_H * TILE_PX + HUD_PX, "Lode Runner (badc)");
     SetTargetFPS(12);
+    if (assets_dir) load_assets(assets_dir);
 
+    int prev_gold = g.gold_taken;
     int frame = 0;
     while (!WindowShouldClose()) {
         Input in = selftest ? scripted_input(frame) : read_input();
         level_step(&g, in);
+#ifdef GAME_AUDIO
+        if (g_assets && g.gold_taken > prev_gold) PlaySound(g_pickup);
+#endif
+        prev_gold = g.gold_taken;
 
         BeginDrawing();
         level_draw(&g);
@@ -181,6 +236,7 @@ int main(int argc, char **argv) {
         if (selftest && frame >= frames) break;
     }
 
+    unload_assets();
     CloseWindow();
     return 0;
 }

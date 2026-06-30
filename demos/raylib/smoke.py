@@ -462,6 +462,9 @@ def oracle_diff(badc: Path, work: Path) -> bool:
         return True
     src = RAYLIB_DIR / "oracle_diff.c"
     inc = RAYLIB_DIR / "src"
+    if not (inc / "raymath.h").is_file():
+        print("smoke SKIP: raymath oracle needs the vendored source (run setup.py)")
+        return True
     bad_out = work / f"oracle_badc{EXE}"
     ref_out = work / f"oracle_ref{EXE}"
     if run([str(badc), "--gnu", "-I", str(inc), str(src), "-o", str(bad_out)]).returncode != 0:
@@ -521,9 +524,11 @@ def _out_dir_arg(argv) -> str | None:
 
 def _run(badc: Path, work: Path) -> int:
     ok = logic_self_test(badc, work)
-    ok &= oracle_diff(badc, work)
+    # platform_build runs setup.py, which fetches raymath.h into src/; the
+    # raymath differential below needs it, so it runs after the build.
     if MAC or LINUX or WIN:
         ok &= platform_build(badc, work)
+    ok &= oracle_diff(badc, work)
     return 0 if ok else 1
 
 

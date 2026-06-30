@@ -183,19 +183,19 @@ def platform_build(badc: Path, work: Path) -> bool:
         print("smoke FAIL: libraylib.a archive", file=sys.stderr)
         return False
 
-    game_obj = work / "loderunner.o"
     logic_obj = work / "loderunner_logic.o"
-    if run([str(badc), "-c", *defines, "-I", str(inc), "-I", str(src),
-            "-o", str(game_obj), str(RAYLIB_DIR / "loderunner.c")]).returncode != 0:
-        print("smoke FAIL: loderunner.c did not compile", file=sys.stderr)
-        return False
     if run([str(badc), "-c", "-I", str(RAYLIB_DIR),
             "-o", str(logic_obj), str(RAYLIB_DIR / "loderunner_logic.c")]).returncode != 0:
         return False
 
     game = work / f"loderunner{EXE}"
-    if run([str(badc), *defines, str(game_obj), str(logic_obj), str(archive),
-            "-o", str(game)]).returncode != 0:
+    # Compile loderunner.c in the link invocation so its
+    # `#pragma subsystem(windows)` drives the PE subsystem (a pragma in a
+    # separately-compiled object is not visible at link). loderunner_logic.c
+    # is still separately compiled to exercise the multi-object link.
+    if run([str(badc), *defines, "-I", str(inc), "-I", str(src),
+            str(RAYLIB_DIR / "loderunner.c"), str(logic_obj),
+            str(archive), "-o", str(game)]).returncode != 0:
         print("smoke FAIL: standalone link", file=sys.stderr)
         return False
     print(f"smoke OK: standalone build -> {game.name} ({game.stat().st_size} bytes)")
@@ -255,6 +255,15 @@ def _pe_imports(path: Path) -> list[tuple[str, str]]:
             t += 8
         d += 20
     return out
+
+
+def _pe_subsystem(path: Path) -> int:
+    """The PE optional-header Subsystem (2 = GUI, 3 = console)."""
+    import struct
+
+    data = path.read_bytes()
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    return struct.unpack_from("<H", data, pe + 24 + 68)[0]
 
 
 def _validate_win_imports(badc: Path, game: Path, work: Path) -> bool:
@@ -326,6 +335,12 @@ def windowed_run(badc: Path, game: Path, work: Path) -> bool:
         # import the PE records resolves against its DLL (the load gate).
         if not _validate_win_imports(badc, game, work):
             return False
+        sub = _pe_subsystem(game)
+        if sub != 2:
+            print(f"smoke FAIL: Windows game subsystem is {sub}, expected 2 (GUI / no "
+                  "console)", file=sys.stderr)
+            return False
+        print("smoke OK: GUI subsystem (no console window)")
         print("smoke SKIP: render needs a desktop session (Windows)")
         return True
     ppm = work / "frame.ppm"

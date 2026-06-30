@@ -15,6 +15,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+// A windowed game wants no console on Windows; the GUI subsystem also
+// suppresses the console window the default console subsystem allocates.
+#ifdef _WIN32
+#pragma subsystem(windows)
+#endif
+
 /* Optional assets, loaded when `--assets <dir>` is passed: a 64x16
  * sprite sheet (four 16x16 tiles) and a pickup sound. When absent the
  * game draws procedurally and runs silent, so it still builds and runs

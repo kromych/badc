@@ -428,11 +428,15 @@ jobs:
           echo === cdb loader snaps on loderunner.exe ===
           echo q | "%CDB%" -logo "%LOG%" -xe ld:ntdll -c "!gflag +sls; g" "%EXE%"
           if exist "%LOG%" type "%LOG%"
-          findstr /c:"c0000139" "%LOG%" >nul && (
+          rem findstr exits 1 when the pattern is absent (the success case),
+          rem so branch on errorlevel and exit 0 explicitly.
+          findstr /c:"c0000139" "%LOG%" >nul
+          if not errorlevel 1 (
             echo FAIL: unresolved import under the loader ^(0xc0000139^)
             exit /b 1
           )
           echo === cdb load gate OK: all imports resolved ===
+          exit /b 0
       - name: quickjs smoke (qjs CLI + pure-JS test suite)
         # Vendored bellard/quickjs compiles + 8-TU links through badc;
         # the qjs CLI runs QuickJS's own pure-JS test suite (closure,

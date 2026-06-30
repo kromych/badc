@@ -98,25 +98,46 @@ void __c5_entry(void *sp, long image_off) {
 // stack layout, so the adapter's `sp` / `image_off` are ignored; argv
 // comes from the CRT instead. `__c5_*` argv helpers own the
 // CRT-specific call shape so the writer only references the names.
-// `__BADC_WIN_GUI__` selects the kernel32 `WinMain` path;
-// `__BADC_WIN_WIDE__` the `wmain` path; otherwise `main`.
+// The entry shape follows the entry symbol, not the PE subsystem:
+// `__BADC_WIN_WINMAIN__` selects the `WinMain` shape, `__BADC_WIN_WIDE__`
+// the `wmain` shape, otherwise `main` with argc/argv. A GUI-subsystem
+// program with a plain `main` therefore still receives argc/argv.
 //   `nShowCmd` is `SW_SHOWNORMAL` (1), not `SW_SHOWDEFAULT` (10);
 // `SW_SHOWDEFAULT` defers to `STARTUPINFOA::wShowWindow`, which is
 // `SW_HIDE` when a parent left it zero without `STARTF_USESHOWWINDOW`.
-#ifdef __BADC_WIN_GUI__
+#ifdef __BADC_WIN_WINMAIN__
 
+// WinMain / wWinMain: (hInstance, hPrevInstance, lpCmdLine, nShowCmd).
+// `__BADC_WIN_WIDE__` selects the wide `wWinMain` (LPWSTR command line).
 #pragma dylib(kernel32, "kernel32.dll")
 #pragma binding(kernel32::GetModuleHandleA, "GetModuleHandleA")
-#pragma binding(kernel32::GetCommandLineA, "GetCommandLineA")
 
 extern void *GetModuleHandleA(void *module_name);
-extern char *GetCommandLineA(void);
-extern int __BADC_ENTRY__(void *instance, void *prev_instance,
-                          char *cmd_line, int show_cmd);
 
 void *__c5_getmodulehandle(void) {
     return GetModuleHandleA(0);
 }
+
+#ifdef __BADC_WIN_WIDE__
+#pragma binding(kernel32::GetCommandLineW, "GetCommandLineW")
+extern unsigned short *GetCommandLineW(void);
+extern int __BADC_ENTRY__(void *instance, void *prev_instance,
+                          unsigned short *cmd_line, int show_cmd);
+
+unsigned short *__c5_getcommandlinew(void) {
+    return GetCommandLineW();
+}
+
+void __c5_entry(void *sp, long image_off) {
+    (void)sp;
+    (void)image_off;
+    __c5_exit(__BADC_ENTRY__(__c5_getmodulehandle(), 0, __c5_getcommandlinew(), 1));
+}
+#else
+#pragma binding(kernel32::GetCommandLineA, "GetCommandLineA")
+extern char *GetCommandLineA(void);
+extern int __BADC_ENTRY__(void *instance, void *prev_instance,
+                          char *cmd_line, int show_cmd);
 
 char *__c5_getcommandline(void) {
     return GetCommandLineA();
@@ -127,6 +148,7 @@ void __c5_entry(void *sp, long image_off) {
     (void)image_off;
     __c5_exit(__BADC_ENTRY__(__c5_getmodulehandle(), 0, __c5_getcommandline(), 1));
 }
+#endif
 
 #else
 

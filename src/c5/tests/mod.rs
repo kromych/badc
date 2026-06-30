@@ -141,8 +141,9 @@ pub fn link_executable_with_runtime(
 
     // This helper always builds a hosted executable, so the runtime's
     // startup section is compiled in (`__BADC_C5_START__`).
-    // `__BADC_WIN_GUI__` selects the kernel32 WinMain entry on a PE GUI
-    // subsystem; `__BADC_WIN_WIDE__` selects the `wmain` entry.
+    // The entry shape follows the entry symbol: `__BADC_WIN_WINMAIN__`
+    // for a `WinMain` entry, `__BADC_WIN_WIDE__` for `wmain`, else `main`
+    // with argc/argv -- independent of the PE subsystem.
     let mut rt_defines: Vec<(String, String)> =
         vec![("__BADC_C5_START__".to_string(), "1".to_string())];
     rt_defines.push((
@@ -152,11 +153,14 @@ pub fn link_executable_with_runtime(
             .clone()
             .unwrap_or_else(|| "main".to_string()),
     ));
-    if program.subsystem == Some(crate::Subsystem::Windows) {
-        rt_defines.push(("__BADC_WIN_GUI__".to_string(), "1".to_string()));
-    }
-    if program.entry_name.as_deref() == Some("wmain") {
-        rt_defines.push(("__BADC_WIN_WIDE__".to_string(), "1".to_string()));
+    match program.entry_name.as_deref() {
+        Some("WinMain") => rt_defines.push(("__BADC_WIN_WINMAIN__".to_string(), "1".to_string())),
+        Some("wWinMain") => {
+            rt_defines.push(("__BADC_WIN_WINMAIN__".to_string(), "1".to_string()));
+            rt_defines.push(("__BADC_WIN_WIDE__".to_string(), "1".to_string()));
+        }
+        Some("wmain") => rt_defines.push(("__BADC_WIN_WIDE__".to_string(), "1".to_string())),
+        _ => {}
     }
     for (name, body) in embedded_runtime().iter() {
         let copts = CompileOptions::default()

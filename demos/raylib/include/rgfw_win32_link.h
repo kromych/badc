@@ -38,7 +38,6 @@
 #pragma binding(gdi32::DeleteDC,                 "DeleteDC")
 #pragma binding(gdi32::DeleteObject,             "DeleteObject")
 #pragma binding(gdi32::SelectObject,             "SelectObject")
-#pragma binding(gdi32::CreateIconIndirect,       "CreateIconIndirect")
 
 #pragma dylib(user32, "user32.dll")
 #pragma binding(user32::CreateWindowExA,         "CreateWindowExA")
@@ -73,6 +72,7 @@
 #pragma binding(user32::SetClassLongPtrA,        "SetClassLongPtrA")
 #pragma binding(user32::SetCursor,               "SetCursor")
 #pragma binding(user32::DestroyCursor,           "DestroyCursor")
+#pragma binding(user32::CreateIconIndirect,      "CreateIconIndirect")
 #pragma binding(user32::DestroyIcon,             "DestroyIcon")
 #pragma binding(user32::SetWindowPos,            "SetWindowPos")
 #pragma binding(user32::SetWindowTextA,          "SetWindowTextA")

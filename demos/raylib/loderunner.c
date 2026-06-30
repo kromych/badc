@@ -207,6 +207,12 @@ static Input scripted_input(int frame) {
  * bottom-up (OpenGL origin). Declared here rather than including rlgl.h. */
 extern unsigned char *rlReadScreenPixels(int width, int height);
 extern void rlViewport(int x, int y, int width, int height);
+extern void rlMatrixMode(int mode);
+extern void rlLoadIdentity(void);
+extern void rlOrtho(double left, double right, double bottom, double top,
+                    double znear, double zfar);
+#define RL_MODELVIEW 0x1700
+#define RL_PROJECTION 0x1701
 
 /* Write an RGB PPM from the framebuffer, flipping to a top-down image.
  * Lets the rendered frame be inspected without a windowing session. */
@@ -344,12 +350,17 @@ int main(int argc, char **argv) {
 #endif
 
         BeginDrawing();
-        /* The RGFW backend derives a nonzero renderOffset in SetupFramebuffer()
-         * when the window is smaller than the monitor with a different aspect
-         * ratio, and re-applies it via SetupViewport() on the resize event
-         * EndDrawing()'s PollInputEvents() processes; BeginDrawing() does not
-         * touch the viewport, so pin it to the full render target each frame. */
+        /* RGFW bakes a fullscreen-only renderOffset into the viewport (re-applied
+         * from EndDrawing's PollInputEvents) and on Windows yields a client area
+         * narrower than requested (it compensates only the title-bar height). Map
+         * the fixed field extent onto the full drawable each frame to fill the
+         * window without offset or right-edge crop. */
         rlViewport(0, 0, GetRenderWidth(), GetRenderHeight());
+        rlMatrixMode(RL_PROJECTION);
+        rlLoadIdentity();
+        rlOrtho(0, MAP_W * TILE_PX, MAP_H * TILE_PX + HUD_PX, 0, 0.0, 1.0);
+        rlMatrixMode(RL_MODELVIEW);
+        rlLoadIdentity();
         level_draw(&g);
         EndDrawing();
 

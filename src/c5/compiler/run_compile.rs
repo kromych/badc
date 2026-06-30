@@ -78,6 +78,7 @@ impl Compiler {
             let mut is_typedef = false;
             let mut static_seen = false;
             let mut extern_seen = false;
+            let mut inline_seen = false;
             let mut atomic_base: Option<i64> = None;
             let mut m = decl_base::IntModifiers::default();
             // `_Noreturn`, `__declspec(thread)`, and `__declspec(dllexport)`
@@ -119,6 +120,7 @@ impl Compiler {
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline {
                         self.pending_is_inline = true;
+                        inline_seen = true;
                     }
                     if self.lex.tk == Token::Noreturn {
                         self.pending_noreturn = true;
@@ -557,7 +559,16 @@ impl Compiler {
                         // internal-linkage from then on. Mirrors
                         // gcc / clang: `static int f(); int f() {
                         // ... }` keeps f static.
-                        if static_seen {
+                        // C99 6.7.4p7: a plain `inline` definition (no
+                        // `static`, no `extern`) provides no external
+                        // definition for the function. Give it internal
+                        // linkage so each translation unit keeps its own
+                        // out-of-line copy instead of exporting a strong
+                        // symbol that collides with the same inline
+                        // function in another unit; the external
+                        // definition, when needed, comes from a non-inline
+                        // or `extern inline` declaration elsewhere.
+                        if static_seen || (inline_seen && !extern_seen) {
                             self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::Internal;
                         } else if self.symbols[id_idx].linkage
                             != crate::c5::symbol::Linkage::Internal

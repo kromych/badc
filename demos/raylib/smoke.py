@@ -12,11 +12,12 @@ Two layers:
 
 * The full standalone build compiles every raylib module + the renderer
   + game through badc and links against the platform's windowing / GL
-  libraries. It runs on macOS (Cocoa via objc_msgSend) and Linux (X11 /
-  GLX); the platform headers ship as demo-local embedded headers under
-  `include/`. The windowed run needs a display server: macOS uses the
-  login session, Linux uses `Xvfb` when present (otherwise the run is
-  skipped, not failed). The Windows standalone surface is pending.
+  libraries. It runs on macOS (Cocoa via objc_msgSend), Linux (X11 / GLX)
+  and Windows (win32 / WGL); the platform headers ship as demo-local
+  embedded headers under `include/`. The windowed run needs a display
+  server: macOS uses the login session, Linux uses `Xvfb` when present;
+  the Windows runners are headless, so there the build + link is the
+  coverage. A run is skipped, not failed, when no display is available.
 
 Override the badc binary via `BADC` (default
 `target/release/badc[.exe]`).
@@ -150,6 +151,13 @@ def platform_build(badc: Path, work: Path) -> bool:
         modules = ("rcore", "rshapes", "rtextures", "rtext", "rmodels", "raudio", "utils")
         rcore_extra = ["-include", "rgfw_macos_link.h"]
         defines.append("-DGAME_AUDIO")
+    elif WIN:
+        # No audio backend yet (WASAPI not authored), so raudio is left
+        # out as on Linux. The win32 / WGL surface ships as demo-local
+        # headers; rgfw_win32_link.h binds the opengl32 / gdi32 / user32 /
+        # shell32 imports.
+        modules = ("rcore", "rshapes", "rtextures", "rtext", "rmodels", "utils")
+        rcore_extra = ["-include", "rgfw_win32_link.h"]
     else:
         modules = ("rcore", "rshapes", "rtextures", "rtext", "rmodels", "utils")
         defines += list(LINUX_DEFINES)
@@ -199,6 +207,12 @@ def windowed_run(game: Path, work: Path) -> bool:
     """Auto-play a few frames and assert the rendered frame is not blank.
     A windowing session is required; on Linux it is provided by Xvfb when
     installed. Without one the run is skipped, not failed."""
+    if WIN:
+        # No headless display server on the Windows CI runners; the build
+        # and link (PE imports resolved against the win32 DLLs) are the
+        # coverage. An interactive desktop session can run it by hand.
+        print("smoke SKIP: standalone built + linked (no headless display on Windows)")
+        return True
     ppm = work / "frame.ppm"
     argv = [str(game), "--assets", str(RAYLIB_DIR / "assets"), "--dump-frame", str(ppm)]
     xvfb = shutil.which("xvfb-run") if LINUX else None
@@ -258,11 +272,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="raylib-smoke-") as work_str:
         work = Path(work_str)
         ok = logic_self_test(badc, work)
-        if MAC or LINUX:
+        if MAC or LINUX or WIN:
             ok &= platform_build(badc, work)
-        else:
-            print("smoke SKIP: standalone build (Win32 surface pending); "
-                  "logic self-test only on this host")
         return 0 if ok else 1
 
 

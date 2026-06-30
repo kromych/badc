@@ -324,6 +324,8 @@ extern char **environ;
 #pragma binding(msvcrt::dup2,  "_dup2")
 #pragma binding(msvcrt::getcwd, "_getcwd")
 #pragma binding(msvcrt::unlink, "_unlink")
+#pragma binding(msvcrt::stat,  "_stat")
+#pragma binding(msvcrt::fstat, "_fstat")
 // msvc_compat.h defines getpid via GetCurrentProcessId (the legacy
 // arm64 msvcrt.dll lacks `_getpid`); skip the binding when that
 // translation-unit definition is present.

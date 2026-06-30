@@ -250,9 +250,37 @@ int main(int argc, char **argv) {
     if (selftest && frames <= 0) frames = 300;
     if (dump_path && frames > 8) frames = 8;
 
+    // Without --assets, use an `assets` directory beside the executable
+    // (as packaged in an app bundle) when present; else render procedurally.
+    char default_assets[1024];
+    if (!assets_dir) {
+        snprintf(default_assets, sizeof default_assets, "%sassets",
+                 GetApplicationDirectory());
+        if (DirectoryExists(default_assets)) assets_dir = default_assets;
+    }
+
     if (!log_path) log_path = getenv("RL_LOG");
-    if (log_path) {
+    // Default to a log file beside the executable so the windowed binary
+    // runs without console output; `--log -` keeps raylib's console log.
+    char default_log[1024];
+    int defaulted = 0;
+    if (!log_path) {
+        snprintf(default_log, sizeof default_log, "%sloderunner.log",
+                 GetApplicationDirectory());
+        log_path = default_log;
+        defaulted = 1;
+    }
+    if (strcmp(log_path, "-") != 0) {
         g_log = fopen(log_path, "w");
+        if (!g_log && defaulted) {
+            // The application directory can be read-only (a packaged or
+            // translocated app bundle); fall back to a writable temp dir.
+            const char *tmp = getenv("TMPDIR");
+            if (!tmp) tmp = getenv("TEMP");
+            if (!tmp) tmp = "/tmp";
+            snprintf(default_log, sizeof default_log, "%s/loderunner.log", tmp);
+            g_log = fopen(default_log, "w");
+        }
         if (g_log) SetTraceLogCallback(log_raylib);
     }
     glog("start argc=%d selftest=%d frames=%d assets=%s", argc, selftest, frames,

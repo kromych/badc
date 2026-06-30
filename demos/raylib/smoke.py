@@ -199,6 +199,10 @@ def platform_build(badc: Path, work: Path) -> bool:
         print("smoke FAIL: standalone link", file=sys.stderr)
         return False
     print(f"smoke OK: standalone build -> {game.name} ({game.stat().st_size} bytes)")
+    if MAC:
+        app = _make_macos_app(game, RAYLIB_DIR / "assets", work)
+        print(f"smoke OK: macOS bundle -> {app.name} (Finder-launch is windowed, "
+              "logs beside the binary)")
 
     return windowed_run(badc, game, work)
 
@@ -282,6 +286,36 @@ def _validate_win_imports(badc: Path, game: Path, work: Path) -> bool:
     return True
 
 
+def _make_macos_app(binary: Path, assets: Path, work: Path) -> Path:
+    """Wrap the standalone binary in a minimal .app bundle so Finder
+    launches it as a windowed app with no Terminal. Assets sit beside the
+    binary in Contents/MacOS, where the game finds them via
+    GetApplicationDirectory; without them it renders procedurally."""
+    app = work / "loderunner.app"
+    macos = app / "Contents" / "MacOS"
+    macos.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(binary, macos / "loderunner")
+    os.chmod(macos / "loderunner", 0o755)
+    if assets.is_dir():
+        shutil.copytree(assets, macos / "assets", dirs_exist_ok=True)
+    (app / "Contents" / "Info.plist").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+        '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+        '<plist version="1.0"><dict>\n'
+        "  <key>CFBundleName</key><string>Lode Runner</string>\n"
+        "  <key>CFBundleExecutable</key><string>loderunner</string>\n"
+        "  <key>CFBundleIdentifier</key><string>org.badc.loderunner</string>\n"
+        "  <key>CFBundleVersion</key><string>1.0</string>\n"
+        "  <key>CFBundleShortVersionString</key><string>1.0</string>\n"
+        "  <key>CFBundlePackageType</key><string>APPL</string>\n"
+        "  <key>NSHighResolutionCapable</key><true/>\n"
+        "  <key>LSMinimumSystemVersion</key><string>11.0</string>\n"
+        "</dict></plist>\n"
+    )
+    return app
+
+
 def windowed_run(badc: Path, game: Path, work: Path) -> bool:
     """Auto-play a few frames and assert the rendered frame is not blank.
     A windowing session is required; on Linux it is provided by Xvfb when
@@ -295,7 +329,10 @@ def windowed_run(badc: Path, game: Path, work: Path) -> bool:
         print("smoke SKIP: render needs a desktop session (Windows)")
         return True
     ppm = work / "frame.ppm"
-    argv = [str(game), "--assets", str(RAYLIB_DIR / "assets"), "--dump-frame", str(ppm)]
+    # `--log -` keeps raylib's console log (the game otherwise defaults to a
+    # file beside the binary) so the no-display detection below still sees it.
+    argv = [str(game), "--assets", str(RAYLIB_DIR / "assets"),
+            "--dump-frame", str(ppm), "--log", "-"]
     xvfb = shutil.which("xvfb-run") if LINUX else None
     if LINUX and not xvfb:
         print("smoke SKIP: Xvfb not installed (dnf install xorg-x11-server-Xvfb); "

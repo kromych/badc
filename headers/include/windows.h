@@ -112,6 +112,7 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::WaitForSingleObject,     "WaitForSingleObject")
 #pragma binding(kernel32::CloseHandle,             "CloseHandle")
 #pragma binding(kernel32::GetExitCodeThread,       "GetExitCodeThread")
+#pragma binding(kernel32::SetThreadPriority,       "SetThreadPriority")
 #pragma binding(kernel32::GetCurrentThreadId,      "GetCurrentThreadId")
 #pragma binding(kernel32::InitializeCriticalSection, "InitializeCriticalSection")
 #pragma binding(kernel32::EnterCriticalSection,    "EnterCriticalSection")
@@ -1495,6 +1496,7 @@ HANDLE CreateThread(char *attrs, long long stack_size, int *start, char *param,
 int WaitForSingleObject(HANDLE handle, int millis);
 int CloseHandle(HANDLE handle);
 int GetExitCodeThread(HANDLE handle, int *exit_code);
+int SetThreadPriority(HANDLE thread, int priority);
 int GetCurrentThreadId();
 int InitializeCriticalSection(char *cs);
 int EnterCriticalSection(char *cs);

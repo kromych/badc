@@ -21,6 +21,9 @@
 
 #pragma once
 
+// `struct sched_param` for the scheduling-parameter setters.
+#include <sched.h>
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::pthread_create,           "_pthread_create")
@@ -32,6 +35,9 @@
 #pragma binding(libc::pthread_getname_np,       "_pthread_getname_np")
 #pragma binding(libc::pthread_setname_np,       "_pthread_setname_np")
 #pragma binding(libc::pthread_kill,             "_pthread_kill")
+#pragma binding(libc::pthread_cancel,           "_pthread_cancel")
+#pragma binding(libc::pthread_setschedparam,    "_pthread_setschedparam")
+#pragma binding(libc::pthread_getschedparam,    "_pthread_getschedparam")
 #pragma binding(libc::pthread_threadid_np,      "_pthread_threadid_np")
 #pragma binding(libc::pthread_get_stackaddr_np, "_pthread_get_stackaddr_np")
 #pragma binding(libc::pthread_get_stacksize_np, "_pthread_get_stacksize_np")
@@ -91,6 +97,10 @@
 #pragma binding(libc::pthread_condattr_destroy, "pthread_condattr_destroy")
 #pragma binding(libc::pthread_condattr_setclock,"pthread_condattr_setclock")
 #pragma binding(libc::pthread_kill,             "pthread_kill")
+#pragma binding(libc::pthread_cancel,           "pthread_cancel")
+#pragma binding(libc::pthread_setschedparam,    "pthread_setschedparam")
+#pragma binding(libc::pthread_getschedparam,    "pthread_getschedparam")
+#pragma binding(libc::pthread_setschedprio,     "pthread_setschedprio")
 #pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
 #pragma binding(libc::pthread_mutex_lock,       "pthread_mutex_lock")
 #pragma binding(libc::pthread_mutex_trylock,    "pthread_mutex_trylock")
@@ -227,6 +237,25 @@ pthread_t pthread_self();
 int pthread_equal(pthread_t t1, pthread_t t2);
 // Deliver a signal to a specific thread (POSIX).
 int pthread_kill(pthread_t thread, int sig);
+// Cancel a thread; query / set a running thread's scheduling parameters.
+int pthread_cancel(pthread_t thread);
+int pthread_setschedparam(pthread_t thread, int policy,
+                          const struct sched_param *param);
+int pthread_getschedparam(pthread_t thread, int *policy,
+                          struct sched_param *param);
+#ifdef __APPLE__
+// macOS has no pthread_setschedprio; POSIX defines it as setting only the
+// priority, which a getschedparam / setschedparam pair expresses.
+static inline int pthread_setschedprio(pthread_t thread, int prio) {
+    struct sched_param param;
+    int policy;
+    pthread_getschedparam(thread, &policy, &param);
+    param.sched_priority = prio;
+    return pthread_setschedparam(thread, policy, &param);
+}
+#else
+int pthread_setschedprio(pthread_t thread, int prio);
+#endif
 #ifdef __APPLE__
 // Darwin sets only the calling thread's name (no pthread_t parameter).
 int pthread_setname_np(const char *name);

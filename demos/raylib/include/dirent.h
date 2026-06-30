@@ -64,7 +64,7 @@ static int closedir(DIR *d) {
 }
 
 #else
-#include "../../../headers/include/dirent.h"
+#include_next <dirent.h>
 #endif /* _WIN32 */
 
 #endif /* RGFW_DEMO_DIRENT_H */

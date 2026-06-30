@@ -1034,6 +1034,17 @@ impl Preprocessor {
                             continue;
                         }
                     }
+                    Directive::IncludeNext { name, quoted } => {
+                        if active {
+                            let included =
+                                self.process_include_next(name, line_no, filename, quoted)?;
+                            out.push_str(&included);
+                            out.push_str(&format_line_marker(source_line + 1, &current_file));
+                            source_line += 1;
+                            idx_iter += 1;
+                            continue;
+                        }
+                    }
                     Directive::Line { line, file } => {
                         if active {
                             // C99 6.10.4: `#line N` retargets the next
@@ -2582,6 +2593,35 @@ impl Preprocessor {
         // as the new file's name so a nested quoted include resolves
         // against the right directory.
         let resolved: Option<(String, String)> = self.find_include(name, source_dir.as_deref());
+        self.finish_include(resolved, name, line_no, filename)
+    }
+
+    /// `#include_next <header>` (C/GCC extension): resolve `name` from the
+    /// search path entry *after* the one that supplied the file holding
+    /// the directive, so a shim header that shadows a system header can
+    /// pull in the shadowed one. The current file's directory is matched
+    /// against the search paths to find the resume point.
+    fn process_include_next(
+        &mut self,
+        name: &str,
+        line_no: usize,
+        filename: &str,
+        _quoted: bool,
+    ) -> Result<String, C5Error> {
+        let resolved = self.find_include_next(name, filename);
+        self.finish_include(resolved, name, line_no, filename)
+    }
+
+    /// Shared tail of `process_include` / `process_include_next`: warn on a
+    /// miss, honour `#pragma once`, bound the include depth, and process
+    /// the resolved body.
+    fn finish_include(
+        &mut self,
+        resolved: Option<(String, String)>,
+        name: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<String, C5Error> {
         let Some((content, resolved_path)) = resolved else {
             // Missing header. Push a warning into the same list
             // the parser uses; the caller drains it through to
@@ -2671,6 +2711,46 @@ impl Preprocessor {
             }
         }
         let _ = source_dir;
+        embedded_header(name).map(|s| (s.to_string(), name.to_string()))
+    }
+
+    /// Resolve `name` for `#include_next`: skip search-path entries up to
+    /// and including the one whose directory holds `current_file`, then
+    /// probe the remaining paths and finally the embedded registry. When
+    /// the directive's file came from the embedded registry (no filesystem
+    /// directory), there is nothing after it, so resolution yields none.
+    fn find_include_next(&self, name: &str, current_file: &str) -> Option<(String, String)> {
+        let mut start = 0usize;
+        let mut from_search_path = false;
+        #[cfg(feature = "std")]
+        if let Some(cur_dir) = include_parent_dir(current_file) {
+            for (i, path) in self.search_paths.iter().enumerate() {
+                if path_dirs_equal(path, &cur_dir) {
+                    start = i + 1;
+                    from_search_path = true;
+                    break;
+                }
+            }
+        }
+        #[cfg(feature = "std")]
+        {
+            let join = |dir: &str| -> String {
+                if dir.is_empty() {
+                    name.to_string()
+                } else if dir.ends_with('/') || dir.ends_with('\\') {
+                    format!("{dir}{name}")
+                } else {
+                    format!("{dir}/{name}")
+                }
+            };
+            for path in self.search_paths.iter().skip(start) {
+                let candidate = join(path);
+                if let Ok(body) = std::fs::read_to_string(&candidate) {
+                    return Some((body, candidate));
+                }
+            }
+        }
+        let _ = from_search_path;
         embedded_header(name).map(|s| (s.to_string(), name.to_string()))
     }
 
@@ -3268,6 +3348,13 @@ enum Directive<'a> {
         name: &'a str,
         quoted: bool,
     },
+    /// `#include_next <header>` -- resume the header search from the
+    /// entry after the one that supplied the current file, so a shim
+    /// header can augment and forward to the next same-named header.
+    IncludeNext {
+        name: &'a str,
+        quoted: bool,
+    },
     /// `#line N` or `#line N "file"` (C99 6.10.4). The filename
     /// is optional -- bare `#line N` keeps the current file and
     /// just retargets the line counter.
@@ -3474,6 +3561,24 @@ fn parse_directive(rest: &str) -> Directive<'_> {
             return Directive::LineMacro(trimmed);
         }
     }
+    // `include_next` must be tested before `include`: the latter is a
+    // prefix of the former, so the `include` branch would otherwise treat
+    // `_next <...>` as a macro-form operand.
+    if let Some(after) = rest.strip_prefix("include_next") {
+        let trimmed = after.trim();
+        if let Some(name) = trimmed.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
+            return Directive::IncludeNext {
+                name: name.trim(),
+                quoted: false,
+            };
+        }
+        if let Some(name) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+            return Directive::IncludeNext {
+                name: name.trim(),
+                quoted: true,
+            };
+        }
+    }
     if let Some(after) = rest.strip_prefix("include") {
         let trimmed = after.trim();
         // Strip the `<...>` or `"..."` wrapping when the operand
@@ -3547,6 +3652,19 @@ fn include_parent_dir(filename: &str) -> Option<alloc::string::String> {
     match filename.rfind(['/', '\\']) {
         Some(cut) => Some(filename[..cut].to_string()),
         None => Some(alloc::string::String::new()),
+    }
+}
+
+/// Whether two directory paths name the same directory. Canonicalizes
+/// both when possible (so `a/b` and `./a/b` and an absolute spelling
+/// compare equal); falls back to a trailing-slash-insensitive string
+/// compare when a path cannot be resolved. Used by `#include_next` to
+/// locate the search-path entry that supplied the current file.
+#[cfg(feature = "std")]
+fn path_dirs_equal(a: &str, b: &str) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(pa), Ok(pb)) => pa == pb,
+        _ => a.trim_end_matches(['/', '\\']) == b.trim_end_matches(['/', '\\']),
     }
 }
 
@@ -5444,6 +5562,40 @@ int x_2 = __COUNTER__;
         assert_eq!(
             super::include_parent_dir("/abs/dir/src.c"),
             Some("/abs/dir".to_string())
+        );
+    }
+
+    #[test]
+    fn include_next_resumes_after_the_current_files_search_path() {
+        // Two search paths each hold a `foo.h`. The first is a shim that
+        // declares a symbol and forwards via `#include_next <foo.h>`; the
+        // forward must resolve the second path's copy, not re-read itself.
+        let base = std::env::temp_dir().join(format!("badc-incnext-{}", std::process::id()));
+        let d1 = base.join("d1");
+        let d2 = base.join("d2");
+        std::fs::create_dir_all(&d1).unwrap();
+        std::fs::create_dir_all(&d2).unwrap();
+        std::fs::write(
+            d1.join("foo.h"),
+            "int from_shim(void);\n#include_next <foo.h>\n",
+        )
+        .unwrap();
+        std::fs::write(d2.join("foo.h"), "int from_system(void);\n").unwrap();
+
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(d1.to_str().unwrap());
+        pp.add_search_path(d2.to_str().unwrap());
+        let out = pp.process("#include <foo.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+
+        assert!(
+            out.contains("from_shim") && out.contains("from_system"),
+            "include_next must reach the next foo.h; got: {out}"
+        );
+        assert!(
+            pp.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            pp.warnings
         );
     }
 }

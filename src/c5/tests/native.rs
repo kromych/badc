@@ -791,6 +791,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("gcc_atomics.c", 0),
     ("inline_linkage.c", 0),
     ("msvc_callconv.c", 0),
+    ("anon_struct_init.c", 0),
     ("float_double_mix.c", 0),
     // Variadic FP packer on macOS arm64. The Apple AAPCS64
     // quirk: variadic args spill to the stack regardless of

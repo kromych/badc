@@ -375,10 +375,15 @@ impl Compiler {
                         // them. Anonymous-struct members keep distinct
                         // positions, so they propagate any group tag they
                         // already carry (a union nested inside).
-                        let group = if self.structs[inner_id].is_union {
-                            inner_id as u32 + 1
+                        // An anonymous union groups its members so a brace
+                        // selects one; an anonymous struct groups its members
+                        // so a brace fills them all in order. Tag with the
+                        // matching id and propagate any group the inner field
+                        // already carries (a nested anonymous aggregate).
+                        let (union_group, struct_group) = if self.structs[inner_id].is_union {
+                            (inner_id as u32 + 1, inner_field.anon_struct_group)
                         } else {
-                            inner_field.anon_union_group
+                            (inner_field.anon_union_group, inner_id as u32 + 1)
                         };
                         saw_field = true;
                         self.structs[struct_id].fields.push(StructField {
@@ -394,7 +399,8 @@ impl Compiler {
                             fn_ptr_indirection: inner_field.fn_ptr_indirection,
                             params: inner_field.params,
                             is_variadic: inner_field.is_variadic,
-                            anon_union_group: group,
+                            anon_union_group: union_group,
+                            anon_struct_group: struct_group,
                         });
                     }
 
@@ -673,6 +679,7 @@ impl Compiler {
                     params: field_params,
                     is_variadic: field_is_variadic,
                     anon_union_group: 0,
+                    anon_struct_group: 0,
                 });
 
                 if self.lex.tk == ',' {

@@ -145,6 +145,13 @@ pub struct StructField {
     /// regular field and for anonymous-struct members, which keep
     /// distinct positions.
     pub anon_union_group: u32,
+    /// Non-zero for a field promoted from an anonymous struct (C11
+    /// 6.7.2.1p13). The members keep distinct positions, but the same id
+    /// groups them so a brace-enclosed sub-initializer fills the whole
+    /// anonymous struct in order (`union { struct { int a, b; }; ... } x =
+    /// { { 1, 2 } }`). Zero for a regular field and for anonymous-union
+    /// members, which the `anon_union_group` path handles.
+    pub anon_struct_group: u32,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler

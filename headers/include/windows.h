@@ -351,19 +351,18 @@ typedef CRITICAL_SECTION   *PCRITICAL_SECTION;
 // 128-bit volume-relative file identifier, per the Windows SDK.
 typedef struct _FILE_ID_128 { unsigned char Identifier[16]; } FILE_ID_128;
 
-// The named `u` struct is listed first so a nested aggregate initializer
-// (`{{lo, hi}}`) targets it; the anonymous struct keeps direct `.LowPart` /
-// `.HighPart` access. All members overlap at offset 0, so the layout is
-// unchanged.
+// The anonymous struct is first, matching the Win32 header: a nested
+// aggregate initializer (`{{lo, hi}}`) fills it, and `.LowPart` /
+// `.HighPart` reach it directly. The named `u` struct overlaps at offset 0.
 union _LARGE_INTEGER {
     struct {
         DWORD LowPart;
         LONG  HighPart;
-    } u;
+    };
     struct {
         DWORD LowPart;
         LONG  HighPart;
-    };
+    } u;
     long long QuadPart;
 };
 

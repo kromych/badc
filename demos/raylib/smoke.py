@@ -444,6 +444,69 @@ def _content_span(w: int, h: int, px: bytes):
     return (maxx - minx + 1) / w, (maxy - miny + 1) / h
 
 
+def oracle_diff(badc: Path, work: Path) -> bool:
+    """Differential check of raylib's pure math (raymath.h): build oracle_diff.c
+    with badc and with the reference C compiler, run both, and assert the
+    results agree. raymath is header-only, so this links no library and needs
+    no platform headers; it exercises badc's float and by-value
+    aggregate-return code on Matrix/Quaternion/Vector3 returns the 2D game does
+    not reach. A system libraylib, when installed, is an additional oracle for
+    the same API; absent one, the reference compiler stands in."""
+    ref = None
+    for c in ("clang", "cc", "gcc"):
+        ref = shutil.which(c)
+        if ref:
+            break
+    if ref is None:
+        print("smoke SKIP: no reference C compiler for the raymath oracle")
+        return True
+    src = RAYLIB_DIR / "oracle_diff.c"
+    inc = RAYLIB_DIR / "src"
+    bad_out = work / f"oracle_badc{EXE}"
+    ref_out = work / f"oracle_ref{EXE}"
+    if run([str(badc), "--gnu", "-I", str(inc), str(src), "-o", str(bad_out)]).returncode != 0:
+        print("smoke FAIL: oracle_diff badc build", file=sys.stderr)
+        return False
+    ref_cmd = [ref, "-O0", "-I", str(inc), str(src), "-o", str(ref_out)]
+    if not WIN:
+        ref_cmd.append("-lm")
+    if run(ref_cmd).returncode != 0:
+        print("smoke FAIL: oracle_diff reference build", file=sys.stderr)
+        return False
+    a = run([str(bad_out)], capture_output=True, text=True)
+    b = run([str(ref_out)], capture_output=True, text=True)
+    if a.returncode != 0 or b.returncode != 0:
+        print("smoke FAIL: oracle_diff run", file=sys.stderr)
+        return False
+    if not _raymath_results_agree(a.stdout, b.stdout):
+        return False
+    print(f"smoke OK: raymath matches {Path(ref).name} (badc vs reference)")
+    return True
+
+
+def _raymath_results_agree(a: str, b: str, tol: float = 1e-4) -> bool:
+    """Compare two oracle_diff outputs field by field. Float rounding order
+    differs between compilers, so each numeric field must agree within a
+    relative tolerance; a codegen error is gross, not in the last digits."""
+    la = [ln.split() for ln in a.splitlines() if ln.strip()]
+    lb = [ln.split() for ln in b.splitlines() if ln.strip()]
+    if len(la) != len(lb):
+        print(f"smoke FAIL: raymath line count {len(la)} vs {len(lb)}", file=sys.stderr)
+        return False
+    for ta, tb in zip(la, lb):
+        if ta[0] != tb[0]:
+            print(f"smoke FAIL: raymath tag {ta[0]} vs {tb[0]}", file=sys.stderr)
+            return False
+        for x, y in zip(ta[1:], tb[1:]):
+            fx, fy = float(x), float(y)
+            rel = abs(fx - fy) / (max(abs(fx), abs(fy)) or 1.0)
+            if rel > tol:
+                print(f"smoke FAIL: raymath {ta[0]} {fx} vs {fy} (rel {rel:.1e})",
+                      file=sys.stderr)
+                return False
+    return True
+
+
 def _out_dir_arg(argv) -> str | None:
     """`--out-dir <path>` keeps the build output (objects, the standalone
     binary, the dumped frame) in <path> instead of a temporary directory
@@ -458,6 +521,7 @@ def _out_dir_arg(argv) -> str | None:
 
 def _run(badc: Path, work: Path) -> int:
     ok = logic_self_test(badc, work)
+    ok &= oracle_diff(badc, work)
     if MAC or LINUX or WIN:
         ok &= platform_build(badc, work)
     return 0 if ok else 1

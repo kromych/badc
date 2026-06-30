@@ -10,6 +10,7 @@
 
 #include "loderunner.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,32 @@ static int g_assets;
 #ifdef GAME_AUDIO
 static Sound g_pickup;
 #endif
+
+/* Optional run log (`--log <path>` or RL_LOG). A windowed binary has no
+ * stdout, so the log is the only record of how far load/init/render got;
+ * each line is flushed so a crash leaves the trace up to that point. */
+static FILE *g_log;
+
+static void log_raylib(int level, const char *text, va_list args) {
+    if (!g_log) return;
+    static const char *const names[] = {"ALL", "TRACE",   "DEBUG", "INFO",
+                                        "WARN", "ERROR", "FATAL", "NONE"};
+    fprintf(g_log, "[%s] ", (level >= 0 && level <= 7) ? names[level] : "?");
+    vfprintf(g_log, text, args);
+    fputc('\n', g_log);
+    fflush(g_log);
+}
+
+static void glog(const char *fmt, ...) {
+    if (!g_log) return;
+    va_list args;
+    va_start(args, fmt);
+    fputs("[game] ", g_log);
+    vfprintf(g_log, fmt, args);
+    fputc('\n', g_log);
+    va_end(args);
+    fflush(g_log);
+}
 
 static void load_assets(const char *dir) {
     char path[1024];
@@ -205,6 +232,7 @@ int main(int argc, char **argv) {
     int frames = 0;
     const char *dump_path = NULL;
     const char *assets_dir = NULL;
+    const char *log_path = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--selftest") == 0) {
             selftest = 1;
@@ -215,52 +243,76 @@ int main(int argc, char **argv) {
             selftest = 1;
         } else if (strcmp(argv[i], "--assets") == 0 && i + 1 < argc) {
             assets_dir = argv[++i];
+        } else if (strcmp(argv[i], "--log") == 0 && i + 1 < argc) {
+            log_path = argv[++i];
         }
     }
     if (selftest && frames <= 0) frames = 300;
     if (dump_path && frames > 8) frames = 8;
 
+    if (!log_path) log_path = getenv("RL_LOG");
+    if (log_path) {
+        g_log = fopen(log_path, "w");
+        if (g_log) SetTraceLogCallback(log_raylib);
+    }
+    glog("start argc=%d selftest=%d frames=%d assets=%s", argc, selftest, frames,
+         assets_dir ? assets_dir : "(none)");
+
     GameState g;
     level_load(&g);
 
+    glog("InitWindow %dx%d", MAP_W * TILE_PX, MAP_H * TILE_PX + HUD_PX);
     InitWindow(MAP_W * TILE_PX, MAP_H * TILE_PX + HUD_PX, "Lode Runner (badc)");
     SetTargetFPS(12);
-    if (assets_dir) load_assets(assets_dir);
+    glog("window ready %dx%d", GetScreenWidth(), GetScreenHeight());
+    if (assets_dir) {
+        load_assets(assets_dir);
+        glog("assets loaded=%d", g_assets);
+    }
 
 #ifdef GAME_AUDIO
     int audio_rc = (selftest && g_assets) ? audio_selftest() : 0;
 #endif
 
+#ifdef GAME_AUDIO
     int prev_gold = g.gold_taken;
+#endif
     int frame = 0;
     while (!WindowShouldClose()) {
         Input in = selftest ? scripted_input(frame) : read_input();
         level_step(&g, in);
 #ifdef GAME_AUDIO
         if (g_assets && g.gold_taken > prev_gold) PlaySound(g_pickup);
-#endif
         prev_gold = g.gold_taken;
+#endif
 
         BeginDrawing();
         level_draw(&g);
         EndDrawing();
 
         frame++;
+        if (frame == 1) glog("first frame drawn");
         if (dump_path && frame >= frames) {
-            if (dump_frame_ppm(dump_path) == 0)
-                TraceLog(LOG_INFO, "FRAME: dumped to %s", dump_path);
+            int rc = dump_frame_ppm(dump_path);
+            if (rc == 0) TraceLog(LOG_INFO, "FRAME: dumped to %s", dump_path);
+            glog("dump %s rc=%d", dump_path, rc);
             break;
         }
         if (selftest && frame >= frames) break;
     }
 
+    glog("loop end frames=%d", frame);
     unload_assets();
     CloseWindow();
 #ifdef GAME_AUDIO
     if (audio_rc) {
         TraceLog(LOG_ERROR, "AUDIO: self-test failed at stage %d", audio_rc);
+        glog("exit rc=%d (audio)", audio_rc);
+        if (g_log) fclose(g_log);
         return audio_rc;
     }
 #endif
+    glog("exit rc=0");
+    if (g_log) fclose(g_log);
     return 0;
 }

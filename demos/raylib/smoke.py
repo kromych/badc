@@ -367,17 +367,30 @@ def windowed_run(badc: Path, game: Path, work: Path) -> bool:
     if not ppm.is_file():
         print("smoke SKIP: no windowing session to run the game")
         return True
-    colors = _distinct_colors(ppm)
+    w, h, px = _parse_ppm(ppm)
+    colors = _distinct_colors(px)
     if colors < 6:
         print(f"smoke FAIL: rendered frame has only {colors} distinct colors "
               "(blank / clear-only render)", file=sys.stderr)
         return False
-    print(f"smoke OK: standalone game rendered a frame ({colors} distinct colors)")
+    # The content must reach the frame edges. The RGFW backend runs
+    # SetupFramebuffer() unconditionally at window creation and derives a
+    # nonzero renderOffset whenever the window is smaller than the monitor
+    # with a different aspect ratio, which offsets the viewport and clips a
+    # band off one edge (horizontal on a wider display, vertical on a taller
+    # one); the game pins the viewport to the full render target to cancel it.
+    xr, yr = _content_span(w, h, px)
+    if xr < 0.93 or yr < 0.93:
+        print(f"smoke FAIL: rendered content spans {xr:.2f}x{yr:.2f} of the "
+              "frame (viewport offset clips an edge)", file=sys.stderr)
+        return False
+    print(f"smoke OK: standalone game rendered a frame ({colors} distinct "
+          f"colors, content spans {xr:.2f}x{yr:.2f})")
     return True
 
 
-def _distinct_colors(ppm: Path) -> int:
-    """Count distinct RGB triples in a binary P6 PPM."""
+def _parse_ppm(ppm: Path):
+    """Return (width, height, pixel bytes) for a binary P6 PPM."""
     data = ppm.read_bytes()
     i = 0
 
@@ -394,8 +407,41 @@ def _distinct_colors(ppm: Path) -> int:
     h, i = tok(data, i)
     _, i = tok(data, i)  # maxval
     i += 1
-    px = data[i:i + int(w) * int(h) * 3]
+    w, h = int(w), int(h)
+    return w, h, data[i:i + w * h * 3]
+
+
+def _distinct_colors(px: bytes) -> int:
+    """Count distinct RGB triples in P6 pixel bytes."""
     return len({px[k:k + 3] for k in range(0, len(px), 3)})
+
+
+# Renderer clear color (loderunner.c level_draw); pixels differing from it are
+# drawn content.
+_CLEAR_RGB = (0x10, 0x14, 0x18)
+
+
+def _content_span(w: int, h: int, px: bytes):
+    """Fraction of the frame width and height covered by the content bounding
+    box (non-clear pixels). An offset viewport clips one edge, shrinking one
+    fraction below the rest."""
+    minx, maxx, miny, maxy = w, -1, h, -1
+    for y in range(h):
+        row = y * w * 3
+        for x in range(w):
+            o = row + x * 3
+            if (px[o], px[o + 1], px[o + 2]) != _CLEAR_RGB:
+                if x < minx:
+                    minx = x
+                if x > maxx:
+                    maxx = x
+                if y < miny:
+                    miny = y
+                if y > maxy:
+                    maxy = y
+    if maxx < 0:
+        return 0.0, 0.0
+    return (maxx - minx + 1) / w, (maxy - miny + 1) / h
 
 
 def _out_dir_arg(argv) -> str | None:

@@ -206,6 +206,7 @@ static Input scripted_input(int frame) {
 /* rlgl's framebuffer read-back: returns width*height*4 RGBA bytes,
  * bottom-up (OpenGL origin). Declared here rather than including rlgl.h. */
 extern unsigned char *rlReadScreenPixels(int width, int height);
+extern void rlViewport(int x, int y, int width, int height);
 
 /* Write an RGB PPM from the framebuffer, flipping to a top-down image.
  * Lets the rendered frame be inspected without a windowing session. */
@@ -343,6 +344,12 @@ int main(int argc, char **argv) {
 #endif
 
         BeginDrawing();
+        /* The RGFW backend derives a nonzero renderOffset in SetupFramebuffer()
+         * when the window is smaller than the monitor with a different aspect
+         * ratio, and re-applies it via SetupViewport() on the resize event
+         * EndDrawing()'s PollInputEvents() processes; BeginDrawing() does not
+         * touch the viewport, so pin it to the full render target each frame. */
+        rlViewport(0, 0, GetRenderWidth(), GetRenderHeight());
         level_draw(&g);
         EndDrawing();
 

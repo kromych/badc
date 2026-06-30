@@ -2720,20 +2720,19 @@ impl Preprocessor {
     /// the directive's file came from the embedded registry (no filesystem
     /// directory), there is nothing after it, so resolution yields none.
     fn find_include_next(&self, name: &str, current_file: &str) -> Option<(String, String)> {
-        let mut start = 0usize;
-        let mut from_search_path = false;
-        #[cfg(feature = "std")]
-        if let Some(cur_dir) = include_parent_dir(current_file) {
-            for (i, path) in self.search_paths.iter().enumerate() {
-                if path_dirs_equal(path, &cur_dir) {
-                    start = i + 1;
-                    from_search_path = true;
-                    break;
-                }
-            }
-        }
         #[cfg(feature = "std")]
         {
+            // Skip the search-path entries up to and including the one whose
+            // directory holds the current file.
+            let mut start = 0usize;
+            if let Some(cur_dir) = include_parent_dir(current_file) {
+                for (i, path) in self.search_paths.iter().enumerate() {
+                    if path_dirs_equal(path, &cur_dir) {
+                        start = i + 1;
+                        break;
+                    }
+                }
+            }
             let join = |dir: &str| -> String {
                 if dir.is_empty() {
                     name.to_string()
@@ -2750,7 +2749,7 @@ impl Preprocessor {
                 }
             }
         }
-        let _ = from_search_path;
+        let _ = current_file;
         embedded_header(name).map(|s| (s.to_string(), name.to_string()))
     }
 

@@ -1388,3 +1388,89 @@ fn wrapping_section_size_is_diagnostic_not_panic() {
         "a wrapping sh_offset + sh_size must be a diagnostic, not a panic"
     );
 }
+
+#[test]
+fn inline_linkage_follows_c99_6_7_4p7() {
+    // C99 6.7.4p7: a function all of whose file-scope declarations are
+    // `inline` without `extern` provides no external definition in the
+    // unit -- its out-of-line copy must be local so the same inline
+    // function compiled into another unit does not collide at link time.
+    // A single non-inline declaration (a prototype) or `extern inline`
+    // makes the definition external, so a unit that only references the
+    // function resolves against it.
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STB_LOCAL: u8 = 0;
+    const STB_GLOBAL: u8 = 1;
+
+    fn binding_of(src: &str, name: &str) -> u8 {
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let sym = obj
+            .symbols
+            .iter()
+            .find(|s| s.name == name && !matches!(s.section, NativeSymSection::Undef))
+            .unwrap_or_else(|| panic!("`{name}` must be a defined symbol"));
+        sym.binding
+    }
+
+    // Plain `inline`, no other declaration: internal linkage (local).
+    assert_eq!(
+        binding_of(
+            "inline int f(int x) { return x + 1; }\n\
+             int main(void) { return f(41) == 42 ? 0 : 1; }\n",
+            "f",
+        ),
+        STB_LOCAL,
+        "plain inline-only definition must be local"
+    );
+    // A non-inline prototype precedes the inline definition: external.
+    assert_eq!(
+        binding_of(
+            "int g(int);\n\
+             inline int g(int x) { return x + 1; }\n\
+             int main(void) { return g(41) == 42 ? 0 : 1; }\n",
+            "g",
+        ),
+        STB_GLOBAL,
+        "a non-inline declaration makes the inline definition external"
+    );
+    // `extern inline` provides the one external definition.
+    assert_eq!(
+        binding_of(
+            "extern inline int h(int x) { return x + 1; }\n\
+             int main(void) { return h(41) == 42 ? 0 : 1; }\n",
+            "h",
+        ),
+        STB_GLOBAL,
+        "extern inline must be external"
+    );
+    // `static inline` is internal.
+    assert_eq!(
+        binding_of(
+            "static inline int s(int x) { return x + 1; }\n\
+             int main(void) { return s(41) == 42 ? 0 : 1; }\n",
+            "s",
+        ),
+        STB_LOCAL,
+        "static inline must be local"
+    );
+    // An inline prototype (no body) must not mark the following,
+    // unrelated definition inline: `pb` is a plain external function.
+    assert_eq!(
+        binding_of(
+            "inline int pa(int);\n\
+             int pb(int x) { return x + 1; }\n\
+             int main(void) { return pb(41) == 42 ? 0 : 1; }\n",
+            "pb",
+        ),
+        STB_GLOBAL,
+        "an inline prototype must not leak `inline` onto the next definition"
+    );
+}

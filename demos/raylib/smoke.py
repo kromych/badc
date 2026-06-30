@@ -137,7 +137,10 @@ def platform_build(badc: Path, work: Path) -> bool:
     # `--gnu` so raylib's GCC-gated correct paths compile (sinfl_bsr's
     # __builtin_clz, miniaudio's atomics). The decoders' SIMD is off (no
     # vector intrinsics in badc); empty-template asm barriers and GCC
-    # pragmas are handled by badc.
+    # pragmas are handled by badc. raymath's RMAPI is plain `inline` in
+    # every module but the one that sets RAYMATH_IMPLEMENTATION (`extern
+    # inline`); badc gives the inline-only copies internal linkage per
+    # C99 6.7.4p7, so they do not collide across modules.
     defines = ["--gnu", *BASE_DEFINES, "-DSTBI_NO_SIMD",
                "-DMA_NO_NEON", "-DMA_NO_SSE2", "-DMA_NO_AVX2",
                "-DDRFLAC_NO_NEON", "-DDRFLAC_NO_SIMD",

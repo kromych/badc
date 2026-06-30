@@ -1,7 +1,7 @@
-// C99 6.7.4p7: a plain `inline` definition (no `static`, no `extern`)
-// provides no external out-of-line definition; it must not export a
-// strong symbol that would collide with the same inline function in
-// another translation unit. `static inline` is internal; `extern
+// C99 6.7.4p7: a plain `inline` definition whose every declaration in
+// the unit is `inline` without `extern` provides no external definition
+// -- badc gives it internal linkage so the same inline function in
+// another unit does not collide. `static inline` is internal; `extern
 // inline` provides the one external definition. All three are callable
 // here regardless of the linkage they carry.
 

@@ -133,7 +133,7 @@ fn synth_program_and_build(
     } = synth_fixups(merged, plt)?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt);
-    let exports = synth_exports(merged);
+    let exports = synth_exports(merged, export_all, output_kind);
     let pc_to_native = synth_pc_to_native(&merged.text, &code_relocs, &exports);
 
     let program = Program {
@@ -851,7 +851,11 @@ fn synth_pc_to_native(
 /// includes every Text-section merged symbol regardless of whether
 /// the program asked for `#pragma export`, so the resulting
 /// executable carries every function name under `nm -a`.
-fn synth_exports(merged: &MergedNative) -> Vec<ExportedFunction> {
+fn synth_exports(
+    merged: &MergedNative,
+    export_all: bool,
+    output_kind: OutputKind,
+) -> Vec<ExportedFunction> {
     // Promote the source-declared `#pragma export` names (unioned by
     // the linker into `merged.exports`) to export-table records,
     // resolving each to its `.text`-defined entry. Names that resolve
@@ -859,14 +863,32 @@ fn synth_exports(merged: &MergedNative) -> Vec<ExportedFunction> {
     // writers consume this only for shared-library output; an
     // executable's export list is ignored.
     let mut exports: Vec<ExportedFunction> = Vec::new();
+    let mut seen: alloc::collections::BTreeSet<String> = alloc::collections::BTreeSet::new();
     for name in &merged.exports {
         if let Some(sym) = merged.defined.get(name)
             && matches!(sym.section, NativeSymSection::Text)
+            && seen.insert(name.clone())
         {
             exports.push(ExportedFunction {
                 name: name.clone(),
                 ent_pc: sym.value as usize,
             });
+        }
+    }
+    // `--export-all` on a shared library exports every global text
+    // function, including those linked from pre-built objects (which carry
+    // no per-symbol `#pragma export` flag). Executables ignore this list.
+    if export_all && output_kind == OutputKind::SharedLibrary {
+        for (name, sym) in &merged.defined {
+            if !name.is_empty()
+                && matches!(sym.section, NativeSymSection::Text)
+                && seen.insert(name.clone())
+            {
+                exports.push(ExportedFunction {
+                    name: name.clone(),
+                    ent_pc: sym.value as usize,
+                });
+            }
         }
     }
     exports
@@ -1036,7 +1058,7 @@ mod tests {
         // `main` is defined but not exported; `helper` and `g_count`
         // are named by `#pragma export`, but `g_count` is data.
         merged.exports = alloc::vec!["helper".to_string(), "g_count".to_string()];
-        let exports = synth_exports(&merged);
+        let exports = synth_exports(&merged, false, OutputKind::SharedLibrary);
         let names: alloc::vec::Vec<&str> = exports.iter().map(|e| e.name.as_str()).collect();
         assert!(names.contains(&"helper"), "exported text symbol missing");
         assert_eq!(
@@ -1051,6 +1073,41 @@ mod tests {
         assert!(
             !names.contains(&"g_count"),
             "data symbol named by export must be dropped"
+        );
+    }
+
+    #[test]
+    fn synth_exports_export_all_surfaces_every_text_global() {
+        // `--export-all` on a shared library exports every global text
+        // function, including ones with no `#pragma export` (a library
+        // linked from pre-built objects), but never data globals.
+        let mut merged = tiny_aarch64_main();
+        merged.defined.insert(
+            "helper".to_string(),
+            MergedSymbol {
+                section: NativeSymSection::Text,
+                value: 0x40,
+                size: 16,
+            },
+        );
+        merged.defined.insert(
+            "g_count".to_string(),
+            MergedSymbol {
+                section: NativeSymSection::Data,
+                value: 0,
+                size: 4,
+            },
+        );
+        // No `#pragma export` at all; `--export-all` carries them.
+        let exports = synth_exports(&merged, true, OutputKind::SharedLibrary);
+        let names: alloc::vec::Vec<&str> = exports.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"main"), "every text global must export");
+        assert!(names.contains(&"helper"), "every text global must export");
+        assert!(!names.contains(&"g_count"), "a data global must not export");
+        // An executable ignores the export list, so export-all leaves it empty.
+        assert!(
+            synth_exports(&merged, true, OutputKind::Executable).is_empty(),
+            "export-all populates the export list only for a shared library"
         );
     }
 }

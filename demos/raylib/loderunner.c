@@ -46,6 +46,20 @@ static void unload_assets(void) {
 #endif
 }
 
+#ifdef GAME_AUDIO
+/* Verify the audio path end to end without listening to it: the device
+ * opened, the sound decoded, and the mixer accepts it for playback.
+ * Returns 0 on success or a distinct non-zero code per failed stage, so
+ * the headless self-test fails a broken backend instead of running mute. */
+static int audio_selftest(void) {
+    if (!IsAudioDeviceReady()) return 11;
+    if (g_pickup.frameCount == 0) return 12;
+    PlaySound(g_pickup);
+    if (!IsSoundPlaying(g_pickup)) return 13;
+    return 0;
+}
+#endif
+
 /* Draw sprite tile `idx` (0..3) from the sheet at the tile cell. */
 static void draw_sprite(int idx, int px, int py) {
     Rectangle src = {idx * 16.0f, 0, 16, 16};
@@ -213,6 +227,10 @@ int main(int argc, char **argv) {
     SetTargetFPS(12);
     if (assets_dir) load_assets(assets_dir);
 
+#ifdef GAME_AUDIO
+    int audio_rc = (selftest && g_assets) ? audio_selftest() : 0;
+#endif
+
     int prev_gold = g.gold_taken;
     int frame = 0;
     while (!WindowShouldClose()) {
@@ -238,5 +256,11 @@ int main(int argc, char **argv) {
 
     unload_assets();
     CloseWindow();
+#ifdef GAME_AUDIO
+    if (audio_rc) {
+        TraceLog(LOG_ERROR, "AUDIO: self-test failed at stage %d", audio_rc);
+        return audio_rc;
+    }
+#endif
     return 0;
 }

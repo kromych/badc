@@ -266,15 +266,37 @@ def _distinct_colors(ppm: Path) -> int:
     return len({px[k:k + 3] for k in range(0, len(px), 3)})
 
 
+def _out_dir_arg(argv) -> str | None:
+    """`--out-dir <path>` keeps the build output (objects, the standalone
+    binary, the dumped frame) in <path> instead of a temporary directory
+    that is deleted on exit. Returns the path, or None for the default."""
+    for i, a in enumerate(argv):
+        if a == "--out-dir" and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith("--out-dir="):
+            return a.split("=", 1)[1]
+    return None
+
+
+def _run(badc: Path, work: Path) -> int:
+    ok = logic_self_test(badc, work)
+    if MAC or LINUX or WIN:
+        ok &= platform_build(badc, work)
+    return 0 if ok else 1
+
+
 def main() -> int:
     badc = resolve_badc()
 
+    out_dir = _out_dir_arg(sys.argv[1:])
+    if out_dir is not None:
+        work = Path(out_dir)
+        work.mkdir(parents=True, exist_ok=True)
+        rc = _run(badc, work)
+        print(f"smoke: output preserved in {work}")
+        return rc
     with tempfile.TemporaryDirectory(prefix="raylib-smoke-") as work_str:
-        work = Path(work_str)
-        ok = logic_self_test(badc, work)
-        if MAC or LINUX or WIN:
-            ok &= platform_build(badc, work)
-        return 0 if ok else 1
+        return _run(badc, Path(work_str))
 
 
 if __name__ == "__main__":

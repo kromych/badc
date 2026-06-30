@@ -3257,6 +3257,12 @@ fn emit_intrinsic(
             bail_msg("x87 control word intrinsic is x86-only");
             false
         }
+        I::Cpuid | I::Xgetbv => {
+            // cpuid / xgetbv are x86-only; the source gates them on
+            // MA_X86 / MA_X64, so AArch64 never reaches them.
+            bail_msg("cpuid / xgetbv intrinsic is x86-only");
+            false
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

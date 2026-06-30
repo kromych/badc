@@ -175,6 +175,17 @@ pub enum Intrinsic {
     /// `mfence` (x86_64); takes no argument and produces no value.
     /// A no-op in the single-threaded interpreter.
     AtomicThreadFence = 43,
+    /// `asm("cpuid" : "=a"(o0), "=b"(o1), "=c"(o2), "=d"(o3) : "a"(leaf),
+    /// "c"(sub))` -- x86 CPU identification. The six args are, in order,
+    /// the four output addresses (eax/ebx/ecx/edx destinations) then the
+    /// two input values (eax = leaf, ecx = subleaf). x86_64 only. The
+    /// interpreter zeroes the outputs (no host CPUID).
+    Cpuid = 44,
+    /// `asm("xgetbv" : "=a"(lo), "=d"(hi) : "c"(reg))` -- read an extended
+    /// control register. Three args: the low and high output addresses
+    /// (eax/edx destinations) then the input value (ecx = register index).
+    /// x86_64 only. The interpreter zeroes the outputs.
+    Xgetbv = 45,
 }
 
 impl Intrinsic {
@@ -223,6 +234,8 @@ impl Intrinsic {
             41 => Some(Intrinsic::X87StoreControlWord),
             42 => Some(Intrinsic::X87LoadControlWord),
             43 => Some(Intrinsic::AtomicThreadFence),
+            44 => Some(Intrinsic::Cpuid),
+            45 => Some(Intrinsic::Xgetbv),
             _ => None,
         }
     }

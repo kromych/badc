@@ -664,6 +664,18 @@ impl Compiler {
             self.data.truncate(tstart);
             return self.parse_x87_control_word_asm(kind);
         }
+        // `cpuid` / `xgetbv` carry register-constrained operands. The
+        // template is just the mnemonic (the PIC `xchg`-wrapped form is
+        // x86-32 only, which c5 does not target).
+        let cpuid_is_cpuid = match tmpl_lc.as_str() {
+            "cpuid" => Some(true),
+            "xgetbv" => Some(false),
+            _ => None,
+        };
+        if let Some(is_cpuid) = cpuid_is_cpuid {
+            self.data.truncate(tstart);
+            return self.parse_cpuid_xgetbv_asm(is_cpuid);
+        }
         // An empty template is a compiler barrier: `__asm__("")`, or the
         // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It emits no
         // instruction, so its operands carry no machine effect; consume
@@ -771,6 +783,132 @@ impl Compiler {
             super::super::ast::Expr::Intrinsic {
                 kind: kind as i64,
                 args: alloc::vec![addr],
+                ty: Ty::Int as i64,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        let _ = self.ast_emit_expr_stmt();
+        Ok(())
+    }
+
+    /// `asm("cpuid" : "=a"(o0),"=b"(o1),"=c"(o2),"=d"(o3) : "a"(leaf),"c"(sub))`
+    /// and `asm("xgetbv" : "=a"(lo),"=d"(hi) : "c"(reg))`. Each operand is a
+    /// register-letter constraint and a parenthesised expression: an output
+    /// (`=`) contributes the destination's address, an input contributes its
+    /// value. Operands are mapped by their constraint letter so the order
+    /// they appear does not matter; the intrinsic args are then built in the
+    /// fixed order the codegen expects. On entry the template is consumed and
+    /// the cursor is at the first `:`.
+    fn parse_cpuid_xgetbv_asm(&mut self, is_cpuid: bool) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, UnOp};
+        // Indexed by register letter: a=0, b=1, c=2, d=3.
+        let mut out: [Option<super::super::ast::ExprId>; 4] = [None; 4];
+        let mut inp: [Option<super::super::ast::ExprId>; 4] = [None; 4];
+        // The asm grammar is `template : outputs : inputs : clobbers`, so a
+        // colon precedes each section: section 1 is outputs, 2 is inputs.
+        let mut section: u8 = 0;
+        let data_base = self.data.len();
+        while self.lex.tk != ')' {
+            if self.lex.tk == ':' {
+                section += 1;
+                self.next()?;
+                continue;
+            }
+            if self.lex.tk == ',' {
+                self.next()?;
+                continue;
+            }
+            if self.lex.tk != '"' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("unsupported cpuid / xgetbv asm syntax"));
+            }
+            // Constraint string: the last alphabetic byte is the register
+            // letter (`=a` -> a). The lexer appended its bytes to the data
+            // segment; read the letter, then drop them.
+            let cstart = self.lex.ival as usize;
+            let letter = self.data[cstart..]
+                .iter()
+                .rev()
+                .find(|b| b.is_ascii_alphabetic())
+                .copied();
+            self.next()?; // consume the constraint string
+            self.data.truncate(cstart);
+            // A clobber (the fourth section on) is a bare string with no
+            // operand; skip it.
+            if section >= 3 {
+                continue;
+            }
+            let slot = match letter {
+                Some(b'a') => 0usize,
+                Some(b'b') => 1,
+                Some(b'c') => 2,
+                Some(b'd') => 3,
+                _ => {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("cpuid / xgetbv: unsupported asm constraint"));
+                }
+            };
+            if self.lex.tk != '(' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("cpuid / xgetbv: `(` expected after constraint"));
+            }
+            self.next()?; // consume `(`
+            self.expr(Token::Assign as i64)?;
+            if section == 1 {
+                // Output: take the destination's address.
+                self.ty += Ty::Ptr as i64;
+                self.ast_apply_unary(UnOp::AddrOf);
+                out[slot] = self.ast_acc.take();
+            } else {
+                inp[slot] = self.ast_acc.take();
+            }
+            if self.lex.tk != ')' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("cpuid / xgetbv: `)` expected after asm operand"));
+            }
+            self.next()?; // consume the operand's `)`
+        }
+        self.next()?; // consume the outer `)`
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        self.data.truncate(data_base);
+
+        // Build the args in the order the codegen reads them.
+        let (kind, parts): (
+            super::super::op::Intrinsic,
+            [Option<super::super::ast::ExprId>; 6],
+        ) = if is_cpuid {
+            (
+                super::super::op::Intrinsic::Cpuid,
+                [out[0], out[1], out[2], out[3], inp[0], inp[2]],
+            )
+        } else {
+            (
+                super::super::op::Intrinsic::Xgetbv,
+                [out[0], out[3], inp[2], None, None, None],
+            )
+        };
+        let need = if is_cpuid { 6 } else { 3 };
+        let mut args: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
+        for p in parts.iter().take(need) {
+            match p {
+                Some(id) => args.push(*id),
+                None => {
+                    return Err(self.compile_err(
+                        "cpuid requires =a,=b,=c,=d outputs with a,c inputs; \
+                         xgetbv requires =a,=d outputs with a c input",
+                    ));
+                }
+            }
+        }
+
+        self.mark_emit_other();
+        self.ty = Ty::Int as i64;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::Intrinsic {
+                kind: kind as i64,
+                args,
                 ty: Ty::Int as i64,
             },
             pos,

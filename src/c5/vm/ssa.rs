@@ -1688,6 +1688,22 @@ fn run_intrinsic(
             // arithmetic.
             Ok(())
         }
+        Intrinsic::Cpuid => {
+            // No host CPUID; zero the four output words so a caller reads a
+            // defined (feature-absent) result rather than uninitialized data.
+            for &a in &args[0..4] {
+                let addr = frame.regs[a as usize] as usize;
+                store_to_memory(mem, addr, 0, StoreKind::I32)?;
+            }
+            Ok(())
+        }
+        Intrinsic::Xgetbv => {
+            for &a in &args[0..2] {
+                let addr = frame.regs[a as usize] as usize;
+                store_to_memory(mem, addr, 0, StoreKind::I32)?;
+            }
+            Ok(())
+        }
         Intrinsic::FrameAddress => {
             // The interpreter has no native frame pointer; return this
             // frame's base in the byte arena. It is non-zero, stable

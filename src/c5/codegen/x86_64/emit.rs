@@ -6710,6 +6710,90 @@ fn emit_intrinsic(
             code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
             true
         }
+        I::Cpuid | I::Xgetbv => {
+            // cpuid (0F A2) reads eax (leaf) + ecx (subleaf) and writes
+            // eax/ebx/ecx/edx; xgetbv (0F 01 D0) reads ecx and writes
+            // eax/edx. Both clobber fixed registers the allocator does not
+            // model -- ebx is callee-saved -- so save rax/rbx/rcx/rdx around
+            // the instruction. The output addresses are pushed before the
+            // clobber and popped after; the inputs are read into r10/r11
+            // before rax/rcx are overwritten, so an operand the allocator
+            // placed in one of the saved registers is still read correctly.
+            const RAX: Reg = Reg(0);
+            const RCX: Reg = Reg(1);
+            const RDX: Reg = Reg(2);
+            const RBX: Reg = Reg(3);
+            const R10: Reg = Reg(10);
+            const R11: Reg = Reg(11);
+            let is_cpuid = matches!(intrinsic, I::Cpuid);
+            let n_out = if is_cpuid { 4 } else { 2 };
+            let n_in = if is_cpuid { 2 } else { 1 };
+            if args.len() != n_out + n_in {
+                bail_msg("cpuid / xgetbv: wrong operand count");
+                return false;
+            }
+            let materialize = |code: &mut Vec<u8>, idx: usize, scratch: Reg| -> Option<Reg> {
+                let place = alloc.places.get(args[idx] as usize).copied()?;
+                let r = materialize_int(code, place, scratch, frame)?;
+                if r.0 != scratch.0 {
+                    super::encode::emit_mov_rr(code, scratch, r);
+                }
+                Some(scratch)
+            };
+            // Save the clobbered / used registers.
+            super::encode::emit_push_r(code, RAX);
+            super::encode::emit_push_r(code, RBX);
+            super::encode::emit_push_r(code, RCX);
+            super::encode::emit_push_r(code, RDX);
+            // Push the output addresses (args[0..n_out]); they survive the
+            // clobber on the stack and are popped in reverse below.
+            for i in 0..n_out {
+                if materialize(code, i, R10).is_none() {
+                    bail_msg("cpuid / xgetbv: output operand not an address");
+                    return false;
+                }
+                super::encode::emit_push_r(code, R10);
+            }
+            // Inputs into r10 (eax) and, for cpuid, r11 (ecx); then move into
+            // the fixed registers. eax/ecx are not touched until both inputs
+            // are safely in scratch.
+            if materialize(code, n_out, R10).is_none() {
+                bail_msg("cpuid / xgetbv: input operand missing");
+                return false;
+            }
+            if is_cpuid {
+                if materialize(code, n_out + 1, R11).is_none() {
+                    bail_msg("cpuid: subleaf operand missing");
+                    return false;
+                }
+                super::encode::emit_mov_rr(code, RAX, R10); // eax = leaf
+                super::encode::emit_mov_rr(code, RCX, R11); // ecx = subleaf
+                code.push(0x0F);
+                code.push(0xA2); // cpuid
+            } else {
+                super::encode::emit_mov_rr(code, RCX, R10); // ecx = reg
+                code.push(0x0F);
+                code.push(0x01);
+                code.push(0xD0); // xgetbv
+            }
+            // Store outputs to the popped addresses. cpuid order (top of
+            // stack first): edx, ecx, ebx, eax; xgetbv: edx, eax.
+            let out_regs: &[Reg] = if is_cpuid {
+                &[RDX, RCX, RBX, RAX]
+            } else {
+                &[RDX, RAX]
+            };
+            for &src in out_regs {
+                super::encode::emit_pop_r(code, R10);
+                super::encode::emit_mov_mem_r32(code, R10, 0, src);
+            }
+            // Restore the saved registers (reverse of the save order).
+            super::encode::emit_pop_r(code, RDX);
+            super::encode::emit_pop_r(code, RCX);
+            super::encode::emit_pop_r(code, RBX);
+            super::encode::emit_pop_r(code, RAX);
+            true
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

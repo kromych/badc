@@ -297,7 +297,7 @@ int main(int argc, char **argv) {
 
     glog("InitWindow %dx%d", MAP_W * TILE_PX, MAP_H * TILE_PX + HUD_PX);
     InitWindow(MAP_W * TILE_PX, MAP_H * TILE_PX + HUD_PX, "Lode Runner (badc)");
-    SetTargetFPS(12);
+    SetTargetFPS(60);
     glog("window ready %dx%d", GetScreenWidth(), GetScreenHeight());
     if (assets_dir) {
         load_assets(assets_dir);
@@ -312,9 +312,31 @@ int main(int argc, char **argv) {
     int prev_gold = g.gold_taken;
 #endif
     int frame = 0;
+    double acc = 0.0;
+    Input latched = {0};
     while (!WindowShouldClose()) {
-        Input in = selftest ? scripted_input(frame) : read_input();
-        level_step(&g, in);
+        if (selftest) {
+            // Deterministic, frame-counted playback for the headless run.
+            level_step(&g, scripted_input(frame));
+        } else {
+            // Advance the grid logic at a fixed 12 Hz regardless of the
+            // render rate; held directions come from the current frame,
+            // one-shot dig / restart are latched until a tick consumes them.
+            Input in = read_input();
+            latched.dig_left |= in.dig_left;
+            latched.dig_right |= in.dig_right;
+            latched.restart |= in.restart;
+            acc += GetFrameTime();
+            int budget = 4;
+            while (acc >= 1.0 / 12.0 && budget-- > 0) {
+                in.dig_left = latched.dig_left;
+                in.dig_right = latched.dig_right;
+                in.restart = latched.restart;
+                level_step(&g, in);
+                latched.dig_left = latched.dig_right = latched.restart = 0;
+                acc -= 1.0 / 12.0;
+            }
+        }
 #ifdef GAME_AUDIO
         if (g_assets && g.gold_taken > prev_gold) PlaySound(g_pickup);
         prev_gold = g.gold_taken;

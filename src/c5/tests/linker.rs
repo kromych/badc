@@ -1177,6 +1177,46 @@ fn win64_dll_without_imports_leaves_import_and_iat_dirs_empty() {
 }
 
 #[test]
+fn windows_hypotf_imports_underscored_ucrtbase_export() {
+    // ucrtbase.dll exports the float hypot only under the legacy
+    // underscored `_hypotf`; the C99 `hypotf` spelling is a header inline
+    // there, with no exported symbol. Binding the call to the bare
+    // `hypotf` leaves an unresolved import that fails the Windows loader
+    // at process start (STATUS_ENTRYPOINT_NOT_FOUND, 0xc0000139). The
+    // import-name string in the PE must therefore be `_hypotf` on both
+    // Windows targets.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "#include <math.h>\n\
+               #pragma export(use_hypotf)\n\
+               float use_hypotf(float a, float b) { return hypotf(a, b); }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile hypotf TU");
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            },
+        )
+        .expect("emit object");
+        // The import symbol is the null-delimited `_hypotf`; matching the
+        // bare substring would also hit the `use_hypotf` definition.
+        let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+        assert!(
+            contains(b"\0_hypotf\0"),
+            "{target:?}: the float hypot call must bind to the exported `_hypotf`"
+        );
+        assert!(
+            !contains(b"\0hypotf\0"),
+            "{target:?}: the unexported bare `hypotf` must not be imported"
+        );
+    }
+}
+
+#[test]
 fn wdm_driver_demo_builds_as_native_subsystem_pe() {
     // The WDM driver skeleton carries `#pragma subsystem(driver)`
     // (an alias for the native subsystem) and `#pragma

@@ -200,18 +200,99 @@ def platform_build(badc: Path, work: Path) -> bool:
         return False
     print(f"smoke OK: standalone build -> {game.name} ({game.stat().st_size} bytes)")
 
-    return windowed_run(game, work)
+    return windowed_run(badc, game, work)
 
 
-def windowed_run(game: Path, work: Path) -> bool:
+def _pe_imports(path: Path) -> list[tuple[str, str]]:
+    """Parse a PE32+ image's import directory into (dll, symbol) pairs.
+    Ordinal-only imports carry an empty symbol. Pure stdlib so it runs on
+    every box without objdump/dumpbin."""
+    import struct
+
+    data = path.read_bytes()
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[pe : pe + 4] != b"PE\0\0":
+        return []
+    n_sec = struct.unpack_from("<H", data, pe + 6)[0]
+    opt = pe + 24
+    if struct.unpack_from("<H", data, opt)[0] != 0x20B:  # PE32+ only
+        return []
+    imp_rva = struct.unpack_from("<I", data, opt + 112 + 8)[0]
+    if imp_rva == 0:
+        return []
+    sec = pe + 24 + struct.unpack_from("<H", data, pe + 20)[0]
+    spans = []
+    for i in range(n_sec):
+        vsize, vaddr, rawsize, rawptr = struct.unpack_from("<IIII", data, sec + i * 40 + 8)
+        spans.append((vaddr, max(vsize, rawsize), rawptr))
+
+    def off(rva: int):
+        for vaddr, vsize, rawptr in spans:
+            if vaddr <= rva < vaddr + vsize:
+                return rawptr + (rva - vaddr)
+        return None
+
+    def cstr(o: int) -> str:
+        return data[o : data.index(b"\0", o)].decode("ascii", "replace")
+
+    out: list[tuple[str, str]] = []
+    d = off(imp_rva)
+    while True:
+        oft, _, _, name_rva, ft = struct.unpack_from("<IIIII", data, d)
+        if oft == 0 and name_rva == 0 and ft == 0:
+            break
+        dll = cstr(off(name_rva))
+        t = off(oft or ft)
+        while True:
+            val = struct.unpack_from("<Q", data, t)[0]
+            if val == 0:
+                break
+            out.append((dll, "" if val & (1 << 63) else cstr(off(val & 0x7FFFFFFF) + 2)))
+            t += 8
+        d += 20
+    return out
+
+
+def _validate_win_imports(badc: Path, game: Path, work: Path) -> bool:
+    """Confirm every (DLL, symbol) the built exe imports resolves via
+    GetProcAddress. A binding to a DLL that does not export the symbol
+    fails the loader at process start (STATUS_ENTRYPOINT_NOT_FOUND), which
+    a build-only smoke misses; this runs without a display."""
+    pairs = [(d, s) for d, s in _pe_imports(game) if s]
+    src = work / "import_probe.c"
+    lines = ["#include <windows.h>", "#include <stdio.h>", "int main(void){int miss=0;"]
+    for dll, sym in pairs:
+        lines.append(
+            f'{{HMODULE h=LoadLibraryA("{dll}");'
+            f'if(!h||!GetProcAddress(h,"{sym}"))'
+            f'{{printf("UNRESOLVED %s in %s\\n","{sym}","{dll}");miss++;}}}}'
+        )
+    lines.append(f'printf("checked {len(pairs)} imports, %d unresolved\\n",miss);')
+    lines.append("return miss?1:0;}")
+    src.write_text("\n".join(lines) + "\n")
+    exe = work / f"import_probe{EXE}"
+    if run([str(badc), str(src), "-o", str(exe)]).returncode != 0:
+        print("smoke FAIL: could not build the import probe", file=sys.stderr)
+        return False
+    p = run([str(exe)], capture_output=True, text=True)
+    if p.returncode != 0:
+        print(f"smoke FAIL: standalone exe has unresolved imports\n{p.stdout}", file=sys.stderr)
+        return False
+    print(f"smoke OK: {p.stdout.strip()}")
+    return True
+
+
+def windowed_run(badc: Path, game: Path, work: Path) -> bool:
     """Auto-play a few frames and assert the rendered frame is not blank.
     A windowing session is required; on Linux it is provided by Xvfb when
     installed. Without one the run is skipped, not failed."""
     if WIN:
-        # No headless display server on the Windows CI runners; the build
-        # and link (PE imports resolved against the win32 DLLs) are the
-        # coverage. An interactive desktop session can run it by hand.
-        print("smoke SKIP: standalone built + linked (no headless display on Windows)")
+        # No headless display server in the Windows session the runners use,
+        # so the render is not exercised here; validate instead that every
+        # import the PE records resolves against its DLL (the load gate).
+        if not _validate_win_imports(badc, game, work):
+            return False
+        print("smoke SKIP: render needs a desktop session (Windows)")
         return True
     ppm = work / "frame.ppm"
     argv = [str(game), "--assets", str(RAYLIB_DIR / "assets"), "--dump-frame", str(ppm)]

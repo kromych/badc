@@ -1787,6 +1787,18 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("restrict", Token::TypeQual),
     ("__restrict", Token::TypeQual),
     ("__restrict__", Token::TypeQual),
+    // MSVC calling-convention decorations. Each badc target has a
+    // single calling convention, so these carry no information and are
+    // consumed as no-op qualifiers wherever a declarator decoration may
+    // appear (`RET __stdcall f(args)`, `RET (__stdcall *fp)(args)`).
+    ("__cdecl", Token::TypeQual),
+    ("__stdcall", Token::TypeQual),
+    ("__fastcall", Token::TypeQual),
+    ("__thiscall", Token::TypeQual),
+    ("__vectorcall", Token::TypeQual),
+    ("_cdecl", Token::TypeQual),
+    ("_stdcall", Token::TypeQual),
+    ("_fastcall", Token::TypeQual),
     // Integer-type modifiers. `signed`, `unsigned`, and `long` are
     // split off: `signed` changes the meaning of a `char` base
     // (signed-char arrays hold negative values that must load

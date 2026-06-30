@@ -164,6 +164,14 @@ impl Compiler {
         // any nested one (a function-pointer parameter's prototype).
         let param_ctx = core::mem::take(&mut self.pending.param_decl_context);
         let mut ty = base;
+        // A calling-convention decoration may precede the declarator
+        // (`RET __stdcall name(args)`) or sit just inside the parentheses
+        // of a function-pointer declarator (`RET (__stdcall *fp)(args)`);
+        // it lexes as a no-op type qualifier. Consume any here so it does
+        // not stand in for the declarator name.
+        while self.lex.tk == Token::TypeQual {
+            self.next()?;
+        }
         let mut leading_ptr_count: i64 = 0;
         while self.lex.tk == Token::MulOp {
             self.next()?;

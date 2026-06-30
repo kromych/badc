@@ -21,6 +21,7 @@ typedef long CFIndex;
 
 #define kCFAllocatorDefault ((CFAllocatorRef)0)
 #define kCFStringEncodingASCII 0x0600
+#define kCFStringEncodingUTF8 0x08000100
 #define kCFCompareEqualTo 0
 
 extern const CFStringRef kCFRunLoopDefaultMode;
@@ -38,6 +39,9 @@ CFURLRef CFBundleCopyResourcesDirectoryURL(CFBundleRef bundle);
 Boolean CFURLGetFileSystemRepresentation(CFURLRef url, Boolean resolveAgainstBase,
                                          unsigned char *buffer, CFIndex maxBufLen);
 CFStringRef CFURLCopyLastPathComponent(CFURLRef url);
+Boolean CFStringGetCString(CFStringRef theString, char *buffer, CFIndex bufferSize,
+                           CFStringEncoding encoding);
+CFIndex CFStringGetLength(CFStringRef theString);
 
 #define CFSTR(s) CFStringCreateWithCString(kCFAllocatorDefault, (s), kCFStringEncodingASCII)
 

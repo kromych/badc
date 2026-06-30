@@ -2724,10 +2724,11 @@ impl Preprocessor {
         {
             // Skip the search-path entries up to and including the one whose
             // directory holds the current file.
+            let cur_dir = include_parent_dir(current_file);
             let mut start = 0usize;
-            if let Some(cur_dir) = include_parent_dir(current_file) {
+            if let Some(ref cd) = cur_dir {
                 for (i, path) in self.search_paths.iter().enumerate() {
-                    if path_dirs_equal(path, &cur_dir) {
+                    if path_dirs_equal(path, cd) {
                         start = i + 1;
                         break;
                     }
@@ -2743,6 +2744,16 @@ impl Preprocessor {
                 }
             };
             for path in self.search_paths.iter().skip(start) {
+                // A later entry that aliases the current header's own
+                // directory (e.g. a relative overlay duplicating an
+                // absolute `-I`, or a symlink) would re-resolve this same
+                // file rather than the next one; skip it.
+                if cur_dir
+                    .as_deref()
+                    .is_some_and(|cd| path_dirs_equal(path, cd))
+                {
+                    continue;
+                }
                 let candidate = join(path);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
                     return Some((body, candidate));
@@ -5595,6 +5606,42 @@ int x_2 = __COUNTER__;
             pp.warnings.is_empty(),
             "unexpected warnings: {:?}",
             pp.warnings
+        );
+    }
+
+    #[test]
+    fn include_next_skips_a_later_path_aliasing_the_current_dir() {
+        // The shim directory is on the search path twice under different
+        // strings (an explicit entry and an aliased duplicate, as the
+        // relative `./include` overlay duplicates an absolute `-I` when badc
+        // runs from a directory that has an `include/`). `#include_next` must
+        // recognize the alias and not re-resolve the guarded shim through it,
+        // which would yield an empty body and drop the next header.
+        let base = std::env::temp_dir().join(format!("badc-incnext-alias-{}", std::process::id()));
+        let d1 = base.join("d1");
+        let d2 = base.join("d2");
+        std::fs::create_dir_all(&d1).unwrap();
+        std::fs::create_dir_all(&d2).unwrap();
+        std::fs::write(
+            d1.join("foo.h"),
+            "#ifndef FOO_SHIM\n#define FOO_SHIM\nint from_shim(void);\n\
+             #include_next <foo.h>\n#endif\n",
+        )
+        .unwrap();
+        std::fs::write(d2.join("foo.h"), "int from_system(void);\n").unwrap();
+
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(d1.to_str().unwrap());
+        // Aliased duplicate of d1, ordered before d2: a canonical match must
+        // skip it so the forward reaches d2 rather than the guarded shim.
+        pp.add_search_path(&format!("{}/.", d1.to_str().unwrap()));
+        pp.add_search_path(d2.to_str().unwrap());
+        let out = pp.process("#include <foo.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+
+        assert!(
+            out.contains("from_shim") && out.contains("from_system"),
+            "include_next must skip the aliased dir and reach the next foo.h; got: {out}"
         );
     }
 }

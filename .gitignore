@@ -17,6 +17,7 @@ demos/raylib/*
 !demos/raylib/loderunner_logic.c
 !demos/raylib/loderunner.h
 !demos/raylib/test_loderunner.c
+!demos/raylib/oracle_diff.c
 !demos/raylib/include
 # SQLite amalgamation -- not committed; `demos/sqlite3/setup.py`
 # fetches the upstream tarball and leaves the four .c/.h files

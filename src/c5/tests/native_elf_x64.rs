@@ -1074,3 +1074,80 @@ fn foreign_caller_r13_preserved() {
         "foreign caller's r13 was clobbered by the badc callee (callee-save violation)"
     );
 }
+
+/// A badc caller into a foreign (cc-compiled) callee that returns a 24-byte
+/// aggregate by value. System V AMD64 3.2.3 returns an aggregate larger than
+/// 16 bytes (MEMORY class) through a hidden pointer the caller passes in the
+/// first integer-argument register (rdi); the callee writes the result there
+/// and returns the pointer in rax. badc must allocate the result buffer and
+/// pass its address ahead of the declared arguments. Links a badc executable
+/// against a cc-built shared object, exercising the real ABI boundary the
+/// c5-to-c5 struct-return lanes cannot.
+#[test]
+fn badc_caller_oversize_struct_return_from_foreign() {
+    use crate::CompileOptions;
+
+    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
+        Command::new(c)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    });
+    let Some(cc) = cc else {
+        eprintln!(
+            "skipping badc_caller_oversize_struct_return_from_foreign: no system C driver \
+             (cc/gcc/clang)"
+        );
+        return;
+    };
+
+    let dir = unique_temp_path("badc-elf64-outptr", "dir");
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let callee_c = dir.join("callee.c");
+    let so_path = dir.join("libbig24.so");
+    std::fs::write(
+        &callee_c,
+        "typedef struct { long a; long b; long c; } Big24;\n\
+         Big24 make_big24(long x) { Big24 r; r.a = x; r.b = x + 1; r.c = x + 2; return r; }\n",
+    )
+    .expect("write callee source");
+    let st = Command::new(cc)
+        .args(["-shared", "-fPIC", "-o"])
+        .arg(&so_path)
+        .arg(&callee_c)
+        .status()
+        .expect("invoke system C driver");
+    assert!(st.success(), "cc failed to build the shared object");
+
+    let caller_src = format!(
+        "#pragma dylib(ext, \"{}\")\n\
+         #pragma binding(ext::make_big24, \"make_big24\")\n\
+         typedef struct {{ long a; long b; long c; }} Big24;\n\
+         Big24 make_big24(long x);\n\
+         int main(void) {{\n\
+         \tBig24 r = make_big24(10);\n\
+         \treturn (r.a == 10 && r.b == 11 && r.c == 12) ? 0 : 1;\n\
+         }}\n",
+        so_path.display()
+    );
+    let prog = Compiler::with_options(caller_src, Target::LinuxX64, CompileOptions::default())
+        .compile()
+        .unwrap_or_else(|e| panic!("compile caller: {e}"));
+    let exe =
+        emit_native(&prog, Target::LinuxX64).unwrap_or_else(|e| panic!("emit caller exe: {e}"));
+    let exe_path = dir.join("caller_exe");
+    std::fs::write(&exe_path, &exe).expect("write caller exe");
+    set_executable(&exe_path);
+
+    let output = Command::new(&exe_path)
+        .env("LD_LIBRARY_PATH", &dir)
+        .output()
+        .expect("run linked binary");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "badc mis-returned a > 16-byte aggregate from a foreign callee (System V sret ABI)"
+    );
+}

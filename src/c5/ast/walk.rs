@@ -2370,6 +2370,48 @@ impl<'a> Walker<'a> {
                                 ext_arg_aggs[i] = Some(b.intern_agg_desc(desc));
                             }
                         }
+                        // System V AMD64 MEMORY class / Win64 oversize
+                        // (StructReturnAbi::OutPtr): the caller allocates the
+                        // result buffer and passes its address as the hidden
+                        // first integer argument; the callee writes through it
+                        // and returns it in rax. Prepend the out-pointer to the
+                        // argument vector and shift the FP-arg mask and the
+                        // aggregate descriptors one slot to follow it. AArch64
+                        // returns this size through x8 (StructReturnAbi::Indirect,
+                        // handled by the ret_agg path below).
+                        if is_struct_ty(*ty)
+                            && struct_ptr_depth(*ty) == 0
+                            && matches!(
+                                crate::c5::compiler::struct_return_abi(
+                                    self.structs,
+                                    self.target,
+                                    *ty
+                                ),
+                                crate::c5::compiler::StructReturnAbi::OutPtr
+                            )
+                        {
+                            let result_size = self.struct_size(*ty);
+                            let result_slot = b.alloc_synthetic_struct(result_size);
+                            // Spill the out-pointer through an int temp so the
+                            // codegen routes it via the host integer arg register.
+                            let addr = b.local_addr(result_slot);
+                            let temp = b.alloc_synthetic_local();
+                            b.store_local(temp, addr, super::super::ir::StoreKind::I64);
+                            let out_arg = b.load_local(temp, super::super::ir::LoadKind::I64);
+                            let mut shifted: alloc::vec::Vec<super::super::ir::ValueId> =
+                                alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
+                            shifted.push(out_arg);
+                            shifted.extend_from_slice(&arg_vals);
+                            let call = b.call_ext(*val, shifted, fp_arg_mask << 1, false);
+                            if !ext_arg_aggs.is_empty() {
+                                let mut s = alloc::vec![None; arg_vals.len() + 1];
+                                for (i, a) in ext_arg_aggs.iter().enumerate() {
+                                    s[i + 1] = *a;
+                                }
+                                b.set_call_arg_aggs(call, s);
+                            }
+                            return Ok(b.local_addr(result_slot));
+                        }
                         // A by-value struct return follows the platform ABI:
                         // reserve the result temp and tag the call's
                         // `ret_agg` so the emitter gathers the return

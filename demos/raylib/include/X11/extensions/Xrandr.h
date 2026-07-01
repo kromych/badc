@@ -14,7 +14,36 @@ typedef XID RRCrtc;
 typedef XID RROutput;
 typedef XID RRMode;
 typedef unsigned short Rotation;
-typedef struct _XRRModeInfo XRRModeInfo;
+typedef unsigned long XRRModeFlags;
+
+/* Mode flags (randr.h) used in the refresh-rate calculation. */
+#define RR_Interlace 0x00000010
+#define RR_DoubleScan 0x00000020
+
+/* CRTC rotation / reflection (randr.h). */
+#define RR_Rotate_0 1
+#define RR_Rotate_90 2
+#define RR_Rotate_180 4
+#define RR_Rotate_270 8
+#define RR_Reflect_X 16
+#define RR_Reflect_Y 32
+
+typedef struct _XRRModeInfo {
+    RRMode id;
+    unsigned int width;
+    unsigned int height;
+    unsigned long dotClock;
+    unsigned int hSyncStart;
+    unsigned int hSyncEnd;
+    unsigned int hTotal;
+    unsigned int hSkew;
+    unsigned int vSyncStart;
+    unsigned int vSyncEnd;
+    unsigned int vTotal;
+    char *name;
+    unsigned int nameLength;
+    XRRModeFlags modeFlags;
+} XRRModeInfo;
 
 typedef struct {
     Time timestamp;
@@ -67,5 +96,37 @@ void XRRFreeCrtcInfo(XRRCrtcInfo *crtcInfo);
 XRROutputInfo *XRRGetOutputInfo(Display *dpy, XRRScreenResources *resources,
                                 RROutput output);
 void XRRFreeOutputInfo(XRROutputInfo *outputInfo);
+
+/* RandR event codes + selection masks (randr.h). */
+#define RRScreenChangeNotify 0
+#define RRNotify 1
+#define RRNotify_CrtcChange 0
+#define RRNotify_OutputChange 1
+#define RRNotify_OutputProperty 2
+#define RRScreenChangeNotifyMask (1L << 0)
+#define RRCrtcChangeNotifyMask (1L << 1)
+#define RROutputChangeNotifyMask (1L << 2)
+#define RROutputPropertyNotifyMask (1L << 3)
+
+/* Gamma-ramp control + mode configuration RGFW's monitor path uses. */
+typedef struct {
+    int size;
+    unsigned short *red;
+    unsigned short *green;
+    unsigned short *blue;
+} XRRCrtcGamma;
+
+Bool XRRQueryExtension(Display *dpy, int *event_base_return,
+                       int *error_base_return);
+void XRRSelectInput(Display *dpy, Window window, int mask);
+RROutput XRRGetOutputPrimary(Display *dpy, Window window);
+int XRRGetCrtcGammaSize(Display *dpy, RRCrtc crtc);
+XRRCrtcGamma *XRRGetCrtcGamma(Display *dpy, RRCrtc crtc);
+XRRCrtcGamma *XRRAllocGamma(int size);
+void XRRSetCrtcGamma(Display *dpy, RRCrtc crtc, XRRCrtcGamma *gamma);
+void XRRFreeGamma(XRRCrtcGamma *gamma);
+Status XRRSetCrtcConfig(Display *dpy, XRRScreenResources *resources, RRCrtc crtc,
+                        Time timestamp, int x, int y, RRMode mode,
+                        Rotation rotation, RROutput *outputs, int noutputs);
 
 #endif /* _X11_EXTENSIONS_XRANDR_H_ */

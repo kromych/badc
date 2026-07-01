@@ -14,6 +14,7 @@ typedef struct {
 } XrmValue;
 
 XrmDatabase XrmGetStringDatabase(const char *data);
+void XrmDestroyDatabase(XrmDatabase database);
 Bool XrmGetResource(XrmDatabase database, const char *str_name,
                     const char *str_class, char **str_type_return,
                     XrmValue *value_return);
@@ -51,5 +52,49 @@ typedef struct {
 #define XNQueryInputStyle  "queryInputStyle"
 #define XIMPreeditNothing  0x0008L
 #define XIMStatusNothing   0x0400L
+
+typedef int (*XErrorHandler)(Display *, XErrorEvent *);
+typedef void (*XIDProc)(Display *, XPointer, XPointer);
+
+/* Input-method / input-context lifecycle. XCreateIC / X{Get,Set}IMValues
+ * take a NULL-terminated attribute-name/value varargs list. */
+XIM XOpenIM(Display *dpy, XrmDatabase rdb, char *res_name, char *res_class);
+Status XCloseIM(XIM im);
+XIC XCreateIC(XIM im, ...);
+void XDestroyIC(XIC ic);
+void XSetICFocus(XIC ic);
+void XUnsetICFocus(XIC ic);
+char *XGetIMValues(XIM im, ...);
+char *XSetIMValues(XIM im, ...);
+char *XSetLocaleModifiers(const char *modifier_list);
+Bool XRegisterIMInstantiateCallback(Display *dpy, XrmDatabase rdb,
+                                    char *res_name, char *res_class,
+                                    XIDProc callback, XPointer client_data);
+Bool XUnregisterIMInstantiateCallback(Display *dpy, XrmDatabase rdb,
+                                      char *res_name, char *res_class,
+                                      XIDProc callback, XPointer client_data);
+
+/* Per-window context association and the error handler. */
+XContext XUniqueContext(void);
+int XSaveContext(Display *dpy, XID rid, XContext context, const char *data);
+int XFindContext(Display *dpy, XID rid, XContext context, XPointer *data_return);
+int XDeleteContext(Display *dpy, XID rid, XContext context);
+XErrorHandler XSetErrorHandler(XErrorHandler handler);
+int XGetErrorText(Display *dpy, int code, char *buffer, int length);
+
+/* Composed-key lookup status (Xutil.h) and the UTF-8 lookup entry point. */
+#define XBufferOverflow (-1)
+#define XLookupNone 1
+#define XLookupChars 2
+#define XLookupKeySym 3
+#define XLookupBoth 4
+
+int Xutf8LookupString(XIC ic, XKeyEvent *event, char *buffer_return,
+                      int bytes_buffer, KeySym *keysym_return,
+                      Status *status_return);
+void Xutf8SetWMProperties(Display *dpy, Window w, const char *window_name,
+                         const char *icon_name, char **argv, int argc,
+                         XSizeHints *normal_hints, XWMHints *wm_hints,
+                         XClassHint *class_hints);
 
 #endif /* _X11_XUTIL_H_ */

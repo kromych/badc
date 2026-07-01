@@ -3,7 +3,10 @@
 #define _X11_XATOM_H_
 
 #define XA_ATOM 4
+#define XA_CARDINAL 6
+#define XA_INTEGER 19
 #define XA_STRING 31
+#define XA_WINDOW 33
 #define XA_WM_NORMAL_HINTS 40
 
 #endif /* _X11_XATOM_H_ */

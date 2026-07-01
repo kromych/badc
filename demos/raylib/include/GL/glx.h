@@ -39,12 +39,35 @@ typedef void (*PFNGLXSWAPINTERVALEXTPROC)(Display *dpy, GLXDrawable drawable,
 #define GLX_CONTEXT_PROFILE_MASK_ARB 0x9126
 #define GLX_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
 #define GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
+#define GLX_ACCUM_RED_SIZE 14
+#define GLX_ACCUM_GREEN_SIZE 15
+#define GLX_ACCUM_BLUE_SIZE 16
+#define GLX_ACCUM_ALPHA_SIZE 17
+#define GLX_CONTEXT_FLAGS_ARB 0x2094
+#define GLX_CONTEXT_DEBUG_BIT_ARB 0x00000001
+#define GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x00000002
+#define GLX_CONTEXT_ROBUST_ACCESS_BIT_ARB 0x00000004
+#define GLX_CONTEXT_ES_PROFILE_BIT_EXT 0x00000004
+#define GLX_CONTEXT_OPENGL_NO_ERROR_ARB 0x31B3
+#define GLX_CONTEXT_RELEASE_BEHAVIOR_ARB 0x2097
+#define GLX_CONTEXT_RELEASE_BEHAVIOR_NONE_ARB 0
+#define GLX_CONTEXT_RELEASE_BEHAVIOR_FLUSH_ARB 0x2098
+#define GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB 0x20B2
+#define GLX_FRAMEBUFFER_SRGB_CAPABLE_EXT 0x20B2
 
 GLXFBConfig *glXChooseFBConfig(Display *dpy, int screen, const int *attribList,
                                int *nitems);
 int glXGetFBConfigAttrib(Display *dpy, GLXFBConfig config, int attribute,
                          int *value);
 XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config);
+typedef XID GLXWindow;
+GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList,
+                            Bool direct);
+GLXContext glXGetCurrentContext(void);
+GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win,
+                          const int *attribList);
+void glXDestroyWindow(Display *dpy, GLXWindow window);
+const char *glXQueryExtensionsString(Display *dpy, int screen);
 void glXDestroyContext(Display *dpy, GLXContext ctx);
 Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx);
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable);

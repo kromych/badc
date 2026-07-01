@@ -323,6 +323,29 @@ typedef struct {
     void *data;
 } XGenericEventCookie;
 
+typedef struct {
+    int type;
+    unsigned long serial;
+    Bool send_event;
+    Display *display;
+    Window window;
+    Atom atom;
+    Time time;
+    int state;
+} XPropertyEvent;
+
+typedef struct {
+    int type;
+    unsigned long serial;
+    Bool send_event;
+    Display *display;
+    Window event;
+    Window window;
+    Window parent;
+    int x, y;
+    Bool override_redirect;
+} XReparentEvent;
+
 typedef union _XEvent {
     int type;
     XAnyEvent xany;
@@ -335,6 +358,8 @@ typedef union _XEvent {
     XClientMessageEvent xclient;
     XSelectionEvent xselection;
     XSelectionRequestEvent xselectionrequest;
+    XPropertyEvent xproperty;
+    XReparentEvent xreparent;
     XFocusChangeEvent xfocus;
     XMapEvent xmap;
     XGenericEventCookie xcookie;
@@ -501,7 +526,35 @@ int XGetEventData(Display *display, XGenericEventCookie *cookie);
 void XFreeEventData(Display *display, XGenericEventCookie *cookie);
 
 typedef struct _XRegion *Region;
-typedef struct _XImage XImage;
+
+/* Full Xlib layout: RGFW writes scalar fields directly and XPutImage /
+ * XDestroyImage read them plus the manipulation-routine table, so the field
+ * order and the trailing function table must match libX11. */
+typedef struct _XImage {
+    int width, height;
+    int xoffset;
+    int format;
+    char *data;
+    int byte_order;
+    int bitmap_unit;
+    int bitmap_bit_order;
+    int bitmap_pad;
+    int depth;
+    int bytes_per_line;
+    int bits_per_pixel;
+    unsigned long red_mask;
+    unsigned long green_mask;
+    unsigned long blue_mask;
+    XPointer obdata;
+    struct {
+        struct _XImage *(*create_image)();
+        int (*destroy_image)();
+        unsigned long (*get_pixel)();
+        int (*put_pixel)();
+        struct _XImage *(*sub_image)();
+        int (*add_pixel)();
+    } f;
+} XImage;
 
 typedef struct {
     long function;
@@ -557,7 +610,11 @@ int XScreenCount(Display *display);
 int XConnectionNumber(Display *display);
 int XDisplayWidthMM(Display *display, int screen_number);
 int XDisplayHeightMM(Display *display, int screen_number);
+int XDefaultDepth(Display *display, int screen_number);
+GC XDefaultGC(Display *display, int screen_number);
 
+#define DefaultDepth(dpy, scr) XDefaultDepth(dpy, scr)
+#define DefaultGC(dpy, scr) XDefaultGC(dpy, scr)
 #define DefaultScreen(dpy) XDefaultScreen(dpy)
 #define DefaultScreenOfDisplay(dpy) XDefaultScreenOfDisplay(dpy)
 #define DefaultRootWindow(dpy) XDefaultRootWindow(dpy)
@@ -569,6 +626,188 @@ int XDisplayHeightMM(Display *display, int screen_number);
 #define DisplayHeightMM(dpy, scr) XDisplayHeightMM(dpy, scr)
 #define DisplayWidth(dpy, scr) XDisplayWidth(dpy, scr)
 #define DisplayHeight(dpy, scr) XDisplayHeight(dpy, scr)
+
+/* Window-manager hints RGFW reads/sets on its window. */
+typedef struct {
+    long flags;
+    Bool input;
+    int initial_state;
+    Pixmap icon_pixmap;
+    Window icon_window;
+    int icon_x, icon_y;
+    Pixmap icon_mask;
+    XID window_group;
+} XWMHints;
+
+/* XWMHints.flags bits and window states (Xutil.h). */
+#ifndef InputHint
+#define InputHint (1L << 0)
+#endif
+#ifndef StateHint
+#define StateHint (1L << 1)
+#endif
+#ifndef IconPixmapHint
+#define IconPixmapHint (1L << 2)
+#endif
+#ifndef IconWindowHint
+#define IconWindowHint (1L << 3)
+#endif
+#ifndef IconPositionHint
+#define IconPositionHint (1L << 4)
+#endif
+#ifndef IconMaskHint
+#define IconMaskHint (1L << 5)
+#endif
+#ifndef WindowGroupHint
+#define WindowGroupHint (1L << 6)
+#endif
+#ifndef XUrgencyHint
+#define XUrgencyHint (1L << 8)
+#endif
+#ifndef WithdrawnState
+#define WithdrawnState 0
+#endif
+#ifndef NormalState
+#define NormalState 1
+#endif
+#ifndef IconicState
+#define IconicState 3
+#endif
+
+Bool XCheckTypedWindowEvent(Display *display, Window w, int event_type,
+                            XEvent *event_return);
+Bool XFilterEvent(XEvent *event, Window w);
+int XClearWindow(Display *display, Window w);
+int XMapRaised(Display *display, Window w);
+int XRaiseWindow(Display *display, Window w);
+Pixmap XCreatePixmap(Display *display, Drawable d, unsigned int width,
+                     unsigned int height, unsigned int depth);
+int XSetWindowBackground(Display *display, Window w, unsigned long background);
+int XSetWindowBackgroundPixmap(Display *display, Window w, Pixmap background);
+Window XGetSelectionOwner(Display *display, Atom selection);
+int XSetInputFocus(Display *display, Window focus, int revert_to, Time time);
+VisualID XVisualIDFromVisual(Visual *visual);
+XVisualInfo *XGetVisualInfo(Display *display, long vinfo_mask,
+                            XVisualInfo *vinfo_template, int *nitems_return);
+XWMHints *XGetWMHints(Display *display, Window w);
+int XSetWMHints(Display *display, Window w, XWMHints *wm_hints);
+
+/* Visual classes (X.h). */
+#ifndef StaticGray
+#define StaticGray 0
+#endif
+#ifndef GrayScale
+#define GrayScale 1
+#endif
+#ifndef StaticColor
+#define StaticColor 2
+#endif
+#ifndef PseudoColor
+#define PseudoColor 3
+#endif
+#ifndef TrueColor
+#define TrueColor 4
+#endif
+#ifndef DirectColor
+#define DirectColor 5
+#endif
+
+/* XVisualInfo field masks (Xutil.h). */
+#ifndef VisualNoMask
+#define VisualNoMask 0x0
+#endif
+#ifndef VisualIDMask
+#define VisualIDMask 0x1
+#endif
+#ifndef VisualScreenMask
+#define VisualScreenMask 0x2
+#endif
+#ifndef VisualDepthMask
+#define VisualDepthMask 0x4
+#endif
+#ifndef VisualClassMask
+#define VisualClassMask 0x8
+#endif
+#ifndef VisualRedMaskMask
+#define VisualRedMaskMask 0x10
+#endif
+#ifndef VisualGreenMaskMask
+#define VisualGreenMaskMask 0x20
+#endif
+#ifndef VisualBlueMaskMask
+#define VisualBlueMaskMask 0x40
+#endif
+#ifndef VisualColormapSizeMask
+#define VisualColormapSizeMask 0x80
+#endif
+#ifndef VisualBitsPerRGBMask
+#define VisualBitsPerRGBMask 0x100
+#endif
+#ifndef VisualAllMask
+#define VisualAllMask 0x1FF
+#endif
+
+/* Property notify state + change modes (X.h). */
+#ifndef PropertyNewValue
+#define PropertyNewValue 0
+#endif
+#ifndef PropertyDelete
+#define PropertyDelete 1
+#endif
+#ifndef PropModeReplace
+#define PropModeReplace 0
+#endif
+#ifndef PropModePrepend
+#define PropModePrepend 1
+#endif
+#ifndef PropModeAppend
+#define PropModeAppend 2
+#endif
+
+/* Window classes (X.h). */
+#ifndef CopyFromParent
+#define CopyFromParent 0
+#endif
+#ifndef InputOutput
+#define InputOutput 1
+#endif
+#ifndef InputOnly
+#define InputOnly 2
+#endif
+
+/* Pointer buttons (X.h). */
+#ifndef Button1
+#define Button1 1
+#endif
+#ifndef Button2
+#define Button2 2
+#endif
+#ifndef Button3
+#define Button3 3
+#endif
+#ifndef Button4
+#define Button4 4
+#endif
+#ifndef Button5
+#define Button5 5
+#endif
+
+/* Image formats and byte order (X.h). */
+#ifndef XYBitmap
+#define XYBitmap 0
+#endif
+#ifndef XYPixmap
+#define XYPixmap 1
+#endif
+#ifndef ZPixmap
+#define ZPixmap 2
+#endif
+#ifndef LSBFirst
+#define LSBFirst 0
+#endif
+#ifndef MSBFirst
+#define MSBFirst 1
+#endif
 
 /* Core X11 event types (X.h). Guarded so this augments whatever the shim
  * already defines. */
@@ -673,14 +912,38 @@ int XDisplayHeightMM(Display *display, int screen_number);
 #endif
 
 /* Event-mask bits (X.h). */
+#ifndef KeymapStateMask
+#define KeymapStateMask (1L << 14)
+#endif
+#ifndef ExposureMask
+#define ExposureMask (1L << 15)
+#endif
 #ifndef VisibilityChangeMask
 #define VisibilityChangeMask (1L << 16)
 #endif
 #ifndef StructureNotifyMask
 #define StructureNotifyMask (1L << 17)
 #endif
+#ifndef ResizeRedirectMask
+#define ResizeRedirectMask (1L << 18)
+#endif
 #ifndef SubstructureNotifyMask
 #define SubstructureNotifyMask (1L << 19)
+#endif
+#ifndef SubstructureRedirectMask
+#define SubstructureRedirectMask (1L << 20)
+#endif
+#ifndef FocusChangeMask
+#define FocusChangeMask (1L << 21)
+#endif
+#ifndef PropertyChangeMask
+#define PropertyChangeMask (1L << 22)
+#endif
+#ifndef ColormapChangeMask
+#define ColormapChangeMask (1L << 23)
+#endif
+#ifndef OwnerGrabButtonMask
+#define OwnerGrabButtonMask (1L << 24)
 #endif
 
 #endif /* _X11_XLIB_H_ */

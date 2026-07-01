@@ -357,6 +357,87 @@ fn data_import_renamed_binding_uses_export_name_on_windows_x64() {
     );
 }
 
+/// The bundled `<stdlib.h>` binds the Windows/x64 environment vectors
+/// as msvcrt data imports: `_environ` / `_wenviron` under their export
+/// names and POSIX `environ` aliased to the `_environ` export. No unit
+/// (the runtime included) may define them locally -- a local slot
+/// shadows the import and reads NULL, which upstream surfaced as an
+/// empty environment in every spawned child process.
+#[test]
+fn windows_x64_environ_family_resolves_to_msvcrt_data_imports() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    let program = Compiler::with_options(
+        "#include <stdlib.h>\n\
+         int main(void){return (environ != 0) + (_environ != 0) + (_wenviron != 0);}\n"
+            .to_string(),
+        Target::WindowsX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile environ TU for WindowsX64");
+    let image =
+        super::link_executable_with_runtime(&program, Target::WindowsX64, NativeOptions::default())
+            .expect("link WindowsX64 executable");
+    assert_eq!(
+        pe_import_dll_of(&image, "_environ").as_deref(),
+        Some("msvcrt.dll"),
+        "`_environ` must be a msvcrt data import"
+    );
+    assert_eq!(
+        pe_import_dll_of(&image, "_wenviron").as_deref(),
+        Some("msvcrt.dll"),
+        "`_wenviron` must be a msvcrt data import"
+    );
+    assert!(
+        pe_iat_slot_rva(&image, "environ").is_none(),
+        "POSIX `environ` must alias the `_environ` export, not import a bare `environ`"
+    );
+}
+
+/// On Windows/arm64 msvcrt.dll exports no environment data symbols, so
+/// `<stdlib.h>` maps the family to msvcrt's `_get_environ` /
+/// `_get_wenviron` accessor functions. ucrtbase's `__p__*` accessors
+/// must not appear: they read UCRT's separate environment copy, which
+/// msvcrt's getenv / _putenv / _wgetenv never update.
+#[test]
+fn windows_arm64_environ_family_lowers_via_msvcrt_accessors() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    let program = Compiler::with_options(
+        "#include <stdlib.h>\n\
+         int main(void){return (environ != 0) + (_environ != 0) + (_wenviron != 0);}\n"
+            .to_string(),
+        Target::WindowsAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile environ TU for WindowsAarch64");
+    let image = super::link_executable_with_runtime(
+        &program,
+        Target::WindowsAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link WindowsAarch64 executable");
+    for accessor in ["_get_environ", "_get_wenviron"] {
+        assert_eq!(
+            pe_import_dll_of(&image, accessor).as_deref(),
+            Some("msvcrt.dll"),
+            "`{accessor}` must be imported from msvcrt.dll"
+        );
+    }
+    for absent in [
+        "environ",
+        "_environ",
+        "_wenviron",
+        "__p__wenviron",
+        "__p__environ",
+    ] {
+        assert!(
+            pe_iat_slot_rva(&image, absent).is_none(),
+            "`{absent}` must not appear in the arm64 import table"
+        );
+    }
+}
+
 /// A data binding must route to its declaring dylib's import
 /// descriptor. Data imports carry no call site, so their routing rides
 /// the `.note.badc` binding map; without an entry the import falls

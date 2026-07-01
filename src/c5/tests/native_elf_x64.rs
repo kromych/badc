@@ -669,6 +669,114 @@ fn fixture_parity() {
     );
 }
 
+/// When a dynamic import binds a versioned default symbol, the writer
+/// wires DT_VERSYM / DT_VERNEED into `.dynamic` and must also give the
+/// `.gnu.version` / `.gnu.version_r` payloads real section headers so
+/// section-based tooling (readelf -V, objcopy) can find them. Ties the
+/// expectation to DT_VERSYM so the check is non-vacuous only when the
+/// host glibc actually resolves a versioned default.
+#[test]
+fn versioned_import_emits_gnu_version_section_headers() {
+    const SHT_STRTAB: u32 = 3;
+    const SHT_DYNAMIC: u32 = 6;
+    const SHT_DYNSYM: u32 = 11;
+    const SHT_GNU_VERNEED: u32 = 0x6fff_fffe;
+    const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
+    let src = super::load_fixture("elf_symbol_version_default.c");
+    let program = Compiler::new(super::with_prelude(&src))
+        .compile()
+        .expect("compile");
+    let bytes = emit_native(&program, Target::LinuxX64).expect("emit_native");
+    let rd_u16 = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let rd_u32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd_u64(0x28) as usize;
+    let e_shnum = rd_u16(0x3C) as usize;
+    let e_shstrndx = rd_u16(0x3E) as usize;
+    let shdr = |i: usize| e_shoff + i * 64;
+    let sh_name = |i: usize| rd_u32(shdr(i));
+    let sh_type = |i: usize| rd_u32(shdr(i) + 4);
+    let sh_offset = |i: usize| rd_u64(shdr(i) + 24) as usize;
+    let sh_size = |i: usize| rd_u64(shdr(i) + 32) as usize;
+    let sh_link = |i: usize| rd_u32(shdr(i) + 40) as usize;
+    let sh_entsize = |i: usize| rd_u64(shdr(i) + 56);
+    let shstr_off = sh_offset(e_shstrndx);
+    let name_at = |noff: u32| -> String {
+        let start = shstr_off + noff as usize;
+        let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
+        String::from_utf8_lossy(&bytes[start..start + len]).into_owned()
+    };
+    // Does `.dynamic` carry DT_VERSYM (0x6fff_fff0)? If so, the payloads
+    // exist and their section headers are required.
+    let mut has_dt_versym = false;
+    if let Some(dyn_i) = (0..e_shnum).find(|&i| sh_type(i) == SHT_DYNAMIC) {
+        let (off, size) = (sh_offset(dyn_i), sh_size(dyn_i));
+        let mut p = off;
+        while p + 16 <= off + size {
+            let d_tag = rd_u64(p);
+            if d_tag == 0x6fff_fff0 {
+                has_dt_versym = true;
+                break;
+            }
+            if d_tag == 0 {
+                break;
+            }
+            p += 16;
+        }
+    }
+    if !has_dt_versym {
+        return; // no versioned import resolved on this host
+    }
+    let versym = (0..e_shnum)
+        .find(|&i| sh_type(i) == SHT_GNU_VERSYM)
+        .expect("DT_VERSYM present but no SHT_GNU_versym header");
+    let verneed = (0..e_shnum)
+        .find(|&i| sh_type(i) == SHT_GNU_VERNEED)
+        .expect("DT_VERNEED present but no SHT_GNU_verneed header");
+    assert_eq!(name_at(sh_name(versym)), ".gnu.version");
+    assert_eq!(name_at(sh_name(verneed)), ".gnu.version_r");
+    assert_eq!(sh_entsize(versym), 2);
+    assert_eq!(
+        sh_type(sh_link(versym)),
+        SHT_DYNSYM,
+        "versym.sh_link -> .dynsym"
+    );
+    assert_eq!(sh_type(sh_link(verneed)), SHT_STRTAB);
+    assert_eq!(name_at(sh_name(sh_link(verneed))), ".dynstr");
+    assert_eq!(e_shstrndx, e_shnum - 1, "shstrtab must be the last section");
+
+    // The version sections shift .text's index; the PLT .symtab's
+    // function symbols (e.g. `main`) must name the shifted .text index,
+    // not the pre-shift one, or a debugger / objdump attributes them to
+    // the wrong section.
+    const SHT_SYMTAB: u32 = 2;
+    let text_idx = (0..e_shnum)
+        .find(|&i| sh_type(i) == 1 && name_at(sh_name(i)) == ".text") // SHT_PROGBITS
+        .expect(".text section present") as u16;
+    let symtab = (0..e_shnum)
+        .find(|&i| sh_type(i) == SHT_SYMTAB)
+        .expect(".symtab present when a versioned import resolves");
+    let (sym_off, sym_size) = (sh_offset(symtab), sh_size(symtab));
+    let str_off = sh_offset(sh_link(symtab));
+    let sym_name = |noff: u32| -> String {
+        let start = str_off + noff as usize;
+        let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
+        String::from_utf8_lossy(&bytes[start..start + len]).into_owned()
+    };
+    let mut saw_main = false;
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_size {
+        let st_name = rd_u32(p);
+        let st_shndx = rd_u16(p + 6);
+        if sym_name(st_name) == "main" {
+            saw_main = true;
+            assert_eq!(st_shndx, text_idx, "`main` st_shndx must name .text");
+        }
+        p += 24;
+    }
+    assert!(saw_main, "`main` must appear in the PLT .symtab");
+}
+
 /// Post-call sub-word extension on the libc return register.
 /// See the matching test in `super::native::atoi_negative_sign_extends`.
 /// The x86_64 ELF backend uses `movsxd` for `Sign32`; glibc

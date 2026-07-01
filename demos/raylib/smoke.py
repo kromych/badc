@@ -326,10 +326,12 @@ def _make_macos_app(binary: Path, assets: Path, work: Path) -> Path:
         "  <key>LSMinimumSystemVersion</key><string>11.0</string>\n"
         "</dict></plist>\n"
     )
-    # Ad-hoc sign the assembled bundle. Apple Silicon requires a valid
-    # signature to launch; an unsigned or partially-signed .app is killed on
-    # launch. Signing after the bundle is complete seals the Info.plist and
-    # resources.
+    # Ad-hoc sign: Apple Silicon kills an unsigned binary at exec, so the
+    # signature is required for the standalone binary to run. It does not make
+    # the bundle double-clickable on macOS 15+, where the kernel security
+    # policy refuses to launch a binary located inside a .app unless the app is
+    # notarized (ad-hoc and un-notarized Developer-ID alike); the standalone
+    # binary runs regardless. Sign last to seal the Info.plist and resources.
     if shutil.which("codesign"):
         run(["codesign", "--force", "--sign", "-", str(app)])
     return app

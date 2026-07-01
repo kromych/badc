@@ -48,6 +48,29 @@ python demos/raylib/smoke.py        # logic self-test on any host;
 `otool -L` on the produced binary shows only OS frameworks -- no
 `libraylib`. The game is built entirely by badc.
 
+## The .app bundle and Finder launch
+
+`smoke.py` also wraps the binary in `loderunner.app`. The standalone binary
+above runs directly, but double-clicking the ad-hoc-signed `.app` does not
+launch on macOS 15+: the kernel security policy (`AppleSystemPolicy`) refuses
+to execute a binary located inside a `.app` unless the app is notarized, and
+terminates it with SIGKILL at launch (`kLSNotifyApplicationAbnormalDeath`).
+This is an OS policy, not a property of the bundle -- an identically bundled
+clang binary is refused the same way, and the same bytes run when copied out
+of the `.app`. A bare executable is exempt, which is why `Play it` runs the
+standalone binary.
+
+To produce a double-clickable `.app`, sign with a Developer ID identity and
+notarize (ad-hoc and un-notarized Developer-ID signatures are both refused):
+
+```sh
+codesign --force --deep --options runtime --timestamp \
+  --sign "Developer ID Application: <name> (<team-id>)" loderunner.app
+xcrun notarytool submit loderunner.app --apple-id <id> \
+  --team-id <team-id> --password <app-specific-password> --wait
+xcrun stapler staple loderunner.app
+```
+
 ## Platform status
 
 macOS is the standalone target today. The Linux (X11 / GLX) and Windows

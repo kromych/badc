@@ -335,6 +335,10 @@ with user identifiers:
     __linux__                            // Linux targets only
 ```
 
+Comparing the string-literal predefines with `#if X == "..."` is a c5
+extension over C99, which restricts a `#if` controlling expression to an
+integer constant expression (see `std-conformance.md`).
+
 The MSVC/MinGW mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64`
 / `__declspec` / etc.) lives in `headers/include/msvc_compat.h`
 and is opted into per translation unit with `-include msvc_compat.h`.

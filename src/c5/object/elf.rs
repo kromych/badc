@@ -192,6 +192,8 @@ const SHT_RELA: u32 = 4;
 const SHT_HASH: u32 = 5;
 const SHT_DYNAMIC: u32 = 6;
 const SHT_DYNSYM: u32 = 11;
+const SHT_GNU_VERNEED: u32 = 0x6fff_fffe;
+const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
 
 // Section header flags (Elf64_Shdr.sh_flags).
 const SHF_WRITE: u64 = 0x1;
@@ -646,6 +648,7 @@ fn build_plt_symtab(
     build: &super::Build,
     text_vmaddr: u64,
     trampoline_size: u64,
+    text_shndx: u16,
 ) -> (Vec<u8>, Vec<u8>) {
     let imports = &build.imports.imports;
     debug_assert_eq!(
@@ -693,11 +696,10 @@ fn build_plt_symtab(
                 // local (the SHT_SYMTAB rule).
                 st_info: (STB_LOCAL << 4) | STT_FUNC,
                 st_other: 0,
-                // .text section index. Hard-coded to match the
-                // section-header table: NULL=0, .interp=1,
-                // .dynsym=2, .dynstr=3, .hash=4, .rela.dyn=5,
-                // .text=6.
-                st_shndx: 6,
+                // .text section index. Shifts by two when the version
+                // sections precede .rela.dyn (has_versions), so it is
+                // passed in rather than hard-coded.
+                st_shndx: text_shndx,
                 st_value,
                 st_size: trampoline_size,
             },
@@ -736,7 +738,7 @@ fn build_plt_symtab(
                 st_name,
                 st_info: (STB_LOCAL << 4) | STT_FUNC,
                 st_other: 0,
-                st_shndx: 6,
+                st_shndx: text_shndx,
                 st_value: text_vmaddr + start,
                 st_size: end.saturating_sub(start),
             },
@@ -1472,6 +1474,11 @@ pub(super) fn write(
         import_versym[i] = idx;
     }
     let has_versions = !verneed_groups.is_empty();
+    // Two extra allocated sections (.gnu.version / .gnu.version_r) precede
+    // .rela.dyn when has_versions, shifting .text onward by two. Symbols
+    // whose st_shndx names .text must use this shifted index.
+    let ver_shdrs: u16 = if has_versions { 2 } else { 0 };
+    let text_shndx: u16 = 6 + ver_shdrs;
     let (gnu_version, gnu_version_r): (Vec<u8>, Vec<u8>) = if has_versions {
         let mut versym: Vec<u8> = Vec::with_capacity(total_dynsym * 2);
         versym.extend_from_slice(&0u16.to_le_bytes()); // null symbol
@@ -1779,7 +1786,7 @@ pub(super) fn write(
         super::Machine::X86_64 => 6,   // jmp qword ptr [rip+disp32]
     };
     let (plt_symtab_bytes, plt_strtab_bytes) = if emit_plt_symtab {
-        build_plt_symtab(build, dwarf_text_vmaddr, trampoline_size)
+        build_plt_symtab(build, dwarf_text_vmaddr, trampoline_size, text_shndx)
     } else {
         (Vec::new(), alloc::vec![0u8])
     };
@@ -1812,6 +1819,8 @@ pub(super) fn write(
         ".dynsym",
         ".dynstr",
         ".hash",
+        ".gnu.version",
+        ".gnu.version_r",
         ".rela.dyn",
         ".text",
         ".tdata",
@@ -1872,15 +1881,16 @@ pub(super) fn write(
     // Section-header indices of the allocated sections, in the order
     // emitted below: .text=6, then optional .tdata, .dynamic, .got, then
     // optional .data, .tbss, .bss. Used to attribute each .dynsym export
-    // to its real section.
-    const TEXT_SHNDX: u16 = 6;
-    let data_shndx: u16 = 9 + has_tdata as u16;
-    let bss_shndx: u16 = 9 + has_tdata as u16 + has_data as u16 + has_tbss as u16;
+    // to its real section. `ver_shdrs` / `text_shndx` are computed near
+    // `has_versions` above so the PLT symtab can share the shifted index.
+    let data_shndx: u16 = 9 + ver_shdrs + has_tdata as u16;
+    let bss_shndx: u16 = 9 + ver_shdrs + has_tdata as u16 + has_data as u16 + has_tbss as u16;
     let n_section_headers: u64 = 1 // NULL
         + 1 // .interp
         + 1 // .dynsym
         + 1 // .dynstr
         + 1 // .hash
+        + ver_shdrs as u64 // .gnu.version + .gnu.version_r
         + 1 // .rela.dyn
         + 1 // .text
         + (if has_tdata { 1 } else { 0 }) // .tdata
@@ -2064,7 +2074,7 @@ pub(super) fn write(
         &copy_addrs,
         &copy_sizes,
         &copy_is_bss,
-        TEXT_SHNDX,
+        text_shndx,
         data_shndx,
         bss_shndx,
     );
@@ -2317,7 +2327,7 @@ pub(super) fn write(
     let dynsym_shdr_idx: u16 = 2;
     let dynstr_shdr_idx: u16 = 3;
     let _hash_shdr_idx: u16 = 4;
-    let _rela_shdr_idx: u16 = 5;
+    let _rela_shdr_idx: u16 = 5 + ver_shdrs;
     let _ = (dynsym_shdr_idx, dynstr_shdr_idx);
 
     // [0] NULL sentinel.
@@ -2408,6 +2418,43 @@ pub(super) fn write(
             sh_entsize: 4,
         },
     );
+
+    // [optional] .gnu.version / .gnu.version_r -- symbol-version tables
+    // (SHT_GNU_versym / SHT_GNU_verneed). Emitted between .hash and
+    // .rela.dyn so the section-header order tracks the file/address
+    // order; present only when an import carries a version requirement.
+    if has_versions {
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: name_off(".gnu.version"),
+                sh_type: SHT_GNU_VERSYM,
+                sh_flags: SHF_ALLOC,
+                sh_addr: gnu_version_vmaddr,
+                sh_offset: gnu_version_off,
+                sh_size: gnu_version.len() as u64,
+                sh_link: dynsym_shdr_idx as u32,
+                sh_info: 0,
+                sh_addralign: 2,
+                sh_entsize: 2,
+            },
+        );
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: name_off(".gnu.version_r"),
+                sh_type: SHT_GNU_VERNEED,
+                sh_flags: SHF_ALLOC,
+                sh_addr: gnu_version_r_vmaddr,
+                sh_offset: gnu_version_r_off,
+                sh_size: gnu_version_r.len() as u64,
+                sh_link: dynstr_shdr_idx as u32,
+                sh_info: verneed_groups.len() as u32,
+                sh_addralign: 8,
+                sh_entsize: 0,
+            },
+        );
+    }
 
     // [5] .rela.dyn -- relocations resolved at load time.
     write_struct(

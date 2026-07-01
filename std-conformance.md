@@ -169,6 +169,12 @@ is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
   documentation-only includes keep compiling. clang / gcc treat both as
   fatal.
 - `__BADC_VERSION__`, `__BADC_TARGET__`, `__BADC_WINDOWS__` predefines.
+- Extension: a `#if` / `#elif` controlling expression accepts string-literal
+  operands to `==` / `!=` (e.g. `#if __BADC_TARGET__ == "macos-aarch64"`,
+  `#if __BADC_VERSION__ == "0.1.0"`). C99 6.10.1p4 restricts `#if` to an
+  integer constant expression; c5 permits string equality so the
+  string-valued `__BADC_TARGET__` / `__BADC_VERSION__` predefines can gate
+  source. Strings remain rejected in every other operator context.
 
 ## Roadmap
 
@@ -176,3 +182,9 @@ is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
    returns a struct by value (the by-value argument direction already
    rides the host ABI).
 2. `volatile`-honored loads / stores.
+3. x86_64 Windows UNWIND_INFO describes only the frame-pointer prologue
+   (RIP/RSP/RBP recover exactly); callee-saved GPR spills are not yet
+   described, so a debugger / profiler / SEH unwind crossing such a frame
+   does not recover those registers. Program execution is unaffected --
+   badc emits no exception-using code. A faithful description needs a
+   push-before-setframe prologue restructure.

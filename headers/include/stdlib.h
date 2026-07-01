@@ -163,8 +163,10 @@
 #pragma binding(msvcrt::abort,   "abort")
 #pragma binding(msvcrt::system,  "system")
 #pragma binding(msvcrt::getenv,  "getenv")
-// msvcrt's `setenv` is the underscored `_putenv_s`. Same shape:
+// POSIX putenv is msvcrt's underscored `_putenv`; msvcrt's `setenv`
+// is `_putenv_s`. Same shapes: (string) -> int and
 // (name, value, overwrite) -> int.
+#pragma binding(msvcrt::putenv,    "_putenv")
 #pragma binding(msvcrt::setenv,    "_putenv_s")
 #pragma binding(msvcrt::_wputenv_s, "_wputenv_s")
 #pragma binding(msvcrt::qsort,     "qsort")
@@ -187,16 +189,42 @@
 #pragma binding(data msvcrt::_sys_nerr,    "_sys_nerr")
 #pragma binding(data msvcrt::_sys_errlist, "_sys_errlist")
 #if defined(__aarch64__)
-// The legacy arm64 msvcrt.dll does not export the `_wenviron` data
-// symbol; UCRT exposes the wide environment only via this accessor.
-#pragma dylib(ucrtbase, "ucrtbase.dll")
-#pragma binding(ucrtbase::__p__wenviron, "__p__wenviron")
-unsigned short ***__p__wenviron(void);
-#define _wenviron (*__p__wenviron())
+// arm64 msvcrt.dll exports no environment data symbols, and ucrtbase's
+// `__p__environ` / `__p__wenviron` accessors read UCRT's separate copy
+// that msvcrt's getenv / _putenv / _wgetenv never update. Reach the
+// vectors through msvcrt's own accessor functions; the wide vector
+// stays NULL until the first wide-environment use, matching the CRT's
+// initialize-on-demand behaviour.
+#pragma binding(msvcrt::_get_environ,  "_get_environ")
+#pragma binding(msvcrt::_get_wenviron, "_get_wenviron")
+int _get_environ(char ***out);
+int _get_wenviron(unsigned short ***out);
+static inline char **__badc_environ(void) {
+    char **v = 0;
+    _get_environ(&v);
+    return v;
+}
+static inline unsigned short **__badc_wenviron(void) {
+    unsigned short **v = 0;
+    _get_wenviron(&v);
+    return v;
+}
+#define environ (__badc_environ())
+#define _environ (__badc_environ())
+#define _wenviron (__badc_wenviron())
 #else
-#pragma binding(data msvcrt::_wenviron,    "_wenviron")
+// x64 msvcrt.dll exports the vectors as data: bind each as a
+// loader-filled import so reads see the CRT's live view (getenv /
+// putenv mutations included). POSIX `environ` aliases the `_environ`
+// export. No unit may define these locally -- a local definition
+// shadows the import with a slot nothing populates.
+#pragma binding(data msvcrt::_wenviron, "_wenviron")
+#pragma binding(data msvcrt::_environ,  "_environ")
+#pragma binding(data msvcrt::environ,   "_environ")
+extern unsigned short **_wenviron;
+extern char **_environ;
+extern char **environ;
 #endif
-#pragma binding(data msvcrt::_environ,     "_environ")
 // `_doserrno` is an SDK macro over the exported accessor `__doserrno`,
 // which returns a pointer to the thread's OS error code.
 #pragma binding(msvcrt::__doserrno, "__doserrno")
@@ -207,10 +235,6 @@ extern char *_sys_errlist[];
 // Deprecated non-underscore aliases the msvcrt headers still expose.
 #define sys_nerr _sys_nerr
 #define sys_errlist _sys_errlist
-#if !defined(__aarch64__)
-extern unsigned short **_wenviron;
-#endif
-extern char **_environ;
 // MSVC CRT size limits (_makepath / _splitpath / environment).
 #define _MAX_PATH   260
 #define _MAX_DRIVE  3
@@ -428,16 +452,4 @@ static inline void __clear_cache(void *begin, void *end) {
     FlushInstructionCache(GetCurrentProcess(), begin,
                           (long long)((char *)end - (char *)begin));
 }
-// msvcrt exposes the environment vector through the `_environ`
-// data symbol. Both `environ` and `_environ` live in
-// `lib/runtime.c` as single canonical definitions; user code
-// declares each `extern` here so every TU resolves through the
-// same slot rather than contributing a tentative def of its
-// own.
-// TODO: bind msvcrt's `_environ` directly via `#pragma binding`'s
-// data form. The form is wired for ELF (COPY relocation) and Mach-O
-// (GOT import); the PE writer has no data-import path yet, so the
-// local slot stays until that lands.
-extern char **environ;
-extern char **_environ;
 #endif

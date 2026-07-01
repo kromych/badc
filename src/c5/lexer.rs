@@ -624,10 +624,22 @@ impl Lexer {
                 }
                 if quote == b'"' {
                     // A wide string stores one code point per element at
-                    // the target's `wchar_t` width (4 bytes on Unix, 2
-                    // on Windows / UTF-16).
-                    for k in 0..self.wchar_bytes {
-                        data.push((val >> (k * 8)) as u8);
+                    // the target's `wchar_t` width (4 bytes on Unix, 2 on
+                    // Windows / UTF-16). A UTF-16 element cannot hold a
+                    // code point above U+FFFF; C99 6.4.5 requires the
+                    // surrogate-pair encoding (Unicode 3.9 D91).
+                    if self.wchar_bytes == 2 && (0x10000..=0x10FFFF).contains(&val) {
+                        let v = val - 0x10000;
+                        let hi = 0xD800 + (v >> 10);
+                        let lo = 0xDC00 + (v & 0x3FF);
+                        data.push(hi as u8);
+                        data.push((hi >> 8) as u8);
+                        data.push(lo as u8);
+                        data.push((lo >> 8) as u8);
+                    } else {
+                        for k in 0..self.wchar_bytes {
+                            data.push((val >> (k * 8)) as u8);
+                        }
                     }
                 } else {
                     char_value = val;
@@ -1154,6 +1166,15 @@ impl Lexer {
                         self.ival = f.to_bits() as i64;
                         self.tk = Tok(Token::FloatNum as i64);
                         return self.end_number();
+                    }
+                    // C99 6.4.4.1: at least one hex digit must follow
+                    // `0x`/`0X`. Checked after the hex-float branch so a
+                    // digit-less integer part of a hex float (`0x.5p0`)
+                    // stays valid.
+                    if self.pos == hex_body_start {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &format!("{}: hex literal `0x` has no digits", self.line),
+                        )));
                     }
                     // Hex literals can carry the standard integer suffix
                     // letters (u/U/l/L plus ll/LL combinations such as
@@ -2159,6 +2180,42 @@ mod tests {
             lex_string_literal_w(r#"L"AB""#, 2),
             vec![0x41, 0, 0x42, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn wide_string_astral_point_encodes_utf16_surrogate_pair_on_windows() {
+        // U+1F600 with a 2-byte wchar_t -> D83D DE00 (LE) + 2-byte nul.
+        assert_eq!(
+            lex_string_literal_w("L\"\u{1F600}\"", 2),
+            vec![0x3D, 0xD8, 0x00, 0xDE, 0, 0]
+        );
+        // A 4-byte wchar_t keeps the single UTF-32 element (no surrogates).
+        assert_eq!(
+            lex_string_literal("L\"\u{1F600}\""),
+            vec![0x00, 0xF6, 0x01, 0x00, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn hex_prefix_without_digits_is_an_error() {
+        // C99 6.4.4.1: `0x`/`0X` must be followed by at least one digit.
+        for src in ["0x", "0X", "0xg", "int x = 0x;"] {
+            let mut lex = Lexer::new(src.to_string());
+            let mut symbols: Vec<Symbol> = Vec::new();
+            let mut index = SymbolIndex::new();
+            let mut data: Vec<u8> = Vec::new();
+            let mut saw_err = false;
+            loop {
+                if lex.next(&mut symbols, &mut index, &mut data).is_err() {
+                    saw_err = true;
+                    break;
+                }
+                if lex.tk == 0 {
+                    break;
+                }
+            }
+            assert!(saw_err, "expected error for {src:?}");
+        }
     }
 
     #[test]

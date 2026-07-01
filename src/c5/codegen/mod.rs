@@ -854,11 +854,13 @@ pub(crate) struct ResolvedImports {
     pub dylibs: Vec<ResolvedDylib>,
     /// Data symbols bound to a host data object via `#pragma
     /// binding(data <lib>::<local>, "<host>")`. Each entry is
-    /// `(local_name, host_symbol)`: the image-side symbol the source
-    /// references and the dynamic symbol it resolves to. The ELF
-    /// writer turns each into a COPY relocation; unlike `imports`,
-    /// these are not call sites and carry no GOT/PLT slot.
-    pub data_bindings: Vec<(String, String)>,
+    /// `(local_name, host_symbol, dylib_index)`: the image-side symbol
+    /// the source references, the dynamic symbol it resolves to, and
+    /// the owning entry in `dylibs`. The ELF writer turns each into a
+    /// COPY relocation; PE / Mach-O route the reference through a
+    /// loader-filled import slot. Unlike `imports`, these are not call
+    /// sites and carry no GOT/PLT slot of their own.
+    pub data_bindings: Vec<(String, String, usize)>,
 }
 
 impl ResolvedImports {
@@ -1070,11 +1072,12 @@ impl ResolvedImports {
         // emits a COPY relocation only when the final image defines the
         // local symbol (the runtime supplies `environ` for every hosted
         // image, so the binding binds it to the host's data object).
-        let mut data_bindings: Vec<(String, String)> = Vec::new();
+        let mut data_bindings: Vec<(String, String, usize)> = Vec::new();
         for spec in &program.dylibs {
             for b in &spec.bindings {
                 if b.is_data {
-                    let entry = (b.local_name.clone(), b.real_symbol.clone());
+                    let dylib_index = dylibs.iter().position(|d| d.name == spec.name).unwrap_or(0);
+                    let entry = (b.local_name.clone(), b.real_symbol.clone(), dylib_index);
                     if !data_bindings.contains(&entry) {
                         data_bindings.push(entry);
                     }

@@ -32,10 +32,14 @@
 // multiple-definition collision.
 //
 // macOS binds `environ` as a GOT data import to libSystem's `_environ`
-// (see <unistd.h>), so the symbol must stay undefined here for the
-// reference to route through the import slot rather than a local cell.
-#ifndef __APPLE__
+// (see <unistd.h>) and Windows binds `environ` / `_environ` /
+// `_wenviron` to msvcrt's live vectors (see <stdlib.h>), so on both
+// the symbols must stay undefined here for references to route
+// through the import rather than a local cell nothing populates.
+#if !defined(__APPLE__) && !defined(_WIN32)
 char **environ;
+#endif
+#ifndef __APPLE__
 // POSIX `tzset` outputs. Like `environ`, the Linux bindings route these
 // through a COPY relocation against the C library's symbols so a read
 // after `tzset()` sees what the library wrote; the local slots here are
@@ -44,11 +48,6 @@ char *tzname[2];
 long timezone;
 int daylight;
 #endif
-
-// msvcrt's environment-vector alias on Windows. `<stdlib.h>`'s
-// `_WIN32` section declares it `extern char **_environ;` for the same
-// reason `environ` lives here.
-char **_environ;
 
 // `__c5_exit` runs libc's `exit` so the atexit chain (including the
 // stdio flush) executes before the kernel reaps the process. The

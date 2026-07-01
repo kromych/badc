@@ -51,7 +51,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 
 use alloc::vec::Vec;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
 use super::codegen::Target;
@@ -265,6 +265,11 @@ pub(crate) struct Preprocessor {
     /// per call site. Lives in a `Cell` because the substitution
     /// path takes `&self`.
     pub(crate) counter: Cell<i64>,
+    /// First macro-expansion diagnostic of a substitution pass (C99
+    /// 6.10.3p4 argument/parameter count mismatch). The substitution path
+    /// returns a `String`, so the error is parked here and drained by the
+    /// Result-returning caller (`process_named`, `eval_condition`).
+    pending_error: RefCell<Option<C5Error>>,
     /// MSVC-style `#pragma warning(disable : N)` IDs currently
     /// suppressed. Push/pop variants nest via `warning_stack`.
     /// c5 doesn't number its own warnings, so the IDs in here
@@ -348,6 +353,11 @@ impl Preprocessor {
     /// * `__BADC_TARGET__` -- the canonical target id (e.g.
     ///   `"macos-aarch64"`), as a string literal. Used to gate
     ///   target-specific code at the source level.
+    ///
+    /// Comparing these string-literal predefines with `#if X == "..."`
+    /// is a c5 extension over C99 6.10.1p4, which restricts a `#if`
+    /// controlling expression to an integer constant expression; see
+    /// std-conformance.md.
     /// * CPU-architecture macros, all defined to `1` when active so
     ///   `#if __aarch64__` works the same way it does in gcc/clang:
     ///   * AArch64 targets get `__aarch64__` and `__arm64__` (the
@@ -562,6 +572,7 @@ impl Preprocessor {
             entrypoint: None,
             subsystem: None,
             counter: Cell::new(0),
+            pending_error: RefCell::new(None),
             warning_disabled: BTreeSet::new(),
             warning_stack: Vec::new(),
             warn_disabled: BTreeSet::new(),
@@ -1301,6 +1312,8 @@ impl Preprocessor {
             }
         }
 
+        self.take_pending_error()?;
+
         if !cond_stack.is_empty() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 "preprocessor: unterminated `#if` / `#ifdef` block",
@@ -1322,6 +1335,60 @@ impl Preprocessor {
     /// `macros` table because their expansion changes on every line.
     fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
         self.substitute_with_blocklist(line, filename, line_no, &Blocklist::Nil)
+    }
+
+    /// Record the first macro-expansion diagnostic of a pass; later
+    /// errors are dropped so the earliest source-order one wins.
+    fn record_pp_error(&self, err: C5Error) {
+        let mut slot = self.pending_error.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(err);
+        }
+    }
+
+    /// Drain any parked macro-expansion diagnostic.
+    fn take_pending_error(&self) -> Result<(), C5Error> {
+        match self.pending_error.borrow_mut().take() {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
+    /// C99 6.10.3p4: the invocation's argument count must match the
+    /// macro's parameter count; record a diagnostic on a mismatch.
+    fn check_macro_arity(
+        &self,
+        name: &str,
+        def: &FnMacro,
+        args: &[String],
+        filename: &str,
+        line_no: usize,
+    ) {
+        if macro_arg_count_ok(def, args) {
+            return;
+        }
+        let want = def.params.len();
+        let got = args.len();
+        let plural = |n: usize| if n == 1 { "" } else { "s" };
+        let msg = if def.is_variadic {
+            format!(
+                "macro `{name}` requires at least {want} argument{}, but {got} given",
+                plural(want)
+            )
+        } else if got > want {
+            format!(
+                "macro `{name}` passed {got} argument{}, but takes just {want}",
+                plural(got)
+            )
+        } else {
+            format!(
+                "macro `{name}` requires {want} argument{}, but only {got} given",
+                plural(want)
+            )
+        };
+        self.record_pp_error(C5Error::Compile(super::error::fmt_compile_err(
+            filename, line_no, &msg,
+        )));
     }
 
     /// Process C99 6.10.9 `_Pragma` operators in already-macro-expanded
@@ -1595,6 +1662,7 @@ impl Preprocessor {
                                 self.substitute_with_blocklist(a, filename, line_no, blocklist)
                             })
                             .collect();
+                        self.check_macro_arity(ident, macro_def, &args, filename, line_no);
                         let expanded = expand_fn_macro(macro_def, &expanded_args, &args);
                         // C99 6.10.3.4 "blue paint": any macro that
                         // fired during arg pre-expansion stays on
@@ -1670,6 +1738,13 @@ impl Preprocessor {
                                         )
                                     })
                                     .collect();
+                                self.check_macro_arity(
+                                    trimmed,
+                                    inner_def,
+                                    &inner_args,
+                                    filename,
+                                    line_no,
+                                );
                                 let inner_body =
                                     expand_fn_macro(inner_def, &inner_expanded_args, &inner_args);
                                 let deeper = Blocklist::Cons(trimmed, blocklist);
@@ -1739,6 +1814,9 @@ impl Preprocessor {
                                         )
                                     })
                                     .collect();
+                                self.check_macro_arity(
+                                    trimmed, macro_def, &args, filename, line_no,
+                                );
                                 let body_expanded =
                                     expand_fn_macro(macro_def, &expanded_args, &args);
                                 let deeper = Blocklist::Cons(trimmed, &nested);
@@ -1932,6 +2010,7 @@ impl Preprocessor {
         // pre-pass that converts it to a literal 0/1 since
         // substitute would otherwise expand X away.
         let prepared = self.expand_for_if(expr, line_no);
+        self.take_pending_error()?;
         let mut p = IfExprParser::new(&prepared, self);
         let v = p.parse_ternary()?;
         p.skip_ws();
@@ -3888,20 +3967,38 @@ fn macro_call_unclosed(
 /// equality / inequality -- mixing them in arithmetic is rejected.
 #[derive(Debug, Clone)]
 enum IfValue {
-    Int(i64),
+    /// C99 6.10.1p4: `#if` operands evaluate in (u)intmax_t. `unsigned`
+    /// records the operand signedness so the right shift (6.5.7p5) and
+    /// the division / remainder (6.2.5) select the correct interpretation.
+    Int {
+        val: i64,
+        unsigned: bool,
+    },
     Str(String),
 }
 
 impl IfValue {
+    fn signed(v: i64) -> IfValue {
+        IfValue::Int {
+            val: v,
+            unsigned: false,
+        }
+    }
+    fn with_sign(v: i64, unsigned: bool) -> IfValue {
+        IfValue::Int { val: v, unsigned }
+    }
+    fn is_unsigned(&self) -> bool {
+        matches!(self, IfValue::Int { unsigned: true, .. })
+    }
     fn truthy(&self) -> bool {
         match self {
-            IfValue::Int(n) => *n != 0,
+            IfValue::Int { val, .. } => *val != 0,
             IfValue::Str(s) => !s.is_empty(),
         }
     }
     fn as_int(&self) -> i64 {
         match self {
-            IfValue::Int(n) => *n,
+            IfValue::Int { val, .. } => *val,
             IfValue::Str(s) => {
                 // String coerced to int: 0 unless the bytes happen
                 // to parse as a number. Real c programs rarely
@@ -3945,6 +4042,11 @@ struct IfExprParser<'a> {
     /// cycle in the grammar passes through `parse_unary`, so the bound is
     /// checked there.
     depth: usize,
+    /// False while parsing a short-circuited (`&&`/`||`) or not-taken
+    /// (`?:`) subexpression. C99 6.6p4 forbids division by zero in a
+    /// constant expression, but an unevaluated operand must not trigger
+    /// the diagnostic (gcc/clang accept `1 ? 2 : 1/0`).
+    live: bool,
 }
 
 impl<'a> IfExprParser<'a> {
@@ -3954,6 +4056,7 @@ impl<'a> IfExprParser<'a> {
             pos: 0,
             pp,
             depth: 0,
+            live: true,
         }
     }
     fn at_end(&self) -> bool {
@@ -3998,8 +4101,11 @@ impl<'a> IfExprParser<'a> {
         loop {
             self.skip_ws();
             if self.eat("||") {
+                let saved = self.live;
+                self.live = saved && !left.truthy();
                 let right = self.parse_and()?;
-                left = IfValue::Int((left.truthy() || right.truthy()) as i64);
+                self.live = saved;
+                left = IfValue::signed((left.truthy() || right.truthy()) as i64);
             } else {
                 break;
             }
@@ -4008,24 +4114,30 @@ impl<'a> IfExprParser<'a> {
     }
 
     /// C99 6.10.1p1 / 6.5.15: `#if` accepts a ternary at the top of
-    /// the expression precedence. `cond ? then : else` -- both
-    /// branches are evaluated unconditionally and the picked one is
-    /// returned (no short-circuit semantics inside a constant
-    /// expression). Right-associative, so the `else` arm recurses.
+    /// the expression precedence. `cond ? then : else` -- both arms are
+    /// parsed and the picked one is returned. The not-taken arm is parsed
+    /// with `live` cleared so a division by zero there is not diagnosed
+    /// (6.6p4 applies to the evaluated operand only). Right-associative,
+    /// so the `else` arm recurses.
     fn parse_ternary(&mut self) -> Result<IfValue, C5Error> {
         let cond = self.parse_or()?;
         self.skip_ws();
         if !self.eat_byte(b'?') {
             return Ok(cond);
         }
+        let saved = self.live;
+        self.live = saved && cond.truthy();
         let then_v = self.parse_ternary()?;
+        self.live = saved;
         self.skip_ws();
         if !self.eat_byte(b':') {
             return Err(C5Error::Compile(
                 "preprocessor: missing `:` in `#if` ternary expression".to_string(),
             ));
         }
+        self.live = saved && !cond.truthy();
         let else_v = self.parse_ternary()?;
+        self.live = saved;
         Ok(if cond.truthy() { then_v } else { else_v })
     }
 
@@ -4034,8 +4146,11 @@ impl<'a> IfExprParser<'a> {
         loop {
             self.skip_ws();
             if self.eat("&&") {
+                let saved = self.live;
+                self.live = saved && left.truthy();
                 let right = self.parse_bitor()?;
-                left = IfValue::Int((left.truthy() && right.truthy()) as i64);
+                self.live = saved;
+                left = IfValue::signed((left.truthy() && right.truthy()) as i64);
             } else {
                 break;
             }
@@ -4054,7 +4169,8 @@ impl<'a> IfExprParser<'a> {
             {
                 self.pos += 1;
                 let right = self.parse_bitxor()?;
-                left = IfValue::Int(left.as_int() | right.as_int());
+                let uns = left.is_unsigned() || right.is_unsigned();
+                left = IfValue::with_sign(left.as_int() | right.as_int(), uns);
             } else {
                 break;
             }
@@ -4068,7 +4184,8 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat_byte(b'^') {
                 let right = self.parse_bitand()?;
-                left = IfValue::Int(left.as_int() ^ right.as_int());
+                let uns = left.is_unsigned() || right.is_unsigned();
+                left = IfValue::with_sign(left.as_int() ^ right.as_int(), uns);
             } else {
                 break;
             }
@@ -4085,7 +4202,8 @@ impl<'a> IfExprParser<'a> {
             {
                 self.pos += 1;
                 let right = self.parse_eq()?;
-                left = IfValue::Int(left.as_int() & right.as_int());
+                let uns = left.is_unsigned() || right.is_unsigned();
+                left = IfValue::with_sign(left.as_int() & right.as_int(), uns);
             } else {
                 break;
             }
@@ -4099,10 +4217,10 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat("==") {
                 let right = self.parse_rel()?;
-                left = IfValue::Int(if_value_eq(&left, &right) as i64);
+                left = IfValue::signed(if_value_eq(&left, &right) as i64);
             } else if self.eat("!=") {
                 let right = self.parse_rel()?;
-                left = IfValue::Int(!if_value_eq(&left, &right) as i64);
+                left = IfValue::signed(!if_value_eq(&left, &right) as i64);
             } else {
                 break;
             }
@@ -4116,22 +4234,22 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat("<=") {
                 let right = self.parse_shift()?;
-                left = IfValue::Int((left.as_int() <= right.as_int()) as i64);
+                left = IfValue::signed(!if_value_lt(&right, &left) as i64);
             } else if self.eat(">=") {
                 let right = self.parse_shift()?;
-                left = IfValue::Int((left.as_int() >= right.as_int()) as i64);
+                left = IfValue::signed(!if_value_lt(&left, &right) as i64);
             } else if self.peek_byte() == Some(b'<')
                 && self.src.as_bytes().get(self.pos + 1) != Some(&b'<')
             {
                 self.pos += 1;
                 let right = self.parse_shift()?;
-                left = IfValue::Int((left.as_int() < right.as_int()) as i64);
+                left = IfValue::signed(if_value_lt(&left, &right) as i64);
             } else if self.peek_byte() == Some(b'>')
                 && self.src.as_bytes().get(self.pos + 1) != Some(&b'>')
             {
                 self.pos += 1;
                 let right = self.parse_shift()?;
-                left = IfValue::Int((left.as_int() > right.as_int()) as i64);
+                left = IfValue::signed(if_value_lt(&right, &left) as i64);
             } else {
                 break;
             }
@@ -4145,31 +4263,28 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat("<<") {
                 let right = self.parse_addsub()?;
-                // Use the wrapping bit-pattern shift so a left
-                // shift past bit 63 doesn't panic. The
-                // preprocessor stores both signed and unsigned
-                // values in `i64` per 6.10.1p4 widest-integer
-                // semantics; left shift on either type is
-                // bit-pattern identical.
+                // Left shift is bit-pattern identical for signed and
+                // unsigned operands; the wrapping form avoids a panic
+                // past bit 63. The result keeps the left operand's sign.
                 let shift = (right.as_int() & 63) as u32;
                 let n = (left.as_int() as u64).wrapping_shl(shift) as i64;
-                left = IfValue::Int(n);
+                left = IfValue::with_sign(n, left.is_unsigned());
             } else if self.eat(">>") {
                 let right = self.parse_addsub()?;
-                // C99 6.5.7p5: the right shift of a signed
-                // negative value is implementation-defined.
-                // c5's preprocessor uses logical (zero-fill)
-                // shift in both modes so that bit-pattern
-                // literals like `ULONG_MAX >> 31` -- where
-                // ULONG_MAX is stored as the wrap of `u64::MAX`
-                // -- yield their unsigned answer rather than
-                // the arithmetic-shift `-1`. The
-                // `((ULONG_MAX >> 31) >> 31) == 3` 64-bit-host
-                // probe shape standard in C library headers
-                // relies on the unsigned interpretation.
+                // C99 6.5.7p5: right shift of a signed value propagates
+                // the sign (arithmetic); an unsigned operand zero-fills
+                // (logical). Tracking the operand sign lets `-2 >> 1`
+                // yield -1 while an unsigned bit-pattern literal such as
+                // the `((SIZE_MAX >> 31) >> 31) == 3` probe still yields
+                // its zero-filled result.
                 let shift = (right.as_int() & 63) as u32;
-                let n = (left.as_int() as u64).wrapping_shr(shift) as i64;
-                left = IfValue::Int(n);
+                let uns = left.is_unsigned();
+                let n = if uns {
+                    (left.as_int() as u64).wrapping_shr(shift) as i64
+                } else {
+                    left.as_int().wrapping_shr(shift)
+                };
+                left = IfValue::with_sign(n, uns);
             } else {
                 break;
             }
@@ -4183,10 +4298,12 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat_byte(b'+') {
                 let right = self.parse_muldiv()?;
-                left = IfValue::Int(left.as_int().wrapping_add(right.as_int()));
+                let uns = left.is_unsigned() || right.is_unsigned();
+                left = IfValue::with_sign(left.as_int().wrapping_add(right.as_int()), uns);
             } else if self.eat_byte(b'-') {
                 let right = self.parse_muldiv()?;
-                left = IfValue::Int(left.as_int().wrapping_sub(right.as_int()));
+                let uns = left.is_unsigned() || right.is_unsigned();
+                left = IfValue::with_sign(left.as_int().wrapping_sub(right.as_int()), uns);
             } else {
                 break;
             }
@@ -4200,20 +4317,47 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat_byte(b'*') {
                 let right = self.parse_unary()?;
-                left = IfValue::Int(left.as_int().wrapping_mul(right.as_int()));
+                let uns = left.is_unsigned() || right.is_unsigned();
+                left = IfValue::with_sign(left.as_int().wrapping_mul(right.as_int()), uns);
             } else if self.eat_byte(b'/') {
                 let right = self.parse_unary()?;
+                let uns = left.is_unsigned() || right.is_unsigned();
                 let r = right.as_int();
-                left = IfValue::Int(if r == 0 { 0 } else { left.as_int() / r });
+                left = IfValue::with_sign(self.div_or_diag(left.as_int(), r, uns, false)?, uns);
             } else if self.eat_byte(b'%') {
                 let right = self.parse_unary()?;
+                let uns = left.is_unsigned() || right.is_unsigned();
                 let r = right.as_int();
-                left = IfValue::Int(if r == 0 { 0 } else { left.as_int() % r });
+                left = IfValue::with_sign(self.div_or_diag(left.as_int(), r, uns, true)?, uns);
             } else {
                 break;
             }
         }
         Ok(left)
+    }
+
+    /// C99 6.6p4: a constant expression with a zero divisor is not a
+    /// valid constant expression. Diagnose it when the operand is
+    /// evaluated (`live`); a short-circuited or not-taken zero divisor
+    /// keeps folding to 0. `rem` selects remainder over division;
+    /// `unsigned` selects the unsigned interpretation (6.3.1.8).
+    fn div_or_diag(&self, lhs: i64, rhs: i64, unsigned: bool, rem: bool) -> Result<i64, C5Error> {
+        if rhs == 0 {
+            if self.live {
+                return Err(C5Error::Compile(
+                    "preprocessor: division by zero in `#if` expression".to_string(),
+                ));
+            }
+            return Ok(0);
+        }
+        Ok(if unsigned {
+            let (a, b) = (lhs as u64, rhs as u64);
+            (if rem { a % b } else { a / b }) as i64
+        } else if rem {
+            lhs.wrapping_rem(rhs)
+        } else {
+            lhs.wrapping_div(rhs)
+        })
     }
 
     fn parse_unary(&mut self) -> Result<IfValue, C5Error> {
@@ -4236,15 +4380,18 @@ impl<'a> IfExprParser<'a> {
         self.skip_ws();
         if self.eat_byte(b'!') {
             let v = self.parse_unary()?;
-            return Ok(IfValue::Int((!v.truthy()) as i64));
+            return Ok(IfValue::signed((!v.truthy()) as i64));
         }
         if self.eat_byte(b'~') {
             let v = self.parse_unary()?;
-            return Ok(IfValue::Int(!v.as_int()));
+            return Ok(IfValue::with_sign(!v.as_int(), v.is_unsigned()));
         }
         if self.eat_byte(b'-') {
             let v = self.parse_unary()?;
-            return Ok(IfValue::Int(-v.as_int()));
+            return Ok(IfValue::with_sign(
+                v.as_int().wrapping_neg(),
+                v.is_unsigned(),
+            ));
         }
         if self.eat_byte(b'+') {
             return self.parse_unary();
@@ -4300,7 +4447,7 @@ impl<'a> IfExprParser<'a> {
             while let Some(b) = self.peek_byte() {
                 if b == b'\'' {
                     self.pos += 1;
-                    return Ok(IfValue::Int(acc));
+                    return Ok(IfValue::signed(acc));
                 }
                 if b == b'\\' && self.pos + 1 < bytes.len() {
                     self.pos += 2;
@@ -4374,9 +4521,11 @@ impl<'a> IfExprParser<'a> {
             self.pos += 1;
         }
         // Eat any integer suffix (uUlL combinations) without
-        // touching the value.
+        // touching the value; a u/U suffix marks the literal unsigned.
+        let mut has_u = false;
         while let Some(b) = self.peek_byte() {
             if matches!(b, b'u' | b'U' | b'l' | b'L') {
+                has_u |= matches!(b, b'u' | b'U');
                 self.pos += 1;
             } else {
                 break;
@@ -4400,18 +4549,22 @@ impl<'a> IfExprParser<'a> {
         } else {
             (body.trim_start_matches('0'), radix)
         };
+        // 6.10.1p4: intmax_t is the signed widest type. A literal that
+        // overflows it but fits u64 takes the unsigned interpretation,
+        // matching gcc/clang and keeping the unsigned bit-pattern probes
+        // (ULONG_MAX / UINT64_MAX) logical-shifting correctly.
         let v = if digits.is_empty() {
-            Ok(0i64)
+            Ok((0i64, has_u))
         } else if let Ok(signed) = i64::from_str_radix(digits, raw_radix) {
-            Ok(signed)
+            Ok((signed, has_u))
         } else if let Ok(unsigned) = u64::from_str_radix(digits, raw_radix) {
-            Ok(unsigned as i64)
+            Ok((unsigned as i64, true))
         } else {
             Err(())
         };
         let _ = body_start;
         match v {
-            Ok(n) => Ok(IfValue::Int(n)),
+            Ok((n, uns)) => Ok(IfValue::with_sign(n, uns)),
             Err(()) => Err(C5Error::Compile(alloc::format!(
                 "preprocessor: malformed integer literal {body:?} in `#if`",
             ))),
@@ -4455,7 +4608,7 @@ impl<'a> IfExprParser<'a> {
                     ));
                 }
             }
-            return Ok(IfValue::Int(self.pp.macros.contains_key(&id) as i64));
+            return Ok(IfValue::signed(self.pp.macros.contains_key(&id) as i64));
         }
         // C23 6.10.1 / universal compiler practice: `__has_include(<h>)`
         // and `__has_include("h")` evaluate to 1 when the header is
@@ -4496,7 +4649,7 @@ impl<'a> IfExprParser<'a> {
                 ));
             }
             let found = self.pp.find_include(&header, None).is_some();
-            return Ok(IfValue::Int(found as i64));
+            return Ok(IfValue::signed(found as i64));
         }
         // Identifier -- look up in the macro table. Function-like
         // macros are skipped (they need an argument list which the
@@ -4509,7 +4662,7 @@ impl<'a> IfExprParser<'a> {
             }
             // Numeric? Try parsing.
             if let Ok(n) = value.parse::<i64>() {
-                return Ok(IfValue::Int(n));
+                return Ok(IfValue::signed(n));
             }
             // The macro might itself be a name; recursively expand
             // (bounded) and try once more. The bare-identifier case
@@ -4518,23 +4671,35 @@ impl<'a> IfExprParser<'a> {
             // string-shaped value.
             let expanded = self.pp.expand_or_self(name);
             if let Ok(n) = expanded.parse::<i64>() {
-                return Ok(IfValue::Int(n));
+                return Ok(IfValue::signed(n));
             }
             return Ok(IfValue::Str(expanded));
         }
-        Ok(IfValue::Int(0))
+        Ok(IfValue::signed(0))
     }
 }
 
 fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
     match (a, b) {
-        (IfValue::Int(x), IfValue::Int(y)) => x == y,
+        (IfValue::Int { val: x, .. }, IfValue::Int { val: y, .. }) => x == y,
         (IfValue::Str(x), IfValue::Str(y)) => x == y,
-        (IfValue::Int(x), IfValue::Str(y)) | (IfValue::Str(y), IfValue::Int(x)) => {
+        (IfValue::Int { val: x, .. }, IfValue::Str(y))
+        | (IfValue::Str(y), IfValue::Int { val: x, .. }) => {
             // Mixed: prefer int interpretation if the string parses,
             // else compare numerically with 0.
             y.trim_matches('"').parse::<i64>().ok() == Some(*x)
         }
+    }
+}
+
+/// C99 6.3.1.8 usual arithmetic conversions: `a < b` compares unsigned
+/// when either operand is unsigned, signed otherwise. Strings coerce to
+/// their signed `as_int` value (0 unless numeric).
+fn if_value_lt(a: &IfValue, b: &IfValue) -> bool {
+    if a.is_unsigned() || b.is_unsigned() {
+        (a.as_int() as u64) < (b.as_int() as u64)
+    } else {
+        a.as_int() < b.as_int()
     }
 }
 
@@ -4543,6 +4708,21 @@ fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
 /// reaches the tail through `rest`).
 fn is_va_token(def: &FnMacro, word: &str) -> bool {
     word == "__VA_ARGS__" || def.va_name.as_deref() == Some(word)
+}
+
+/// C99 6.10.3p4. A variadic macro's `...` absorbs any surplus, so the
+/// invocation needs at least as many arguments as named parameters. A
+/// zero-parameter macro invoked as `NAME()` supplies a single empty
+/// argument, which counts as zero (the single-empty-argument rule).
+fn macro_arg_count_ok(def: &FnMacro, args: &[String]) -> bool {
+    let params = def.params.len();
+    if def.is_variadic {
+        args.len() >= params
+    } else if params == 0 {
+        args.len() == 1 && args[0].is_empty()
+    } else {
+        args.len() == params
+    }
 }
 
 fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> String {
@@ -4726,6 +4906,80 @@ mod tests {
     fn process(source: &str) -> String {
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         pp.process(source).expect("preprocessor failed")
+    }
+
+    fn process_err(source: &str) -> String {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        match pp.process(source) {
+            Ok(out) => panic!("expected error, got: {out}"),
+            Err(e) => format!("{e}"),
+        }
+    }
+
+    #[test]
+    fn if_signed_right_shift_is_arithmetic() {
+        for e in ["(-2 >> 1) == -1", "(-1 >> 1) == -1", "(-8 >> 2) == -2"] {
+            let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
+            assert!(out.contains("TAKEN"), "{e}: {out}");
+        }
+        // Unsigned operands keep the logical (zero-fill) shift: an
+        // over-i64 literal and a `u`-suffixed literal are both unsigned.
+        let out = process("#if ((18446744073709551615 >> 31) >> 31) == 3\nY\n#else\nN\n#endif\n");
+        assert!(out.contains('Y'), "{out}");
+        let out = process("#if (0xFFFFFFFFFFFFFFFFu >> 63) == 1\nY\n#else\nN\n#endif\n");
+        assert!(out.contains('Y'), "{out}");
+    }
+
+    #[test]
+    fn if_division_by_zero_is_error() {
+        for src in [
+            "#if 1/0\nX\n#endif\n",
+            "#if 1%0\nX\n#endif\n",
+            "#if 3/(2-2)\nX\n#endif\n",
+        ] {
+            assert!(
+                process_err(src).contains("division by zero"),
+                "expected division-by-zero error: {src}"
+            );
+        }
+        // A short-circuited or not-taken zero divisor is unevaluated and
+        // must not be diagnosed (gcc/clang accept these).
+        for src in [
+            "#if 1 ? 2 : 1/0\nX\n#endif\n",
+            "#if 1 || 1/0\nX\n#endif\n",
+            "#if 0 && 1/0\nZ\n#endif\n",
+        ] {
+            let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+            assert!(pp.process(src).is_ok(), "dead branch must not error: {src}");
+        }
+    }
+
+    #[test]
+    fn if_string_literal_equality_extension() {
+        // c5 extension over C99 6.10.1p4: string-literal `==` / `!=`.
+        let out = process("#if __BADC_TARGET__ == \"macos-aarch64\"\nT\n#else\nF\n#endif\n");
+        assert!(out.contains('T'), "{out}");
+        let out = process("#if __BADC_VERSION__ == \"0.1.0\"\nT\n#else\nF\n#endif\n");
+        assert!(out.contains('T'), "{out}");
+        let out = process("#if __BADC_TARGET__ != \"win-x64\"\nT\n#else\nF\n#endif\n");
+        assert!(out.contains('T'), "{out}");
+    }
+
+    #[test]
+    fn function_like_macro_arity_is_checked() {
+        // C99 6.10.3p4: argument count must match parameter count.
+        assert!(process_err("#define ID(x) (x)\nint a = ID(1, 2);\n").contains("ID"));
+        assert!(process_err("#define ADD(a,b) ((a)+(b))\nint x = ADD(1);\n").contains("ADD"));
+        assert!(process_err("#define FOO() 42\nint x = FOO(1);\n").contains("FOO"));
+        // A fixed parameter with no argument is rejected even for a
+        // variadic macro.
+        assert!(process_err("#define F(a, b, ...) g(a, b)\nint x = F(1);\n").contains('F'));
+        // Valid arities: zero-param called empty, variadic empty tail,
+        // variadic surplus absorbed.
+        assert!(process("#define FOO() 42\nint x = FOO();\n").contains("42"));
+        let out =
+            process("#define LOG(fmt, ...) f(fmt, __VA_ARGS__)\nLOG(\"a\");\nLOG(\"a\", 1, 2);\n");
+        assert!(out.contains("f("), "{out}");
     }
 
     #[test]

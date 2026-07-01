@@ -1434,12 +1434,22 @@ fn build_badc_note(
     // Record 2: per-import dylib map. Skip when there are no
     // imports -- the parser tolerates a missing record so the
     // older shape (dylibs note only) still round-trips.
-    if !imports.imports.is_empty() {
+    if !imports.imports.is_empty() || !imports.data_bindings.is_empty() {
         let mut bm_desc: Vec<u8> = Vec::new();
         for imp in &imports.imports {
             let idx = imp.dylib_index as u32;
             bm_desc.extend_from_slice(&idx.to_le_bytes());
             bm_desc.extend_from_slice(imp.real_symbol.as_bytes());
+            bm_desc.push(0);
+        }
+        // Data bindings route through the same map, keyed by the
+        // local name: that is the UNDEF symbol the linker records as
+        // the import when no unit defines the local (PE / Mach-O).
+        // Without an entry the import falls back to dylib 0.
+        for (local, _host, dylib_index) in &imports.data_bindings {
+            let idx = *dylib_index as u32;
+            bm_desc.extend_from_slice(&idx.to_le_bytes());
+            bm_desc.extend_from_slice(local.as_bytes());
             bm_desc.push(0);
         }
         out.extend_from_slice(&(name.len() as u32).to_le_bytes());
@@ -1591,7 +1601,7 @@ fn build_badc_note(
     // NUL-terminated string pairs from `#pragma binding(data ...)`.
     if !imports.data_bindings.is_empty() {
         let mut desc: Vec<u8> = Vec::new();
-        for (local, host) in &imports.data_bindings {
+        for (local, host, _dylib_index) in &imports.data_bindings {
             desc.extend_from_slice(local.as_bytes());
             desc.push(0);
             desc.extend_from_slice(host.as_bytes());

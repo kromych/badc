@@ -2373,6 +2373,11 @@ const UWOP_PUSH_NONVOL: u8 = 0;
 const UWOP_ALLOC_LARGE: u8 = 1;
 const UWOP_ALLOC_SMALL: u8 = 2;
 const UWOP_SET_FPREG: u8 = 3;
+/// Non-volatile GPR save at a scaled RSP offset. Not emitted today (see
+/// `build_unwind_codes`); referenced by the regression test that locks
+/// the current no-SAVE_NONVOL shape until the prologue restructure.
+#[cfg(test)]
+const UWOP_SAVE_NONVOL: u8 = 4;
 /// Register encoding for rbp in `OpInfo` / `FrameRegister`.
 const UNWIND_REG_RBP: u8 = 5;
 
@@ -2416,15 +2421,25 @@ fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
 /// the final alloc reverses the arg-spill so RSP and the return
 /// address land at the caller's frame.
 ///
-/// TODO: the callee-saved GPRs this backend stores with `mov
-/// [rsp+i*8],reg` (below rbp, after the frame allocation) are not
-/// described. RIP/RSP/RBP recover exactly at any body fault, but a
-/// debugger unwinding past this frame does not recover those
-/// register values. Encoding them as `UWOP_SAVE_NONVOL` needs a
-/// frame pointer that points into the frame (a nonzero scaled
-/// `FrameOffset`), which this backend's `mov rbp,rsp` (offset 0,
-/// rbp at the frame top) cannot express with the required positive
-/// save offsets; that awaits a prologue change.
+/// The callee-saved GPRs this backend stores with `mov [rsp+off],reg`
+/// at the frame bottom (after the frame allocation) are not described.
+/// RIP/RSP/RBP recover exactly at any body fault through the frame
+/// pointer, but a debugger / profiler / SEH / C++ unwind crossing this
+/// frame does not recover those GPR values. `UWOP_SAVE_NONVOL` cannot
+/// describe the current saves: (a) unwind codes must be listed in
+/// descending prologue offset, so the GPR saves (last in the prologue)
+/// are always processed before `UWOP_SET_FPREG` and thus resolve against
+/// the running `context->Rsp` rather than the reconstructed frame RSP;
+/// (b) the body lowers each call as `sub rsp,scratch; call; add
+/// rsp,scratch` with per-site scratch, so at a call return address
+/// `context->Rsp` is `frame_rsp - scratch` and no fixed save offset is
+/// correct at every sample point. A faithful description requires saving
+/// the GPRs with `push` before the frame pointer is established so each
+/// recovers via `UWOP_PUSH_NONVOL` (processed after `UWOP_SET_FPREG`
+/// resets RSP to rbp). TODO: that push-before-setframe prologue
+/// restructure (prologue + epilogue + the decoder in lockstep, plus an
+/// 8*count shift of every rbp-relative local/spill offset). badc emits
+/// no exception-using code today, so execution is unaffected until then.
 fn build_unwind_codes(uw: &super::FnUnwind) -> (Vec<u8>, u8, u8) {
     if uw.leaf {
         return (Vec::new(), 0, 0);
@@ -3367,6 +3382,79 @@ mod tests {
                 uw.begin
             );
         }
+    }
+
+    /// Locks the documented unwind-metadata limitation: a non-leaf x64
+    /// Windows function that spills callee-saved GPRs describes only the
+    /// frame-pointer prologue (SET_FPREG + PUSH_NONVOL rbp), never a
+    /// `UWOP_SAVE_NONVOL` for the GPR spills. When the push-before-setframe
+    /// prologue restructure lands, this assertion must flip to REQUIRE a
+    /// PUSH_NONVOL per spilled GPR.
+    #[test]
+    fn win64_gpr_spill_unwind_omits_save_nonvol() {
+        use crate::Compiler;
+        // Many simultaneously-live longs across a call force the allocator
+        // to spill callee-saved GPRs in a non-leaf frame.
+        let src = "
+            long g(long);
+            long f(long a, long b, long c, long d, long e, long h, long i) {
+                long r = g(a) + g(b);
+                return r + a * b + c * d + e * h + i * a + b * c + d * e;
+            }
+            int main(void) { return (int)f(1, 2, 3, 4, 5, 6, 7); }
+        ";
+        let program = Compiler::new(super::super::super::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let build = lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        // Walk an UNWIND_CODE byte stream node-by-node, returning the op
+        // nibble of each node (ALLOC_LARGE carries extra size slots).
+        fn ops_of(codes: &[u8]) -> Vec<u8> {
+            let mut ops = Vec::new();
+            let mut i = 0;
+            while i + 1 < codes.len() {
+                let op = codes[i + 1] & 0x0F;
+                let opinfo = codes[i + 1] >> 4;
+                ops.push(op);
+                let slots = match op {
+                    1 => {
+                        if opinfo == 0 {
+                            2
+                        } else {
+                            3
+                        }
+                    } // ALLOC_LARGE
+                    _ => 1,
+                };
+                i += slots * 2;
+            }
+            ops
+        }
+        let mut saw_non_leaf = false;
+        for uw in &build.fn_unwind {
+            if uw.leaf {
+                continue;
+            }
+            saw_non_leaf = true;
+            let (codes, _size_of_prolog, frame_reg) = build_unwind_codes(uw);
+            assert_eq!(frame_reg, UNWIND_REG_RBP);
+            let ops = ops_of(&codes);
+            assert!(
+                ops.contains(&UWOP_SET_FPREG),
+                "non-leaf must set the frame register"
+            );
+            assert!(ops.contains(&UWOP_PUSH_NONVOL), "non-leaf must save rbp");
+            assert!(
+                !ops.contains(&UWOP_SAVE_NONVOL),
+                "GPR spills are not (yet) described by UWOP_SAVE_NONVOL"
+            );
+        }
+        assert!(saw_non_leaf, "expected at least one non-leaf frame");
     }
 
     /// `DYNAMIC_BASE` / `HIGH_ENTROPY_VA` stay on for every

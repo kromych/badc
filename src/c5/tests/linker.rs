@@ -1088,16 +1088,18 @@ fn win64_dll_records_requested_name() {
     // at runtime; the name comes from the requested `-o` basename, not a
     // fixed default. (The runtime's `exit` binding resolving through
     // msvcrt.dll rather than ucrtbase.dll is exercised by the Windows
-    // demos, which link the embedded runtime.)
+    // demos, which link the embedded runtime.) No prelude: the host's
+    // headers would carry host-OS data bindings into this PE-target
+    // link, which the linker rejects as binding/definition collisions.
     use crate::c5::linker::{
         emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    let program = Compiler::new(alloc::format!(
-        "{TEST_PRELUDE}\
-         #pragma export(api_fn)\n\
-         int api_fn(int x) {{ return x + 1; }}\n"
-    ))
+    let program = Compiler::new(
+        "#pragma export(api_fn)\n\
+         int api_fn(int x) { return x + 1; }\n"
+            .to_string(),
+    )
     .compile()
     .expect("compile");
     let opts = NativeOptions {

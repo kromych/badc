@@ -214,11 +214,58 @@ extern void rlOrtho(double left, double right, double bottom, double top,
 #define RL_MODELVIEW 0x1700
 #define RL_PROJECTION 0x1701
 
+#if defined(__APPLE__)
+/* raylib's GetWindowScaleDPI returns the RGFW monitor's DPI ratio (dpi/96),
+ * not the pixel backing scale, so on a Retina display GetRenderWidth
+ * undersizes the framebuffer (which is screen size * backing scale). Read the
+ * backing scale from the key window; it is 1 or 2 on macOS. */
+#pragma dylib(libobjc, "/usr/lib/libobjc.A.dylib")
+#pragma binding(libobjc::objc_getClass, "_objc_getClass")
+#pragma binding(libobjc::sel_registerName, "_sel_registerName")
+#pragma binding(libobjc::objc_msgSend, "_objc_msgSend")
+extern void *objc_getClass(const char *name);
+extern void *sel_registerName(const char *name);
+extern void *objc_msgSend(void *recv, void *sel);
+static double macos_backing_scale(void) {
+    static double cached = 0.0;
+    if (cached > 0.0) return cached;
+    /* The window is not always key during a headless self-test, so read the
+     * scale from the main screen, which is available regardless of focus. */
+    void *screen = objc_msgSend(objc_getClass("NSScreen"),
+                                sel_registerName("mainScreen"));
+    double s = 1.0;
+    if (screen) {
+        double (*msg_d)(void *, void *) = (double (*)(void *, void *))objc_msgSend;
+        s = msg_d(screen, sel_registerName("backingScaleFactor"));
+    }
+    cached = (s >= 1.0) ? s : 1.0;
+    return cached;
+}
+#endif
+
+/* Pixel dimensions of the drawable. On macOS the framebuffer is the screen
+ * size times the backing scale; elsewhere GetRenderWidth/Height already report
+ * pixels. Used for both the viewport and the framebuffer read-back. */
+static int render_width(void) {
+#if defined(__APPLE__)
+    return (int)(GetScreenWidth() * macos_backing_scale());
+#else
+    return GetRenderWidth();
+#endif
+}
+static int render_height(void) {
+#if defined(__APPLE__)
+    return (int)(GetScreenHeight() * macos_backing_scale());
+#else
+    return GetRenderHeight();
+#endif
+}
+
 /* Write an RGB PPM from the framebuffer, flipping to a top-down image.
  * Lets the rendered frame be inspected without a windowing session. */
 static int dump_frame_ppm(const char *path) {
-    int w = GetScreenWidth();
-    int h = GetScreenHeight();
+    int w = render_width();
+    int h = render_height();
     unsigned char *rgba = rlReadScreenPixels(w, h);
     if (!rgba) return 1;
     FILE *f = fopen(path, "wb");
@@ -363,7 +410,7 @@ int main(int argc, char **argv) {
          * narrower than requested (it compensates only the title-bar height). Map
          * the fixed field extent onto the full drawable each frame to fill the
          * window without offset or right-edge crop. */
-        rlViewport(0, 0, GetRenderWidth(), GetRenderHeight());
+        rlViewport(0, 0, render_width(), render_height());
         rlMatrixMode(RL_PROJECTION);
         rlLoadIdentity();
         rlOrtho(0, MAP_W * TILE_PX, MAP_H * TILE_PX + HUD_PX, 0, 0.0, 1.0);

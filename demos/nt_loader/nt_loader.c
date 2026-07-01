@@ -39,20 +39,26 @@
 
 #define USE_UNICODE
 
+// Select the wide-char surface in <windows.h> so its TCHAR is WCHAR-wide and
+// matches the typedef below; the ANSI branch leaves both as char.
+#ifdef USE_UNICODE
+#  define UNICODE
+#  define _UNICODE
+#endif
+
 #include <windows.h>
 #include <winternl.h>
 #include <stdio.h>
 #include <wchar.h>
 #include <string.h>
 
-// TCHAR macros.
+// Generic-text program macros. TCHAR itself comes from <windows.h>, keyed on
+// UNICODE above.
 #ifdef USE_UNICODE
-typedef WCHAR   TCHAR;
 #  define _T(x)      L##x
 #  define _tprintf   wprintf
 #  define _tmain     wmain
 #else
-typedef CHAR    TCHAR;
 #  define _T(x)      x
 #  define _tprintf   printf
 #  define _tmain     main

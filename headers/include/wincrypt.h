@@ -29,6 +29,7 @@ typedef unsigned int ALG_ID;
 
 #pragma binding(advapi32::CryptAcquireContextA, "CryptAcquireContextA")
 #pragma binding(advapi32::CryptReleaseContext,  "CryptReleaseContext")
+#pragma binding(advapi32::CryptGenRandom,       "CryptGenRandom")
 #pragma binding(advapi32::CryptCreateHash,      "CryptCreateHash")
 #pragma binding(advapi32::CryptHashData,        "CryptHashData")
 #pragma binding(advapi32::CryptGetHashParam,    "CryptGetHashParam")
@@ -42,6 +43,7 @@ typedef unsigned int ALG_ID;
 int CryptAcquireContextA(HCRYPTPROV *prov, const char *container,
                          const char *provider, DWORD prov_type, DWORD flags);
 int CryptReleaseContext(HCRYPTPROV prov, DWORD flags);
+int CryptGenRandom(HCRYPTPROV prov, DWORD len, BYTE *buf);
 int CryptCreateHash(HCRYPTPROV prov, ALG_ID algid, HCRYPTKEY key, DWORD flags,
                     HCRYPTHASH *hash);
 int CryptHashData(HCRYPTHASH hash, const BYTE *data, DWORD len, DWORD flags);

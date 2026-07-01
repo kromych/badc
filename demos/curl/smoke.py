@@ -224,9 +224,9 @@ def build_bearssl_archive(badc: Path, work: Path) -> Path | None:
     incs = ["-I", str(BEAR_DIR / "inc"), "-I", str(BEAR_DIR / "src")]
     for i, src in enumerate(srcs):
         obj = work / f"be_{i}.o"
-        # BR_USE_WIN32_RAND=0: the Win32 CryptoAPI seeder needs a <wincrypt.h>
-        # surface badc does not ship; the portable PRNGs cover the demo.
-        r = run([str(badc), "--gnu", "-DBR_USE_WIN32_RAND=0", *incs,
+        # BearSSL auto-selects its RNG seeder: the Win32 CryptoAPI on Windows
+        # (needed for the TLS handshake), /dev/urandom on POSIX.
+        r = run([str(badc), "--gnu", *incs,
                  "-c", "-o", str(obj), src], capture_output=True, text=True)
         if r.returncode != 0:
             print(f"smoke FAIL: BearSSL {Path(src).name}\n{r.stderr[:500]}", file=sys.stderr)

@@ -8,6 +8,7 @@
 #include <objc/runtime.h>
 
 id objc_msgSend(id self, SEL op, ...);
+id objc_msgSendSuper(struct objc_super *super, SEL op, ...);
 void objc_msgSend_stret(void *stret_addr, id self, SEL op, ...);
 double objc_msgSend_fpret(id self, SEL op, ...);
 

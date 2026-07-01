@@ -29,6 +29,10 @@ typedef OSStatus (*AudioObjectPropertyListenerProc)(
 #define kAudioObjectPropertyScopeGlobal     0x676C6F62u  /* 'glob' */
 #define kAudioObjectPropertyScopeInput      0x696E7074u  /* 'inpt' */
 #define kAudioObjectPropertyScopeOutput     0x6F757470u  /* 'outp' */
+/* Pre-10.8 selector names; miniaudio remaps the modern scope constants onto
+ * these when the SDK version is unknown. Same selector fourccs. */
+#define kAudioDevicePropertyScopeInput      0x696E7074u  /* 'inpt' */
+#define kAudioDevicePropertyScopeOutput     0x6F757470u  /* 'outp' */
 #define kAudioObjectPropertyElementMain     0
 #define kAudioObjectPropertyElementMaster   0
 #define kAudioObjectPropertyElementWildcard 0xFFFFFFFFu

@@ -31,9 +31,15 @@ typedef struct CGColorSpace *CGColorSpaceRef;
 typedef struct CGImage *CGImageRef;
 typedef struct __CGEvent *CGEventRef;
 typedef struct __CGEventSource *CGEventSourceRef;
+typedef struct CGDisplayMode *CGDisplayModeRef;
+typedef float CGGammaValue;
 
 /* CGImageAlphaInfo values RGFW passes to CGBitmapContextCreate. */
 #define kCGImageAlphaPremultipliedLast 1
+
+/* CGWindowLevelKey values RGFW passes to the Cocoa setLevel: selector. */
+#define kCGNormalWindowLevelKey 4
+#define kCGFloatingWindowLevelKey 5
 
 static CGPoint CGPointMake(CGFloat x, CGFloat y) {
     CGPoint p;
@@ -58,6 +64,26 @@ CGError CGAssociateMouseAndMouseCursorPosition(int connected);
 
 CGEventRef CGEventCreate(CGEventSourceRef source);
 CGPoint CGEventGetLocation(CGEventRef event);
+
+/* Display-mode enumeration and gamma control (RGFW monitor handling). */
+uint32_t CGDisplayUnitNumber(CGDirectDisplayID display);
+CGDirectDisplayID CGOpenGLDisplayMaskToDisplayID(uint32_t mask);
+CGDisplayModeRef CGDisplayCopyDisplayMode(CGDirectDisplayID display);
+CFArrayRef CGDisplayCopyAllDisplayModes(CGDirectDisplayID display,
+                                        CFDictionaryRef options);
+size_t CGDisplayModeGetWidth(CGDisplayModeRef mode);
+size_t CGDisplayModeGetHeight(CGDisplayModeRef mode);
+double CGDisplayModeGetRefreshRate(CGDisplayModeRef mode);
+CGError CGDisplaySetDisplayMode(CGDirectDisplayID display, CGDisplayModeRef mode,
+                                CFDictionaryRef options);
+uint32_t CGDisplayGammaTableCapacity(CGDirectDisplayID display);
+CGError CGGetDisplayTransferByTable(CGDirectDisplayID display, uint32_t capacity,
+                                    CGGammaValue *redTable, CGGammaValue *greenTable,
+                                    CGGammaValue *blueTable, uint32_t *sampleCount);
+CGError CGSetDisplayTransferByTable(CGDirectDisplayID display, uint32_t tableSize,
+                                    const CGGammaValue *redTable,
+                                    const CGGammaValue *greenTable,
+                                    const CGGammaValue *blueTable);
 
 CGContextRef CGBitmapContextCreate(void *data, size_t width, size_t height,
                                    size_t bitsPerComponent, size_t bytesPerRow,

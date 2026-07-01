@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the raylib 5.5 source distribution and adapt its build config
+"""Fetch the raylib 6.0 source distribution and adapt its build config
 for the badc demo.
 
 After this runs, ``demos/raylib/src/`` holds the raylib C sources
@@ -31,8 +31,8 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
-VERSION = "5.5"
-TARBALL_SHA256 = "aea98ecf5bc5c5e0b789a76de0083a21a70457050ea4cc2aec7566935f5e258e"
+VERSION = "6.0"
+TARBALL_SHA256 = "2b3ee1e2120c7a0796b33062c7e9a694dd8a8caa56a96319ac8c8ecf54a90d0b"
 URL = f"https://github.com/raysan5/raylib/archive/refs/tags/{VERSION}.tar.gz"
 
 RAYLIB_DIR = Path(__file__).resolve().parent

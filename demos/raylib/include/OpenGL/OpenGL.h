@@ -10,6 +10,8 @@ typedef struct _CGLRendererInfoObject *CGLRendererInfoObj;
 
 /* From CGLRenderers.h: the generic floating-point software renderer. */
 #define kCGLRendererGenericFloatID 0x00020400
+/* From CGLTypes.h (CGLPixelFormatAttribute). */
+#define kCGLPFASupportsAutomaticGraphicsSwitching 101
 
 CGLContextObj CGLGetCurrentContext(void);
 

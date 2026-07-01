@@ -147,7 +147,7 @@ def platform_build(badc: Path, work: Path) -> bool:
                "-DEXTERNAL_CONFIG_FLAGS", *_config_defines(src / "config.h")]
 
     if MAC:
-        modules = ("rcore", "rshapes", "rtextures", "rtext", "rmodels", "raudio", "utils")
+        modules = ("rcore", "rshapes", "rtextures", "rtext", "rmodels", "raudio")
         rcore_extra = ["-include", "rgfw_macos_link.h"]
         defines.append("-DGAME_AUDIO")
     elif WIN:
@@ -155,10 +155,10 @@ def platform_build(badc: Path, work: Path) -> bool:
         # out as on Linux. The win32 / WGL surface ships as demo-local
         # headers; rgfw_win32_link.h binds the opengl32 / gdi32 / user32 /
         # shell32 imports.
-        modules = ("rcore", "rshapes", "rtextures", "rtext", "rmodels", "utils")
+        modules = ("rcore", "rshapes", "rtextures", "rtext", "rmodels")
         rcore_extra = ["-include", "rgfw_win32_link.h"]
     else:
-        modules = ("rcore", "rshapes", "rtextures", "rtext", "rmodels", "utils")
+        modules = ("rcore", "rshapes", "rtextures", "rtext", "rmodels")
         defines += list(LINUX_DEFINES)
         rcore_extra = ["-include", "rgfw_x11_link.h",
                        "-include", "X11/extensions/Xrandr.h"]

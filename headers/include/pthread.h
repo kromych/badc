@@ -64,6 +64,7 @@
 #pragma binding(libc::pthread_attr_setschedpolicy, "_pthread_attr_setschedpolicy")
 #pragma binding(libc::pthread_attr_setschedparam, "_pthread_attr_setschedparam")
 #pragma binding(libc::pthread_attr_getschedparam, "_pthread_attr_getschedparam")
+#pragma binding(libc::pthread_attr_setinheritsched, "_pthread_attr_setinheritsched")
 #pragma binding(libc::pthread_atfork,           "_pthread_atfork")
 #pragma binding(libc::pthread_key_create,       "_pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "_pthread_key_delete")
@@ -80,6 +81,9 @@
 #define PTHREAD_CREATE_JOINABLE 1
 #define PTHREAD_SCOPE_SYSTEM  1
 #define PTHREAD_SCOPE_PROCESS 2
+// macOS inherit-scheduling values passed to pthread_attr_setinheritsched.
+#define PTHREAD_INHERIT_SCHED  1
+#define PTHREAD_EXPLICIT_SCHED 2
 #endif
 
 #ifdef __linux__
@@ -123,6 +127,7 @@
 #pragma binding(libc::pthread_attr_setschedpolicy, "pthread_attr_setschedpolicy")
 #pragma binding(libc::pthread_attr_setschedparam, "pthread_attr_setschedparam")
 #pragma binding(libc::pthread_attr_getschedparam, "pthread_attr_getschedparam")
+#pragma binding(libc::pthread_attr_setinheritsched, "pthread_attr_setinheritsched")
 // The Linux C library's pthread_atfork lives in libc_nonshared.a (a static stub),
 // not as a dynamic export of libc.so.6 -- x86_64 keeps a weak legacy
 // alias but aarch64 does not, so a dynamic import resolves on one and
@@ -144,6 +149,9 @@
 #define PTHREAD_CREATE_JOINABLE 0
 #define PTHREAD_SCOPE_SYSTEM  0
 #define PTHREAD_SCOPE_PROCESS 1
+// Linux inherit-scheduling values passed to pthread_attr_setinheritsched.
+#define PTHREAD_INHERIT_SCHED  0
+#define PTHREAD_EXPLICIT_SCHED 1
 #endif
 
 #ifdef _WIN32
@@ -306,6 +314,7 @@ int pthread_attr_setscope(char *attr, int scope);
 int pthread_attr_setschedpolicy(char *attr, int policy);
 int pthread_attr_setschedparam(char *attr, const struct sched_param *param);
 int pthread_attr_getschedparam(const char *attr, struct sched_param *param);
+int pthread_attr_setinheritsched(char *attr, int inheritsched);
 #ifdef __linux__
 // Linux names the calling-convention pair (pthread_t, name).
 int pthread_setname_np(pthread_t thread, const char *name);

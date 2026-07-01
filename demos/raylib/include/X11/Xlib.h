@@ -570,4 +570,117 @@ int XDisplayHeightMM(Display *display, int screen_number);
 #define DisplayWidth(dpy, scr) XDisplayWidth(dpy, scr)
 #define DisplayHeight(dpy, scr) XDisplayHeight(dpy, scr)
 
+/* Core X11 event types (X.h). Guarded so this augments whatever the shim
+ * already defines. */
+#ifndef KeyPress
+#define KeyPress 2
+#endif
+#ifndef KeyRelease
+#define KeyRelease 3
+#endif
+#ifndef ButtonPress
+#define ButtonPress 4
+#endif
+#ifndef ButtonRelease
+#define ButtonRelease 5
+#endif
+#ifndef MotionNotify
+#define MotionNotify 6
+#endif
+#ifndef EnterNotify
+#define EnterNotify 7
+#endif
+#ifndef LeaveNotify
+#define LeaveNotify 8
+#endif
+#ifndef FocusIn
+#define FocusIn 9
+#endif
+#ifndef FocusOut
+#define FocusOut 10
+#endif
+#ifndef KeymapNotify
+#define KeymapNotify 11
+#endif
+#ifndef Expose
+#define Expose 12
+#endif
+#ifndef GraphicsExpose
+#define GraphicsExpose 13
+#endif
+#ifndef NoExpose
+#define NoExpose 14
+#endif
+#ifndef VisibilityNotify
+#define VisibilityNotify 15
+#endif
+#ifndef CreateNotify
+#define CreateNotify 16
+#endif
+#ifndef DestroyNotify
+#define DestroyNotify 17
+#endif
+#ifndef UnmapNotify
+#define UnmapNotify 18
+#endif
+#ifndef MapNotify
+#define MapNotify 19
+#endif
+#ifndef MapRequest
+#define MapRequest 20
+#endif
+#ifndef ReparentNotify
+#define ReparentNotify 21
+#endif
+#ifndef ConfigureNotify
+#define ConfigureNotify 22
+#endif
+#ifndef ConfigureRequest
+#define ConfigureRequest 23
+#endif
+#ifndef GravityNotify
+#define GravityNotify 24
+#endif
+#ifndef ResizeRequest
+#define ResizeRequest 25
+#endif
+#ifndef CirculateNotify
+#define CirculateNotify 26
+#endif
+#ifndef CirculateRequest
+#define CirculateRequest 27
+#endif
+#ifndef PropertyNotify
+#define PropertyNotify 28
+#endif
+#ifndef SelectionClear
+#define SelectionClear 29
+#endif
+#ifndef SelectionRequest
+#define SelectionRequest 30
+#endif
+#ifndef SelectionNotify
+#define SelectionNotify 31
+#endif
+#ifndef ColormapNotify
+#define ColormapNotify 32
+#endif
+#ifndef ClientMessage
+#define ClientMessage 33
+#endif
+#ifndef MappingNotify
+#define MappingNotify 34
+#endif
+
+/* Event-mask bits (X.h). */
+#ifndef VisibilityChangeMask
+#define VisibilityChangeMask (1L << 16)
+#endif
+#ifndef StructureNotifyMask
+#define StructureNotifyMask (1L << 17)
+#endif
+#ifndef SubstructureNotifyMask
+#define SubstructureNotifyMask (1L << 19)
+#endif
+
 #endif /* _X11_XLIB_H_ */

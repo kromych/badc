@@ -33,10 +33,14 @@ struct objc_super {
 };
 
 SEL sel_registerName(const char *name);
+SEL sel_getUid(const char *str);
 Class objc_getClass(const char *name);
+Class object_getClass(id obj);
+Class class_getSuperclass(Class cls);
 Class objc_allocateClassPair(Class superclass, const char *name,
                              unsigned long extraBytes);
 void objc_registerClassPair(Class cls);
+void objc_disposeClassPair(Class cls);
 BOOL class_addMethod(Class cls, SEL name, IMP imp, const char *types);
 BOOL class_addIvar(Class cls, const char *name, unsigned long size,
                    unsigned char alignment, const char *types);

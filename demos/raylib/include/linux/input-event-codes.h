@@ -104,5 +104,88 @@
 #define KEY_DELETE 111
 #define KEY_LEFTMETA 125
 #define KEY_RIGHTMETA 126
+#define KEY_MAX 0x2ff
+#define KEY_CNT (KEY_MAX + 1)
+
+/* Event types and the gamepad button / absolute-axis codes RGFW's
+ * minigamepad backend reads from evdev. Values are the kernel codes. */
+#define EV_SYN 0x00
+#define EV_KEY 0x01
+#define EV_REL 0x02
+#define EV_ABS 0x03
+#define EV_MAX 0x1f
+#define EV_CNT (EV_MAX + 1)
+
+#define BTN_MISC 0x100
+#define BTN_BACK 0x116
+#define BTN_TRIGGER 0x120
+#define BTN_THUMB 0x121
+#define BTN_THUMB2 0x122
+#define BTN_TOP 0x123
+#define BTN_TOP2 0x124
+#define BTN_PINKIE 0x125
+#define BTN_BASE 0x126
+#define BTN_BASE2 0x127
+#define BTN_BASE3 0x128
+#define BTN_BASE4 0x129
+#define BTN_BASE5 0x12a
+#define BTN_BASE6 0x12b
+#define BTN_SOUTH 0x130
+#define BTN_A BTN_SOUTH
+#define BTN_EAST 0x131
+#define BTN_NORTH 0x133
+#define BTN_WEST 0x134
+#define BTN_TL 0x136
+#define BTN_TR 0x137
+#define BTN_SELECT 0x13a
+#define BTN_START 0x13b
+#define BTN_MODE 0x13c
+#define BTN_THUMBL 0x13d
+#define BTN_THUMBR 0x13e
+#define BTN_TOUCH 0x14a
+#define BTN_DPAD_UP 0x220
+#define BTN_DPAD_DOWN 0x221
+#define BTN_DPAD_LEFT 0x222
+#define BTN_DPAD_RIGHT 0x223
+#define BTN_TRIGGER_HAPPY 0x2c0
+#define BTN_TRIGGER_HAPPY1 0x2c0
+#define BTN_TRIGGER_HAPPY2 0x2c1
+#define BTN_TRIGGER_HAPPY3 0x2c2
+#define BTN_TRIGGER_HAPPY4 0x2c3
+#define BTN_TRIGGER_HAPPY6 0x2c5
+#define BTN_TRIGGER_HAPPY7 0x2c6
+#define BTN_TRIGGER_HAPPY8 0x2c7
+#define BTN_TRIGGER_HAPPY9 0x2c8
+#define BTN_TRIGGER_HAPPY10 0x2c9
+
+#define ABS_X 0x00
+#define ABS_Y 0x01
+#define ABS_Z 0x02
+#define ABS_RX 0x03
+#define ABS_RY 0x04
+#define ABS_RZ 0x05
+#define ABS_THROTTLE 0x06
+#define ABS_RUDDER 0x07
+#define ABS_WHEEL 0x08
+#define ABS_GAS 0x09
+#define ABS_BRAKE 0x0a
+#define ABS_HAT0X 0x10
+#define ABS_HAT0Y 0x11
+#define ABS_HAT1X 0x12
+#define ABS_HAT1Y 0x13
+#define ABS_HAT2X 0x14
+#define ABS_HAT2Y 0x15
+#define ABS_HAT3X 0x16
+#define ABS_HAT3Y 0x17
+#define ABS_PRESSURE 0x18
+#define ABS_DISTANCE 0x19
+#define ABS_TILT_X 0x1a
+#define ABS_TILT_Y 0x1b
+#define ABS_TOOL_WIDTH 0x1c
+#define ABS_VOLUME 0x20
+#define ABS_PROFILE 0x21
+#define ABS_MISC 0x28
+#define ABS_MAX 0x3f
+#define ABS_CNT (ABS_MAX + 1)
 
 #endif /* _LINUX_INPUT_EVENT_CODES_H_ */

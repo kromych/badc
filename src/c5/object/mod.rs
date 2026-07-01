@@ -97,7 +97,8 @@ pub fn emit_native_with_options(
 /// `.data`-relative address and faults at runtime.
 ///
 /// Mach-O only: ELF binds the local copy through an `R_*_COPY`
-/// relocation and the PE writer has no data-import path.
+/// relocation; PE routes the reference through a loader-filled IAT
+/// slot on the regular import path (`is_data_load` GOT fixups).
 #[cfg(feature = "native-emit")]
 fn route_single_tu_data_imports(build: &mut Build, target: Target) {
     if target != Target::MacOSAarch64 || build.output_kind == OutputKind::Relocatable {
@@ -111,7 +112,7 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
         .imports
         .data_bindings
         .iter()
-        .map(|(l, h)| (l.clone(), h.clone()))
+        .map(|(l, h, _dylib)| (l.clone(), h.clone()))
         .collect();
     let mut import_for: alloc::collections::BTreeMap<String, usize> =
         alloc::collections::BTreeMap::new();

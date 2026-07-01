@@ -322,6 +322,73 @@ fn data_import_lowers_as_iat_load_not_thunk_on_windows_x64() {
     );
 }
 
+/// A data binding whose local name differs from the host symbol must
+/// put the HOST name in the import table: the loader resolves the
+/// import-by-name entry against the DLL's export table, and msvcrt
+/// exports `_environ`, not the local alias. Emitting the local name
+/// loads with STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139).
+#[test]
+fn data_import_renamed_binding_uses_export_name_on_windows_x64() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    // Mirror the CLI: user TUs compile with `no_entry_point` so an
+    // `extern` data declaration stays UNDEF instead of taking a
+    // tentative local slot, letting the link admit the data import.
+    let program = Compiler::with_options(
+        "#pragma dylib(msvcrt, \"msvcrt.dll\")\n\
+         #pragma binding(data msvcrt::__badc_env_alias, \"_environ\")\n\
+         extern char **__badc_env_alias;\n\
+         int main(void){return __badc_env_alias == 0;}\n"
+            .to_string(),
+        Target::WindowsX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile renamed data-binding TU for WindowsX64");
+    let image =
+        super::link_executable_with_runtime(&program, Target::WindowsX64, NativeOptions::default())
+            .expect("link WindowsX64 executable");
+    assert!(
+        pe_iat_slot_rva(&image, "_environ").is_some(),
+        "renamed data binding must import the host symbol `_environ`"
+    );
+    assert!(
+        pe_iat_slot_rva(&image, "__badc_env_alias").is_none(),
+        "the local alias must not appear in the import table"
+    );
+}
+
+/// A data binding must route to its declaring dylib's import
+/// descriptor. Data imports carry no call site, so their routing rides
+/// the `.note.badc` binding map; without an entry the import falls
+/// back to descriptor 0, which here is kernel32.dll -- a DLL that does
+/// not export `_environ`, so the image would fail to load.
+#[test]
+fn data_import_routes_to_declaring_dylib_on_windows_x64() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    let program = Compiler::with_options(
+        "#pragma dylib(kernel32, \"kernel32.dll\")\n\
+         #pragma binding(kernel32::GetCurrentProcess, \"GetCurrentProcess\")\n\
+         void *GetCurrentProcess(void);\n\
+         #pragma dylib(msvcrt, \"msvcrt.dll\")\n\
+         #pragma binding(data msvcrt::__badc_env_alias, \"_environ\")\n\
+         extern char **__badc_env_alias;\n\
+         int main(void){return GetCurrentProcess() != 0 && __badc_env_alias == 0;}\n"
+            .to_string(),
+        Target::WindowsX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile dylib-routing TU for WindowsX64");
+    let image =
+        super::link_executable_with_runtime(&program, Target::WindowsX64, NativeOptions::default())
+            .expect("link WindowsX64 executable");
+    assert_eq!(
+        pe_import_dll_of(&image, "_environ").as_deref(),
+        Some("msvcrt.dll"),
+        "`_environ` must sit under msvcrt.dll's import descriptor"
+    );
+}
+
 /// Return the `(VirtualAddress, raw bytes)` of the PE `.text`
 /// section. RVA-relative byte scans use the VirtualAddress; the raw
 /// bytes are the section's file image.
@@ -394,6 +461,69 @@ fn bss_segregation_extends_pe_data_virtual_size() {
             va + vsize
         );
     }
+}
+
+/// Walk a PE32+ import table and return the DLL name whose descriptor
+/// carries the named import. Same walk as [`pe_iat_slot_rva`], reading
+/// each descriptor's Name field instead of the IAT slot.
+fn pe_import_dll_of(image: &[u8], want: &str) -> Option<String> {
+    let u16a = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+    let pe = u32a(0x3c) as usize;
+    let opt = pe + 24;
+    let import_dir_rva = u32a(opt + 112 + 8);
+    if import_dir_rva == 0 {
+        return None;
+    }
+    let num_sections = u16a(pe + 6) as usize;
+    let opt_size = u16a(pe + 20) as usize;
+    let sec_table = pe + 24 + opt_size;
+    let rva_to_off = |rva: u32| -> Option<usize> {
+        for s in 0..num_sections {
+            let sh = sec_table + s * 40;
+            let va = u32a(sh + 12);
+            let vsize = u32a(sh + 8);
+            let raw_off = u32a(sh + 20);
+            if rva >= va && rva < va + vsize {
+                return Some((raw_off + (rva - va)) as usize);
+            }
+        }
+        None
+    };
+    let cstr_at = |off: usize| -> String {
+        let end = image[off..]
+            .iter()
+            .position(|&c| c == 0)
+            .map_or(off, |n| off + n);
+        String::from_utf8_lossy(&image[off..end]).into_owned()
+    };
+    let import_dir_off = rva_to_off(import_dir_rva)?;
+    let mut d = import_dir_off;
+    loop {
+        let ilt_rva = u32a(d);
+        let name_rva = u32a(d + 12);
+        if ilt_rva == 0 && name_rva == 0 && u32a(d + 16) == 0 {
+            break;
+        }
+        let ilt_off = rva_to_off(ilt_rva)?;
+        let mut k = 0usize;
+        loop {
+            let entry = u64a(ilt_off + k * 8);
+            if entry == 0 {
+                break;
+            }
+            if entry & (1u64 << 63) == 0 {
+                let name_off = rva_to_off(entry as u32)? + 2;
+                if cstr_at(name_off) == want {
+                    return Some(cstr_at(rva_to_off(name_rva)?));
+                }
+            }
+            k += 1;
+        }
+        d += 20;
+    }
+    None
 }
 
 /// Walk a PE32+ import table and return the RVA of the IAT slot for

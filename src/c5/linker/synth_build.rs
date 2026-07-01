@@ -479,6 +479,17 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
             })
             .collect()
     };
+    // A data-binding import is recorded under its local name (the
+    // UNDEF symbol the source references); the loader resolves the
+    // binding's host symbol. Map local -> host so the import table
+    // carries the name the dynamic linker actually looks up. The host
+    // string is already in the target's final shape (`"_environ"` on
+    // PE and Mach-O alike), so no per-target prefixing applies.
+    let data_binding_hosts: alloc::collections::BTreeMap<&str, &str> = merged
+        .copy_relocs
+        .iter()
+        .map(|(local, host)| (local.as_str(), host.as_str()))
+        .collect();
     let imports: Vec<ResolvedImport> = merged
         .imports
         .iter()
@@ -498,7 +509,9 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
             // not a `#pragma binding`'s pre-shaped `real_symbol`. Mach-O
             // prepends the leading underscore the loader matches against
             // the host's exported `_name`; ELF uses the name verbatim.
-            real_symbol: if merged.flat_imports.contains(name) && target == Target::MacOSAarch64 {
+            real_symbol: if let Some(host) = data_binding_hosts.get(name.as_str()) {
+                (*host).to_string()
+            } else if merged.flat_imports.contains(name) && target == Target::MacOSAarch64 {
                 alloc::format!("_{name}")
             } else {
                 name.clone()

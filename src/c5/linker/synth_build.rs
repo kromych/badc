@@ -254,16 +254,29 @@ fn synth_program_and_build(
     };
 
     // Resolve each data-import copy relocation against the merged
-    // symbol table. The local data object named in the binding must be
-    // defined in the image (e.g. runtime.c's `environ`); carry its
-    // section + offset so the writer can place the host symbol and the
-    // R_*_COPY at the object's runtime address. A binding whose local
-    // symbol the image does not define is dropped silently.
+    // symbol table. On ELF the local data object named in the binding
+    // must be defined in the image (e.g. runtime.c's `tzname`); carry
+    // its section + offset so the writer can place the host symbol and
+    // the R_*_COPY at the object's runtime address. A binding whose
+    // local symbol the image does not define is dropped silently.
+    //
+    // PE and Mach-O have no copy semantics: the reference must stay
+    // undefined so it routes through a loader-filled import slot. A
+    // definition anywhere in the image wins symbol resolution and
+    // silently shadows the binding with a slot nothing populates, so
+    // reject the collision instead of shipping the dead read.
+    let elf_target = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
     let mut copy_relocs: Vec<CopyRelocReq> = Vec::new();
     for (local, host) in &merged.copy_relocs {
         let Some(sym) = merged.defined.get(local) else {
             continue;
         };
+        if !elf_target {
+            return Err(synth_err(&alloc::format!(
+                "`{local}` is bound as a data import of `{host}` but the image also \
+                 defines it; remove the definition or the `#pragma binding(data ...)`"
+            )));
+        }
         let is_bss = matches!(sym.section, NativeSymSection::Bss);
         if !is_bss && !matches!(sym.section, NativeSymSection::Data) {
             continue;

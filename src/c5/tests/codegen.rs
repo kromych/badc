@@ -237,10 +237,8 @@ fn environ_data_binding_records_copy_relocation() {
 /// trampoline. The msvcrt `_sys_errlist` array is the bundled
 /// `<stdlib.h>` example (`extern char *_sys_errlist[]` bound to
 /// `msvcrt::_sys_errlist` under `_WIN32`); the binding is declared
-/// inline here so the TU pulls in only the data import under test
-/// and not the header's `environ` / `_environ` block, whose
-/// PE-local-slot lowering still collides with the runtime's
-/// `environ` definition (a separate, pre-existing gap). Compile a TU
+/// inline here so the TU pulls in only the data import under test.
+/// Compile a TU
 /// that indexes the array, link a complete PE, locate the import's
 /// IAT slot via the standard import-table walk, and confirm the
 /// referencing `.text` instruction is a RIP-relative `mov`
@@ -319,6 +317,34 @@ fn data_import_lowers_as_iat_load_not_thunk_on_windows_x64() {
         mov_to_slot >= 1,
         "data import _sys_errlist reference must be a RIP-relative `mov` (48 8B, IAT-slot load); \
          found none targeting its IAT slot"
+    );
+}
+
+/// PE has no COPY-relocation semantics: a symbol both bound as a data
+/// import and defined in the image would resolve to the local slot and
+/// silently drop the binding, so the link must reject the collision.
+/// (On ELF the same dual is the design: the local definition is the
+/// COPY destination.)
+#[test]
+fn data_binding_with_local_definition_is_a_link_error_on_windows_x64() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    let program = Compiler::with_options(
+        "#pragma dylib(msvcrt, \"msvcrt.dll\")\n\
+         #pragma binding(data msvcrt::__badc_env_alias, \"_environ\")\n\
+         char **__badc_env_alias;\n\
+         int main(void){return __badc_env_alias == 0;}\n"
+            .to_string(),
+        Target::WindowsX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile colliding data-binding TU for WindowsX64");
+    let err =
+        super::link_executable_with_runtime(&program, Target::WindowsX64, NativeOptions::default())
+            .expect_err("a data binding shadowed by a local definition must fail the link");
+    assert!(
+        err.contains("bound as a data import"),
+        "diagnostic must name the collision; got: {err}"
     );
 }
 

@@ -21,6 +21,9 @@
 
 #pragma once
 
+// `struct sched_param` for the scheduling-parameter setters.
+#include <sched.h>
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::pthread_create,           "_pthread_create")
@@ -32,6 +35,9 @@
 #pragma binding(libc::pthread_getname_np,       "_pthread_getname_np")
 #pragma binding(libc::pthread_setname_np,       "_pthread_setname_np")
 #pragma binding(libc::pthread_kill,             "_pthread_kill")
+#pragma binding(libc::pthread_cancel,           "_pthread_cancel")
+#pragma binding(libc::pthread_setschedparam,    "_pthread_setschedparam")
+#pragma binding(libc::pthread_getschedparam,    "_pthread_getschedparam")
 #pragma binding(libc::pthread_threadid_np,      "_pthread_threadid_np")
 #pragma binding(libc::pthread_get_stackaddr_np, "_pthread_get_stackaddr_np")
 #pragma binding(libc::pthread_get_stacksize_np, "_pthread_get_stacksize_np")
@@ -55,6 +61,10 @@
 #pragma binding(libc::pthread_attr_setdetachstate, "_pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "_pthread_attr_setstacksize")
 #pragma binding(libc::pthread_attr_setscope,    "_pthread_attr_setscope")
+#pragma binding(libc::pthread_attr_setschedpolicy, "_pthread_attr_setschedpolicy")
+#pragma binding(libc::pthread_attr_setschedparam, "_pthread_attr_setschedparam")
+#pragma binding(libc::pthread_attr_getschedparam, "_pthread_attr_getschedparam")
+#pragma binding(libc::pthread_attr_setinheritsched, "_pthread_attr_setinheritsched")
 #pragma binding(libc::pthread_atfork,           "_pthread_atfork")
 #pragma binding(libc::pthread_key_create,       "_pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "_pthread_key_delete")
@@ -71,6 +81,9 @@
 #define PTHREAD_CREATE_JOINABLE 1
 #define PTHREAD_SCOPE_SYSTEM  1
 #define PTHREAD_SCOPE_PROCESS 2
+// macOS inherit-scheduling values passed to pthread_attr_setinheritsched.
+#define PTHREAD_INHERIT_SCHED  1
+#define PTHREAD_EXPLICIT_SCHED 2
 #endif
 
 #ifdef __linux__
@@ -88,6 +101,10 @@
 #pragma binding(libc::pthread_condattr_destroy, "pthread_condattr_destroy")
 #pragma binding(libc::pthread_condattr_setclock,"pthread_condattr_setclock")
 #pragma binding(libc::pthread_kill,             "pthread_kill")
+#pragma binding(libc::pthread_cancel,           "pthread_cancel")
+#pragma binding(libc::pthread_setschedparam,    "pthread_setschedparam")
+#pragma binding(libc::pthread_getschedparam,    "pthread_getschedparam")
+#pragma binding(libc::pthread_setschedprio,     "pthread_setschedprio")
 #pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
 #pragma binding(libc::pthread_mutex_lock,       "pthread_mutex_lock")
 #pragma binding(libc::pthread_mutex_trylock,    "pthread_mutex_trylock")
@@ -107,6 +124,10 @@
 #pragma binding(libc::pthread_attr_setdetachstate, "pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "pthread_attr_setstacksize")
 #pragma binding(libc::pthread_attr_setscope,    "pthread_attr_setscope")
+#pragma binding(libc::pthread_attr_setschedpolicy, "pthread_attr_setschedpolicy")
+#pragma binding(libc::pthread_attr_setschedparam, "pthread_attr_setschedparam")
+#pragma binding(libc::pthread_attr_getschedparam, "pthread_attr_getschedparam")
+#pragma binding(libc::pthread_attr_setinheritsched, "pthread_attr_setinheritsched")
 // The Linux C library's pthread_atfork lives in libc_nonshared.a (a static stub),
 // not as a dynamic export of libc.so.6 -- x86_64 keeps a weak legacy
 // alias but aarch64 does not, so a dynamic import resolves on one and
@@ -128,6 +149,9 @@
 #define PTHREAD_CREATE_JOINABLE 0
 #define PTHREAD_SCOPE_SYSTEM  0
 #define PTHREAD_SCOPE_PROCESS 1
+// Linux inherit-scheduling values passed to pthread_attr_setinheritsched.
+#define PTHREAD_INHERIT_SCHED  0
+#define PTHREAD_EXPLICIT_SCHED 1
 #endif
 
 #ifdef _WIN32
@@ -221,6 +245,25 @@ pthread_t pthread_self();
 int pthread_equal(pthread_t t1, pthread_t t2);
 // Deliver a signal to a specific thread (POSIX).
 int pthread_kill(pthread_t thread, int sig);
+// Cancel a thread; query / set a running thread's scheduling parameters.
+int pthread_cancel(pthread_t thread);
+int pthread_setschedparam(pthread_t thread, int policy,
+                          const struct sched_param *param);
+int pthread_getschedparam(pthread_t thread, int *policy,
+                          struct sched_param *param);
+#ifdef __APPLE__
+// macOS has no pthread_setschedprio; POSIX defines it as setting only the
+// priority, which a getschedparam / setschedparam pair expresses.
+static inline int pthread_setschedprio(pthread_t thread, int prio) {
+    struct sched_param param;
+    int policy;
+    pthread_getschedparam(thread, &policy, &param);
+    param.sched_priority = prio;
+    return pthread_setschedparam(thread, policy, &param);
+}
+#else
+int pthread_setschedprio(pthread_t thread, int prio);
+#endif
 #ifdef __APPLE__
 // Darwin sets only the calling thread's name (no pthread_t parameter).
 int pthread_setname_np(const char *name);
@@ -268,6 +311,10 @@ int pthread_attr_destroy(char *attr);
 int pthread_attr_setdetachstate(char *attr, int detachstate);
 int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
 int pthread_attr_setscope(char *attr, int scope);
+int pthread_attr_setschedpolicy(char *attr, int policy);
+int pthread_attr_setschedparam(char *attr, const struct sched_param *param);
+int pthread_attr_getschedparam(const char *attr, struct sched_param *param);
+int pthread_attr_setinheritsched(char *attr, int inheritsched);
 #ifdef __linux__
 // Linux names the calling-convention pair (pthread_t, name).
 int pthread_setname_np(pthread_t thread, const char *name);

@@ -319,7 +319,10 @@ float exp2f(float x);
 #pragma binding(ucrtbase::atan2f, "atan2f")
 #pragma binding(ucrtbase::asinf,  "asinf")
 #pragma binding(ucrtbase::acosf,  "acosf")
-#pragma binding(ucrtbase::hypotf, "hypotf")
+// ucrtbase.dll exports the float hypot only under the legacy underscored
+// `_hypotf`; the C99 `hypotf` spelling is a header inline there, so binding
+// to it yields an unresolved import at load.
+#pragma binding(ucrtbase::hypotf, "_hypotf")
 #pragma binding(ucrtbase::fminf,  "fminf")
 #pragma binding(ucrtbase::fmaxf,  "fmaxf")
 #pragma binding(ucrtbase::nearbyintf, "nearbyintf")

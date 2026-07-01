@@ -65,6 +65,8 @@
 typedef void *FARPROC;
 typedef void *HMODULE;
 typedef void *HINSTANCE;
+typedef void *HRGN;
+typedef void *HKEY;
 typedef int   *LPDWORD;
 typedef int   *PDWORD;
 typedef int    LPVOID_TYPE_PLACEHOLDER;
@@ -112,6 +114,7 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::WaitForSingleObject,     "WaitForSingleObject")
 #pragma binding(kernel32::CloseHandle,             "CloseHandle")
 #pragma binding(kernel32::GetExitCodeThread,       "GetExitCodeThread")
+#pragma binding(kernel32::SetThreadPriority,       "SetThreadPriority")
 #pragma binding(kernel32::GetCurrentThreadId,      "GetCurrentThreadId")
 #pragma binding(kernel32::InitializeCriticalSection, "InitializeCriticalSection")
 #pragma binding(kernel32::EnterCriticalSection,    "EnterCriticalSection")
@@ -351,6 +354,9 @@ typedef CRITICAL_SECTION   *PCRITICAL_SECTION;
 // 128-bit volume-relative file identifier, per the Windows SDK.
 typedef struct _FILE_ID_128 { unsigned char Identifier[16]; } FILE_ID_128;
 
+// The anonymous struct is first, matching the Win32 header: a nested
+// aggregate initializer (`{{lo, hi}}`) fills it, and `.LowPart` /
+// `.HighPart` reach it directly. The named `u` struct overlaps at offset 0.
 union _LARGE_INTEGER {
     struct {
         DWORD LowPart;
@@ -1492,6 +1498,7 @@ HANDLE CreateThread(char *attrs, long long stack_size, int *start, char *param,
 int WaitForSingleObject(HANDLE handle, int millis);
 int CloseHandle(HANDLE handle);
 int GetExitCodeThread(HANDLE handle, int *exit_code);
+int SetThreadPriority(HANDLE thread, int priority);
 int GetCurrentThreadId();
 int InitializeCriticalSection(char *cs);
 int EnterCriticalSection(char *cs);
@@ -2195,4 +2202,1052 @@ int LookupPrivilegeValueW(LPCWSTR lpSystemName, LPCWSTR lpName, PLUID lpLuid);
 int AdjustTokenPrivileges(HANDLE TokenHandle, int DisableAllPrivileges,
                           PTOKEN_PRIVILEGES NewState, DWORD BufferLength,
                           PTOKEN_PRIVILEGES PreviousState, LPDWORD ReturnLength);
+
+// ---------------------------------------------------------------------------
+// Win32 GUI / GDI / WGL surface (user32.dll, gdi32.dll, opengl32.dll,
+// shell32.dll). Widths and field order are pinned to the Win64 (LLP64) ABI so
+// the structs match what the OS reads/writes on the other side of a call.
+// Handles are opaque pointers (8 bytes). Bindings for the entry points below
+// live in the consumer's link header; only the declarations are here.
+// ---------------------------------------------------------------------------
+
+typedef void *HGLRC;   // OpenGL rendering context (wingdi.h)
+typedef void *HGDIOBJ; // generic GDI object
+typedef void *HDROP;   // dropped-file handle (shellapi.h)
+typedef void *HRAWINPUT;
+typedef void *PROC;    // wglGetProcAddress return; cast to the target PFN
+typedef float FLOAT;
+typedef DWORD COLORREF;
+typedef WORD  ATOM;
+typedef char  CHAR;
+typedef const char *LPCCH;
+typedef WORD *LPWORD;
+typedef UINT *PUINT;
+
+// Empty error code returned by XInputGetKeystroke / message peeks.
+#ifndef ERROR_DEVICE_NOT_CONNECTED
+#define ERROR_DEVICE_NOT_CONNECTED 1167
+#endif
+#ifndef ERROR_EMPTY
+#define ERROR_EMPTY 4306
+#endif
+
+// Word extraction from message parameters (minwindef.h).
+#define LOWORD(l) ((WORD)((DWORD_PTR)(l) & 0xffff))
+#define HIWORD(l) ((WORD)(((DWORD_PTR)(l) >> 16) & 0xffff))
+#define RGB(r, g, b) \
+    ((COLORREF)(((BYTE)(r)) | (((WORD)((BYTE)(g))) << 8) | (((DWORD)(BYTE)(b)) << 16)))
+#define MAKEINTRESOURCEA(i) ((LPSTR)((ULONG_PTR)((WORD)(i))))
+
+struct tagPOINT { LONG x; LONG y; };
+typedef struct tagPOINT POINT;
+typedef struct tagPOINT *LPPOINT;
+typedef struct tagPOINT *PPOINT;
+
+struct tagRECT { LONG left; LONG top; LONG right; LONG bottom; };
+typedef struct tagRECT RECT;
+typedef struct tagRECT *LPRECT;
+typedef struct tagRECT *PRECT;
+
+struct tagMSG {
+    HWND   hwnd;
+    UINT   message;
+    WPARAM wParam;
+    LPARAM lParam;
+    DWORD  time;
+    POINT  pt;
+};
+typedef struct tagMSG MSG;
+typedef struct tagMSG *LPMSG;
+typedef struct tagMSG *PMSG;
+
+// WndProc and enumeration callback shapes.
+typedef LRESULT (*WNDPROC)(HWND, UINT, WPARAM, LPARAM);
+typedef int (*MONITORENUMPROC)(HMONITOR, HDC, LPRECT, LPARAM);
+
+struct tagWNDCLASSA {
+    UINT    style;
+    WNDPROC lpfnWndProc;
+    int     cbClsExtra;
+    int     cbWndExtra;
+    HINSTANCE hInstance;
+    HICON   hIcon;
+    HCURSOR hCursor;
+    HBRUSH  hbrBackground;
+    LPCSTR  lpszMenuName;
+    LPCSTR  lpszClassName;
+};
+typedef struct tagWNDCLASSA WNDCLASSA;
+typedef struct tagWNDCLASSA *LPWNDCLASSA;
+
+struct tagWNDCLASSW {
+    UINT    style;
+    WNDPROC lpfnWndProc;
+    int     cbClsExtra;
+    int     cbWndExtra;
+    HINSTANCE hInstance;
+    HICON   hIcon;
+    HCURSOR hCursor;
+    HBRUSH  hbrBackground;
+    const WCHAR *lpszMenuName;
+    const WCHAR *lpszClassName;
+};
+typedef struct tagWNDCLASSW WNDCLASSW;
+typedef struct tagWNDCLASSW *LPWNDCLASSW;
+
+// Pixel format descriptor (wingdi.h) -- 40 bytes, all fields BYTE/WORD/DWORD.
+struct tagPIXELFORMATDESCRIPTOR {
+    WORD  nSize;
+    WORD  nVersion;
+    DWORD dwFlags;
+    BYTE  iPixelType;
+    BYTE  cColorBits;
+    BYTE  cRedBits;
+    BYTE  cRedShift;
+    BYTE  cGreenBits;
+    BYTE  cGreenShift;
+    BYTE  cBlueBits;
+    BYTE  cBlueShift;
+    BYTE  cAlphaBits;
+    BYTE  cAlphaShift;
+    BYTE  cAccumBits;
+    BYTE  cAccumRedBits;
+    BYTE  cAccumGreenBits;
+    BYTE  cAccumBlueBits;
+    BYTE  cAccumAlphaBits;
+    BYTE  cDepthBits;
+    BYTE  cStencilBits;
+    BYTE  cAuxBuffers;
+    BYTE  iLayerType;
+    BYTE  bReserved;
+    DWORD dwLayerMask;
+    DWORD dwVisibleMask;
+    DWORD dwDamageMask;
+};
+typedef struct tagPIXELFORMATDESCRIPTOR PIXELFORMATDESCRIPTOR;
+typedef struct tagPIXELFORMATDESCRIPTOR *LPPIXELFORMATDESCRIPTOR;
+
+struct tagMINMAXINFO {
+    POINT ptReserved;
+    POINT ptMaxSize;
+    POINT ptMaxPosition;
+    POINT ptMinTrackSize;
+    POINT ptMaxTrackSize;
+};
+typedef struct tagMINMAXINFO MINMAXINFO;
+typedef struct tagMINMAXINFO *PMINMAXINFO;
+
+struct tagWINDOWPLACEMENT {
+    UINT  length;
+    UINT  flags;
+    UINT  showCmd;
+    POINT ptMinPosition;
+    POINT ptMaxPosition;
+    RECT  rcNormalPosition;
+};
+typedef struct tagWINDOWPLACEMENT WINDOWPLACEMENT;
+typedef struct tagWINDOWPLACEMENT *LPWINDOWPLACEMENT;
+
+struct tagMONITORINFO {
+    DWORD cbSize;
+    RECT  rcMonitor;
+    RECT  rcWork;
+    DWORD dwFlags;
+};
+typedef struct tagMONITORINFO MONITORINFO;
+typedef struct tagMONITORINFO *LPMONITORINFO;
+
+#define CCHDEVICENAME 32
+typedef struct tagMONITORINFOEXW {
+    DWORD cbSize;
+    RECT  rcMonitor;
+    RECT  rcWork;
+    DWORD dwFlags;
+    WCHAR szDevice[CCHDEVICENAME];
+} MONITORINFOEXW, *LPMONITORINFOEXW;
+typedef struct tagMONITORINFOEXA {
+    DWORD cbSize;
+    RECT  rcMonitor;
+    RECT  rcWork;
+    DWORD dwFlags;
+    char  szDevice[CCHDEVICENAME];
+} MONITORINFOEXA, *LPMONITORINFOEXA;
+#define MONITORINFOEX MONITORINFOEXW
+
+struct _DISPLAY_DEVICEA {
+    DWORD cb;
+    CHAR  DeviceName[32];
+    CHAR  DeviceString[128];
+    DWORD StateFlags;
+    CHAR  DeviceID[128];
+    CHAR  DeviceKey[128];
+};
+typedef struct _DISPLAY_DEVICEA DISPLAY_DEVICEA;
+typedef struct _DISPLAY_DEVICEA *PDISPLAY_DEVICEA;
+
+// Raw input (winuser.h). Anonymous union/struct members are flattened to
+// named fields occupying the same byte offsets the SDK lays out.
+struct tagRAWINPUTHEADER {
+    DWORD  dwType;
+    DWORD  dwSize;
+    HANDLE hDevice;
+    WPARAM wParam;
+};
+typedef struct tagRAWINPUTHEADER RAWINPUTHEADER;
+
+struct tagRAWMOUSE {
+    USHORT usFlags;
+    USHORT usReserved;
+    ULONG  ulButtons;
+    ULONG  ulRawButtons;
+    LONG   lLastX;
+    LONG   lLastY;
+    ULONG  ulExtraInformation;
+};
+typedef struct tagRAWMOUSE RAWMOUSE;
+
+struct tagRAWKEYBOARD {
+    USHORT MakeCode;
+    USHORT Flags;
+    USHORT Reserved;
+    USHORT VKey;
+    UINT   Message;
+    ULONG  ExtraInformation;
+};
+typedef struct tagRAWKEYBOARD RAWKEYBOARD;
+
+struct tagRAWHID {
+    DWORD dwSizeHid;
+    DWORD dwCount;
+    BYTE  bRawData[1];
+};
+typedef struct tagRAWHID RAWHID;
+
+struct tagRAWINPUT {
+    RAWINPUTHEADER header;
+    union {
+        RAWMOUSE    mouse;
+        RAWKEYBOARD keyboard;
+        RAWHID      hid;
+    } data;
+};
+typedef struct tagRAWINPUT RAWINPUT;
+
+struct tagRAWINPUTDEVICE {
+    USHORT usUsagePage;
+    USHORT usUsage;
+    DWORD  dwFlags;
+    HWND   hwndTarget;
+};
+typedef struct tagRAWINPUTDEVICE RAWINPUTDEVICE;
+typedef struct tagRAWINPUTDEVICE *PRAWINPUTDEVICE;
+
+// Raw-input device enumeration surface (GetRawInputDeviceList /
+// GetRawInputDeviceInfo). Used to identify XInput HID devices.
+typedef struct tagRAWINPUTDEVICELIST {
+    HANDLE hDevice;
+    DWORD  dwType;
+} RAWINPUTDEVICELIST, *PRAWINPUTDEVICELIST;
+
+typedef struct tagRID_DEVICE_INFO_MOUSE {
+    DWORD dwId;
+    DWORD dwNumberOfButtons;
+    DWORD dwSampleRate;
+    BOOL  fHasHorizontalWheel;
+} RID_DEVICE_INFO_MOUSE;
+
+typedef struct tagRID_DEVICE_INFO_KEYBOARD {
+    DWORD dwType;
+    DWORD dwSubType;
+    DWORD dwKeyboardMode;
+    DWORD dwNumberOfFunctionKeys;
+    DWORD dwNumberOfIndicators;
+    DWORD dwNumberOfKeysTotal;
+} RID_DEVICE_INFO_KEYBOARD;
+
+typedef struct tagRID_DEVICE_INFO_HID {
+    DWORD  dwVendorId;
+    DWORD  dwProductId;
+    DWORD  dwVersionNumber;
+    USHORT usUsagePage;
+    USHORT usUsage;
+} RID_DEVICE_INFO_HID;
+
+typedef struct tagRID_DEVICE_INFO {
+    DWORD cbSize;
+    DWORD dwType;
+    union {
+        RID_DEVICE_INFO_MOUSE    mouse;
+        RID_DEVICE_INFO_KEYBOARD keyboard;
+        RID_DEVICE_INFO_HID      hid;
+    };
+} RID_DEVICE_INFO, *PRID_DEVICE_INFO;
+
+#define RIM_TYPEMOUSE    0
+#define RIM_TYPEKEYBOARD 1
+#define RIM_TYPEHID      2
+#define RIDI_DEVICENAME  0x20000007
+#define RIDI_DEVICEINFO  0x2000000b
+
+UINT GetRawInputDeviceList(PRAWINPUTDEVICELIST pRawInputDeviceList,
+                           PUINT puiNumDevices, UINT cbSize);
+UINT GetRawInputDeviceInfoA(HANDLE hDevice, UINT uiCommand, LPVOID pData,
+                            PUINT pcbSize);
+UINT GetRawInputDeviceInfoW(HANDLE hDevice, UINT uiCommand, LPVOID pData,
+                            PUINT pcbSize);
+
+struct _ICONINFO {
+    BOOL    fIcon;
+    DWORD   xHotspot;
+    DWORD   yHotspot;
+    HBITMAP hbmMask;
+    HBITMAP hbmColor;
+};
+typedef struct _ICONINFO ICONINFO;
+typedef struct _ICONINFO *PICONINFO;
+
+// DIB / icon bitmap structures (wingdi.h).
+typedef struct tagRGBQUAD {
+    BYTE rgbBlue;
+    BYTE rgbGreen;
+    BYTE rgbRed;
+    BYTE rgbReserved;
+} RGBQUAD;
+typedef struct tagBITMAPINFOHEADER {
+    DWORD biSize;
+    LONG  biWidth;
+    LONG  biHeight;
+    WORD  biPlanes;
+    WORD  biBitCount;
+    DWORD biCompression;
+    DWORD biSizeImage;
+    LONG  biXPelsPerMeter;
+    LONG  biYPelsPerMeter;
+    DWORD biClrUsed;
+    DWORD biClrImportant;
+} BITMAPINFOHEADER;
+typedef struct tagBITMAPINFO {
+    BITMAPINFOHEADER bmiHeader;
+    RGBQUAD          bmiColors[1];
+} BITMAPINFO;
+// 14-byte on-disk BMP file header; bfSize/bfOffBits are unaligned, so it is
+// packed to match the file format the OS clipboard produces.
+#pragma pack(push, 1)
+typedef struct tagBITMAPFILEHEADER {
+    WORD  bfType;
+    DWORD bfSize;
+    WORD  bfReserved1;
+    WORD  bfReserved2;
+    DWORD bfOffBits;
+} BITMAPFILEHEADER;
+#pragma pack(pop)
+typedef struct tagCIEXYZ { LONG ciexyzX; LONG ciexyzY; LONG ciexyzZ; } CIEXYZ;
+typedef struct tagCIEXYZTRIPLE { CIEXYZ ciexyzRed; CIEXYZ ciexyzGreen; CIEXYZ ciexyzBlue; } CIEXYZTRIPLE;
+typedef struct {
+    DWORD        bV5Size;
+    LONG         bV5Width;
+    LONG         bV5Height;
+    WORD         bV5Planes;
+    WORD         bV5BitCount;
+    DWORD        bV5Compression;
+    DWORD        bV5SizeImage;
+    LONG         bV5XPelsPerMeter;
+    LONG         bV5YPelsPerMeter;
+    DWORD        bV5ClrUsed;
+    DWORD        bV5ClrImportant;
+    DWORD        bV5RedMask;
+    DWORD        bV5GreenMask;
+    DWORD        bV5BlueMask;
+    DWORD        bV5AlphaMask;
+    DWORD        bV5CSType;
+    CIEXYZTRIPLE bV5Endpoints;
+    DWORD        bV5GammaRed;
+    DWORD        bV5GammaGreen;
+    DWORD        bV5GammaBlue;
+    DWORD        bV5Intent;
+    DWORD        bV5ProfileData;
+    DWORD        bV5ProfileSize;
+    DWORD        bV5Reserved;
+} BITMAPV5HEADER;
+
+// Window messages (winuser.h).
+#define WM_NULL         0x0000
+#define WM_MOVE         0x0003
+#define WM_SIZE         0x0005
+#define WM_ACTIVATE     0x0006
+#define WM_PAINT        0x000F
+#define WM_CLOSE        0x0010
+#define WM_QUIT         0x0012
+#define WM_GETMINMAXINFO 0x0024
+#define WM_DEVICECHANGE 0x0219
+#define WM_INPUT        0x00FF
+
+// Window messages, styles, virtual keys and metrics RGFW's win32 backend
+// reads. Canonical Win32 values; guarded so this augments the surface above.
+#ifndef WM_MOUSEACTIVATE
+#define WM_MOUSEACTIVATE 0x0021
+#endif
+#ifndef WM_SETICON
+#define WM_SETICON 0x0080
+#endif
+#ifndef WM_NCHITTEST
+#define WM_NCHITTEST 0x0084
+#endif
+#ifndef WM_NCLBUTTONDOWN
+#define WM_NCLBUTTONDOWN 0x00A1
+#endif
+#ifndef WM_CHAR
+#define WM_CHAR 0x0102
+#endif
+#ifndef WM_SYSKEYDOWN
+#define WM_SYSKEYDOWN 0x0104
+#endif
+#ifndef WM_SYSKEYUP
+#define WM_SYSKEYUP 0x0105
+#endif
+#ifndef WM_SYSCHAR
+#define WM_SYSCHAR 0x0106
+#endif
+#ifndef WM_UNICHAR
+#define WM_UNICHAR 0x0109
+#endif
+#ifndef WM_TIMER
+#define WM_TIMER 0x0113
+#endif
+#ifndef WM_SIZING
+#define WM_SIZING 0x0214
+#endif
+#ifndef WM_CAPTURECHANGED
+#define WM_CAPTURECHANGED 0x0215
+#endif
+#ifndef WM_MOUSEHWHEEL
+#define WM_MOUSEHWHEEL 0x020E
+#endif
+#ifndef WM_XBUTTONDOWN
+#define WM_XBUTTONDOWN 0x020B
+#endif
+#ifndef WM_XBUTTONUP
+#define WM_XBUTTONUP 0x020C
+#endif
+#ifndef WM_DISPLAYCHANGE
+#define WM_DISPLAYCHANGE 0x007E
+#endif
+#ifndef WM_ENTERSIZEMOVE
+#define WM_ENTERSIZEMOVE 0x0231
+#endif
+#ifndef WM_EXITSIZEMOVE
+#define WM_EXITSIZEMOVE 0x0232
+#endif
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
+#ifndef WM_DWMCOMPOSITIONCHANGED
+#define WM_DWMCOMPOSITIONCHANGED 0x031E
+#endif
+#ifndef WM_DWMCOLORIZATIONCOLORCHANGED
+#define WM_DWMCOLORIZATIONCOLORCHANGED 0x0320
+#endif
+
+#ifndef WS_EX_TOPMOST
+#define WS_EX_TOPMOST 0x00000008
+#endif
+#ifndef WS_EX_APPWINDOW
+#define WS_EX_APPWINDOW 0x00040000
+#endif
+#ifndef SW_MAXIMIZE
+#define SW_MAXIMIZE 3
+#endif
+#ifndef SWP_NOACTIVATE
+#define SWP_NOACTIVATE 0x0010
+#endif
+#ifndef SWP_NOOWNERZORDER
+#define SWP_NOOWNERZORDER 0x0200
+#endif
+#ifndef HWND_TOPMOST
+#define HWND_TOPMOST ((HWND)-1)
+#endif
+#ifndef HWND_NOTOPMOST
+#define HWND_NOTOPMOST ((HWND)-2)
+#endif
+#ifndef SM_XVIRTUALSCREEN
+#define SM_XVIRTUALSCREEN 76
+#endif
+#ifndef SM_YVIRTUALSCREEN
+#define SM_YVIRTUALSCREEN 77
+#endif
+#ifndef SM_CXVIRTUALSCREEN
+#define SM_CXVIRTUALSCREEN 78
+#endif
+#ifndef SM_CYVIRTUALSCREEN
+#define SM_CYVIRTUALSCREEN 79
+#endif
+#ifndef MAPVK_VK_TO_VSC
+#define MAPVK_VK_TO_VSC 0
+#endif
+#ifndef MAPVK_VSC_TO_VK
+#define MAPVK_VSC_TO_VK 1
+#endif
+#ifndef KF_EXTENDED
+#define KF_EXTENDED 0x0100
+#endif
+#ifndef PFD_STEREO
+#define PFD_STEREO 0x00000002
+#endif
+#ifndef HTCLIENT
+#define HTCLIENT 1
+#endif
+#ifndef HTCAPTION
+#define HTCAPTION 2
+#endif
+#ifndef UNICODE_NOCHAR
+#define UNICODE_NOCHAR 0xFFFF
+#endif
+#ifndef MOUSE_MOVE_ABSOLUTE
+#define MOUSE_MOVE_RELATIVE 0
+#define MOUSE_MOVE_ABSOLUTE 0x01
+#define MOUSE_VIRTUAL_DESKTOP 0x02
+#endif
+#ifndef XBUTTON1
+#define XBUTTON1 0x0001
+#define XBUTTON2 0x0002
+#endif
+#ifndef GET_X_LPARAM
+#define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
+#define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
+#define GET_XBUTTON_WPARAM(wp) (HIWORD(wp))
+#endif
+#ifndef BI_RGB
+#define BI_RGB 0
+#endif
+#ifndef HORZSIZE
+#define HORZSIZE 4
+#define VERTSIZE 6
+#endif
+#ifndef ICON_SMALL
+#define ICON_SMALL 0
+#define ICON_BIG 1
+#endif
+#ifndef SRCCOPY
+#define SRCCOPY 0x00CC0020
+#endif
+#ifndef WMSZ_LEFT
+#define WMSZ_LEFT 1
+#define WMSZ_RIGHT 2
+#define WMSZ_TOP 3
+#define WMSZ_TOPLEFT 4
+#define WMSZ_TOPRIGHT 5
+#define WMSZ_BOTTOM 6
+#define WMSZ_BOTTOMLEFT 7
+#define WMSZ_BOTTOMRIGHT 8
+#endif
+#ifndef IMAGE_ICON
+#define IMAGE_ICON 1
+#endif
+#ifndef LR_DEFAULTSIZE
+#define LR_DEFAULTSIZE 0x00000040
+#endif
+#ifndef LR_SHARED
+#define LR_SHARED 0x00008000
+#endif
+#ifndef IDI_APPLICATION
+#define IDI_APPLICATION ((LPCSTR)(ULONG_PTR)32512)
+#endif
+#ifndef MONITORINFOF_PRIMARY
+#define MONITORINFOF_PRIMARY 0x00000001
+#endif
+#ifndef ENUM_CURRENT_SETTINGS
+#define ENUM_CURRENT_SETTINGS ((DWORD)-1)
+#endif
+#ifndef DISPLAY_DEVICE_ACTIVE
+#define DISPLAY_DEVICE_ACTIVE 0x00000001
+#endif
+#ifndef DISP_CHANGE_SUCCESSFUL
+#define DISP_CHANGE_SUCCESSFUL 0
+#endif
+#ifndef CDS_UPDATEREGISTRY
+#define CDS_UPDATEREGISTRY 0x00000001
+#endif
+#ifndef CDS_TEST
+#define CDS_TEST 0x00000002
+#endif
+#ifndef DM_BITSPERPEL
+#define DM_BITSPERPEL 0x00040000
+#endif
+#ifndef DM_PELSWIDTH
+#define DM_PELSWIDTH 0x00080000
+#endif
+#ifndef DM_PELSHEIGHT
+#define DM_PELSHEIGHT 0x00100000
+#endif
+#ifndef DM_DISPLAYFREQUENCY
+#define DM_DISPLAYFREQUENCY 0x00400000
+#endif
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#ifndef FLASHW_STOP
+#define FLASHW_STOP 0
+#endif
+#ifndef FLASHW_TRAY
+#define FLASHW_TRAY 0x00000002
+#endif
+#ifndef FLASHW_TIMERNOFG
+#define FLASHW_TIMERNOFG 0x0000000C
+#endif
+
+// Virtual-key codes (winuser.h).
+#ifndef VK_RETURN
+#define VK_RETURN 0x0D
+#endif
+#ifndef VK_CONTROL
+#define VK_CONTROL 0x11
+#endif
+#ifndef VK_PAUSE
+#define VK_PAUSE 0x13
+#endif
+#ifndef VK_PRIOR
+#define VK_PRIOR 0x21
+#endif
+#ifndef VK_NEXT
+#define VK_NEXT 0x22
+#endif
+#ifndef VK_END
+#define VK_END 0x23
+#endif
+#ifndef VK_HOME
+#define VK_HOME 0x24
+#endif
+#ifndef VK_LEFT
+#define VK_LEFT 0x25
+#endif
+#ifndef VK_UP
+#define VK_UP 0x26
+#endif
+#ifndef VK_RIGHT
+#define VK_RIGHT 0x27
+#endif
+#ifndef VK_DOWN
+#define VK_DOWN 0x28
+#endif
+#ifndef VK_SNAPSHOT
+#define VK_SNAPSHOT 0x2C
+#endif
+#ifndef VK_INSERT
+#define VK_INSERT 0x2D
+#endif
+#ifndef VK_LWIN
+#define VK_LWIN 0x5B
+#endif
+#ifndef VK_RWIN
+#define VK_RWIN 0x5C
+#endif
+#ifndef VK_APPS
+#define VK_APPS 0x5D
+#endif
+#ifndef VK_NUMPAD0
+#define VK_NUMPAD0 0x60
+#define VK_NUMPAD1 0x61
+#define VK_NUMPAD2 0x62
+#define VK_NUMPAD3 0x63
+#define VK_NUMPAD4 0x64
+#define VK_NUMPAD5 0x65
+#define VK_NUMPAD6 0x66
+#define VK_NUMPAD7 0x67
+#define VK_NUMPAD8 0x68
+#define VK_NUMPAD9 0x69
+#endif
+#ifndef VK_MULTIPLY
+#define VK_MULTIPLY 0x6A
+#define VK_ADD 0x6B
+#define VK_SUBTRACT 0x6D
+#define VK_DECIMAL 0x6E
+#define VK_DIVIDE 0x6F
+#endif
+#ifndef VK_F1
+#define VK_F1 0x70
+#define VK_F2 0x71
+#define VK_F3 0x72
+#define VK_F4 0x73
+#define VK_F5 0x74
+#define VK_F6 0x75
+#define VK_F7 0x76
+#define VK_F8 0x77
+#define VK_F9 0x78
+#define VK_F10 0x79
+#define VK_F11 0x7A
+#define VK_F12 0x7B
+#define VK_F13 0x7C
+#define VK_F14 0x7D
+#define VK_F15 0x7E
+#define VK_F16 0x7F
+#define VK_F17 0x80
+#define VK_F18 0x81
+#define VK_F19 0x82
+#define VK_F20 0x83
+#define VK_F21 0x84
+#define VK_F22 0x85
+#define VK_F23 0x86
+#define VK_F24 0x87
+#endif
+#ifndef VK_SCROLL
+#define VK_SCROLL 0x91
+#endif
+#ifndef VK_LSHIFT
+#define VK_LSHIFT 0xA0
+#define VK_RSHIFT 0xA1
+#define VK_LCONTROL 0xA2
+#define VK_RCONTROL 0xA3
+#define VK_LMENU 0xA4
+#define VK_RMENU 0xA5
+#endif
+#ifndef MAKELONG
+#define MAKELONG(a, b) ((LONG)(((WORD)((a) & 0xffff)) | ((DWORD)((WORD)((b) & 0xffff))) << 16))
+#endif
+#define WM_KEYDOWN      0x0100
+#define WM_KEYUP        0x0101
+#define WM_MOUSEMOVE    0x0200
+#define WM_LBUTTONDOWN  0x0201
+#define WM_LBUTTONUP    0x0202
+#define WM_RBUTTONDOWN  0x0204
+#define WM_RBUTTONUP    0x0205
+#define WM_MBUTTONDOWN  0x0207
+#define WM_MBUTTONUP    0x0208
+#define WM_MOUSEWHEEL   0x020A
+#define WM_DROPFILES    0x0233
+#define WM_MOUSELEAVE   0x02A3
+#define WA_INACTIVE     0
+
+// Window styles.
+#define WS_OVERLAPPEDWINDOW 0x00CF0000
+#define WS_POPUP            0x80000000
+#define WS_VISIBLE         0x10000000
+#define WS_CLIPSIBLINGS    0x04000000
+#define WS_CLIPCHILDREN    0x02000000
+#define WS_CAPTION         0x00C00000
+#define WS_BORDER          0x00800000
+#define WS_SYSMENU         0x00080000
+#define WS_THICKFRAME      0x00040000
+#define WS_SIZEBOX         0x00040000
+#define WS_MINIMIZEBOX     0x00020000
+#define WS_MAXIMIZEBOX     0x00010000
+#define WS_EX_TRANSPARENT  0x00000020
+#define WS_EX_LAYERED      0x00080000
+
+// Pixel format flags / types (wingdi.h).
+#define PFD_DOUBLEBUFFER        0x00000001
+#define PFD_DRAW_TO_WINDOW      0x00000004
+#define PFD_SUPPORT_OPENGL      0x00000020
+#define PFD_GENERIC_FORMAT      0x00000040
+#define PFD_GENERIC_ACCELERATED 0x00001000
+#define PFD_TYPE_RGBA           0
+#define PFD_MAIN_PLANE          0
+
+#define PM_REMOVE       0x0001
+#define SW_HIDE         0
+#define SW_SHOWNORMAL   1
+#define SW_SHOWMINIMIZED 2
+#define SW_SHOWMAXIMIZED 3
+#define SW_MINIMIZE     6
+#define SW_RESTORE      9
+#define GWL_STYLE       (-16)
+#define GWL_EXSTYLE     (-20)
+#define GCLP_HICON      (-14)
+#define GCLP_HCURSOR    (-12)
+#define VK_SHIFT        0x10
+#define VK_CAPITAL      0x14
+#define VK_NUMLOCK      0x90
+#define MAPVK_VK_TO_CHAR 2
+#define SM_CXSCREEN     0
+#define SM_CYSCREEN     1
+#define RID_INPUT       0x10000003
+#define RIDEV_REMOVE    0x00000001
+#define RIM_TYPEMOUSE   0
+#define MONITOR_DEFAULTTOPRIMARY 0x00000001
+#define WHEEL_DELTA     120
+#define IDC_ARROW       MAKEINTRESOURCEA(32512)
+#define OCR_NORMAL      32512
+#define OCR_IBEAM       32513
+#define OCR_CROSS       32515
+#define OCR_SIZENWSE    32642
+#define OCR_SIZENESW    32643
+#define OCR_SIZEWE      32644
+#define OCR_SIZENS      32645
+#define OCR_SIZEALL     32646
+#define OCR_NO          32648
+#define OCR_HAND        32649
+#define OCR_WAIT        32514
+#define OCR_UP          32516
+#define OCR_APPSTARTING 32650
+#define QS_ALLINPUT     0x04FF
+#define CF_UNICODETEXT  13
+#define CF_DIB          8
+#define GMEM_MOVEABLE   0x0002
+#define LWA_ALPHA       0x00000002
+#define BI_BITFIELDS    3
+#define DIB_RGB_COLORS  0
+#define LOGPIXELSX      88
+#define LOGPIXELSY      90
+#define SWP_NOSIZE      0x0001
+#define SWP_NOMOVE      0x0002
+#define SWP_NOZORDER    0x0004
+#define SWP_FRAMECHANGED 0x0020
+#define SWP_SHOWWINDOW  0x0040
+#define HORZRES         8
+#define VERTRES         10
+#define HWND_TOP        ((HWND)0)
+
+// kernel32 movable-memory allocation (used for clipboard transfers).
+#pragma binding(kernel32::GlobalAlloc,  "GlobalAlloc")
+#pragma binding(kernel32::GlobalFree,   "GlobalFree")
+#pragma binding(kernel32::GlobalLock,   "GlobalLock")
+#pragma binding(kernel32::GlobalUnlock, "GlobalUnlock")
+#pragma binding(kernel32::GlobalSize,   "GlobalSize")
+HGLOBAL GlobalAlloc(UINT uFlags, SIZE_T dwBytes);
+HGLOBAL GlobalFree(HGLOBAL hMem);
+LPVOID  GlobalLock(HGLOBAL hMem);
+BOOL    GlobalUnlock(HGLOBAL hMem);
+SIZE_T  GlobalSize(HGLOBAL hMem);
+
+// user32.dll window, message, input, monitor, and clipboard entry points.
+#define CreateWindowA(cls, name, style, x, y, w, h, parent, menu, inst, param) \
+    CreateWindowExA(0, cls, name, style, x, y, w, h, parent, menu, inst, param)
+#define LoadCursor    LoadCursorA
+#define MapVirtualKey MapVirtualKeyA
+#define GetWindowLong GetWindowLongA
+#define SetWindowLong SetWindowLongA
+HWND CreateWindowExA(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
+                     DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+                     HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
+ATOM    RegisterClassA(const WNDCLASSA *lpWndClass);
+LRESULT DefWindowProcA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+
+#define CreateWindowW(cls, name, style, x, y, w, h, parent, menu, inst, param) \
+    CreateWindowExW(0, cls, name, style, x, y, w, h, parent, menu, inst, param)
+HWND CreateWindowExW(DWORD dwExStyle, const WCHAR *lpClassName,
+                     const WCHAR *lpWindowName, DWORD dwStyle, int X, int Y,
+                     int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
+                     HINSTANCE hInstance, LPVOID lpParam);
+ATOM    RegisterClassW(const WNDCLASSW *lpWndClass);
+LRESULT DefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+#ifndef SendMessage
+#define SendMessage SendMessageW
+#endif
+#ifndef PostMessage
+#define PostMessage PostMessageW
+#endif
+#ifndef GetWindowLongPtr
+#define GetWindowLongPtr GetWindowLongPtrW
+#endif
+#ifndef LoadIcon
+#define LoadIcon LoadIconA
+#endif
+HANDLE  GetPropW(HWND hWnd, const WCHAR *lpString);
+BOOL    SetPropW(HWND hWnd, const WCHAR *lpString, HANDLE hData);
+HANDLE  RemovePropW(HWND hWnd, const WCHAR *lpString);
+
+// Registry read used for the Windows dark-mode query.
+#define HKEY_CURRENT_USER ((HKEY)(ULONG_PTR)0x80000001)
+#define RRF_RT_REG_DWORD 0x00000010
+LONG RegGetValueW(HKEY hkey, const WCHAR *lpSubKey, const WCHAR *lpValue,
+                  DWORD dwFlags, LPDWORD pdwType, void *pvData, LPDWORD pcbData);
+
+// Display / paint / timer surface RGFW's win32 backend reads.
+typedef BYTE *PBYTE;
+typedef void (CALLBACK *TIMERPROC)(HWND, UINT, UINT_PTR, DWORD);
+typedef enum MONITOR_DPI_TYPE {
+    MDT_EFFECTIVE_DPI = 0,
+    MDT_ANGULAR_DPI = 1,
+    MDT_RAW_DPI = 2,
+    MDT_DEFAULT = 0
+} MONITOR_DPI_TYPE;
+
+typedef struct tagPOINTL { LONG x; LONG y; } POINTL;
+
+typedef struct _devicemodeW {
+    WCHAR dmDeviceName[32];
+    WORD  dmSpecVersion;
+    WORD  dmDriverVersion;
+    WORD  dmSize;
+    WORD  dmDriverExtra;
+    DWORD dmFields;
+    union {
+        struct {
+            short dmOrientation;
+            short dmPaperSize;
+            short dmPaperLength;
+            short dmPaperWidth;
+            short dmScale;
+            short dmCopies;
+            short dmDefaultSource;
+            short dmPrintQuality;
+        };
+        struct {
+            POINTL dmPosition;
+            DWORD  dmDisplayOrientation;
+            DWORD  dmDisplayFixedOutput;
+        };
+    };
+    short dmColor;
+    short dmDuplex;
+    short dmYResolution;
+    short dmTTOption;
+    short dmCollate;
+    WCHAR dmFormName[32];
+    WORD  dmLogPixels;
+    DWORD dmBitsPerPel;
+    DWORD dmPelsWidth;
+    DWORD dmPelsHeight;
+    union {
+        DWORD dmDisplayFlags;
+        DWORD dmNup;
+    };
+    DWORD dmDisplayFrequency;
+    DWORD dmICMMethod;
+    DWORD dmICMIntent;
+    DWORD dmMediaType;
+    DWORD dmDitherType;
+    DWORD dmReserved1;
+    DWORD dmReserved2;
+    DWORD dmPanningWidth;
+    DWORD dmPanningHeight;
+} DEVMODEW, *PDEVMODEW, *LPDEVMODEW;
+
+typedef struct _DISPLAY_DEVICEW {
+    DWORD cb;
+    WCHAR DeviceName[32];
+    WCHAR DeviceString[128];
+    DWORD StateFlags;
+    WCHAR DeviceID[128];
+    WCHAR DeviceKey[128];
+} DISPLAY_DEVICEW, *PDISPLAY_DEVICEW;
+
+typedef struct tagPAINTSTRUCT {
+    HDC  hdc;
+    BOOL fErase;
+    RECT rcPaint;
+    BOOL fRestore;
+    BOOL fIncUpdate;
+    BYTE rgbReserved[32];
+} PAINTSTRUCT, *LPPAINTSTRUCT;
+
+typedef struct tagFLASHWINFO {
+    UINT  cbSize;
+    HWND  hwnd;
+    DWORD dwFlags;
+    UINT  uCount;
+    DWORD dwTimeout;
+} FLASHWINFO, *PFLASHWINFO;
+
+BOOL     GetKeyboardState(PBYTE lpKeyState);
+HKL      GetKeyboardLayout(DWORD idThread);
+UINT     MapVirtualKeyW(UINT uCode, UINT uMapType);
+int      ToUnicodeEx(UINT wVirtKey, UINT wScanCode, const BYTE *lpKeyState,
+                     LPWSTR pwszBuff, int cchBuff, UINT wFlags, HKL dwhkl);
+LONG     ChangeDisplaySettingsExW(const WCHAR *lpszDeviceName, DEVMODEW *lpDevMode,
+                                  HWND hwnd, DWORD dwflags, LPVOID lParam);
+BOOL     EnumDisplayDevicesW(const WCHAR *lpDevice, DWORD iDevNum,
+                             PDISPLAY_DEVICEW lpDisplayDevice, DWORD dwFlags);
+BOOL     EnumDisplaySettingsW(const WCHAR *lpszDeviceName, DWORD iModeNum,
+                              DEVMODEW *lpDevMode);
+BOOL     FlashWindowEx(PFLASHWINFO pfwi);
+BOOL     GetMonitorInfoW(HMONITOR hMonitor, MONITORINFO *lpmi);
+BOOL     IsZoomed(HWND hWnd);
+HICON    LoadIconA(HINSTANCE hInstance, LPCSTR lpIconName);
+HANDLE   LoadImageA(HINSTANCE hInst, LPCSTR name, UINT type, int cx, int cy,
+                    UINT fuLoad);
+LONG_PTR GetWindowLongPtrW(HWND hWnd, int nIndex);
+LONG_PTR SetWindowLongPtrW(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
+BOOL     SetWindowTextW(HWND hWnd, const WCHAR *lpString);
+LRESULT  SendMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+HWND     SetFocus(HWND hWnd);
+BOOL     SetForegroundWindow(HWND hWnd);
+UINT_PTR SetTimer(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerFunc);
+BOOL     KillTimer(HWND hWnd, UINT_PTR uIDEvent);
+HDC      BeginPaint(HWND hWnd, LPPAINTSTRUCT lpPaint);
+BOOL     EndPaint(HWND hWnd, const PAINTSTRUCT *lpPaint);
+BOOL     BringWindowToTop(HWND hWnd);
+BOOL     AdjustWindowRectEx(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle);
+BOOL     MoveWindow(HWND hWnd, int X, int Y, int nWidth, int nHeight, BOOL bRepaint);
+BOOL     BitBlt(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1,
+                DWORD rop);
+HDC      CreateDCW(const WCHAR *pwszDriver, const WCHAR *pwszDevice,
+                   const WCHAR *pszPort, const DEVMODEW *pdm);
+BOOL     GetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
+BOOL     SetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
+BOOL    ShowWindow(HWND hWnd, int nCmdShow);
+HDC     GetDC(HWND hWnd);
+int     ReleaseDC(HWND hWnd, HDC hDC);
+BOOL    GetWindowRect(HWND hWnd, LPRECT lpRect);
+BOOL    GetClientRect(HWND hWnd, LPRECT lpRect);
+BOOL    DestroyWindow(HWND hWnd);
+BOOL    PeekMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax, UINT wRemoveMsg);
+BOOL    TranslateMessage(const MSG *lpMsg);
+LRESULT DispatchMessageA(const MSG *lpMsg);
+BOOL    PostMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+DWORD   MsgWaitForMultipleObjects(DWORD nCount, void *pHandles, BOOL fWaitAll, DWORD dwMilliseconds, DWORD dwWakeMask);
+HCURSOR LoadCursorA(HINSTANCE hInstance, LPCSTR lpCursorName);
+SHORT   GetKeyState(int nVirtKey);
+int     GetKeyNameTextA(LONG lParam, LPSTR lpString, int cchSize);
+UINT    MapVirtualKeyA(UINT uCode, UINT uMapType);
+int     ToAscii(UINT uVirtKey, UINT uScanCode, const BYTE *lpKeyState, LPWORD lpChar, UINT uFlags);
+UINT    GetRawInputData(HRAWINPUT hRawInput, UINT uiCommand, LPVOID pData, PUINT pcbSize, UINT cbSizeHeader);
+BOOL    RegisterRawInputDevices(const RAWINPUTDEVICE *pRawInputDevices, UINT uiNumDevices, UINT cbSize);
+BOOL    ClipCursor(const RECT *lpRect);
+BOOL    GetCursorPos(LPPOINT lpPoint);
+BOOL    SetCursorPos(int X, int Y);
+BOOL    ClientToScreen(HWND hWnd, LPPOINT lpPoint);
+BOOL    ScreenToClient(HWND hWnd, LPPOINT lpPoint);
+BOOL    IsWindow(HWND hWnd);
+BOOL    IsWindowVisible(HWND hWnd);
+BOOL    GetWindowPlacement(HWND hWnd, WINDOWPLACEMENT *lpwndpl);
+ULONG_PTR SetClassLongPtrA(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
+HCURSOR SetCursor(HCURSOR hCursor);
+BOOL    DestroyCursor(HCURSOR hCursor);
+BOOL    DestroyIcon(HICON hIcon);
+BOOL    SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags);
+BOOL    SetWindowTextA(HWND hWnd, LPCSTR lpString);
+LONG    GetWindowLongW(HWND hWnd, int nIndex);
+LONG    SetWindowLongW(HWND hWnd, int nIndex, LONG dwNewLong);
+LONG    GetWindowLongA(HWND hWnd, int nIndex);
+LONG    SetWindowLongA(HWND hWnd, int nIndex, LONG dwNewLong);
+BOOL    GetLayeredWindowAttributes(HWND hWnd, COLORREF *pcrKey, BYTE *pbAlpha, DWORD *pdwFlags);
+BOOL    SetLayeredWindowAttributes(HWND hWnd, COLORREF crKey, BYTE bAlpha, DWORD dwFlags);
+int     GetSystemMetrics(int nIndex);
+HMONITOR MonitorFromPoint(POINT pt, DWORD dwFlags);
+HMONITOR MonitorFromWindow(HWND hwnd, DWORD dwFlags);
+BOOL    EnumDisplayMonitors(HDC hdc, LPRECT lprcClip, MONITORENUMPROC lpfnEnum, LPARAM dwData);
+BOOL    EnumDisplayDevicesA(LPCSTR lpDevice, DWORD iDevNum, PDISPLAY_DEVICEA lpDisplayDevice, DWORD dwFlags);
+BOOL    GetMonitorInfoA(HMONITOR hMonitor, LPMONITORINFO lpmi);
+BOOL    SetProcessDPIAware(void);
+HWND    GetForegroundWindow(void);
+BOOL    OpenClipboard(HWND hWndNewOwner);
+BOOL    CloseClipboard(void);
+HANDLE  GetClipboardData(UINT uFormat);
+BOOL    EmptyClipboard(void);
+HANDLE  SetClipboardData(UINT uFormat, HANDLE hMem);
+DWORD   CharLowerBuffA(LPSTR lpsz, DWORD cchLength);
+
+// gdi32.dll pixel format, DIB, and bitblt entry points.
+int     ChoosePixelFormat(HDC hdc, const PIXELFORMATDESCRIPTOR *ppfd);
+BOOL    SetPixelFormat(HDC hdc, int format, const PIXELFORMATDESCRIPTOR *ppfd);
+int     DescribePixelFormat(HDC hdc, int iPixelFormat, UINT nBytes, LPPIXELFORMATDESCRIPTOR ppfd);
+BOOL    SwapBuffers(HDC hdc);
+int     GetDeviceCaps(HDC hdc, int index);
+HBITMAP CreateBitmap(int nWidth, int nHeight, UINT nPlanes, UINT nBitCount, const void *lpBits);
+HBITMAP CreateDIBSection(HDC hdc, const BITMAPINFO *pbmi, UINT usage, void **ppvBits, HANDLE hSection, DWORD offset);
+HDC     CreateCompatibleDC(HDC hdc);
+BOOL    DeleteDC(HDC hdc);
+BOOL    DeleteObject(HGDIOBJ ho);
+HGDIOBJ SelectObject(HDC hdc, HGDIOBJ h);
+HICON   CreateIconIndirect(PICONINFO piconinfo);
+
+// opengl32.dll WGL context entry points.
+HGLRC   wglCreateContext(HDC hdc);
+BOOL    wglDeleteContext(HGLRC hglrc);
+BOOL    wglMakeCurrent(HDC hdc, HGLRC hglrc);
+PROC    wglGetProcAddress(LPCSTR lpszProc);
+HDC     wglGetCurrentDC(void);
+HGLRC   wglGetCurrentContext(void);
+BOOL    wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
+
 #endif

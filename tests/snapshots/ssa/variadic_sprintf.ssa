@@ -25,7 +25,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
     v15  LoadLocal { off=-1, kind=I64 }                   -> x0
     v16  ImmData(48)                                      -> x6
     v17  Imm(11)                                          -> x2
-    v18  CallExt { binding_idx=95, args=[v2, v16, v17], fp_arg_mask=0x0 } -> x0
+    v18  CallExt { binding_idx=96, args=[v2, v16, v17], fp_arg_mask=0x0 } -> x0
     v19  BinopI { op=ne, lhs=v18, rhs_imm=0 }             -> x0
     terminator Bz { cond=v19, target=b4, fall=b3 }   (exit_acc=v19)
   block 3  start_pc=0

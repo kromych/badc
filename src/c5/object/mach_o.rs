@@ -507,6 +507,116 @@ fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
     }
 }
 
+/// Build the `LC_DYLD_INFO` export trie from `(disk name, address)` pairs
+/// where `address` is the symbol's offset from the image base. dyld
+/// resolves two-level-namespace imports and `dlsym` through this trie, not
+/// the classic symbol table, so a shared library without it exports
+/// nothing dyld can bind against. The trie is a radix tree over the names;
+/// a terminal node carries the export flags (0 = regular) and the address.
+/// Child-edge offsets are ULEB128, so node sizes depend on each other; the
+/// layout iterates to a fixed point before emitting.
+fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
+    if entries.is_empty() {
+        return Vec::new();
+    }
+    struct Node {
+        addr: Option<u64>,
+        edges: Vec<(Vec<u8>, usize)>,
+        offset: usize,
+    }
+    let mut nodes: Vec<Node> = alloc::vec![Node {
+        addr: None,
+        edges: Vec::new(),
+        offset: 0,
+    }];
+    for (name, addr) in entries {
+        let bytes = name.as_bytes();
+        let mut cur = 0usize;
+        let mut pos = 0usize;
+        'walk: while pos < bytes.len() {
+            for ei in 0..nodes[cur].edges.len() {
+                let label = nodes[cur].edges[ei].0.clone();
+                let child = nodes[cur].edges[ei].1;
+                let mut k = 0;
+                while k < label.len() && pos + k < bytes.len() && label[k] == bytes[pos + k] {
+                    k += 1;
+                }
+                if k == 0 {
+                    continue;
+                }
+                if k == label.len() {
+                    cur = child;
+                    pos += k;
+                    continue 'walk;
+                }
+                // Partial match: split the edge at the common prefix.
+                let split = nodes.len();
+                nodes.push(Node {
+                    addr: None,
+                    edges: alloc::vec![(label[k..].to_vec(), child)],
+                    offset: 0,
+                });
+                nodes[cur].edges[ei] = (label[..k].to_vec(), split);
+                cur = split;
+                pos += k;
+                continue 'walk;
+            }
+            let leaf = nodes.len();
+            nodes.push(Node {
+                addr: None,
+                edges: Vec::new(),
+                offset: 0,
+            });
+            nodes[cur].edges.push((bytes[pos..].to_vec(), leaf));
+            cur = leaf;
+            pos = bytes.len();
+        }
+        nodes[cur].addr = Some(*addr);
+    }
+    let body = |node: &Node, nodes: &[Node]| -> Vec<u8> {
+        let mut term = Vec::new();
+        if let Some(addr) = node.addr {
+            put_uleb128(&mut term, 0);
+            put_uleb128(&mut term, addr);
+        }
+        let mut out = Vec::new();
+        put_uleb128(&mut out, term.len() as u64);
+        out.extend_from_slice(&term);
+        out.push(node.edges.len() as u8);
+        for (label, child) in &node.edges {
+            out.extend_from_slice(label);
+            out.push(0);
+            put_uleb128(&mut out, nodes[*child].offset as u64);
+        }
+        out
+    };
+    loop {
+        let sizes: Vec<usize> = (0..nodes.len())
+            .map(|i| body(&nodes[i], &nodes).len())
+            .collect();
+        let mut off = 0usize;
+        let mut changed = false;
+        for i in 0..nodes.len() {
+            if nodes[i].offset != off {
+                nodes[i].offset = off;
+                changed = true;
+            }
+            off += sizes[i];
+        }
+        if !changed {
+            break;
+        }
+    }
+    let mut out = Vec::new();
+    for i in 0..nodes.len() {
+        out.extend_from_slice(&body(&nodes[i], &nodes));
+    }
+    while out.len() % 8 != 0 {
+        out.push(0);
+    }
+    out
+}
+
 /// Pad a Vec to the next multiple of `align`. Used for keeping load-
 /// command bodies (LC_LOAD_DYLIB strings etc.) at their required
 /// 8-byte alignment.
@@ -2042,6 +2152,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // is the runtime VA of the function: the code segment's
     // vmaddr base plus the function's native-byte offset within
     // `build.text`.
+    // The export trie carries the same defined externals as the symtab's
+    // extdef range, addressed relative to the image base (TEXT_VMADDR_BASE).
+    let mut export_trie_entries: Vec<(String, u64)> = Vec::new();
     for (i, exp) in build.exports.iter().enumerate() {
         let n_strx = str_indices[n_locals + i];
         let native_off = build
@@ -2060,6 +2173,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         }
         let n_value = code_vmaddr_base + native_off as u64;
         symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT));
+        export_trie_entries.push((export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE));
     }
 
     // [Defined dynamic exports] (N_EXT | N_SECT) -- the program's
@@ -2224,12 +2338,17 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         )
     };
 
+    let export_trie = build_export_trie(&export_trie_entries);
     let linkedit_fileoff = dwarf_fileoff + dwarf_filesize;
     let rebase_off = linkedit_fileoff;
     let bind_off = rebase_off + rebase_ops.len() as u64;
-    let symoff = bind_off + bind_ops.len() as u64;
+    // The export trie sits between the bind opcodes and the symbol table,
+    // matching dyld's LC_DYLD_INFO stream order.
+    let export_off = bind_off + bind_ops.len() as u64;
+    let symoff = export_off + export_trie.len() as u64;
     let stroff = symoff + symtab.len() as u64;
-    let linkedit_payload = rebase_ops.len() + bind_ops.len() + symtab.len() + strtab.len();
+    let linkedit_payload =
+        rebase_ops.len() + bind_ops.len() + export_trie.len() + symtab.len() + strtab.len();
     let linkedit_filesize = linkedit_payload as u64;
     // __DWARF claims its own page-aligned vmaddr range between
     // __DATA and __LINKEDIT (when emit_dwarf), so the
@@ -2334,8 +2453,8 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         0,
         0,
         0,
-        0,
-        0,
+        export_off as u32,
+        export_trie.len() as u32,
     );
     let nsyms_total = symbol_names.len() as u32;
     let symtab_lc = symtab_command(
@@ -2587,12 +2706,13 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         out.resize(out.len() + dwarf_tail_pad, 0);
     }
 
-    // __LINKEDIT contents. Order matches what
-    // LC_DYLD_INFO_ONLY's offsets name: rebase_off first, then
-    // bind_off, then symtab, then strtab.
+    // __LINKEDIT contents. Order matches what LC_DYLD_INFO_ONLY's offsets
+    // name: rebase first, then bind, then the export trie, then symtab,
+    // then strtab.
     debug_assert_eq!(out.len() as u64, linkedit_fileoff);
     out.extend_from_slice(&rebase_ops);
     out.extend_from_slice(&bind_ops);
+    out.extend_from_slice(&export_trie);
     out.extend_from_slice(&symtab);
     out.extend_from_slice(&strtab);
 
@@ -2822,6 +2942,79 @@ mod tests {
             put_uleb128(&mut out, *value);
             assert_eq!(&out[..], *expected, "uleb128({value})");
         }
+    }
+
+    #[test]
+    fn export_trie_round_trips() {
+        // Shared prefixes ("_Init...") exercise the radix edge splitting.
+        // A minimal walker decodes each name back to its address.
+        let entries = [
+            ("_InitWindow".to_string(), 0x1234u64),
+            ("_InitAudioDevice".to_string(), 0x5678u64),
+            ("_DrawRectangle".to_string(), 0x9abcu64),
+        ];
+        let trie = build_export_trie(&entries);
+        assert!(!trie.is_empty(), "non-empty input must produce a trie");
+
+        fn uleb(buf: &[u8], p: &mut usize) -> u64 {
+            let (mut v, mut shift) = (0u64, 0);
+            loop {
+                let b = buf[*p];
+                *p += 1;
+                v |= ((b & 0x7F) as u64) << shift;
+                if b & 0x80 == 0 {
+                    return v;
+                }
+                shift += 7;
+            }
+        }
+        let lookup = |trie: &[u8], name: &str| -> Option<u64> {
+            let bytes = name.as_bytes();
+            let (mut node, mut pos) = (0usize, 0usize);
+            loop {
+                let mut p = node;
+                let term_size = uleb(trie, &mut p) as usize;
+                if pos == bytes.len() {
+                    if term_size == 0 {
+                        return None;
+                    }
+                    let _flags = uleb(trie, &mut p);
+                    return Some(uleb(trie, &mut p));
+                }
+                p += term_size;
+                let child_count = trie[p];
+                p += 1;
+                let mut next = None;
+                for _ in 0..child_count {
+                    let start = p;
+                    while trie[p] != 0 {
+                        p += 1;
+                    }
+                    let label = &trie[start..p];
+                    p += 1;
+                    let child = uleb(trie, &mut p) as usize;
+                    if bytes[pos..].starts_with(label) {
+                        next = Some((label.len(), child));
+                        break;
+                    }
+                }
+                match next {
+                    Some((len, child)) => {
+                        pos += len;
+                        node = child;
+                    }
+                    None => return None,
+                }
+            }
+        };
+        for (name, addr) in &entries {
+            assert_eq!(lookup(&trie, name), Some(*addr), "trie lookup {name}");
+        }
+        assert_eq!(lookup(&trie, "_Nonexistent"), None);
+        assert!(
+            build_export_trie(&[]).is_empty(),
+            "empty input -> empty trie"
+        );
     }
 
     #[test]

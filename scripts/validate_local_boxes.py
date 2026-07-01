@@ -49,6 +49,7 @@ GATING_DEMOS = (
     "demos/stb/smoke.py",
     "demos/tweetnacl/smoke.py",
     "demos/quickjs/smoke.py",
+    "demos/raylib/smoke.py",
 )
 
 

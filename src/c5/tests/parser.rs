@@ -589,31 +589,23 @@ fn libc_call_with_struct_arg_compiles() {
 }
 
 #[test]
-fn libc_call_returning_struct_is_refused() {
-    // Symmetric to the arg case: a Token::Sys binding declared
-    // to return a struct by value (e.g. `div_t div(int, int)`)
-    // would need the platform ABI's two-register split on
-    // SysV / AAPCS64 or hidden-out-pointer on Win64. Until
-    // that lands, we refuse the call.
-    //
-    // The prelude doesn't declare any struct-returning libc
-    // function today, so we synthesize one via a local
-    // `#pragma binding` to a non-existent symbol; the parser
-    // type-checks the call before the loader would notice the
-    // binding is bogus.
+fn libc_call_returning_struct_compiles() {
+    // A Token::Sys binding declared to return a struct by value is
+    // lowered through the native SSA path: the walker tags the CallExt
+    // with `ret_agg` and the emitter gathers the result from the
+    // platform-ABI return registers (HFA in v-regs, x0/x1 for a small
+    // aggregate, or x8 indirect for > 16 bytes) into the result temp.
+    // The binding's symbol need not resolve for the parse + codegen to
+    // succeed.
     let src = "\
         #pragma dylib(libc, \"libc.so.6\")\n\
         #pragma binding(libc::make_pair, \"make_pair\")\n\
         struct Pair { int a; int b; };\n\
         struct Pair make_pair();\n\
         int main() { struct Pair p; p = make_pair(); return p.a; }\n";
-    let res = Compiler::new(src.to_string()).compile();
-    let err = res.expect_err("expected struct-return-from-libc to fail");
-    let msg = err.to_string();
     assert!(
-        msg.contains("returns a struct by value")
-            || msg.contains("struct-return convention isn't implemented"),
-        "expected platform-ABI struct-return refusal, got: {msg}"
+        Compiler::new(src.to_string()).compile().is_ok(),
+        "struct-return from a libc binding should compile"
     );
 }
 

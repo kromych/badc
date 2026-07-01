@@ -2938,6 +2938,8 @@ fn emit_inst(
             args,
             fp_arg_mask,
             arg_aggs,
+            ret_agg,
+            ret_slot_local,
             ..
         } => emit_call_ext(
             code,
@@ -2953,6 +2955,9 @@ fn emit_inst(
             imports,
             arg_aggs,
             &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
+            func,
         ),
         Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
         Inst::ImmCode(target_ent_pc) => {
@@ -5681,6 +5686,9 @@ fn emit_call_ext(
     imports: &super::ResolvedImports,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+    func: &FunctionSsa,
 ) -> bool {
     let import_index = match imports.index_of_binding(binding_idx) {
         Some(i) => i,
@@ -5732,6 +5740,39 @@ fn emit_call_ext(
     super::encode::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
+    }
+    // Host-ABI aggregate return (System V AMD64 3.2.3): a <= 16-byte
+    // aggregate arrives in rax:rdx (INTEGER) / xmm0:xmm1 (SSE); store each
+    // eightbyte into the caller's result temp. The walker tags `ret_agg`
+    // for the register-returned class; > 16-byte returns use the OutPtr
+    // hidden-argument path and do not reach here.
+    if let Some(ai) = ret_agg {
+        let desc = &agg_descs[ai as usize];
+        let base = local_slot_off(ret_slot_local, func, frame, abi);
+        let eb_classes = match super::abi_classify::classify_aggregate(
+            desc.size,
+            desc.align,
+            &desc.fields,
+            abi,
+            true,
+        ) {
+            super::abi_classify::AggClass::Regs(c) => c,
+            _ => alloc::vec::Vec::new(),
+        };
+        let int_ret = [Reg::RAX, Reg::RDX];
+        let mut int_i = 0usize;
+        let mut sse_i = 0u8;
+        for (k, class) in eb_classes.iter().enumerate() {
+            let disp = (base + (k as i64) * 8) as i32;
+            if matches!(class, super::abi_classify::RegClass::Sse) {
+                emit_movsd_mem_xmm(code, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
+                sse_i += 1;
+            } else {
+                emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
+                int_i += 1;
+            }
+        }
+        return true;
     }
     // Sub-word integer returns get the standard sign / zero
     // extension into rax. FP returns arrive in xmm0 (SysV 3.2.3,
@@ -6631,6 +6672,14 @@ fn emit_intrinsic(
             code.push(0x90);
             true
         }
+        I::AtomicThreadFence => {
+            // `mfence` (0F AE F0), a full barrier (C11 7.17.4 seq_cst).
+            // No operand, no result.
+            code.push(0x0F);
+            code.push(0xAE);
+            code.push(0xF0);
+            true
+        }
         I::X87StoreControlWord | I::X87LoadControlWord => {
             // `fnstcw m16` (D9 /7) stores the x87 control word, `fldcw m16`
             // (D9 /5) loads it. The single argument is the operand's
@@ -6659,6 +6708,90 @@ fn emit_intrinsic(
             code.push(0x41); // REX.B for r10
             code.push(0xD9);
             code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
+            true
+        }
+        I::Cpuid | I::Xgetbv => {
+            // cpuid (0F A2) reads eax (leaf) + ecx (subleaf) and writes
+            // eax/ebx/ecx/edx; xgetbv (0F 01 D0) reads ecx and writes
+            // eax/edx. Both clobber fixed registers the allocator does not
+            // model -- ebx is callee-saved -- so save rax/rbx/rcx/rdx around
+            // the instruction. The output addresses are pushed before the
+            // clobber and popped after; the inputs are read into r10/r11
+            // before rax/rcx are overwritten, so an operand the allocator
+            // placed in one of the saved registers is still read correctly.
+            const RAX: Reg = Reg(0);
+            const RCX: Reg = Reg(1);
+            const RDX: Reg = Reg(2);
+            const RBX: Reg = Reg(3);
+            const R10: Reg = Reg(10);
+            const R11: Reg = Reg(11);
+            let is_cpuid = matches!(intrinsic, I::Cpuid);
+            let n_out = if is_cpuid { 4 } else { 2 };
+            let n_in = if is_cpuid { 2 } else { 1 };
+            if args.len() != n_out + n_in {
+                bail_msg("cpuid / xgetbv: wrong operand count");
+                return false;
+            }
+            let materialize = |code: &mut Vec<u8>, idx: usize, scratch: Reg| -> Option<Reg> {
+                let place = alloc.places.get(args[idx] as usize).copied()?;
+                let r = materialize_int(code, place, scratch, frame)?;
+                if r.0 != scratch.0 {
+                    super::encode::emit_mov_rr(code, scratch, r);
+                }
+                Some(scratch)
+            };
+            // Save the clobbered / used registers.
+            super::encode::emit_push_r(code, RAX);
+            super::encode::emit_push_r(code, RBX);
+            super::encode::emit_push_r(code, RCX);
+            super::encode::emit_push_r(code, RDX);
+            // Push the output addresses (args[0..n_out]); they survive the
+            // clobber on the stack and are popped in reverse below.
+            for i in 0..n_out {
+                if materialize(code, i, R10).is_none() {
+                    bail_msg("cpuid / xgetbv: output operand not an address");
+                    return false;
+                }
+                super::encode::emit_push_r(code, R10);
+            }
+            // Inputs into r10 (eax) and, for cpuid, r11 (ecx); then move into
+            // the fixed registers. eax/ecx are not touched until both inputs
+            // are safely in scratch.
+            if materialize(code, n_out, R10).is_none() {
+                bail_msg("cpuid / xgetbv: input operand missing");
+                return false;
+            }
+            if is_cpuid {
+                if materialize(code, n_out + 1, R11).is_none() {
+                    bail_msg("cpuid: subleaf operand missing");
+                    return false;
+                }
+                super::encode::emit_mov_rr(code, RAX, R10); // eax = leaf
+                super::encode::emit_mov_rr(code, RCX, R11); // ecx = subleaf
+                code.push(0x0F);
+                code.push(0xA2); // cpuid
+            } else {
+                super::encode::emit_mov_rr(code, RCX, R10); // ecx = reg
+                code.push(0x0F);
+                code.push(0x01);
+                code.push(0xD0); // xgetbv
+            }
+            // Store outputs to the popped addresses. cpuid order (top of
+            // stack first): edx, ecx, ebx, eax; xgetbv: edx, eax.
+            let out_regs: &[Reg] = if is_cpuid {
+                &[RDX, RCX, RBX, RAX]
+            } else {
+                &[RDX, RAX]
+            };
+            for &src in out_regs {
+                super::encode::emit_pop_r(code, R10);
+                super::encode::emit_mov_mem_r32(code, R10, 0, src);
+            }
+            // Restore the saved registers (reverse of the save order).
+            super::encode::emit_pop_r(code, RDX);
+            super::encode::emit_pop_r(code, RCX);
+            super::encode::emit_pop_r(code, RBX);
+            super::encode::emit_pop_r(code, RAX);
             true
         }
         I::Sqrt

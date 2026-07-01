@@ -401,6 +401,42 @@ jobs:
         # DRBGs, the TLS PRF, ChaCha20 and Poly1305. Slow
         # AES / DES KAT loops are tracked under TODO.
         run: python demos/bearssl/smoke.py
+      - name: raylib standalone build + cdb load gate (Windows)
+        # Build the vendored raylib + Lode Runner game standalone, then run
+        # it under cdb with show-loader-snaps. A win32 / CRT import bound to
+        # a DLL that does not export the symbol fails the loader at process
+        # start (STATUS_ENTRYPOINT_NOT_FOUND, 0xc0000139), which a build-only
+        # check misses. The initial process breakpoint stops before the
+        # entry point, so the windowed game never runs -- only the loader's
+        # import walk is exercised. smoke.py also resolves every PE import
+        # via GetProcAddress; this is the authoritative real-loader gate.
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          @echo off
+          setlocal
+          set "OUT=%RUNNER_TEMP%\raylib-out"
+          if exist "%OUT%" rmdir /s /q "%OUT%"
+          python "%GITHUB_WORKSPACE%\demos\raylib\smoke.py" --out-dir "%OUT%" || exit /b 1
+          set "EXE=%OUT%\loderunner.exe"
+          if not exist "%EXE%" ( echo loderunner.exe not built & exit /b 1 )
+          set "CDBDIR=x64"
+          if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "CDBDIR=arm64"
+          set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\%CDBDIR%\cdb.exe"
+          if not exist "%CDB%" ( echo cdb not found at "%CDB%" & exit /b 1 )
+          set "LOG=%OUT%\cdb.log"
+          echo === cdb loader snaps on loderunner.exe ===
+          echo q | "%CDB%" -logo "%LOG%" -xe ld:ntdll -c "!gflag +sls; g" "%EXE%"
+          if exist "%LOG%" type "%LOG%"
+          rem findstr exits 1 when the pattern is absent (the success case),
+          rem so branch on errorlevel and exit 0 explicitly.
+          findstr /c:"c0000139" "%LOG%" >nul
+          if not errorlevel 1 (
+            echo FAIL: unresolved import under the loader ^(0xc0000139^)
+            exit /b 1
+          )
+          echo === cdb load gate OK: all imports resolved ===
+          exit /b 0
       - name: quickjs smoke (qjs CLI + pure-JS test suite)
         # Vendored bellard/quickjs compiles + 8-TU links through badc;
         # the qjs CLI runs QuickJS's own pure-JS test suite (closure,
@@ -826,7 +862,7 @@ jobs:
         run: |
           set -e
           export BADC="$PWD/target/release/badc"
-          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb quickjs; do
+          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb quickjs raylib; do
             echo "::group::$d (N=${{ matrix.pressure }})"
             python "demos/$d/smoke.py"
             echo "::endgroup::"

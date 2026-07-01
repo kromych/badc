@@ -240,6 +240,196 @@ impl Compiler {
         Ok(())
     }
 
+    /// Fetch a required GCC-builtin operand or report an arity error.
+    fn require_gcc_arg(
+        &self,
+        a: Option<super::super::ast::ExprId>,
+        name: &str,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        a.ok_or_else(|| self.compile_err(format!("`{name}` -- too few arguments")))
+    }
+
+    /// Parse a GCC `__atomic_*` / `__sync_*` builtin call (the opening
+    /// `(` already consumed) and lower it onto the C11 7.17 atomic
+    /// infrastructure. The `__atomic_*` forms carry trailing
+    /// `memory_order` arguments and the compare-exchange forms a `weak`
+    /// flag; badc parses and discards them (it always emits seq_cst).
+    /// The `__sync_*` forms are seq_cst with no order argument.
+    fn parse_gcc_atomic_builtin(&mut self, name: &str, id_idx: usize) -> Result<(), C5Error> {
+        use super::super::ast::{AtomicKind, Expr, ExprId};
+        let _ = id_idx;
+        // Parse the full argument list; the first operand's type sets the
+        // access width for the pointer-based forms.
+        let mut args: Vec<ExprId> = Vec::new();
+        let mut first_ty = 0i64;
+        if self.lex.tk != ')' {
+            loop {
+                self.expr(Token::Assign as i64)?;
+                if args.is_empty() {
+                    first_ty = self.ty;
+                }
+                if let Some(a) = self.ast_acc {
+                    args.push(a);
+                }
+                if self.lex.tk == ',' {
+                    self.next()?;
+                    continue;
+                }
+                break;
+            }
+        }
+        if self.lex.tk != ')' {
+            return Err(self.compile_err(format!("`{name}` -- malformed argument list")));
+        }
+        self.next()?;
+        self.mark_emit_other();
+        let int_ty = Ty::Int as i64;
+
+        // Fences (C11 7.17.4): a full barrier with no pointer operand.
+        // `__atomic_signal_fence` is a compiler-only barrier; a real
+        // fence is a safe superset.
+        if matches!(
+            name,
+            "__sync_synchronize" | "__atomic_thread_fence" | "__atomic_signal_fence"
+        ) {
+            let pos = self.ast_src_pos();
+            let id = self.ast.push_expr(
+                Expr::Intrinsic {
+                    kind: crate::c5::op::Intrinsic::AtomicThreadFence as i64,
+                    args: Vec::new(),
+                    ty: int_ty,
+                },
+                pos,
+            );
+            self.ty = int_ty;
+            self.ast_acc = Some(id);
+            return Ok(());
+        }
+
+        // `__atomic_is_lock_free(size, ptr)` -- a compile-time predicate;
+        // the supported targets provide lock-free atomics for the sizes
+        // used here.
+        if name == "__atomic_is_lock_free" {
+            let pos = self.ast_src_pos();
+            let id = self.ast.push_expr(Expr::IntLit { val: 1, ty: int_ty }, pos);
+            self.ty = int_ty;
+            self.ast_acc = Some(id);
+            return Ok(());
+        }
+
+        // Every remaining form takes the atomic-object pointer first; its
+        // pointee type drives the load / store / RMW width.
+        if args.is_empty() || !is_pointer_ty(first_ty) {
+            return Err(self.compile_err(format!(
+                "`{name}` first argument must be a pointer to the atomic object"
+            )));
+        }
+        let elem_ty = first_ty - Ty::Ptr as i64;
+        let ptr = args[0];
+        let val1 = args.get(1).copied();
+        let val2 = args.get(2).copied();
+        let pos = self.ast_src_pos();
+
+        let (kind, op_args, result_ty): (AtomicKind, Vec<ExprId>, i64) = match name {
+            "__atomic_load_n" => (AtomicKind::Load, alloc::vec![ptr], elem_ty),
+            "__atomic_store_n" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::Store, alloc::vec![ptr, v], int_ty)
+            }
+            "__atomic_exchange_n" | "__sync_lock_test_and_set" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::Exchange, alloc::vec![ptr, v], elem_ty)
+            }
+            "__atomic_fetch_add" | "__sync_fetch_and_add" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::FetchAdd, alloc::vec![ptr, v], elem_ty)
+            }
+            "__atomic_fetch_sub" | "__sync_fetch_and_sub" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::FetchSub, alloc::vec![ptr, v], elem_ty)
+            }
+            "__atomic_fetch_and" | "__sync_fetch_and_and" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::FetchAnd, alloc::vec![ptr, v], elem_ty)
+            }
+            "__atomic_fetch_or" | "__sync_fetch_and_or" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::FetchOr, alloc::vec![ptr, v], elem_ty)
+            }
+            "__atomic_fetch_xor" | "__sync_fetch_and_xor" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::FetchXor, alloc::vec![ptr, v], elem_ty)
+            }
+            "__sync_add_and_fetch" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::AddFetch, alloc::vec![ptr, v], elem_ty)
+            }
+            "__sync_sub_and_fetch" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::SubFetch, alloc::vec![ptr, v], elem_ty)
+            }
+            "__sync_and_and_fetch" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::AndFetch, alloc::vec![ptr, v], elem_ty)
+            }
+            "__sync_or_and_fetch" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::OrFetch, alloc::vec![ptr, v], elem_ty)
+            }
+            "__sync_xor_and_fetch" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::XorFetch, alloc::vec![ptr, v], elem_ty)
+            }
+            "__atomic_compare_exchange_n" => {
+                let exp = self.require_gcc_arg(val1, name)?;
+                let des = self.require_gcc_arg(val2, name)?;
+                (
+                    AtomicKind::CompareExchangeStrong,
+                    alloc::vec![ptr, exp, des],
+                    int_ty,
+                )
+            }
+            "__sync_val_compare_and_swap" => {
+                let old = self.require_gcc_arg(val1, name)?;
+                let new = self.require_gcc_arg(val2, name)?;
+                (AtomicKind::SyncCasVal, alloc::vec![ptr, old, new], elem_ty)
+            }
+            "__sync_bool_compare_and_swap" => {
+                let old = self.require_gcc_arg(val1, name)?;
+                let new = self.require_gcc_arg(val2, name)?;
+                (AtomicKind::SyncCasBool, alloc::vec![ptr, old, new], int_ty)
+            }
+            // `__atomic_test_and_set(ptr, mo)` -- set the byte to 1 and
+            // yield the prior contents (callers test for non-zero).
+            "__atomic_test_and_set" => {
+                let one = self.ast.push_expr(Expr::IntLit { val: 1, ty: int_ty }, pos);
+                (AtomicKind::Exchange, alloc::vec![ptr, one], elem_ty)
+            }
+            // `__atomic_clear(ptr, mo)` / `__sync_lock_release(ptr)` --
+            // store 0 to the object.
+            "__atomic_clear" | "__sync_lock_release" => {
+                let zero = self.ast.push_expr(Expr::IntLit { val: 0, ty: int_ty }, pos);
+                (AtomicKind::Store, alloc::vec![ptr, zero], int_ty)
+            }
+            _ => {
+                return Err(self.compile_err(format!("`{name}` -- unsupported atomic builtin")));
+            }
+        };
+
+        self.ty = result_ty;
+        let id = self.ast.push_expr(
+            Expr::Atomic {
+                kind,
+                args: op_args,
+                elem_ty,
+                ty: result_ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
         let mut t: i64;
 
@@ -358,14 +548,24 @@ impl Compiler {
                 // to a real function, in which case the call is left to
                 // the normal path.
                 let intrinsic_id = self.pp_intrinsics.get(&self.symbols[id_idx].name).copied();
-                let atomic_kind = if self.symbols[id_idx].class != Token::Fun as i64
-                    && self.symbols[id_idx].class != Token::Sys as i64
-                {
+                let not_real_fn = self.symbols[id_idx].class != Token::Fun as i64
+                    && self.symbols[id_idx].class != Token::Sys as i64;
+                let atomic_kind = if not_real_fn {
                     intrinsic_id.and_then(atomic_kind_from_intrinsic)
                 } else {
                     None
                 };
-                if let Some(akind) = atomic_kind {
+                // GCC `__atomic_*` / `__sync_*` builtins are compiler-
+                // provided (no header) and lowered at the call site like
+                // the C11 7.17 atomics. Recognize them by name prefix when
+                // the name is not bound to a real function.
+                let is_gcc_atomic = not_real_fn
+                    && (self.symbols[id_idx].name.starts_with("__atomic_")
+                        || self.symbols[id_idx].name.starts_with("__sync_"));
+                if is_gcc_atomic {
+                    let name = self.symbols[id_idx].name.clone();
+                    self.parse_gcc_atomic_builtin(&name, id_idx)?;
+                } else if let Some(akind) = atomic_kind {
                     self.parse_atomic_builtin(akind, id_idx)?;
                 } else if let Some(intrinsic_id) = intrinsic_id {
                     let fn_name = self.symbols[id_idx].name.clone();
@@ -692,27 +892,12 @@ impl Compiler {
                     let callee_returns_struct = self.symbols[id_idx].class == Token::Fun as i64
                         && is_struct_ty(callee_ret_ty)
                         && struct_ptr_depth(callee_ret_ty) == 0;
-                    // Token::Sys (libc) calls returning a struct by
-                    // value would need real platform-ABI register
-                    // packing -- SysV's two-register split for
-                    // 8 < size <= 16, Win64's hidden out-pointer for
-                    // size > 8, AAPCS64's HFA / two-GPR split, and so
-                    // on. The c5-internal "address-as-value, hidden
-                    // out-pointer at val=2" convention only works for
-                    // c5-to-c5 calls. Refuse the call up front rather
-                    // than emit a silently-broken sequence.
-                    if self.symbols[id_idx].class == Token::Sys as i64
-                        && is_struct_ty(callee_ret_ty)
-                        && struct_ptr_depth(callee_ret_ty) == 0
-                    {
-                        return Err(self.compile_err(format!(
-                            "`{}` returns a struct by value, but the \
-                         platform-ABI struct-return convention isn't \
-                         implemented for Token::Sys calls. Use a \
-                         pointer-returning variant or pass an out-buffer.",
-                            fn_name_for_warn
-                        )));
-                    }
+                    // A Token::Sys (dylib-bound) call returning a struct by
+                    // value is lowered through the native SSA path: the
+                    // walker tags the CallExt with `ret_agg` and the emitter
+                    // gathers the result from the platform-ABI return
+                    // registers into the result temp (HFA in v0..vN, x0/x1
+                    // for a small aggregate, x8 indirect for > 16 bytes).
                     let mut nargs = 0;
                     // Snapshot the AST parser-side vstack depth so
                     // the call's per-arg emit sequence (per-arg

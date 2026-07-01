@@ -196,6 +196,16 @@ pub(crate) struct Symbol {
     /// waiting to resolve.
     pub is_extern_decl: bool,
 
+    /// Sticky across all file-scope declarations of a function in the
+    /// translation unit. `saw_noninline_decl` records that at least one
+    /// declaration omitted `inline`; `saw_static_decl` records `static`
+    /// on any declaration. C99 6.7.4p7: a function all of whose
+    /// declarations are `inline` without `extern` provides no external
+    /// definition in this unit (internal linkage); a single non-inline
+    /// or `extern` declaration makes the definition external.
+    pub saw_noninline_decl: bool,
+    pub saw_static_decl: bool,
+
     /// True while a block-scope `extern` declaration that shadows an
     /// enclosing local (or other bound name) holds this slot. The slot
     /// is converted to `Glo` for the block so in-block references take

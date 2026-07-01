@@ -108,7 +108,7 @@ fn ent_pc=7 n_params=3 variadic=false locals=3
     v7   LoadLocal { off=2, kind=I64 }                    -> x0
     v8   LoadLocal { off=3, kind=I64 }                    -> x0
     v9   LoadLocal { off=4, kind=I32 }                    -> x0
-    v10  CallExt { binding_idx=8, args=[v1, v3, v5], fp_arg_mask=0x0 } -> x0
+    v10  CallExt { binding_idx=9, args=[v1, v3, v5], fp_arg_mask=0x0 } -> x0
     terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=strtoumax
@@ -125,7 +125,7 @@ fn ent_pc=8 n_params=3 variadic=false locals=3
     v7   LoadLocal { off=2, kind=I64 }                    -> x0
     v8   LoadLocal { off=3, kind=I64 }                    -> x0
     v9   LoadLocal { off=4, kind=I32 }                    -> x0
-    v10  CallExt { binding_idx=27, args=[v1, v3, v5], fp_arg_mask=0x0 } -> x0
+    v10  CallExt { binding_idx=28, args=[v1, v3, v5], fp_arg_mask=0x0 } -> x0
     terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=main

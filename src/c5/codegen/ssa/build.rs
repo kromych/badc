@@ -354,6 +354,11 @@ impl SsaBuilder {
             ret_agg: ra,
             ret_slot_local: rs,
             ..
+        }
+        | Inst::CallExt {
+            ret_agg: ra,
+            ret_slot_local: rs,
+            ..
         } = &mut self.func.insts[v as usize]
         {
             *ra = Some(ret_agg);
@@ -1127,6 +1132,8 @@ impl SsaBuilder {
             fp_arg_mask,
             fp_return,
             arg_aggs: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
         })
     }
 

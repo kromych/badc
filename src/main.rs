@@ -920,8 +920,8 @@ fn main() {
         let compile_in_memory = |label: &str, src: String, extra: &[(&str, &str)]| -> Vec<u8> {
             // The embedded runtime gates its sections on macros the
             // driver sets per image: `__BADC_C5_START__` (an entry
-            // stub is emitted), `__BADC_WIN_GUI__` (PE GUI subsystem),
-            // `__BADC_WIN_WIDE__` (`wmain` entry).
+            // stub is emitted), `__BADC_WIN_WINMAIN__` (WinMain-shaped
+            // entry), `__BADC_WIN_WIDE__` (wide `wmain` / `wWinMain` entry).
             let mut copts_defines = defines.clone();
             for (k, v) in extra {
                 copts_defines.push((k.to_string(), v.to_string()));
@@ -1039,11 +1039,19 @@ fn main() {
                 "__BADC_ENTRY__",
                 entry_override.as_deref().unwrap_or("main"),
             ));
-            if subsystem_override == Some(badc::Subsystem::Windows) {
-                runtime_defines.push(("__BADC_WIN_GUI__", "1"));
-            }
-            if entry_override.as_deref() == Some("wmain") {
-                runtime_defines.push(("__BADC_WIN_WIDE__", "1"));
+            // The entry shape follows the entry symbol, not the PE
+            // subsystem (set separately on the optional header): a
+            // GUI-subsystem program with a plain `main` still receives
+            // argc/argv. WinMain / wWinMain take the (hInstance, prev,
+            // cmdline, nShow) shape; wmain / wWinMain take the wide form.
+            match entry_override.as_deref() {
+                Some("WinMain") => runtime_defines.push(("__BADC_WIN_WINMAIN__", "1")),
+                Some("wWinMain") => {
+                    runtime_defines.push(("__BADC_WIN_WINMAIN__", "1"));
+                    runtime_defines.push(("__BADC_WIN_WIDE__", "1"));
+                }
+                Some("wmain") => runtime_defines.push(("__BADC_WIN_WIDE__", "1")),
+                _ => {}
             }
         }
         // Prefer an installed runtime source (~/.badc/lib/<name>) over the

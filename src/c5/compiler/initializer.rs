@@ -1741,6 +1741,49 @@ impl Compiler {
             // the shared pending value for its own member).
             self.skip_opt_compound_literal_cast()?;
             let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            // C11 6.7.2.1: an anonymous struct flattened into the parent may
+            // take a brace-enclosed sub-initializer that fills its members in
+            // order (`union { struct { int a, b; }; ... } x = { { 1, 2 } }`).
+            // The grouped members are contiguous; fill each from the brace,
+            // then advance past the whole group.
+            if field.anon_struct_group != 0 && self.lex.tk == '{' {
+                self.next()?; // consume `{`
+                let group = field.anon_struct_group;
+                let mut mem_pos = field_idx;
+                while self.lex.tk != '}' {
+                    while mem_pos < self.structs[struct_id].fields.len()
+                        && self.structs[struct_id].fields[mem_pos].anon_struct_group != group
+                    {
+                        mem_pos += 1;
+                    }
+                    if mem_pos >= self.structs[struct_id].fields.len() {
+                        return Err(self.compile_err("too many initializers for anonymous struct"));
+                    }
+                    let mem = self.structs[struct_id].fields[mem_pos].clone();
+                    let mem_base = (var_offset as usize) + mem.offset;
+                    if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
+                        self.collect_struct_initializer(struct_id_of(mem.ty), mem_base as i64)?;
+                    } else {
+                        let (value, reloc) = self.parse_constant_init_value()?;
+                        let size = self.size_of_type(mem.ty);
+                        self.write_init_value(mem_base, size, value, reloc, mem.ty);
+                    }
+                    mem_pos += 1;
+                    self.accept(',')?;
+                }
+                self.next()?; // consume `}`
+                pos = field_idx;
+                while pos < self.structs[struct_id].fields.len()
+                    && self.structs[struct_id].fields[pos].anon_struct_group == group
+                {
+                    pos += 1;
+                }
+                for _ in 0..close_parens {
+                    self.accept(')')?;
+                }
+                self.accept(',')?;
+                continue;
+            }
             // C11 6.7.2.1: an anonymous union/struct member whose members are
             // flattened into the parent (shared anon_union_group) may take a
             // brace-enclosed sub-initializer (`{ .member = v }` or `{ v }`).

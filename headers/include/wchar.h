@@ -40,6 +40,7 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(libc::wmemset,  "_wmemset")
 #pragma binding(libc::mbrtowc,  "_mbrtowc")
 #pragma binding(libc::wcrtomb,  "_wcrtomb")
+#pragma binding(libc::wcsrtombs, "_wcsrtombs")
 #pragma binding(libc::btowc,    "_btowc")
 #pragma binding(libc::wctob,    "_wctob")
 #pragma binding(libc::wcscoll,  "_wcscoll")
@@ -68,6 +69,7 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(libc::wmemset,  "wmemset")
 #pragma binding(libc::mbrtowc,  "mbrtowc")
 #pragma binding(libc::wcrtomb,  "wcrtomb")
+#pragma binding(libc::wcsrtombs, "wcsrtombs")
 #pragma binding(libc::btowc,    "btowc")
 #pragma binding(libc::wctob,    "wctob")
 #pragma binding(libc::wcscoll,  "wcscoll")
@@ -103,6 +105,7 @@ int wcscat_s(wchar_t *dst, size_t dstsz, const wchar_t *src);
 #pragma binding(msvcrt::wcscoll,  "wcscoll")
 #pragma binding(msvcrt::wcsxfrm,  "wcsxfrm")
 #pragma binding(msvcrt::wcsftime, "wcsftime")
+#pragma binding(msvcrt::wcsrtombs, "wcsrtombs")
 
 // Neither msvcrt.dll nor ucrtbase.dll exports the C99 wide-array
 // functions (7.24.4.4 / 7.24.4.5), count-based swprintf (7.24.2.3), or
@@ -187,6 +190,7 @@ wchar_t *wcstok(wchar_t *s, const wchar_t *delim, wchar_t **ptr);
 // Restartable multibyte / wide conversion (C99 7.24.6.3).
 unsigned long mbrtowc(wchar_t *pwc, const char *s, unsigned long n, mbstate_t *ps);
 unsigned long wcrtomb(char *s, wchar_t wc, mbstate_t *ps);
+unsigned long wcsrtombs(char *dst, const wchar_t **src, unsigned long len, mbstate_t *ps);
 
 // Single-byte / wide-character conversion (C99 7.24.6.1).
 wint_t btowc(int c);

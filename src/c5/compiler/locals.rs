@@ -1384,6 +1384,10 @@ impl Compiler {
         // Assignment precedence: the comma between elements is the
         // delimiter, not a comma-expression operator.
         self.expr(Token::Assign as i64)?;
+        // C99 6.7.8p11: an initializer element is converted as in
+        // assignment, so an integer element of a floating member
+        // rounds through IEEE-754 rather than storing the raw bits.
+        self.convert_assign_rhs(ty);
         let elem_ast = self.ast_acc;
         self.ast_assign();
         if let Some(value) = elem_ast {
@@ -1483,6 +1487,8 @@ impl Compiler {
                     }
                     self.ast_psh();
                     self.expr(Token::Assign as i64)?;
+                    // C99 6.7.8p11 assignment conversion (see emit_array_leaf_runtime).
+                    self.convert_assign_rhs(final_ty);
                     let field_ast = self.ast_acc;
                     self.ast_assign();
                     if let Some(value) = field_ast {
@@ -1611,6 +1617,8 @@ impl Compiler {
                         }
                         self.ast_psh();
                         self.expr(Token::Assign as i64)?;
+                        // C99 6.7.8p11 assignment conversion (see emit_array_leaf_runtime).
+                        self.convert_assign_rhs(mem.ty);
                         let v = self.ast_acc;
                         self.ast_assign();
                         if let Some(value) = v {
@@ -1705,6 +1713,10 @@ impl Compiler {
                     "brace elision into a non-constant struct member is not supported",
                 ));
             }
+            // C99 6.7.8p11 assignment conversion (see emit_array_leaf_runtime).
+            // Placed after the struct-copy checks above so it acts only on
+            // the scalar / pointer store path.
+            self.convert_assign_rhs(field.ty);
             let field_ast = self.ast_acc;
             self.ast_assign();
             if let Some(value) = field_ast {

@@ -80,12 +80,15 @@ impl Compiler {
             let mut extern_seen = false;
             let mut atomic_base: Option<i64> = None;
             let mut m = decl_base::IntModifiers::default();
-            // `_Noreturn`, `__declspec(thread)`, and `__declspec(dllexport)`
-            // scope to this declaration; clear the carriers so they cannot leak
-            // onto the next one.
+            // `_Noreturn`, `__declspec(thread)`, `__declspec(dllexport)`, and
+            // `inline` scope to this declaration; clear the carriers so they
+            // cannot leak onto the next one. `inline` matters even without a
+            // body: an inline prototype must not mark the following
+            // declaration as inline when the linkage rule reads the flag.
             self.pending_noreturn = false;
             self.pending.attr_thread_local = false;
             self.pending.attr_dllexport = false;
+            self.pending_is_inline = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
@@ -302,12 +305,24 @@ impl Compiler {
                 // synthesising placeholder parameter types would feed the
                 // call-site argument type-check a spurious mismatch.
                 let fnptr_proto = self.pending.typedef_fn_proto.take();
-                if let Some(types) = self.pending.fn_ptr_param_types.take() {
-                    self.symbols[id_idx].params = types;
-                    self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
-                } else if let Some((proto_fixed, true)) = fnptr_proto {
-                    self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
-                    self.symbols[id_idx].is_variadic = true;
+                let fnptr_param_types = self.pending.fn_ptr_param_types.take();
+                // `fn_ptr_param_types` is the pointee signature of a
+                // fn-pointer typedef used as this declarator's type. It
+                // describes a fn-pointer OBJECT (`cb x;` -- a callback
+                // variable an indirect call reads its parameter shape
+                // from). A declarator that is itself a function whose
+                // return type is that typedef (`cb f(args)`) has its own
+                // parameter list, installed below; a following `(` marks
+                // it, so the return type's pointee params must not stand
+                // in as the function's own.
+                if self.lex.tk != '(' {
+                    if let Some(types) = fnptr_param_types {
+                        self.symbols[id_idx].params = types;
+                        self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
+                    } else if let Some((proto_fixed, true)) = fnptr_proto {
+                        self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
+                        self.symbols[id_idx].is_variadic = true;
+                    }
                 }
                 // Carry the bare-`void` side channel onto the
                 // declarator. `pending_base_was_void` was set if
@@ -537,21 +552,33 @@ impl Compiler {
                             self.symbols[id_idx].decl_line = self.lex.line;
                             self.symbols[id_idx].decl_in_main_source = self.in_main_source();
                         }
-                        // C99 6.2.2 linkage: `static` at file scope
-                        // is internal; everything else (bare or
-                        // `extern`) is external. `static` on either
-                        // the prototype or the definition is
-                        // sticky -- once seen, the function is
-                        // internal-linkage from then on. Mirrors
-                        // gcc / clang: `static int f(); int f() {
-                        // ... }` keeps f static.
+                        // C99 6.2.2 / 6.7.4p7 linkage, recomputed from the
+                        // facts accumulated across every declaration of this
+                        // name. `static` is internal and sticky. A function
+                        // all of whose declarations are `inline` without
+                        // `extern` provides no external definition in this
+                        // unit, so it takes internal linkage (the out-of-line
+                        // copy stays private; the external definition, when
+                        // the program needs one, comes from a unit that
+                        // declares it `extern inline` or non-inline). A single
+                        // non-inline or `extern` declaration makes it external.
                         if static_seen {
-                            self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::Internal;
-                        } else if self.symbols[id_idx].linkage
-                            != crate::c5::symbol::Linkage::Internal
-                        {
-                            self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
+                            self.symbols[id_idx].saw_static_decl = true;
                         }
+                        if !self.pending_is_inline {
+                            self.symbols[id_idx].saw_noninline_decl = true;
+                        }
+                        // `static` is internal; an all-`inline`, never-`extern`
+                        // function is inline-only (also internal); anything
+                        // with a non-inline or `extern` declaration is external.
+                        let sym = &mut self.symbols[id_idx];
+                        let internal = sym.saw_static_decl
+                            || (!sym.saw_noninline_decl && !extern_seen && !sym.is_extern_decl);
+                        sym.linkage = if internal {
+                            crate::c5::symbol::Linkage::Internal
+                        } else {
+                            crate::c5::symbol::Linkage::External
+                        };
                         if extern_seen {
                             self.symbols[id_idx].is_extern_decl = true;
                         }

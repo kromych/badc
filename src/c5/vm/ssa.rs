@@ -1673,6 +1673,9 @@ fn run_intrinsic(
             frame.regs[v as usize] = 0;
             Ok(())
         }
+        // A memory barrier has no effect in the single-threaded
+        // interpreter; no operand, no result.
+        Intrinsic::AtomicThreadFence => Ok(()),
         Intrinsic::X87StoreControlWord => {
             // The interpreter evaluates floats with host doubles, so it
             // has no x87 control word to read; store the architectural
@@ -1683,6 +1686,22 @@ fn run_intrinsic(
         Intrinsic::X87LoadControlWord => {
             // Setting the control word has no effect on host-double
             // arithmetic.
+            Ok(())
+        }
+        Intrinsic::Cpuid => {
+            // No host CPUID; zero the four output words so a caller reads a
+            // defined (feature-absent) result rather than uninitialized data.
+            for &a in &args[0..4] {
+                let addr = frame.regs[a as usize] as usize;
+                store_to_memory(mem, addr, 0, StoreKind::I32)?;
+            }
+            Ok(())
+        }
+        Intrinsic::Xgetbv => {
+            for &a in &args[0..2] {
+                let addr = frame.regs[a as usize] as usize;
+                store_to_memory(mem, addr, 0, StoreKind::I32)?;
+            }
             Ok(())
         }
         Intrinsic::FrameAddress => {

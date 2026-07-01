@@ -169,6 +169,23 @@ pub enum Intrinsic {
     /// codegen emits `fldcw m16` (x86_64 only). A no-op in the
     /// interpreter.
     X87LoadControlWord = 42,
+    /// `__atomic_thread_fence` / `__atomic_signal_fence` /
+    /// `__sync_synchronize` -- a full memory barrier (C11 7.17.4,
+    /// GCC `__sync`/`__atomic` builtins). Emits `dmb ish` (AArch64) /
+    /// `mfence` (x86_64); takes no argument and produces no value.
+    /// A no-op in the single-threaded interpreter.
+    AtomicThreadFence = 43,
+    /// `asm("cpuid" : "=a"(o0), "=b"(o1), "=c"(o2), "=d"(o3) : "a"(leaf),
+    /// "c"(sub))` -- x86 CPU identification. The six args are, in order,
+    /// the four output addresses (eax/ebx/ecx/edx destinations) then the
+    /// two input values (eax = leaf, ecx = subleaf). x86_64 only. The
+    /// interpreter zeroes the outputs (no host CPUID).
+    Cpuid = 44,
+    /// `asm("xgetbv" : "=a"(lo), "=d"(hi) : "c"(reg))` -- read an extended
+    /// control register. Three args: the low and high output addresses
+    /// (eax/edx destinations) then the input value (ecx = register index).
+    /// x86_64 only. The interpreter zeroes the outputs.
+    Xgetbv = 45,
 }
 
 impl Intrinsic {
@@ -216,6 +233,9 @@ impl Intrinsic {
             40 => Some(Intrinsic::AtomicCompareExchangeStrong),
             41 => Some(Intrinsic::X87StoreControlWord),
             42 => Some(Intrinsic::X87LoadControlWord),
+            43 => Some(Intrinsic::AtomicThreadFence),
+            44 => Some(Intrinsic::Cpuid),
+            45 => Some(Intrinsic::Xgetbv),
             _ => None,
         }
     }

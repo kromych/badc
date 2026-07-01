@@ -33,6 +33,27 @@
 // going to call.
 #define _MSC_VER 1900
 
+// Target-architecture macros MSVC predefines and the Windows SDK headers
+// gate on. <winnt.h> selects its per-arch register/context definitions from
+// the `_<ARCH>_` form and errors ("No Target Architecture") if none is set;
+// `_M_*` is the compiler-predefined spelling other headers read. Mapped from
+// badc's own gcc-style arch predefines so each target gets the right pair.
+#if defined(__x86_64__)
+#define _M_X64 100
+#define _M_AMD64 100
+#ifndef _AMD64_
+#define _AMD64_ 1
+#endif
+#elif defined(__aarch64__)
+#define _M_ARM64 1
+#ifndef _ARM64_
+#define _ARM64_ 1
+#endif
+#endif
+#ifndef _WIN64
+#define _WIN64 1
+#endif
+
 // Pretend to be MinGW alongside MSVC. The two are mostly mutually
 // exclusive in upstream code, but we want both #if branches to fire
 // favourably: sqlite gates the wmain() wrapper on `defined(_WIN32)
@@ -96,6 +117,26 @@
 #define __pragma(x)
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)
+
+// CRT header framing macros. <vcruntime.h> spells these `extern "C" {` / `}`
+// under C++ and empty under C; supply the C form up front so the SDK's
+// corecrt.h / vcruntime.h chain parses regardless of include order.
+#define _CRT_BEGIN_C_HEADER
+#define _CRT_END_C_HEADER
+
+// CRT import decorators. These expand to `__declspec(dllimport)` -- already
+// a no-op above -- but the SDK spells the import surface with per-library
+// aliases, so name them empty for the declarations that carry them.
+#define _ACRTIMP
+#define _ACRTIMP_ALT
+#define _DCRTIMP
+#define _VCRTIMP
+#define _MRTIMP
+#define _CRTIMP2
+#define _CRTIMP_ALT
+#define _CRTIMP_ALTERNATIVE
+#define _CRTIMP_PURE
+#define _CRTIMP_NOIA64
 
 // `#pragma comment(lib, "...")` is an MSVC linker directive.
 // badc resolves imports through `#pragma binding(...)` (emitted

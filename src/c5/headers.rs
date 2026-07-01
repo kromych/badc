@@ -143,6 +143,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/sys/param.h"),
     ),
     (
+        "sys/syslimits.h",
+        include_str!("../../headers/include/sys/syslimits.h"),
+    ),
+    (
         "copyfile.h",
         include_str!("../../headers/include/copyfile.h"),
     ),

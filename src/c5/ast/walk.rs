@@ -2370,10 +2370,72 @@ impl<'a> Walker<'a> {
                                 ext_arg_aggs[i] = Some(b.intern_agg_desc(desc));
                             }
                         }
+                        // System V AMD64 MEMORY class / Win64 oversize
+                        // (StructReturnAbi::OutPtr): the caller allocates the
+                        // result buffer and passes its address as the hidden
+                        // first integer argument; the callee writes through it
+                        // and returns it in rax. Prepend the out-pointer to the
+                        // argument vector and shift the FP-arg mask and the
+                        // aggregate descriptors one slot to follow it. AArch64
+                        // returns this size through x8 (StructReturnAbi::Indirect,
+                        // handled by the ret_agg path below).
+                        if is_struct_ty(*ty)
+                            && struct_ptr_depth(*ty) == 0
+                            && matches!(
+                                crate::c5::compiler::struct_return_abi(
+                                    self.structs,
+                                    self.target,
+                                    *ty
+                                ),
+                                crate::c5::compiler::StructReturnAbi::OutPtr
+                            )
+                        {
+                            let result_size = self.struct_size(*ty);
+                            let result_slot = b.alloc_synthetic_struct(result_size);
+                            // Spill the out-pointer through an int temp so the
+                            // codegen routes it via the host integer arg register.
+                            let addr = b.local_addr(result_slot);
+                            let temp = b.alloc_synthetic_local();
+                            b.store_local(temp, addr, super::super::ir::StoreKind::I64);
+                            let out_arg = b.load_local(temp, super::super::ir::LoadKind::I64);
+                            let mut shifted: alloc::vec::Vec<super::super::ir::ValueId> =
+                                alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
+                            shifted.push(out_arg);
+                            shifted.extend_from_slice(&arg_vals);
+                            let call = b.call_ext(*val, shifted, fp_arg_mask << 1, false);
+                            if !ext_arg_aggs.is_empty() {
+                                let mut s = alloc::vec![None; arg_vals.len() + 1];
+                                for (i, a) in ext_arg_aggs.iter().enumerate() {
+                                    s[i + 1] = *a;
+                                }
+                                b.set_call_arg_aggs(call, s);
+                            }
+                            return Ok(b.local_addr(result_slot));
+                        }
+                        // A by-value struct return follows the platform ABI:
+                        // reserve the result temp and tag the call's
+                        // `ret_agg` so the emitter gathers the return
+                        // registers (HFA in v0..vN, x0/x1 for a small
+                        // aggregate, x8 indirect for > 16 bytes). The Mcpy at
+                        // the use site copies from this temp's address.
+                        let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                        | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                            crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
+                        {
+                            let ridx = b.intern_agg_desc(desc.clone());
+                            let slot = b.alloc_synthetic_struct(desc.size as i64);
+                            Some((ridx, slot))
+                        } else {
+                            None
+                        };
                         let fp_return = is_floating_scalar(*ty);
                         let call = b.call_ext(*val, arg_vals, fp_arg_mask, fp_return);
                         if !ext_arg_aggs.is_empty() {
                             b.set_call_arg_aggs(call, ext_arg_aggs);
+                        }
+                        if let Some((ridx, slot)) = ret_temp {
+                            b.set_call_ret_agg(call, ridx, slot);
+                            return Ok(b.local_addr(slot));
                         }
                         if is_float_ty(*ty) {
                             return Ok(b.mark_f32(call));
@@ -3184,6 +3246,45 @@ impl<'a> Walker<'a> {
                 let exp_addr = self.walk_expr_rvalue(b, args[1])?;
                 let desired = self.walk_expr_rvalue(b, args[2])?;
                 Ok(b.atomic_cas(addr, exp_addr, desired, width))
+            }
+            AtomicKind::AddFetch
+            | AtomicKind::SubFetch
+            | AtomicKind::AndFetch
+            | AtomicKind::OrFetch
+            | AtomicKind::XorFetch => {
+                // GCC `__sync_*_and_fetch`: the read-modify-write yields the
+                // prior value; recompute the post-operation value in plain
+                // IR so a value with side effects is evaluated once.
+                let value = self.walk_expr_rvalue(b, args[1])?;
+                let (rmw, bin) = match kind {
+                    AtomicKind::AddFetch => (AtomicRmwOp::Add, BinOp::Add),
+                    AtomicKind::SubFetch => (AtomicRmwOp::Sub, BinOp::Sub),
+                    AtomicKind::AndFetch => (AtomicRmwOp::And, BinOp::And),
+                    AtomicKind::OrFetch => (AtomicRmwOp::Or, BinOp::Or),
+                    AtomicKind::XorFetch => (AtomicRmwOp::Xor, BinOp::Xor),
+                    _ => unreachable!(),
+                };
+                let old = b.atomic_rmw(rmw, addr, value, width);
+                let old = self.extend_atomic_result(b, old, elem_ty);
+                let new = b.binop(bin, old, value);
+                Ok(self.extend_atomic_result(b, new, elem_ty))
+            }
+            AtomicKind::SyncCasVal | AtomicKind::SyncCasBool => {
+                // GCC `__sync_val/bool_compare_and_swap(p, old, new)`. The
+                // existing CAS expects the comparand by address and writes
+                // the current `*p` back through it on failure, so after the
+                // CAS the scratch slot holds the prior `*p` in both cases.
+                let old_val = self.walk_expr_rvalue(b, args[1])?;
+                let new_val = self.walk_expr_rvalue(b, args[2])?;
+                let slot = b.alloc_synthetic_local();
+                let exp_addr = b.local_addr(slot);
+                b.store(exp_addr, old_val, store_kind);
+                let swapped = b.atomic_cas(addr, exp_addr, new_val, width);
+                if matches!(kind, AtomicKind::SyncCasBool) {
+                    Ok(swapped)
+                } else {
+                    Ok(b.load(exp_addr, load_kind))
+                }
             }
         }
     }

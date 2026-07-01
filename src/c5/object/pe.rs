@@ -2174,20 +2174,13 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
 // Entry stub.
 //
 // `AddressOfEntryPoint` is the no-argument entry the loader calls;
-// the stub bridges that to the C signature the source declared.
-// The shape is selected by the PE optional-header `Subsystem`:
-//
-//   Console (`IMAGE_SUBSYSTEM_WINDOWS_CUI`, default): call
-//   `__getmainargs` to populate argc/argv, then call the entry
-//   with `(argc, argv)`, then call `exit`. Entry signature
-//   `int main(int argc, char **argv)`.
-//
-//   GUI (`IMAGE_SUBSYSTEM_WINDOWS_GUI`, `#pragma
-//   subsystem(windows)`): call `GetModuleHandleA(NULL)` and
-//   `GetCommandLineA()`, load `SW_SHOWNORMAL` into the 4th-arg
-//   register, then call the entry with `(hInst, NULL, lpCmdLine,
-//   nShowCmd)`, then call `exit`. Entry signature
-//   `int WinMain(HINSTANCE, HINSTANCE, LPSTR, int)`.
+// the uniform stub bridges it to `__c5_entry`, which calls the user's
+// entry with the shape its symbol dictates (not the PE subsystem):
+// `main` / `wmain` take `(argc, argv)` via `__getmainargs` /
+// `__wgetmainargs`; `WinMain` / `wWinMain` take `(hInstance, NULL,
+// lpCmdLine, SW_SHOWNORMAL)` via `GetModuleHandleA` + `GetCommandLineA`
+// / `GetCommandLineW`. A GUI-subsystem image can therefore enter at a
+// plain `main` and still receive argc/argv.
 //
 // Instruction selection differs per architecture; the call shape is
 // uniform. Every CRT / kernel32 entry the stub needs is reached
@@ -2245,9 +2238,10 @@ fn build_entry_stub(machine: Machine, is_dll: bool) -> EntryStub {
     if is_dll {
         return build_dllmain_stub(machine);
     }
-    // The console / GUI / wide distinction lives in `__c5_entry` (gated
-    // by `__BADC_WIN_GUI__` / `__BADC_WIN_WIDE__` in the runtime TU), so
-    // the adapter is uniform across subsystems.
+    // The main / wmain / WinMain / wWinMain distinction lives in
+    // `__c5_entry` (gated by `__BADC_WIN_WINMAIN__` / `__BADC_WIN_WIDE__`
+    // in the runtime TU, following the entry symbol), so the adapter is
+    // uniform across subsystems.
     build_entry_adapter(machine)
 }
 

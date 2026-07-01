@@ -435,6 +435,20 @@ impl Preprocessor {
         macros.insert("__STDC__".to_string(), "1".to_string());
         macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
         macros.insert("__STDC_VERSION__".to_string(), "201112L".to_string());
+        // Memory-order arguments to the __atomic_* builtins. badc always
+        // emits sequential consistency, so the value only has to satisfy
+        // the source's `#if`/comparison uses; the canonical GCC encoding
+        // (relaxed=0 .. seq_cst=5) keeps those exact.
+        for (name, val) in [
+            ("__ATOMIC_RELAXED", "0"),
+            ("__ATOMIC_CONSUME", "1"),
+            ("__ATOMIC_ACQUIRE", "2"),
+            ("__ATOMIC_RELEASE", "3"),
+            ("__ATOMIC_ACQ_REL", "4"),
+            ("__ATOMIC_SEQ_CST", "5"),
+        ] {
+            macros.insert(name.to_string(), val.to_string());
+        }
         // `__GNUC__` and the rest of the GCC identity are opt-in
         // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
         // extensions real code gates on `__GNUC__`, but not all of them
@@ -1014,6 +1028,17 @@ impl Preprocessor {
                             // when the amalgamator started gluing
                             // multiple translation units together
                             // via `#line` markers.
+                            out.push_str(&format_line_marker(source_line + 1, &current_file));
+                            source_line += 1;
+                            idx_iter += 1;
+                            continue;
+                        }
+                    }
+                    Directive::IncludeNext { name, quoted } => {
+                        if active {
+                            let included =
+                                self.process_include_next(name, line_no, filename, quoted)?;
+                            out.push_str(&included);
                             out.push_str(&format_line_marker(source_line + 1, &current_file));
                             source_line += 1;
                             idx_iter += 1;
@@ -1981,10 +2006,16 @@ impl Preprocessor {
         if args.trim() == "warn" {
             return self.parse_pragma_warn("", line_no, filename);
         }
-        // `pack` and `once` are consumed elsewhere; everything
-        // else falls through to the unknown-pragma warning below.
+        // `pack` and `once` are consumed elsewhere. The `GCC` / `clang`
+        // vendor pragmas (diagnostic selection, `optimize`, `target`,
+        // `push_options`, `loop`, ...) and the C99 6.10.6 `STDC` pragmas
+        // (FP_CONTRACT, FENV_ACCESS, CX_LIMITED_RANGE) are compiler hints
+        // / evaluation modes c5 does not act on. Accept them silently
+        // rather than warning on every occurrence; everything else falls
+        // through to the unknown-pragma warning.
         let directive = args.split('(').next().unwrap_or(args).trim();
-        if matches!(directive, "pack" | "once") {
+        let head = directive.split_whitespace().next().unwrap_or("");
+        if matches!(head, "pack" | "once" | "STDC" | "GCC" | "clang") {
             return Ok(());
         }
         self.warnings.push(super::error::fmt_compile_warn(
@@ -2259,34 +2290,9 @@ impl Preprocessor {
     /// whose spellings collide with c5 keywords don't trip
     /// the identifier parser; the body uses `is_ident` to
     /// stay strict.
-    fn parse_pragma_intrinsic(
-        &mut self,
-        inner: &str,
-        line_no: usize,
-        filename: &str,
-    ) -> Result<(), C5Error> {
-        let raw = inner.trim();
-        let name = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"'));
-        let Some(name) = name else {
-            return Err(C5Error::Compile(super::error::fmt_compile_err(
-                filename,
-                line_no,
-                &format!(
-                    "`#pragma intrinsic({raw})` -- expected a quoted \
-                     identifier, e.g. `#pragma intrinsic(\"alloca\")`"
-                ),
-            )));
-        };
-        if !is_ident(name) {
-            return Err(C5Error::Compile(super::error::fmt_compile_err(
-                filename,
-                line_no,
-                &format!(
-                    "`#pragma intrinsic(\"{name}\")` -- name must be a \
-                     plain identifier"
-                ),
-            )));
-        }
+    /// Map an intrinsic name to its [`Intrinsic`] discriminant, or `None`
+    /// when the name is not one c5 lowers specially.
+    fn intrinsic_id(name: &str) -> Option<i64> {
         let id = match name {
             "alloca" | "__builtin_alloca" => super::op::Intrinsic::Alloca as i64,
             // C11 7.17 atomic generic operations. Lowered at the call
@@ -2322,23 +2328,67 @@ impl Preprocessor {
             "trunc" => super::op::Intrinsic::Trunc as i64,
             "truncf" => super::op::Intrinsic::Truncf as i64,
             "__builtin_trap" => super::op::Intrinsic::Trap as i64,
-            _ => {
+            _ => return None,
+        };
+        Some(id)
+    }
+
+    fn parse_pragma_intrinsic(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        // Two forms share this pragma. The quoted single-name form is c5's
+        // own registration and stays strict so an unknown name is a typo,
+        // not a silent no-op. MSVC's `#pragma intrinsic(name, name, ...)`
+        // names bare identifiers as an inlining hint; c5 registers the ones
+        // it lowers specially and, like MSVC's C4163, ignores the rest so
+        // MSVC-shaped headers (winnt.h's `#pragma intrinsic(_rotl8)`) parse.
+        for item in inner.split(',') {
+            let item = item.trim();
+            if item.is_empty() {
+                continue;
+            }
+            if let Some(name) = item.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+                if !is_ident(name) {
+                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                        filename,
+                        line_no,
+                        &format!(
+                            "`#pragma intrinsic(\"{name}\")` -- name must be a \
+                             plain identifier"
+                        ),
+                    )));
+                }
+                let Some(id) = Self::intrinsic_id(name) else {
+                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                        filename,
+                        line_no,
+                        &format!(
+                            "`#pragma intrinsic(\"{name}\")` -- unknown \
+                             intrinsic; supported today: alloca, \
+                             __builtin_alloca, __c5_aarch64_setjmp, \
+                             __c5_aarch64_longjmp, __builtin_va_start, \
+                             __builtin_va_arg, __builtin_va_end, \
+                             __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
+                             fabs, fabsf, and the C11 atomic_* operations"
+                        ),
+                    )));
+                };
+                self.intrinsics.insert(name.to_string(), id);
+            } else if is_ident(item) {
+                if let Some(id) = Self::intrinsic_id(item) {
+                    self.intrinsics.insert(item.to_string(), id);
+                }
+            } else {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,
                     line_no,
-                    &format!(
-                        "`#pragma intrinsic(\"{name}\")` -- unknown \
-                         intrinsic; supported today: alloca, \
-                         __builtin_alloca, __c5_aarch64_setjmp, \
-                         __c5_aarch64_longjmp, __builtin_va_start, \
-                         __builtin_va_arg, __builtin_va_end, \
-                         __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
-                         fabs, fabsf, and the C11 atomic_* operations"
-                    ),
+                    &format!("`#pragma intrinsic({item})` -- expected an identifier"),
                 )));
             }
-        };
-        self.intrinsics.insert(name.to_string(), id);
+        }
         Ok(())
     }
 
@@ -2562,6 +2612,35 @@ impl Preprocessor {
         // as the new file's name so a nested quoted include resolves
         // against the right directory.
         let resolved: Option<(String, String)> = self.find_include(name, source_dir.as_deref());
+        self.finish_include(resolved, name, line_no, filename)
+    }
+
+    /// `#include_next <header>` (C/GCC extension): resolve `name` from the
+    /// search path entry *after* the one that supplied the file holding
+    /// the directive, so a shim header that shadows a system header can
+    /// pull in the shadowed one. The current file's directory is matched
+    /// against the search paths to find the resume point.
+    fn process_include_next(
+        &mut self,
+        name: &str,
+        line_no: usize,
+        filename: &str,
+        _quoted: bool,
+    ) -> Result<String, C5Error> {
+        let resolved = self.find_include_next(name, filename);
+        self.finish_include(resolved, name, line_no, filename)
+    }
+
+    /// Shared tail of `process_include` / `process_include_next`: warn on a
+    /// miss, honour `#pragma once`, bound the include depth, and process
+    /// the resolved body.
+    fn finish_include(
+        &mut self,
+        resolved: Option<(String, String)>,
+        name: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<String, C5Error> {
         let Some((content, resolved_path)) = resolved else {
             // Missing header. Push a warning into the same list
             // the parser uses; the caller drains it through to
@@ -2651,6 +2730,56 @@ impl Preprocessor {
             }
         }
         let _ = source_dir;
+        embedded_header(name).map(|s| (s.to_string(), name.to_string()))
+    }
+
+    /// Resolve `name` for `#include_next`: skip search-path entries up to
+    /// and including the one whose directory holds `current_file`, then
+    /// probe the remaining paths and finally the embedded registry. When
+    /// the directive's file came from the embedded registry (no filesystem
+    /// directory), there is nothing after it, so resolution yields none.
+    fn find_include_next(&self, name: &str, current_file: &str) -> Option<(String, String)> {
+        #[cfg(feature = "std")]
+        {
+            // Skip the search-path entries up to and including the one whose
+            // directory holds the current file.
+            let cur_dir = include_parent_dir(current_file);
+            let mut start = 0usize;
+            if let Some(ref cd) = cur_dir {
+                for (i, path) in self.search_paths.iter().enumerate() {
+                    if path_dirs_equal(path, cd) {
+                        start = i + 1;
+                        break;
+                    }
+                }
+            }
+            let join = |dir: &str| -> String {
+                if dir.is_empty() {
+                    name.to_string()
+                } else if dir.ends_with('/') || dir.ends_with('\\') {
+                    format!("{dir}{name}")
+                } else {
+                    format!("{dir}/{name}")
+                }
+            };
+            for path in self.search_paths.iter().skip(start) {
+                // A later entry that aliases the current header's own
+                // directory (e.g. a relative overlay duplicating an
+                // absolute `-I`, or a symlink) would re-resolve this same
+                // file rather than the next one; skip it.
+                if cur_dir
+                    .as_deref()
+                    .is_some_and(|cd| path_dirs_equal(path, cd))
+                {
+                    continue;
+                }
+                let candidate = join(path);
+                if let Ok(body) = std::fs::read_to_string(&candidate) {
+                    return Some((body, candidate));
+                }
+            }
+        }
+        let _ = current_file;
         embedded_header(name).map(|s| (s.to_string(), name.to_string()))
     }
 
@@ -3248,6 +3377,13 @@ enum Directive<'a> {
         name: &'a str,
         quoted: bool,
     },
+    /// `#include_next <header>` -- resume the header search from the
+    /// entry after the one that supplied the current file, so a shim
+    /// header can augment and forward to the next same-named header.
+    IncludeNext {
+        name: &'a str,
+        quoted: bool,
+    },
     /// `#line N` or `#line N "file"` (C99 6.10.4). The filename
     /// is optional -- bare `#line N` keeps the current file and
     /// just retargets the line counter.
@@ -3454,6 +3590,24 @@ fn parse_directive(rest: &str) -> Directive<'_> {
             return Directive::LineMacro(trimmed);
         }
     }
+    // `include_next` must be tested before `include`: the latter is a
+    // prefix of the former, so the `include` branch would otherwise treat
+    // `_next <...>` as a macro-form operand.
+    if let Some(after) = rest.strip_prefix("include_next") {
+        let trimmed = after.trim();
+        if let Some(name) = trimmed.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
+            return Directive::IncludeNext {
+                name: name.trim(),
+                quoted: false,
+            };
+        }
+        if let Some(name) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+            return Directive::IncludeNext {
+                name: name.trim(),
+                quoted: true,
+            };
+        }
+    }
     if let Some(after) = rest.strip_prefix("include") {
         let trimmed = after.trim();
         // Strip the `<...>` or `"..."` wrapping when the operand
@@ -3527,6 +3681,19 @@ fn include_parent_dir(filename: &str) -> Option<alloc::string::String> {
     match filename.rfind(['/', '\\']) {
         Some(cut) => Some(filename[..cut].to_string()),
         None => Some(alloc::string::String::new()),
+    }
+}
+
+/// Whether two directory paths name the same directory. Canonicalizes
+/// both when possible (so `a/b` and `./a/b` and an absolute spelling
+/// compare equal); falls back to a trailing-slash-insensitive string
+/// compare when a path cannot be resolved. Used by `#include_next` to
+/// locate the search-path entry that supplied the current file.
+#[cfg(feature = "std")]
+fn path_dirs_equal(a: &str, b: &str) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(pa), Ok(pb)) => pa == pb,
+        _ => a.trim_end_matches(['/', '\\']) == b.trim_end_matches(['/', '\\']),
     }
 }
 
@@ -4590,6 +4757,67 @@ mod tests {
     }
 
     #[test]
+    fn vendor_and_stdc_pragmas_are_silent() {
+        // GCC/clang vendor pragmas and the C99 6.10.6 STDC pragmas carry
+        // no directive c5 acts on, so they must not warn.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.process(
+            "#pragma GCC diagnostic push\n\
+             #pragma GCC diagnostic ignored \"-Wunused\"\n\
+             #pragma GCC diagnostic pop\n\
+             #pragma GCC optimize(\"O2\")\n\
+             #pragma clang loop unroll(disable)\n\
+             #pragma STDC FP_CONTRACT OFF\n\
+             int x;\n",
+        )
+        .expect("preprocessor failed");
+        assert!(
+            pp.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            pp.warnings
+        );
+
+        // An unrecognised pragma still surfaces a warning.
+        let mut pp2 = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp2.process("#pragma frobnicate widgets\nint y;\n")
+            .expect("preprocessor failed");
+        assert!(!pp2.warnings.is_empty(), "unknown pragma should warn");
+    }
+
+    #[test]
+    fn pragma_intrinsic_bare_and_quoted_forms() {
+        // MSVC's `#pragma intrinsic(name, name, ...)` names bare identifiers
+        // as an inlining hint; c5 registers the ones it lowers specially and
+        // ignores the rest (like MSVC's C4163) so MSVC-shaped SDK headers
+        // parse. The quoted single-name form stays strict.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.process("#pragma intrinsic(alloca, _rotl8, __ll_lshift)\nint x;\n")
+            .expect("bare intrinsic list must parse");
+        assert!(
+            pp.intrinsics.contains_key("alloca"),
+            "known bare intrinsic registers"
+        );
+        assert!(
+            !pp.intrinsics.contains_key("_rotl8"),
+            "unknown bare intrinsic is ignored, not registered"
+        );
+
+        let mut pq = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pq.process("#pragma intrinsic(\"alloca\")\nint x;\n")
+            .expect("quoted known intrinsic must parse");
+        assert!(pq.intrinsics.contains_key("alloca"));
+
+        // The quoted form stays strict: an unknown name is a typo, not a
+        // silent no-op.
+        let mut pr = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        assert!(
+            pr.process("#pragma intrinsic(\"bogus\")\nint x;\n")
+                .is_err(),
+            "quoted unknown intrinsic must error"
+        );
+    }
+
+    #[test]
     fn self_referential_function_macro_in_nested_arg() {
         // C99 6.10.3.4: a self-referential function-like macro
         // (`#define M(x) M(inner(x))`) expands once and the recurring `M`
@@ -5396,6 +5624,76 @@ int x_2 = __COUNTER__;
         assert_eq!(
             super::include_parent_dir("/abs/dir/src.c"),
             Some("/abs/dir".to_string())
+        );
+    }
+
+    #[test]
+    fn include_next_resumes_after_the_current_files_search_path() {
+        // Two search paths each hold a `foo.h`. The first is a shim that
+        // declares a symbol and forwards via `#include_next <foo.h>`; the
+        // forward must resolve the second path's copy, not re-read itself.
+        let base = std::env::temp_dir().join(format!("badc-incnext-{}", std::process::id()));
+        let d1 = base.join("d1");
+        let d2 = base.join("d2");
+        std::fs::create_dir_all(&d1).unwrap();
+        std::fs::create_dir_all(&d2).unwrap();
+        std::fs::write(
+            d1.join("foo.h"),
+            "int from_shim(void);\n#include_next <foo.h>\n",
+        )
+        .unwrap();
+        std::fs::write(d2.join("foo.h"), "int from_system(void);\n").unwrap();
+
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(d1.to_str().unwrap());
+        pp.add_search_path(d2.to_str().unwrap());
+        let out = pp.process("#include <foo.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+
+        assert!(
+            out.contains("from_shim") && out.contains("from_system"),
+            "include_next must reach the next foo.h; got: {out}"
+        );
+        assert!(
+            pp.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            pp.warnings
+        );
+    }
+
+    #[test]
+    fn include_next_skips_a_later_path_aliasing_the_current_dir() {
+        // The shim directory is on the search path twice under different
+        // strings (an explicit entry and an aliased duplicate, as the
+        // relative `./include` overlay duplicates an absolute `-I` when badc
+        // runs from a directory that has an `include/`). `#include_next` must
+        // recognize the alias and not re-resolve the guarded shim through it,
+        // which would yield an empty body and drop the next header.
+        let base = std::env::temp_dir().join(format!("badc-incnext-alias-{}", std::process::id()));
+        let d1 = base.join("d1");
+        let d2 = base.join("d2");
+        std::fs::create_dir_all(&d1).unwrap();
+        std::fs::create_dir_all(&d2).unwrap();
+        std::fs::write(
+            d1.join("foo.h"),
+            "#ifndef FOO_SHIM\n#define FOO_SHIM\nint from_shim(void);\n\
+             #include_next <foo.h>\n#endif\n",
+        )
+        .unwrap();
+        std::fs::write(d2.join("foo.h"), "int from_system(void);\n").unwrap();
+
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(d1.to_str().unwrap());
+        // Aliased duplicate of d1, ordered before d2: a canonical match must
+        // skip it so the forward reaches d2 rather than the guarded shim.
+        pp.add_search_path(&format!("{}/.", d1.to_str().unwrap()));
+        pp.add_search_path(d2.to_str().unwrap());
+        let out = pp.process("#include <foo.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+
+        assert!(
+            out.contains("from_shim") && out.contains("from_system"),
+            "include_next must skip the aliased dir and reach the next foo.h; got: {out}"
         );
     }
 }

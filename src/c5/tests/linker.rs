@@ -1177,6 +1177,46 @@ fn win64_dll_without_imports_leaves_import_and_iat_dirs_empty() {
 }
 
 #[test]
+fn windows_hypotf_imports_underscored_ucrtbase_export() {
+    // ucrtbase.dll exports the float hypot only under the legacy
+    // underscored `_hypotf`; the C99 `hypotf` spelling is a header inline
+    // there, with no exported symbol. Binding the call to the bare
+    // `hypotf` leaves an unresolved import that fails the Windows loader
+    // at process start (STATUS_ENTRYPOINT_NOT_FOUND, 0xc0000139). The
+    // import-name string in the PE must therefore be `_hypotf` on both
+    // Windows targets.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "#include <math.h>\n\
+               #pragma export(use_hypotf)\n\
+               float use_hypotf(float a, float b) { return hypotf(a, b); }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile hypotf TU");
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            },
+        )
+        .expect("emit object");
+        // The import symbol is the null-delimited `_hypotf`; matching the
+        // bare substring would also hit the `use_hypotf` definition.
+        let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+        assert!(
+            contains(b"\0_hypotf\0"),
+            "{target:?}: the float hypot call must bind to the exported `_hypotf`"
+        );
+        assert!(
+            !contains(b"\0hypotf\0"),
+            "{target:?}: the unexported bare `hypotf` must not be imported"
+        );
+    }
+}
+
+#[test]
 fn wdm_driver_demo_builds_as_native_subsystem_pe() {
     // The WDM driver skeleton carries `#pragma subsystem(driver)`
     // (an alias for the native subsystem) and `#pragma
@@ -1386,5 +1426,132 @@ fn wrapping_section_size_is_diagnostic_not_panic() {
     assert!(
         parse_native_elf(&bytes).is_err(),
         "a wrapping sh_offset + sh_size must be a diagnostic, not a panic"
+    );
+}
+
+#[test]
+fn inline_linkage_follows_c99_6_7_4p7() {
+    // C99 6.7.4p7: a function all of whose file-scope declarations are
+    // `inline` without `extern` provides no external definition in the
+    // unit -- its out-of-line copy must be local so the same inline
+    // function compiled into another unit does not collide at link time.
+    // A single non-inline declaration (a prototype) or `extern inline`
+    // makes the definition external, so a unit that only references the
+    // function resolves against it.
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STB_LOCAL: u8 = 0;
+    const STB_GLOBAL: u8 = 1;
+
+    fn binding_of(src: &str, name: &str) -> u8 {
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let sym = obj
+            .symbols
+            .iter()
+            .find(|s| s.name == name && !matches!(s.section, NativeSymSection::Undef))
+            .unwrap_or_else(|| panic!("`{name}` must be a defined symbol"));
+        sym.binding
+    }
+
+    // Plain `inline`, no other declaration: internal linkage (local).
+    assert_eq!(
+        binding_of(
+            "inline int f(int x) { return x + 1; }\n\
+             int main(void) { return f(41) == 42 ? 0 : 1; }\n",
+            "f",
+        ),
+        STB_LOCAL,
+        "plain inline-only definition must be local"
+    );
+    // A non-inline prototype precedes the inline definition: external.
+    assert_eq!(
+        binding_of(
+            "int g(int);\n\
+             inline int g(int x) { return x + 1; }\n\
+             int main(void) { return g(41) == 42 ? 0 : 1; }\n",
+            "g",
+        ),
+        STB_GLOBAL,
+        "a non-inline declaration makes the inline definition external"
+    );
+    // `extern inline` provides the one external definition.
+    assert_eq!(
+        binding_of(
+            "extern inline int h(int x) { return x + 1; }\n\
+             int main(void) { return h(41) == 42 ? 0 : 1; }\n",
+            "h",
+        ),
+        STB_GLOBAL,
+        "extern inline must be external"
+    );
+    // `static inline` is internal.
+    assert_eq!(
+        binding_of(
+            "static inline int s(int x) { return x + 1; }\n\
+             int main(void) { return s(41) == 42 ? 0 : 1; }\n",
+            "s",
+        ),
+        STB_LOCAL,
+        "static inline must be local"
+    );
+    // An inline prototype (no body) must not mark the following,
+    // unrelated definition inline: `pb` is a plain external function.
+    assert_eq!(
+        binding_of(
+            "inline int pa(int);\n\
+             int pb(int x) { return x + 1; }\n\
+             int main(void) { return pb(41) == 42 ? 0 : 1; }\n",
+            "pb",
+        ),
+        STB_GLOBAL,
+        "an inline prototype must not leak `inline` onto the next definition"
+    );
+}
+
+#[test]
+fn cpuid_xgetbv_asm_emit_for_x86_64() {
+    // The GCC `cpuid` / `xgetbv` inline-asm forms (miniaudio's CPU feature
+    // probe) lower to dedicated intrinsics on x86_64: the `cpuid` (0F A2)
+    // and `xgetbv` (0F 01 D0) opcodes appear, bracketed by a save of the
+    // fixed registers they clobber (push rbx = 0x53, ebx being callee-saved).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(
+        "static void cpuid(unsigned f, unsigned s, unsigned o[4]) {\n\
+         __asm__ __volatile__(\"cpuid\" : \"=a\"(o[0]),\"=b\"(o[1]),\"=c\"(o[2]),\"=d\"(o[3]) : \"a\"(f),\"c\"(s));\n\
+         }\n\
+         static unsigned long long xgetbv(unsigned r) {\n\
+         unsigned lo, hi;\n\
+         __asm__ __volatile__(\"xgetbv\" : \"=a\"(lo),\"=d\"(hi) : \"c\"(r));\n\
+         return ((unsigned long long)hi << 32) | lo;\n\
+         }\n\
+         unsigned long long use_both(unsigned o[4]) { cpuid(1,0,o); return xgetbv(0); }\n\
+         int main(void){ unsigned o[4]; return (int)use_both(o); }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(2).any(|w| w == [0x0F, 0xA2]),
+        "cpuid opcode (0F A2) must be emitted"
+    );
+    assert!(
+        bytes.windows(3).any(|w| w == [0x0F, 0x01, 0xD0]),
+        "xgetbv opcode (0F 01 D0) must be emitted"
+    );
+    assert!(
+        bytes.contains(&0x53),
+        "push rbx (callee-saved, clobbered by cpuid) must be saved"
     );
 }

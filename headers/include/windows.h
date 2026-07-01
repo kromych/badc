@@ -2357,6 +2357,23 @@ struct tagMONITORINFO {
 typedef struct tagMONITORINFO MONITORINFO;
 typedef struct tagMONITORINFO *LPMONITORINFO;
 
+#define CCHDEVICENAME 32
+typedef struct tagMONITORINFOEXW {
+    DWORD cbSize;
+    RECT  rcMonitor;
+    RECT  rcWork;
+    DWORD dwFlags;
+    WCHAR szDevice[CCHDEVICENAME];
+} MONITORINFOEXW, *LPMONITORINFOEXW;
+typedef struct tagMONITORINFOEXA {
+    DWORD cbSize;
+    RECT  rcMonitor;
+    RECT  rcWork;
+    DWORD dwFlags;
+    char  szDevice[CCHDEVICENAME];
+} MONITORINFOEXA, *LPMONITORINFOEXA;
+#define MONITORINFOEX MONITORINFOEXW
+
 struct _DISPLAY_DEVICEA {
     DWORD cb;
     CHAR  DeviceName[32];
@@ -2676,6 +2693,107 @@ typedef struct {
 #ifndef PFD_STEREO
 #define PFD_STEREO 0x00000002
 #endif
+#ifndef HTCLIENT
+#define HTCLIENT 1
+#endif
+#ifndef HTCAPTION
+#define HTCAPTION 2
+#endif
+#ifndef UNICODE_NOCHAR
+#define UNICODE_NOCHAR 0xFFFF
+#endif
+#ifndef MOUSE_MOVE_ABSOLUTE
+#define MOUSE_MOVE_RELATIVE 0
+#define MOUSE_MOVE_ABSOLUTE 0x01
+#define MOUSE_VIRTUAL_DESKTOP 0x02
+#endif
+#ifndef XBUTTON1
+#define XBUTTON1 0x0001
+#define XBUTTON2 0x0002
+#endif
+#ifndef GET_X_LPARAM
+#define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
+#define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
+#define GET_XBUTTON_WPARAM(wp) (HIWORD(wp))
+#endif
+#ifndef BI_RGB
+#define BI_RGB 0
+#endif
+#ifndef HORZSIZE
+#define HORZSIZE 4
+#define VERTSIZE 6
+#endif
+#ifndef ICON_SMALL
+#define ICON_SMALL 0
+#define ICON_BIG 1
+#endif
+#ifndef SRCCOPY
+#define SRCCOPY 0x00CC0020
+#endif
+#ifndef WMSZ_LEFT
+#define WMSZ_LEFT 1
+#define WMSZ_RIGHT 2
+#define WMSZ_TOP 3
+#define WMSZ_TOPLEFT 4
+#define WMSZ_TOPRIGHT 5
+#define WMSZ_BOTTOM 6
+#define WMSZ_BOTTOMLEFT 7
+#define WMSZ_BOTTOMRIGHT 8
+#endif
+#ifndef IMAGE_ICON
+#define IMAGE_ICON 1
+#endif
+#ifndef LR_DEFAULTSIZE
+#define LR_DEFAULTSIZE 0x00000040
+#endif
+#ifndef LR_SHARED
+#define LR_SHARED 0x00008000
+#endif
+#ifndef IDI_APPLICATION
+#define IDI_APPLICATION ((LPCSTR)(ULONG_PTR)32512)
+#endif
+#ifndef MONITORINFOF_PRIMARY
+#define MONITORINFOF_PRIMARY 0x00000001
+#endif
+#ifndef ENUM_CURRENT_SETTINGS
+#define ENUM_CURRENT_SETTINGS ((DWORD)-1)
+#endif
+#ifndef DISPLAY_DEVICE_ACTIVE
+#define DISPLAY_DEVICE_ACTIVE 0x00000001
+#endif
+#ifndef DISP_CHANGE_SUCCESSFUL
+#define DISP_CHANGE_SUCCESSFUL 0
+#endif
+#ifndef CDS_UPDATEREGISTRY
+#define CDS_UPDATEREGISTRY 0x00000001
+#endif
+#ifndef CDS_TEST
+#define CDS_TEST 0x00000002
+#endif
+#ifndef DM_BITSPERPEL
+#define DM_BITSPERPEL 0x00040000
+#endif
+#ifndef DM_PELSWIDTH
+#define DM_PELSWIDTH 0x00080000
+#endif
+#ifndef DM_PELSHEIGHT
+#define DM_PELSHEIGHT 0x00100000
+#endif
+#ifndef DM_DISPLAYFREQUENCY
+#define DM_DISPLAYFREQUENCY 0x00400000
+#endif
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#ifndef FLASHW_STOP
+#define FLASHW_STOP 0
+#endif
+#ifndef FLASHW_TRAY
+#define FLASHW_TRAY 0x00000002
+#endif
+#ifndef FLASHW_TIMERNOFG
+#define FLASHW_TIMERNOFG 0x0000000C
+#endif
 
 // Virtual-key codes (winuser.h).
 #ifndef VK_RETURN
@@ -2857,6 +2975,9 @@ typedef struct {
 #define OCR_SIZEALL     32646
 #define OCR_NO          32648
 #define OCR_HAND        32649
+#define OCR_WAIT        32514
+#define OCR_UP          32516
+#define OCR_APPSTARTING 32650
 #define QS_ALLINPUT     0x04FF
 #define CF_UNICODETEXT  13
 #define CF_DIB          8
@@ -2908,6 +3029,18 @@ HWND CreateWindowExW(DWORD dwExStyle, const WCHAR *lpClassName,
                      HINSTANCE hInstance, LPVOID lpParam);
 ATOM    RegisterClassW(const WNDCLASSW *lpWndClass);
 LRESULT DefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+#ifndef SendMessage
+#define SendMessage SendMessageW
+#endif
+#ifndef PostMessage
+#define PostMessage PostMessageW
+#endif
+#ifndef GetWindowLongPtr
+#define GetWindowLongPtr GetWindowLongPtrW
+#endif
+#ifndef LoadIcon
+#define LoadIcon LoadIconA
+#endif
 HANDLE  GetPropW(HWND hWnd, const WCHAR *lpString);
 BOOL    SetPropW(HWND hWnd, const WCHAR *lpString, HANDLE hData);
 HANDLE  RemovePropW(HWND hWnd, const WCHAR *lpString);
@@ -2917,6 +3050,130 @@ HANDLE  RemovePropW(HWND hWnd, const WCHAR *lpString);
 #define RRF_RT_REG_DWORD 0x00000010
 LONG RegGetValueW(HKEY hkey, const WCHAR *lpSubKey, const WCHAR *lpValue,
                   DWORD dwFlags, LPDWORD pdwType, void *pvData, LPDWORD pcbData);
+
+// Display / paint / timer surface RGFW's win32 backend reads.
+typedef BYTE *PBYTE;
+typedef void (CALLBACK *TIMERPROC)(HWND, UINT, UINT_PTR, DWORD);
+typedef enum MONITOR_DPI_TYPE {
+    MDT_EFFECTIVE_DPI = 0,
+    MDT_ANGULAR_DPI = 1,
+    MDT_RAW_DPI = 2,
+    MDT_DEFAULT = 0
+} MONITOR_DPI_TYPE;
+
+typedef struct tagPOINTL { LONG x; LONG y; } POINTL;
+
+typedef struct _devicemodeW {
+    WCHAR dmDeviceName[32];
+    WORD  dmSpecVersion;
+    WORD  dmDriverVersion;
+    WORD  dmSize;
+    WORD  dmDriverExtra;
+    DWORD dmFields;
+    union {
+        struct {
+            short dmOrientation;
+            short dmPaperSize;
+            short dmPaperLength;
+            short dmPaperWidth;
+            short dmScale;
+            short dmCopies;
+            short dmDefaultSource;
+            short dmPrintQuality;
+        };
+        struct {
+            POINTL dmPosition;
+            DWORD  dmDisplayOrientation;
+            DWORD  dmDisplayFixedOutput;
+        };
+    };
+    short dmColor;
+    short dmDuplex;
+    short dmYResolution;
+    short dmTTOption;
+    short dmCollate;
+    WCHAR dmFormName[32];
+    WORD  dmLogPixels;
+    DWORD dmBitsPerPel;
+    DWORD dmPelsWidth;
+    DWORD dmPelsHeight;
+    union {
+        DWORD dmDisplayFlags;
+        DWORD dmNup;
+    };
+    DWORD dmDisplayFrequency;
+    DWORD dmICMMethod;
+    DWORD dmICMIntent;
+    DWORD dmMediaType;
+    DWORD dmDitherType;
+    DWORD dmReserved1;
+    DWORD dmReserved2;
+    DWORD dmPanningWidth;
+    DWORD dmPanningHeight;
+} DEVMODEW, *PDEVMODEW, *LPDEVMODEW;
+
+typedef struct _DISPLAY_DEVICEW {
+    DWORD cb;
+    WCHAR DeviceName[32];
+    WCHAR DeviceString[128];
+    DWORD StateFlags;
+    WCHAR DeviceID[128];
+    WCHAR DeviceKey[128];
+} DISPLAY_DEVICEW, *PDISPLAY_DEVICEW;
+
+typedef struct tagPAINTSTRUCT {
+    HDC  hdc;
+    BOOL fErase;
+    RECT rcPaint;
+    BOOL fRestore;
+    BOOL fIncUpdate;
+    BYTE rgbReserved[32];
+} PAINTSTRUCT, *LPPAINTSTRUCT;
+
+typedef struct tagFLASHWINFO {
+    UINT  cbSize;
+    HWND  hwnd;
+    DWORD dwFlags;
+    UINT  uCount;
+    DWORD dwTimeout;
+} FLASHWINFO, *PFLASHWINFO;
+
+BOOL     GetKeyboardState(PBYTE lpKeyState);
+HKL      GetKeyboardLayout(DWORD idThread);
+UINT     MapVirtualKeyW(UINT uCode, UINT uMapType);
+int      ToUnicodeEx(UINT wVirtKey, UINT wScanCode, const BYTE *lpKeyState,
+                     LPWSTR pwszBuff, int cchBuff, UINT wFlags, HKL dwhkl);
+LONG     ChangeDisplaySettingsExW(const WCHAR *lpszDeviceName, DEVMODEW *lpDevMode,
+                                  HWND hwnd, DWORD dwflags, LPVOID lParam);
+BOOL     EnumDisplayDevicesW(const WCHAR *lpDevice, DWORD iDevNum,
+                             PDISPLAY_DEVICEW lpDisplayDevice, DWORD dwFlags);
+BOOL     EnumDisplaySettingsW(const WCHAR *lpszDeviceName, DWORD iModeNum,
+                              DEVMODEW *lpDevMode);
+BOOL     FlashWindowEx(PFLASHWINFO pfwi);
+BOOL     GetMonitorInfoW(HMONITOR hMonitor, MONITORINFO *lpmi);
+BOOL     IsZoomed(HWND hWnd);
+HICON    LoadIconA(HINSTANCE hInstance, LPCSTR lpIconName);
+HANDLE   LoadImageA(HINSTANCE hInst, LPCSTR name, UINT type, int cx, int cy,
+                    UINT fuLoad);
+LONG_PTR GetWindowLongPtrW(HWND hWnd, int nIndex);
+LONG_PTR SetWindowLongPtrW(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
+BOOL     SetWindowTextW(HWND hWnd, const WCHAR *lpString);
+LRESULT  SendMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+HWND     SetFocus(HWND hWnd);
+BOOL     SetForegroundWindow(HWND hWnd);
+UINT_PTR SetTimer(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerFunc);
+BOOL     KillTimer(HWND hWnd, UINT_PTR uIDEvent);
+HDC      BeginPaint(HWND hWnd, LPPAINTSTRUCT lpPaint);
+BOOL     EndPaint(HWND hWnd, const PAINTSTRUCT *lpPaint);
+BOOL     BringWindowToTop(HWND hWnd);
+BOOL     AdjustWindowRectEx(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle);
+BOOL     MoveWindow(HWND hWnd, int X, int Y, int nWidth, int nHeight, BOOL bRepaint);
+BOOL     BitBlt(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1,
+                DWORD rop);
+HDC      CreateDCW(const WCHAR *pwszDriver, const WCHAR *pwszDevice,
+                   const WCHAR *pszPort, const DEVMODEW *pdm);
+BOOL     GetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
+BOOL     SetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
 BOOL    ShowWindow(HWND hWnd, int nCmdShow);
 HDC     GetDC(HWND hWnd);
 int     ReleaseDC(HWND hWnd, HDC hDC);

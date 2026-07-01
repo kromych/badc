@@ -844,6 +844,21 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     if promotable.is_empty() {
         return Vec::new();
     }
+    // A slot live-in to the entry block (block 0) is read on some path
+    // before any store defines it (C99 6.2.4: an indeterminate value).
+    // It has no reaching definition on that path, so promoting it would
+    // inject a join phi with an undefined predecessor edge -- a dead phi
+    // that still holds a register and drives a predecessor-exit move.
+    // Exclude such slots so they stay entirely in memory; this is the
+    // up-front form of the rename's `failed` detection.
+    let entry_live_in = slot_live_in_sets(func, &promotable)[0].clone();
+    let promotable: BTreeSet<i64> = promotable
+        .into_iter()
+        .filter(|s| !entry_live_in.contains(s))
+        .collect();
+    if promotable.is_empty() {
+        return Vec::new();
+    }
     // Write-only address-free slots: every store is dead per C99
     // 6.2.4p2 (the slot's value is never observed). Neutralise each
     // such store to `Inst::Imm(0)`; the dead-pure check in the emit
@@ -1955,6 +1970,74 @@ mod tests {
         assert_eq!(
             f.blocks[3].exit_acc, phi_id_u32,
             "exit_acc should follow the redirect to the phi"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn read_before_write_slot_is_left_in_memory_without_orphan_phi() {
+        // `int f(int c){ int x; if(c) x=7; return x+1; }`: slot -1 is
+        // stored only on the taken arm but read unconditionally, so it
+        // is live-in to the entry block. It must not be promoted; no
+        // Inst::Phi may be injected, and its load/store stay resident.
+        let insts = alloc::vec![
+            Inst::Imm(0), // block 0: cond
+            Inst::Imm(7), // block 1
+            Inst::StoreLocal {
+                off: -1,
+                value: 1,
+                kind: StoreKind::I64,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+            }, // block 2
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Bz {
+                    cond: 0,
+                    target: 2,
+                    fall_through: 1,
+                },
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..3,
+                terminator: Terminator::Jmp(2),
+                exit_acc: NO_VALUE,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        let promoted = with_phi_promote_override(true, || run(&mut f));
+        assert!(
+            !promoted.contains(&-1),
+            "read-before-write slot must not be promoted"
+        );
+        assert!(
+            !f.insts.iter().any(|i| matches!(i, Inst::Phi { .. })),
+            "no orphan phi may remain for the failed slot"
+        );
+        assert!(
+            f.insts
+                .iter()
+                .any(|i| matches!(i, Inst::StoreLocal { off: -1, .. })),
+            "the store must stay resident in memory"
+        );
+        assert!(
+            f.insts
+                .iter()
+                .any(|i| matches!(i, Inst::LoadLocal { off: -1, .. })),
+            "the load must stay resident in memory"
         );
     }
 

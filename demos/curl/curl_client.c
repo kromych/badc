@@ -175,7 +175,12 @@ static int scenario_file(void)
 
 int main(int argc, char **argv)
 {
-    setvbuf(stdout, NULL, _IOLBF, 0);
+    // Emit each progress line immediately. Line buffering (_IOLBF) is not
+    // honoured by the Windows legacy CRT, which treats it as full buffering, so
+    // a piped stdout would hold the whole run and lose it if the process-exit
+    // flush is preempted by lingering network worker threads. Unbuffered output
+    // is written per line on every platform.
+    setvbuf(stdout, NULL, _IONBF, 0);
     if(curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
         return fail("curl_global_init");
 

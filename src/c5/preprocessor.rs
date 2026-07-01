@@ -2290,34 +2290,9 @@ impl Preprocessor {
     /// whose spellings collide with c5 keywords don't trip
     /// the identifier parser; the body uses `is_ident` to
     /// stay strict.
-    fn parse_pragma_intrinsic(
-        &mut self,
-        inner: &str,
-        line_no: usize,
-        filename: &str,
-    ) -> Result<(), C5Error> {
-        let raw = inner.trim();
-        let name = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"'));
-        let Some(name) = name else {
-            return Err(C5Error::Compile(super::error::fmt_compile_err(
-                filename,
-                line_no,
-                &format!(
-                    "`#pragma intrinsic({raw})` -- expected a quoted \
-                     identifier, e.g. `#pragma intrinsic(\"alloca\")`"
-                ),
-            )));
-        };
-        if !is_ident(name) {
-            return Err(C5Error::Compile(super::error::fmt_compile_err(
-                filename,
-                line_no,
-                &format!(
-                    "`#pragma intrinsic(\"{name}\")` -- name must be a \
-                     plain identifier"
-                ),
-            )));
-        }
+    /// Map an intrinsic name to its [`Intrinsic`] discriminant, or `None`
+    /// when the name is not one c5 lowers specially.
+    fn intrinsic_id(name: &str) -> Option<i64> {
         let id = match name {
             "alloca" | "__builtin_alloca" => super::op::Intrinsic::Alloca as i64,
             // C11 7.17 atomic generic operations. Lowered at the call
@@ -2353,23 +2328,67 @@ impl Preprocessor {
             "trunc" => super::op::Intrinsic::Trunc as i64,
             "truncf" => super::op::Intrinsic::Truncf as i64,
             "__builtin_trap" => super::op::Intrinsic::Trap as i64,
-            _ => {
+            _ => return None,
+        };
+        Some(id)
+    }
+
+    fn parse_pragma_intrinsic(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        // Two forms share this pragma. The quoted single-name form is c5's
+        // own registration and stays strict so an unknown name is a typo,
+        // not a silent no-op. MSVC's `#pragma intrinsic(name, name, ...)`
+        // names bare identifiers as an inlining hint; c5 registers the ones
+        // it lowers specially and, like MSVC's C4163, ignores the rest so
+        // MSVC-shaped headers (winnt.h's `#pragma intrinsic(_rotl8)`) parse.
+        for item in inner.split(',') {
+            let item = item.trim();
+            if item.is_empty() {
+                continue;
+            }
+            if let Some(name) = item.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+                if !is_ident(name) {
+                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                        filename,
+                        line_no,
+                        &format!(
+                            "`#pragma intrinsic(\"{name}\")` -- name must be a \
+                             plain identifier"
+                        ),
+                    )));
+                }
+                let Some(id) = Self::intrinsic_id(name) else {
+                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                        filename,
+                        line_no,
+                        &format!(
+                            "`#pragma intrinsic(\"{name}\")` -- unknown \
+                             intrinsic; supported today: alloca, \
+                             __builtin_alloca, __c5_aarch64_setjmp, \
+                             __c5_aarch64_longjmp, __builtin_va_start, \
+                             __builtin_va_arg, __builtin_va_end, \
+                             __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
+                             fabs, fabsf, and the C11 atomic_* operations"
+                        ),
+                    )));
+                };
+                self.intrinsics.insert(name.to_string(), id);
+            } else if is_ident(item) {
+                if let Some(id) = Self::intrinsic_id(item) {
+                    self.intrinsics.insert(item.to_string(), id);
+                }
+            } else {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,
                     line_no,
-                    &format!(
-                        "`#pragma intrinsic(\"{name}\")` -- unknown \
-                         intrinsic; supported today: alloca, \
-                         __builtin_alloca, __c5_aarch64_setjmp, \
-                         __c5_aarch64_longjmp, __builtin_va_start, \
-                         __builtin_va_arg, __builtin_va_end, \
-                         __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
-                         fabs, fabsf, and the C11 atomic_* operations"
-                    ),
+                    &format!("`#pragma intrinsic({item})` -- expected an identifier"),
                 )));
             }
-        };
-        self.intrinsics.insert(name.to_string(), id);
+        }
         Ok(())
     }
 
@@ -4763,6 +4782,39 @@ mod tests {
         pp2.process("#pragma frobnicate widgets\nint y;\n")
             .expect("preprocessor failed");
         assert!(!pp2.warnings.is_empty(), "unknown pragma should warn");
+    }
+
+    #[test]
+    fn pragma_intrinsic_bare_and_quoted_forms() {
+        // MSVC's `#pragma intrinsic(name, name, ...)` names bare identifiers
+        // as an inlining hint; c5 registers the ones it lowers specially and
+        // ignores the rest (like MSVC's C4163) so MSVC-shaped SDK headers
+        // parse. The quoted single-name form stays strict.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.process("#pragma intrinsic(alloca, _rotl8, __ll_lshift)\nint x;\n")
+            .expect("bare intrinsic list must parse");
+        assert!(
+            pp.intrinsics.contains_key("alloca"),
+            "known bare intrinsic registers"
+        );
+        assert!(
+            !pp.intrinsics.contains_key("_rotl8"),
+            "unknown bare intrinsic is ignored, not registered"
+        );
+
+        let mut pq = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pq.process("#pragma intrinsic(\"alloca\")\nint x;\n")
+            .expect("quoted known intrinsic must parse");
+        assert!(pq.intrinsics.contains_key("alloca"));
+
+        // The quoted form stays strict: an unknown name is a typo, not a
+        // silent no-op.
+        let mut pr = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        assert!(
+            pr.process("#pragma intrinsic(\"bogus\")\nint x;\n")
+                .is_err(),
+            "quoted unknown intrinsic must error"
+        );
     }
 
     #[test]

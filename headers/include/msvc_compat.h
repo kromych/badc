@@ -118,6 +118,26 @@
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)
 
+// CRT header framing macros. <vcruntime.h> spells these `extern "C" {` / `}`
+// under C++ and empty under C; supply the C form up front so the SDK's
+// corecrt.h / vcruntime.h chain parses regardless of include order.
+#define _CRT_BEGIN_C_HEADER
+#define _CRT_END_C_HEADER
+
+// CRT import decorators. These expand to `__declspec(dllimport)` -- already
+// a no-op above -- but the SDK spells the import surface with per-library
+// aliases, so name them empty for the declarations that carry them.
+#define _ACRTIMP
+#define _ACRTIMP_ALT
+#define _DCRTIMP
+#define _VCRTIMP
+#define _MRTIMP
+#define _CRTIMP2
+#define _CRTIMP_ALT
+#define _CRTIMP_ALTERNATIVE
+#define _CRTIMP_PURE
+#define _CRTIMP_NOIA64
+
 // `#pragma comment(lib, "...")` is an MSVC linker directive.
 // badc resolves imports through `#pragma binding(...)` (emitted
 // below) and the preprocessor emits an unknown-pragma warning

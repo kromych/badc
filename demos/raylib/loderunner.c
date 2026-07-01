@@ -264,10 +264,18 @@ int main(int argc, char **argv) {
     if (dump_path && frames > 8) frames = 8;
 
     // Without --assets, use an `assets` directory beside the executable
-    // (as packaged in an app bundle) when present; else render procedurally.
+    // when present; else render procedurally.
     char default_assets[1024];
     if (!assets_dir) {
         snprintf(default_assets, sizeof default_assets, "%sassets",
+                 GetApplicationDirectory());
+        if (DirectoryExists(default_assets)) assets_dir = default_assets;
+    }
+    // In a macOS .app bundle the executable is in Contents/MacOS and the
+    // resources are in Contents/Resources (code and resources must be kept
+    // separate for the bundle signature to validate).
+    if (!assets_dir) {
+        snprintf(default_assets, sizeof default_assets, "%s../Resources/assets",
                  GetApplicationDirectory());
         if (DirectoryExists(default_assets)) assets_dir = default_assets;
     }

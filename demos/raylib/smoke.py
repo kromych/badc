@@ -304,8 +304,13 @@ def _make_macos_app(binary: Path, assets: Path, work: Path) -> Path:
     macos.mkdir(parents=True, exist_ok=True)
     shutil.copy2(binary, macos / "loderunner")
     os.chmod(macos / "loderunner", 0o755)
+    # Resources go in Contents/Resources, not Contents/MacOS: the bundle
+    # signature seals code and resources separately, and a non-code file
+    # under MacOS/ makes codesign reject the bundle.
     if assets.is_dir():
-        shutil.copytree(assets, macos / "assets", dirs_exist_ok=True)
+        res = app / "Contents" / "Resources"
+        res.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(assets, res / "assets", dirs_exist_ok=True)
     (app / "Contents" / "Info.plist").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
@@ -321,6 +326,12 @@ def _make_macos_app(binary: Path, assets: Path, work: Path) -> Path:
         "  <key>LSMinimumSystemVersion</key><string>11.0</string>\n"
         "</dict></plist>\n"
     )
+    # Ad-hoc sign the assembled bundle. Apple Silicon requires a valid
+    # signature to launch; an unsigned or partially-signed .app is killed on
+    # launch. Signing after the bundle is complete seals the Info.plist and
+    # resources.
+    if shutil.which("codesign"):
+        run(["codesign", "--force", "--sign", "-", str(app)])
     return app
 
 

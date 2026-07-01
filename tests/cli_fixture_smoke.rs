@@ -378,3 +378,52 @@ fn unknown_option_is_rejected() {
     assert!(ok.status.success(), "valid build must still succeed");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn unrecognized_input_extension_is_rejected() {
+    // A compile/link mode must diagnose an unrecognized input extension
+    // rather than silently reclassifying it (and every input after it)
+    // as the program's argv.
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-unkext-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let a = dir.join("a.c");
+    let b = dir.join("b.c");
+    let cc = dir.join("foo.cc");
+    std::fs::write(&a, "int helper(void); int main(void){ return helper(); }\n").expect("write a");
+    std::fs::write(&b, "int helper(void){ return 0; }\n").expect("write b");
+    std::fs::write(&cc, "int nope(void){ return 0; }\n").expect("write cc");
+    let out = Command::new(badc)
+        .arg(&a)
+        .arg(&cc)
+        .arg(&b)
+        .arg("-o")
+        .arg(dir.join("prog"))
+        .output()
+        .expect("run badc");
+    assert!(
+        !out.status.success(),
+        "unrecognized input extension must fail the build"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("unrecognized input file extension") && stderr.contains("foo.cc"),
+        "expected a diagnostic naming foo.cc, got: {stderr}"
+    );
+    // Two valid `.c` inputs still link (b.c is not silently dropped in
+    // the valid case).
+    let ok = Command::new(badc)
+        .arg(&a)
+        .arg(&b)
+        .arg("-o")
+        .arg(dir.join("prog2"))
+        .output()
+        .expect("run badc");
+    assert!(
+        ok.status.success(),
+        "valid multi-input native link must succeed"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

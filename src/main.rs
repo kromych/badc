@@ -609,6 +609,9 @@ fn main() {
     let mut objects: Vec<String> = Vec::new();
     let mut archives: Vec<String> = Vec::new();
     let mut prog_args_start: usize = args.len();
+    // Program argv is consumed only by --jit / --interp; every other
+    // mode links or preprocesses its inputs and has no argv tail.
+    let takes_prog_args = matches!(mode, Mode::Jit | Mode::Interp);
     for (i, a) in args.iter().enumerate().skip(1) {
         if a == "-" {
             sources.push(a.clone());
@@ -623,11 +626,22 @@ fn main() {
             "o" => objects.push(a.clone()),
             "a" => archives.push(a.clone()),
             _ => {
-                // First unrecognised entry marks the boundary;
-                // everything from here on is the C program's
-                // argv (so `badc foo.c arg1 arg2` still works).
-                prog_args_start = i;
-                break;
+                // In --jit / --interp the first unrecognised entry marks
+                // the boundary; everything after it is the program's argv
+                // (so `badc --jit foo.c arg1 arg2` still works). Every
+                // other mode links or preprocesses its inputs and has no
+                // argv, so an unrecognised extension is a mistyped or
+                // unsupported input and is reported rather than silently
+                // dropped along with every input after it.
+                if takes_prog_args {
+                    prog_args_start = i;
+                    break;
+                }
+                eprint_diagnostic(format!(
+                    "badc: error: unrecognized input file extension: `{a}` \
+                     (expected a `.c` source, `.o` object, or `.a` archive)"
+                ));
+                std::process::exit(1);
             }
         }
     }

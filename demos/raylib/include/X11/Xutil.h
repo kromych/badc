@@ -74,8 +74,11 @@ Bool XUnregisterIMInstantiateCallback(Display *dpy, XrmDatabase rdb,
                                       char *res_name, char *res_class,
                                       XIDProc callback, XPointer client_data);
 
-/* Per-window context association and the error handler. */
-XContext XUniqueContext(void);
+/* Per-window context association and the error handler. XUniqueContext is a
+ * macro over XrmUniqueQuark in Xlib, not a libX11 export. */
+typedef int XrmQuark;
+XrmQuark XrmUniqueQuark(void);
+#define XUniqueContext() ((XContext) XrmUniqueQuark())
 int XSaveContext(Display *dpy, XID rid, XContext context, const char *data);
 int XFindContext(Display *dpy, XID rid, XContext context, XPointer *data_return);
 int XDeleteContext(Display *dpy, XID rid, XContext context);

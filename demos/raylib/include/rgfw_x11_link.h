@@ -107,7 +107,7 @@
 #pragma binding(libx11::XSetWMHints, "XSetWMHints")
 #pragma binding(libx11::XSetWindowBackground, "XSetWindowBackground")
 #pragma binding(libx11::XSetWindowBackgroundPixmap, "XSetWindowBackgroundPixmap")
-#pragma binding(libx11::XUniqueContext, "XUniqueContext")
+#pragma binding(libx11::XrmUniqueQuark, "XrmUniqueQuark")
 #pragma binding(libx11::XUnregisterIMInstantiateCallback, "XUnregisterIMInstantiateCallback")
 #pragma binding(libx11::XUnsetICFocus, "XUnsetICFocus")
 #pragma binding(libx11::XVisualIDFromVisual, "XVisualIDFromVisual")

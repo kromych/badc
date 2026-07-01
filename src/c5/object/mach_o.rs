@@ -158,6 +158,9 @@ const SDK_MACOS: u32 = 11 << 16;
 
 const BIND_OPCODE_DONE: u8 = 0x00;
 const BIND_OPCODE_SET_DYLIB_ORDINAL_IMM: u8 = 0x10;
+/// ULEB128 dylib ordinal, for 1-based ordinals past 15 that do not fit
+/// the IMM opcode's 4-bit operand (<mach-o/loader.h>).
+const BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB: u8 = 0x20;
 /// Select a special pseudo-dylib by signed immediate. Used for the
 /// flat-namespace lookup ordinal (`BIND_SPECIAL_DYLIB_FLAT_LOOKUP`,
 /// -2), which dyld resolves by searching every loaded image -- the
@@ -203,6 +206,10 @@ const N_UNDF: u8 = 0x0;
 const N_SECT: u8 = 0xE;
 const N_EXT: u8 = 0x01;
 const NO_SECT: u8 = 0;
+/// `DYNAMIC_LOOKUP_ORDINAL` (<mach-o/nlist.h>): the n_desc library
+/// ordinal for a symbol resolved through the flat namespace rather than
+/// a specific LC_LOAD_DYLIB.
+const DYNAMIC_LOOKUP_ORDINAL: u8 = 0xFE;
 /// 1-based index of `__TEXT,__text` within the per-image
 /// section table. Mach-O numbers sections globally across
 /// all segments in declaration order; `__text` is the first
@@ -1654,6 +1661,33 @@ fn build_rebase_opcodes(
     out
 }
 
+/// Source library a bind opcode selects: the flat-lookup pseudo-dylib or
+/// a 1-based LC_LOAD_DYLIB ordinal.
+#[derive(PartialEq, Clone, Copy)]
+enum BindSource {
+    Flat,
+    Dylib(u64),
+}
+
+/// Emit the dylib-selection opcode for `source`. Uses the compact IMM
+/// form for ordinals <= 15 (its operand is 4 bits) and the ULEB form
+/// otherwise, so an ordinal past 15 binds against the right library
+/// instead of wrapping.
+fn push_bind_source(out: &mut Vec<u8>, source: BindSource) {
+    match source {
+        BindSource::Flat => {
+            out.push(BIND_OPCODE_SET_DYLIB_SPECIAL_IMM | BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM);
+        }
+        BindSource::Dylib(ord) if ord <= 0x0F => {
+            out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (ord as u8));
+        }
+        BindSource::Dylib(ord) => {
+            out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB);
+            put_uleb128(out, ord);
+        }
+    }
+}
+
 fn build_bind_opcodes(
     imports: &super::ResolvedImports,
     segment: u8,
@@ -1665,16 +1699,16 @@ fn build_bind_opcodes(
     // imports from the same source don't repeat it. A flat-lookup import
     // selects the special pseudo-dylib instead of an LC_LOAD_DYLIB
     // ordinal.
-    let mut current_selector: Option<u8> = None;
+    let mut current_source: Option<BindSource> = None;
     for (i, imp) in imports.imports.iter().enumerate() {
-        let selector = if imp.flat_lookup {
-            BIND_OPCODE_SET_DYLIB_SPECIAL_IMM | BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM
+        let source = if imp.flat_lookup {
+            BindSource::Flat
         } else {
-            BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (((imp.dylib_index + 1) as u8) & 0x0F)
+            BindSource::Dylib((imp.dylib_index + 1) as u64)
         };
-        if current_selector != Some(selector) {
-            out.push(selector);
-            current_selector = Some(selector);
+        if current_source != Some(source) {
+            push_bind_source(&mut out, source);
+            current_source = Some(source);
         }
         out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
         out.extend_from_slice(imp.real_symbol.as_bytes());
@@ -1695,11 +1729,11 @@ fn build_bind_opcodes(
             .dylibs
             .iter()
             .position(|d| d.path.contains("libSystem"))
-            .map(|i| (i + 1) as u8)
+            .map(|i| (i + 1) as u64)
             .unwrap_or(1);
-        let bootstrap_selector = BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (bootstrap_ordinal & 0x0F);
-        if current_selector != Some(bootstrap_selector) {
-            out.push(bootstrap_selector);
+        let bootstrap_source = BindSource::Dylib(bootstrap_ordinal);
+        if current_source != Some(bootstrap_source) {
+            push_bind_source(&mut out, bootstrap_source);
         }
         out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
         out.extend_from_slice(TLV_BOOTSTRAP_SYMBOL.as_bytes());
@@ -1716,6 +1750,18 @@ fn build_bind_opcodes(
     out.push(BIND_OPCODE_DONE);
     pad_to(&mut out, 8);
     out
+}
+
+/// The nlist library ordinal for an import, mirroring the bind stream's
+/// flat-lookup branch so the symbol table and the bind opcodes agree on
+/// the symbol's provenance: a flat-lookup import carries
+/// `DYNAMIC_LOOKUP_ORDINAL`, a two-level import its 1-based dylib ordinal.
+fn import_library_ordinal(imp: &super::ResolvedImport) -> u8 {
+    if imp.flat_lookup {
+        DYNAMIC_LOOKUP_ORDINAL
+    } else {
+        (imp.dylib_index + 1) as u8
+    }
 }
 
 /// One `nlist_64` for an undefined external symbol. `n_strx` is the
@@ -2202,7 +2248,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // `str_indices` are shifted past the locals + exports.
     for (j, imp) in build.imports.imports.iter().enumerate() {
         let n_strx = str_indices[n_locals + n_exports + j];
-        let ordinal = (imp.dylib_index + 1) as u8;
+        let ordinal = import_library_ordinal(imp);
         symtab.extend_from_slice(&nlist_undef(n_strx, ordinal));
     }
     if tls_present {
@@ -2942,6 +2988,68 @@ mod tests {
             put_uleb128(&mut out, *value);
             assert_eq!(&out[..], *expected, "uleb128({value})");
         }
+    }
+
+    fn sample_import(dylib_index: usize, flat_lookup: bool) -> super::super::ResolvedImport {
+        use super::super::ResolvedImport;
+        ResolvedImport {
+            binding_idx: dylib_index as i64,
+            local_name: format!("s{dylib_index}"),
+            real_symbol: format!("_s{dylib_index}"),
+            dylib_index,
+            flat_lookup,
+            is_variadic: false,
+            fixed_args: 0,
+            return_type_tag: 0,
+            returns_long_double: false,
+            param_types: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn bind_dylib_ordinal_past_15_uses_uleb() {
+        use super::super::ResolvedImports;
+        use crate::c5::codegen::ResolvedDylib;
+        // 20 distinct dylibs: ordinals 16 and 17 (dylib_index 15 / 16)
+        // exceed the IMM opcode's 4-bit operand and must switch to the
+        // ULEB form instead of wrapping to a wrong library.
+        let dylibs: Vec<ResolvedDylib> = (0..20)
+            .map(|i| ResolvedDylib {
+                name: format!("lib{i}"),
+                path: format!("/lib{i}.dylib"),
+            })
+            .collect();
+        let imports = ResolvedImports {
+            data_bindings: Default::default(),
+            imports: (0..20).map(|i| sample_import(i, false)).collect(),
+            dylibs,
+        };
+        let out = build_bind_opcodes(&imports, 1, None);
+        assert!(
+            out.windows(2)
+                .any(|w| w == [BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB, 0x10]),
+            "ordinal 16 must use the ULEB selector"
+        );
+        assert!(
+            out.windows(2)
+                .any(|w| w == [BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB, 0x11]),
+            "ordinal 17 must use the ULEB selector"
+        );
+    }
+
+    #[test]
+    fn flat_lookup_nlist_carries_dynamic_lookup_ordinal() {
+        // A flat-lookup import's nlist library ordinal must match the
+        // bind stream's flat-lookup provenance (DYNAMIC_LOOKUP_ORDINAL),
+        // not a two-level ordinal pointing at the first dylib.
+        let flat = sample_import(0, true);
+        assert_eq!(import_library_ordinal(&flat), DYNAMIC_LOOKUP_ORDINAL);
+        let bytes = nlist_undef(0, import_library_ordinal(&flat));
+        let n_desc = u16::from_le_bytes([bytes[6], bytes[7]]);
+        assert_eq!((n_desc >> 8) as u8, DYNAMIC_LOOKUP_ORDINAL);
+        // A two-level import still reports its 1-based dylib ordinal.
+        let two_level = sample_import(0, false);
+        assert_eq!(import_library_ordinal(&two_level), 1);
     }
 
     #[test]

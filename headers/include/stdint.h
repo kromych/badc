@@ -70,8 +70,12 @@ typedef uint64_t            uint_fast64_t;
 
 #define INT8_MIN  (-128)
 #define INT16_MIN (-32768)
-#define INT32_MIN (-2147483648)
-#define INT64_MIN (-9223372036854775808)
+/* C99 7.18.2: written as `-MAX-1` so the positive operand of unary minus
+   stays in range for the macro's exact-width signed type (matching the
+   limits.h idiom). `2147483648` exceeds INT_MAX and `9223372036854775808`
+   is unrepresentable in any signed type. */
+#define INT32_MIN (-2147483647-1)
+#define INT64_MIN (-9223372036854775807LL-1)
 
 #define INT8_MAX  127
 #define INT16_MAX 32767

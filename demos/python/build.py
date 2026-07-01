@@ -192,16 +192,7 @@ TARGETS = {
     #     (test_strftime_y2k, test_strftime_y2k_c99).
     # TODO: a C99-conforming CRT or a math/time shim removes every entry here.
     "windows-x64": {"windows": True, "tier2_ignore": _WIN_CRT_IGNORE},
-    # arm64 also ignores test_gh_120161. The test helper spawns the interpreter
-    # as a child with a sanitized environment block (neither PATH nor SystemRoot
-    # present); the child's `import asyncio` then loads _overlapped, whose
-    # WSAStartup initializes the Winsock provider catalog. On Windows arm64 that
-    # init fails with WinError 10106 (WSAEPROVIDERFAILEDINIT) under the stripped
-    # environment, while x64 tolerates it. The byte-identical interpreter imports
-    # _overlapped in every normal invocation, so this is an arm64 Winsock-startup
-    # property of the spawn environment, not a code-generation defect.
-    "windows-arm64": {"windows": True,
-                      "tier2_ignore": _WIN_CRT_IGNORE + ["test_gh_120161"]},
+    "windows-arm64": {"windows": True, "tier2_ignore": _WIN_CRT_IGNORE},
 }
 
 

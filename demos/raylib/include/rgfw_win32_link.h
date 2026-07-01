@@ -40,9 +40,18 @@
 #pragma binding(gdi32::SelectObject,             "SelectObject")
 
 #pragma dylib(user32, "user32.dll")
+#pragma binding(user32::GetRawInputDeviceList,   "GetRawInputDeviceList")
+#pragma binding(user32::GetRawInputDeviceInfoA,  "GetRawInputDeviceInfoA")
+#pragma binding(user32::GetRawInputDeviceInfoW,  "GetRawInputDeviceInfoW")
 #pragma binding(user32::CreateWindowExA,         "CreateWindowExA")
+#pragma binding(user32::CreateWindowExW,         "CreateWindowExW")
 #pragma binding(user32::RegisterClassA,          "RegisterClassA")
+#pragma binding(user32::RegisterClassW,          "RegisterClassW")
 #pragma binding(user32::DefWindowProcA,          "DefWindowProcA")
+#pragma binding(user32::DefWindowProcW,          "DefWindowProcW")
+#pragma binding(user32::GetPropW,                "GetPropW")
+#pragma binding(user32::SetPropW,                "SetPropW")
+#pragma binding(user32::RemovePropW,             "RemovePropW")
 #pragma binding(user32::ShowWindow,              "ShowWindow")
 #pragma binding(user32::GetDC,                   "GetDC")
 #pragma binding(user32::ReleaseDC,               "ReleaseDC")
@@ -105,5 +114,8 @@
 
 #pragma dylib(winmm, "winmm.dll")
 #pragma binding(winmm::timeBeginPeriod,          "timeBeginPeriod")
+
+#pragma dylib(advapi32, "advapi32.dll")
+#pragma binding(advapi32::RegGetValueW,          "RegGetValueW")
 
 #endif /* RGFW_WIN32_LINK_H */

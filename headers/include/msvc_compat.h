@@ -33,6 +33,27 @@
 // going to call.
 #define _MSC_VER 1900
 
+// Target-architecture macros MSVC predefines and the Windows SDK headers
+// gate on. <winnt.h> selects its per-arch register/context definitions from
+// the `_<ARCH>_` form and errors ("No Target Architecture") if none is set;
+// `_M_*` is the compiler-predefined spelling other headers read. Mapped from
+// badc's own gcc-style arch predefines so each target gets the right pair.
+#if defined(__x86_64__)
+#define _M_X64 100
+#define _M_AMD64 100
+#ifndef _AMD64_
+#define _AMD64_ 1
+#endif
+#elif defined(__aarch64__)
+#define _M_ARM64 1
+#ifndef _ARM64_
+#define _ARM64_ 1
+#endif
+#endif
+#ifndef _WIN64
+#define _WIN64 1
+#endif
+
 // Pretend to be MinGW alongside MSVC. The two are mostly mutually
 // exclusive in upstream code, but we want both #if branches to fire
 // favourably: sqlite gates the wmain() wrapper on `defined(_WIN32)

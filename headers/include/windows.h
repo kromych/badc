@@ -65,6 +65,8 @@
 typedef void *FARPROC;
 typedef void *HMODULE;
 typedef void *HINSTANCE;
+typedef void *HRGN;
+typedef void *HKEY;
 typedef int   *LPDWORD;
 typedef int   *PDWORD;
 typedef int    LPVOID_TYPE_PLACEHOLDER;
@@ -2278,6 +2280,21 @@ struct tagWNDCLASSA {
 typedef struct tagWNDCLASSA WNDCLASSA;
 typedef struct tagWNDCLASSA *LPWNDCLASSA;
 
+struct tagWNDCLASSW {
+    UINT    style;
+    WNDPROC lpfnWndProc;
+    int     cbClsExtra;
+    int     cbWndExtra;
+    HINSTANCE hInstance;
+    HICON   hIcon;
+    HCURSOR hCursor;
+    HBRUSH  hbrBackground;
+    const WCHAR *lpszMenuName;
+    const WCHAR *lpszClassName;
+};
+typedef struct tagWNDCLASSW WNDCLASSW;
+typedef struct tagWNDCLASSW *LPWNDCLASSW;
+
 // Pixel format descriptor (wingdi.h) -- 40 bytes, all fields BYTE/WORD/DWORD.
 struct tagPIXELFORMATDESCRIPTOR {
     WORD  nSize;
@@ -2408,6 +2425,60 @@ struct tagRAWINPUTDEVICE {
 typedef struct tagRAWINPUTDEVICE RAWINPUTDEVICE;
 typedef struct tagRAWINPUTDEVICE *PRAWINPUTDEVICE;
 
+// Raw-input device enumeration surface (GetRawInputDeviceList /
+// GetRawInputDeviceInfo). Used to identify XInput HID devices.
+typedef struct tagRAWINPUTDEVICELIST {
+    HANDLE hDevice;
+    DWORD  dwType;
+} RAWINPUTDEVICELIST, *PRAWINPUTDEVICELIST;
+
+typedef struct tagRID_DEVICE_INFO_MOUSE {
+    DWORD dwId;
+    DWORD dwNumberOfButtons;
+    DWORD dwSampleRate;
+    BOOL  fHasHorizontalWheel;
+} RID_DEVICE_INFO_MOUSE;
+
+typedef struct tagRID_DEVICE_INFO_KEYBOARD {
+    DWORD dwType;
+    DWORD dwSubType;
+    DWORD dwKeyboardMode;
+    DWORD dwNumberOfFunctionKeys;
+    DWORD dwNumberOfIndicators;
+    DWORD dwNumberOfKeysTotal;
+} RID_DEVICE_INFO_KEYBOARD;
+
+typedef struct tagRID_DEVICE_INFO_HID {
+    DWORD  dwVendorId;
+    DWORD  dwProductId;
+    DWORD  dwVersionNumber;
+    USHORT usUsagePage;
+    USHORT usUsage;
+} RID_DEVICE_INFO_HID;
+
+typedef struct tagRID_DEVICE_INFO {
+    DWORD cbSize;
+    DWORD dwType;
+    union {
+        RID_DEVICE_INFO_MOUSE    mouse;
+        RID_DEVICE_INFO_KEYBOARD keyboard;
+        RID_DEVICE_INFO_HID      hid;
+    };
+} RID_DEVICE_INFO, *PRID_DEVICE_INFO;
+
+#define RIM_TYPEMOUSE    0
+#define RIM_TYPEKEYBOARD 1
+#define RIM_TYPEHID      2
+#define RIDI_DEVICENAME  0x20000007
+#define RIDI_DEVICEINFO  0x2000000b
+
+UINT GetRawInputDeviceList(PRAWINPUTDEVICELIST pRawInputDeviceList,
+                           PUINT puiNumDevices, UINT cbSize);
+UINT GetRawInputDeviceInfoA(HANDLE hDevice, UINT uiCommand, LPVOID pData,
+                            PUINT pcbSize);
+UINT GetRawInputDeviceInfoW(HANDLE hDevice, UINT uiCommand, LPVOID pData,
+                            PUINT pcbSize);
+
 struct _ICONINFO {
     BOOL    fIcon;
     DWORD   xHotspot;
@@ -2491,7 +2562,229 @@ typedef struct {
 #define WM_CLOSE        0x0010
 #define WM_QUIT         0x0012
 #define WM_GETMINMAXINFO 0x0024
+#define WM_DEVICECHANGE 0x0219
 #define WM_INPUT        0x00FF
+
+// Window messages, styles, virtual keys and metrics RGFW's win32 backend
+// reads. Canonical Win32 values; guarded so this augments the surface above.
+#ifndef WM_MOUSEACTIVATE
+#define WM_MOUSEACTIVATE 0x0021
+#endif
+#ifndef WM_SETICON
+#define WM_SETICON 0x0080
+#endif
+#ifndef WM_NCHITTEST
+#define WM_NCHITTEST 0x0084
+#endif
+#ifndef WM_NCLBUTTONDOWN
+#define WM_NCLBUTTONDOWN 0x00A1
+#endif
+#ifndef WM_CHAR
+#define WM_CHAR 0x0102
+#endif
+#ifndef WM_SYSKEYDOWN
+#define WM_SYSKEYDOWN 0x0104
+#endif
+#ifndef WM_SYSKEYUP
+#define WM_SYSKEYUP 0x0105
+#endif
+#ifndef WM_SYSCHAR
+#define WM_SYSCHAR 0x0106
+#endif
+#ifndef WM_UNICHAR
+#define WM_UNICHAR 0x0109
+#endif
+#ifndef WM_TIMER
+#define WM_TIMER 0x0113
+#endif
+#ifndef WM_SIZING
+#define WM_SIZING 0x0214
+#endif
+#ifndef WM_CAPTURECHANGED
+#define WM_CAPTURECHANGED 0x0215
+#endif
+#ifndef WM_MOUSEHWHEEL
+#define WM_MOUSEHWHEEL 0x020E
+#endif
+#ifndef WM_XBUTTONDOWN
+#define WM_XBUTTONDOWN 0x020B
+#endif
+#ifndef WM_XBUTTONUP
+#define WM_XBUTTONUP 0x020C
+#endif
+#ifndef WM_DISPLAYCHANGE
+#define WM_DISPLAYCHANGE 0x007E
+#endif
+#ifndef WM_ENTERSIZEMOVE
+#define WM_ENTERSIZEMOVE 0x0231
+#endif
+#ifndef WM_EXITSIZEMOVE
+#define WM_EXITSIZEMOVE 0x0232
+#endif
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
+#ifndef WM_DWMCOMPOSITIONCHANGED
+#define WM_DWMCOMPOSITIONCHANGED 0x031E
+#endif
+#ifndef WM_DWMCOLORIZATIONCOLORCHANGED
+#define WM_DWMCOLORIZATIONCOLORCHANGED 0x0320
+#endif
+
+#ifndef WS_EX_TOPMOST
+#define WS_EX_TOPMOST 0x00000008
+#endif
+#ifndef WS_EX_APPWINDOW
+#define WS_EX_APPWINDOW 0x00040000
+#endif
+#ifndef SW_MAXIMIZE
+#define SW_MAXIMIZE 3
+#endif
+#ifndef SWP_NOACTIVATE
+#define SWP_NOACTIVATE 0x0010
+#endif
+#ifndef SWP_NOOWNERZORDER
+#define SWP_NOOWNERZORDER 0x0200
+#endif
+#ifndef HWND_TOPMOST
+#define HWND_TOPMOST ((HWND)-1)
+#endif
+#ifndef HWND_NOTOPMOST
+#define HWND_NOTOPMOST ((HWND)-2)
+#endif
+#ifndef SM_XVIRTUALSCREEN
+#define SM_XVIRTUALSCREEN 76
+#endif
+#ifndef SM_YVIRTUALSCREEN
+#define SM_YVIRTUALSCREEN 77
+#endif
+#ifndef SM_CXVIRTUALSCREEN
+#define SM_CXVIRTUALSCREEN 78
+#endif
+#ifndef SM_CYVIRTUALSCREEN
+#define SM_CYVIRTUALSCREEN 79
+#endif
+#ifndef MAPVK_VK_TO_VSC
+#define MAPVK_VK_TO_VSC 0
+#endif
+#ifndef MAPVK_VSC_TO_VK
+#define MAPVK_VSC_TO_VK 1
+#endif
+#ifndef KF_EXTENDED
+#define KF_EXTENDED 0x0100
+#endif
+#ifndef PFD_STEREO
+#define PFD_STEREO 0x00000002
+#endif
+
+// Virtual-key codes (winuser.h).
+#ifndef VK_RETURN
+#define VK_RETURN 0x0D
+#endif
+#ifndef VK_CONTROL
+#define VK_CONTROL 0x11
+#endif
+#ifndef VK_PAUSE
+#define VK_PAUSE 0x13
+#endif
+#ifndef VK_PRIOR
+#define VK_PRIOR 0x21
+#endif
+#ifndef VK_NEXT
+#define VK_NEXT 0x22
+#endif
+#ifndef VK_END
+#define VK_END 0x23
+#endif
+#ifndef VK_HOME
+#define VK_HOME 0x24
+#endif
+#ifndef VK_LEFT
+#define VK_LEFT 0x25
+#endif
+#ifndef VK_UP
+#define VK_UP 0x26
+#endif
+#ifndef VK_RIGHT
+#define VK_RIGHT 0x27
+#endif
+#ifndef VK_DOWN
+#define VK_DOWN 0x28
+#endif
+#ifndef VK_SNAPSHOT
+#define VK_SNAPSHOT 0x2C
+#endif
+#ifndef VK_INSERT
+#define VK_INSERT 0x2D
+#endif
+#ifndef VK_LWIN
+#define VK_LWIN 0x5B
+#endif
+#ifndef VK_RWIN
+#define VK_RWIN 0x5C
+#endif
+#ifndef VK_APPS
+#define VK_APPS 0x5D
+#endif
+#ifndef VK_NUMPAD0
+#define VK_NUMPAD0 0x60
+#define VK_NUMPAD1 0x61
+#define VK_NUMPAD2 0x62
+#define VK_NUMPAD3 0x63
+#define VK_NUMPAD4 0x64
+#define VK_NUMPAD5 0x65
+#define VK_NUMPAD6 0x66
+#define VK_NUMPAD7 0x67
+#define VK_NUMPAD8 0x68
+#define VK_NUMPAD9 0x69
+#endif
+#ifndef VK_MULTIPLY
+#define VK_MULTIPLY 0x6A
+#define VK_ADD 0x6B
+#define VK_SUBTRACT 0x6D
+#define VK_DECIMAL 0x6E
+#define VK_DIVIDE 0x6F
+#endif
+#ifndef VK_F1
+#define VK_F1 0x70
+#define VK_F2 0x71
+#define VK_F3 0x72
+#define VK_F4 0x73
+#define VK_F5 0x74
+#define VK_F6 0x75
+#define VK_F7 0x76
+#define VK_F8 0x77
+#define VK_F9 0x78
+#define VK_F10 0x79
+#define VK_F11 0x7A
+#define VK_F12 0x7B
+#define VK_F13 0x7C
+#define VK_F14 0x7D
+#define VK_F15 0x7E
+#define VK_F16 0x7F
+#define VK_F17 0x80
+#define VK_F18 0x81
+#define VK_F19 0x82
+#define VK_F20 0x83
+#define VK_F21 0x84
+#define VK_F22 0x85
+#define VK_F23 0x86
+#define VK_F24 0x87
+#endif
+#ifndef VK_SCROLL
+#define VK_SCROLL 0x91
+#endif
+#ifndef VK_LSHIFT
+#define VK_LSHIFT 0xA0
+#define VK_RSHIFT 0xA1
+#define VK_LCONTROL 0xA2
+#define VK_RCONTROL 0xA3
+#define VK_LMENU 0xA4
+#define VK_RMENU 0xA5
+#endif
+#ifndef MAKELONG
+#define MAKELONG(a, b) ((LONG)(((WORD)((a) & 0xffff)) | ((DWORD)((WORD)((b) & 0xffff))) << 16))
+#endif
 #define WM_KEYDOWN      0x0100
 #define WM_KEYUP        0x0101
 #define WM_MOUSEMOVE    0x0200
@@ -2606,6 +2899,24 @@ HWND CreateWindowExA(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
                      HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
 ATOM    RegisterClassA(const WNDCLASSA *lpWndClass);
 LRESULT DefWindowProcA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+
+#define CreateWindowW(cls, name, style, x, y, w, h, parent, menu, inst, param) \
+    CreateWindowExW(0, cls, name, style, x, y, w, h, parent, menu, inst, param)
+HWND CreateWindowExW(DWORD dwExStyle, const WCHAR *lpClassName,
+                     const WCHAR *lpWindowName, DWORD dwStyle, int X, int Y,
+                     int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
+                     HINSTANCE hInstance, LPVOID lpParam);
+ATOM    RegisterClassW(const WNDCLASSW *lpWndClass);
+LRESULT DefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+HANDLE  GetPropW(HWND hWnd, const WCHAR *lpString);
+BOOL    SetPropW(HWND hWnd, const WCHAR *lpString, HANDLE hData);
+HANDLE  RemovePropW(HWND hWnd, const WCHAR *lpString);
+
+// Registry read used for the Windows dark-mode query.
+#define HKEY_CURRENT_USER ((HKEY)(ULONG_PTR)0x80000001)
+#define RRF_RT_REG_DWORD 0x00000010
+LONG RegGetValueW(HKEY hkey, const WCHAR *lpSubKey, const WCHAR *lpValue,
+                  DWORD dwFlags, LPDWORD pdwType, void *pvData, LPDWORD pcbData);
 BOOL    ShowWindow(HWND hWnd, int nCmdShow);
 HDC     GetDC(HWND hWnd);
 int     ReleaseDC(HWND hWnd, HDC hDC);

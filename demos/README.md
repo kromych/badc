@@ -152,6 +152,18 @@ standalone build + headless run is wired for macOS today (the X11
 / Win32 header surface for the Linux / Windows ports is pending).
 See [`raylib/README.md`](./raylib/README.md).
 
+## curl/
+
+badc compiles the curl 8.11.1 library (HTTP + `file://` + WebSocket,
+threaded resolver, IPv6, no external dependencies) and builds it as a
+static archive, a shared library, and an executable linked against
+each, plus a flavour that binds a badc-compiled client to the
+platform's installed libcurl to check the frontend matches the OS ABI.
+HTTPS is provided by badc-compiled BearSSL (`USE_BEARSSL`); the smoke
+drives HTTP / HTTPS / `file://` transfers against a hermetic loopback
+server, so it needs no external network. See
+[`curl/README.md`](./curl/README.md).
+
 ## efi_hello/
 
 UEFI application that prints "Hello, EFI!" through

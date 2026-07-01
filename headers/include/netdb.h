@@ -99,11 +99,33 @@ struct hostent {
 #define NI_NAMEREQD 0x08
 #define NI_DGRAM 0x10
 #endif
-// EAI_SYSTEM: positive on macOS, negative on Linux; Windows does not define it.
+// getaddrinfo error codes. macOS/BSD number them positively, Linux
+// negatively; Windows maps them to WSA error values via <ws2tcpip.h>.
 #ifdef __APPLE__
-#define EAI_SYSTEM 11
+#define EAI_AGAIN     2
+#define EAI_BADFLAGS  3
+#define EAI_FAIL      4
+#define EAI_FAMILY    5
+#define EAI_MEMORY    6
+#define EAI_NODATA    7
+#define EAI_NONAME    8
+#define EAI_SERVICE   9
+#define EAI_SOCKTYPE  10
+#define EAI_SYSTEM    11
+#define EAI_OVERFLOW  14
 #elif defined(__linux__)
-#define EAI_SYSTEM (-11)
+#define EAI_BADFLAGS  (-1)
+#define EAI_NONAME    (-2)
+#define EAI_AGAIN     (-3)
+#define EAI_FAIL      (-4)
+#define EAI_NODATA    (-5)
+#define EAI_FAMILY    (-6)
+#define EAI_SOCKTYPE  (-7)
+#define EAI_SERVICE   (-8)
+#define EAI_ADDRFAMILY (-9)
+#define EAI_MEMORY    (-10)
+#define EAI_SYSTEM    (-11)
+#define EAI_OVERFLOW  (-12)
 #endif
 
 #ifdef __APPLE__

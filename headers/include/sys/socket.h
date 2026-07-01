@@ -51,6 +51,22 @@
 #define INADDR_ANY  0
 #define SOMAXCONN   128
 
+// Protocol families. POSIX PF_* mirror the AF_* address families; every
+// current target defines them with equal values.
+#define PF_UNSPEC AF_UNSPEC
+#define PF_UNIX   AF_UNIX
+#define PF_LOCAL  AF_UNIX
+#define PF_INET   AF_INET
+#define PF_INET6  AF_INET6
+
+// Address-family field type. macOS holds it in one byte (sin_len precedes
+// it); Linux and Winsock use a 16-bit field.
+#ifdef __APPLE__
+typedef unsigned char sa_family_t;
+#else
+typedef unsigned short sa_family_t;
+#endif
+
 // setsockopt / getsockopt levels and option names. The numeric values differ
 // between Linux and the BSD-derived set; Winsock inherited the BSD values, so
 // macOS and Windows share them.
@@ -138,6 +154,7 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #define SO_REUSEADDR  0x0004
 #define SO_KEEPALIVE  0x0008
 #define SO_BROADCAST  0x0020
+#define SO_NOSIGPIPE  0x1022  // suppress SIGPIPE on writes to a broken socket
 #define SHUT_RD       0
 #define SHUT_WR       1
 #define SHUT_RDWR     2
@@ -169,6 +186,7 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #define SO_REUSEADDR  2
 #define SO_KEEPALIVE  9
 #define SO_BROADCAST  6
+#define MSG_NOSIGNAL  0x4000  // send() flag: do not raise SIGPIPE
 #define SHUT_RD       0
 #define SHUT_WR       1
 #define SHUT_RDWR     2

@@ -324,5 +324,32 @@ struct statvfs {
 #pragma binding(libc::fstatfs, "fstatfs")
 #endif
 
+#ifndef _WIN32
 int statfs(char *path, struct statfs *buf);
 int fstatfs(int fd, struct statfs *buf);
+#endif
+
+#ifdef _WIN32
+// Windows CRT large-file stat. `struct _stati64` carries a 64-bit st_size;
+// msvcrt exposes the ANSI (`_stati64`) and wide (`_wstati64`) forms.
+struct _stati64 {
+    unsigned int   st_dev;
+    unsigned short st_ino;
+    unsigned short st_mode;
+    short          st_nlink;
+    short          st_uid;
+    short          st_gid;
+    unsigned int   st_rdev;
+    long long      st_size;
+    long long      st_atime;
+    long long      st_mtime;
+    long long      st_ctime;
+};
+#pragma dylib(msvcrt, "msvcrt.dll")
+#pragma binding(msvcrt::_stati64,  "_stati64")
+#pragma binding(msvcrt::_wstati64, "_wstati64")
+#pragma binding(msvcrt::_fstati64, "_fstati64")
+int _stati64(const char *path, struct _stati64 *buf);
+int _wstati64(const unsigned short *path, struct _stati64 *buf);
+int _fstati64(int fd, struct _stati64 *buf);
+#endif

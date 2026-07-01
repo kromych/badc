@@ -401,6 +401,15 @@ jobs:
         # DRBGs, the TLS PRF, ChaCha20 and Poly1305. Slow
         # AES / DES KAT loops are tracked under TODO.
         run: python demos/bearssl/smoke.py
+      - name: curl smoke (static + shared + system + BearSSL HTTPS)
+        # Compiles the whole libcurl source tree (HTTP + file + ws)
+        # and builds it as a static archive, a shared library, and an
+        # exe linked against each, plus a flavour bound to the system
+        # libcurl. HTTPS uses badc-compiled BearSSL. Transfers run
+        # against a hermetic loopback server. The Windows build is
+        # skipped for now (config-win32 surface pending), so the step
+        # is a no-op there.
+        run: python demos/curl/smoke.py
       - name: raylib standalone build + cdb load gate (Windows)
         # Build the vendored raylib + Lode Runner game standalone, then run
         # it under cdb with show-loader-snaps. A win32 / CRT import bound to
@@ -862,7 +871,7 @@ jobs:
         run: |
           set -e
           export BADC="$PWD/target/release/badc"
-          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb quickjs raylib; do
+          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb quickjs raylib curl; do
             echo "::group::$d (N=${{ matrix.pressure }})"
             python "demos/$d/smoke.py"
             echo "::endgroup::"

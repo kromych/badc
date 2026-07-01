@@ -204,6 +204,9 @@ int *__doserrno(void);
 #define _doserrno (*__doserrno())
 extern int _sys_nerr;
 extern char *_sys_errlist[];
+// Deprecated non-underscore aliases the msvcrt headers still expose.
+#define sys_nerr _sys_nerr
+#define sys_errlist _sys_errlist
 #if !defined(__aarch64__)
 extern unsigned short **_wenviron;
 #endif

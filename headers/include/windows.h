@@ -48,8 +48,16 @@
 #define _T(x) x
 #define __TEXT(x) x
 #define TEXT(x) x
+// Generic-text character type. c5 reaches for the ANSI-flavoured calls, so
+// TCHAR is `char` unless the program opts into UNICODE.
+#ifdef UNICODE
+typedef unsigned short TCHAR;
+#else
+typedef char TCHAR;
+#endif
 #define LoadLibrary LoadLibraryA
 #define GetModuleHandle GetModuleHandleA
+#define GetSystemDirectory GetSystemDirectoryA
 #define WINBASEAPI
 #define WINAPI
 #define WINAPI_INLINE
@@ -117,6 +125,7 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::SetThreadPriority,       "SetThreadPriority")
 #pragma binding(kernel32::GetCurrentThreadId,      "GetCurrentThreadId")
 #pragma binding(kernel32::InitializeCriticalSection, "InitializeCriticalSection")
+#pragma binding(kernel32::InitializeCriticalSectionEx, "InitializeCriticalSectionEx")
 #pragma binding(kernel32::EnterCriticalSection,    "EnterCriticalSection")
 #pragma binding(kernel32::LeaveCriticalSection,    "LeaveCriticalSection")
 #pragma binding(kernel32::DeleteCriticalSection,   "DeleteCriticalSection")
@@ -205,6 +214,7 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::CreateHardLinkW,             "CreateHardLinkW")
 #pragma binding(kernel32::CreateSymbolicLinkW,         "CreateSymbolicLinkW")
 #pragma binding(kernel32::MoveFileExW,                 "MoveFileExW")
+#pragma binding(kernel32::MoveFileExA,                 "MoveFileExA")
 #pragma binding(kernel32::SetEnvironmentVariableW,     "SetEnvironmentVariableW")
 #pragma binding(kernel32::GetDriveTypeW,               "GetDriveTypeW")
 #pragma binding(kernel32::GetDiskFreeSpaceExW,         "GetDiskFreeSpaceExW")
@@ -276,12 +286,17 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 typedef void              *HANDLE;
 typedef HANDLE            *PHANDLE;
 typedef HANDLE            *LPHANDLE;
-typedef long long          SIZE_T;
-typedef long long          ULONG_PTR;
-typedef long long          UINT_PTR;
-typedef long long          DWORD_PTR;
+typedef unsigned long long SIZE_T;
+typedef unsigned long long ULONG_PTR;
+typedef unsigned long long UINT_PTR;
+typedef unsigned long long DWORD_PTR;
 typedef long long          LONG_PTR;
 typedef long long          LONGLONG;
+// basetsd.h pointer/integer conversions. HANDLE is pointer-width; a LONG
+// sign-extends through LONG_PTR before becoming a HANDLE.
+#define LongToHandle(h) ((HANDLE)(LONG_PTR)(long)(h))
+#define HandleToLong(h) ((long)(LONG_PTR)(h))
+#define ULongToHandle(h) ((HANDLE)(ULONG_PTR)(unsigned long)(h))
 typedef unsigned long long ULONGLONG;
 typedef long long          INT64;
 typedef long long          LONG64;
@@ -320,6 +335,17 @@ typedef unsigned short    *LPCWSTR;
 typedef unsigned short     WCHAR;
 typedef unsigned short    *PWSTR;
 typedef unsigned short    *PCWSTR;
+// Generic-text pointer aliases. c5 builds ANSI, so the T-variants map to the
+// narrow forms unless the program opts into UNICODE.
+#ifdef UNICODE
+typedef LPWSTR             LPTSTR;
+typedef LPCWSTR            LPCTSTR;
+#else
+typedef LPSTR              LPTSTR;
+typedef LPCSTR             LPCTSTR;
+#endif
+typedef LPCSTR             PCSTR;
+typedef LPSTR              PSTR;
 typedef long long          INT_PTR;
 typedef long long          SSIZE_T;
 typedef long long          LRESULT;
@@ -333,6 +359,8 @@ typedef unsigned char      BOOLEAN;
 // Slim reader/writer lock, condition variable, and one-time init
 // (Vista+). Pointer-sized opaque values per the Windows SDK.
 typedef struct _RTL_SRWLOCK { PVOID Ptr; } SRWLOCK;
+// Static initialiser for an SRWLOCK (minwinbase.h RTL_SRWLOCK_INIT).
+#define SRWLOCK_INIT {0}
 typedef struct _RTL_CONDITION_VARIABLE { PVOID Ptr; } CONDITION_VARIABLE;
 typedef struct _RTL_RUN_ONCE { PVOID Ptr; } INIT_ONCE;
 typedef SRWLOCK            *PSRWLOCK;
@@ -1501,6 +1529,9 @@ int GetExitCodeThread(HANDLE handle, int *exit_code);
 int SetThreadPriority(HANDLE thread, int priority);
 int GetCurrentThreadId();
 int InitializeCriticalSection(char *cs);
+// InitializeCriticalSectionEx(cs, spin, flags): the flag word selects debug
+// info / no-dynamic-spin; c5 passes 0.
+int InitializeCriticalSectionEx(char *cs, DWORD spin, DWORD flags);
 int EnterCriticalSection(char *cs);
 int LeaveCriticalSection(char *cs);
 int DeleteCriticalSection(char *cs);
@@ -1569,6 +1600,8 @@ int DeviceIoControl(HANDLE device, DWORD code, void *in_buf, DWORD in_size, void
 int CreateHardLinkW(const unsigned short *link, const unsigned short *target, void *attrs);
 int CreateSymbolicLinkW(const unsigned short *symlink, const unsigned short *target, DWORD flags);
 int MoveFileExW(const unsigned short *from, const unsigned short *to, DWORD flags);
+int MoveFileExA(const char *from, const char *to, DWORD flags);
+#define MoveFileEx MoveFileExA
 int SetEnvironmentVariableW(const unsigned short *name, const unsigned short *value);
 unsigned int GetDriveTypeW(const unsigned short *root);
 int GetDiskFreeSpaceExW(const unsigned short *dir, void *avail, void *total, void *free_total);

@@ -259,7 +259,12 @@ impl Compiler {
                 self.parse_enum_decl()?;
                 field_base_is_enum = true;
                 Ty::Int as i64
-            } else if self.is_lex_typedef_name() {
+            } else if !mods.saw_int_mod && self.is_lex_typedef_name() {
+                // Guarded by `!saw_int_mod`: C99 6.7.2p2 forbids
+                // combining a typedef-name with `unsigned`/`short`/
+                // `long`/`signed`, so after an int-modifier the
+                // following typedef-name is the field's declarator
+                // identifier (a redeclared name), not a type-specifier.
                 if self.symbols[self.lex.curr_id_idx].is_enum_typedef {
                     field_base_is_enum = true;
                 }

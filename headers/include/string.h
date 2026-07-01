@@ -119,6 +119,9 @@
 #pragma binding(msvcrt::strcspn,  "strcspn")
 #pragma binding(msvcrt::strpbrk,  "strpbrk")
 #pragma binding(msvcrt::strtok,   "strtok")
+// POSIX strtok_r is msvcrt's strtok_s -- identical (str, delim, context)
+// signature and semantics.
+#pragma binding(msvcrt::strtok_r, "strtok_s")
 // Case-insensitive compares: msvcrt's POSIX-style names live
 // behind a leading underscore. Expose both spellings so source
 // reaching for the underscored direct form resolves the same

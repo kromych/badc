@@ -105,6 +105,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/netinet/in.h"),
     ),
     (
+        "netinet/tcp.h",
+        include_str!("../../headers/include/netinet/tcp.h"),
+    ),
+    (
         "arpa/inet.h",
         include_str!("../../headers/include/arpa/inet.h"),
     ),
@@ -261,6 +265,11 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
     ("windows.h", include_str!("../../headers/include/windows.h")),
+    (
+        "wincrypt.h",
+        include_str!("../../headers/include/wincrypt.h"),
+    ),
+    ("tchar.h", include_str!("../../headers/include/tchar.h")),
     (
         "winapifamily.h",
         include_str!("../../headers/include/winapifamily.h"),

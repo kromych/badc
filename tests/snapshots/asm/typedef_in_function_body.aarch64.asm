@@ -14,6 +14,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	mov	x0, #0x7                // =7
+               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -34,6 +35,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	mov	x1, #0x1                // =1
                	mov	x2, #0x7                // =7
+               	sxtw	x2, w2
                	cmp	x2, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

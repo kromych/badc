@@ -30,6 +30,9 @@
 #define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 1
 #endif
+// Raw hardware monotonic clock, unadjusted by NTP slewing. Same id on
+// macOS and Linux.
+#define CLOCK_MONOTONIC_RAW 4
 // `clock_nanosleep` / `timer_settime` flag: the supplied time is
 // absolute, not a relative interval. Same value on every target.
 #define TIMER_ABSTIME 1
@@ -46,9 +49,12 @@ struct timespec {
     long long tv_nsec;
 };
 
+// Winsock's select() reads `struct timeval` as two 32-bit `long` fields
+// (LLP64), so the whole object is 8 bytes. A 64-bit field would place
+// tv_usec where select expects tv_sec's high half, zeroing the timeout.
 struct timeval {
-    long long tv_sec;
-    long long tv_usec;
+    long tv_sec;
+    long tv_usec;
 };
 #elif defined(__APPLE__)
 struct timespec {

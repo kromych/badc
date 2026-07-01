@@ -537,9 +537,14 @@ impl Compiler {
             Ty::Int as i64
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?
-        } else if self.is_lex_typedef_name() {
+        } else if !m.saw_int_mod && self.is_lex_typedef_name() {
             // Typedef-name as base type. Resolve to the aliased
-            // type and consume the identifier.
+            // type and consume the identifier. Guarded by
+            // `!saw_int_mod`: C99 6.7.2p2 forbids combining a
+            // typedef-name with `unsigned`/`short`/`long`/`signed`,
+            // so once an int-modifier is seen the following
+            // typedef-name is the declarator identifier (a redeclared
+            // name), not a second type-specifier.
             let aliased = self.symbols[self.lex.curr_id_idx].type_;
             // Carry the typedef's fn-pointer lineage forward (gh
             // #19) so a later `fn_t fp` declaration ends up with

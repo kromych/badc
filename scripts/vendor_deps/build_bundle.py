@@ -185,6 +185,17 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
+        # curl 8.11.1 -- HTTP client library. Standalone release
+        # tarball from curl.se with no VCS identifier in the download
+        # name, so pinned by the tarball sha256.
+        name="curl",
+        version="8.11.1",
+        url="https://curl.se/download/curl-8.11.1.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="a889ac9dbba3644271bd9d1302b5c22a088893719b72be3487bc3d401e5c4e80",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
         # Lua 5.5.0 official test suite -- published as a separate
         # tarball at www.lua.org/tests/. Same pin model as the
         # interpreter source: sha256 of the tarball.

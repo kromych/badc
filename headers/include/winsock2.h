@@ -58,6 +58,53 @@ struct sockaddr_in6 {
 // IN6ADDR_ANY_INIT is all zeros (in6.h); a zero-filled const matches.
 static const struct in6_addr in6addr_any;
 
+// Address-family field type (ws2def.h): a 16-bit unsigned, same width as the
+// sa_family field in every sockaddr here.
+typedef unsigned short ADDRESS_FAMILY;
+
+// A Winsock event object is a HANDLE; the null handle is the invalid event.
+typedef HANDLE WSAEVENT;
+#define WSA_INVALID_EVENT ((WSAEVENT)0)
+
+// Pack two bytes into a WORD, low byte first (the WSAStartup version word).
+#define MAKEWORD(a, b) \
+    ((WORD)(((BYTE)(a)) | ((WORD)((BYTE)(b)) << 8)))
+
+// Event-based socket notification (WSAEventSelect / WSAWaitForMultipleEvents).
+// The ws2_32 dylib is declared in <sys/socket.h>, included above.
+#define WSAEWOULDBLOCK 10035
+#define FD_READ    0x01
+#define FD_WRITE   0x02
+#define FD_OOB     0x04
+#define FD_ACCEPT  0x08
+#define FD_CONNECT 0x10
+#define FD_CLOSE   0x20
+#define FD_MAX_EVENTS 10
+#define WSA_WAIT_FAILED   0xffffffff
+#define WSA_WAIT_TIMEOUT  0x102
+#define WSA_INFINITE      0xffffffff
+
+typedef struct _WSANETWORKEVENTS {
+    long lNetworkEvents;
+    int  iErrorCode[FD_MAX_EVENTS];
+} WSANETWORKEVENTS, *LPWSANETWORKEVENTS;
+
+#pragma binding(ws2_32::WSACreateEvent,  "WSACreateEvent")
+#pragma binding(ws2_32::WSACloseEvent,   "WSACloseEvent")
+#pragma binding(ws2_32::WSASetEvent,     "WSASetEvent")
+#pragma binding(ws2_32::WSAResetEvent,   "WSAResetEvent")
+#pragma binding(ws2_32::WSAEventSelect,  "WSAEventSelect")
+#pragma binding(ws2_32::WSAWaitForMultipleEvents, "WSAWaitForMultipleEvents")
+#pragma binding(ws2_32::WSAEnumNetworkEvents, "WSAEnumNetworkEvents")
+WSAEVENT WSACreateEvent(void);
+int WSACloseEvent(WSAEVENT ev);
+int WSASetEvent(WSAEVENT ev);
+int WSAResetEvent(WSAEVENT ev);
+int WSAEventSelect(int s, WSAEVENT ev, long net_events);
+DWORD WSAWaitForMultipleEvents(DWORD count, const WSAEVENT *events, int wait_all,
+                               DWORD timeout, int alertable);
+int WSAEnumNetworkEvents(int s, WSAEVENT ev, WSANETWORKEVENTS *events);
+
 // Uppercase aliases the SDK carries for the address structures.
 typedef struct sockaddr_in  SOCKADDR_IN,  *PSOCKADDR_IN,  *LPSOCKADDR_IN;
 typedef struct sockaddr_in6 SOCKADDR_IN6, *PSOCKADDR_IN6, *LPSOCKADDR_IN6;

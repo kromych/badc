@@ -57,18 +57,11 @@ _tu_spec.loader.exec_module(_tu_build)
 WIN = sys.platform == "win32"
 EXE_SUFFIX = ".exe" if WIN else ""
 
-# Disable the Win32 CryptoAPI seeder in src/rand/sysrng.c: it
-# pulls in `<wincrypt.h>` types and functions (HCRYPTPROV,
-# PROV_RSA_FULL, CryptAcquireContext, ...) that c5's ambient
-# Windows headers do not surface. The portable PRNGs still build
-# and the smoke / KAT drivers never call br_prng_seeder_system,
-# so the disabled codepath has no behavioural effect on the
-# tests. The override is a no-op on POSIX, where BR_USE_URANDOM
-# carries the runtime path. TODO: add a wincrypt.h surface to
-# the c5 headers so this can come back on Windows.
-BUILD_DEFINES: tuple[str, ...] = (
-    "BR_USE_WIN32_RAND=0",
-)
+# BearSSL selects its system RNG seeder automatically: the Win32 CryptoAPI on
+# Windows (<wincrypt.h>) and /dev/urandom on POSIX. The Windows path compiles
+# against the shipped wincrypt.h surface (HCRYPTPROV, CryptAcquireContext,
+# CryptGenRandom, ...).
+BUILD_DEFINES: tuple[str, ...] = ()
 INCLUDE_PATHS = (
     BEAR_DIR / "inc",
     BEAR_DIR / "src",

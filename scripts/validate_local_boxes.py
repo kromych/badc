@@ -50,6 +50,7 @@ GATING_DEMOS = (
     "demos/tweetnacl/smoke.py",
     "demos/quickjs/smoke.py",
     "demos/raylib/smoke.py",
+    "demos/curl/smoke.py",
 )
 
 

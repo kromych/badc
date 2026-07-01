@@ -7,8 +7,22 @@
 
 #include <sys/socket.h>
 
+#define IPPROTO_IP   0
 #define IPPROTO_IPV6 41
 #define IPV6_V6ONLY  26 // Linux value; macOS=27 -- set via setsockopt only
+
+// IP / IPv6 per-packet class-of-service option names for setsockopt. The
+// numbering is BSD-derived on macOS and distinct on Linux.
+#ifdef __linux__
+#define IP_TOS      1
+#define IPV6_TCLASS 67
+#else
+#define IP_TOS      3
+#define IPV6_TCLASS 36
+#endif
+
+// Port number in network byte order.
+typedef unsigned short in_port_t;
 
 // Well-known IPv4 addresses in host byte order (uniform across targets).
 #define INADDR_ANY             0x00000000U

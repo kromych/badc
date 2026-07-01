@@ -290,6 +290,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::perror,    "perror")
 #pragma binding(msvcrt::fseek,     "fseek")
 #pragma binding(msvcrt::ftell,     "ftell")
+#pragma binding(msvcrt::_fseeki64, "_fseeki64")
+#pragma binding(msvcrt::_ftelli64, "_ftelli64")
 #pragma binding(msvcrt::fgetpos,   "fgetpos")
 #pragma binding(msvcrt::fsetpos,   "fsetpos")
 #pragma binding(msvcrt::rewind,    "rewind")
@@ -485,6 +487,9 @@ long ftell(FILE *stream);
 #ifndef _WIN32
 int fseeko(FILE *stream, long offset, int whence);
 long ftello(FILE *stream);
+#else
+int _fseeki64(FILE *stream, long long offset, int whence);
+long long _ftelli64(FILE *stream);
 #endif
 int fgetpos(FILE *stream, fpos_t *pos);
 int fsetpos(FILE *stream, const fpos_t *pos);

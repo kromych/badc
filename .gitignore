@@ -78,6 +78,16 @@ demos/bearssl/*
 !demos/bearssl/smoke.py
 !demos/bearssl/smoke_main.c
 !demos/bearssl/README.md
+# curl -- vendored by `demos/curl/setup.py` (library sources -> src/,
+# public API headers -> include/curl/). Only the hand-written config,
+# driver, binding header, runner, and README are committed.
+demos/curl/*
+!demos/curl/setup.py
+!demos/curl/smoke.py
+!demos/curl/README.md
+!demos/curl/curl_client.c
+!demos/curl/curl_config.h
+!demos/curl/curl_syslink.h
 # stb -- a collection of single-file public-domain headers.
 # `setup.py` pulls the upstream archive from the vendor-deps
 # release and drops a curated set of headers into `demos/stb/`;

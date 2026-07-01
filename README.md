@@ -70,25 +70,27 @@ a (fast) script.
 
 There are various demo's under [`demos`](./demos/):
 
-* Few small-ish ones (`threads.c`, `coro_pool.c`, `hello_server.c`),
-* `maze.c ` - maze builder and solver,
-* `gui_hello` - GUI demos for macOS, Linux and Windows,
-* `wdm_driver`, `nt_hello`, `nt_loader` - examples of the Windows native (NT) executable, Windows driver,
-* `efi_hello` - a UEFI binary,
-* `sqlite3` - the most famous embedded database,
-* `miniz` - compression, CRC32, integers, bit twiddling,
-* `kissfft` - floating points, Fast Fourier Transform,
-* `bzip2` - compression, integers, bit twiddling,
-* `stb` - header-only C library with lots of incredible features (math
+* Few small-ish ones ([`threads.c`](./demos/threads.c), [`coro_pool.c`](./demos/coro_pool.c), [`hello_server.c`](./demos/hello_server.c)),
+* [`maze.c`](./demos/maze.c) - maze builder and solver,
+* [`gui_hello`](./demos/gui_hello/) - GUI demos for macOS, Linux and Windows,
+* [`wdm_driver`](./demos/wdm_driver/), [`nt_hello`](./demos/nt_hello/), [`nt_loader`](./demos/nt_loader/) - examples of the Windows native (NT) executable, Windows driver,
+* [`efi_hello`](./demos/efi_hello/) - a UEFI binary,
+* [`sqlite3`](./demos/sqlite3/) - the most famous embedded database ([sqlite.org](https://sqlite.org)),
+* [`miniz`](./demos/miniz/) - compression, CRC32, integers, bit twiddling ([richgel999/miniz](https://github.com/richgel999/miniz)),
+* [`kissfft`](./demos/kissfft/) - floating points, Fast Fourier Transform ([mborgerding/kissfft](https://github.com/mborgerding/kissfft)),
+* [`bzip2`](./demos/bzip2/) - compression, integers, bit twiddling ([sourceware.org/bzip2](https://sourceware.org/bzip2/)),
+* [`stb`](./demos/stb/) - header-only C library with lots of incredible features (math
   noise generation, sound, JPEG, PNG, BMP, PSD support to name a few).
-  It really stresses all of the compiler.
-* `chibicc` - a small C compiler
-* `tinycc` - a cool and small C toolchain
-* `TweetNaCl`, `Monocypher`, `BearSSL` - cryptography
-* `Lua` - the embeddable scripting language
-* `quickjs` - JavaScript interpreter
-* [`TCL`](https://en.wikipedia.org/wiki/Tcl_(programming_language)) - Tool command language
-* `Python` - Python 3.14
+  It really stresses all of the compiler ([nothings/stb](https://github.com/nothings/stb)),
+* [`chibicc`](./demos/chibicc/) - a small C compiler ([rui314/chibicc](https://github.com/rui314/chibicc)),
+* [`tinycc`](./demos/tinycc/) - a cool and small C toolchain ([TinyCC/tinycc](https://github.com/TinyCC/tinycc)),
+* [`TweetNaCl`](./demos/tweetnacl/) ([tweetnacl.cr.yp.to](https://tweetnacl.cr.yp.to/)), [`Monocypher`](./demos/monocypher/) ([monocypher.org](https://monocypher.org/)), [`BearSSL`](./demos/bearssl/) ([bearssl.org](https://bearssl.org/)) - cryptography,
+* [`Lua`](./demos/lua/) - the embeddable scripting language ([lua.org](https://www.lua.org/)),
+* [`quickjs`](./demos/quickjs/) - JavaScript interpreter ([bellard.org/quickjs](https://bellard.org/quickjs/)),
+* [`TCL`](./demos/tcl/) - Tool command language ([tcl-lang.org](https://www.tcl-lang.org/)),
+* [`raylib`](./demos/raylib/) - Library for games, (there is also [`loderunner`](./demos/raylib/loderunner.c) game included) ([raylib.com](https://www.raylib.com/)),
+* [`curl`](./demos/curl/) - The library and the tools that handle HTTP and friends on PCs, smart phones/watches, TVs, ... ([curl.se](https://curl.se/)),
+* [`Python`](./demos/python/) - Python 3.14 ([python.org](https://www.python.org/)).
 
 Besides these, there are some fun test fixtures implementing Horner scheme, RK4,
 8-Queens and more.

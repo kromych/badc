@@ -103,12 +103,26 @@ impl Compiler {
             // Detect unnamed by counting `*` markers and then
             // peeking for `,` or `)`.
             let mut ty = base;
+            let mut leading_ptr_count = 0;
             while self.lex.tk == Token::MulOp {
                 self.next()?;
                 ty += Ty::Ptr as i64;
+                leading_ptr_count += 1;
                 while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
+            }
+            // A parameter that is a pointer to a function-pointer typedef
+            // base (`curl_write_callback *p`) gains one fn-pointer
+            // indirection level per leading `*`, matching the general
+            // declarator path. Without it the fn-pointer decay no-op
+            // (`*fp == fp`) misfires on `*p`, landing the load/store one
+            // level too shallow (at the pointer's own slot).
+            if leading_ptr_count > 0
+                && !self.pending.base_is_function_type
+                && let Some(fpi) = self.pending.fn_ptr_indirection
+            {
+                self.pending.fn_ptr_indirection = Some(fpi + leading_ptr_count);
             }
             // Optional `[N]` / `[]` after an unnamed parameter
             // type ('int []' / 'char [16]'). Per C99 6.7.5.3p7,

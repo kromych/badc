@@ -1739,6 +1739,25 @@ fn array_typedef_dimensions_propagate() {
 }
 
 #[test]
+fn typedef_name_as_declarator() {
+    // C99 6.7.2p2: a typedef name cannot combine with
+    // `unsigned`/`short`/`long`/`signed`, so once an int-modifier
+    // is seen the following typedef name is the declarator
+    // identifier (a redeclared name), not a second type specifier.
+    // Exercises struct field, block-scope object, and parameter.
+    assert_eq!(run_fixture("typedef_name_as_declarator.c"), 0);
+}
+
+#[test]
+fn fnptr_param_indirection() {
+    // A parameter of type "pointer to function-pointer typedef"
+    // (`fn_t *p`) carries two levels of fn-pointer indirection, so
+    // `*p` is a real dereference rather than the `*fp == fp` decay
+    // no-op. Locks store and load through such a parameter.
+    assert_eq!(run_fixture("fnptr_param_indirection.c"), 0);
+}
+
+#[test]
 fn variadic_call_through_fnptr_delivers_all_args() {
     // C99 6.5.2.2: a call through a function pointer must
     // deliver every fixed and variadic argument to the callee.

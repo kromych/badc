@@ -1292,9 +1292,9 @@ fn dispatch_callext<H: Host>(
                     "vm_ssa: printf: bad fmt addr 0x{fmt_addr:x}",
                 )));
             }
-            let fmt = read_cstring(mem, fmt_addr as usize)?;
+            let fmt = read_cstring_bytes(mem, fmt_addr as usize)?;
             let out = format_printf(&fmt, &args[1..], mem)?;
-            let _ = host.write(1, out.as_bytes());
+            let _ = host.write(1, &out);
             Ok(0)
         }
         // `int putchar(int c)` -- write one byte to stdout, returns
@@ -1429,11 +1429,12 @@ fn dispatch_callext<H: Host>(
 /// Read a NUL-terminated C string out of memory. Bounds-checks
 /// up to the data segment / stack / heap end so a stray pointer
 /// returns a runtime error rather than reading past the buffer.
-fn read_cstring(mem: &Memory, addr: usize) -> Result<alloc::string::String, C5Error> {
-    let mut s = alloc::string::String::new();
+/// Read the NUL-terminated C string at `addr` as raw bytes. A C string
+/// is an arbitrary byte sequence; the caller decides how to interpret
+/// bytes >= 0x80 rather than forcing a Latin-1 -> UTF-8 round-trip.
+fn read_cstring_bytes(mem: &Memory, addr: usize) -> Result<Vec<u8>, C5Error> {
     let mut i = addr;
     while i < mem.bytes.len() && mem.bytes[i] != 0 {
-        s.push(mem.bytes[i] as char);
         i += 1;
     }
     if i >= mem.bytes.len() {
@@ -1441,7 +1442,15 @@ fn read_cstring(mem: &Memory, addr: usize) -> Result<alloc::string::String, C5Er
             "vm_ssa: read_cstring: missing NUL terminator past addr 0x{addr:x}",
         )));
     }
-    Ok(s)
+    Ok(mem.bytes[addr..i].to_vec())
+}
+
+/// Read a C string for a Rust `&str` consumer (path names, env keys).
+/// Bytes >= 0x80 that are not valid UTF-8 become U+FFFD, giving defined
+/// behavior rather than the prior plausible-but-wrong Latin-1 mapping.
+fn read_cstring(mem: &Memory, addr: usize) -> Result<alloc::string::String, C5Error> {
+    let bytes = read_cstring_bytes(mem, addr)?;
+    Ok(alloc::string::String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Minimal printf formatter. Walks `fmt`'s `%c / %d / %u / %x /
@@ -1449,21 +1458,25 @@ fn read_cstring(mem: &Memory, addr: usize) -> Result<alloc::string::String, C5Er
 /// non-literal conversion. Width / precision / flags are not
 /// honoured. Returns the formatted string for the caller to
 /// hand to `host.write`.
-fn format_printf(fmt: &str, args: &[i64], mem: &Memory) -> Result<alloc::string::String, C5Error> {
+fn format_printf(fmt: &[u8], args: &[i64], mem: &Memory) -> Result<Vec<u8>, C5Error> {
     use core::fmt::Write;
-    let mut out = alloc::string::String::new();
+    let mut out: Vec<u8> = Vec::new();
+    let mut num = alloc::string::String::new();
     let mut arg_idx = 0usize;
-    let mut chars = fmt.chars();
-    while let Some(c) = chars.next() {
-        if c != '%' {
+    let mut i = 0usize;
+    while i < fmt.len() {
+        let c = fmt[i];
+        i += 1;
+        if c != b'%' {
             out.push(c);
             continue;
         }
-        let Some(spec) = chars.next() else {
+        let Some(&spec) = fmt.get(i) else {
             break;
         };
-        if spec == '%' {
-            out.push('%');
+        i += 1;
+        if spec == b'%' {
+            out.push(b'%');
             continue;
         }
         let Some(val) = args.get(arg_idx).copied() else {
@@ -1474,37 +1487,47 @@ fn format_printf(fmt: &str, args: &[i64], mem: &Memory) -> Result<alloc::string:
         };
         arg_idx += 1;
         match spec {
-            'd' | 'i' => {
-                let _ = write!(out, "{}", val as i32 as i64);
+            b'd' | b'i' => {
+                num.clear();
+                let _ = write!(num, "{}", val as i32 as i64);
+                out.extend_from_slice(num.as_bytes());
             }
-            'u' => {
-                let _ = write!(out, "{}", val as u32 as u64);
+            b'u' => {
+                num.clear();
+                let _ = write!(num, "{}", val as u32 as u64);
+                out.extend_from_slice(num.as_bytes());
             }
-            'x' => {
-                let _ = write!(out, "{:x}", val as u32);
+            b'x' => {
+                num.clear();
+                let _ = write!(num, "{:x}", val as u32);
+                out.extend_from_slice(num.as_bytes());
             }
-            'X' => {
-                let _ = write!(out, "{:X}", val as u32);
+            b'X' => {
+                num.clear();
+                let _ = write!(num, "{:X}", val as u32);
+                out.extend_from_slice(num.as_bytes());
             }
-            'c' => {
-                out.push(val as u8 as char);
+            b'c' => {
+                out.push(val as u8);
             }
-            's' => {
+            b's' => {
                 if val < 0 {
                     return Err(C5Error::Runtime(format!(
                         "vm_ssa: printf %s: bad ptr 0x{val:x}",
                     )));
                 }
-                let s = read_cstring(mem, val as usize)?;
-                out.push_str(&s);
+                let s = read_cstring_bytes(mem, val as usize)?;
+                out.extend_from_slice(&s);
             }
-            'p' => {
-                let _ = write!(out, "0x{:x}", val as u64);
+            b'p' => {
+                num.clear();
+                let _ = write!(num, "0x{:x}", val as u64);
+                out.extend_from_slice(num.as_bytes());
             }
             other => {
                 // Unrecognised conversion: emit the literal
                 // `%X` so the caller sees what was wrong.
-                out.push('%');
+                out.push(b'%');
                 out.push(other);
             }
         }
@@ -1955,6 +1978,23 @@ fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, C5Error> {
 mod tests {
     use super::*;
     use crate::Compiler;
+
+    #[test]
+    fn printf_string_preserves_high_bytes() {
+        // 0xC3 0xA9 (the UTF-8 encoding of U+00E9) must reach stdout as
+        // those two raw bytes, not the 4-byte Latin-1 -> UTF-8 re-encoding
+        // the old path produced.
+        let mem = Memory::new(b"\xC3\xA9\x00");
+        let out = format_printf(b"%s", &[0], &mem).expect("format");
+        assert_eq!(out, alloc::vec![0xC3u8, 0xA9]);
+    }
+
+    #[test]
+    fn printf_char_preserves_high_byte() {
+        let mem = Memory::new(b"\x00");
+        let out = format_printf(b"%c", &[0x80], &mem).expect("format");
+        assert_eq!(out, alloc::vec![0x80u8]);
+    }
 
     fn ssa_main_of(src: &str) -> FunctionSsa {
         let program = Compiler::new(src.to_string())

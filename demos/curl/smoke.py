@@ -57,6 +57,11 @@ CURL_DISABLE = [
 # defines __MINGW32__ so curl/system.h takes the LLP64 branch (correct
 # curl_off_t) instead of the POSIX one.
 _CONFIG_DEFINES = ["-D__MINGW32__"] if WIN else ["-DHAVE_CONFIG_H"]
+# The client only includes the public <curl/curl.h>, whose system.h keys the
+# curl_off_t / curl_socket_t widths on __MINGW32__ on Windows. Without it the
+# __GNUC__ branch is taken, which resolves the types for x86_64 but leaves them
+# undefined on aarch64.
+CLIENT_PLATFORM_DEFINES = ["-D__MINGW32__"] if WIN else []
 BASE_DEFINES = (
     ["--gnu", "-DBUILDING_LIBCURL", "-DCURL_STATICLIB"] + _CONFIG_DEFINES
     + [f"-DCURL_DISABLE_{d}" for d in CURL_DISABLE]
@@ -135,7 +140,8 @@ def write_binding_header(path: Path, lib_spec: str) -> None:
 def link_client(badc: Path, work: Path, out: Path, optimize: bool,
                 *, archive: Path | None = None, binding_header: Path | None = None) -> bool:
     cmd = [str(badc)] + (["-O"] if optimize else [])
-    cmd += ["--gnu", "-DCURL_STATICLIB", "-I", str(INC), "-I", str(CURL_DIR)]
+    cmd += ["--gnu", "-DCURL_STATICLIB", *CLIENT_PLATFORM_DEFINES,
+            "-I", str(INC), "-I", str(CURL_DIR)]
     if binding_header is not None:
         cmd += ["-include", str(binding_header)]
     cmd += [str(CURL_DIR / "curl_client.c")]
@@ -256,7 +262,8 @@ def build_tls_lane(badc: Path, work: Path, bearssl: Path, https_base: str) -> bo
         return False
     # Link against both archives (curl references BearSSL's br_* symbols).
     exe = od / f"curl_client_tls{EXE}"
-    cmd = [str(badc), "--gnu", "-DCURL_STATICLIB", "-I", str(INC), "-I", str(CURL_DIR),
+    cmd = [str(badc), "--gnu", "-DCURL_STATICLIB", *CLIENT_PLATFORM_DEFINES,
+           "-I", str(INC), "-I", str(CURL_DIR),
            str(CURL_DIR / "curl_client.c"), "-L", str(od), "-l", "curl",
            "-L", str(bearssl.parent), "-l", "bearssl", "-o", str(exe)]
     r = run(cmd, capture_output=True, text=True)

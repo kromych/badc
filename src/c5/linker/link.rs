@@ -383,10 +383,18 @@ pub fn link_native_objects_with_options(
     // definitions (same name in two units) error out -- the
     // ELF rule for `STB_GLOBAL` is "exactly one definition".
     let mut defined: BTreeMap<String, MergedSymbol> = BTreeMap::new();
+    // STB_WEAK (binding 2) defined symbols. ELF/SysV treats a weak
+    // definition as a real but overridable definition: a strong
+    // (STB_GLOBAL) definition of the same name wins with no
+    // multiple-definition error, and a weak definition on its own
+    // satisfies a reference. Collected separately, then folded into
+    // `defined` for every name no strong definition claims.
+    let mut weak_defined: BTreeMap<String, MergedSymbol> = BTreeMap::new();
     for (i, obj) in objs.iter().enumerate() {
         for sym in &obj.symbols {
-            if sym.binding != 1 {
-                // STB_GLOBAL = 1
+            // STB_LOCAL (0) routes through the static-func pass; only
+            // STB_GLOBAL (1) and STB_WEAK (2) join the merged table here.
+            if sym.binding != 1 && sym.binding != 2 {
                 continue;
             }
             if matches!(sym.section, NativeSymSection::Undef | NativeSymSection::Abs) {
@@ -406,6 +414,11 @@ pub fn link_native_objects_with_options(
                 value: base as u64 + sym.value,
                 size: sym.size,
             };
+            if sym.binding == 2 {
+                // Multiple weak definitions -- keep the first, no error.
+                weak_defined.entry(sym.name.clone()).or_insert(merged);
+                continue;
+            }
             if let Some(prev) = defined.get(&sym.name) {
                 return Err(link_err(&format!(
                     "multiple definition of `{}` (first at offset 0x{:x}, also at 0x{:x})",
@@ -414,6 +427,12 @@ pub fn link_native_objects_with_options(
             }
             defined.insert(sym.name.clone(), merged);
         }
+    }
+    // Fold weak definitions in behind strong ones: a name a strong def
+    // already claims keeps the strong entry (strong wins, silently);
+    // every other weak name becomes its own defined entry.
+    for (name, merged) in weak_defined {
+        defined.entry(name).or_insert(merged);
     }
 
     // Pass 2.1 -- collect synthetic prologue-end anchors. The
@@ -2240,6 +2259,132 @@ mod tests {
             .expect("x should resolve to the strong def");
         assert!(matches!(def.section, NativeSymSection::Data));
         assert_eq!(merged.bss_size, 0, "Common dropped, no bss slot");
+    }
+
+    // STB_WEAK defined symbols from a foreign object must resolve a
+    // reference rather than being dropped (ELF/SysV: a weak definition
+    // is a real, overridable definition). A strong definition of the
+    // same name wins, order-independently, with no multiple-definition
+    // error.
+    #[test]
+    fn weak_defined_symbol_resolves_and_yields_to_strong() {
+        use super::super::object::{NativeReloc, NativeSymbol};
+        let null_sym = || NativeSymbol {
+            name: alloc::string::String::new(),
+            section: NativeSymSection::Undef,
+            value: 0,
+            size: 0,
+            binding: 0,
+            kind: 0,
+        };
+        let mk = |text: alloc::vec::Vec<u8>,
+                  data: alloc::vec::Vec<u8>,
+                  symbols: alloc::vec::Vec<NativeSymbol>,
+                  text_relocs: alloc::vec::Vec<NativeReloc>|
+         -> NativeObject {
+            NativeObject {
+                machine: NativeMachine::X86_64,
+                text,
+                data,
+                bss_size: 0,
+                tls_data: alloc::vec::Vec::new(),
+                tls_bss_size: 0,
+                symbols,
+                text_relocs,
+                data_relocs: alloc::vec::Vec::new(),
+                dylibs: alloc::vec::Vec::new(),
+                import_dylib_map: alloc::vec::Vec::new(),
+                exports: alloc::vec::Vec::new(),
+                tls_index_fixups: alloc::vec::Vec::new(),
+                macho_tlv_descriptors: alloc::vec::Vec::new(),
+                macho_tlv_fixups: alloc::vec::Vec::new(),
+                tls_symbols: alloc::vec::Vec::new(),
+                macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+                elf_tpoff_fixups: alloc::vec::Vec::new(),
+                copy_relocs: alloc::vec::Vec::new(),
+                debug_info: alloc::vec::Vec::new(),
+                debug_abbrev: alloc::vec::Vec::new(),
+                debug_line: alloc::vec::Vec::new(),
+                debug_str: alloc::vec::Vec::new(),
+                debug_info_relocs: alloc::vec::Vec::new(),
+                debug_line_relocs: alloc::vec::Vec::new(),
+            }
+        };
+        // Weak definition of `weak_target` in `.text`.
+        let weak_unit = || {
+            mk(
+                alloc::vec![0xC3],
+                alloc::vec::Vec::new(),
+                alloc::vec![
+                    null_sym(),
+                    NativeSymbol {
+                        name: "weak_target".to_string(),
+                        section: NativeSymSection::Text,
+                        value: 0,
+                        size: 1,
+                        binding: 2,
+                        kind: 2,
+                    },
+                ],
+                alloc::vec::Vec::new(),
+            )
+        };
+        // `call weak_target` (R_X86_64_PC32) with an UNDEF reference.
+        let ref_unit = mk(
+            alloc::vec![0xE8, 0, 0, 0, 0],
+            alloc::vec::Vec::new(),
+            alloc::vec![
+                null_sym(),
+                NativeSymbol {
+                    name: "weak_target".to_string(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 1,
+                    kind: 0,
+                },
+            ],
+            alloc::vec![NativeReloc {
+                offset: 1,
+                sym_idx: 1,
+                rtype: 2,
+                addend: -4,
+            }],
+        );
+        // A weak def now satisfies the reference (previously "undefined
+        // reference to `weak_target`").
+        let merged = link_native_objects(&[weak_unit(), ref_unit]).expect("weak def resolves");
+        let def = merged.defined.get("weak_target").expect("weak def present");
+        assert!(matches!(def.section, NativeSymSection::Text));
+
+        // Strong definition in `.data`.
+        let strong_unit = || {
+            mk(
+                alloc::vec::Vec::new(),
+                alloc::vec![0u8; 4],
+                alloc::vec![
+                    null_sym(),
+                    NativeSymbol {
+                        name: "weak_target".to_string(),
+                        section: NativeSymSection::Data,
+                        value: 0,
+                        size: 4,
+                        binding: 1,
+                        kind: 1,
+                    },
+                ],
+                alloc::vec::Vec::new(),
+            )
+        };
+        // Strong wins over weak, independent of link order, no error.
+        for pair in [[weak_unit(), strong_unit()], [strong_unit(), weak_unit()]] {
+            let merged = link_native_objects(&pair).expect("strong+weak links");
+            let def = merged.defined.get("weak_target").expect("resolved");
+            assert!(
+                matches!(def.section, NativeSymSection::Data),
+                "strong definition must win"
+            );
+        }
     }
 
     // A code reference and a data initializer that both name the same

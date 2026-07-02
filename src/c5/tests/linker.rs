@@ -1090,6 +1090,55 @@ fn macho_executable_exports_globals_through_dyld_info_trie() {
 }
 
 #[test]
+fn thread_local_in_elf_shared_library_is_a_link_error() {
+    // The emitted `_Thread_local` sequences use the local-exec TLS
+    // model, whose TP-relative offsets are valid only in the
+    // executable's static TLS block; baked into ET_DYN they address
+    // another module's TLS. The writer must reject the combination
+    // until the general-dynamic model is implemented.
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "_Thread_local int counter = 7;\n\
+         int bump(void) { counter += 1; return counter; }\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    assert!(
+        !merged.tls_data.is_empty(),
+        "the merged unit must carry TLS data"
+    );
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let err = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "",
+        None,
+        OutputKind::SharedLibrary,
+        Target::LinuxX64,
+        None,
+    )
+    .expect_err("a _Thread_local shared library must be rejected");
+    assert!(
+        err.to_string()
+            .contains("_Thread_local data is not supported in ELF shared-library output"),
+        "unexpected diagnostic: {err}"
+    );
+}
+
+#[test]
 fn shared_object_relocates_internal_data_pointers() {
     // A function / data pointer baked into a shared object's static data
     // must carry an R_*_RELATIVE relocation so it tracks the runtime load

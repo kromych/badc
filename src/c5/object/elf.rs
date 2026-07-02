@@ -1311,6 +1311,17 @@ pub(super) fn write(
     machine: Machine,
 ) -> Result<Vec<u8>, C5Error> {
     let is_shared = build.output_kind == super::OutputKind::SharedLibrary;
+    // Both backends lower `_Thread_local` access with the local-exec
+    // model, whose TP-relative offsets are valid only in the
+    // executable's static TLS block; baked into ET_DYN they address
+    // another module's TLS. TODO: implement the general-dynamic TLS
+    // model for ELF shared-library output.
+    if is_shared && !build.tls_data.is_empty() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+            "_Thread_local data is not supported in ELF shared-library output: \
+             only the executable-model (local-exec) TLS sequence is implemented",
+        )));
+    }
     let n_imports = build.imports.imports.len();
     // Pick the libc-exit tail when the user has any
     // libc `exit` import (typically through `<stdlib.h>`),

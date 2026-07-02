@@ -365,14 +365,17 @@ fn live_data_intervals(
             live[interval_of(off)] = true;
         }
     }
+    // The target interval is resolved via the anchor: a one-past-the-end
+    // target coincides with the next object's start and would mark the
+    // wrong object live.
     let edges: Vec<(usize, usize)> = program
         .data_relocs
         .iter()
-        .filter(|r| (r.data_offset as i64) < data_len && (r.target_offset as i64) < data_len)
+        .filter(|r| (r.data_offset as i64) < data_len && (r.target_anchor as i64) < data_len)
         .map(|r| {
             (
                 interval_of(r.data_offset as i64),
-                interval_of(r.target_offset as i64),
+                interval_of(r.target_anchor as i64),
             )
         })
         .collect();
@@ -554,7 +557,23 @@ pub(crate) fn compact_program_data(
     }
     for r in &mut out.data_relocs {
         r.data_offset = map(r.data_offset as i64) as u64;
-        r.target_offset = map(r.target_offset as i64) as u64;
+        // Rebase the target against its own object, resolved via the
+        // anchor: a one-past-the-end target (C99 6.5.6p8) lies on the
+        // next object's start and the raw offset would follow that
+        // object instead.
+        let anchor = r.target_anchor as i64;
+        if (0..data_len).contains(&anchor) {
+            let i = interval_of(anchor);
+            if new_base[i] >= 0 {
+                r.target_offset = (new_base[i] + (r.target_offset as i64 - starts[i])) as u64;
+            } else {
+                r.target_offset = 0;
+            }
+            r.target_anchor = map(anchor) as u64;
+        } else {
+            r.target_offset = map(r.target_offset as i64) as u64;
+            r.target_anchor = r.target_offset;
+        }
     }
     for r in &mut out.code_relocs {
         r.data_offset = map(r.data_offset as i64) as u64;

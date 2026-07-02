@@ -250,6 +250,7 @@ impl Compiler {
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: target_offset as u64,
+                target_anchor: target_offset as u64,
             });
             self.data_reloc_sym_idx.push(target_idx);
             return Ok(());
@@ -273,6 +274,7 @@ impl Compiler {
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: addr as u64,
+                target_anchor: addr as u64,
             });
             // String-literal target -- no originating
             // symbol; sentinel marks the entry as
@@ -343,6 +345,7 @@ impl Compiler {
                 self.data_relocs.push(crate::c5::program::DataReloc {
                     data_offset: var_offset as u64,
                     target_offset: off as u64,
+                    target_anchor: off as u64,
                 });
                 self.data_reloc_sym_idx.push(new_idx);
                 return Ok(());
@@ -518,6 +521,7 @@ impl Compiler {
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: target_offset as u64,
+                target_anchor: self.symbols[target_idx].val as u64,
             });
             self.data_reloc_sym_idx.push(target_idx);
             return Ok(());

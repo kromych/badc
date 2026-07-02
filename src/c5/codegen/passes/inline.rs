@@ -840,7 +840,8 @@ fn splice_multi_block(
                     }
                     _ => {}
                 }
-                if let Some(translated) = rewrite_callee_inst(cinst, &remapped_args, &callee_remap) {
+                if let Some(translated) = rewrite_callee_inst(cinst, &remapped_args, &callee_remap)
+                {
                     let new_id = new_insts.len() as u32;
                     callee_remap[ce_pc as usize] = new_id;
                     new_insts.push(translated);
@@ -929,7 +930,6 @@ fn splice_multi_block(
             break;
         }
     }
-
 
     // Carry both the caller's own and the spliced callee's cross-TU
     // symbol references onto their new value-ids. The symbol indices

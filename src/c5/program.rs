@@ -50,6 +50,13 @@ pub struct DataReloc {
     /// pointed at. Same data segment; cross-segment
     /// relocations (e.g., into `tls_data`) are future work.
     pub target_offset: u64,
+    /// Start offset of the object `target_offset` points into.
+    /// The raw offset alone cannot attribute a one-past-the-end
+    /// address (C99 6.5.6p8): it coincides with the next object's
+    /// start, so data compaction would track the wrong object.
+    /// Equals `target_offset` when the producer has no object
+    /// identity.
+    pub target_anchor: u64,
 }
 
 /// A function-pointer initializer that needs run-time relocation.

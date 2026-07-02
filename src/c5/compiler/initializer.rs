@@ -113,9 +113,14 @@ impl Compiler {
                         return;
                     }
                 }
+                let anchor = match src_sym {
+                    Some(sym_idx) => self.symbols[sym_idx].val,
+                    None => value,
+                };
                 self.data_relocs.push(crate::c5::program::DataReloc {
                     data_offset: here as u64,
                     target_offset: value as u64,
+                    target_anchor: anchor as u64,
                 });
                 self.data_reloc_sym_idx.push(src_sym.unwrap_or(usize::MAX));
             }

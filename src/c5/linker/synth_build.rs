@@ -805,6 +805,7 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
                 data_relocs.push(DataReloc {
                     data_offset: r.slot_offset,
                     target_offset: r.target_offset,
+                    target_anchor: r.target_offset,
                 });
             }
             NativeSymSection::Bss => {
@@ -815,6 +816,7 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
                 data_relocs.push(DataReloc {
                     data_offset: r.slot_offset,
                     target_offset: merged.data.len() as u64 + r.target_offset,
+                    target_anchor: merged.data.len() as u64 + r.target_offset,
                 });
             }
             NativeSymSection::Text => {

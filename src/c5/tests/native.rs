@@ -911,6 +911,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // a `BuildError` on this entry means the retry regressed.
     ("auto_include_undeclared_libc.c", 0),
     ("packed_bitfield_repack.c", 0),
+    ("nested_designator_string_member.c", 0),
+    ("union_member_unbraced_init.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

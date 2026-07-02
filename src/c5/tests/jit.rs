@@ -1540,6 +1540,8 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // native_elf_x64 runners validate the Linux paths once the
     // built ELF lands on the orb VMs.
     ("packed_bitfield_repack.c", 0),
+    ("nested_designator_string_member.c", 0),
+    ("union_member_unbraced_init.c", 0),
 ];
 
 #[test]

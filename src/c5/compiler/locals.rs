@@ -1468,17 +1468,58 @@ impl Compiler {
                 // C99 6.7.8p7 nested designator chain. See the
                 // matching branch in `collect_struct_initializer`
                 // for the constant-staging variant. Computes the
-                // cumulative offset / final type, then emits one
+                // cumulative offset / final member, then emits one
                 // store at `&local + extra_offset + final_offset`.
                 if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
                     let outer = self.structs[sid].fields[outer_idx].clone();
                     let chain_base = extra_offset + outer.offset as i64;
-                    let (final_offset, final_ty) =
+                    let (final_offset, final_field) =
                         self.resolve_nested_designator_chain(chain_base, outer.ty)?;
                     if self.lex.tk != Token::Assign {
                         return Err(self.compile_err("`=` expected after nested-designator chain"));
                     }
                     self.next()?;
+                    // A char-array final member takes a string literal
+                    // (C99 6.7.8p14): per-byte constant stores, zero
+                    // fill; mirrors the positional branch below. Other
+                    // array or bitfield finals are rejected the same
+                    // way the positional walk rejects them.
+                    if final_field.array_size > 0 {
+                        if self.lex.tk == '"'
+                            && !self.lex.str_is_wide
+                            && (final_field.ty & !UNSIGNED_BIT) == Ty::Char as i64
+                        {
+                            let start_addr = self.take_concat_string_literal()?;
+                            self.data.push(0); // ensure NUL terminator
+                            for k in 0..final_field.array_size as usize {
+                                let b = if start_addr + k < self.data.len() {
+                                    self.data[start_addr + k] as i64
+                                } else {
+                                    0
+                                };
+                                let value = self.ast_emit_int_lit(b, Ty::Char as i64);
+                                self.pending_local_runtime_elements.push(
+                                    super::super::ast::RuntimeInitElement {
+                                        offset: final_offset + k as i64,
+                                        value,
+                                        ty: Ty::Char as i64,
+                                    },
+                                );
+                            }
+                            pos = outer_idx + 1;
+                            self.accept(',')?;
+                            continue;
+                        }
+                        return Err(self.compile_err(
+                            "non-constant array-field initializer not yet supported",
+                        ));
+                    }
+                    if final_field.bit_width > 0 {
+                        return Err(
+                            self.compile_err("non-constant bitfield initializer not yet supported")
+                        );
+                    }
+                    let final_ty = final_field.ty;
                     self.emit_lea(local_val);
                     if final_offset > 0 {
                         self.ast_psh();

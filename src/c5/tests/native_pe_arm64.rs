@@ -910,6 +910,8 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("setjmp_misaligned.c", 0),
     ("setjmp_longjmp_roundtrip.c", 0),
     ("packed_bitfield_repack.c", 0),
+    ("nested_designator_string_member.c", 0),
+    ("union_member_unbraced_init.c", 0),
 ];
 
 #[test]

@@ -650,6 +650,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // default.
     ("elf_symbol_version_default.c", 0),
     ("packed_bitfield_repack.c", 0),
+    ("nested_designator_string_member.c", 0),
+    ("union_member_unbraced_init.c", 0),
 ];
 
 #[test]

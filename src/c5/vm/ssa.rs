@@ -1823,7 +1823,7 @@ fn format_float(v: f64, s: &PrintfSpec) -> alloc::string::String {
     if upper { body.to_uppercase() } else { body }
 }
 
-/// `d.dddde±dd` with `prec` fraction digits (7.19.6.1p8, the e
+/// `d.dddde+/-dd` with `prec` fraction digits (7.19.6.1p8, the e
 /// conversion). Rust's `{:e}` produces `d.ddddeN`; rewrite the
 /// exponent into the sign + minimum-two-digit C form.
 fn format_exp(av: f64, prec: usize, alt: bool) -> alloc::string::String {

@@ -535,6 +535,13 @@ impl Preprocessor {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());
                 macros.insert("__MACH__".to_string(), "1".to_string());
+                // Deployment target, decimal MMmmpp. Matches the 11.0
+                // minimum OS version stamped into LC_BUILD_VERSION;
+                // <AvailabilityMacros.h> derives its version gates from it.
+                macros.insert(
+                    "__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__".to_string(),
+                    "110000".to_string(),
+                );
             }
             Target::LinuxAarch64 | Target::LinuxX64 => {
                 macros.insert("__linux__".to_string(), "1".to_string());

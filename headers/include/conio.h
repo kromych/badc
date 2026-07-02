@@ -1,7 +1,7 @@
 #pragma once
-// MSVC CRT direct-console I/O (`_getch` family) plus the `_locking`
-// mode constants. These entry points live in msvcrt.dll; the
-// underscore-prefixed names are the spellings the CRT exports.
+// MSVC CRT direct-console I/O (`_getch` family). These entry points
+// live in msvcrt.dll; the underscore-prefixed names are the spellings
+// the CRT exports.
 #ifdef _WIN32
 // `wchar_t` (<stddef.h>) and `wint_t` (<wchar.h>) back the wide
 // console entry points below.
@@ -30,11 +30,7 @@ int    _ungetch(int c);
 wint_t _ungetwch(wint_t c);
 int    _kbhit(void);
 
-// `_locking` mode argument (MSVC <sys/locking.h>). Values pinned by
-// the CRT.
-#define _LK_UNLCK 0
-#define _LK_LOCK  1
-#define _LK_NBLCK 2
-#define _LK_RLCK  3
-#define _LK_NBRLCK 4
+// Callers historically reached the `_locking` mode constants through
+// this header; they live in their CRT home now.
+#include <sys/locking.h>
 #endif

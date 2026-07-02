@@ -1,0 +1,54 @@
+// AvailabilityMacros.h -- macOS version gates. Version constants and
+// the MIN_REQUIRED/MAX_ALLOWED derivation follow the SDK header; the
+// compiler predefines __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__
+// to match the LC_BUILD_VERSION minimum it stamps.
+
+#pragma once
+
+#ifdef __APPLE__
+
+#include <TargetConditionals.h>
+
+// Encoded MMmm(pp): 10.x as 10x0 through 10.9, 10MM00/MM0000 after.
+// Values from the SDK's <AvailabilityVersions.h>.
+#define MAC_OS_X_VERSION_10_0 1000
+#define MAC_OS_X_VERSION_10_1 1010
+#define MAC_OS_X_VERSION_10_2 1020
+#define MAC_OS_X_VERSION_10_3 1030
+#define MAC_OS_X_VERSION_10_4 1040
+#define MAC_OS_X_VERSION_10_5 1050
+#define MAC_OS_X_VERSION_10_6 1060
+#define MAC_OS_X_VERSION_10_7 1070
+#define MAC_OS_X_VERSION_10_8 1080
+#define MAC_OS_X_VERSION_10_9 1090
+#define MAC_OS_X_VERSION_10_10 101000
+#define MAC_OS_X_VERSION_10_11 101100
+#define MAC_OS_X_VERSION_10_12 101200
+#define MAC_OS_X_VERSION_10_13 101300
+#define MAC_OS_X_VERSION_10_14 101400
+#define MAC_OS_X_VERSION_10_15 101500
+#define MAC_OS_X_VERSION_10_16 101600
+#define MAC_OS_VERSION_11_0 110000
+#define MAC_OS_VERSION_12_0 120000
+#define MAC_OS_VERSION_13_0 130000
+#define MAC_OS_VERSION_14_0 140000
+
+#ifndef MAC_OS_X_VERSION_MIN_REQUIRED
+#ifdef __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__
+#define MAC_OS_X_VERSION_MIN_REQUIRED __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__
+#else
+#define MAC_OS_X_VERSION_MIN_REQUIRED MAC_OS_X_VERSION_10_5
+#endif
+#endif
+
+#ifndef MAC_OS_X_VERSION_MAX_ALLOWED
+#if MAC_OS_X_VERSION_MIN_REQUIRED > MAC_OS_VERSION_14_0
+#define MAC_OS_X_VERSION_MAX_ALLOWED MAC_OS_X_VERSION_MIN_REQUIRED
+#else
+#define MAC_OS_X_VERSION_MAX_ALLOWED MAC_OS_VERSION_14_0
+#endif
+#endif
+
+// TODO: AVAILABLE_MAC_OS_X_VERSION_* attribute decorators.
+
+#endif

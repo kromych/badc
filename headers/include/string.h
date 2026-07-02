@@ -181,6 +181,14 @@ char *strchrnul(const char *s, int c);
 char *memrchr(char *s, int c, int n);
 void explicit_bzero(void *s, size_t n);
 #endif
+// C11 K.3.7.4.1, visible on the Annex-K opt-in like the platform
+// header; libSystem exports it, glibc does not.
+#if defined(__APPLE__) && defined(__STDC_WANT_LIB_EXT1__) && __STDC_WANT_LIB_EXT1__ >= 1
+#pragma binding(libc::memset_s, "_memset_s")
+typedef int errno_t;
+typedef size_t rsize_t;
+errno_t memset_s(void *s, rsize_t smax, int c, rsize_t n);
+#endif
 #ifdef _WIN32
 // Case-insensitive compares -- msvcrt-only, no POSIX equivalent
 // in the c5 surface. Names match the underscored entries

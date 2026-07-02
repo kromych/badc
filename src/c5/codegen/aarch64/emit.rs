@@ -3786,13 +3786,13 @@ fn finish_call_result(
 }
 
 /// Common return-value bridge shared by `emit_call` and
-/// `emit_call_indirect`. The c5-internal calling convention ferries
-/// every return value -- including an f64 bit pattern -- through the
-/// integer return register x0 (see `emit_return`, which moves an
-/// FP-placed return value into x0 via `fmov x0, d`). When the callee
-/// returns a floating-point scalar (`fp_return`) the call's result is
-/// FP-classed, so the x0 bit pattern is reinterpreted into the FP
-/// register file via `fmov d, x0`.
+/// `emit_call_indirect`. An integer-classed result rides x0 (AAPCS64
+/// 6.4.1); a floating-point scalar rides d0, whose low 32 bits are the
+/// s0 an f32 occupies (AAPCS64 6.4.2), which is where `emit_return`
+/// leaves it. When the callee returns a floating-point scalar
+/// (`fp_return`) this copies d0 into the FP-classed destination, or
+/// bridges it to a GPR via `fmov x, d0` when the destination is
+/// integer-classed.
 fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: bool) {
     if fp_return {
         // A floating-point scalar result arrives in d0 (C99 6.2.5p10 /

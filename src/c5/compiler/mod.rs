@@ -880,10 +880,9 @@ pub struct Compiler {
     /// the .tls$ callback chain on Win64). Each `_Thread_local`
     /// global gets `slots_of_type(ty) * 8` bytes here, with
     /// `Symbol::val` holding the byte offset within `tls_data`.
-    /// Today we don't parse TLS initialisers, so the segment is
-    /// always zero-filled and goes entirely into .tbss; the layout
-    /// leaves room for a future "initialised TLS image -> .tdata"
-    /// path.
+    /// A `_Thread_local int x = 5;` initialiser fills its slice and
+    /// raises `tls_init_size` so its bytes go into .tdata; an
+    /// uninitialised variable stays zero-filled in .tbss.
     tls_data: Vec<u8>,
     /// Number of bytes at the start of [`Self::tls_data`] that
     /// are statically initialised by an explicit

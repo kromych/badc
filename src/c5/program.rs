@@ -119,10 +119,9 @@ pub struct Program {
     /// indexed by `Inst::TlsAddr`'s operand. The image writers copy
     /// this into `.tdata` (initialised slice = `tls_data[..tls_init_size]`)
     /// and `.tbss` (zero-fill remainder = `tls_data[tls_init_size..]`).
-    /// Today everything starts zero (no `_Thread_local int x = 5;`
-    /// initialiser syntax), so `tls_init_size == 0` and the whole
-    /// block lives in .tbss; the layout is structured for future
-    /// expansion.
+    /// A `_Thread_local int x = 5;` initialiser raises
+    /// `tls_init_size` so its bytes land in `.tdata`; an
+    /// uninitialised variable keeps its slice zero and in `.tbss`.
     pub tls_data: Vec<u8>,
     /// Number of bytes of `tls_data` that are statically initialised
     /// (i.e., emitted into `.tdata`). The remainder

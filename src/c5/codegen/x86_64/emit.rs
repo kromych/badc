@@ -334,14 +334,13 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
 
 /// `(n_reg, n_stack)` split of the declared parameters: how many land
 /// in argument registers (integer or FP) and how many overflow to the
-/// host stack. The prologue's c5 cdecl cell layout requires the
-/// register-passed parameters to form a contiguous prefix and the
-/// stack-passed ones a contiguous suffix; that holds whenever neither
-/// argument-register bank is exhausted before a later parameter of the
-/// other bank is placed. TODO: a parameter list that exhausts the
-/// integer bank before a trailing floating-point parameter would
-/// interleave register and stack placements; such lists are not yet
-/// lowered (the debug assertion fires).
+/// host stack. The entry-spill prologue fills each c5 cdecl cell from
+/// its own placement, so the register-passed and stack-passed
+/// parameters need not form a contiguous prefix and suffix: a by-value
+/// aggregate consuming no argument register (System V AMD64 MEMORY
+/// class) or a Win64 aggregate overflowing past the positional
+/// registers interleaves the two, and the per-placement fill handles
+/// it directly.
 fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) {
     let placements = param_placements(func, abi);
     // The count of register-passed (non-stack) placements and the count
@@ -7222,19 +7221,17 @@ fn emit_atomic_cas(
 ///     own prologue, but the tail call site can't tell from here, so
 ///     keep the tail conversion off when *this* function is variadic
 ///     (its arg slots stay on the c5 stack rather than reg cells).
-///   * The function has no `LocalAddr` to a negative slot: any such
-///     address could have been passed to the callee in an earlier
-///     call's argument, and tearing down our frame before the jmp
-///     would invalidate it.
-///   * The function records no callee-saved register use
-///     (`alloc.gpr_used.is_empty()`): the epilogue would emit per-reg
-///     restores between the arg marshal and the jmp, all of which
-///     are callee-saved (rbx / r12 / r14 / r15 / rsi / rdi on Win64)
-///     and so don't alias the caller-saved arg-register window the
-///     tail call has just populated. Restricted on this first pass
-///     for tractability; the more general path can drop this gate
-///     once it is shown to be safe via an explicit save-before-marshal
-///     sequence.
+///   * The function takes no `LocalAddr`, whether to a user local
+///     (negative `off`) or a c5 cdecl param cell (`off >= 2`): such an
+///     address could have been passed to an earlier callee, and the
+///     param cells are overwritten by the tail-callee's own prologue,
+///     so tearing down the frame before the jmp would make it dangle.
+///
+/// Callee-saved register use is allowed: the marshalled arguments ride
+/// the caller-saved arg-register window, which is disjoint from
+/// `alloc.gpr_used` (only callee-saved regs land there), so the
+/// epilogue's per-reg restores cannot clobber them (see
+/// `emit_tail_call`).
 fn detect_tail_call<'a>(
     func: &'a FunctionSsa,
     block: &super::super::ir::Block,

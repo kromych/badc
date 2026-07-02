@@ -16,13 +16,6 @@
 //!     `is_variadic` / `fixed_args` / `param_types` across the ELF
 //!     ET_REL roundtrip. The C99-motivated fix is a per-binding
 //!     metadata note section. TODO.
-//!   * Multi-object `_Thread_local` storage. A single TLS-bearing
-//!     input is fully threaded: ELF PT_TLS via
-//!     [`MergedNative::tls_data`], the Win64 `_tls_index` fixups and
-//!     macOS TLV descriptors via the matching `.note.badc` records.
-//!     Merging two or more TLS objects still needs per-unit TPOFF /
-//!     descriptor-index relocations, so `link_native_objects` rejects
-//!     the multi-object case. TODO.
 //!   * DWARF debug info. The merged image has no AST / function
 //!     metadata to drive DWARF emit; debug sections are skipped,
 //!     matching `write_executable_elf64`'s policy. TODO.
@@ -30,6 +23,12 @@
 //! Shared-library output is handled: the caller passes
 //! [`OutputKind::SharedLibrary`] and the `#pragma export` names ride
 //! the ET_REL `NT_BADC_EXPORTS` note into [`MergedNative::exports`].
+//!
+//! `_Thread_local` storage is threaded for single- and multi-object
+//! links: ELF PT_TLS via [`MergedNative::tls_data`], the Win64
+//! `_tls_index` fixups and macOS TLV descriptors via the matching
+//! `.note.badc` records, with per-unit TPOFF / descriptor rebasing
+//! resolved in `link_native_objects`.
 
 #![cfg(feature = "std")]
 

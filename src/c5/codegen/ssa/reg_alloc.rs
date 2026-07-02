@@ -104,12 +104,13 @@ pub(crate) struct Allocation {
     /// skip pure-with-no-uses insts (dead-code elimination). A value
     /// with zero uses and no side effects produces no machine code.
     pub use_counts: Vec<u32>,
-    /// Highest PC index that names each value as an operand. A
-    /// value defined at PC `i` is live throughout `[i, last_use[i]]`
-    /// and the emit pass queries this to compute the set of
-    /// registers carrying live SSA values at any given PC -- needed
-    /// when picking an intra-instruction scratch that must not
-    /// clobber a value the next instruction reads.
+    /// Highest PC index that names each value as an operand, raised
+    /// across back edges by `extend_last_use_across_blocks`. A value
+    /// defined at PC `i` is live throughout `[i, last_use[i]]`. The
+    /// allocator's interval tests read it: `class_last_use` feeds
+    /// `promote_calls_after_def_to_classes` so a value whose range
+    /// spans a call takes a callee-saved home, and the coalescing
+    /// hints avoid a caller-saved register such a call would clobber.
     pub last_use: Vec<u32>,
     /// For `BinopI(Shr, X, K)` insts the allocator recognised as
     /// the upper half of a sign-narrow `Shl K; Shr K` pair (K in
@@ -1945,9 +1946,13 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             }
         };
         bump(b.exit_acc);
+        // A `GotoIndirect` sets `exit_acc` to its target, so the bump
+        // above already covers it; the explicit arm keeps this walk
+        // uniform with the liveness and use-count terminator walks.
         match &b.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(*cond),
             Terminator::Return(v) => bump(*v),
+            Terminator::GotoIndirect { target } => bump(*target),
             _ => {}
         }
     }
@@ -2012,6 +2017,7 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
         match &blk.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
             Terminator::Return(v) if *v != NO_VALUE => mark(*v),
+            Terminator::GotoIndirect { target } if *target != NO_VALUE => mark(*target),
             _ => {}
         }
     }

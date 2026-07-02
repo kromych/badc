@@ -238,12 +238,11 @@ const SEG_INDEX_DATA: u8 = 2;
 const S_ATTR_DEBUG: u32 = 0x0200_0000;
 
 /// Mach-O section type bits used by the TLV layout. See
-/// `<mach-o/loader.h>` for the full set; we only need
-/// `__thread_bss` (zero-fill, the only flavour the c5 frontend
-/// generates today since `_Thread_local` initialisers aren't
-/// supported) and `__thread_vars` (descriptors). The matching
-/// `__thread_data` (S_THREAD_LOCAL_REGULAR = 0x11) would be
-/// emitted alongside if we ever support TLS initialisers.
+/// `<mach-o/loader.h>` for the full set. `__thread_vars` holds the
+/// descriptors; the per-thread storage is `__thread_bss` (zero-fill)
+/// when every `_Thread_local` starts zero, or `__thread_data`
+/// (S_THREAD_LOCAL_REGULAR = 0x11, file-backed init template) once any
+/// initialiser makes `build.tls_init_size` non-zero.
 #[allow(dead_code)]
 const S_ZEROFILL: u32 = 0x1; // __bss (zero-fill, no file backing)
 const S_THREAD_LOCAL_REGULAR: u32 = 0x11; // __thread_data (init data)
@@ -2572,9 +2571,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // then dyld_info family, then symbol tables, then dylinker /
     // dylib / build_version / main (or LC_ID_DYLIB for shared libs).
     // Segment LC order: __PAGEZERO, __TEXT, __DATA, __DWARF
-    // (executables only), __LINKEDIT -- the layout
-    // `go build` produces for executables. __DWARF reuses
-    // __LINKEDIT's vmaddr with vmsize=0, so the loaded image's
+    // (present when debug info is emitted, for both executables and
+    // dylibs), __LINKEDIT. __DWARF occupies its own page-aligned
+    // vmaddr slot between __DATA and __LINKEDIT, so the loaded image's
     // address space stays monotonic non-decreasing.
     // File-resident order matches LC order.
     out.extend_from_slice(&pagezero);
@@ -2746,9 +2745,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     }
     out.resize((data_fileoff + data_filesize) as usize, 0);
 
-    // __DWARF contents (executables only -- dylibs skip phase
-    // 1 DWARF, see `emit_dwarf`). Order matches what
-    // `segment_dwarf` pointed each section at: info, abbrev,
+    // __DWARF contents, emitted whenever debug info is requested
+    // (executables and dylibs, gated by `emit_dwarf`). Order matches
+    // what `segment_dwarf` pointed each section at: info, abbrev,
     // line, str. Sits ahead of __LINKEDIT so codesign can grow
     // __LINKEDIT at the file tail without trampling debug
     // bytes.

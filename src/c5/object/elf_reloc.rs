@@ -289,9 +289,9 @@ fn data_global_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
 
 /// Emit a relocatable ELF64 object holding the contents of
 /// `build`. The result is a standard `.o` that `ld` / `lld` can
-/// link (modulo missing relocations -- the writer doesn't yet
-/// emit `.rela.text`, so a TU with cross-TU calls produces a
-/// link error today).
+/// link: the writer emits `.rela.text` (SHT_RELA, `sh_info` = the
+/// `.text` section index) with one entry per call site, so a TU with
+/// cross-TU calls resolves at link time.
 pub(super) fn write_relocatable(
     program: &Program,
     build: &Build,

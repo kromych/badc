@@ -177,11 +177,12 @@ const NUM_DATA_DIRS: u32 = 16;
 /// appears when the c5 program has initialized data -- string
 /// literals, globals, or `_Thread_local` storage -- because
 /// real Windows kernels reject images that list a zero-sized
-/// section. The optional `.reloc` only appears when the
-/// program declares any `_Thread_local` global; that's the
-/// only path that puts absolute VAs into the image (the three
-/// pointer fields of `IMAGE_TLS_DIRECTORY64`), which the
-/// ASLR-aware loader needs to fix up after sliding.
+/// section. The optional `.reloc` appears when the image holds
+/// any absolute VA the ASLR-aware loader must fix up after
+/// sliding: the three `IMAGE_TLS_DIRECTORY64` pointer fields
+/// (when the program declares a `_Thread_local` global) and any
+/// absolute pointer baked by an address-of-static data or code
+/// relocation.
 ///
 /// `.pdata` is the Exception Directory, mandatory under the
 /// 64-bit Windows ABI: the loader looks up `RUNTIME_FUNCTION`
@@ -191,13 +192,13 @@ const NUM_DATA_DIRS: u32 = 16;
 /// hosts can reject a missing entry, so we emit it on both
 /// arches.
 ///
-/// `.reloc` is omitted for TLS-free images because every
-/// cross-section reference the codegen emits is RIP-relative
-/// (x86_64) or PC-relative (aarch64 ADRP+ADD), so the
-/// DYNAMIC_BASE-flagged image can be slid to any address
-/// without touching any absolute pointer in the file. The
-/// only absolute pointers we ever emit live inside the TLS
-/// directory, which is why `.reloc` follows TLS presence.
+/// `.reloc` is omitted only when the image holds no absolute
+/// pointer: most cross-section references are RIP-relative
+/// (x86_64) or PC-relative (aarch64 ADRP+ADD), and a
+/// DYNAMIC_BASE-flagged image slides freely without touching
+/// them. Absolute VAs live in the TLS directory and in
+/// address-of-static initializers, so `.reloc` follows their
+/// presence.
 fn num_sections(
     data_section_present: bool,
     reloc_section_present: bool,
@@ -1189,13 +1190,13 @@ pub(super) fn write(
             // subsequent `tls_array[0] + offset` then lands
             // inside another module's per-thread storage and
             // reads non-zero data, which trips
-            // `thread_local_basic.c`'s "counter != 0" check.
-            // The c5 frontend never produces non-zero TLS init
-            // bytes today (no `_Thread_local int x = 5;`
-            // syntax), so emitting the whole block as zero
-            // template bytes is byte-for-byte identical to the
-            // SizeOfZeroFill scheme but sidesteps the loader
-            // edge case.
+            // the "counter != 0" check in a per-thread test.
+            // The frontend may produce non-zero TLS init bytes
+            // (`_Thread_local int x = 5;`); `build.tls_data`
+            // already holds the init template followed by the
+            // zero-init tail, so emitting the whole block as
+            // template bytes carries both correctly and sidesteps
+            // the empty-template edge case.
             let tls_init_start_va =
                 IMAGE_BASE + (data_rva + tls_layout.tls_init_offset_in_data) as u64;
             let tls_init_end_va = tls_init_start_va + build.tls_data.len() as u64;
@@ -1207,10 +1208,9 @@ pub(super) fn write(
             out.extend_from_slice(&0u64.to_le_bytes()); // AddressOfCallBacks
             out.extend_from_slice(&zero_fill.to_le_bytes());
             out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
-            // TLS template -- copied verbatim into each
-            // thread's per-thread region by the loader. The c5
-            // frontend zero-initialises every TLS variable
-            // today, so this is effectively N bytes of zeros.
+            // TLS template -- copied verbatim into each thread's
+            // per-thread region by the loader. `tls_data` holds the
+            // initialised bytes followed by the zero-init tail.
             out.extend_from_slice(&build.tls_data);
         }
     }
@@ -2861,10 +2861,11 @@ fn patch_aarch64_adrp_ldr(
     Ok(())
 }
 
-/// Patch an aarch64 `adrp xd, _; add xd, xd, #_` pair so the final
-/// xd holds the absolute-address-mod-image-base equivalent of
-/// `target_rva` (resolved by the loader at fixed image base since
-/// we don't ship base relocations).
+/// Patch an aarch64 `adrp xd, _; add xd, xd, #_` pair to point at
+/// `target_rva`. The encoding is PC-relative: `adrp` takes the signed
+/// 4 KiB page delta from its own page and `add` the 12-bit in-page
+/// offset, so an ASLR slide moves the instruction and its target by
+/// the same delta and the pair needs no base relocation.
 fn patch_aarch64_adrp_add(
     text: &mut [u8],
     adrp_offset_in_text: u32,

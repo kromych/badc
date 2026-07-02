@@ -302,9 +302,10 @@ pub fn link_native_objects_with_options(
     // the same through `NT_BADC_ELF_TPOFF` fixups resolved in Pass 4.1
     // below (x86_64 variant-2 `sub imm32`, Linux/aarch64 variant-1 `add
     // imm12`, Windows/aarch64 TEB-indexed `add imm12`), so a multi-unit
-    // link rebases each access against the merged layout. A same-unit
-    // access on the Windows TEB path with no cross-unit reference carries
-    // no fixup and keeps its baked single-unit offset.
+    // link rebases each access against the merged layout. On the
+    // Windows/aarch64 TEB path both a unit-local and an extern access
+    // record a fixup, so a unit-local offset is rebased by its unit's
+    // base in the merged block rather than kept as a baked offset.
     let uses_tlv = objs.iter().any(|o| {
         !o.macho_tlv_descriptors.is_empty()
             || !o.macho_tlv_fixups.is_empty()

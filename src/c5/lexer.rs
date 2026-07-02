@@ -1089,8 +1089,14 @@ impl Lexer {
                     && self.pos < self.src.len()
                     && (b'0'..=b'7').contains(&self.src[self.pos])
                 {
+                    // Accumulate via wrapping_mul / wrapping_add so a
+                    // full 64-bit octal pattern (the spelling of
+                    // ULLONG_MAX) does not trip debug-build overflow
+                    // detection; the type picker types it per C99
+                    // 6.4.4.1 from the wrapped bit pattern.
                     while self.pos < self.src.len() && (b'0'..=b'7').contains(&self.src[self.pos]) {
-                        val = val * 8 + (self.src[self.pos] - b'0') as i64;
+                        let digit = (self.src[self.pos] - b'0') as i64;
+                        val = val.wrapping_mul(8).wrapping_add(digit);
                         self.pos += 1;
                     }
                     self.lex_int_suffix();

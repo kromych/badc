@@ -599,6 +599,13 @@ impl Compiler {
     }
 
     pub(super) fn parse_const_expr_unary_val(&mut self) -> Result<ConstVal, C5Error> {
+        // Every recursive cycle in the constant-expression grammar
+        // (parentheses, ternary arms, unary chains) passes through
+        // here, so this one guard bounds the whole cascade.
+        self.with_nesting("expression", |c| c.parse_const_expr_unary_val_inner())
+    }
+
+    fn parse_const_expr_unary_val_inner(&mut self) -> Result<ConstVal, C5Error> {
         if self.lex.tk == Token::SubOp {
             self.next()?;
             return Ok(match self.parse_const_expr_unary_val()? {

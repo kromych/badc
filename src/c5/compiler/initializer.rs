@@ -260,6 +260,15 @@ impl Compiler {
         &mut self,
         elem_ty: i64,
     ) -> Result<Vec<(i64, InitElemReloc)>, C5Error> {
+        self.with_nesting("initializer", |c| {
+            c.collect_array_initializer_inner(elem_ty)
+        })
+    }
+
+    fn collect_array_initializer_inner(
+        &mut self,
+        elem_ty: i64,
+    ) -> Result<Vec<(i64, InitElemReloc)>, C5Error> {
         // 2D inner-dim hint -- callers set this when the declarator
         // shape is `T xs[N][M]` so a nested `{ row }` that lists
         // fewer than M values gets zero-padded per C99 6.7.8p21
@@ -1500,6 +1509,16 @@ impl Compiler {
     }
 
     pub(super) fn collect_struct_initializer(
+        &mut self,
+        struct_id: usize,
+        var_offset: i64,
+    ) -> Result<(), C5Error> {
+        self.with_nesting("initializer", |c| {
+            c.collect_struct_initializer_inner(struct_id, var_offset)
+        })
+    }
+
+    fn collect_struct_initializer_inner(
         &mut self,
         struct_id: usize,
         var_offset: i64,

@@ -199,6 +199,21 @@ impl Mode {
 }
 
 fn main() {
+    // The recursive-descent parser bounds its nesting depth with a
+    // diagnostic, but debug builds spend tens of KiB of native stack
+    // per level, more than the platform default provides at the
+    // bound. Run the driver on a thread with an explicit reservation
+    // so the diagnostic always fires before the stack runs out.
+    let driver = std::thread::Builder::new()
+        .stack_size(256 * 1024 * 1024)
+        .spawn(run)
+        .expect("spawn driver thread");
+    if let Err(e) = driver.join() {
+        std::panic::resume_unwind(e);
+    }
+}
+
+fn run() {
     let raw: Vec<String> = std::env::args().collect();
 
     // Mode selection: at most one of the mode-picking flags

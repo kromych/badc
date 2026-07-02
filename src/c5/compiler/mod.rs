@@ -801,6 +801,12 @@ pub struct Compiler {
     /// Number of currently-open `continue`-eligible scopes
     /// (loops only; `switch` doesn't open one).
     loop_continue_depth: usize,
+    /// Recursion depth shared by the recursive-descent entry points
+    /// (statements, expressions, constant expressions, declarators,
+    /// initializer lists). Bounded by `MAX_NEST_DEPTH` via
+    /// `with_nesting` so pathological nesting is diagnosed instead
+    /// of exhausting the native stack.
+    nest_depth: usize,
     /// Linear table of `(label_name, text_pc)`. Per-function (cleared
     /// at every function start), so it stays small -- typically 0-2
     /// entries even in code that uses `goto`. Linear scan beats
@@ -1321,6 +1327,7 @@ impl Compiler {
             pending_local_runtime_elements: Vec::new(),
             loop_break_depth: 0,
             loop_continue_depth: 0,
+            nest_depth: 0,
             labels: Vec::new(),
             unresolved_gotos: Vec::new(),
             switch_cases: Vec::new(),

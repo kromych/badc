@@ -294,6 +294,28 @@ impl Compiler {
         }
     }
 
+    /// Bound one level of parser recursion. Every recursive cycle in
+    /// the grammar (expressions, constant expressions, declarators,
+    /// initializer lists, statements) passes through an entry wrapped
+    /// in this helper, so one counter bounds them all and
+    /// pathological nesting gets a diagnostic instead of exhausting
+    /// the native stack. C99 5.2.4.1 requires 63 nesting levels; the
+    /// bound stays well above any real source.
+    pub(super) fn with_nesting<T>(
+        &mut self,
+        construct: &'static str,
+        f: impl FnOnce(&mut Self) -> Result<T, C5Error>,
+    ) -> Result<T, C5Error> {
+        const MAX_NEST_DEPTH: usize = 1024;
+        if self.nest_depth >= MAX_NEST_DEPTH {
+            return Err(self.compile_err(alloc::format!("{construct} nesting too deep")));
+        }
+        self.nest_depth += 1;
+        let r = f(self);
+        self.nest_depth -= 1;
+        r
+    }
+
     /// Build a `C5Error::Compile` whose message follows the
     /// gcc / clang-shape convention everything else in this codebase
     /// uses for diagnostics:

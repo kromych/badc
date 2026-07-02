@@ -932,6 +932,10 @@ impl Compiler {
     }
 
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
+        self.with_nesting("statement", |c| c.stmt_inner())
+    }
+
+    fn stmt_inner(&mut self) -> Result<(), C5Error> {
         // Function-pointer callee parameters captured for a postfix
         // indirect call never span a statement: drop any left set by a
         // producer whose call did not consume them so they cannot reach an

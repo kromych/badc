@@ -812,3 +812,79 @@ fn constant_expression_llong_min_div_neg_one_folds() {
     .compile()
     .expect("LLONG_MIN / -1 must fold, not panic");
 }
+
+/// Run on a thread with the same explicit stack reservation the CLI
+/// driver uses: deeply nested source costs more native stack in debug
+/// builds than the default test-thread allotment provides.
+fn on_big_stack(f: impl FnOnce() + Send + 'static) {
+    std::thread::Builder::new()
+        .stack_size(256 * 1024 * 1024)
+        .spawn(f)
+        .expect("spawn compile thread")
+        .join()
+        .expect("join compile thread");
+}
+
+fn expect_compile_error_on_big_stack(src: String, needle: &'static str) {
+    on_big_stack(move || expect_compile_error(&src, needle));
+}
+
+#[test]
+fn deep_expression_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!(
+        "int main(void) {{ return {}1{}; }}",
+        "(".repeat(n),
+        ")".repeat(n)
+    );
+    expect_compile_error_on_big_stack(src, "expression nesting too deep");
+}
+
+#[test]
+fn deep_global_initializer_expression_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!("int x = {}1{};", "(".repeat(n), ")".repeat(n));
+    expect_compile_error_on_big_stack(src, "nesting too deep");
+}
+
+#[test]
+fn deep_declarator_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!("int {}x{};", "(".repeat(n), ")".repeat(n));
+    expect_compile_error_on_big_stack(src, "declarator nesting too deep");
+}
+
+#[test]
+fn deep_initializer_brace_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!(
+        "int main(void) {{ int q[1] = {}1{}; return q[0]; }}",
+        "{".repeat(n),
+        "}".repeat(n)
+    );
+    expect_compile_error_on_big_stack(src, "initializer nesting too deep");
+}
+
+#[test]
+fn deep_statement_block_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!(
+        "int main(void) {{ {}{} return 0; }}",
+        "{".repeat(n),
+        "}".repeat(n)
+    );
+    expect_compile_error_on_big_stack(src, "statement nesting too deep");
+}
+
+#[test]
+fn c99_minimum_expression_nesting_compiles() {
+    // C99 5.2.4.1: 63 nesting levels of parenthesized expressions
+    // must be accepted; the depth bound sits far above this.
+    let n = 63;
+    let src = format!(
+        "int main(void) {{ return {}0{}; }}",
+        "(".repeat(n),
+        ")".repeat(n)
+    );
+    on_big_stack(move || assert_eq!(super::run_str(&src), 0));
+}

@@ -433,6 +433,10 @@ impl Compiler {
     }
 
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
+        self.with_nesting("expression", |c| c.expr_inner(lev))
+    }
+
+    fn expr_inner(&mut self, lev: i64) -> Result<(), C5Error> {
         let mut t: i64;
 
         if self.lex.tk == 0 {

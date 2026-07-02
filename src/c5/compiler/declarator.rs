@@ -189,6 +189,10 @@ impl Compiler {
     /// the decay happened, but for c5 today the equivalence is
     /// sufficient.
     pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
+        self.with_nesting("declarator", |c| c.parse_declarator_inner(base))
+    }
+
+    fn parse_declarator_inner(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
         // Taken once so it scopes to this parameter's own declarator, not
         // any nested one (a function-pointer parameter's prototype).
         let param_ctx = core::mem::take(&mut self.pending.param_decl_context);

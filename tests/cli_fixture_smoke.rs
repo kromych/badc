@@ -48,6 +48,12 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "thread_local_initializer.c",
     "thread_local_per_thread.c",
     "deferred_jit_thread_local.c",
+    // VLA fixtures that assert a clean rejection diagnostic rather
+    // than compiling; the constructs are unsupported by design (C99
+    // 6.7.6.2 corners left as TODO).
+    "vla_multidim_rejected.c",
+    "vla_file_scope_rejected.c",
+    "vla_initializer_rejected.c",
 ];
 
 #[test]

@@ -942,6 +942,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("variadic_agg_return_classes.c", 0),
     ("va_copy_under_pressure.c", 0),
     ("variable_shift_rcx_loop.c", 0),
+    ("va_arg_composite_straddle.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

@@ -2678,6 +2678,13 @@ fn emit_va_arg_aapcs64(
         enc_add_imm(scratch.primary, scratch.primary, reg_advance),
     );
     emit(code, enc_str32_imm(scratch.primary, ap, off_field));
+    // AAPCS64 B.5 post-increment check: a composite whose span crosses
+    // the save area's high edge (offs + span > 0) spilled to the stack
+    // at the call; take the overflow path. The incremented offset stays
+    // written back, keeping later register-bank reads exhausted.
+    emit(code, enc_subs_imm(Reg(31), scratch.primary, 0));
+    emit(code, enc_b_cond(Cond::Gt, 0));
+    let to_stack_straddle = code.len() - 4;
     // Land the address uniformly in x16.
     emit_mov_reg(code, scratch.primary, borrow);
     emit(code, enc_b(0));
@@ -2686,6 +2693,9 @@ fn emit_va_arg_aapcs64(
     let stack_lbl = code.len();
     let delta = ((stack_lbl - to_stack) / 4) as i32;
     code[to_stack..to_stack + 4].copy_from_slice(&enc_b_cond(Cond::Ge, delta).to_le_bytes());
+    let delta = ((stack_lbl - to_stack_straddle) / 4) as i32;
+    code[to_stack_straddle..to_stack_straddle + 4]
+        .copy_from_slice(&enc_b_cond(Cond::Gt, delta).to_le_bytes());
     // x16 = __stack ; borrow = __stack + advance (next cursor) ; write back.
     emit(code, enc_ldr_imm(scratch.primary, ap, 0));
     emit(code, enc_add_imm(borrow, scratch.primary, stack_advance));

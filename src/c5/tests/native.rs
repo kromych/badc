@@ -934,6 +934,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_multi_block_result_forward.c", 10),
     ("sxtw_fold_source_liveness.c", 18),
     ("data_reloc_one_past_end.c", 10),
+    ("variadic_libc_fnptr_static_init.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

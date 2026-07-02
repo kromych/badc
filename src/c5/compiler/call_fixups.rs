@@ -163,12 +163,12 @@ impl Compiler {
     /// Lev
     /// ```
     ///
-    /// Variadic libc fns lose anything beyond their declared
-    /// fixed prefix -- a trampoline can only forward what its
-    /// signature tells it to push. The known callers (e.g.
-    /// dispatch-table slots for `fcntl` and `ioctl`) work
-    /// because the cast at the use site lines up with the fixed
-    /// prefix the trampoline does forward.
+    /// Variadic bindings take the frameless tail-jump shape
+    /// instead: the caller marshalled the tail per the variadic
+    /// convention (stack region and, on System V, `al`), which a
+    /// forwarding body of fixed arity cannot repack; a `jmp`
+    /// passes every register class and the stack through
+    /// unchanged.
     pub(super) fn emit_sys_trampolines(&mut self) {
         use crate::c5::codegen::ssa::build::SsaBuilder;
         use crate::c5::ir::{LoadKind, NO_VALUE};
@@ -208,12 +208,14 @@ impl Compiler {
             // return that runs a widening `fcvt d0,s0`, and since `s0`
             // and `d0` alias `v0`, the widened double's zero low half
             // overwrites the `s0` the caller reads (C99 6.2.5p10 /
-            // AAPCS64 6.4.2: a `float` result occupies `s0`). The
-            // `double` case happened to survive because no widening
-            // was emitted, but the tail jump is the correct path for
-            // both. Variadic bindings keep the forwarding body so the
-            // dispatch-table arg repacking stays in scope; no bound
-            // variadic libc routine returns a floating-point scalar.
+            // AAPCS64 6.4.2: a `float` result occupies `s0`).
+            //
+            // A variadic binding takes the same tail jump: the caller
+            // marshalled the tail per the variadic convention (the
+            // stack region on AAPCS64-Darwin, `al` on System V), and
+            // only a frameless jump carries that through -- a
+            // forwarding body of fixed arity would drop everything
+            // past its declared prefix.
             let ret_ty = self.symbols[sys_idx].type_;
             let touches_fp = is_float_ty(ret_ty)
                 || is_double_ty(ret_ty)
@@ -221,7 +223,7 @@ impl Compiler {
                     .params
                     .iter()
                     .any(|&p| is_float_ty(p) || is_double_ty(p));
-            if !is_variadic && touches_fp {
+            if is_variadic || touches_fp {
                 let mut sb = SsaBuilder::new(ent_pc, 0, false);
                 sb.set_locals(0);
                 sb.set_name(alloc::format!("__c5_sys_{}", self.symbols[sys_idx].name));
@@ -236,16 +238,9 @@ impl Compiler {
                 continue;
             }
 
-            // Forwarded arg count. Variadic prefix forwards one
-            // extra so dispatch tables (open / fcntl / ioctl)
-            // line up.
-            let nargs_ssa = if fixed_nargs == 0 && !is_variadic {
-                0
-            } else if is_variadic {
-                fixed_nargs + 1
-            } else {
-                fixed_nargs
-            };
+            // Forwarded arg count (variadic bindings took the tail
+            // jump above).
+            let nargs_ssa = fixed_nargs;
             // The synthesised trampoline's own signature is a
             // fixed-arg host-ABI function: callers reach it via
             // function pointer through `(sys_ptr)open`, which the
@@ -292,68 +287,10 @@ impl Compiler {
             self.synthetic_ssa_funcs.push(func);
             let synth_idx = self.synthetic_ssa_funcs.len() - 1;
 
-            // Two trampoline shapes coexist:
-            //
-            // * Prototype-bearing bindings (`int fopen(char *,
-            //   char *);`, ..., or any `int foo(...);`) get the
-            //   classic `Ent + Lea/Li/Psh + JsrExt + Adj + Lev`
-            //   body. The forwarded arg count matches the
-            //   prototype, and the JsrExt lowering's per-arg
-            //   FP-mask + post-call sub-word extension (#48) both
-            //   stay in scope.
-            //
-            // * Bindings with *no* declared params (just
-            //   `int Name();`) -- e.g. kernel32 entries that
-            //   real-world dispatch tables cast back to the
-            //   right arity at the call site -- get a tail-call
-            //   body. The trampoline is `jmp [rip+iat]` and the
-            //   caller's indirect-call lowering owns the host-ABI
-            //   arg setup, return-register copy, and stack
-            //   adjustment. Sub-word extension is left to the
-            //   caller (the call site casts the result to the
-            //   right type explicitly), which matches what
-            //   real-world dispatch-table consumers already do.
-            if fixed_nargs == 0 && !is_variadic {
-                // The SSA-tier trampoline body is fully built by
-                // SsaBuilder above; bump the parser PC counter by
-                // one so the synthesised function's `end_pc`
-                // stays strictly greater than its `ent_pc`, which
-                // is what the linker and DWARF range builder
-                // require.
-                self.next_ent_pc += 1;
-                self.synthetic_ssa_funcs[synth_idx].end_pc = self.next_ent_pc;
-                continue;
-            }
-
-            // For variadic libc fns the binding-declared param
-            // count is only the fixed prefix; common dispatch
-            // tables (open/fcntl/ioctl) want the trampoline to
-            // forward *one* of the variadic args so the caller's
-            // 3-argument cast lines up with what `JsrExt` packs
-            // onto the macOS arm64 variadic-args stack region.
-            // Callers that pass strictly the fixed prefix end up
-            // reading one junk slot from above their own pushes,
-            // but no in-the-wild caller does -- they all add at
-            // least one extra arg precisely to feed the variadic.
-            // The general case (forward N variadic args where N
-            // is unknown at compile time) needs a real va_args
-            // bridge -- tracked separately with the `c5 va_list`
-            // work.
-            let nargs = if is_variadic {
-                fixed_nargs + 1
-            } else {
-                fixed_nargs
-            };
-
             // SSA body fully built by SsaBuilder above. Reserve a
             // single PC unit so the trampoline's `end_pc` is
             // strictly greater than `ent_pc`, satisfying the
-            // linker / DWARF range invariant. The cdecl
-            // right-to-left arg push, JsrExt + binding, Adj
-            // cleanup and Lev epilogue used to be tape ops here;
-            // the matching SSA insts live on
-            // `synthetic_ssa_funcs[synth_idx]` and drive the codegen.
-            let _ = (nargs, binding_idx);
+            // linker / DWARF range invariant.
             self.next_ent_pc += 1;
             self.synthetic_ssa_funcs[synth_idx].end_pc = self.next_ent_pc;
         }

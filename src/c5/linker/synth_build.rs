@@ -124,14 +124,14 @@ fn synth_program_and_build(
     } else {
         resolve_entry_offset(merged, entry_name)?
     };
-    let imports = synth_imports(merged, target);
+    let imports = synth_imports(merged, target)?;
     let SynthFixups {
         got: got_fixups,
         data: data_fixups,
         func: func_fixups,
     } = synth_fixups(merged, plt)?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
-    let plt_trampoline_offsets = synth_plt_offsets(merged, plt);
+    let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
     let exports = synth_exports(merged, export_all, output_kind);
     let pc_to_native = synth_pc_to_native(&merged.text, &code_relocs, &exports);
 
@@ -295,17 +295,20 @@ fn synth_program_and_build(
     // dynamically loaded module resolves them (a Python C extension
     // binding `PyFloat_Type` and the rest of the C-API against the
     // interpreter executable). macOS publishes every global of every
-    // executable through the Mach-O symtab. ELF splits the same coverage
-    // across two flags matching the system toolchain's `-rdynamic`:
-    // `--export-all` adds functions (STT_FUNC), `--export-data` adds data
-    // globals (STT_OBJECT). Both gate the export because it widens the
-    // global symbol scope. Resolved from `merged.defined` at link time;
-    // shared libraries use `exports`, and the PE writer ignores the field.
+    // executable through the Mach-O symtab. ELF and PE split the same
+    // coverage across two flags matching the toolchain's `-rdynamic`:
+    // `--export-all` adds functions (STT_FUNC / .edata name),
+    // `--export-data` adds data globals (STT_OBJECT / .edata name). Both
+    // gate the export because it widens the global symbol scope. Resolved
+    // from `merged.defined` at link time; shared libraries use `exports`.
     let is_exec = output_kind == OutputKind::Executable;
     let macos_exec = target == Target::MacOSAarch64 && is_exec;
-    let elf_exec = matches!(target, Target::LinuxX64 | Target::LinuxAarch64) && is_exec;
-    let export_funcs = macos_exec || (elf_exec && export_all);
-    let export_data_globals = macos_exec || (elf_exec && export_data);
+    let flagged_exec = matches!(
+        target,
+        Target::LinuxX64 | Target::LinuxAarch64 | Target::WindowsX64 | Target::WindowsAarch64
+    ) && is_exec;
+    let export_funcs = macos_exec || (flagged_exec && export_all);
+    let export_data_globals = macos_exec || (flagged_exec && export_data);
     let dynamic_exports: Vec<DynamicExport> = if export_funcs || export_data_globals {
         merged
             .defined
@@ -476,7 +479,7 @@ fn resolve_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize
     Ok(sym.value as usize)
 }
 
-fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
+fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImports, C5Error> {
     // `merged.dylibs` holds each `#pragma dylib` path the input
     // units recorded (in declaration order, deduped). When a
     // unit was produced before the `.badc.dylibs` section landed
@@ -506,11 +509,27 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
         .iter()
         .map(|(local, host)| (local.as_str(), host.as_str()))
         .collect();
-    let imports: Vec<ResolvedImport> = merged
-        .imports
-        .iter()
-        .enumerate()
-        .map(|(i, name)| ResolvedImport {
+    let mut imports: Vec<ResolvedImport> = Vec::with_capacity(merged.imports.len());
+    for (i, name) in merged.imports.iter().enumerate() {
+        let flat_lookup = merged.flat_imports.contains(name);
+        // `import_dylib_map` carries the per-import dylib assignment the
+        // .o writer recorded. A miss is defaulted to dylib 0 only when
+        // nothing hangs on the choice: a flat-lookup import binds through
+        // the loader's global scope (the ordinal is unread), and a
+        // single-dylib image (including the legacy-`.o` default fallback
+        // above) leaves one library to route to. With several dylibs a
+        // miss would silently bind the call to the wrong library, so fail.
+        let dylib_index = match merged.import_dylib_map.get(name) {
+            Some(&idx) => idx as usize,
+            None if flat_lookup || dylibs.len() <= 1 => 0,
+            None => {
+                return Err(synth_err(&alloc::format!(
+                    "import `{name}` carries no dylib routing ({} dylibs in the image)",
+                    dylibs.len(),
+                )));
+            }
+        };
+        imports.push(ResolvedImport {
             binding_idx: i as i64,
             // The .o writer stores each libc import under its
             // per-target `real_symbol` (the name the dynamic
@@ -527,33 +546,27 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
             // the host's exported `_name`; ELF uses the name verbatim.
             real_symbol: if let Some(host) = data_binding_hosts.get(name.as_str()) {
                 (*host).to_string()
-            } else if merged.flat_imports.contains(name) && target == Target::MacOSAarch64 {
+            } else if flat_lookup && target == Target::MacOSAarch64 {
                 alloc::format!("_{name}")
             } else {
                 name.clone()
             },
-            // `import_dylib_map` carries the per-import dylib
-            // assignment the .o writer recorded. An import
-            // missing from the map falls back to dylib 0 (the
-            // first dylib in the merge) so legacy `.o` files
-            // produced before NT_BADC_BINDING_MAP landed still
-            // round-trip.
-            dylib_index: merged.import_dylib_map.get(name).copied().unwrap_or(0) as usize,
-            flat_lookup: merged.flat_imports.contains(name),
+            dylib_index,
+            flat_lookup,
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
             returns_long_double: false,
             param_types: Vec::new(),
-        })
-        .collect();
+        });
+    }
     // Data bindings are surfaced separately, from the merged
     // `.note.badc` copy-reloc records (see `synth_data_copy_relocs`).
-    ResolvedImports {
+    Ok(ResolvedImports {
         imports,
         dylibs,
         data_bindings: Vec::new(),
-    }
+    })
 }
 
 fn default_dylib(target: Target) -> ResolvedDylib {
@@ -925,14 +938,26 @@ fn synth_exports(
     exports
 }
 
-fn synth_plt_offsets(merged: &MergedNative, plt: &[PltTrampoline]) -> Vec<usize> {
-    let mut offsets = alloc::vec![0usize; merged.imports.len()];
+/// Per-import trampoline offsets aligned with `merged.imports`.
+/// `None` for an import no trampoline was emitted for (a data import
+/// bound through the GOT/IAT), so a writer never fabricates a text
+/// symbol at the slot's default offset for it.
+fn synth_plt_offsets(
+    merged: &MergedNative,
+    plt: &[PltTrampoline],
+) -> Result<Vec<Option<usize>>, C5Error> {
+    let mut offsets = alloc::vec![None; merged.imports.len()];
     for t in plt {
-        if t.import_index < offsets.len() {
-            offsets[t.import_index] = t.text_offset;
+        if t.import_index >= offsets.len() {
+            return Err(synth_err(&alloc::format!(
+                "PLT trampoline references import index {} out of range ({} imports)",
+                t.import_index,
+                offsets.len(),
+            )));
         }
+        offsets[t.import_index] = Some(t.text_offset);
     }
-    offsets
+    Ok(offsets)
 }
 
 fn synth_err(msg: &str) -> C5Error {
@@ -1027,7 +1052,7 @@ mod tests {
         // target's `real_symbol` from `#pragma binding`; the
         // synthesizer passes the name through verbatim.
         merged.imports = alloc::vec!["_malloc".to_string()];
-        let imports = synth_imports(&merged, Target::MacOSAarch64);
+        let imports = synth_imports(&merged, Target::MacOSAarch64).expect("synth");
         assert_eq!(imports.dylibs.len(), 1);
         assert!(
             imports.dylibs[0].path.contains("libSystem"),
@@ -1042,7 +1067,7 @@ mod tests {
     fn synth_imports_no_underscore_for_linux() {
         let mut merged = tiny_aarch64_main();
         merged.imports = alloc::vec!["malloc".to_string()];
-        let imports = synth_imports(&merged, Target::LinuxAarch64);
+        let imports = synth_imports(&merged, Target::LinuxAarch64).expect("synth");
         assert_eq!(imports.imports[0].real_symbol, "malloc");
     }
 
@@ -1055,12 +1080,64 @@ mod tests {
         let mut merged = tiny_aarch64_main();
         merged.imports = alloc::vec!["JS_ToIndex".to_string()];
         merged.flat_imports.insert("JS_ToIndex".to_string());
-        let mac = synth_imports(&merged, Target::MacOSAarch64);
+        let mac = synth_imports(&merged, Target::MacOSAarch64).expect("synth");
         assert!(mac.imports[0].flat_lookup, "must be flat-lookup on macOS");
         assert_eq!(mac.imports[0].real_symbol, "_JS_ToIndex");
-        let elf = synth_imports(&merged, Target::LinuxAarch64);
+        let elf = synth_imports(&merged, Target::LinuxAarch64).expect("synth");
         assert!(elf.imports[0].flat_lookup, "must be flat-lookup on ELF");
         assert_eq!(elf.imports[0].real_symbol, "JS_ToIndex");
+    }
+
+    /// A non-flat import missing from the routing map is defaulted to
+    /// dylib 0 only when a single dylib leaves no choice; with several
+    /// dylibs the old `unwrap_or(0)` silently misrouted the binding.
+    #[test]
+    fn synth_imports_unmapped_routing() {
+        let mut merged = tiny_aarch64_main();
+        merged.imports = alloc::vec!["puts".to_string()];
+        merged.dylibs = alloc::vec!["/usr/lib/libSystem.B.dylib".to_string()];
+        let single = synth_imports(&merged, Target::MacOSAarch64).expect("single dylib routes");
+        assert_eq!(single.imports[0].dylib_index, 0);
+
+        merged.dylibs.push("/usr/lib/libother.dylib".to_string());
+        let err = synth_imports(&merged, Target::MacOSAarch64).expect_err("ambiguous miss");
+        assert!(
+            alloc::format!("{err}").contains("puts"),
+            "error must name the import: {err}"
+        );
+
+        // A flat-lookup import binds through the loader's global scope;
+        // the ordinal is unread, so the miss is fine.
+        merged.flat_imports.insert("puts".to_string());
+        let flat = synth_imports(&merged, Target::MacOSAarch64).expect("flat import routes");
+        assert!(flat.imports[0].flat_lookup);
+
+        // A mapped import routes as recorded.
+        merged.flat_imports.clear();
+        merged.import_dylib_map.insert("puts".to_string(), 1);
+        let mapped = synth_imports(&merged, Target::MacOSAarch64).expect("mapped");
+        assert_eq!(mapped.imports[0].dylib_index, 1);
+    }
+
+    /// `synth_plt_offsets` keeps a `None` slot for an import without a
+    /// trampoline (a data import) so no writer fabricates a text symbol
+    /// at the slot's default offset for it.
+    #[test]
+    fn synth_plt_offsets_leaves_untrampolined_imports_none() {
+        let mut merged = tiny_aarch64_main();
+        merged.imports = alloc::vec!["environ".to_string(), "malloc".to_string()];
+        let plt = alloc::vec![PltTrampoline {
+            text_offset: 0x40,
+            import_index: 1,
+        }];
+        let offsets = synth_plt_offsets(&merged, &plt).expect("offsets");
+        assert_eq!(offsets, alloc::vec![None, Some(0x40)]);
+
+        let bad = alloc::vec![PltTrampoline {
+            text_offset: 0x40,
+            import_index: 7,
+        }];
+        assert!(synth_plt_offsets(&merged, &bad).is_err());
     }
 
     #[test]

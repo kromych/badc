@@ -656,14 +656,22 @@ fn build_plt_symtab(
         build.plt_trampoline_offsets.len(),
         "trampoline-offset count must match import count"
     );
+    // A data import (bound through the GOT) has no trampoline
+    // (`None` slot); a text symbol for it would mislabel whatever
+    // code sits at the fabricated address.
+    let plt_locals: Vec<(&str, usize)> = imports
+        .iter()
+        .zip(build.plt_trampoline_offsets.iter())
+        .filter_map(|(imp, off)| off.map(|o| (imp.local_name.as_str(), o)))
+        .collect();
 
     // .strtab: leading NUL (st_name=0 -> empty string sentinel)
     // followed by NUL-separated import names.
     let mut strtab = alloc::vec![0u8];
-    let mut name_offsets: Vec<u32> = Vec::with_capacity(imports.len());
-    for imp in imports {
+    let mut name_offsets: Vec<u32> = Vec::with_capacity(plt_locals.len());
+    for &(name, _) in &plt_locals {
         name_offsets.push(strtab.len() as u32);
-        strtab.extend_from_slice(imp.local_name.as_bytes());
+        strtab.extend_from_slice(name.as_bytes());
         strtab.push(0);
     }
 
@@ -671,7 +679,7 @@ fn build_plt_symtab(
     // STT_FUNC per trampoline. Local symbols come first by spec
     // (the .symtab section header's `sh_info` field points one
     // past the last local entry).
-    let mut symtab: Vec<u8> = Vec::with_capacity((1 + imports.len()) * ELF64_SYM_SIZE as usize);
+    let mut symtab: Vec<u8> = Vec::with_capacity((1 + plt_locals.len()) * ELF64_SYM_SIZE as usize);
     write_struct(
         &mut symtab,
         &Elf64Sym {
@@ -683,9 +691,8 @@ fn build_plt_symtab(
             st_size: 0,
         },
     );
-    for (i, imp) in imports.iter().enumerate() {
-        let _ = imp;
-        let st_value = text_vmaddr + build.plt_trampoline_offsets[i] as u64;
+    for (i, &(_, tramp_offset)) in plt_locals.iter().enumerate() {
+        let st_value = text_vmaddr + tramp_offset as u64;
         write_struct(
             &mut symtab,
             &Elf64Sym {
@@ -719,7 +726,13 @@ fn build_plt_symtab(
         .iter()
         .map(|&pc| build.pc_to_native[pc] as u64)
         .collect();
-    boundaries.extend(build.plt_trampoline_offsets.iter().map(|&o| o as u64));
+    boundaries.extend(
+        build
+            .plt_trampoline_offsets
+            .iter()
+            .flatten()
+            .map(|&o| o as u64),
+    );
     boundaries.push(text_len);
     boundaries.sort_unstable();
     for (i, name) in build.func_names.iter().enumerate() {
@@ -1361,13 +1374,25 @@ pub(super) fn write(
     // executable has no exports, so the tables are unchanged.
     let mut elf_exports: Vec<ElfExport> = Vec::new();
     for exp in &build.exports {
-        if let Some(&native_off) = build.pc_to_native.get(exp.ent_pc) {
-            elf_exports.push(ElfExport {
-                name: exp.name.clone(),
-                section: super::DynamicExportSection::Text,
-                offset: native_off as u64,
-            });
+        let native_off = build
+            .pc_to_native
+            .get(exp.ent_pc)
+            .copied()
+            .unwrap_or(usize::MAX);
+        if native_off == usize::MAX {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: exported function `{}` (bc PC {}) doesn't \
+                 align with any native instruction",
+                    exp.name, exp.ent_pc
+                ),
+            )));
         }
+        elf_exports.push(ElfExport {
+            name: exp.name.clone(),
+            section: super::DynamicExportSection::Text,
+            offset: native_off as u64,
+        });
     }
     for d in &build.dynamic_exports {
         if !elf_exports.iter().any(|e| e.name == d.name) {
@@ -3015,6 +3040,24 @@ mod tests {
         let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
         let e_machine = u16::from_le_bytes(bytes[18..20].try_into().unwrap());
         assert_eq!(e_machine, EM_AARCH64);
+    }
+
+    /// An export whose ent_pc misses `pc_to_native` must fail the write
+    /// with a diagnostic; it was previously dropped from `.dynsym`
+    /// silently, shipping a shared library without the symbol.
+    #[test]
+    fn export_with_unmapped_ent_pc_errors() {
+        let mut build = tiny_build();
+        build.output_kind = super::super::OutputKind::SharedLibrary;
+        build.exports = vec![crate::c5::program::ExportedFunction {
+            name: "ghost".into(),
+            ent_pc: 999,
+        }];
+        let err = write(&tiny_program(), &build, Machine::Aarch64).unwrap_err();
+        assert!(
+            err.to_string().contains("ghost"),
+            "error must name the export: {err}"
+        );
     }
 
     #[test]

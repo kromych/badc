@@ -1441,7 +1441,9 @@ pub(crate) struct Build {
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
     /// `plt_trampoline_offsets[i]` is the local code address the
     /// per-format writer should expose as `imports[i].local_name`
-    /// in the static symbol table.
+    /// in the static symbol table. `None` for an import with no
+    /// trampoline (a data import bound through the GOT/IAT); the
+    /// writers must not synthesize a text symbol for those.
     ///
     /// Each trampoline is a tiny GOT/IAT-load + tail-jump (3
     /// instructions on aarch64 / 1 instruction on x86_64) that
@@ -1451,7 +1453,7 @@ pub(crate) struct Build {
     /// the GOT load -- so a debugger's `b malloc` resolves
     /// against this in-image local symbol rather than getting
     /// lost in the dynamic linker's macro-expansion sites.
-    pub plt_trampoline_offsets: Vec<usize>,
+    pub plt_trampoline_offsets: Vec<Option<usize>>,
     /// Post-prologue native byte offset of each function, keyed by
     /// `ent_pc`. The SSA emit records `code.len()` right after the
     /// prologue; the DWARF CFI pass turns the value into the FDE's

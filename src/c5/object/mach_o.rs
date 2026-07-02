@@ -1607,6 +1607,27 @@ struct TlvBindContext {
     segment_offset: u64,
     /// Number of TLV descriptors that need binding.
     tlv_count: usize,
+    /// 1-based LC_LOAD_DYLIB ordinal of libSystem, which defines
+    /// `__tlv_bootstrap` (see [`tlv_bootstrap_ordinal`]).
+    bootstrap_ordinal: u64,
+}
+
+/// 1-based LC_LOAD_DYLIB ordinal of libSystem, the dylib that defines
+/// `__tlv_bootstrap`. The bind stream and the matching nlist entry both
+/// resolve the ordinal through here so they cannot diverge. An image
+/// using TLV without linking libSystem cannot bind the descriptors, so
+/// that is an error rather than a guessed ordinal.
+fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result<u64, C5Error> {
+    dylibs
+        .iter()
+        .position(|d| d.path.contains("libSystem"))
+        .map(|i| (i + 1) as u64)
+        .ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "Mach-O: `_Thread_local` requires libSystem for `__tlv_bootstrap`, \
+                 but no linked dylib matches libSystem",
+            ))
+        })
 }
 
 /// Bind opcode stream that resolves the program's imports plus,
@@ -1719,20 +1740,7 @@ fn build_bind_opcodes(
         out.push(BIND_OPCODE_DO_BIND);
     }
     if let Some(ctx) = tlv_ctx {
-        // `__tlv_bootstrap` always lives in libSystem; its
-        // dylib ordinal is the position of libSystem in the
-        // per-image dylib list, +1. We reuse the first dylib
-        // (libSystem is always present on macOS targets) for
-        // simplicity; if the order ever changes, the
-        // matching nlist entry's ordinal is computed the same
-        // way.
-        let bootstrap_ordinal = imports
-            .dylibs
-            .iter()
-            .position(|d| d.path.contains("libSystem"))
-            .map(|i| (i + 1) as u64)
-            .unwrap_or(1);
-        let bootstrap_source = BindSource::Dylib(bootstrap_ordinal);
+        let bootstrap_source = BindSource::Dylib(ctx.bootstrap_ordinal);
         if current_source != Some(bootstrap_source) {
             push_bind_source(&mut out, bootstrap_source);
         }
@@ -2091,6 +2099,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             Some(TlvBindContext {
                 segment_offset: thread_vars_offset_in_segment,
                 tlv_count: n_tlv,
+                bootstrap_ordinal: tlv_bootstrap_ordinal(&build.imports.dylibs)?,
             })
         } else {
             None
@@ -2130,25 +2139,20 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // `real_symbol` ("_malloc") so `nm`/`lldb` show the name
     // the C source uses.
     //
-    // Test fixtures sometimes hand us a `Build` with imports but
-    // no trampoline offsets (no per-arch lower() ran); in that
-    // case we skip the local section.
-    let emit_plt_locals = !build.plt_trampoline_offsets.is_empty();
-    // One local symbol per PLT trampoline. Function imports carry a
-    // trampoline; data imports (bound through the GOT) do not, and the
-    // routing appends them after the function imports, so the first
-    // `plt_trampoline_offsets.len()` imports are exactly the trampolined
-    // ones. The remaining imports still get an undefined symtab entry +
-    // bind below.
-    let n_trampolines = build.plt_trampoline_offsets.len();
-    let mut symbol_names: Vec<&str> = if emit_plt_locals {
-        build.imports.imports[..n_trampolines]
-            .iter()
-            .map(|imp| imp.local_name.as_str())
-            .collect()
-    } else {
-        Vec::new()
-    };
+    // One local symbol per PLT trampoline. A data import (bound through
+    // the GOT) carries no trampoline (`None` slot) and gets only the
+    // undefined symtab entry + bind below -- a local text symbol for it
+    // would sit at the slot's default address (the first function's
+    // bytes) and mislabel backtraces and breakpoints. Keyed by import
+    // index, not by ordering, so the two never diverge.
+    let plt_locals: Vec<(&str, usize)> = build
+        .imports
+        .imports
+        .iter()
+        .zip(build.plt_trampoline_offsets.iter())
+        .filter_map(|(imp, off)| off.map(|o| (imp.local_name.as_str(), o)))
+        .collect();
+    let mut symbol_names: Vec<&str> = plt_locals.iter().map(|&(name, _)| name).collect();
     // Executable dynamic exports: every defined global symbol, so a
     // dlopen'd module binds the program's symbols. `#pragma export`
     // populates `build.exports` for shared libraries instead, so the
@@ -2186,16 +2190,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
 
     // [Locals] one entry per PLT trampoline. Data imports have no
     // trampoline; they appear only as undefined import symbols below.
-    if emit_plt_locals {
-        debug_assert!(
-            n_trampolines <= build.imports.imports.len(),
-            "more trampolines than imports"
-        );
-        for (i, &tramp_offset) in build.plt_trampoline_offsets.iter().enumerate() {
-            let n_strx = str_indices[i];
-            let n_value = code_vmaddr_base + tramp_offset as u64;
-            symtab.extend_from_slice(&nlist_local(n_strx, n_value, SECT_INDEX_TEXT));
-        }
+    for (i, &(_, tramp_offset)) in plt_locals.iter().enumerate() {
+        let n_strx = str_indices[i];
+        let n_value = code_vmaddr_base + tramp_offset as u64;
+        symtab.extend_from_slice(&nlist_local(n_strx, n_value, SECT_INDEX_TEXT));
     }
 
     // [Defined exports] (N_EXT | N_SECT). Each one's `n_value`
@@ -2259,16 +2257,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         symtab.extend_from_slice(&nlist_undef(n_strx, ordinal));
     }
     if tls_present {
-        // `__tlv_bootstrap` comes from libSystem.B.dylib (which is
-        // already in the dylib list because every macOS Mach-O
-        // we emit links libSystem). Find its ordinal.
-        let bootstrap_dylib_ordinal = build
-            .imports
-            .dylibs
-            .iter()
-            .position(|d| d.path.contains("libSystem"))
-            .map(|i| (i + 1) as u8)
-            .unwrap_or(1);
+        let bootstrap_dylib_ordinal = tlv_bootstrap_ordinal(&build.imports.dylibs)? as u8;
         let bootstrap_strx = str_indices[symbol_names.len() - 1];
         symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal));
     }
@@ -2983,6 +2972,26 @@ mod tests {
             "image too small: {} bytes",
             bytes.len()
         );
+    }
+
+    /// `__tlv_bootstrap` binds against libSystem's real ordinal; an
+    /// image whose dylib list lacks libSystem cannot bind the TLV
+    /// descriptors and must fail rather than guess ordinal 1.
+    #[test]
+    fn tlv_bootstrap_ordinal_requires_libsystem() {
+        use crate::c5::codegen::ResolvedDylib;
+        let dylibs = vec![
+            ResolvedDylib {
+                name: "libfoo".into(),
+                path: "/usr/lib/libfoo.dylib".into(),
+            },
+            ResolvedDylib {
+                name: "libSystem".into(),
+                path: "/usr/lib/libSystem.B.dylib".into(),
+            },
+        ];
+        assert_eq!(tlv_bootstrap_ordinal(&dylibs).unwrap(), 2);
+        assert!(tlv_bootstrap_ordinal(&dylibs[..1]).is_err());
     }
 
     #[test]

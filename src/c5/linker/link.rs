@@ -1052,23 +1052,43 @@ pub fn link_native_objects_with_options(
     }
     // Build the merged import->dylib map. Each unit's per-import
     // dylib_index is local to that unit's `dylibs` list; translate
-    // through `merged_idx_for[unit_idx][per_unit_idx]` so the value
-    // refers to the merged `dylibs` order. First entry per import
-    // name wins -- a sibling unit redeclaring the same name picks
-    // up the same dylib through cross-TU resolution anyway.
+    // through `local_to_merged` so the value refers to the merged
+    // `dylibs` order. Two units routing the same import to different
+    // dylibs is a conflict: whichever entry won, the loser's calls
+    // would bind against the wrong library, so reject it.
     let mut import_dylib_map: BTreeMap<String, u32> = BTreeMap::new();
-    for obj in objs {
+    for (i, obj) in objs.iter().enumerate() {
         let mut local_to_merged: Vec<u32> = Vec::with_capacity(obj.dylibs.len());
         for d in &obj.dylibs {
-            let merged_idx = dylibs.iter().position(|m| m == d).unwrap_or(0) as u32;
+            // The merged list was built from these same entries above,
+            // so the position lookup cannot miss.
+            let merged_idx = dylibs
+                .iter()
+                .position(|m| m == d)
+                .expect("merged dylib list contains every per-unit path")
+                as u32;
             local_to_merged.push(merged_idx);
         }
         for (name, idx) in &obj.import_dylib_map {
-            if import_dylib_map.contains_key(name) {
-                continue;
+            let merged_idx = local_to_merged.get(*idx as usize).copied().ok_or_else(|| {
+                link_err(&format!(
+                    "object {i}: import `{name}` routes to dylib index {idx} \
+                     out of range ({} dylibs declared)",
+                    obj.dylibs.len(),
+                ))
+            })?;
+            match import_dylib_map.get(name) {
+                None => {
+                    import_dylib_map.insert(name.clone(), merged_idx);
+                }
+                Some(&prev) if prev == merged_idx => {}
+                Some(&prev) => {
+                    return Err(link_err(&format!(
+                        "import `{name}` routed to `{}` by one object and `{}` by another",
+                        dylibs[prev as usize], dylibs[merged_idx as usize],
+                    )));
+                }
             }
-            let merged_idx = local_to_merged.get(*idx as usize).copied().unwrap_or(0);
-            import_dylib_map.insert(name.clone(), merged_idx);
         }
     }
 
@@ -2600,6 +2620,58 @@ mod tests {
                     && p.addend >= data_len
                     && p.addend < bss_end),
             "code reference to a bss global must resolve into the bss region [{data_len}, {bss_end})"
+        );
+    }
+
+    /// Two objects routing the same import name to different dylibs is a
+    /// conflict; first-writer-wins previously bound the loser's calls
+    /// against the wrong library with no diagnostic.
+    #[test]
+    fn conflicting_import_dylib_routing_errors() {
+        let mk = |dylib: &str| NativeObject {
+            machine: NativeMachine::X86_64,
+            text: alloc::vec::Vec::new(),
+            data: alloc::vec::Vec::new(),
+            data_align: 1,
+            bss_size: 0,
+            tls_data: alloc::vec::Vec::new(),
+            tls_bss_size: 0,
+            symbols: alloc::vec::Vec::new(),
+            text_relocs: alloc::vec::Vec::new(),
+            data_relocs: alloc::vec::Vec::new(),
+            dylibs: alloc::vec![dylib.to_string()],
+            import_dylib_map: alloc::vec![("f".to_string(), 0u32)],
+            exports: alloc::vec::Vec::new(),
+            tls_index_fixups: alloc::vec::Vec::new(),
+            macho_tlv_descriptors: alloc::vec::Vec::new(),
+            macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
+            debug_info: alloc::vec::Vec::new(),
+            debug_abbrev: alloc::vec::Vec::new(),
+            debug_line: alloc::vec::Vec::new(),
+            debug_str: alloc::vec::Vec::new(),
+            debug_info_relocs: alloc::vec::Vec::new(),
+            debug_line_relocs: alloc::vec::Vec::new(),
+        };
+        // Same routing across units links fine.
+        let merged = link_native_objects(&[mk("libA.so"), mk("libA.so")]).expect("consistent");
+        assert_eq!(merged.import_dylib_map.get("f"), Some(&0));
+        // Divergent routing errors and names both libraries.
+        let err = link_native_objects(&[mk("libA.so"), mk("libB.so")]).unwrap_err();
+        assert!(
+            err.to_string().contains("libA.so") && err.to_string().contains("libB.so"),
+            "error must name both dylibs: {err}"
+        );
+        // A per-unit dylib index past the unit's dylib list errors.
+        let mut bad = mk("libA.so");
+        bad.import_dylib_map = alloc::vec![("f".to_string(), 5u32)];
+        let err = link_native_objects(&[bad]).unwrap_err();
+        assert!(
+            err.to_string().contains("out of range"),
+            "expected an index diagnostic, got: {err}"
         );
     }
 

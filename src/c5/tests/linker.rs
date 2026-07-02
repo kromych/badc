@@ -2233,3 +2233,93 @@ fn dead_libc_bindings_fail_at_build_not_at_load() {
         link_one(src).expect("bound libc call must link");
     }
 }
+
+#[test]
+fn macho_data_import_gets_no_bogus_local_text_symbol() {
+    // A Mach-O data import (`environ`, bound through the GOT) carries no
+    // PLT trampoline. The symtab previously fabricated a local text
+    // symbol for it at code offset 0 -- the first function's address --
+    // mislabeling backtraces and breakpoints. Only imports that actually
+    // have a trampoline get a local text symbol; a data import keeps just
+    // its undefined entry.
+    use crate::c5::linker::{
+        emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "#include <unistd.h>\n\
+         #include <string.h>\n\
+         int main(void) { return environ != 0 ? (int)strlen(\"x\") : 0; }\n"
+            .to_string(),
+        Target::MacOSAarch64,
+        CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::MacOSAarch64,
+        None,
+    )
+    .expect("write executable");
+
+    // Walk LC_SYMTAB collecting (name, n_type). N_STAB=0xe0, N_TYPE=0x0e,
+    // N_SECT=0x0e, N_EXT=0x01.
+    const LC_SYMTAB: u32 = 2;
+    let ncmds = u32::from_le_bytes(exe[16..20].try_into().unwrap());
+    let mut p = 32usize;
+    let mut names: alloc::vec::Vec<(String, u8)> = alloc::vec::Vec::new();
+    for _ in 0..ncmds {
+        let cmd = u32::from_le_bytes(exe[p..p + 4].try_into().unwrap());
+        let cmdsize = u32::from_le_bytes(exe[p + 4..p + 8].try_into().unwrap()) as usize;
+        if cmd == LC_SYMTAB {
+            let symoff = u32::from_le_bytes(exe[p + 8..p + 12].try_into().unwrap()) as usize;
+            let nsyms = u32::from_le_bytes(exe[p + 12..p + 16].try_into().unwrap()) as usize;
+            let stroff = u32::from_le_bytes(exe[p + 16..p + 20].try_into().unwrap()) as usize;
+            for k in 0..nsyms {
+                let e = symoff + k * 16;
+                let n_strx = u32::from_le_bytes(exe[e..e + 4].try_into().unwrap()) as usize;
+                let n_type = exe[e + 4];
+                let s = stroff + n_strx;
+                let len = exe[s..].iter().position(|&b| b == 0).unwrap();
+                names.push((
+                    String::from_utf8_lossy(&exe[s..s + len]).into_owned(),
+                    n_type,
+                ));
+            }
+            break;
+        }
+        p += cmdsize;
+    }
+    // No local (N_SECT set, N_EXT clear) symbol named `environ`.
+    assert!(
+        !names
+            .iter()
+            .any(|(n, t)| n == "environ" && t & 0x0e == 0x0e && t & 0x01 == 0),
+        "data import `environ` must not get a bogus local text symbol: {names:?}"
+    );
+    // Its undefined import entry (`_environ`, N_SECT clear) survives.
+    assert!(
+        names.iter().any(|(n, t)| n == "_environ" && t & 0x0e == 0),
+        "data import must keep its undefined `_environ` entry: {names:?}"
+    );
+    // A real function import (`_strlen`) still gets its local text symbol.
+    assert!(
+        names
+            .iter()
+            .any(|(n, t)| n == "_strlen" && t & 0x0e == 0x0e && t & 0x01 == 0),
+        "a trampolined import must keep its local text symbol: {names:?}"
+    );
+}

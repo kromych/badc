@@ -1900,7 +1900,9 @@ pub(crate) fn lower(
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
         merged_dwarf: None,
-        plt_trampoline_offsets,
+        // Every import on this single-TU path gets a trampoline (data
+        // imports ride `ResolvedImports::data_bindings`, not `imports`).
+        plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
     })
 }
 

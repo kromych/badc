@@ -534,8 +534,10 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
 fn end_of_user_text(build: &Build) -> usize {
     build
         .plt_trampoline_offsets
-        .first()
+        .iter()
         .copied()
+        .flatten()
+        .min()
         .unwrap_or(build.text.len())
 }
 
@@ -564,7 +566,13 @@ fn collect_plt_subprograms(
         build.plt_trampoline_offsets.len(),
         "trampoline-offset count must match import count"
     );
-    let n = imports.len();
+    // A data import (bound through the GOT) has no trampoline
+    // (`None` slot) and gets no stub DIE.
+    let stubbed: Vec<(&super::ResolvedImport, usize)> = imports
+        .iter()
+        .zip(build.plt_trampoline_offsets.iter())
+        .filter_map(|(imp, off)| off.map(|o| (imp, o)))
+        .collect();
     // Per-stub size. Trampolines are emitted contiguously and
     // are uniform-sized per arch, so the delta between two
     // consecutive offsets is exact. The last-stub-to-text-end
@@ -574,10 +582,10 @@ fn collect_plt_subprograms(
     // `build.text.len() - offsets.last()` overshoots by the
     // marker bytes (the overshoot was visible as DW_AT_high_pc
     // = 0x1f instead of 0xc on the linked_list fixture).
-    let stub_size = if n >= 2 {
-        (build.plt_trampoline_offsets[1] - build.plt_trampoline_offsets[0]) as u64
+    let stub_size = if stubbed.len() >= 2 {
+        (stubbed[1].1 - stubbed[0].1) as u64
     } else {
-        // Single import: fall back to the per-arch constant. Has
+        // Single stub: fall back to the per-arch constant. Has
         // to match `super::aarch64::emit_plt_trampolines`
         // (3 instructions = 12 bytes) /
         // `super::x86_64::emit_plt_trampolines` (1 jmp = 6
@@ -588,11 +596,9 @@ fn collect_plt_subprograms(
         }
     };
 
-    imports
+    stubbed
         .iter()
-        .enumerate()
-        .map(|(i, imp)| {
-            let off = build.plt_trampoline_offsets[i];
+        .map(|&(imp, off)| {
             // Synthetic per-param names: `arg0`, `arg1`, ... The
             // c5 binding doesn't track parameter names, but
             // gdb's `info args` and `bt` skip name-less entries
@@ -2229,7 +2235,12 @@ impl DebugFrameFdeHeader {
 /// `build.text` by `emit_plt_trampolines`, so the range is
 /// `[code_vmaddr + offsets[0], code_vmaddr + build.text.len())`.
 fn plt_pool_range(build: &Build, code_vmaddr: u64) -> Option<(u64, u64)> {
-    let first = build.plt_trampoline_offsets.first().copied()?;
+    let first = build
+        .plt_trampoline_offsets
+        .iter()
+        .copied()
+        .flatten()
+        .min()?;
     let start = code_vmaddr + first as u64;
     let end = code_vmaddr + build.text.len() as u64;
     if end > start {
@@ -2921,7 +2932,7 @@ mod tests {
         assert_eq!(plt_pool_range(&build, 0x1000), None);
         // Once a trampoline is recorded, the range covers from the
         // first stub byte to the end of `build.text`.
-        build.plt_trampoline_offsets = alloc::vec![0xc0, 0xcc];
+        build.plt_trampoline_offsets = alloc::vec![Some(0xc0), Some(0xcc)];
         build.text.extend(alloc::vec![0u8; 0x40]); // pretend trampolines are appended
         assert_eq!(plt_pool_range(&build, 0x1000), Some((0x10c0, 0x1140)));
     }
@@ -3003,7 +3014,7 @@ mod tests {
         let build = Build {
             copy_relocs: Default::default(),
             text,
-            plt_trampoline_offsets: alloc::vec![0xc0, 0xcc],
+            plt_trampoline_offsets: alloc::vec![Some(0xc0), Some(0xcc)],
             imports,
             ..Build::default()
         };
@@ -3090,7 +3101,7 @@ mod tests {
         let mut build = Build {
             copy_relocs: Default::default(),
             text: alloc::vec![0u8; 0x200],
-            plt_trampoline_offsets: alloc::vec![0x180, 0x18c, 0x198],
+            plt_trampoline_offsets: alloc::vec![Some(0x180), Some(0x18c), Some(0x198)],
             ..Build::default()
         };
         assert_eq!(end_of_user_text(&build), 0x180);

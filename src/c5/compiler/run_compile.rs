@@ -878,6 +878,7 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.uses_alloca_in_current_fn = false;
+                    self.func_vla_decls = 0;
                     self.ast_reset();
 
                     let ent_pc = self.next_ent_pc;

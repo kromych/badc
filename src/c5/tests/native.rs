@@ -365,6 +365,11 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("vla_basic_sum.c", 0),
+    ("vla_runtime_sizeof.c", 0),
+    ("vla_size_from_arg.c", 0),
+    ("vla_scope_reclaim_loop.c", 0),
+    ("vla_param_decay.c", 0),
     ("mem2reg_param_promoted.c", 0),
     ("phi_class_for_loop_sum.c", 45),
     ("phi_class_nested_loops.c", 49),

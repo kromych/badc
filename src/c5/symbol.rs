@@ -94,6 +94,24 @@ pub(crate) struct Symbol {
     /// Shadow slot for `array_dims`. See `h_array_size`.
     pub h_array_dims: Vec<i64>,
 
+    /// True for a C99 6.7.6.2 variable-length array local: the
+    /// element count is a runtime expression, so the storage is
+    /// allocated from the per-frame alloca arena rather than a fixed
+    /// frame slot. `type_` holds the element type; `array_size` stays
+    /// 0 (it is not a constant array). `vla_ptr_slot` is the hidden
+    /// frame slot holding the runtime base pointer; `vla_size_slot`
+    /// holds the runtime byte count so `sizeof` reports `n *
+    /// sizeof(elem)` per 6.5.3.4p2.
+    pub is_vla: bool,
+    pub vla_ptr_slot: i64,
+    pub vla_size_slot: i64,
+    /// Shadow slots for the VLA fields, saved / restored alongside
+    /// `array_size` so an inner binding that reuses the name does not
+    /// corrupt an outer VLA (C99 6.2.1p4).
+    pub h_is_vla: bool,
+    pub h_vla_ptr_slot: i64,
+    pub h_vla_size_slot: i64,
+
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition
     /// merges (C11 6.9.2): a forward `static T x;` (or the same

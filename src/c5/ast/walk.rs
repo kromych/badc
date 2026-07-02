@@ -1150,6 +1150,26 @@ impl<'a> Walker<'a> {
                 self.walk_decl(b, decl_id)?;
                 Ok(false)
             }
+            // C99 6.2.4p2: snapshot the alloca-arena top on entry to a
+            // VLA-declaring block, restore it on exit so the storage is
+            // reclaimed (per loop iteration for a loop body).
+            Stmt::VlaScopeEnter { save_slot } => {
+                let slot = *save_slot;
+                let top = b.intrinsic(
+                    super::super::op::Intrinsic::AllocaSave as i64,
+                    alloc::vec::Vec::new(),
+                );
+                b.store_local(slot, top, super::super::ir::StoreKind::I64);
+                Ok(false)
+            }
+            Stmt::VlaScopeExit { save_slot } => {
+                let saved = b.load_local(*save_slot, super::super::ir::LoadKind::I64);
+                b.intrinsic(
+                    super::super::op::Intrinsic::AllocaRestore as i64,
+                    alloc::vec![saved],
+                );
+                Ok(false)
+            }
         }
     }
 
@@ -1178,10 +1198,34 @@ impl<'a> Walker<'a> {
                 let init_clone = init.clone();
                 self.emit_local_init(b, slot, ty, &init_clone)
             }
-            super::super::ast::Decl::Vla { .. } => Err(WalkError::UnsupportedStmt {
-                id: 0,
-                kind: "Decl::Vla",
-            }),
+            super::super::ast::Decl::Vla {
+                elem_size,
+                ptr_slot,
+                size_slot,
+                dim,
+                ..
+            } => {
+                // C99 6.7.6.2: allocate `count * sizeof(elem)` bytes
+                // from the per-frame alloca arena, store the base
+                // pointer for decay and the byte count for `sizeof`.
+                let elem_size = *elem_size;
+                let ptr_slot = *ptr_slot;
+                let size_slot = *size_slot;
+                let dim = *dim;
+                let n = self.walk_expr_rvalue(b, dim)?;
+                let bytes = if elem_size == 1 {
+                    n
+                } else {
+                    b.binop_imm(BinOp::Mul, n, elem_size)
+                };
+                b.store_local(size_slot, bytes, super::super::ir::StoreKind::I64);
+                let ptr = b.intrinsic(
+                    super::super::op::Intrinsic::Alloca as i64,
+                    alloc::vec![bytes],
+                );
+                b.store_local(ptr_slot, ptr, super::super::ir::StoreKind::I64);
+                Ok(())
+            }
             super::super::ast::Decl::StaticLocal { .. } => {
                 // C99 6.2.4p3 + 6.7.8p4: storage + initializer
                 // live in the data segment; nothing to emit in
@@ -2860,6 +2904,8 @@ impl<'a> Walker<'a> {
                     Expr::StrLit { ty, .. } => *ty,
                     Expr::Intrinsic { ty, .. } => *ty,
                     Expr::Atomic { ty, .. } => *ty,
+                    Expr::VlaBase { ty, .. } => *ty,
+                    Expr::VlaSizeof { .. } => Ty::Int as i64,
                     // `&&label` is a `void *` (char-pointer encoding).
                     Expr::LabelAddr(_) => {
                         crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64
@@ -3102,6 +3148,17 @@ impl<'a> Walker<'a> {
                 Ok(old)
             }
             Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
+            // C99 6.3.2.1p3: a VLA lvalue decays to a pointer to its
+            // first element -- the runtime base pointer the matching
+            // `Decl::Vla` stored into `ptr_slot`.
+            Expr::VlaBase { ptr_slot, .. } => {
+                Ok(b.load_local(*ptr_slot, super::super::ir::LoadKind::I64))
+            }
+            // C99 6.5.3.4p2: `sizeof <vla>` is the runtime byte count
+            // the matching `Decl::Vla` stored into `size_slot`.
+            Expr::VlaSizeof { size_slot } => {
+                Ok(b.load_local(*size_slot, super::super::ir::LoadKind::I64))
+            }
             Expr::CompoundLiteral {
                 slot_off,
                 ty,
@@ -4269,9 +4326,12 @@ fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::Comma { ty, .. }
         | Expr::ShortCircuit { ty, .. }
         | Expr::Intrinsic { ty, .. }
-        | Expr::Atomic { ty, .. } => Some(*ty),
+        | Expr::Atomic { ty, .. }
+        | Expr::VlaBase { ty, .. } => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
+        // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
+        Expr::VlaSizeof { .. } => Some(crate::c5::token::Ty::Int as i64),
         Expr::CompoundLiteral { ty, .. } => Some(*ty),
         // `&&label` is a `void *` (char-pointer encoding).
         Expr::LabelAddr(_) => {
@@ -4398,6 +4458,8 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::ShortCircuit { .. } => "ShortCircuit",
         Expr::Atomic { .. } => "Atomic",
         Expr::LabelAddr(_) => "LabelAddr",
+        Expr::VlaBase { .. } => "VlaBase",
+        Expr::VlaSizeof { .. } => "VlaSizeof",
     }
 }
 

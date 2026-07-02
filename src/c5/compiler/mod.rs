@@ -295,6 +295,12 @@ impl CompileOptions {
 /// function-pointer chain-depth tracker into one carrier so the
 /// `Compiler` field list reads as "lexer + symbols + codegen
 /// output + transient state" instead of eleven loose fields.
+/// Sentinel `array_size` for a C99 6.7.6.2 variable-length array
+/// declarator: distinct from `0` (scalar), `> 0` (constant array),
+/// and `-1` (deferred / flexible `T x[]`). The dimension expression
+/// rides on `Pending::vla_dim_expr`.
+pub(in crate::c5::compiler) const VLA_ARRAY_SIZE: i64 = -2;
+
 #[derive(Debug)]
 pub(in crate::c5::compiler) struct Pending {
     /// Side channel from the base-type parsers
@@ -428,6 +434,26 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array length. Cleared by every base-type parse
     /// (`0` means "not from an array typedef").
     pub typedef_base_array_size: i64,
+    /// Set true while parsing a block-scope object declarator, where
+    /// a non-constant array dimension is a C99 6.7.6.2 variable-length
+    /// array. Elsewhere (file scope, struct member, typedef, cast,
+    /// sizeof) a non-constant dimension is a constraint violation.
+    pub vla_allowed: bool,
+    /// The declarator's parsed VLA dimension expression, set when the
+    /// leading `[expr]` was non-constant and `vla_allowed`. `None` for
+    /// a constant-dimension array. Consumed by the local-decl site.
+    pub vla_dim_expr: Option<crate::c5::ast::ExprId>,
+    /// Set by `sizeof_operand_bytes` to the VLA's runtime-byte-count
+    /// slot when the operand is a variable-length array (C99
+    /// 6.5.3.4p2); the `sizeof` site then emits a runtime load instead
+    /// of a constant. `None` for a constant-size operand.
+    pub sizeof_vla_size_slot: Option<i64>,
+    /// Set by the constant-expression evaluator when it fails because it
+    /// reached a non-constant operand (a runtime identifier, call, ...),
+    /// as opposed to a malformed constant (division by zero, ...). Lets
+    /// the array-declarator distinguish a C99 6.7.6.2 VLA dimension from
+    /// a genuine constant-expression error that must be diagnosed.
+    pub const_expr_nonconst: bool,
     /// Binding-site carrier for a function-pointer typedef's
     /// prototype: `Some((fixed_param_count, is_variadic))` when the
     /// base type was a typedef whose alias is a function-pointer
@@ -623,6 +649,10 @@ impl Default for Pending {
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
+            vla_allowed: false,
+            vla_dim_expr: None,
+            sizeof_vla_size_slot: None,
+            const_expr_nonconst: false,
             typedef_fn_proto: None,
             fn_ptr_param_types: None,
             indirect_callee_params: None,
@@ -700,6 +730,13 @@ pub struct Compiler {
     /// the alloca-top slot index. Reset on each new function
     /// definition.
     uses_alloca_in_current_fn: bool,
+
+    /// Count of C99 6.7.6.2 variable-length arrays declared so far in
+    /// the current function. Snapshotted around a block's declarations
+    /// so `parse_block_stmt` knows whether to bracket the block with
+    /// the alloca-arena save / restore that reclaims VLA storage on
+    /// exit. Reset on each new function definition.
+    func_vla_decls: usize,
 
     /// True when the most recent decl-spec parse consumed an
     /// `inline` / `__inline` / `__inline__` keyword. Captured at
@@ -1194,7 +1231,7 @@ impl Compiler {
     /// Reserve `n_slots` eight-byte frame cells and return the
     /// negative base offset, bumping the high-water mark. Callers
     /// own any `multi_cell_temps` push and any `loc_offs` recycle.
-    fn reserve_slots(&mut self, n_slots: i64) -> i64 {
+    pub(super) fn reserve_slots(&mut self, n_slots: i64) -> i64 {
         self.loc_offs += n_slots;
         if self.loc_offs > self.max_loc_offs {
             self.max_loc_offs = self.loc_offs;
@@ -1312,6 +1349,7 @@ impl Compiler {
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
             uses_alloca_in_current_fn: false,
+            func_vla_decls: 0,
             pending_is_inline: false,
             pending_noreturn: false,
             const_unevaluated: 0,

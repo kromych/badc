@@ -46,6 +46,7 @@ mod programs;
 #[cfg(feature = "full")]
 mod reloc_golden;
 mod types;
+mod vla;
 
 /// Absolute path of `tests/fixtures/c/<name>` relative to the crate root.
 fn fixture_path(name: &str) -> PathBuf {

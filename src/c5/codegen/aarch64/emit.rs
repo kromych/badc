@@ -3142,6 +3142,47 @@ fn emit_intrinsic(
             emit(code, enc_str_imm(rd, scratch.primary, 0));
             true
         }
+        I::AllocaSave => {
+            // Read the arena top for a VLA block snapshot (C99 6.7.6.2).
+            if current_alloca_top == 0 {
+                bail_msg("AllocaSave: AllocaInit didn't run for this function");
+                return false;
+            }
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                bail_msg("AllocaSave: dst not int reg / spill");
+                return false;
+            };
+            emit_arena_top_addr(code, scratch.secondary, current_alloca_top);
+            emit(code, enc_ldr_imm(rd, scratch.secondary, 0));
+            spill_local_addr_to_dst(code, dst, rd, frame);
+            true
+        }
+        I::AllocaRestore => {
+            // Restore the arena top on VLA block exit.
+            if current_alloca_top == 0 {
+                bail_msg("AllocaRestore: AllocaInit didn't run for this function");
+                return false;
+            }
+            if args.len() != 1 {
+                bail_msg("AllocaRestore: expected 1 arg");
+                return false;
+            }
+            let v_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let v = match materialize_int(code, v_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("AllocaRestore: arg not int reg / spill / fp");
+                    return false;
+                }
+            };
+            emit_arena_top_addr(code, scratch.secondary, current_alloca_top);
+            emit(code, enc_str_imm(v, scratch.secondary, 0));
+            true
+        }
         I::SetjmpAArch64 => {
             // c5 binds <setjmp.h>'s setjmp() to this intrinsic on
             // Windows aarch64 because msvcrt's longjmp routes
@@ -4512,6 +4553,25 @@ fn spill_local_addr_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Fram
         // the scaled-imm12 reach.
         let addr_scratch = if src.0 == 16 { Reg(17) } else { Reg(16) };
         emit_sp_str_x(code, src, sp_off, addr_scratch);
+    }
+}
+
+/// Materialize the per-frame alloca-arena bookkeeping slot address
+/// (`fp - top_offset`) into `reg`. Mirrors the `AllocaInit` /
+/// `Alloca` address computation for the VLA save / restore ops.
+fn emit_arena_top_addr(code: &mut Vec<u8>, reg: Reg, top_offset: u32) {
+    if top_offset < 4096 {
+        emit(code, enc_sub_imm(reg, Reg(29), top_offset));
+    } else {
+        let high = top_offset & !0xfff;
+        let low = top_offset & 0xfff;
+        emit(
+            code,
+            super::encode::enc_sub_imm_lsl12(reg, Reg(29), high >> 12),
+        );
+        if low != 0 {
+            emit(code, enc_sub_imm(reg, reg, low));
+        }
     }
 }
 

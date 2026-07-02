@@ -65,6 +65,10 @@ impl Compiler {
     /// emit its local declaration. A non-`Loc` binding (a redeclaration
     /// that resolved elsewhere) discards the carriers without emitting.
     pub(super) fn finalize_local_init(&mut self, loc_idx: usize) {
+        // A VLA already emitted its `Decl::Vla` in `allocate_vla_local`.
+        if self.symbols[loc_idx].is_vla {
+            return;
+        }
         if self.symbols[loc_idx].class == Token::Loc as i64 {
             let slot_off = self.symbols[loc_idx].val;
             let init = self.drain_pending_local_init();
@@ -132,7 +136,11 @@ impl Compiler {
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
+            // C99 6.7.6.2: a non-constant array dimension at block scope
+            // is a variable-length array.
+            self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            self.pending.vla_allowed = false;
             // C23 6.7.13.5 `[[maybe_unused]]` / GNU
             // `__attribute__((unused))` on the declaration suppresses
             // the unused-variable diagnostic for the names it declares.
@@ -612,12 +620,49 @@ impl Compiler {
     ///   * deferred-size array (`int xs[] = {...};`): the
     ///     initializer determines the dimension first, then storage
     ///     is reserved.
+    /// C99 6.7.6.2 variable-length array local. Reserves two hidden
+    /// frame slots -- the runtime base pointer and the runtime byte
+    /// count -- and records a `Decl::Vla`; the walker allocates the
+    /// storage from the per-frame alloca arena. The array is not
+    /// promotable and its storage is reclaimed on block exit by the
+    /// scope bracket `parse_block_stmt` emits.
+    fn allocate_vla_local(&mut self, loc_idx: usize, elem_ty: i64) -> Result<(), C5Error> {
+        // C99 6.7.8p3: a VLA declaration may not carry an initializer.
+        if self.lex.tk == Token::Assign {
+            return Err(self.compile_err("a variable-length array may not have an initializer"));
+        }
+        let dim = match self.pending.vla_dim_expr.take() {
+            Some(d) => d,
+            None => return Err(self.compile_err("variable-length array has no dimension")),
+        };
+        let ptr_slot = self.reserve_slots(1);
+        let size_slot = self.reserve_slots(1);
+        let elem_size = self.size_of_type(elem_ty) as i64;
+        let s = &mut self.symbols[loc_idx];
+        s.is_vla = true;
+        s.type_ = elem_ty;
+        s.array_size = 0;
+        s.vla_ptr_slot = ptr_slot;
+        s.vla_size_slot = size_slot;
+        s.was_written = true;
+        s.address_escaped = true;
+        self.func_vla_decls += 1;
+        // The VLA storage comes from the per-frame alloca arena, so the
+        // function reserves the arena and its bookkeeping slot.
+        self.uses_alloca_in_current_fn = true;
+        self.ast_emit_vla_decl(loc_idx as u32, elem_ty, elem_size, ptr_slot, size_slot, dim);
+        Ok(())
+    }
+
     pub(super) fn allocate_local_with_init(
         &mut self,
         loc_idx: usize,
         ty: i64,
         declared_array_size: i64,
     ) -> Result<(), C5Error> {
+        if declared_array_size == super::VLA_ARRAY_SIZE {
+            return self.allocate_vla_local(loc_idx, ty);
+        }
         // C99 6.7.9: an initializer at the declaration site counts
         // as a store from the perspective of the dead-store
         // analysis. Mark before parsing the initializer so

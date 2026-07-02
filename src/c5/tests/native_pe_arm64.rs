@@ -619,6 +619,11 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
 /// are arch-independent.
 const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
+    ("vla_basic_sum.c", 0),
+    ("vla_runtime_sizeof.c", 0),
+    ("vla_size_from_arg.c", 0),
+    ("vla_scope_reclaim_loop.c", 0),
+    ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
     ("strtof_parses_float.c", 0),
     ("snprintf_truncation_c99.c", 0),

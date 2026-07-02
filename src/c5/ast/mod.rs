@@ -340,6 +340,15 @@ pub(crate) enum Expr {
         array_size: i64,
         init: LocalInit,
     },
+    /// A variable-length array identifier in a value context (C99
+    /// 6.3.2.1p3 decay). The array's storage is at a runtime address
+    /// held in `ptr_slot`; the walker loads that pointer. `ty` is the
+    /// decayed element-pointer type.
+    VlaBase { ptr_slot: i64, ty: i64 },
+    /// `sizeof <vla>` -- the runtime byte count the matching
+    /// `Decl::Vla` stored into `size_slot` (C99 6.5.3.4p2: for a VLA
+    /// the operand is evaluated and the result is a runtime value).
+    VlaSizeof { size_slot: i64 },
 }
 
 /// One item inside a compound statement. C99 6.8.2's
@@ -412,6 +421,13 @@ pub(crate) enum Stmt {
     /// `parse_block_stmt` can capture decls alongside stmts via a
     /// single stmt-id sequence.
     Decl(DeclId),
+    /// Snapshot the per-frame alloca-arena top into `save_slot` on
+    /// entry to a block that declares a variable-length array. Paired
+    /// with `VlaScopeExit` so the VLA storage is reclaimed on block
+    /// exit and, for a loop body, on every iteration (C99 6.2.4p2).
+    VlaScopeEnter { save_slot: i64 },
+    /// Restore the alloca-arena top from `save_slot` on block exit.
+    VlaScopeExit { save_slot: i64 },
 }
 
 /// One stored element in a runtime aggregate initializer.
@@ -476,10 +492,21 @@ pub(crate) enum Decl {
         slot_off: i64,
         init: LocalInit,
     },
-    /// Variable-length array declaration. `dim` is the runtime
-    /// dimension expression; the walker emits `Inst::AllocaInit`
-    /// to reserve the matching stack region. C99 6.7.6.2p4.
-    Vla { sym: u32, dim: ExprId },
+    /// Variable-length array declaration (C99 6.7.6.2). `dim` is the
+    /// runtime element-count expression; `elem_size` is the element's
+    /// byte size. The walker evaluates `dim * elem_size`, allocates
+    /// that many bytes from the per-frame alloca arena, stores the
+    /// base pointer into `ptr_slot`, and the byte count into
+    /// `size_slot` (read back by `sizeof`). `elem_ty` carries the
+    /// element type for struct-size remapping.
+    Vla {
+        sym: u32,
+        elem_ty: i64,
+        elem_size: i64,
+        ptr_slot: i64,
+        size_slot: i64,
+        dim: ExprId,
+    },
     /// Block-scope `static T name [= init];` declaration. C99
     /// 6.2.4p3 (lifetime is whole program) + 6.7.8p4 (init must
     /// be constant). The parser promotes the symbol to the `Glo`
@@ -876,7 +903,9 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::Comma { ty, .. }
         | Expr::ShortCircuit { ty, .. }
         | Expr::Intrinsic { ty, .. }
-        | Expr::Atomic { ty, .. } => f(ty),
+        | Expr::Atomic { ty, .. }
+        | Expr::VlaBase { ty, .. } => f(ty),
+        Expr::VlaSizeof { .. } => {}
         Expr::Cast { to_ty, .. } => f(to_ty),
         Expr::CompoundLiteral { ty, init, .. } => {
             f(ty);
@@ -902,7 +931,8 @@ fn visit_decl_ty(decl: &mut Decl, f: &mut impl FnMut(&mut i64)) {
                 }
             }
         }
-        Decl::Vla { .. } | Decl::StaticLocal { .. } => {}
+        Decl::Vla { elem_ty, .. } => f(elem_ty),
+        Decl::StaticLocal { .. } => {}
     }
 }
 

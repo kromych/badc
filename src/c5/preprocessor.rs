@@ -490,7 +490,8 @@ impl Preprocessor {
         // thread-local storage. GCC and clang made the same choice while
         // they lacked `<threads.h>`. `<stdatomic.h>` is provided, so
         // `__STDC_NO_ATOMICS__` also stays undefined.
-        macros.insert("__STDC_NO_VLA__".to_string(), "1".to_string());
+        // `__STDC_NO_VLA__` stays undefined: c5 supports C99 6.7.6.2
+        // variable-length arrays (single dimension, block scope).
         macros.insert("__STDC_NO_COMPLEX__".to_string(), "1".to_string());
         macros.insert(
             "__DATE__".to_string(),

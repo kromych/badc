@@ -506,12 +506,15 @@ impl Compiler {
             let total_bytes = self.sizeof_operand_bytes()?;
             self.emit_imm(total_bytes);
             self.ty = Ty::Int as i64;
-            // Dual-emit: sizeof is a compile-time constant per
-            // 6.5.3.4p2. Seed the accumulator with the matching
-            // IntLit so a wrapping expression (call argument,
-            // binary op, assignment) finds the value on
-            // `ast_acc`.
-            self.ast_emit_int_lit(total_bytes, self.ty);
+            // C99 6.5.3.4p2: `sizeof` of a variable-length array is a
+            // runtime value -- emit a load of the VLA's byte-count
+            // slot. Every other operand folds to a compile-time
+            // constant; seed the accumulator with the matching IntLit.
+            if let Some(size_slot) = self.pending.sizeof_vla_size_slot.take() {
+                self.ast_emit_vla_sizeof(size_slot);
+            } else {
+                self.ast_emit_int_lit(total_bytes, self.ty);
+            }
         } else if self.lex.tk == Token::Alignof {
             // C11 6.5.3.4: `_Alignof ( type-name )`, a compile-time
             // constant. Emit the alignment as a runtime immediate and
@@ -1317,6 +1320,7 @@ impl Compiler {
                 self.ty = self.symbols[id_idx].type_;
                 let is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                 let is_array_var = self.symbols[id_idx].array_size != 0;
+                let is_vla_var = self.symbols[id_idx].is_vla;
                 // A function-pointer variable carries its callee parameter
                 // types so the dereferenced-call shape `(*fp)(args)` (which
                 // reaches the postfix path rather than the direct-identifier
@@ -1335,7 +1339,14 @@ impl Compiler {
                 // "address-as-value" rule but keep their type
                 // because the `.field` operator needs the struct's
                 // value type to look up offsets.
-                if is_array_var {
+                if is_vla_var {
+                    // C99 6.3.2.1p3: a VLA decays to a pointer to its
+                    // first element -- the runtime base pointer, loaded
+                    // from the hidden slot, not a fixed frame address.
+                    let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
+                    self.ty += Ty::Ptr as i64;
+                    self.ast_emit_vla_base(ptr_slot, self.ty);
+                } else if is_array_var {
                     if identifier_is_local {
                         // Array decay produces the array's
                         // address rather than a scalar value, so

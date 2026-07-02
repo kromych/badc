@@ -6633,6 +6633,50 @@ fn emit_intrinsic(
             spill_dst_to_slot(code, dst, rd_phys, frame);
             true
         }
+        I::AllocaSave => {
+            // Read the arena top for a VLA block snapshot (C99 6.7.6.2).
+            if current_alloca_top == 0 {
+                bail_msg("AllocaSave: AllocaInit didn't run for this function");
+                return false;
+            }
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("AllocaSave: dst not int reg / spill");
+                return false;
+            };
+            let rd_phys = if matches!(dst, Place::Spill(_)) {
+                SCRATCH_R10
+            } else {
+                rd
+            };
+            emit_mov_r_mem(code, rd_phys, Reg::RBP, -(current_alloca_top as i32));
+            spill_dst_to_slot(code, dst, rd_phys, frame);
+            true
+        }
+        I::AllocaRestore => {
+            // Restore the arena top on VLA block exit.
+            if current_alloca_top == 0 {
+                bail_msg("AllocaRestore: AllocaInit didn't run for this function");
+                return false;
+            }
+            if args.len() != 1 {
+                bail_msg("AllocaRestore: expected 1 arg");
+                return false;
+            }
+            let v_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let v = match materialize_int(code, v_place, SCRATCH_R10, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("AllocaRestore: arg not int reg / spill / fp");
+                    return false;
+                }
+            };
+            emit_mov_mem_r(code, Reg::RBP, -(current_alloca_top as i32), v);
+            true
+        }
         I::SetjmpAArch64 | I::LongjmpAArch64 => {
             bail_msg("intrinsic: AArch64 setjmp / longjmp on non-AArch64 target");
             false

@@ -1956,6 +1956,23 @@ fn run_intrinsic(
             frame.regs[v as usize] = base as i64;
             Ok(())
         }
+        // VLA block reclamation (C99 6.7.6.2): snapshot / restore the
+        // frame's bump-allocation cursor so a VLA declared in a block
+        // (or a loop body, once per iteration) frees on exit.
+        Intrinsic::AllocaSave => {
+            frame.regs[v as usize] = mem.stack_top as i64;
+            Ok(())
+        }
+        Intrinsic::AllocaRestore => {
+            let saved = args
+                .first()
+                .map(|&a| frame.regs[a as usize])
+                .ok_or_else(|| {
+                    C5Error::Runtime("vm_ssa: AllocaRestore expects 1 argument".to_string())
+                })?;
+            mem.release_frame(saved as usize);
+            Ok(())
+        }
         Intrinsic::VaStart => {
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let last_addr = frame.regs[args[1] as usize];

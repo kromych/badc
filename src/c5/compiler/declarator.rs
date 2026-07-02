@@ -509,15 +509,13 @@ impl Compiler {
                 // decide how to interpret it.
                 self.next()?;
                 array_size = -1;
-            } else {
-                // `int xs[N]` -- N must fold to a positive integer
-                // constant. The constant-expression evaluator
-                // accepts integer literals (with optional unary
-                // minus) and identifiers bound to compile-time
-                // integer constants (Token::Num via enum or via
-                // `#define`s the preprocessor folded into the
-                // source token stream).
-                let n = self.parse_constant_int()?;
+            } else if let Some(n) = self.try_parse_constant_dim()? {
+                // `int xs[N]` -- N folded to an integer constant. The
+                // constant-expression evaluator accepts integer literals
+                // (with optional unary minus) and identifiers bound to
+                // compile-time integer constants (Token::Num via enum or
+                // via `#define`s the preprocessor folded into the source
+                // token stream).
                 if n < 0 {
                     return Err(
                         self.compile_err(format!("array dimension must be positive (got {n})"))
@@ -533,6 +531,39 @@ impl Compiler {
                 // allocated past the fixed part. Route it through the same
                 // `array_size = -1` sentinel.
                 array_size = if n == 0 { -1 } else { n };
+            } else {
+                // Non-constant dimension (C99 6.7.6.2). In a parameter it
+                // is adjusted to a pointer, so the size is parsed and
+                // discarded (6.7.6.3p7). At block scope it declares a
+                // variable-length array. Everywhere else it is a
+                // constraint violation.
+                if param_ctx {
+                    self.skip_array_dimension_expr()?;
+                    // `skip_array_dimension_expr` stops at the `]`; consume
+                    // it so the declarator resumes past the dimension.
+                    self.next()?;
+                    array_size = -1;
+                } else if self.pending.vla_allowed {
+                    self.expr(Token::Assign as i64)?;
+                    self.pending.vla_dim_expr = self.ast_acc.take();
+                    if self.lex.tk != ']' {
+                        return Err(self.compile_err("close bracket expected in array declarator"));
+                    }
+                    self.next()?;
+                    if self.lex.tk == Token::Brak {
+                        return Err(self.compile_err(
+                            "multidimensional variable-length arrays are not supported",
+                        ));
+                    }
+                    array_size = super::VLA_ARRAY_SIZE;
+                    if idx != usize::MAX {
+                        return Ok((idx, ty, array_size));
+                    }
+                } else {
+                    return Err(
+                        self.compile_err("variable-length array is only allowed at block scope")
+                    );
+                }
             }
             // Trailing dimensions for N-dim arrays. c5 stores
             // `array_size = product(dims)` (total element count),
@@ -556,7 +587,18 @@ impl Compiler {
                     self.next()?;
                     continue;
                 }
-                let m = self.parse_constant_int()?;
+                let Some(m) = self.try_parse_constant_dim()? else {
+                    // A non-constant inner dimension makes the whole
+                    // object a variably-modified type (C99 6.7.6.2); c5's
+                    // stride model is compile-time only, so reject it
+                    // cleanly rather than miscompile the row stride.
+                    if self.pending.vla_allowed || param_ctx {
+                        return Err(self.compile_err(
+                            "multidimensional variable-length arrays are not supported",
+                        ));
+                    }
+                    return Err(self.compile_err("constant integer expected in array declarator"));
+                };
                 if m <= 0 {
                     return Err(
                         self.compile_err(format!("array dimension must be positive (got {m})"))

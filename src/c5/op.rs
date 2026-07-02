@@ -186,6 +186,16 @@ pub enum Intrinsic {
     /// (eax/edx destinations) then the input value (ecx = register index).
     /// x86_64 only. The interpreter zeroes the outputs.
     Xgetbv = 45,
+    /// Read the current per-frame alloca-arena top pointer (the
+    /// bookkeeping slot the matching `AllocaInit` set up). Takes no
+    /// argument, returns the top. Used to snapshot the arena on entry
+    /// to a block that declares a variable-length array (C99 6.7.6.2)
+    /// so the storage is reclaimed on block exit.
+    AllocaSave = 46,
+    /// Write the per-frame alloca-arena top pointer back to a value a
+    /// prior `AllocaSave` captured. One argument (the saved top);
+    /// returns nothing. Reclaims a VLA block's storage on exit.
+    AllocaRestore = 47,
 }
 
 impl Intrinsic {
@@ -236,6 +246,8 @@ impl Intrinsic {
             43 => Some(Intrinsic::AtomicThreadFence),
             44 => Some(Intrinsic::Cpuid),
             45 => Some(Intrinsic::Xgetbv),
+            46 => Some(Intrinsic::AllocaSave),
+            47 => Some(Intrinsic::AllocaRestore),
             _ => None,
         }
     }

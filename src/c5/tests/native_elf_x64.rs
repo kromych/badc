@@ -275,6 +275,11 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 }
 
 const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
+    ("vla_basic_sum.c", 0),
+    ("vla_runtime_sizeof.c", 0),
+    ("vla_size_from_arg.c", 0),
+    ("vla_scope_reclaim_loop.c", 0),
+    ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
     ("goto.c", 5),
     ("switch_statement.c", 25),

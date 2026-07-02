@@ -252,6 +252,51 @@ impl Compiler {
         Ok(self.parse_const_expr_cond_val()?.as_int())
     }
 
+    /// Try to fold an array-declarator dimension to an integer
+    /// constant. Returns `Some(value)` for a constant dimension, or
+    /// `None` when the dimension is a non-constant expression (a C99
+    /// 6.7.6.2 variable-length array) -- in which case the lexer is
+    /// restored so the caller can re-parse the dimension as a runtime
+    /// expression.
+    pub(super) fn try_parse_constant_dim(&mut self) -> Result<Option<i64>, C5Error> {
+        let snap = self.lex.snapshot();
+        self.pending.const_expr_nonconst = false;
+        match self.parse_const_expr_cond_val() {
+            // Folded to a constant; the caller validates the trailing `]`.
+            Ok(v) => Ok(Some(v.as_int())),
+            // Non-constant operand -> a VLA dimension: rewind for the
+            // caller's runtime-expression parse.
+            Err(_) if self.pending.const_expr_nonconst => {
+                self.lex.restore(snap);
+                Ok(None)
+            }
+            // A genuine constant-expression error (division by zero, an
+            // overflowing shift, ...) is diagnosed, not treated as a VLA.
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Consume an array-declarator dimension up to (not including) the
+    /// matching `]`. Used for a variable-length array parameter, whose
+    /// size is discarded when the array is adjusted to a pointer (C99
+    /// 6.7.6.3p7); also absorbs the `[*]` unspecified-size form.
+    pub(super) fn skip_array_dimension_expr(&mut self) -> Result<(), C5Error> {
+        let mut depth: i64 = 0;
+        loop {
+            if self.lex.tk == Token::Brak {
+                depth += 1;
+            } else if self.lex.tk == ']' {
+                if depth == 0 {
+                    return Ok(());
+                }
+                depth -= 1;
+            } else if self.lex.tk == 0 {
+                return Err(self.compile_err("close bracket expected in array declarator"));
+            }
+            self.next()?;
+        }
+    }
+
     /// Parse a C11 6.7.10 `_Static_assert(<const-int-expr>,
     /// "<string-literal>");` (or its C23 `static_assert` alias).
     /// On entry the current token is `Token::StaticAssert`. The
@@ -945,6 +990,10 @@ impl Compiler {
         } else {
             alloc::string::String::new()
         };
+        // Reached a non-constant operand rather than a malformed
+        // constant: the array-declarator reads this to tell a C99
+        // 6.7.6.2 VLA dimension apart from a constant-expression error.
+        self.pending.const_expr_nonconst = true;
         Err(self.compile_err(format!(
             "constant integer expected (got {}{id_suffix})",
             super::super::token::describe(self.lex.tk),

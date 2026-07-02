@@ -357,14 +357,12 @@ fn thread_local_compiles_to_op_tlslea() {
     // those gates.
     let src = "_Thread_local int counter;\n\
                int main() { counter = 42; return counter; }";
-    let p = super::Compiler::new(super::with_prelude(src))
-        .compile()
-        .expect("compile failed");
-    assert_eq!(p.tls_data.len(), 8, "single 8-byte TLS slot");
     // Every supported target now lowers `_Thread_local`. Linux
     // and Windows have full code paths; macOS arm64 routes
     // through the Mach-O `__thread_vars` + `__tlv_bootstrap`
-    // pipeline.
+    // pipeline, which needs libSystem in the dylib set -- so
+    // compile per target rather than re-emitting a host-compiled
+    // program whose dylib bindings are the host's.
     for target in [
         super::super::codegen::Target::LinuxAarch64,
         super::super::codegen::Target::LinuxX64,
@@ -372,6 +370,10 @@ fn thread_local_compiles_to_op_tlslea() {
         super::super::codegen::Target::WindowsAarch64,
         super::super::codegen::Target::MacOSAarch64,
     ] {
+        let p = super::Compiler::with_target(super::with_prelude(src), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("`{target:?}` compile failed: {e}"));
+        assert_eq!(p.tls_data.len(), 8, "single 8-byte TLS slot for {target:?}");
         super::super::object::emit_native_single_tu_for_test(
             &p,
             target,

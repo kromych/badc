@@ -1244,6 +1244,19 @@ fn is_pure_inst(inst: &Inst) -> bool {
     )
 }
 
+/// Whether `inst` is the inline setjmp intrinsic. A longjmp back to
+/// the setjmp site restores only the jmp_buf register set (x19-x28,
+/// x29, sp, d8-d15), so for allocation the site clobbers the
+/// caller-saved banks exactly like a call (C99 7.13.2.1p3 requires
+/// values unmodified since setjmp to survive the second return).
+pub(crate) fn is_setjmp_barrier(inst: &Inst) -> bool {
+    matches!(
+        inst,
+        Inst::Intrinsic { kind, .. }
+            if *kind == crate::c5::op::Intrinsic::SetjmpAArch64 as i64
+    )
+}
+
 /// Invoke `f` for each operand `ValueId` referenced by `inst`.
 pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
     match inst {
@@ -2099,7 +2112,8 @@ fn promote_calls_after_def_to_classes(
         let is_call = matches!(
             inst,
             Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)));
+        ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
+            || is_setjmp_barrier(inst);
         if is_call {
             call_pcs.push(idx as u32);
         }

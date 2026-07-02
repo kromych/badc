@@ -938,6 +938,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_libc_fnptr_static_init.c", 0),
     ("block_scope_typedef_variadic_fnptr.c", 0),
     ("atomic_operand_in_working_regs.c", 0),
+    ("setjmp_value_live_across.c", 0),
 ];
 
 #[test]

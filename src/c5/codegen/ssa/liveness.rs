@@ -403,7 +403,8 @@ impl Liveness {
                 let is_call = matches!(
                     inst,
                     Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-                ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)));
+                ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
+                    || super::reg_alloc::is_setjmp_barrier(inst);
                 if super::reg_alloc::produces_value(inst) {
                     live.remove(&idx);
                 }

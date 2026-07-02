@@ -2537,11 +2537,24 @@ mod tests {
     fn bound_data_global_is_diagnosed_under_interp() {
         // `environ` binds to host data; the interpreter's memory
         // model cannot reach the host cell, so the reference is a
-        // clean diagnostic rather than a phantom NULL read.
-        expect_runtime_err(
-            "#include <unistd.h>\nint main(void) { return environ != 0; }",
-            "bound to host data",
-        );
+        // clean diagnostic rather than a phantom NULL read. Pinned
+        // to the macOS target: the Windows headers route `environ`
+        // per-arch and Linux defines it in the runtime, so the
+        // host-target shape varies.
+        let program = Compiler::with_options(
+            "#include <unistd.h>\nint main(void) { return environ != 0; }".to_string(),
+            crate::Target::MacOSAarch64,
+            crate::CompileOptions::default(),
+        )
+        .compile()
+        .expect("compile fixture");
+        let err = crate::Vm::new(program).run().expect_err("run must fail");
+        match err {
+            crate::C5Error::Runtime(m) => {
+                assert!(m.contains("bound to host data"), "{m}")
+            }
+            other => panic!("expected Runtime, got {other:?}"),
+        }
     }
 
     #[test]

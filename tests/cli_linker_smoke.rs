@@ -2972,5 +2972,10 @@ fn link_defined_symbol_wins_over_auto_included_binding() {
     );
     let out = Command::new(&exe2).output().expect("run prog2");
     assert_eq!(out.status.code(), Some(0), "auto-included printf runs");
-    assert_eq!(String::from_utf8_lossy(&out.stdout), "hi\n");
+    // The Windows CRT translates `\n` to `\r\n` on stdout; strip CR so
+    // the comparison holds on every host.
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).replace('\r', ""),
+        "hi\n"
+    );
 }

@@ -177,6 +177,9 @@ pub(crate) struct Preprocessor {
     // string-prefix compares were the leftover frontend hot spot
     // after the symbol-table fix went in.
     macros: HashMap<String, String>,
+    /// Compilation target; Windows include resolution is
+    /// case-insensitive, matching its filesystems.
+    target: Target,
     fn_macros: HashMap<String, FnMacro>,
     /// One entry per `#pragma dylib(name, "path")`, in the order
     /// declared. Each entry collects the bindings whose
@@ -558,6 +561,7 @@ impl Preprocessor {
         }
         Self {
             macros,
+            target,
             fn_macros,
             dylibs: Vec::new(),
             exports: Vec::new(),
@@ -2800,7 +2804,19 @@ impl Preprocessor {
             }
         }
         let _ = source_dir;
-        embedded_header(name).map(|s| (s.to_string(), name.to_string()))
+        if let Some(body) = embedded_header(name) {
+            return Some((body.to_string(), name.to_string()));
+        }
+        // Windows resolves includes case-insensitively (its filesystems
+        // are); match the embedded registry the same way there.
+        if matches!(self.target, Target::WindowsX64 | Target::WindowsAarch64) {
+            let lower = name.to_ascii_lowercase();
+            return super::headers::embedded_headers()
+                .iter()
+                .find(|(n, _)| n.eq_ignore_ascii_case(&lower))
+                .map(|(n, body)| (body.to_string(), n.to_string()));
+        }
+        None
     }
 
     /// Resolve `name` for `#include_next`: skip search-path entries up to

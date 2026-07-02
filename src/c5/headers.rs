@@ -266,6 +266,8 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
     ("fenv.h", include_str!("../../headers/include/fenv.h")),
     ("io.h", include_str!("../../headers/include/io.h")),
+    ("direct.h", include_str!("../../headers/include/direct.h")),
+    ("intrin.h", include_str!("../../headers/include/intrin.h")),
     (
         "TargetConditionals.h",
         include_str!("../../headers/include/TargetConditionals.h"),

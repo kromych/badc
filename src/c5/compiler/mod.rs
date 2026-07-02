@@ -580,6 +580,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// skip to mark the declared locals so their unused-variable
     /// diagnostics are suppressed.
     pub attr_maybe_unused: bool,
+    /// Requested object alignment from `_Alignas(N)` /
+    /// `__attribute__((aligned(N)))` / `__declspec(align(N))`, 0 when
+    /// absent. The declaration parse takes it: file-scope objects
+    /// honor up to 16, anything larger (or an automatic object above
+    /// the 8-byte slot alignment) is a diagnostic, never silent.
+    pub attr_align: i64,
     /// A consumed `__declspec(thread)`. Read by the declaration parse to mark
     /// the declared object thread-local (the storage class `_Thread_local`
     /// reaches the same flag through the keyword path).
@@ -625,6 +631,7 @@ impl Default for Pending {
             last_imm_was_zero: false,
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
+            attr_align: 0,
             attr_thread_local: false,
             attr_dllexport: false,
         }
@@ -965,6 +972,10 @@ pub struct Compiler {
     /// returns a `Program` with `entry_pc = 0` /
     /// `entry_name = None` if no entry symbol exists.
     no_entry_point: bool,
+
+    /// Base alignment the `.data` image requires, at least 8. Raised
+    /// to 16 when a file-scope object requests `_Alignas(16)`.
+    data_align: usize,
 
     /// Mirror of [`CompileOptions::export_all_functions`]. When set,
     /// `resolve_exports` adds every non-static defined function to the
@@ -1317,6 +1328,7 @@ impl Compiler {
             pending_store_symbols: Vec::new(),
             warn_dead_store: opts.warn_dead_store,
             no_entry_point: opts.no_entry_point,
+            data_align: 8,
             export_all_functions: opts.export_all_functions,
             source_files: Vec::new(),
             source_label: opts.source_label.clone(),
@@ -1652,6 +1664,7 @@ impl Compiler {
         let exports = self.resolve_exports()?;
         Ok(Program {
             data: self.data,
+            data_align: self.data_align,
             data_object_starts: self.data_object_starts,
             entry_pc,
             warnings: self.warnings,

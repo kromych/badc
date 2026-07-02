@@ -291,6 +291,7 @@ impl Compiler {
         thread_local: &mut bool,
         noreturn: &mut bool,
         dllexport: &mut bool,
+        aligned: &mut bool,
     ) {
         if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.as_str();
@@ -309,6 +310,9 @@ impl Compiler {
                 // MSVC `__declspec(dllexport)`: export the symbol, the
                 // equivalent of `#pragma export(name)`.
                 *dllexport = true;
+            } else if n == "aligned" || n == "__aligned__" || n == "align" {
+                // GNU `aligned(N)` / MSVC `__declspec(align(N))`.
+                *aligned = true;
             }
         }
     }
@@ -328,14 +332,43 @@ impl Compiler {
         let mut thread_local = false;
         let mut noreturn = false;
         let mut dllexport = false;
+        let mut align: i64 = 0;
         loop {
             if self.lex.tk == Token::Attribute {
                 // `__attribute__((...))`, `__declspec(...)`,
                 // `_Alignas(...)`. Consume the balanced parenthesised
                 // payload, recording the `packed` attribute.
+                let is_alignas = self.symbols[self.lex.curr_id_idx].name == "_Alignas";
                 self.next()?;
                 if self.lex.tk != '(' {
                     return Err(self.compile_err("`(` expected after attribute specifier"));
+                }
+                // C11 6.7.5 `_Alignas(constant-expression)`. The
+                // type-name form's alignment never exceeds 8 in this
+                // dialect and stays advisory.
+                if is_alignas {
+                    self.next()?; // (
+                    if self.lex.tk == Token::Num {
+                        let n = self.parse_constant_int()?;
+                        align = align.max(n);
+                        if self.lex.tk != ')' {
+                            return Err(self.compile_err("`)` expected after `_Alignas` operand"));
+                        }
+                        self.next()?;
+                    } else {
+                        let mut depth = 1i32;
+                        while depth > 0 {
+                            if self.lex.tk == '(' {
+                                depth += 1;
+                            } else if self.lex.tk == ')' {
+                                depth -= 1;
+                            } else if self.lex.tk == 0 {
+                                return Err(self.compile_err("unterminated `_Alignas`"));
+                            }
+                            self.next()?;
+                        }
+                    }
+                    continue;
                 }
                 let mut depth = 0i32;
                 loop {
@@ -351,14 +384,34 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err("unterminated attribute specifier"));
                     } else {
+                        let mut saw_aligned = false;
                         self.note_attribute_name(
                             &mut packed,
                             &mut maybe_unused,
                             &mut thread_local,
                             &mut noreturn,
                             &mut dllexport,
+                            &mut saw_aligned,
                         );
                         self.next()?;
+                        if saw_aligned {
+                            if self.lex.tk == '(' {
+                                self.next()?;
+                                let n = self.parse_constant_int()?;
+                                align = align.max(n);
+                                if self.lex.tk != ')' {
+                                    return Err(
+                                        self.compile_err("`)` expected after `aligned` operand")
+                                    );
+                                }
+                                self.next()?;
+                            } else {
+                                // Bare `aligned`: the target's largest
+                                // fundamental alignment (16 on the
+                                // supported targets).
+                                align = align.max(16);
+                            }
+                        }
                     }
                 }
             } else if self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'[') {
@@ -389,14 +442,27 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err("unterminated `[[` attribute"));
                     } else {
+                        let mut saw_aligned = false;
                         self.note_attribute_name(
                             &mut packed,
                             &mut maybe_unused,
                             &mut thread_local,
                             &mut noreturn,
                             &mut dllexport,
+                            &mut saw_aligned,
                         );
                         self.next()?;
+                        if saw_aligned && self.lex.tk == '(' {
+                            self.next()?;
+                            let n = self.parse_constant_int()?;
+                            align = align.max(n);
+                            if self.lex.tk != ')' {
+                                return Err(
+                                    self.compile_err("`)` expected after `aligned` operand")
+                                );
+                            }
+                            self.next()?;
+                        }
                     }
                 }
             } else {
@@ -414,6 +480,9 @@ impl Compiler {
         }
         if dllexport {
             self.pending.attr_dllexport = true;
+        }
+        if align > 0 {
+            self.pending.attr_align = self.pending.attr_align.max(align);
         }
         Ok(packed)
     }

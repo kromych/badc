@@ -98,6 +98,11 @@ pub struct CodeReloc {
 #[derive(Debug, Clone)]
 pub struct Program {
     pub data: Vec<u8>,
+    /// Base alignment `data` requires in the image, at least 8;
+    /// raised to 16 when a file-scope object carries `_Alignas(16)`
+    /// (or the attribute equivalents). The native writers place the
+    /// data section at a multiple of it.
+    pub data_align: usize,
     /// Start offsets of anonymous data objects (string literals and the
     /// implicit `__func__` arrays of C99 6.4.2.2) within `data`. Named
     /// globals already carry their offset in `symbols[..].val`; these are

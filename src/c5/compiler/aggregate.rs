@@ -48,6 +48,22 @@ impl Compiler {
         is_union: bool,
         packed: bool,
     ) -> Result<usize, C5Error> {
+        // An alignment request preceding the tag
+        // (`__declspec(align(16)) struct S { ... }`) belongs to the
+        // declaration, not to the first member; park it across the
+        // body parse so the member checks see only member attributes.
+        let decl_attr_align = core::mem::take(&mut self.pending.attr_align);
+        let r = self.parse_aggregate_body_inner(name, is_union, packed);
+        self.pending.attr_align = self.pending.attr_align.max(decl_attr_align);
+        r
+    }
+
+    fn parse_aggregate_body_inner(
+        &mut self,
+        name: &str,
+        is_union: bool,
+        packed: bool,
+    ) -> Result<usize, C5Error> {
         // Pre-register or recycle a forward declaration so
         // self-referential pointer fields can find this aggregate
         // mid-definition. C99 6.2.1: only a tag in the SAME scope
@@ -149,6 +165,15 @@ impl Compiler {
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
+                    // Member layout uses 8-byte alignment at most; a
+                    // larger request would change the struct layout
+                    // silently, so it is a diagnostic.
+                    let m_align = core::mem::take(&mut self.pending.attr_align);
+                    if m_align > 8 {
+                        return Err(self.compile_err(format!(
+                            "member alignment {m_align} is not supported (at most 8)"
+                        )));
+                    }
                     continue;
                 }
                 if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
@@ -502,6 +527,12 @@ impl Compiler {
                 // A member may carry a trailing attribute
                 // (`int x __attribute__((deprecated));`).
                 self.skip_attribute_specifiers()?;
+                let m_align = core::mem::take(&mut self.pending.attr_align);
+                if m_align > 8 {
+                    return Err(self.compile_err(format!(
+                        "member alignment {m_align} is not supported (at most 8)"
+                    )));
+                }
                 // A typedef whose alias is an array contributes
                 // its dimension when the declarator stayed at the
                 // typedef's element type (`jmp_buf b;` ->

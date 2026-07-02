@@ -1032,8 +1032,10 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
 
-    // .data
-    let data_off = round_up(out.len() as u64, 8);
+    // .data -- `sh_addralign` carries the unit's base data alignment
+    // so the linker places this unit's data at a multiple of it.
+    let data_align = build.data_align.max(8) as u64;
+    let data_off = round_up(out.len() as u64, data_align);
     out.resize(data_off as usize, 0);
     out.extend_from_slice(&build.data);
     sh.push(Elf64Shdr {
@@ -1042,7 +1044,7 @@ pub(super) fn write_relocatable(
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: data_off,
         sh_size: build.data.len() as u64,
-        sh_addralign: 8,
+        sh_addralign: data_align,
         ..Default::default()
     });
 
@@ -1760,6 +1762,7 @@ mod tests {
             structs: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
+            data_align: 8,
             subsystem: None,
             finished_functions: Vec::new(),
             symbols: Vec::new(),

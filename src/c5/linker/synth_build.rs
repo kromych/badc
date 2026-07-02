@@ -138,6 +138,7 @@ fn synth_program_and_build(
 
     let program = Program {
         data: Vec::new(),
+        data_align: 8,
         data_object_starts: Vec::new(),
         entry_pc: 0,
         warnings: Vec::new(),

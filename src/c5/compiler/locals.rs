@@ -204,6 +204,18 @@ impl Compiler {
 
             self.shadow_symbol(loc_idx);
 
+            // C11 6.7.5 on block-scope objects: a static local's
+            // `.data` slot honors up to 16 like a file-scope object;
+            // an automatic object lives in 8-byte frame slots, so a
+            // larger request is a diagnostic, never a silent drop.
+            let req_align = core::mem::take(&mut self.pending.attr_align);
+            if req_align > 16 || (req_align > 8 && !is_static) {
+                return Err(self.compile_err(format!(
+                    "requested alignment {req_align} is not supported here \
+                     (automatic objects align to 8, static objects to at most 16)"
+                )));
+            }
+
             if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
@@ -213,6 +225,10 @@ impl Compiler {
                 // object of the same name reappears. The `Loc`-gated
                 // cleanup would skip it, so mark it for restore.
                 self.symbols[loc_idx].is_scope_static = true;
+                if req_align > 8 {
+                    self.align_data_to(req_align as usize);
+                    self.data_align = 16;
+                }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.ast_emit_static_local_decl(loc_idx as u32);
             } else {

@@ -2821,6 +2821,7 @@ mod tests {
             structs: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
+            data_align: 8,
             subsystem: None,
             finished_functions: alloc::vec::Vec::new(),
             symbols: alloc::vec::Vec::new(),

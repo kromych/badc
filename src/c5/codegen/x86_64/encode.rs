@@ -2302,7 +2302,7 @@ pub(crate) fn lower(
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
-        data_align: 8,
+        data_align: program.data_align,
         bss_size: 0,
         entry_offset,
         got_fixups,

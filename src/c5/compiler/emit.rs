@@ -227,6 +227,14 @@ impl Compiler {
         }
     }
 
+    /// Pad `self.data` to `align` bytes -- the `_Alignas(16)` /
+    /// `aligned(16)` placement for a file-scope object.
+    pub(super) fn align_data_to(&mut self, align: usize) {
+        while !self.data.len().is_multiple_of(align.max(8)) {
+            self.data.push(0);
+        }
+    }
+
     /// True when the most recently emitted instruction is `Imm 0` --
     /// i.e. the expression that just finished compiling was the literal
     /// `0`. Used by [`Compiler::type_warning`] to suppress the NULL

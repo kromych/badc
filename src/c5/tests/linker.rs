@@ -2016,3 +2016,125 @@ fn elf_section_offsets_respect_their_claimed_alignment() {
         }
     }
 }
+
+#[test]
+fn extern_redeclaration_keeps_the_tentative_definition() {
+    // C99 6.2.2p4 + 6.9.2p2: `int x; extern int x;` retains the
+    // tentative definition (the extern redeclaration refers to the
+    // same object), so the TU's object defines `x`. The same holds
+    // for the array form and for an initialized definition.
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let defined_sections = |src: &str, names: &[&str]| -> alloc::vec::Vec<bool> {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        names
+            .iter()
+            .map(|n| {
+                obj.symbols
+                    .iter()
+                    .any(|s| &s.name == n && s.section != NativeSymSection::Undef)
+            })
+            .collect()
+    };
+    let defined = defined_sections(
+        "int x;\nextern int x;\n\
+         int a[4];\nextern int a[];\n\
+         int y = 5;\nextern int y;\n\
+         int use_all(void) { return x + a[0] + y; }\n",
+        &["x", "a", "y"],
+    );
+    assert_eq!(
+        defined,
+        alloc::vec![true, true, true],
+        "the definitions must survive the extern redeclarations (x, a, y)"
+    );
+    // A genuinely extern-only declaration still emits an UNDEF.
+    let defined = defined_sections("extern int z;\nint use_z(void) { return z; }\n", &["z"]);
+    assert_eq!(defined, alloc::vec![false], "extern-only stays undefined");
+}
+
+#[test]
+fn alignas_sixteen_places_objects_and_raises_data_align() {
+    // C11 6.7.5: a 16-byte alignment request on a file-scope object
+    // is honored -- the object's section offset is 16-aligned through
+    // compaction and the unit records `data_align = 16` so the linker
+    // and the image writers keep the base congruent. Larger requests
+    // and unsupported positions are diagnostics, never silent drops.
+    use crate::c5::linker::{NativeSymSection, link_native_objects, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let compile = |src: &str| {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL")
+    };
+    let aligned_unit = "\
+        _Alignas(16) unsigned char pool[24];\n\
+        char skew[3] = \"ab\";\n\
+        __attribute__((aligned(16))) unsigned char pool2[8];\n\
+        int use_all(void) { return pool[0] + skew[0] + pool2[0]; }\n";
+    let obj = compile(aligned_unit);
+    assert_eq!(obj.data_align, 16, "unit must claim 16-byte data alignment");
+    for name in ["pool", "pool2"] {
+        let sym = obj
+            .symbols
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name} missing"));
+        assert!(
+            sym.section != NativeSymSection::Undef && sym.value.is_multiple_of(16),
+            "{name} at {:?}+0x{:x} must be 16-aligned",
+            sym.section,
+            sym.value
+        );
+    }
+    // Linked after a unit with an odd-sized data tail, the offsets
+    // stay 16-congruent (the unit base honors the claimed alignment)
+    // and the file image is padded so bss offsets keep their residue.
+    let odd = compile("char tail[5] = \"abcd\";\nint use_tail(void) { return tail[0]; }\n");
+    let merged = link_native_objects(&[odd, compile(aligned_unit)]).expect("link");
+    assert_eq!(merged.data_align, 16);
+    if merged.bss_size > 0 {
+        assert!(merged.data.len().is_multiple_of(16));
+    }
+    for name in ["pool", "pool2"] {
+        let sym = merged.defined.get(name).unwrap_or_else(|| panic!("{name}"));
+        assert!(
+            sym.value.is_multiple_of(16),
+            "{name} merged offset 0x{:x} must stay 16-aligned",
+            sym.value
+        );
+    }
+    // Diagnostics: above 16, automatic objects above 8, members above 8.
+    for src in [
+        "_Alignas(64) static char big[8];\nint main(void) { return 0; }\n",
+        "int main(void) { _Alignas(16) char buf[8]; return buf[0]; }\n",
+        "struct S { _Alignas(16) int f; };\nint main(void) { struct S s; s.f = 0; return s.f; }\n",
+    ] {
+        assert!(
+            Compiler::new(src.to_string()).compile().is_err(),
+            "must be diagnosed: {src}"
+        );
+    }
+}

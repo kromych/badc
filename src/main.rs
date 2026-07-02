@@ -933,9 +933,11 @@ fn main() {
         // below: same compile + emit chain, no filesystem read.
         let compile_in_memory = |label: &str, src: String, extra: &[(&str, &str)]| -> Vec<u8> {
             // The embedded runtime gates its sections on macros the
-            // driver sets per image: `__BADC_C5_START__` (an entry
-            // stub is emitted), `__BADC_WIN_WINMAIN__` (WinMain-shaped
-            // entry), `__BADC_WIN_WIDE__` (wide `wmain` / `wWinMain` entry).
+            // driver sets per image: `__BADC_C5_CRT__` (the image may
+            // import the user-mode C library), `__BADC_C5_START__`
+            // (an entry stub is emitted), `__BADC_WIN_WINMAIN__`
+            // (WinMain-shaped entry), `__BADC_WIN_WIDE__` (wide
+            // `wmain` / `wWinMain` entry).
             let mut copts_defines = defines.clone();
             for (k, v) in extra {
                 copts_defines.push((k.to_string(), v.to_string()));
@@ -1025,12 +1027,12 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        // The embedded runtime's startup (`__c5_entry`, `__c5_exit`,
-        // `environ`) links only when the writer emits an entry stub --
-        // not into shared libraries, passthrough-entry subsystems
-        // (native / EFI), or freestanding images.
-        let emits_start_stub = mode != Mode::SharedLibrary
-            && !freestanding
+        // The runtime's CRT section (the C99 snprintf / vsnprintf
+        // definitions on Windows) links into any image that may
+        // import the user-mode C library -- hosted executables and
+        // shared libraries, but not passthrough-entry subsystems
+        // (native / EFI) or freestanding images.
+        let links_crt = !freestanding
             && !matches!(
                 subsystem_override,
                 Some(
@@ -1041,10 +1043,17 @@ fn main() {
                         | badc::Subsystem::EfiRom
                 )
             );
-        // The single runtime source compiles to nothing unless
-        // `__BADC_C5_START__` is set; the GUI / wide-entry macros
-        // select the matching `__c5_entry` body on Windows.
+        // The startup section (`__c5_entry`, `__c5_exit`, `environ`)
+        // links only when the writer emits an entry stub -- not into
+        // shared libraries.
+        let emits_start_stub = mode != Mode::SharedLibrary && links_crt;
+        // The single runtime source compiles to nothing unless a gate
+        // macro is set; the GUI / wide-entry macros select the
+        // matching `__c5_entry` body on Windows.
         let mut runtime_defines: Vec<(&str, &str)> = Vec::new();
+        if links_crt {
+            runtime_defines.push(("__BADC_C5_CRT__", "1"));
+        }
         if emits_start_stub {
             runtime_defines.push(("__BADC_C5_START__", "1"));
             // `__c5_entry` calls this symbol; default `main`,

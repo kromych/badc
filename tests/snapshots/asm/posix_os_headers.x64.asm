@@ -113,7 +113,7 @@ Disassembly of section .text:
                	movl	$0x5413, %esi           # imm = 0x5413
                	leaq	-0x70(%rbp), %rdx
                	movq	%rbx, %rdi
-               	xorl	%eax, %eax
+               	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	%rbx, %rax

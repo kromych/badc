@@ -8,14 +8,16 @@
 //! native ELF ET_REL alongside the user's translation units.
 //!
 //! Single registry [`EMBEDDED_RUNTIME`]. Its one source
-//! (`runtime.c`) gates everything -- the `environ` / `_environ` data
-//! and the `__c5_exit` / `__c5_entry` startup -- on
-//! `__BADC_C5_START__`, which the driver defines only when the image
-//! writer emits an entry stub. Shared libraries and passthrough-entry
-//! subsystems (native / EFI) leave it undefined, so the source
-//! compiles to nothing for them: no user-mode CRT import, and no
-//! `environ` definition (a library inherits it from the host
-//! process).
+//! (`runtime.c`) gates its sections on driver-defined macros:
+//! `__BADC_C5_CRT__` (the image may import the user-mode C library --
+//! hosted executables and shared libraries) selects the Windows C99
+//! snprintf / vsnprintf definitions, and `__BADC_C5_START__` (an
+//! entry stub is emitted -- hosted executables only) selects the
+//! `environ` / `tzname` data and the `__c5_exit` / `__c5_entry`
+//! startup. Passthrough-entry subsystems (native / EFI) and
+//! freestanding images leave both undefined, so the source compiles
+//! to nothing for them: no user-mode CRT import, and no `environ`
+//! definition (a library inherits it from the host process).
 
 /// Runtime sources compiled + linked alongside the user's
 /// translation units on the native-link path.

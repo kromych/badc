@@ -1087,6 +1087,8 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("variadic_struct_arg.c", 18),
     ("variadic_struct_arg_16b.c", 51),
     ("libc_div.c", 0),
+    ("strtof_parses_float.c", 0),
+    ("snprintf_truncation_c99.c", 0),
     ("strength_reduce_pow2_divmod.c", 0),
     ("return_callee_saved_value.c", 0),
     ("spill_slot_reuse_disjoint_calls.c", 0),

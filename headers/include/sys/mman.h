@@ -83,6 +83,13 @@ char *mremap(char *old, unsigned long old_size, unsigned long new_size, int flag
 int msync(char *addr, unsigned long len, int flags);
 int mprotect(char *addr, unsigned long len, int prot);
 int madvise(char *addr, unsigned long len, int advice);
-// POSIX shared memory objects; mode is mode_t (an unsigned int on the targets).
+// POSIX shared memory objects; mode is mode_t (an unsigned int on the
+// targets). Darwin declares shm_open variadic and reads the mode via
+// va_arg (from the stack on arm64), so the prototype must match; glibc
+// declares the fixed three-argument POSIX shape.
+#ifdef __APPLE__
+int shm_open(const char *name, int oflag, ...);
+#else
 int shm_open(const char *name, int oflag, int mode);
+#endif
 int shm_unlink(const char *name);

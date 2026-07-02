@@ -620,6 +620,8 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// are arch-independent.
 const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
+    ("strtof_parses_float.c", 0),
+    ("snprintf_truncation_c99.c", 0),
     ("control_flow.c", 1),
     ("do_while.c", 5),
     ("break_continue.c", 4),

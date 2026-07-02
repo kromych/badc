@@ -496,6 +496,82 @@ fn data_import_routes_to_declaring_dylib_on_windows_x64() {
     );
 }
 
+/// C99 7.19.6.5p3 / 7.19.6.12p3: snprintf / vsnprintf return the
+/// untruncated length and NUL-terminate a nonempty buffer; msvcrt's
+/// `_snprintf` / `_vsnprintf` return -1 and omit the NUL. The standard
+/// spellings therefore carry no msvcrt binding on Windows: they resolve
+/// against the runtime's conforming definitions, which wrap
+/// `_vsnprintf` + `_vscprintf`.
+#[test]
+fn windows_snprintf_resolves_to_the_runtime_definition() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_options(
+            "#include <stdio.h>\n\
+             int main(void){char b[4]; return snprintf(b, 4, \"%d\", 123456);}\n"
+                .to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile snprintf TU");
+        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .expect("link Windows executable");
+        for imported in ["_vscprintf", "_vsnprintf"] {
+            assert_eq!(
+                pe_import_dll_of(&image, imported).as_deref(),
+                Some("msvcrt.dll"),
+                "{target:?}: the runtime definition must import `{imported}`"
+            );
+        }
+        for absent in ["_snprintf", "snprintf", "vsnprintf"] {
+            assert!(
+                pe_iat_slot_rva(&image, absent).is_none(),
+                "{target:?}: `{absent}` must not appear in the import table"
+            );
+        }
+    }
+}
+
+/// A shared library compiles the runtime with `__BADC_C5_CRT__` but
+/// without the startup gate; the CRT section alone must still define
+/// the C99 snprintf / vsnprintf so a DLL's calls resolve locally.
+#[test]
+fn windows_runtime_crt_section_defines_snprintf_without_start_gate() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, embedded_runtime,
+        link_native_objects, parse_native_elf,
+    };
+    let target = Target::WindowsX64;
+    let reloc = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let mut objs = Vec::new();
+    for (name, body) in embedded_runtime() {
+        let copts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_defines(vec![("__BADC_C5_CRT__".to_string(), "1".to_string())]);
+        let rt = Compiler::with_options(body.to_string(), target, copts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile runtime {name}: {e}"));
+        let bytes = crate::emit_native_with_options(&rt, target, reloc)
+            .unwrap_or_else(|e| panic!("emit runtime {name}: {e}"));
+        objs.push(parse_native_elf(&bytes).expect("parse runtime object"));
+    }
+    let merged = link_native_objects(&objs).expect("link CRT-only runtime");
+    for def in ["snprintf", "vsnprintf"] {
+        assert!(
+            merged.defined.contains_key(def),
+            "the CRT section must define `{def}`"
+        );
+    }
+    assert!(
+        !merged.defined.contains_key("__c5_entry"),
+        "the startup section must stay gated out"
+    );
+}
+
 /// Return the `(VirtualAddress, raw bytes)` of the PE `.text`
 /// section. RVA-relative byte scans use the VirtualAddress; the raw
 /// bytes are the section's file image.

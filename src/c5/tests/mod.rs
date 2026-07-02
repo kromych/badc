@@ -140,12 +140,14 @@ pub fn link_executable_with_runtime(
     objs.push(parse_native_elf(&prog_bytes).map_err(|e| format!("parse program object: {e}"))?);
 
     // This helper always builds a hosted executable, so the runtime's
-    // startup section is compiled in (`__BADC_C5_START__`).
+    // CRT and startup sections are both compiled in.
     // The entry shape follows the entry symbol: `__BADC_WIN_WINMAIN__`
     // for a `WinMain` entry, `__BADC_WIN_WIDE__` for `wmain`, else `main`
     // with argc/argv -- independent of the PE subsystem.
-    let mut rt_defines: Vec<(String, String)> =
-        vec![("__BADC_C5_START__".to_string(), "1".to_string())];
+    let mut rt_defines: Vec<(String, String)> = vec![
+        ("__BADC_C5_CRT__".to_string(), "1".to_string()),
+        ("__BADC_C5_START__".to_string(), "1".to_string()),
+    ];
     rt_defines.push((
         "__BADC_ENTRY__".to_string(),
         program
@@ -218,8 +220,10 @@ pub fn link_executable_with_runtime_multi(
     // PLT pass numbers trampolines in object order, so the order must be
     // stable across linkers.
     let mut objs = Vec::new();
-    let mut rt_defines: Vec<(String, String)> =
-        vec![("__BADC_C5_START__".to_string(), "1".to_string())];
+    let mut rt_defines: Vec<(String, String)> = vec![
+        ("__BADC_C5_CRT__".to_string(), "1".to_string()),
+        ("__BADC_C5_START__".to_string(), "1".to_string()),
+    ];
     rt_defines.push((
         "__BADC_ENTRY__".to_string(),
         entry

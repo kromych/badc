@@ -90,7 +90,10 @@
 #pragma binding(libc::strtol,  "strtol")
 #pragma binding(libc::strtoll, "strtoll")
 #pragma binding(libc::strtod,  "strtod")
-#pragma binding(libc::strtof,  "strtof")
+// The prototype below declares `strtof` as returning double (c5
+// aliases `float` to `double`), so the binding must target the
+// double-returning entry point; libc's own `strtof` returns `float`.
+#pragma binding(libc::strtof,  "strtod")
 #pragma binding(libc::strtold, "strtold")
 #pragma binding(libc::abs,     "abs")
 #pragma binding(libc::abort,   "abort")
@@ -155,7 +158,9 @@
 #pragma binding(msvcrt::strtoull, "_strtoui64")
 #pragma binding(msvcrt::_strtoui64, "_strtoui64")
 #pragma binding(msvcrt::strtod,  "strtod")
-#pragma binding(msvcrt::strtof,  "strtof")
+// msvcrt.dll exports no `strtof` (a UCRT addition); `strtof` routes
+// through `strtod`, matching the double-returning prototype below.
+#pragma binding(msvcrt::strtof,  "strtod")
 // msvcrt.dll has no `strtold`; UCRT exports it but the
 // universally-available CRT here does not. Programs that
 // need `long double` parsing on Windows pin to UCRT.

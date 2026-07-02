@@ -243,29 +243,31 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::wprintf,   "wprintf")
 #pragma binding(msvcrt::fprintf,   "fprintf")
 #pragma binding(msvcrt::sprintf,   "sprintf")
-// MSVC renamed the safe forms; the original `snprintf` only landed
-// in msvcrt circa VS2015. `_snprintf` is the universally available
-// spelling and behaves the same way for our usage (no NUL guarantee
-// on overflow, but neither does our other targets' `snprintf` once
-// the buffer fills). Note that msvcrt's printf family prints
-// infinity / NaN as `1.#INF` / `1.#IND` / `1.#QNAN` rather than
-// C99 `inf` / `nan`; programs that classify formatted output
-// by a digit-prefix regex misclassify the msvcrt output as
-// numeric.
-// Routing through `ucrtbase._snprintf` would emit the C99
-// spelling but that entry point fails with
-// STATUS_ENTRYPOINT_NOT_FOUND at PE load time on the GitHub
-// Windows runners -- the documented UCRT import path is via the
-// `api-ms-win-crt-stdio-l1-1-0.dll` proxy set, not ucrtbase
-// directly. Tracked under the TODO marker until c5 grows
+// The original `snprintf` only landed in msvcrt circa VS2015, and
+// `_snprintf` deviates from C99 7.19.6.5 (returns -1 and omits the
+// NUL on truncation). The standard `snprintf` / `vsnprintf`
+// spellings carry no binding here: they resolve at link time against
+// the conforming definitions in the auto-linked runtime, which wrap
+// `_vsnprintf` + `_vscprintf`. The underscored spellings keep the
+// msvcrt entry points for source written against msvcrt semantics.
+// Note that msvcrt's printf family prints infinity / NaN as
+// `1.#INF` / `1.#IND` / `1.#QNAN` rather than C99 `inf` / `nan`;
+// programs that classify formatted output by a digit-prefix regex
+// misclassify the msvcrt output as numeric.
+// Routing through `ucrtbase` would emit the C99 spelling but its
+// entry points fail with STATUS_ENTRYPOINT_NOT_FOUND at PE load
+// time on the GitHub Windows runners -- the documented UCRT import
+// path is via the `api-ms-win-crt-stdio-l1-1-0.dll` proxy set, not
+// ucrtbase directly. Tracked under the TODO marker until c5 grows
 // support for the UCRT proxy DLLs.
-#pragma binding(msvcrt::snprintf,  "_snprintf")
 #pragma binding(msvcrt::_snprintf, "_snprintf")
+#pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
 #pragma binding(msvcrt::vprintf,   "vprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
-#pragma binding(msvcrt::vsnprintf, "_vsnprintf")
-#pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
+// The runtime's `vsnprintf` needs a prototype on Windows; every
+// other target binds the name straight to libc.
+int vsnprintf(char *buf, int size, char *fmt, char *ap);
 #pragma binding(msvcrt::scanf,     "scanf")
 #pragma binding(msvcrt::fscanf,    "fscanf")
 #pragma binding(msvcrt::sscanf,    "sscanf")
@@ -797,9 +799,12 @@ static char *__c5_lazy_stream(int idx) {
 // Windows-flavoured sources spell the v* names with a leading underscore
 // (`#define vsnprintf _vsnprintf` is a common MSVC idiom). Alias the
 // underscored spellings to the canonical names so they resolve through the
-// same per-target bindings -- on Windows the canonical names already bind
-// to the underscored CRT entry points.
+// same per-target bindings. On Windows `_vsnprintf` stays a direct msvcrt
+// binding with msvcrt semantics; the canonical `vsnprintf` is the C99
+// definition in the auto-linked runtime.
 #define _vfprintf  vfprintf
 #define _vprintf   vprintf
 #define _vsprintf  vsprintf
+#ifndef _WIN32
 #define _vsnprintf vsnprintf
+#endif

@@ -206,7 +206,7 @@ int openat(int dirfd, const char *path, int flags, ...);
 #pragma binding(libc::splice, "splice")
 #pragma binding(libc::posix_fadvise, "posix_fadvise")
 #pragma binding(libc::posix_fallocate, "posix_fallocate")
-int fcntl(int fd, int cmd, int arg);
+int fcntl(int fd, int cmd, ...);
 int openat(int dirfd, const char *path, int flags, ...);
 // Move data between two descriptors, one of which must be a pipe; the
 // `off_*` parameters are in/out file offsets or null.

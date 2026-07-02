@@ -169,10 +169,11 @@
 #pragma binding(msvcrt::system,  "system")
 #pragma binding(msvcrt::getenv,  "getenv")
 // POSIX putenv is msvcrt's underscored `_putenv` (a `(string) -> int`
-// shape). POSIX setenv takes a third `overwrite` argument that msvcrt's
-// 2-parameter `_putenv_s(name, value)` lacks, so it is left unbound and
-// resolved by the runtime shim (see lib/runtime.c) that honors the flag.
+// shape). msvcrt's `_putenv_s(name, value)` has no overwrite flag and
+// always replaces; setenv honors POSIX overwrite via the inline wrapper
+// below (declared here, defined after getenv/_putenv_s are in scope).
 #pragma binding(msvcrt::putenv,    "_putenv")
+#pragma binding(msvcrt::_putenv_s, "_putenv_s")
 #pragma binding(msvcrt::_wputenv_s, "_wputenv_s")
 #pragma binding(msvcrt::qsort,     "qsort")
 #pragma binding(msvcrt::bsearch,   "bsearch")
@@ -331,7 +332,20 @@ _Noreturn int abort();
 _Noreturn int exit(int status);
 int system(char *cmd);
 char *getenv(char *name);
+#ifdef _WIN32
+int _putenv_s(char *name, char *value);
+// POSIX setenv (IEEE Std 1003.1): overwrite == 0 leaves an existing
+// binding untouched and returns 0. Inline so the compiled, JIT, and
+// interpreter paths share one definition without a runtime import.
+static inline int setenv(char *name, char *value, int overwrite) {
+    if (overwrite == 0 && getenv(name) != 0) {
+        return 0;
+    }
+    return _putenv_s(name, value);
+}
+#else
 int setenv(char *name, char *value, int overwrite);
+#endif
 int putenv(char *string);
 // Multibyte / wide-character string conversion (C99 7.20.8). `wchar_t`
 // and `size_t` come from <stddef.h>.

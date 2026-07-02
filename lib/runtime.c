@@ -62,24 +62,6 @@ int snprintf(char *buf, int size, char *fmt, ...) {
     return len;
 }
 
-// POSIX setenv (IEEE Std 1003.1): with overwrite == 0 an existing
-// binding is left untouched and 0 is returned. msvcrt's
-// `_putenv_s(name, value)` has no overwrite flag and always replaces,
-// so probe `getenv` first and write only when the name is absent or a
-// replacement is requested (`<stdlib.h>` leaves setenv unbound on
-// Windows so this definition resolves it).
-#pragma binding(libc::getenv, "getenv")
-#pragma binding(libc::_putenv_s, "_putenv_s")
-extern char *getenv(char *name);
-extern int _putenv_s(char *name, char *value);
-
-int setenv(char *name, char *value, int overwrite) {
-    if (overwrite == 0 && getenv(name) != 0) {
-        return 0;
-    }
-    return _putenv_s(name, value);
-}
-
 #endif
 #endif
 

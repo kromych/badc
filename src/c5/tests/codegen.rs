@@ -232,14 +232,13 @@ fn environ_data_binding_records_copy_relocation() {
 }
 
 /// POSIX `setenv` carries a third `overwrite` argument that msvcrt's
-/// 2-parameter `_putenv_s` lacks, so `<stdlib.h>` must leave `setenv`
-/// unbound on Windows -- resolved by the runtime shim that honors the
-/// flag -- rather than binding it straight to `_putenv_s` (which drops
-/// `overwrite`). The object for a `setenv`-calling TU must therefore
-/// reference `setenv` as an undefined symbol and carry no `_putenv_s`
-/// import of its own.
+/// 2-parameter `_putenv_s` lacks, so `<stdlib.h>` defines `setenv` as
+/// an inline wrapper that probes `getenv` before calling `_putenv_s`,
+/// honoring the flag. The wrapper compiles in place -- the object
+/// imports `_putenv_s` and carries no undefined `setenv` symbol -- and
+/// the same definition serves the interpreter and JIT paths.
 #[test]
-fn setenv_left_unbound_for_runtime_shim_on_windows() {
+fn setenv_inline_wrapper_imports_putenv_s_on_windows() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::with_target(
         "#include <stdlib.h>\nint main(void){ setenv(\"K\", \"V\", 0); return 0; }".to_string(),
@@ -254,12 +253,8 @@ fn setenv_left_unbound_for_runtime_shim_on_windows() {
     let obj = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
     let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
     assert!(
-        contains(b"setenv"),
-        "setenv must reach the object as an undefined symbol for the runtime shim to satisfy"
-    );
-    assert!(
-        !contains(b"_putenv_s"),
-        "setenv must not be bound directly to _putenv_s (the overwrite flag would be dropped)"
+        contains(b"_putenv_s"),
+        "the inline setenv wrapper must import _putenv_s"
     );
 }
 

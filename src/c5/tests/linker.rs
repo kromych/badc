@@ -945,6 +945,151 @@ fn export_data_exposes_data_globals_in_dynsym() {
 }
 
 #[test]
+fn macho_executable_exports_globals_through_dyld_info_trie() {
+    // macOS publishes every global of an executable so a dlopen'd module
+    // resolves them against the host. dyld resolves an image carrying
+    // LC_DYLD_INFO exclusively through the export trie -- a symtab-only
+    // entry is invisible to it -- so a text and a data global must both
+    // resolve through the trie at their symtab addresses.
+    use crate::c5::linker::{
+        emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             int host_data = 7;\n\
+             int host_api(int x) {{ return x + host_data; }}\n\
+             int main(void) {{ return host_api(0); }}\n"
+        ),
+        Target::MacOSAarch64,
+        CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::MacOSAarch64,
+        None,
+    )
+    .expect("write executable");
+
+    fn uleb(buf: &[u8], p: &mut usize) -> u64 {
+        let (mut v, mut shift) = (0u64, 0);
+        loop {
+            let b = buf[*p];
+            *p += 1;
+            v |= ((b & 0x7F) as u64) << shift;
+            if b & 0x80 == 0 {
+                return v;
+            }
+            shift += 7;
+        }
+    }
+    fn trie_lookup(trie: &[u8], name: &str) -> Option<u64> {
+        let bytes = name.as_bytes();
+        let (mut node, mut pos) = (0usize, 0usize);
+        loop {
+            let mut p = node;
+            let term_size = uleb(trie, &mut p) as usize;
+            if pos == bytes.len() {
+                if term_size == 0 {
+                    return None;
+                }
+                let _flags = uleb(trie, &mut p);
+                return Some(uleb(trie, &mut p));
+            }
+            p += term_size;
+            let child_count = trie[p];
+            p += 1;
+            let mut next = None;
+            for _ in 0..child_count {
+                let start = p;
+                while trie[p] != 0 {
+                    p += 1;
+                }
+                let label = &trie[start..p];
+                p += 1;
+                let child = uleb(trie, &mut p) as usize;
+                if bytes[pos..].starts_with(label) {
+                    next = Some((label.len(), child));
+                    break;
+                }
+            }
+            match next {
+                Some((len, child)) => {
+                    pos += len;
+                    node = child;
+                }
+                None => return None,
+            }
+        }
+    }
+
+    let read_u32 = |off: usize| u32::from_le_bytes(exe[off..off + 4].try_into().unwrap());
+    let read_u64 = |off: usize| u64::from_le_bytes(exe[off..off + 8].try_into().unwrap());
+    assert_eq!(read_u32(0), 0xfeed_facf, "executable must be MH_MAGIC_64");
+    // Walk the load commands for LC_DYLD_INFO_ONLY (export_off/size at
+    // +40/+44), LC_SYMTAB (symoff/nsyms/stroff at +8/+12/+16), and the
+    // __TEXT segment vmaddr (image base; trie addresses are relative to it).
+    let sizeofcmds = read_u32(20) as usize;
+    let (mut export_range, mut symtab_loc, mut image_base) = (None, None, None);
+    let mut p = 32usize;
+    while p < 32 + sizeofcmds {
+        match read_u32(p) {
+            0x8000_0022 => {
+                export_range = Some((read_u32(p + 40) as usize, read_u32(p + 44) as usize));
+            }
+            0x2 => {
+                symtab_loc = Some((
+                    read_u32(p + 8) as usize,
+                    read_u32(p + 12) as usize,
+                    read_u32(p + 16) as usize,
+                ));
+            }
+            0x19 if exe[p + 8..p + 15] == *b"__TEXT\0" => {
+                image_base = Some(read_u64(p + 24));
+            }
+            _ => {}
+        }
+        p += read_u32(p + 4) as usize;
+    }
+    let (export_off, export_size) = export_range.expect("LC_DYLD_INFO_ONLY must be present");
+    let trie = &exe[export_off..export_off + export_size];
+    let (symoff, nsyms, stroff) = symtab_loc.expect("LC_SYMTAB must be present");
+    let image_base = image_base.expect("__TEXT segment must be present");
+    let n_value_of = |name: &str| -> u64 {
+        (0..nsyms)
+            .find_map(|i| {
+                let base = symoff + i * 16;
+                let s = &exe[stroff + read_u32(base) as usize..];
+                let end = s.iter().position(|&b| b == 0).unwrap();
+                (&s[..end] == name.as_bytes()).then(|| read_u64(base + 8))
+            })
+            .unwrap_or_else(|| panic!("symtab must carry {name}"))
+    };
+    for name in ["_host_api", "_host_data"] {
+        assert_eq!(
+            trie_lookup(trie, name),
+            Some(n_value_of(name) - image_base),
+            "{name} must resolve through the export trie at its symtab address"
+        );
+    }
+}
+
+#[test]
 fn shared_object_relocates_internal_data_pointers() {
     // A function / data pointer baked into a shared object's static data
     // must carry an R_*_RELATIVE relocation so it tracks the runtime load

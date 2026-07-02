@@ -2226,7 +2226,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // global symbols, so a dlopen'd module binds against them. A text
     // symbol's value is the code base plus its byte offset within
     // `build.text`; a data symbol's value is the `__data` section
-    // vmaddr plus its byte offset within `build.data`.
+    // vmaddr plus its byte offset within `build.data`. dyld resolves
+    // an image carrying LC_DYLD_INFO through the export trie only, so
+    // each dynamic export joins the trie alongside its symtab entry.
     let dyn_export_str_base = n_locals + export_disk_names.len();
     for (i, d) in dyn_exports_emit.iter().enumerate() {
         let n_strx = str_indices[dyn_export_str_base + i];
@@ -2243,6 +2245,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             }
         };
         symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect));
+        export_trie_entries.push((dyn_export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE));
     }
     // [Undefined imports] (N_EXT | N_UNDF). Indices in
     // `str_indices` are shifted past the locals + exports.

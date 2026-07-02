@@ -660,6 +660,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("sxtw_fold_source_liveness.c", 18),
     ("data_reloc_one_past_end.c", 10),
     ("variadic_libc_fnptr_static_init.c", 0),
+    ("block_scope_typedef_variadic_fnptr.c", 0),
 ];
 
 #[test]

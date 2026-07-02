@@ -282,6 +282,20 @@ impl Compiler {
             if let Some(pp) = typedef_params {
                 self.symbols[id_idx].params = pp.types;
                 self.symbols[id_idx].is_variadic = pp.is_variadic;
+            } else if let Some((proto_fixed, proto_variadic)) =
+                self.pending.typedef_fn_proto.take()
+            {
+                // `typedef RET (*NAME)(args)` at block scope: the
+                // declarator captured the pointee prototype. Record it
+                // as the file-scope branch does, so an indirect call
+                // through a variable of this typedef narrows arguments
+                // and routes a variadic tail per the host ABI.
+                self.symbols[id_idx].params = self
+                    .pending
+                    .fn_ptr_param_types
+                    .take()
+                    .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
+                self.symbols[id_idx].is_variadic = proto_variadic;
             }
             self.accept(',')?;
         }

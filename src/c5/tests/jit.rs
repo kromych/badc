@@ -1566,6 +1566,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("setjmp_value_live_across.c", 0),
     ("mixed_sse_int_aggregate_args.c", 0),
     ("variadic_agg_return_classes.c", 0),
+    ("va_copy_under_pressure.c", 0),
 ];
 
 #[test]

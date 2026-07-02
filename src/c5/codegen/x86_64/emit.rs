@@ -6324,19 +6324,32 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            // Three distinct registers: src pointer in r11, dst pointer
-            // in rcx, the copied word in r10 (all outside the allocator's
-            // live values for this instruction). Copy the three 8-byte
-            // words -- gp_offset + fp_offset packed in the first, then
-            // overflow_arg_area and reg_save_area.
-            let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_RCX, frame) else {
+            // Both pointers ride the reserved r10 / r11 scratches (rcx
+            // is in the allocator's caller pool and may hold a live
+            // value across the intrinsic). The copied word borrows a
+            // pool register around a push/pop pair, mirroring
+            // emit_mcpy; the spill loads above run before the push so
+            // rsp-relative offsets stay valid.
+            let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_R10, frame) else {
                 bail_msg("VaCopy: &dst not in int reg / spill");
                 return false;
             };
+            let temp = if dst_p.0 != Reg::RAX.0 && src_p.0 != Reg::RAX.0 {
+                Reg::RAX
+            } else if dst_p.0 != Reg::RCX.0 && src_p.0 != Reg::RCX.0 {
+                Reg::RCX
+            } else {
+                Reg::RDX
+            };
+            emit_push_r(code, temp);
+            // Copy the three 8-byte `__va_list_tag` words (ABI 3.5.7):
+            // gp_offset + fp_offset packed in the first, then
+            // overflow_arg_area and reg_save_area.
             for off in [0i32, 8, 16] {
-                emit_mov_r_mem(code, SCRATCH_R10, src_p, off);
-                emit_mov_mem_r(code, dst_p, off, SCRATCH_R10);
+                emit_mov_r_mem(code, temp, src_p, off);
+                emit_mov_mem_r(code, dst_p, off, temp);
             }
+            emit_pop_r(code, temp);
             true
         }
         I::VaStart => {

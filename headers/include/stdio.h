@@ -293,7 +293,9 @@ int vsnprintf(char *buf, int size, char *fmt, char *ap);
 #pragma binding(msvcrt::fseek,     "fseek")
 #pragma binding(msvcrt::ftell,     "ftell")
 #pragma binding(msvcrt::_fseeki64, "_fseeki64")
-#pragma binding(msvcrt::_ftelli64, "_ftelli64")
+// The legacy msvcrt.dll exports no _ftelli64 (unlike _fseeki64); UCRT does.
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::_ftelli64, "_ftelli64")
 #pragma binding(msvcrt::fgetpos,   "fgetpos")
 #pragma binding(msvcrt::fsetpos,   "fsetpos")
 #pragma binding(msvcrt::rewind,    "rewind")
@@ -371,7 +373,7 @@ int vsnprintf(char *buf, int size, char *fmt, char *ap);
 // SDK macros. badc's time_t is 64-bit on Windows, so the ABI matches.
 #pragma binding(msvcrt::localtime_s,    "_localtime64_s")
 #pragma binding(msvcrt::gmtime_s,       "_gmtime64_s")
-#pragma binding(msvcrt::ctime_s,        "ctime_s")
+#pragma binding(msvcrt::ctime_s,        "_ctime64_s")
 #pragma binding(msvcrt::asctime_s,      "asctime_s")
 #pragma binding(msvcrt::strerror_s,     "strerror_s")
 #pragma binding(msvcrt::_strdup,        "_strdup")
@@ -404,7 +406,12 @@ int vsnprintf(char *buf, int size, char *fmt, char *ap);
 #pragma binding(msvcrt::_unlink,        "_unlink")
 #pragma binding(msvcrt::_getcwd,        "_getcwd")
 #pragma binding(msvcrt::_chdir,         "_chdir")
+// The legacy arm64 msvcrt.dll does not export `_getpid`; UCRT does.
+#if defined(__aarch64__)
+#pragma binding(ucrtbase::_getpid,      "_getpid")
+#else
 #pragma binding(msvcrt::_getpid,        "_getpid")
+#endif
 #pragma binding(msvcrt::_dup,           "_dup")
 #pragma binding(msvcrt::_dup2,          "_dup2")
 #pragma binding(msvcrt::_fdopen,        "_fdopen")
@@ -412,9 +419,10 @@ int vsnprintf(char *buf, int size, char *fmt, char *ap);
 // form, so the portable spelling binds to the same entry point.
 #pragma binding(msvcrt::fdopen,         "_fdopen")
 #pragma binding(msvcrt::fileno,         "_fileno")
-#pragma binding(msvcrt::_byteswap_ulong,  "_byteswap_ulong")
-#pragma binding(msvcrt::_byteswap_uint64, "_byteswap_uint64")
-#pragma binding(msvcrt::_byteswap_ushort, "_byteswap_ushort")
+// The legacy msvcrt.dll exports no _byteswap_*; UCRT does.
+#pragma binding(ucrtbase::_byteswap_ulong,  "_byteswap_ulong")
+#pragma binding(ucrtbase::_byteswap_uint64, "_byteswap_uint64")
+#pragma binding(ucrtbase::_byteswap_ushort, "_byteswap_ushort")
 // `__acrt_iob_func(int)` is the CRT helper that returns a
 // FILE * to the requested standard stream (0=stdin, 1=stdout,
 // 2=stderr). Used by `__c5_lazy_stream` above to back the

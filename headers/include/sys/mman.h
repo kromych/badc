@@ -43,7 +43,7 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::mmap,     "_mmap")
 #pragma binding(libc::munmap,   "_munmap")
-#pragma binding(libc::mremap,   "_mremap")
+// mremap is Linux-only; unbound here so a use fails at link.
 #pragma binding(libc::msync,    "_msync")
 #pragma binding(libc::mprotect, "_mprotect")
 #pragma binding(libc::madvise,    "_madvise")

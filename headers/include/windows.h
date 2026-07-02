@@ -1676,8 +1676,10 @@ LONG RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwType
 #pragma binding(kernel32::GetNativeSystemInfo,     "GetNativeSystemInfo")
 #pragma binding(kernel32::GetProcessHeap,          "GetProcessHeap")
 #pragma binding(kernel32::GetProcAddressA,         "GetProcAddress")
-#pragma binding(kernel32::CharLowerW,              "CharLowerW")
-#pragma binding(kernel32::CharUpperW,              "CharUpperW")
+// CharLowerW / CharUpperW are user32.dll exports (winuser.h).
+#pragma dylib(user32, "user32.dll")
+#pragma binding(user32::CharLowerW,                "CharLowerW")
+#pragma binding(user32::CharUpperW,                "CharUpperW")
 #pragma binding(kernel32::CreateFileA,             "CreateFileA")
 #pragma binding(kernel32::CreateFileTransactedA,   "CreateFileTransactedA")
 #pragma binding(kernel32::CreateFileTransactedW,   "CreateFileTransactedW")
@@ -1848,13 +1850,11 @@ LONG RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwType
 #pragma binding(kernel32::TzSpecificLocalTimeToSystemTime, "TzSpecificLocalTimeToSystemTime")
 #pragma binding(kernel32::GetLocalTime,            "GetLocalTime")
 #pragma binding(kernel32::SetLastError,            "SetLastError")
-// rpcrt4-resident UUID helpers; sqlite gates these on
-// `SQLITE_WIN32_USE_UUID`. The kernel32 dylib hosts the binding
-// nominally -- runtime resolution still goes through the
-// dispatch table -- but production-quality runs would bind these
-// to rpcrt4.dll.
-#pragma binding(kernel32::UuidCreate,              "UuidCreate")
-#pragma binding(kernel32::UuidCreateSequential,    "UuidCreateSequential")
+// UuidCreate / UuidCreateSequential are rpcrt4.dll exports (rpcdce.h);
+// binding them to kernel32 fails at load.
+#pragma dylib(rpcrt4, "rpcrt4.dll")
+#pragma binding(rpcrt4::UuidCreate,                "UuidCreate")
+#pragma binding(rpcrt4::UuidCreateSequential,      "UuidCreateSequential")
 
 // Prototypes mirror the Win32 API shapes documented on MSDN. Where
 // the real return type is `BOOL` (= int) we keep `int`; where it's

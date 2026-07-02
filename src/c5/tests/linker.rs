@@ -2138,3 +2138,98 @@ fn alignas_sixteen_places_objects_and_raises_data_align() {
         );
     }
 }
+
+#[test]
+fn windows_x64_tz_globals_bind_to_msvcrt_data_exports() {
+    // msvcrt's `_tzset` writes the DLL's own `_tzname` / `_timezone` /
+    // `_daylight`; the x64 image must import them as data (the
+    // `environ` treatment) instead of resolving the externs to local
+    // zero-filled slots `_tzset` never writes.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "#include <time.h>\n\
+               #include <stdio.h>\n\
+               #pragma export(use_tz)\n\
+               long use_tz(void) { tzset(); return timezone + daylight + (tzname[0] != 0); }\n";
+    let program = Compiler::with_target(src.to_string(), Target::WindowsX64)
+        .compile()
+        .expect("compile tz TU");
+    let obj = emit_native_with_options(
+        &program,
+        Target::WindowsX64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        },
+    )
+    .expect("emit object");
+    let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+    for sym in [
+        &b"\0_tzname\0"[..],
+        &b"\0_timezone\0"[..],
+        &b"\0_daylight\0"[..],
+    ] {
+        assert!(
+            contains(sym),
+            "x64 tz output {:?} must be a data import",
+            core::str::from_utf8(sym)
+        );
+    }
+}
+
+#[test]
+fn dead_libc_bindings_fail_at_build_not_at_load() {
+    // libSystem exports none of these (dlsym-verified); the header must
+    // leave them unbound so a use fails the build loudly instead of
+    // producing an image that aborts at load with a dyld error.
+    let cases = [
+        (
+            "#include <time.h>\nint main(void) { struct timespec t; t.tv_sec = 0; t.tv_nsec = 0; return clock_nanosleep(0, 0, &t, 0); }\n",
+            "clock_nanosleep",
+        ),
+        (
+            "#include <sys/mman.h>\nint main(void) { return mremap((void *)0, 0, 0, 0) != 0; }\n",
+            "mremap",
+        ),
+        (
+            "#include <sched.h>\nint main(void) { return sched_getscheduler(0); }\n",
+            "sched_getscheduler",
+        ),
+        (
+            "#include <unistd.h>\nint main(void) { return fexecve(0, 0, 0); }\n",
+            "fexecve",
+        ),
+    ];
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let link_one = |src: &str| {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::MacOSAarch64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
+        link_native_objects(&[parse_native_elf(&bytes).expect("parse")])
+    };
+    for (src, name) in cases {
+        let err = link_one(src)
+            .err()
+            .unwrap_or_else(|| panic!("{name}: use of an unexported symbol must not link"));
+        assert!(
+            format!("{err}").contains(name),
+            "{name}: diagnostic must name the symbol: {err}"
+        );
+    }
+    // The bound neighbors still link.
+    for src in [
+        "#include <time.h>\nint main(void) { struct timespec t; return clock_gettime(0, &t); }\n",
+        "#include <sched.h>\nint main(void) { return sched_yield(); }\n",
+    ] {
+        link_one(src).expect("bound libc call must link");
+    }
+}

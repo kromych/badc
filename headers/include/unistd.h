@@ -136,7 +136,7 @@
 #pragma binding(libc::fpathconf, "_fpathconf")
 #pragma binding(libc::lockf,     "_lockf")
 #pragma binding(libc::execv,     "_execv")
-#pragma binding(libc::fexecve,   "_fexecve")
+// libSystem exports no fexecve; unbound so a use fails at link.
 #pragma binding(libc::pathconf,  "_pathconf")
 #pragma binding(libc::sysconf,   "_sysconf")
 #pragma binding(libc::getpagesize, "_getpagesize")
@@ -257,7 +257,7 @@ extern char **environ;
 #pragma binding(libc::ttyname,   "ttyname")
 #pragma binding(libc::ttyname_r, "ttyname_r")
 #pragma binding(libc::ctermid,   "ctermid")
-#pragma binding(libc::ctermid_r, "ctermid_r")
+// glibc exports no ctermid_r; unbound so a use fails at link.
 #pragma binding(libc::getlogin,  "getlogin")
 #pragma binding(libc::getlogin_r,"getlogin_r")
 #pragma binding(libc::getgroups, "getgroups")

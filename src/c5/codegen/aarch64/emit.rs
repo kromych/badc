@@ -4155,6 +4155,16 @@ fn atomic_operand_into(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
+    // An operand the allocator placed in a borrowed working register
+    // (x9..x12) may already have been overwritten by an earlier
+    // operand move; read its saved copy from the save area instead
+    // ([sp+0]=x9 .. [sp+24]=x12, laid out by `atomic_save_working`).
+    if let Place::IntReg(r) = place
+        && (9..=12).contains(&r)
+    {
+        emit_sp_ldr_x(code, target, (r as u32 - 9) * 8);
+        return true;
+    }
     match materialize_int_shifted(code, place, target, frame, sp_shift) {
         Some(r) => {
             if r.0 != target.0 {

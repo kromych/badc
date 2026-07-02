@@ -1224,18 +1224,20 @@ fn marshal_args(
         }
     }
 
-    // System V FP-eightbyte aggregate arguments: any aggregate containing
-    // an SSE eightbyte. regs[0] may be an xmm, so the regs[0]-as-base scheme
-    // below cannot apply -- materialize the source address into a scratch
-    // GPR and load each eightbyte into its register (movsd for SSE, mov for
-    // INTEGER). Runs after the scalar-FP moves (their xmm sources consumed)
-    // and before the integer marshal (the source address, in a GPR, not yet
-    // overwritten); the eightbytes are memory loads, joining no xmm cycle.
+    // System V aggregates whose eightbytes are all SSE: no integer
+    // eightbyte register can hold the base, so materialize the source
+    // address into a scratch GPR and load each eightbyte's xmm. Runs
+    // after the scalar-FP moves (their xmm sources consumed); the loads
+    // touch only SCRATCH_R10 and the aggregate's own xmm targets, so
+    // they cannot disturb the integer parallel move below. Mixed
+    // SSE/INTEGER aggregates are deferred: their integer eightbyte
+    // targets are argument GPRs that may still be another argument's
+    // pending source, so their base rides the parallel move instead.
     for (i, &placement) in plan.placements.iter().enumerate() {
         let super::ArgPlacement::StructRegs { regs, n } = placement else {
             continue;
         };
-        if n == 0 || !regs.iter().take(n as usize).any(|c| c.is_fp) {
+        if n == 0 || !regs.iter().take(n as usize).all(|c| c.is_fp) {
             continue;
         }
         let base = match materialize_int_shifted(
@@ -1253,30 +1255,29 @@ fn marshal_args(
                 return false;
             }
         };
-        // The source address must not share a register with an INTEGER
-        // eightbyte's destination (an argument GPR): loading that eightbyte
-        // would clobber the base before a later SSE eightbyte loads from it.
-        // materialize_int_shifted may return the value's existing register
-        // (an argument GPR), so stage it in SCRATCH_R10, never an argument
-        // or aggregate destination.
         if base.0 != SCRATCH_R10.0 {
             emit_mov_rr(code, SCRATCH_R10, base);
         }
-        let base = SCRATCH_R10;
         for (k, cr) in regs.iter().take(n as usize).enumerate() {
-            let off = (k as i32) * 8;
-            if cr.is_fp {
-                emit_movsd_xmm_mem(code, Reg(cr.reg), base, off);
-            } else {
-                emit_mov_r_mem(code, Reg(cr.reg), base, off);
-            }
+            emit_movsd_xmm_mem(code, Reg(cr.reg), SCRATCH_R10, (k as i32) * 8);
         }
     }
+
+    // First INTEGER eightbyte register of an aggregate, if any: the
+    // aggregate's base address is routed there by the parallel move and
+    // the eightbyte loads below read from it (that register's own
+    // eightbyte loads last).
+    let agg_base_reg = |regs: &[super::ClassReg; 4], n: u8| -> Option<u8> {
+        regs.iter()
+            .take(n as usize)
+            .find(|c| !c.is_fp)
+            .map(|c| c.reg)
+    };
 
     // Integer-register placements plus aggregate base addresses are one
     // parallel register move (System V AMD64 3.2.3). A scalar `IntReg`
     // arg moves src->target; a `StructRegs` arg positions its base
-    // address into its own first eightbyte register `regs[0]`, from
+    // address into its own first integer eightbyte register, from
     // which the eightbytes load below (the base register is overwritten
     // by its own eightbyte last). Routing the base through that per-
     // aggregate register -- never a shared scratch -- keeps one
@@ -1291,12 +1292,10 @@ fn marshal_args(
                     int_moves.push((s, r));
                 }
             }
-            // FP-eightbyte aggregates (an SSE unit) loaded above.
-            super::ArgPlacement::StructRegs { regs, n }
-                if n > 0 && !regs.iter().take(n as usize).any(|c| c.is_fp) =>
-            {
-                let dst = regs[0].reg;
-                if let Place::IntReg(s) = arg_place(i)
+            // All-SSE aggregates loaded above.
+            super::ArgPlacement::StructRegs { regs, n } => {
+                if let Some(dst) = agg_base_reg(&regs, n)
+                    && let Place::IntReg(s) = arg_place(i)
                     && s != dst
                 {
                     int_moves.push((s, dst));
@@ -1343,16 +1342,14 @@ fn marshal_args(
     }
 
     // Aggregate bases not already register-resident (spill / computed)
-    // materialise into the aggregate's first eightbyte register, the
-    // same destination the move loop used for the register-resident
-    // case.
+    // materialise into the aggregate's first integer eightbyte
+    // register, the same destination the move loop used for the
+    // register-resident case.
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::StructRegs { regs, n } = placement
-            && n > 0
-            && !regs.iter().take(n as usize).any(|c| c.is_fp)
+            && let Some(dst) = agg_base_reg(&regs, n)
             && !matches!(arg_place(i), Place::IntReg(_))
         {
-            let dst = regs[0].reg;
             let src = match materialize_int_shifted(
                 code,
                 arg_place(i),
@@ -1374,21 +1371,31 @@ fn marshal_args(
         }
     }
 
-    // Load each aggregate's eightbytes from the base now in `regs[0]`.
-    // High eightbytes first; `regs[0]` (the base) is read last,
-    // overwritten by its own eightbyte. Integer-only (homogeneous
-    // floating-point aggregates excluded upstream).
+    // Load each aggregate's eightbytes from the base now in its first
+    // integer eightbyte register: SSE eightbytes first (they leave the
+    // base intact), then the remaining integer eightbytes high-first,
+    // the base register's own eightbyte last since the load overwrites
+    // it. All-SSE aggregates were loaded above.
     for &placement in plan.placements.iter() {
-        // Integer-class aggregate: load eightbytes from the base in regs[0].
-        // FP-eightbyte aggregates (an SSE unit) were loaded above.
         if let super::ArgPlacement::StructRegs { regs, n } = placement
-            && !regs.iter().take(n as usize).any(|c| c.is_fp)
+            && let Some(base) = agg_base_reg(&regs, n)
         {
-            let base = regs[0].reg;
-            for k in (1..n as usize).rev() {
-                emit_mov_r_mem(code, Reg(regs[k].reg), Reg(base), (k as i32) * 8);
+            for (k, cr) in regs.iter().take(n as usize).enumerate() {
+                if cr.is_fp {
+                    emit_movsd_xmm_mem(code, Reg(cr.reg), Reg(base), (k as i32) * 8);
+                }
             }
-            emit_mov_r_mem(code, Reg(base), Reg(base), 0);
+            for (k, cr) in regs.iter().take(n as usize).enumerate().rev() {
+                if !cr.is_fp && cr.reg != base {
+                    emit_mov_r_mem(code, Reg(cr.reg), Reg(base), (k as i32) * 8);
+                }
+            }
+            let base_off = regs
+                .iter()
+                .take(n as usize)
+                .position(|c| !c.is_fp && c.reg == base)
+                .unwrap_or(0);
+            emit_mov_r_mem(code, Reg(base), Reg(base), (base_off as i32) * 8);
         }
     }
 

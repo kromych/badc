@@ -714,6 +714,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("block_scope_typedef_variadic_fnptr.c", 0),
     ("atomic_operand_in_working_regs.c", 0),
     ("setjmp_value_live_across.c", 0),
+    ("mixed_sse_int_aggregate_args.c", 0),
 ];
 
 #[test]

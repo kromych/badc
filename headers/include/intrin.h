@@ -7,10 +7,12 @@
 
 #ifdef _WIN32
 
-#pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::_byteswap_ushort, "_byteswap_ushort")
-#pragma binding(msvcrt::_byteswap_ulong,  "_byteswap_ulong")
-#pragma binding(msvcrt::_byteswap_uint64, "_byteswap_uint64")
+/* The byte-swap trio lives in the UCRT, not legacy msvcrt.dll
+** (probed on both Windows boxes). */
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::_byteswap_ushort, "_byteswap_ushort")
+#pragma binding(ucrtbase::_byteswap_ulong,  "_byteswap_ulong")
+#pragma binding(ucrtbase::_byteswap_uint64, "_byteswap_uint64")
 
 unsigned short     _byteswap_ushort(unsigned short value);
 unsigned long      _byteswap_ulong(unsigned long value);

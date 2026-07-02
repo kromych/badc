@@ -179,18 +179,13 @@ typedef long clock_t;
 #pragma binding(msvcrt::gmtime,   "gmtime")
 #pragma binding(msvcrt::strftime, "strftime")
 #pragma binding(msvcrt::tzset,    "_tzset")
-#if defined(__aarch64__)
-// TODO: the arm64 msvcrt.dll tzset-output surface is unverified;
-// the runtime defines safe local slots (empty names, zero offset)
-// until the accessor route is validated on an arm64 box.
-#else
-// x64 msvcrt.dll exports the tzset outputs as data; bind each as a
-// loader-filled import so a read after `tzset()` sees the CRT's
-// values -- the same treatment as `environ` (see <stdlib.h>).
+// msvcrt.dll exports the tzset outputs as data on both x64 and
+// arm64 (probed on the real boxes); bind each as a loader-filled
+// import so a read after `tzset()` sees the CRT's values -- the
+// same treatment as `environ` (see <stdlib.h>).
 #pragma binding(data msvcrt::tzname,   "_tzname")
 #pragma binding(data msvcrt::timezone, "_timezone")
 #pragma binding(data msvcrt::daylight, "_daylight")
-#endif
 // Windows doesn't ship POSIX `clock_gettime` / `gettimeofday`. SQLite
 // has its own Win32-specific code path that calls
 // `GetSystemTimeAsFileTime`; programs that want a portable shape

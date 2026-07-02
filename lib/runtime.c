@@ -95,16 +95,10 @@ char **environ;
 // POSIX `tzset` outputs. Like `environ`, the Linux bindings route these
 // through a COPY relocation against the C library's symbols so a read
 // after `tzset()` sees what the library wrote; the local slots here are
-// the relocation targets. Windows x64 binds them as msvcrt data imports
-// (see <time.h>), so the symbols must stay undefined there.
+// the relocation targets. Windows binds them as msvcrt data imports on
+// both architectures (see <time.h>), so the symbols must stay
+// undefined there.
 char *tzname[2];
-long timezone;
-int daylight;
-#elif defined(_WIN32) && defined(__aarch64__)
-// TODO: the arm64 msvcrt.dll tzset-output surface (data exports or
-// accessors) is unverified; keep local slots with defined contents
-// (empty names, zero offset, no DST) so reads cannot fault.
-char *tzname[2] = { "", "" };
 long timezone;
 int daylight;
 #endif

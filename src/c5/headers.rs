@@ -268,6 +268,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("io.h", include_str!("../../headers/include/io.h")),
     ("direct.h", include_str!("../../headers/include/direct.h")),
     ("intrin.h", include_str!("../../headers/include/intrin.h")),
+    ("bcrypt.h", include_str!("../../headers/include/bcrypt.h")),
     (
         "TargetConditionals.h",
         include_str!("../../headers/include/TargetConditionals.h"),

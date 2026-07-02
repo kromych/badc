@@ -88,6 +88,7 @@ demos/curl/*
 !demos/curl/curl_client.c
 !demos/curl/curl_config.h
 !demos/curl/curl_syslink.h
+!demos/curl/_mingw.h
 # stb -- a collection of single-file public-domain headers.
 # `setup.py` pulls the upstream archive from the vendor-deps
 # release and drops a curated set of headers into `demos/stb/`;

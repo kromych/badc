@@ -5020,12 +5020,17 @@ fn emit_shift_by_count_reg(
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
+    // Save rcx whenever any value is allocated there (unless the count
+    // already sits in rcx, in which case nothing below writes it). A
+    // `def < v < last_use` pc-interval test is not a liveness test: a
+    // value carried around a loop back edge is live at the shift while
+    // the shift's pc lies outside the interval.
+    let _ = v;
     let rcx_holds_live = count_reg.map(|r| r.0).unwrap_or(u8::MAX) != Reg::RCX.0
-        && alloc.places.iter().enumerate().any(|(idx, p)| {
-            let i = idx as u32;
-            let last = alloc.last_use.get(idx).copied().unwrap_or(0);
-            matches!(p, Place::IntReg(r) if *r == Reg::RCX.0) && i < v && v < last
-        });
+        && alloc
+            .places
+            .iter()
+            .any(|p| matches!(p, Place::IntReg(r) if *r == Reg::RCX.0));
     if rcx_holds_live {
         emit_push_r(code, Reg::RCX);
     }

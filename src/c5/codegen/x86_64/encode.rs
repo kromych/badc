@@ -2146,8 +2146,7 @@ pub(crate) fn lower(
     // `apply_fixups` and re-emit them as
     // `Build::user_extern_call_sites` entries that the writer
     // surfaces as `R_X86_64_PLT32` relocs against the
-    // callee's symbol. Empty for builds without
-    // `CompileOptions::no_entry_point`.
+    // callee's symbol.
     let extern_pc_lookup: alloc::collections::BTreeMap<usize, &str> = program
         .extern_function_imports
         .iter()
@@ -2303,6 +2302,7 @@ pub(crate) fn lower(
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
+        data_align: program.data_align,
         bss_size: 0,
         entry_offset,
         got_fixups,
@@ -2342,7 +2342,9 @@ pub(crate) fn lower(
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
         merged_dwarf: None,
-        plt_trampoline_offsets,
+        // Every import on this single-TU path gets a trampoline (data
+        // imports ride `ResolvedImports::data_bindings`, not `imports`).
+        plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
     })
 }
 

@@ -89,25 +89,45 @@ fn fmt_inst(inst: &Inst) -> String {
         BlockAddr(b) => format!("BlockAddr(block={b})"),
         LocalAddr(n) => format!("LocalAddr({n})"),
         TlsAddr(o) => format!("TlsAddr({o})"),
-        Load { addr, disp, kind } => format!(
-            "Load {{ addr=v{addr}, disp={disp}, kind={} }}",
-            fmt_load_kind(*kind)
+        Load {
+            addr,
+            disp,
+            kind,
+            volatile,
+        } => format!(
+            "Load {{ addr=v{addr}, disp={disp}, kind={}{} }}",
+            fmt_load_kind(*kind),
+            fmt_volatile(*volatile),
         ),
         Store {
             addr,
             disp,
             value,
             kind,
+            volatile,
         } => format!(
-            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={} }}",
+            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={}{} }}",
             fmt_store_kind(*kind),
+            fmt_volatile(*volatile),
         ),
-        LoadLocal { off, kind } => {
-            format!("LoadLocal {{ off={off}, kind={} }}", fmt_load_kind(*kind),)
-        }
-        StoreLocal { off, value, kind } => format!(
-            "StoreLocal {{ off={off}, value=v{value}, kind={} }}",
+        LoadLocal {
+            off,
+            kind,
+            volatile,
+        } => format!(
+            "LoadLocal {{ off={off}, kind={}{} }}",
+            fmt_load_kind(*kind),
+            fmt_volatile(*volatile),
+        ),
+        StoreLocal {
+            off,
+            value,
+            kind,
+            volatile,
+        } => format!(
+            "StoreLocal {{ off={off}, value=v{value}, kind={}{} }}",
             fmt_store_kind(*kind),
+            fmt_volatile(*volatile),
         ),
         LoadIndexed {
             base,
@@ -269,6 +289,11 @@ fn fmt_place(p: Place) -> String {
         Place::Spill(s) => format!("[spill {s}]"),
         Place::None => "-".into(),
     }
+}
+
+/// Rendered only when set so non-volatile dumps are unchanged.
+fn fmt_volatile(v: bool) -> &'static str {
+    if v { ", volatile" } else { "" }
 }
 
 fn fmt_load_kind(k: LoadKind) -> &'static str {

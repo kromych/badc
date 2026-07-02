@@ -31,7 +31,9 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{
+    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth,
+};
 
 impl Compiler {
     /// Drain the three pending local-initializer carriers into a single
@@ -63,6 +65,10 @@ impl Compiler {
     /// emit its local declaration. A non-`Loc` binding (a redeclaration
     /// that resolved elsewhere) discards the carriers without emitting.
     pub(super) fn finalize_local_init(&mut self, loc_idx: usize) {
+        // A VLA already emitted its `Decl::Vla` in `allocate_vla_local`.
+        if self.symbols[loc_idx].is_vla {
+            return;
+        }
         if self.symbols[loc_idx].class == Token::Loc as i64 {
             let slot_off = self.symbols[loc_idx].val;
             let init = self.drain_pending_local_init();
@@ -81,6 +87,7 @@ impl Compiler {
         let mut is_static = false;
         let mut is_extern = false;
         let mut saw_specifier = false;
+        let mut qual_bits: i64 = 0;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::FuncSpec
@@ -92,6 +99,8 @@ impl Compiler {
             if self.lex.tk == Token::Extern {
                 is_extern = true;
             }
+            // `volatile` qualifies the declared type (C99 6.7.3).
+            qual_bits |= self.lex_volatile_bit();
             saw_specifier = true;
             self.next()?;
         }
@@ -103,7 +112,7 @@ impl Compiler {
             Ty::Int as i64
         } else {
             self.parse_decl_base_type()?
-        };
+        } | qual_bits;
         // A function-pointer typedef base type contributes its lineage to
         // every declarator in the list (`fn_t a, b;` makes both a and b
         // function pointers). The per-declarator symbol creation consumes
@@ -127,7 +136,11 @@ impl Compiler {
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
+            // C99 6.7.6.2: a non-constant array dimension at block scope
+            // is a variable-length array.
+            self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            self.pending.vla_allowed = false;
             // C23 6.7.13.5 `[[maybe_unused]]` / GNU
             // `__attribute__((unused))` on the declaration suppresses
             // the unused-variable diagnostic for the names it declares.
@@ -199,6 +212,18 @@ impl Compiler {
 
             self.shadow_symbol(loc_idx);
 
+            // C11 6.7.5 on block-scope objects: a static local's
+            // `.data` slot honors up to 16 like a file-scope object;
+            // an automatic object lives in 8-byte frame slots, so a
+            // larger request is a diagnostic, never a silent drop.
+            let req_align = core::mem::take(&mut self.pending.attr_align);
+            if req_align > 16 || (req_align > 8 && !is_static) {
+                return Err(self.compile_err(format!(
+                    "requested alignment {req_align} is not supported here \
+                     (automatic objects align to 8, static objects to at most 16)"
+                )));
+            }
+
             if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
@@ -208,6 +233,10 @@ impl Compiler {
                 // object of the same name reappears. The `Loc`-gated
                 // cleanup would skip it, so mark it for restore.
                 self.symbols[loc_idx].is_scope_static = true;
+                if req_align > 8 {
+                    self.align_data_to(req_align as usize);
+                    self.data_align = 16;
+                }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.ast_emit_static_local_decl(loc_idx as u32);
             } else {
@@ -591,12 +620,49 @@ impl Compiler {
     ///   * deferred-size array (`int xs[] = {...};`): the
     ///     initializer determines the dimension first, then storage
     ///     is reserved.
+    /// C99 6.7.6.2 variable-length array local. Reserves two hidden
+    /// frame slots -- the runtime base pointer and the runtime byte
+    /// count -- and records a `Decl::Vla`; the walker allocates the
+    /// storage from the per-frame alloca arena. The array is not
+    /// promotable and its storage is reclaimed on block exit by the
+    /// scope bracket `parse_block_stmt` emits.
+    fn allocate_vla_local(&mut self, loc_idx: usize, elem_ty: i64) -> Result<(), C5Error> {
+        // C99 6.7.8p3: a VLA declaration may not carry an initializer.
+        if self.lex.tk == Token::Assign {
+            return Err(self.compile_err("a variable-length array may not have an initializer"));
+        }
+        let dim = match self.pending.vla_dim_expr.take() {
+            Some(d) => d,
+            None => return Err(self.compile_err("variable-length array has no dimension")),
+        };
+        let ptr_slot = self.reserve_slots(1);
+        let size_slot = self.reserve_slots(1);
+        let elem_size = self.size_of_type(elem_ty) as i64;
+        let s = &mut self.symbols[loc_idx];
+        s.is_vla = true;
+        s.type_ = elem_ty;
+        s.array_size = 0;
+        s.vla_ptr_slot = ptr_slot;
+        s.vla_size_slot = size_slot;
+        s.was_written = true;
+        s.address_escaped = true;
+        self.func_vla_decls += 1;
+        // The VLA storage comes from the per-frame alloca arena, so the
+        // function reserves the arena and its bookkeeping slot.
+        self.uses_alloca_in_current_fn = true;
+        self.ast_emit_vla_decl(loc_idx as u32, elem_ty, elem_size, ptr_slot, size_slot, dim);
+        Ok(())
+    }
+
     pub(super) fn allocate_local_with_init(
         &mut self,
         loc_idx: usize,
         ty: i64,
         declared_array_size: i64,
     ) -> Result<(), C5Error> {
+        if declared_array_size == super::VLA_ARRAY_SIZE {
+            return self.allocate_vla_local(loc_idx, ty);
+        }
         // C99 6.7.9: an initializer at the declaration site counts
         // as a store from the perspective of the dead-store
         // analysis. Mark before parsing the initializer so
@@ -1468,17 +1534,58 @@ impl Compiler {
                 // C99 6.7.8p7 nested designator chain. See the
                 // matching branch in `collect_struct_initializer`
                 // for the constant-staging variant. Computes the
-                // cumulative offset / final type, then emits one
+                // cumulative offset / final member, then emits one
                 // store at `&local + extra_offset + final_offset`.
                 if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
                     let outer = self.structs[sid].fields[outer_idx].clone();
                     let chain_base = extra_offset + outer.offset as i64;
-                    let (final_offset, final_ty) =
+                    let (final_offset, final_field) =
                         self.resolve_nested_designator_chain(chain_base, outer.ty)?;
                     if self.lex.tk != Token::Assign {
                         return Err(self.compile_err("`=` expected after nested-designator chain"));
                     }
                     self.next()?;
+                    // A char-array final member takes a string literal
+                    // (C99 6.7.8p14): per-byte constant stores, zero
+                    // fill; mirrors the positional branch below. Other
+                    // array or bitfield finals are rejected the same
+                    // way the positional walk rejects them.
+                    if final_field.array_size > 0 {
+                        if self.lex.tk == '"'
+                            && !self.lex.str_is_wide
+                            && (final_field.ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
+                        {
+                            let start_addr = self.take_concat_string_literal()?;
+                            self.data.push(0); // ensure NUL terminator
+                            for k in 0..final_field.array_size as usize {
+                                let b = if start_addr + k < self.data.len() {
+                                    self.data[start_addr + k] as i64
+                                } else {
+                                    0
+                                };
+                                let value = self.ast_emit_int_lit(b, Ty::Char as i64);
+                                self.pending_local_runtime_elements.push(
+                                    super::super::ast::RuntimeInitElement {
+                                        offset: final_offset + k as i64,
+                                        value,
+                                        ty: Ty::Char as i64,
+                                    },
+                                );
+                            }
+                            pos = outer_idx + 1;
+                            self.accept(',')?;
+                            continue;
+                        }
+                        return Err(self.compile_err(
+                            "non-constant array-field initializer not yet supported",
+                        ));
+                    }
+                    if final_field.bit_width > 0 {
+                        return Err(
+                            self.compile_err("non-constant bitfield initializer not yet supported")
+                        );
+                    }
+                    let final_ty = final_field.ty;
                     self.emit_lea(local_val);
                     if final_offset > 0 {
                         self.ast_psh();
@@ -1534,7 +1641,7 @@ impl Compiler {
                 // it composes with non-constant sibling fields.
                 if self.lex.tk == '"'
                     && !self.lex.str_is_wide
-                    && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
+                    && (field.ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
                 {
                     let start_addr = self.take_concat_string_literal()?;
                     self.data.push(0); // ensure NUL terminator

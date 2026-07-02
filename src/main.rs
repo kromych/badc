@@ -199,6 +199,21 @@ impl Mode {
 }
 
 fn main() {
+    // The recursive-descent parser bounds its nesting depth with a
+    // diagnostic, but debug builds spend tens of KiB of native stack
+    // per level, more than the platform default provides at the
+    // bound. Run the driver on a thread with an explicit reservation
+    // so the diagnostic always fires before the stack runs out.
+    let driver = std::thread::Builder::new()
+        .stack_size(256 * 1024 * 1024)
+        .spawn(run)
+        .expect("spawn driver thread");
+    if let Err(e) = driver.join() {
+        std::panic::resume_unwind(e);
+    }
+}
+
+fn run() {
     let raw: Vec<String> = std::env::args().collect();
 
     // Mode selection: at most one of the mode-picking flags
@@ -681,7 +696,7 @@ fn main() {
     {
         sources.push("-".to_string());
     }
-    if sources.is_empty() && objects.is_empty() {
+    if sources.is_empty() && objects.is_empty() && archives.is_empty() {
         eprint_diagnostic("badc: error: no files");
         std::process::exit(1);
     }
@@ -877,8 +892,14 @@ fn main() {
         // `.c` -> in-memory native ELF64 ET_REL: the source compiles
         // straight to ET_REL bytes that `parse_native_elf` reads back,
         // so no intermediate `.o` is written to disk.
-        let compile_one = |src_path: &str| -> (Vec<u8>, Option<String>, Option<badc::Subsystem>) {
-            if multi_tu && !quiet {
+        type CompiledUnit = (
+            Vec<u8>,
+            Option<String>,
+            Option<badc::Subsystem>,
+            Vec<String>,
+        );
+        let compile_one = |src_path: &str, implicit_externs: &[String]| -> CompiledUnit {
+            if multi_tu && !quiet && implicit_externs.is_empty() {
                 eprint_diagnostic(format!("info: compiling {src_path}"));
             }
             let src_bytes = if src_path == "-" {
@@ -902,6 +923,7 @@ fn main() {
                 .with_show_includes(show_includes)
                 .with_warn_dead_store(warn_dead_store)
                 .with_export_all_functions(export_all)
+                .with_implicit_extern_fns(implicit_externs.to_vec())
                 .with_no_entry_point(true);
             let mut compiler = Compiler::with_options(src_bytes, target, copts);
             if show_includes {
@@ -921,8 +943,9 @@ fn main() {
             }
             let entry = program.entry_name.clone();
             let subsystem = program.subsystem;
+            let auto_includes = program.auto_includes.clone();
             match badc::emit_native_with_options(&program, target, reloc_opts) {
-                Ok(b) => (b, entry, subsystem),
+                Ok(b) => (b, entry, subsystem, auto_includes),
                 Err(e) => {
                     eprint_diagnostic(e);
                     std::process::exit(1);
@@ -933,9 +956,11 @@ fn main() {
         // below: same compile + emit chain, no filesystem read.
         let compile_in_memory = |label: &str, src: String, extra: &[(&str, &str)]| -> Vec<u8> {
             // The embedded runtime gates its sections on macros the
-            // driver sets per image: `__BADC_C5_START__` (an entry
-            // stub is emitted), `__BADC_WIN_WINMAIN__` (WinMain-shaped
-            // entry), `__BADC_WIN_WIDE__` (wide `wmain` / `wWinMain` entry).
+            // driver sets per image: `__BADC_C5_CRT__` (the image may
+            // import the user-mode C library), `__BADC_C5_START__`
+            // (an entry stub is emitted), `__BADC_WIN_WINMAIN__`
+            // (WinMain-shaped entry), `__BADC_WIN_WIDE__` (wide
+            // `wmain` / `wWinMain` entry).
             let mut copts_defines = defines.clone();
             for (k, v) in extra {
                 copts_defines.push((k.to_string(), v.to_string()));
@@ -977,14 +1002,16 @@ fn main() {
         // it (the source-level pragma rides the in-memory `Program`,
         // not a section), then threaded to the PE writer.
         let mut subsystem_override: Option<badc::Subsystem> = None;
+        let mut source_auto_includes: Vec<Vec<String>> = Vec::with_capacity(sources.len());
         for src_path in &sources {
-            let (bytes, entry, subsystem) = compile_one(src_path);
+            let (bytes, entry, subsystem, auto_includes) = compile_one(src_path, &[]);
             if entry_override.is_none() {
                 entry_override = entry;
             }
             if subsystem_override.is_none() {
                 subsystem_override = subsystem;
             }
+            source_auto_includes.push(auto_includes);
             match badc::parse_native_elf(&bytes) {
                 Ok(o) => native_objs.push(o),
                 Err(e) => {
@@ -1008,29 +1035,23 @@ fn main() {
         }
         // A freestanding image must supply its own entry symbol; the
         // embedded runtime that would otherwise define `__c5_entry` is
-        // not linked. Report a missing entry here rather than as a bare
-        // undefined-symbol relocation at link time.
-        if freestanding {
-            let entry = entry_override.as_deref().unwrap_or("__c5_entry");
-            let defined = native_objs.iter().any(|o| {
-                o.symbols
-                    .iter()
-                    .any(|s| s.name == entry && s.section == badc::NativeSymSection::Text)
-            });
-            if !defined {
-                eprint_diagnostic(format!(
-                    "badc: error: --freestanding: image entry `{entry}` is not defined; \
-                     a freestanding image must provide its own entry point"
-                ));
-                std::process::exit(1);
-            }
-        }
-        // The embedded runtime's startup (`__c5_entry`, `__c5_exit`,
-        // `environ`) links only when the writer emits an entry stub --
-        // not into shared libraries, passthrough-entry subsystems
-        // (native / EFI), or freestanding images.
-        let emits_start_stub = mode != Mode::SharedLibrary
-            && !freestanding
+        // not linked. The entry may come from any input -- a compiled
+        // source, a `.o`, or an archive member -- so the defined-entry
+        // check runs below, after objects and archive members are
+        // parsed, rather than as a bare undefined-symbol relocation at
+        // link time.
+        let freestanding_entry = freestanding.then(|| {
+            entry_override
+                .as_deref()
+                .unwrap_or("__c5_entry")
+                .to_string()
+        });
+        // The runtime's CRT section (the C99 snprintf / vsnprintf
+        // definitions on Windows) links into any image that may
+        // import the user-mode C library -- hosted executables and
+        // shared libraries, but not passthrough-entry subsystems
+        // (native / EFI) or freestanding images.
+        let links_crt = !freestanding
             && !matches!(
                 subsystem_override,
                 Some(
@@ -1041,10 +1062,17 @@ fn main() {
                         | badc::Subsystem::EfiRom
                 )
             );
-        // The single runtime source compiles to nothing unless
-        // `__BADC_C5_START__` is set; the GUI / wide-entry macros
-        // select the matching `__c5_entry` body on Windows.
+        // The startup section (`__c5_entry`, `__c5_exit`, `environ`)
+        // links only when the writer emits an entry stub -- not into
+        // shared libraries.
+        let emits_start_stub = mode != Mode::SharedLibrary && links_crt;
+        // The single runtime source compiles to nothing unless a gate
+        // macro is set; the GUI / wide-entry macros select the
+        // matching `__c5_entry` body on Windows.
         let mut runtime_defines: Vec<(&str, &str)> = Vec::new();
+        if links_crt {
+            runtime_defines.push(("__BADC_C5_CRT__", "1"));
+        }
         if emits_start_stub {
             runtime_defines.push(("__BADC_C5_START__", "1"));
             // `__c5_entry` calls this symbol; default `main`,
@@ -1118,6 +1146,14 @@ fn main() {
                 }
             }
         }
+        // Archive members join the link on demand: a member is
+        // included iff it defines a symbol some already-included
+        // object still leaves undefined, iterated to a fixpoint so a
+        // pulled member's own references can pull further members
+        // (from any archive). Unreferenced members stay out, so their
+        // unrelated undefined or duplicate symbols cannot fail a
+        // valid link.
+        let mut pending: Vec<(String, badc::NativeObject)> = Vec::new();
         for a_path in &archives {
             let bytes = match std::fs::read(a_path) {
                 Ok(b) => b,
@@ -1142,7 +1178,7 @@ fn main() {
                     std::process::exit(1);
                 }
                 match badc::parse_native_elf(&m.bytes) {
-                    Ok(o) => native_objs.push(o),
+                    Ok(o) => pending.push((format!("{a_path}({})", m.name), o)),
                     Err(e) => {
                         eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
                         std::process::exit(1);
@@ -1150,9 +1186,134 @@ fn main() {
                 }
             }
         }
+        // C89 6.3.2.2 link semantics: a definition anywhere in the
+        // link set satisfies an implicitly declared call, so a name
+        // the auto-include retry bound to a header's library binding
+        // is recompiled as an implicit extern when an input defines
+        // it -- the user's definition wins over the binding.
+        if source_auto_includes.iter().any(|a| !a.is_empty()) {
+            let mut defined_fns = std::collections::HashSet::<String>::new();
+            for o in native_objs.iter().chain(pending.iter().map(|(_, o)| o)) {
+                for s in &o.symbols {
+                    // STB_GLOBAL STT_FUNC section-resident definitions.
+                    if s.binding == 1
+                        && s.kind == 2
+                        && !matches!(
+                            s.section,
+                            badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
+                        )
+                    {
+                        defined_fns.insert(s.name.clone());
+                    }
+                }
+            }
+            for (i, autos) in source_auto_includes.iter().enumerate() {
+                let redirect: Vec<String> = autos
+                    .iter()
+                    .filter(|n| defined_fns.contains(n.as_str()))
+                    .cloned()
+                    .collect();
+                if redirect.is_empty() {
+                    continue;
+                }
+                if !quiet {
+                    for n in &redirect {
+                        eprint_diagnostic(format!(
+                            "info: the link defines `{n}`; rebinding the call in {} to it",
+                            sources[i]
+                        ));
+                    }
+                }
+                let (bytes, _, _, _) = compile_one(&sources[i], &redirect);
+                match badc::parse_native_elf(&bytes) {
+                    Ok(o) => native_objs[i] = o,
+                    Err(e) => {
+                        eprint_diagnostic(format!("badc: {}: {e}", sources[i]));
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+        if !pending.is_empty() {
+            let mut defined = std::collections::HashSet::<String>::new();
+            let mut undefined = std::collections::HashSet::<String>::new();
+            // A global or weak definition satisfies references; only a
+            // strong (STB_GLOBAL) undefined reference pulls a member,
+            // matching ELF archive practice (a weak reference left
+            // unresolved does not extract members).
+            let account =
+                |o: &badc::NativeObject,
+                 defined: &mut std::collections::HashSet<String>,
+                 undefined: &mut std::collections::HashSet<String>| {
+                    for s in &o.symbols {
+                        if s.binding == 0 {
+                            continue;
+                        }
+                        if s.section == badc::NativeSymSection::Undef {
+                            if s.binding == 1 && !defined.contains(&s.name) {
+                                undefined.insert(s.name.clone());
+                            }
+                        } else {
+                            defined.insert(s.name.clone());
+                            undefined.remove(&s.name);
+                        }
+                    }
+                };
+            for o in &native_objs {
+                account(o, &mut defined, &mut undefined);
+            }
+            // A freestanding entry is a link root: seed it as undefined
+            // so an archive member that only defines the entry is pulled.
+            if let Some(entry) = &freestanding_entry
+                && !defined.contains(entry)
+            {
+                undefined.insert(entry.clone());
+            }
+            // The archive symbol index lists strong section-resident
+            // definitions; a member is pulled on exactly those.
+            let mut progress = true;
+            while progress {
+                progress = false;
+                let mut i = 0;
+                while i < pending.len() {
+                    let wanted = pending[i].1.symbols.iter().any(|s| {
+                        s.binding == 1
+                            && !matches!(
+                                s.section,
+                                badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
+                            )
+                            && undefined.contains(&s.name)
+                    });
+                    if wanted {
+                        let (_, o) = pending.remove(i);
+                        account(&o, &mut defined, &mut undefined);
+                        native_objs.push(o);
+                        progress = true;
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+        }
         if native_objs.is_empty() {
             eprint_diagnostic("badc: error: no inputs");
             std::process::exit(1);
+        }
+        // With every source, object, and pulled archive member now
+        // parsed, a freestanding image's entry must be defined.
+        if let Some(entry) = &freestanding_entry {
+            let defined = native_objs.iter().any(|o| {
+                o.symbols
+                    .iter()
+                    .any(|s| s.name == *entry && s.section == badc::NativeSymSection::Text)
+            });
+            if !defined {
+                eprint_diagnostic(format!(
+                    "badc: error: --freestanding: image entry `{entry}` is not defined; \
+                     a freestanding image must provide its own entry point"
+                ));
+                std::process::exit(1);
+            }
         }
         // Every supported target lays out `_Thread_local` storage
         // through the native path: ELF PT_TLS, the PE TLS directory +
@@ -1314,6 +1475,7 @@ fn main() {
             for w in &program.warnings {
                 eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
             }
+            warn_dropped_link_pragmas(&program, src_path);
             match badc::emit_native_with_options(&program, target, reloc_opts) {
                 Ok(b) => b,
                 Err(e) => {
@@ -1418,6 +1580,7 @@ fn main() {
             for w in &program.warnings {
                 eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
             }
+            warn_dropped_link_pragmas(&program, src_path);
             match badc::emit_native_with_options(&program, target, reloc_opts) {
                 Ok(b) => b,
                 Err(e) => {
@@ -1514,6 +1677,27 @@ fn native_defined_globals(bytes: &[u8], path: &str) -> Vec<String> {
         })
         .map(|s| s.name)
         .collect()
+}
+
+/// `#pragma entrypoint` / `#pragma subsystem` ride the in-memory
+/// `Program` of the invocation that links; an ET_REL object carries
+/// neither. Warn when a relocatable emit drops them so the TU is
+/// recompiled in the link invocation instead of silently producing a
+/// console-subsystem / default-entry image.
+fn warn_dropped_link_pragmas(program: &badc::Program, src_path: &str) {
+    let mut dropped: Vec<&str> = Vec::new();
+    if program.entry_pragma.is_some() {
+        dropped.push("entrypoint");
+    }
+    if program.subsystem.is_some() {
+        dropped.push("subsystem");
+    }
+    for p in dropped {
+        eprint_diagnostic(format!(
+            "{src_path}: warning: `#pragma {p}(...)` is not carried by an object \
+             file; compile this source in the link invocation for it to take effect"
+        ));
+    }
 }
 
 fn eprint_diagnostic(msg: impl core::fmt::Display) {

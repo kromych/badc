@@ -365,6 +365,11 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("vla_basic_sum.c", 0),
+    ("vla_runtime_sizeof.c", 0),
+    ("vla_size_from_arg.c", 0),
+    ("vla_scope_reclaim_loop.c", 0),
+    ("vla_param_decay.c", 0),
     ("mem2reg_param_promoted.c", 0),
     ("phi_class_for_loop_sum.c", 45),
     ("phi_class_nested_loops.c", 49),
@@ -373,11 +378,22 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("goto.c", 5),
     ("switch_statement.c", 25),
     ("switch_binary_search.c", 0),
+    ("switch_case_label_promoted.c", 0),
+    ("int_literal_boundary_types.c", 0),
+    ("const_expr_unsigned_fold.c", 0),
+    ("shift_result_promoted_type.c", 0),
+    ("ternary_arith_common_type.c", 0),
+    ("compound_assign_unsigned_div.c", 0),
+    ("decl_specifier_any_order.c", 0),
     ("branch_relaxation.c", 21),
     ("float_register_resident.c", 45),
     ("variadic_struct_arg.c", 18),
     ("variadic_struct_arg_16b.c", 51),
     ("libc_div.c", 0),
+    ("strtof_parses_float.c", 0),
+    ("snprintf_truncation_c99.c", 0),
+    ("ioctl_fionread_pipe.c", 0),
+    ("shm_open_mode_arg.c", 0),
     ("wide_string_literal_alignment.c", 0),
     ("va_arg_through_pointer.c", 0),
     ("pthread_key_once_width.c", 0),
@@ -406,6 +422,9 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_two_reg_struct_param.c", 0),
     ("struct_param_stack_spill.c", 0),
     ("struct_stack_arg_then_scalar.c", 0),
+    ("call_sp_adjust_imm12_overflow.c", 0),
+    ("indirect_call_target_scratch_exhausted.c", 0),
+    ("fp_load_folded_disp.c", 0),
     ("mixed_struct_gpr_abi.c", 0),
     ("unary_plus_preserves_type.c", 0),
     ("local_multidim_aggregate_array_init.c", 0),
@@ -692,6 +711,13 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // expansions in the codegen replace the missing CRT
     // surface.
     ("setjmp_longjmp_roundtrip.c", 0),
+    // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
+    // their post-longjmp value, are re-read through aliases, and
+    // unused volatile reads still execute.
+    ("volatile_setjmp_longjmp.c", 0),
+    ("volatile_ptr_alias_loop.c", 0),
+    ("volatile_unused_read.c", 0),
+    ("volatile_param_classes.c", 0),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("global_initializer_int.c", 141),
@@ -735,6 +761,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
+    ("setenv_overwrite.c", 0),
     // Runtime dynamic linking. Opens the global symbol table,
     // resolves libc atoi via dlsym, calls it through indirect call
     // (which loads args into x0..x7 in case the target is native),
@@ -910,6 +937,24 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // retry. Exits 0 when the auto-include path is wired up;
     // a `BuildError` on this entry means the retry regressed.
     ("auto_include_undeclared_libc.c", 0),
+    ("packed_bitfield_repack.c", 0),
+    ("nested_designator_string_member.c", 0),
+    ("union_member_unbraced_init.c", 0),
+    ("inline_multi_block_result_forward.c", 10),
+    ("sxtw_fold_source_liveness.c", 18),
+    ("data_reloc_one_past_end.c", 10),
+    ("variadic_libc_fnptr_static_init.c", 0),
+    ("block_scope_typedef_variadic_fnptr.c", 0),
+    ("atomic_operand_in_working_regs.c", 0),
+    ("setjmp_value_live_across.c", 0),
+    ("mixed_sse_int_aggregate_args.c", 0),
+    ("variadic_agg_return_classes.c", 0),
+    ("va_copy_under_pressure.c", 0),
+    ("variable_shift_rcx_loop.c", 0),
+    ("va_arg_composite_straddle.c", 0),
+    ("variadic_hfa_struct_arg.c", 0),
+    ("variadic_cast_fnptr_dispatch.c", 0),
+    ("fcntl_lock_via_cast_fnptr.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

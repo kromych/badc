@@ -214,12 +214,13 @@ fn promote_once(func: &mut FunctionSsa) -> bool {
                     disp,
                     value,
                     kind,
+                    volatile,
                 } => {
                     if let Some(&s) = la_slot.get(addr) {
                         // A write into a tracked slot. Promotable only as a
-                        // single full-width store at offset 0; any other
-                        // store shape disqualifies the slot.
-                        let full = *disp == 0 && store_width(*kind) == 8;
+                        // single full-width non-volatile store at offset 0;
+                        // any other store shape disqualifies the slot.
+                        let full = *disp == 0 && store_width(*kind) == 8 && !*volatile;
                         let u = slots.entry(s).or_insert_with(SlotUse::empty);
                         if !u.disqualified && u.store_idx == 0 && full {
                             u.store_idx = idx;
@@ -234,9 +235,14 @@ fn promote_once(func: &mut FunctionSsa) -> bool {
                         mark_disq(&mut slots, s);
                     }
                 }
-                Inst::Load { addr, disp, kind } => {
+                Inst::Load {
+                    addr,
+                    disp,
+                    kind,
+                    volatile,
+                } => {
                     if let Some(&s) = la_slot.get(addr) {
-                        if *disp == 0 {
+                        if *disp == 0 && !*volatile {
                             slots
                                 .entry(s)
                                 .or_insert_with(SlotUse::empty)
@@ -383,6 +389,7 @@ fn promote_once(func: &mut FunctionSsa) -> bool {
                         disp: 0,
                         value: u.word,
                         kind: u.kind,
+                        volatile: false,
                     },
                 ));
                 // A reference to the copy's result reads the stored value.

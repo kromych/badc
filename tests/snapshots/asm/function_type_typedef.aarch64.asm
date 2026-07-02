@@ -26,9 +26,9 @@ Disassembly of section .text:
                	str	x19, [sp]
                	sxtw	x1, w1
                	sxtw	x2, w2
-               	mov	x9, x0
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	blr	x9
@@ -45,9 +45,9 @@ Disassembly of section .text:
                	str	x19, [sp]
                	sxtw	x1, w1
                	sxtw	x2, w2
-               	mov	x9, x0
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	blr	x9

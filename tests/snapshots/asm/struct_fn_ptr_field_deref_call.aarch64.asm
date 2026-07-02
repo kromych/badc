@@ -34,16 +34,16 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	str	w1, [x20, #0x8]
                	mov	x1, #0xa                // =10
-               	mov	x9, x0
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
                	sxtw	x21, w0
                	ldr	x0, [x20]
                	mov	x1, #0x14               // =20
-               	mov	x9, x0
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
@@ -70,16 +70,16 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	str	x0, [x20]
                	mov	x1, #0x64               // =100
-               	mov	x9, x0
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
                	sxtw	x21, w0
                	ldr	x0, [x20]
                	mov	x1, #0xc8               // =200
-               	mov	x9, x0
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10

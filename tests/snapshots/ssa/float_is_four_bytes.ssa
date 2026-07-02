@@ -152,8 +152,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     v89  Phi { incoming=[b36:v74, b13:v87], kind=I64 }    -> x3
     v90  ImmData(40)                                      -> x0
     v91  Imm(4)                                           -> x1
-    v92  BinopI { op=add, lhs=v90, rhs_imm=4 }            -> x0
-    v93  Load { addr=v92, disp=0, kind=F32 }              -> d0 [f32]
+    v92  BinopI { op=add, lhs=v90, rhs_imm=4 }            -> x1
+    v93  Load { addr=v90, disp=4, kind=F32 }              -> d0 [f32]
     v94  Imm(4612811918334230528)                         -> x0
     v95  FpCast { kind=F32ToF64, value=v93 }              -> d0
     v96  Binop { op=fne, lhs=v95, rhs=v94 }               -> x0
@@ -162,8 +162,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     v97  ImmData(232)                                     -> x7
     v98  ImmData(40)                                      -> x0
     v99  Imm(4)                                           -> x1
-    v100 BinopI { op=add, lhs=v98, rhs_imm=4 }            -> x0
-    v101 Load { addr=v100, disp=0, kind=F32 }             -> d0 [f32]
+    v100 BinopI { op=add, lhs=v98, rhs_imm=4 }            -> x1
+    v101 Load { addr=v98, disp=4, kind=F32 }              -> d0 [f32]
     v102 FpCast { kind=F32ToF64, value=v101 }             -> d0
     v103 CallExt { binding_idx=0, args=[v97, v102], fp_arg_mask=0x2 } -> x0
     v104 Imm(8)                                           -> x3
@@ -173,8 +173,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     v106 Phi { incoming=[b37:v89, b15:v104], kind=I64 }   -> x3
     v107 ImmData(40)                                      -> x0
     v108 Imm(8)                                           -> x1
-    v109 BinopI { op=add, lhs=v107, rhs_imm=8 }           -> x0
-    v110 Load { addr=v109, disp=0, kind=F32 }             -> d0 [f32]
+    v109 BinopI { op=add, lhs=v107, rhs_imm=8 }           -> x1
+    v110 Load { addr=v107, disp=8, kind=F32 }             -> d0 [f32]
     v111 Imm(4615063718147915776)                         -> x0
     v112 FpCast { kind=F32ToF64, value=v110 }             -> d0
     v113 Binop { op=fne, lhs=v112, rhs=v111 }             -> x0
@@ -183,8 +183,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     v114 ImmData(252)                                     -> x7
     v115 ImmData(40)                                      -> x0
     v116 Imm(8)                                           -> x1
-    v117 BinopI { op=add, lhs=v115, rhs_imm=8 }           -> x0
-    v118 Load { addr=v117, disp=0, kind=F32 }             -> d0 [f32]
+    v117 BinopI { op=add, lhs=v115, rhs_imm=8 }           -> x1
+    v118 Load { addr=v115, disp=8, kind=F32 }             -> d0 [f32]
     v119 FpCast { kind=F32ToF64, value=v118 }             -> d0
     v120 CallExt { binding_idx=0, args=[v114, v119], fp_arg_mask=0x2 } -> x0
     v121 Imm(9)                                           -> x3
@@ -194,8 +194,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     v123 Phi { incoming=[b38:v106, b17:v121], kind=I64 }  -> x3
     v124 ImmData(40)                                      -> x0
     v125 Imm(12)                                          -> x1
-    v126 BinopI { op=add, lhs=v124, rhs_imm=12 }          -> x0
-    v127 Load { addr=v126, disp=0, kind=F32 }             -> d0 [f32]
+    v126 BinopI { op=add, lhs=v124, rhs_imm=12 }          -> x1
+    v127 Load { addr=v124, disp=12, kind=F32 }            -> d0 [f32]
     v128 Imm(4616752568008179712)                         -> x0
     v129 FpCast { kind=F32ToF64, value=v127 }             -> d0
     v130 Binop { op=fne, lhs=v129, rhs=v128 }             -> x0
@@ -204,8 +204,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     v131 ImmData(272)                                     -> x7
     v132 ImmData(40)                                      -> x0
     v133 Imm(12)                                          -> x1
-    v134 BinopI { op=add, lhs=v132, rhs_imm=12 }          -> x0
-    v135 Load { addr=v134, disp=0, kind=F32 }             -> d0 [f32]
+    v134 BinopI { op=add, lhs=v132, rhs_imm=12 }          -> x1
+    v135 Load { addr=v132, disp=12, kind=F32 }            -> d0 [f32]
     v136 FpCast { kind=F32ToF64, value=v135 }             -> d0
     v137 CallExt { binding_idx=0, args=[v131, v136], fp_arg_mask=0x2 } -> x0
     v138 Imm(10)                                          -> x3

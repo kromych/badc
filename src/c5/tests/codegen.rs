@@ -231,6 +231,33 @@ fn environ_data_binding_records_copy_relocation() {
     );
 }
 
+/// POSIX `setenv` carries a third `overwrite` argument that msvcrt's
+/// 2-parameter `_putenv_s` lacks, so `<stdlib.h>` defines `setenv` as
+/// an inline wrapper that probes `getenv` before calling `_putenv_s`,
+/// honoring the flag. The wrapper compiles in place -- the object
+/// imports `_putenv_s` and carries no undefined `setenv` symbol -- and
+/// the same definition serves the interpreter and JIT paths.
+#[test]
+fn setenv_inline_wrapper_imports_putenv_s_on_windows() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "#include <stdlib.h>\nint main(void){ setenv(\"K\", \"V\", 0); return 0; }".to_string(),
+        Target::WindowsX64,
+    )
+    .compile()
+    .expect("compile setenv TU for WindowsX64");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let obj = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
+    let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+    assert!(
+        contains(b"_putenv_s"),
+        "the inline setenv wrapper must import _putenv_s"
+    );
+}
+
 /// A `#pragma binding(data lib::sym, ...)` import on the Windows
 /// x86-64 PE target must lower the data reference as a load of the
 /// import's IAT slot, not as the address of a `jmp [IAT]` call
@@ -493,6 +520,82 @@ fn data_import_routes_to_declaring_dylib_on_windows_x64() {
         pe_import_dll_of(&image, "_environ").as_deref(),
         Some("msvcrt.dll"),
         "`_environ` must sit under msvcrt.dll's import descriptor"
+    );
+}
+
+/// C99 7.19.6.5p3 / 7.19.6.12p3: snprintf / vsnprintf return the
+/// untruncated length and NUL-terminate a nonempty buffer; msvcrt's
+/// `_snprintf` / `_vsnprintf` return -1 and omit the NUL. The standard
+/// spellings therefore carry no msvcrt binding on Windows: they resolve
+/// against the runtime's conforming definitions, which wrap
+/// `_vsnprintf` + `_vscprintf`.
+#[test]
+fn windows_snprintf_resolves_to_the_runtime_definition() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_options(
+            "#include <stdio.h>\n\
+             int main(void){char b[4]; return snprintf(b, 4, \"%d\", 123456);}\n"
+                .to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile snprintf TU");
+        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .expect("link Windows executable");
+        for imported in ["_vscprintf", "_vsnprintf"] {
+            assert_eq!(
+                pe_import_dll_of(&image, imported).as_deref(),
+                Some("msvcrt.dll"),
+                "{target:?}: the runtime definition must import `{imported}`"
+            );
+        }
+        for absent in ["_snprintf", "snprintf", "vsnprintf"] {
+            assert!(
+                pe_iat_slot_rva(&image, absent).is_none(),
+                "{target:?}: `{absent}` must not appear in the import table"
+            );
+        }
+    }
+}
+
+/// A shared library compiles the runtime with `__BADC_C5_CRT__` but
+/// without the startup gate; the CRT section alone must still define
+/// the C99 snprintf / vsnprintf so a DLL's calls resolve locally.
+#[test]
+fn windows_runtime_crt_section_defines_snprintf_without_start_gate() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, embedded_runtime,
+        link_native_objects, parse_native_elf,
+    };
+    let target = Target::WindowsX64;
+    let reloc = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let mut objs = Vec::new();
+    for (name, body) in embedded_runtime() {
+        let copts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_defines(vec![("__BADC_C5_CRT__".to_string(), "1".to_string())]);
+        let rt = Compiler::with_options(body.to_string(), target, copts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile runtime {name}: {e}"));
+        let bytes = crate::emit_native_with_options(&rt, target, reloc)
+            .unwrap_or_else(|e| panic!("emit runtime {name}: {e}"));
+        objs.push(parse_native_elf(&bytes).expect("parse runtime object"));
+    }
+    let merged = link_native_objects(&objs).expect("link CRT-only runtime");
+    for def in ["snprintf", "vsnprintf"] {
+        assert!(
+            merged.defined.contains_key(def),
+            "the CRT section must define `{def}`"
+        );
+    }
+    assert!(
+        !merged.defined.contains_key("__c5_entry"),
+        "the startup section must stay gated out"
     );
 }
 
@@ -1491,6 +1594,452 @@ fn debug_info_does_not_change_codegen() {
             "-g changed .text for {target:?} ({} vs {} bytes)",
             text_g.len(),
             text_no_g.len()
+        );
+    }
+}
+
+/// PE/COFF orders the export name pointer table lexically: the loader's
+/// import binding and GetProcAddress binary-search it, so a table in
+/// declaration order resolves names data-dependently (a miss surfaces as
+/// STATUS_ENTRYPOINT_NOT_FOUND). Export in non-alphabetical declaration
+/// order and byte-walk the emitted directory: the name table must come
+/// out sorted with each name's ordinal still selecting its own
+/// function's AddressOfFunctions slot.
+#[test]
+fn pe_export_name_table_is_lexically_sorted() {
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    // Each function carries a unique imm32 marker so the export's
+    // resolved address can be tied back to the right body.
+    let program = Compiler::with_options(
+        "#pragma export(zeta)\n\
+         #pragma export(mike)\n\
+         #pragma export(alpha)\n\
+         int zeta(void) { return 0x5a17aa01; }\n\
+         int mike(void) { return 0x5a17aa02; }\n\
+         int alpha(void) { return 0x5a17aa03; }\n"
+            .to_string(),
+        Target::WindowsX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile export TU");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let dll = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "",
+        None,
+        OutputKind::SharedLibrary,
+        Target::WindowsX64,
+        Some("exp.dll"),
+    )
+    .expect("write DLL");
+
+    let u16a = |o: usize| u16::from_le_bytes(dll[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(dll[o..o + 4].try_into().unwrap());
+    let pe = u32a(0x3c) as usize;
+    let opt = pe + 24;
+    // Section table maps RVAs to file offsets.
+    let num_sections = u16a(pe + 6) as usize;
+    let opt_size = u16a(pe + 20) as usize;
+    let sec_table = pe + 24 + opt_size;
+    let rva_to_off = |rva: u32| -> usize {
+        for s in 0..num_sections {
+            let sh = sec_table + s * 40;
+            let va = u32a(sh + 12);
+            let vsize = u32a(sh + 8);
+            let raw_off = u32a(sh + 20);
+            if rva >= va && rva < va + vsize {
+                return (raw_off + (rva - va)) as usize;
+            }
+        }
+        panic!("rva {rva:#x} outside every section");
+    };
+    let cstr_at = |off: usize| -> alloc::string::String {
+        let end = dll[off..]
+            .iter()
+            .position(|&c| c == 0)
+            .map_or(off, |n| off + n);
+        alloc::string::String::from_utf8_lossy(&dll[off..end]).into_owned()
+    };
+    // Data directory 0 is the Export Directory (PE32+: opt + 112).
+    let edata_rva = u32a(opt + 112);
+    assert_ne!(edata_rva, 0, "DLL must carry an export directory");
+    let ed = rva_to_off(edata_rva);
+    let n_names = u32a(ed + 24) as usize;
+    assert_eq!(n_names, 3);
+    let funcs_off = rva_to_off(u32a(ed + 28));
+    let names_off = rva_to_off(u32a(ed + 32));
+    let ords_off = rva_to_off(u32a(ed + 36));
+
+    let names: alloc::vec::Vec<alloc::string::String> = (0..n_names)
+        .map(|i| cstr_at(rva_to_off(u32a(names_off + 4 * i))))
+        .collect();
+    assert_eq!(
+        names,
+        ["alpha", "mike", "zeta"],
+        "name pointer table must be lexically sorted"
+    );
+    // Ground truth per function: the file offset of its unique marker.
+    let marker_off = |imm: u32| -> usize {
+        let needle = imm.to_le_bytes();
+        let hits: alloc::vec::Vec<usize> = dll
+            .windows(4)
+            .enumerate()
+            .filter(|(_, w)| *w == needle)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(hits.len(), 1, "marker {imm:#x} must be unique");
+        hits[0]
+    };
+    let markers = [
+        ("zeta", marker_off(0x5a17aa01)),
+        ("mike", marker_off(0x5a17aa02)),
+        ("alpha", marker_off(0x5a17aa03)),
+    ];
+    for (i, name) in names.iter().enumerate() {
+        let ordinal = u16a(ords_off + 2 * i) as usize;
+        let fn_off = rva_to_off(u32a(funcs_off + 4 * ordinal));
+        // The nearest marker at or past the function's entry must be
+        // this export's own -- the ordinal table maps name -> body.
+        let (owner, _) = markers
+            .iter()
+            .filter(|&&(_, m)| m >= fn_off)
+            .min_by_key(|&&(_, m)| m)
+            .expect("a marker must follow the entry");
+        assert_eq!(
+            owner, name,
+            "export `{name}` (ordinal {ordinal}) must resolve to its own body"
+        );
+    }
+}
+
+/// Minimal foreign ET_REL mirroring clang -O2's SSE constant pool: a
+/// 4-byte `.rodata` (align 4) followed by `.rodata.cst16` (align 16)
+/// holding `mask`, with a global object symbol `c16_mask` on it.
+fn foreign_et_rel_with_cst16(mask: &[u8; 16]) -> alloc::vec::Vec<u8> {
+    let rodata: [u8; 4] = [1, 2, 3, 4];
+    let strtab = b"\0c16_mask\0";
+    let shstrtab = b"\0.rodata\0.rodata.cst16\0.symtab\0.strtab\0.shstrtab\0";
+    let rodata_off = 64usize;
+    let cst16_off = rodata_off + rodata.len();
+    let symtab_off = cst16_off + mask.len();
+    // Elf64Sym pair: the null symbol, then GLOBAL OBJECT `c16_mask`
+    // at offset 0 of section 2 (`.rodata.cst16`).
+    let mut symtab = alloc::vec![0u8; 24];
+    symtab.extend_from_slice(&1u32.to_le_bytes());
+    symtab.push(0x11); // (STB_GLOBAL << 4) | STT_OBJECT
+    symtab.push(0);
+    symtab.extend_from_slice(&2u16.to_le_bytes());
+    symtab.extend_from_slice(&0u64.to_le_bytes());
+    symtab.extend_from_slice(&16u64.to_le_bytes());
+    let strtab_off = symtab_off + symtab.len();
+    let shstr_off = strtab_off + strtab.len();
+    let shoff = (shstr_off + shstrtab.len()).next_multiple_of(8);
+
+    let mut out = alloc::vec![0u8; 64];
+    out[0..4].copy_from_slice(b"\x7fELF");
+    out[4] = 2; // ELFCLASS64
+    out[5] = 1; // ELFDATA2LSB
+    out[6] = 1; // EV_CURRENT
+    out[16..18].copy_from_slice(&1u16.to_le_bytes()); // ET_REL
+    out[18..20].copy_from_slice(&62u16.to_le_bytes()); // EM_X86_64
+    out[20..24].copy_from_slice(&1u32.to_le_bytes()); // e_version
+    out[40..48].copy_from_slice(&(shoff as u64).to_le_bytes());
+    out[52..54].copy_from_slice(&64u16.to_le_bytes()); // e_ehsize
+    out[58..60].copy_from_slice(&64u16.to_le_bytes()); // e_shentsize
+    out[60..62].copy_from_slice(&6u16.to_le_bytes()); // e_shnum
+    out[62..64].copy_from_slice(&5u16.to_le_bytes()); // e_shstrndx
+    out.extend_from_slice(&rodata);
+    out.extend_from_slice(mask);
+    out.extend_from_slice(&symtab);
+    out.extend_from_slice(strtab);
+    out.extend_from_slice(shstrtab);
+    out.resize(shoff, 0);
+    let mut shdr = |name: u32,
+                    ty: u32,
+                    flags: u64,
+                    off: usize,
+                    size: usize,
+                    link: u32,
+                    info: u32,
+                    align: u64,
+                    entsize: u64| {
+        out.extend_from_slice(&name.to_le_bytes());
+        out.extend_from_slice(&ty.to_le_bytes());
+        out.extend_from_slice(&flags.to_le_bytes());
+        out.extend_from_slice(&0u64.to_le_bytes()); // sh_addr
+        out.extend_from_slice(&(off as u64).to_le_bytes());
+        out.extend_from_slice(&(size as u64).to_le_bytes());
+        out.extend_from_slice(&link.to_le_bytes());
+        out.extend_from_slice(&info.to_le_bytes());
+        out.extend_from_slice(&align.to_le_bytes());
+        out.extend_from_slice(&entsize.to_le_bytes());
+    };
+    shdr(0, 0, 0, 0, 0, 0, 0, 0, 0);
+    shdr(1, 1, 2, rodata_off, rodata.len(), 0, 0, 4, 0); // .rodata
+    shdr(9, 1, 2, cst16_off, mask.len(), 0, 0, 16, 0); // .rodata.cst16
+    shdr(23, 2, 0, symtab_off, symtab.len(), 4, 1, 8, 24); // .symtab
+    shdr(31, 3, 0, strtab_off, strtab.len(), 0, 0, 1, 0); // .strtab
+    shdr(39, 3, 0, shstr_off, shstrtab.len(), 0, 0, 1, 0); // .shstrtab
+    out
+}
+
+/// `(sh_addr, sh_offset)` of the named section in an ELF64 image.
+fn elf64_shdr_addr_off(b: &[u8], want: &str) -> Option<(u64, u64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let shstrndx = u16a(0x3e) as usize;
+    let str_off = u64a(shoff + shstrndx * shentsize + 0x18) as usize;
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let name_off = str_off + u32a(sh) as usize;
+        let end = b[name_off..]
+            .iter()
+            .position(|&c| c == 0)
+            .map_or(name_off, |n| name_off + n);
+        if &b[name_off..end] == want.as_bytes() {
+            return Some((u64a(sh + 0x10), u64a(sh + 0x18)));
+        }
+    }
+    None
+}
+
+/// A foreign object's `.rodata.cst16`-style section (sh_addralign 16 --
+/// clang/gcc -O2 SSE constant pools) must keep its alignment through the
+/// family concatenation, the unit merge, and the final image placement:
+/// legacy-SSE aligned loads (`xorps`/`movaps`) fault on a misaligned
+/// operand. Link the foreign object after a badc unit and check the
+/// constant's final vaddr.
+#[test]
+fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let mask: [u8; 16] = [
+        0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae,
+        0xaf,
+    ];
+    let foreign = parse_native_elf(&foreign_et_rel_with_cst16(&mask)).expect("parse foreign");
+    assert_eq!(foreign.data_align, 16, "sh_addralign must be recorded");
+    // Intra-object: the 4-byte `.rodata` ahead forces 12 bytes of pad.
+    assert_eq!(&foreign.data[16..32], &mask);
+
+    // A badc unit with an import so the image carries `.dynamic` and a
+    // non-empty `.got` ahead of `.data` (the placement the alignment
+    // rounding must correct).
+    let program = super::compile_str_bare(
+        "#pragma dylib(libc, \"libc.so.6\")\n\
+         #pragma binding(libc::puts, \"puts\")\n\
+         int puts(const char *s); \
+         int main(void) { return puts(\"x\"); }",
+    );
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let tu = parse_native_elf(&bytes).expect("parse TU");
+    let mut merged = link_native_objects(&[tu, foreign]).expect("link");
+    assert_eq!(merged.data_align, 16, "merge must carry the max alignment");
+    let sym_value = merged
+        .defined
+        .get("c16_mask")
+        .expect("foreign data symbol must survive the merge")
+        .value;
+    assert_eq!(sym_value % 16, 0, "merged .data offset must stay aligned");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::LinuxX64,
+        None,
+    )
+    .expect("write executable");
+    let (data_addr, data_off) = elf64_shdr_addr_off(&exe, ".data").expect(".data section header");
+    assert_eq!(
+        (data_addr + sym_value) % 16,
+        0,
+        "the 16-byte constant's runtime address must be 16-aligned"
+    );
+    let at = (data_off + sym_value) as usize;
+    assert_eq!(
+        &exe[at..at + 16],
+        &mask,
+        "the constant's bytes must land at the placed offset"
+    );
+}
+
+/// A constant struct-field offset folds into the displacement of a
+/// floating-point load and store, and the AArch64 emit carries that
+/// displacement into the immediate-offset encoding. The load side used
+/// to hard-code offset 0 while the store side honored it, masked only
+/// by the fold declining FP kinds.
+#[test]
+fn aarch64_fp_access_folds_constant_displacement() {
+    use crate::c5::ir::{Inst, LoadKind, StoreKind};
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let target = Target::LinuxAarch64;
+    let program = Compiler::with_target(
+        "struct s { long tag; float f; double d; }; \
+         float rf(struct s *p) { return p->f; } \
+         double rd(struct s *p) { return p->d; } \
+         void wd(struct s *p) { p->d = p->d + 0.5; } \
+         int main(void) { return 0; }"
+            .to_string(),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+    crate::c5::codegen::passes::index_fold::run(&mut funcs);
+    let mut f32_load = false;
+    let mut f64_load = false;
+    let mut f64_store = false;
+    for inst in funcs.iter().flat_map(|f| f.insts.iter()) {
+        match inst {
+            Inst::Load {
+                disp: 8,
+                kind: LoadKind::F32,
+                ..
+            } => f32_load = true,
+            Inst::Load {
+                disp: 16,
+                kind: LoadKind::F64,
+                ..
+            } => f64_load = true,
+            Inst::Store {
+                disp: 16,
+                kind: StoreKind::F64,
+                ..
+            } => f64_store = true,
+            _ => {}
+        }
+    }
+    assert!(f32_load, "p->f must fold to Load {{ disp: 8, F32 }}");
+    assert!(f64_load, "p->d must fold to Load {{ disp: 16, F64 }}");
+    assert!(
+        f64_store,
+        "p->d = ... must fold to Store {{ disp: 16, F64 }}"
+    );
+    let obj = emit_native_with_options(
+        &program,
+        target,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        },
+    )
+    .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let words = || {
+        text.chunks_exact(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+    };
+    // Unsigned-offset FP loads/stores scale the immediate by the access
+    // width, so #8 (F32) and #16 (F64) both encode imm12 = 2. Register
+    // fields are masked out.
+    let imm2 = |w: u32, class: u32| (w & 0xFFC0_0000) == class && (w >> 10) & 0xFFF == 2;
+    assert!(
+        words().any(|w| imm2(w, 0xBD40_0000)),
+        "expected `ldr s, [xN, #8]` for the folded F32 load"
+    );
+    assert!(
+        words().any(|w| imm2(w, 0xFD40_0000)),
+        "expected `ldr d, [xN, #16]` for the folded F64 load"
+    );
+    assert!(
+        words().any(|w| imm2(w, 0xFD00_0000)),
+        "expected `str d, [xN, #16]` for the folded F64 store"
+    );
+}
+
+/// A call whose outgoing-argument area exceeds the 12-bit add/sub
+/// immediate must split the call-site SP adjustment into the
+/// shifted-12 + remainder pair, as the prologue path does. 261
+/// by-value 16-byte structs leave 257 on the AAPCS64 stack: 257 * 16 =
+/// 4112 = 4096 + 16 bytes. The raw encoder used to fold 4112 into the
+/// `lsl #12` bit and adjust SP by 65536 instead.
+#[test]
+fn aarch64_call_sp_adjust_covers_wide_outgoing_area() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let mut src = String::from("struct pair { long a; long b; };\nstatic struct pair g[261];\n");
+    src.push_str("long take(");
+    for i in 0..261 {
+        src.push_str(&format!("struct pair p{i}"));
+        src.push_str(if i < 260 { ", " } else { ");\n" });
+    }
+    src.push_str("long caller(void) { return take(");
+    for i in 0..261 {
+        src.push_str(&format!("g[{i}]"));
+        src.push_str(if i < 260 { ", " } else { "); }\n" });
+    }
+    src.push_str("int main(void) { return (int)caller(); }\n");
+    let program = Compiler::with_target(src, Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let obj = emit_native_with_options(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        },
+    )
+    .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let entry = elf_func_value(&obj, "caller").expect("caller symbol") as usize;
+    let size = elf_func_symbols(&obj)
+        .into_iter()
+        .find(|(n, _)| n == "caller")
+        .map(|(_, s)| s as usize)
+        .expect("caller size");
+    let body = &text[entry..(entry + size).min(text.len())];
+    let words: alloc::vec::Vec<u32> = body
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+    // 4112 bytes split as `sub sp, sp, #1, lsl #12` + `sub sp, sp, #16`
+    // and restore with the matching adds. The caller's own frame stays
+    // below 4096, so only the call site produces the shifted forms.
+    for (word, what) in [
+        (0xD140_07FFu32, "sub sp, sp, #1, lsl #12"),
+        (0xD100_43FF, "sub sp, sp, #16"),
+        (0x9140_07FF, "add sp, sp, #1, lsl #12"),
+        (0x9100_43FF, "add sp, sp, #16"),
+    ] {
+        assert!(
+            words.contains(&word),
+            "caller must contain `{what}` ({word:#010x}) for the 4112-byte outgoing area"
+        );
+    }
+    // The raw-encoder overflow artifact: 4112 << 10 sets the shift bit
+    // and leaves imm12 = 16, i.e. a 65536-byte adjustment.
+    for word in [0xD140_43FFu32, 0x9140_43FF] {
+        assert!(
+            !words.contains(&word),
+            "caller must not adjust SP by 65536 (mis-encoded 4112): {word:#010x}"
         );
     }
 }

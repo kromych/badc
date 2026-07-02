@@ -42,8 +42,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
     v6   ImmData(16)                                      -> x0
-    v7   BinopI { op=add, lhs=v6, rhs_imm=8 }             -> x0
-    v8   Load { addr=v7, disp=0, kind=F64 }               -> d0
+    v7   BinopI { op=add, lhs=v6, rhs_imm=8 }             -> x1
+    v8   Load { addr=v6, disp=8, kind=F64 }               -> d0
     v9   Call { target_pc=13, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
     v10  BinopI { op=eq, lhs=v9, rhs_imm=0 }              -> x0
     terminator Bz { cond=v10, target=b4, fall=b3 }   (exit_acc=v10)

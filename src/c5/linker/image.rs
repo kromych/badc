@@ -1033,6 +1033,7 @@ mod tests {
             // x86_64: `mov eax, 42; ret` -- minimal main body.
             text: alloc::vec![0xb8, 0x2a, 0x00, 0x00, 0x00, 0xc3],
             data: alloc::vec![],
+            data_align: 8,
             bss_size: 0,
             defined,
             imports: alloc::vec![],

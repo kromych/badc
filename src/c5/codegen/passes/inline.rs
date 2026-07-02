@@ -706,204 +706,230 @@ fn splice_multi_block(
         new_f32.push(f32);
     };
 
-    // Step 1: caller blocks 0..splice_block_idx (unchanged).
-    for (b_idx, block) in original.blocks.iter().enumerate().take(splice_block_idx) {
-        let block_start = new_insts.len() as u32;
-        for pc in block.inst_range.start..block.inst_range.end {
-            emit_caller_inst(
-                pc,
-                &mut new_insts,
-                &mut new_inst_src,
-                &mut new_f32,
-                &mut remap,
-                &original,
-            );
-        }
-        let term = map_terminator_caller(block.terminator, &remap);
-        let exit_acc = map_v(block.exit_acc, &remap);
-        new_blocks.push(Block {
-            start_pc: block.start_pc,
-            inst_range: block_start..new_insts.len() as u32,
-            terminator: term,
-            exit_acc,
-        });
-        let _ = b_idx;
-    }
+    // Neither block array is ordered definitions-before-uses, and the
+    // call result's mapping only materializes when the callee's Return
+    // is spliced (Step 6) -- after Step 4 already emitted the caller
+    // blocks that follow the splice point. Run the emission to a fixed
+    // point, as the flat single-block splice does: emission is
+    // structurally identical across passes, so every inst keeps its new
+    // id and the maps converge one forward-reference level per pass.
+    let mut guard = original.insts.len() + callee.insts.len() + 2;
+    loop {
+        new_insts.clear();
+        new_inst_src.clear();
+        new_f32.clear();
+        new_blocks.clear();
+        let remap_before = remap.clone();
+        let callee_remap_before = callee_remap.clone();
 
-    // Step 2: prefix (caller's splice block, insts up to call).
-    let prefix_start = new_insts.len() as u32;
-    for pc in splice_block.inst_range.start..call_pc {
-        emit_caller_inst(
-            pc,
-            &mut new_insts,
-            &mut new_inst_src,
-            &mut new_f32,
-            &mut remap,
-            &original,
-        );
-    }
-    let callee_entry_new_id = callee_block_base;
-    new_blocks.push(Block {
-        start_pc: splice_block.start_pc,
-        inst_range: prefix_start..new_insts.len() as u32,
-        terminator: Terminator::Jmp(callee_entry_new_id),
-        exit_acc: NO_VALUE,
-    });
-    let _ = prefix_id;
-
-    // Step 3: postfix block placeholder (filled after callee splices).
-    // We need its ID stable now so the callee's Return -> Jmp(postfix)
-    // points to it; emit insts + terminator below after the callee.
-    let postfix_block_slot = new_blocks.len();
-    new_blocks.push(Block {
-        start_pc: 0,
-        inst_range: 0..0,
-        terminator: Terminator::Jmp(0),
-        exit_acc: NO_VALUE,
-    });
-    let _ = postfix_id;
-
-    // Step 4: caller blocks splice_block_idx+1..n_caller (shifted +1).
-    for (b_idx, block) in original
-        .blocks
-        .iter()
-        .enumerate()
-        .skip(splice_block_idx + 1)
-    {
-        let block_start = new_insts.len() as u32;
-        for pc in block.inst_range.start..block.inst_range.end {
-            emit_caller_inst(
-                pc,
-                &mut new_insts,
-                &mut new_inst_src,
-                &mut new_f32,
-                &mut remap,
-                &original,
-            );
-        }
-        let term = map_terminator_caller(block.terminator, &remap);
-        let exit_acc = map_v(block.exit_acc, &remap);
-        new_blocks.push(Block {
-            start_pc: block.start_pc,
-            inst_range: block_start..new_insts.len() as u32,
-            terminator: term,
-            exit_acc,
-        });
-        let _ = b_idx;
-    }
-
-    // Step 5: remap the call's args through the caller's now-built remap.
-    let remapped_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
-
-    // Step 6: splice every callee block.
-    for cblock in &callee.blocks {
-        let block_start = new_insts.len() as u32;
-        for ce_pc in cblock.inst_range.start..cblock.inst_range.end {
-            let cinst = &callee.insts[ce_pc as usize];
-            match cinst {
-                Inst::ParamRef { idx, kind } => {
-                    let i = *idx as usize;
-                    let arg = if i < remapped_args.len() {
-                        remapped_args[i]
-                    } else {
-                        NO_VALUE
-                    };
-                    callee_remap[ce_pc as usize] = splice_param_ref(
-                        *kind,
-                        arg,
-                        (0, 0),
-                        &mut new_insts,
-                        &mut new_inst_src,
-                        &mut new_f32,
-                    );
-                    continue;
-                }
-                Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
-                    callee_remap[ce_pc as usize] = NO_VALUE;
-                    continue;
-                }
-                _ => {}
-            }
-            if let Some(translated) = rewrite_callee_inst(cinst, &remapped_args, &callee_remap) {
-                let new_id = new_insts.len() as u32;
-                callee_remap[ce_pc as usize] = new_id;
-                new_insts.push(translated);
-                new_inst_src.push((0, 0));
-                new_f32.push(
-                    callee
-                        .f32_values
-                        .get(ce_pc as usize)
-                        .copied()
-                        .unwrap_or(false),
+        // Step 1: caller blocks 0..splice_block_idx (unchanged).
+        for (b_idx, block) in original.blocks.iter().enumerate().take(splice_block_idx) {
+            let block_start = new_insts.len() as u32;
+            for pc in block.inst_range.start..block.inst_range.end {
+                emit_caller_inst(
+                    pc,
+                    &mut new_insts,
+                    &mut new_inst_src,
+                    &mut new_f32,
+                    &mut remap,
+                    &original,
                 );
             }
+            let term = map_terminator_caller(block.terminator, &remap);
+            let exit_acc = map_v(block.exit_acc, &remap);
+            new_blocks.push(Block {
+                start_pc: block.start_pc,
+                inst_range: block_start..new_insts.len() as u32,
+                terminator: term,
+                exit_acc,
+            });
+            let _ = b_idx;
         }
-        let new_term = match cblock.terminator {
-            Terminator::Jmp(b) => Terminator::Jmp(shift_callee_bid(b)),
-            Terminator::FallThrough(b) => Terminator::Jmp(shift_callee_bid(b)),
-            Terminator::Bz {
-                cond,
-                target,
-                fall_through,
-            } => Terminator::Bz {
-                cond: map_v(cond, &callee_remap),
-                target: shift_callee_bid(target),
-                fall_through: shift_callee_bid(fall_through),
-            },
-            Terminator::Bnz {
-                cond,
-                target,
-                fall_through,
-            } => Terminator::Bnz {
-                cond: map_v(cond, &callee_remap),
-                target: shift_callee_bid(target),
-                fall_through: shift_callee_bid(fall_through),
-            },
-            Terminator::Return(v) => {
-                remap[call_pc as usize] = map_v(v, &callee_remap);
-                Terminator::Jmp(postfix_id)
-            }
-            Terminator::TailExt(_) => unreachable!("filter rejects TailExt"),
-            Terminator::GotoIndirect { .. } => {
-                unreachable!("filter rejects GotoIndirect")
-            }
-        };
-        let exit_acc = if cblock.exit_acc != NO_VALUE {
-            map_v(cblock.exit_acc, &callee_remap)
-        } else {
-            NO_VALUE
-        };
+
+        // Step 2: prefix (caller's splice block, insts up to call).
+        let prefix_start = new_insts.len() as u32;
+        for pc in splice_block.inst_range.start..call_pc {
+            emit_caller_inst(
+                pc,
+                &mut new_insts,
+                &mut new_inst_src,
+                &mut new_f32,
+                &mut remap,
+                &original,
+            );
+        }
+        let callee_entry_new_id = callee_block_base;
+        new_blocks.push(Block {
+            start_pc: splice_block.start_pc,
+            inst_range: prefix_start..new_insts.len() as u32,
+            terminator: Terminator::Jmp(callee_entry_new_id),
+            exit_acc: NO_VALUE,
+        });
+        let _ = prefix_id;
+
+        // Step 3: postfix block placeholder (filled after callee splices).
+        // We need its ID stable now so the callee's Return -> Jmp(postfix)
+        // points to it; emit insts + terminator below after the callee.
+        let postfix_block_slot = new_blocks.len();
         new_blocks.push(Block {
             start_pc: 0,
-            inst_range: block_start..new_insts.len() as u32,
-            terminator: new_term,
-            exit_acc,
+            inst_range: 0..0,
+            terminator: Terminator::Jmp(0),
+            exit_acc: NO_VALUE,
         });
-    }
+        let _ = postfix_id;
 
-    // Step 7: fill the postfix slot now that the call's remap is set.
-    let postfix_start = new_insts.len() as u32;
-    for pc in (call_pc + 1)..splice_block.inst_range.end {
-        emit_caller_inst(
-            pc,
-            &mut new_insts,
-            &mut new_inst_src,
-            &mut new_f32,
-            &mut remap,
-            &original,
-        );
+        // Step 4: caller blocks splice_block_idx+1..n_caller (shifted +1).
+        for (b_idx, block) in original
+            .blocks
+            .iter()
+            .enumerate()
+            .skip(splice_block_idx + 1)
+        {
+            let block_start = new_insts.len() as u32;
+            for pc in block.inst_range.start..block.inst_range.end {
+                emit_caller_inst(
+                    pc,
+                    &mut new_insts,
+                    &mut new_inst_src,
+                    &mut new_f32,
+                    &mut remap,
+                    &original,
+                );
+            }
+            let term = map_terminator_caller(block.terminator, &remap);
+            let exit_acc = map_v(block.exit_acc, &remap);
+            new_blocks.push(Block {
+                start_pc: block.start_pc,
+                inst_range: block_start..new_insts.len() as u32,
+                terminator: term,
+                exit_acc,
+            });
+            let _ = b_idx;
+        }
+
+        // Step 5: remap the call's args through the caller's now-built remap.
+        let remapped_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
+
+        // Step 6: splice every callee block.
+        for cblock in &callee.blocks {
+            let block_start = new_insts.len() as u32;
+            for ce_pc in cblock.inst_range.start..cblock.inst_range.end {
+                let cinst = &callee.insts[ce_pc as usize];
+                match cinst {
+                    Inst::ParamRef { idx, kind } => {
+                        let i = *idx as usize;
+                        let arg = if i < remapped_args.len() {
+                            remapped_args[i]
+                        } else {
+                            NO_VALUE
+                        };
+                        callee_remap[ce_pc as usize] = splice_param_ref(
+                            *kind,
+                            arg,
+                            (0, 0),
+                            &mut new_insts,
+                            &mut new_inst_src,
+                            &mut new_f32,
+                        );
+                        continue;
+                    }
+                    Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
+                        callee_remap[ce_pc as usize] = NO_VALUE;
+                        continue;
+                    }
+                    _ => {}
+                }
+                if let Some(translated) = rewrite_callee_inst(cinst, &remapped_args, &callee_remap)
+                {
+                    let new_id = new_insts.len() as u32;
+                    callee_remap[ce_pc as usize] = new_id;
+                    new_insts.push(translated);
+                    new_inst_src.push((0, 0));
+                    new_f32.push(
+                        callee
+                            .f32_values
+                            .get(ce_pc as usize)
+                            .copied()
+                            .unwrap_or(false),
+                    );
+                }
+            }
+            let new_term = match cblock.terminator {
+                Terminator::Jmp(b) => Terminator::Jmp(shift_callee_bid(b)),
+                Terminator::FallThrough(b) => Terminator::Jmp(shift_callee_bid(b)),
+                Terminator::Bz {
+                    cond,
+                    target,
+                    fall_through,
+                } => Terminator::Bz {
+                    cond: map_v(cond, &callee_remap),
+                    target: shift_callee_bid(target),
+                    fall_through: shift_callee_bid(fall_through),
+                },
+                Terminator::Bnz {
+                    cond,
+                    target,
+                    fall_through,
+                } => Terminator::Bnz {
+                    cond: map_v(cond, &callee_remap),
+                    target: shift_callee_bid(target),
+                    fall_through: shift_callee_bid(fall_through),
+                },
+                Terminator::Return(v) => {
+                    remap[call_pc as usize] = map_v(v, &callee_remap);
+                    Terminator::Jmp(postfix_id)
+                }
+                Terminator::TailExt(_) => unreachable!("filter rejects TailExt"),
+                Terminator::GotoIndirect { .. } => {
+                    unreachable!("filter rejects GotoIndirect")
+                }
+            };
+            let exit_acc = if cblock.exit_acc != NO_VALUE {
+                map_v(cblock.exit_acc, &callee_remap)
+            } else {
+                NO_VALUE
+            };
+            new_blocks.push(Block {
+                start_pc: 0,
+                inst_range: block_start..new_insts.len() as u32,
+                terminator: new_term,
+                exit_acc,
+            });
+        }
+
+        // Step 7: fill the postfix slot now that the call's remap is set.
+        let postfix_start = new_insts.len() as u32;
+        for pc in (call_pc + 1)..splice_block.inst_range.end {
+            emit_caller_inst(
+                pc,
+                &mut new_insts,
+                &mut new_inst_src,
+                &mut new_f32,
+                &mut remap,
+                &original,
+            );
+        }
+        let postfix_term = match splice_block.terminator {
+            Terminator::FallThrough(b) => Terminator::Jmp(shift_caller_bid(b)),
+            other => map_terminator_caller(other, &remap),
+        };
+        let postfix_exit_acc = map_v(splice_block.exit_acc, &remap);
+        new_blocks[postfix_block_slot] = Block {
+            start_pc: 0,
+            inst_range: postfix_start..new_insts.len() as u32,
+            terminator: postfix_term,
+            exit_acc: postfix_exit_acc,
+        };
+
+        if remap == remap_before && callee_remap == callee_remap_before {
+            break;
+        }
+        guard -= 1;
+        if guard == 0 {
+            break;
+        }
     }
-    let postfix_term = match splice_block.terminator {
-        Terminator::FallThrough(b) => Terminator::Jmp(shift_caller_bid(b)),
-        other => map_terminator_caller(other, &remap),
-    };
-    let postfix_exit_acc = map_v(splice_block.exit_acc, &remap);
-    new_blocks[postfix_block_slot] = Block {
-        start_pc: 0,
-        inst_range: postfix_start..new_insts.len() as u32,
-        terminator: postfix_term,
-        exit_acc: postfix_exit_acc,
-    };
 
     // Carry both the caller's own and the spliced callee's cross-TU
     // symbol references onto their new value-ids. The symbol indices

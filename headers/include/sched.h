@@ -30,11 +30,9 @@ struct sched_param {
 #pragma binding(libc::sched_yield, "_sched_yield")
 #pragma binding(libc::sched_get_priority_max, "_sched_get_priority_max")
 #pragma binding(libc::sched_get_priority_min, "_sched_get_priority_min")
-#pragma binding(libc::sched_setscheduler, "_sched_setscheduler")
-#pragma binding(libc::sched_getscheduler, "_sched_getscheduler")
-#pragma binding(libc::sched_setparam, "_sched_setparam")
-#pragma binding(libc::sched_getparam, "_sched_getparam")
-#pragma binding(libc::sched_rr_get_interval, "_sched_rr_get_interval")
+// libSystem exports none of sched_setscheduler / sched_getscheduler /
+// sched_setparam / sched_getparam / sched_rr_get_interval; leaving
+// them unbound makes a use fail at link rather than at load.
 #endif
 
 #ifdef __linux__

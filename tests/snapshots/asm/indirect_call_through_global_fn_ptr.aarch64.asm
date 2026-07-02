@@ -36,10 +36,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	mov	x9, x0
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
                	str	x20, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	ldr	x2, [sp, #0x20]

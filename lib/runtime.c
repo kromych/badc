@@ -5,13 +5,65 @@
 // `embedded_headers` registry) and compiled + linked alongside the
 // user's translation units.
 //
-// Everything here is gated on `__BADC_C5_START__`, which the driver
-// defines only when the image writer emits an entry stub -- i.e. for
-// a hosted executable. Shared libraries and passthrough-entry
-// subsystems (native / EFI) leave it undefined and link none of it:
-// they carry no user-mode CRT import (a kernel-mode driver cannot
-// resolve `msvcrt!exit`), and `environ` belongs to the host process,
-// not a library that imports it.
+// Two gates, both defined by the driver:
+//
+// * `__BADC_C5_CRT__` -- the image may import the user-mode C
+//   library (hosted executables and shared libraries; native / EFI
+//   subsystems and freestanding images leave it undefined -- a
+//   kernel-mode driver cannot resolve `msvcrt!exit`).
+// * `__BADC_C5_START__` -- the image writer emits an entry stub
+//   (hosted executables only). Shared libraries link the CRT section
+//   but not the startup section: `environ` belongs to the host
+//   process, not a library that imports it.
+
+#ifdef __BADC_C5_CRT__
+#ifdef _WIN32
+
+// C99 7.19.6.5p3 / 7.19.6.12p3: snprintf / vsnprintf return the
+// length the output would have had without truncation and always
+// NUL-terminate a nonempty buffer. msvcrt's `_vsnprintf` returns -1
+// on truncation and omits the NUL, so the standard spellings resolve
+// to these definitions (`<stdio.h>` declares them without a binding
+// on Windows); `_vscprintf` supplies the untruncated length.
+#pragma dylib(libc, "msvcrt.dll")
+#pragma binding(libc::_vsnprintf, "_vsnprintf")
+#pragma binding(libc::_vscprintf, "_vscprintf")
+
+extern int _vsnprintf(char *buf, unsigned long long count, char *fmt, void *ap);
+extern int _vscprintf(char *fmt, void *ap);
+
+int vsnprintf(char *buf, int size, char *fmt, void *ap) {
+    int len = _vscprintf(fmt, ap);
+    if (len < 0) {
+        return len;
+    }
+    if (size > 0) {
+        _vsnprintf(buf, size, fmt, ap);
+        if (len >= size) {
+            buf[size - 1] = 0;
+        }
+    }
+    return len;
+}
+
+// Windows `va_list` is a byte cursor over the home area / stack
+// (see `<stdarg.h>`); the intrinsics take the cursor's address.
+#pragma intrinsic("__builtin_va_start")
+#pragma intrinsic("__builtin_va_end")
+void __builtin_va_start(void **ap, void *last_addr);
+void __builtin_va_end(void **ap);
+
+int snprintf(char *buf, int size, char *fmt, ...) {
+    void *ap;
+    int len;
+    __builtin_va_start(&ap, (void *)&fmt);
+    len = vsnprintf(buf, size, fmt, ap);
+    __builtin_va_end(&ap);
+    return len;
+}
+
+#endif
+#endif
 
 #ifdef __BADC_C5_START__
 
@@ -39,11 +91,13 @@
 #if !defined(__APPLE__) && !defined(_WIN32)
 char **environ;
 #endif
-#ifndef __APPLE__
+#if defined(__linux__)
 // POSIX `tzset` outputs. Like `environ`, the Linux bindings route these
 // through a COPY relocation against the C library's symbols so a read
 // after `tzset()` sees what the library wrote; the local slots here are
-// the relocation targets.
+// the relocation targets. Windows binds them as msvcrt data imports on
+// both architectures (see <time.h>), so the symbols must stay
+// undefined there.
 char *tzname[2];
 long timezone;
 int daylight;

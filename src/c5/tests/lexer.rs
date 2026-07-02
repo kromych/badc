@@ -31,6 +31,29 @@ fn hex_literal_lower_and_upper() {
     assert_eq!(h.ival(), 0xABCD);
 }
 
+// C99 6.4.4.1: every integer base carries the same u/U/l/L suffix;
+// octal and binary literals must record it like decimal and hex do.
+#[test]
+fn integer_suffix_recorded_for_every_base() {
+    let cases: &[(&str, i64, u8, bool)] = &[
+        ("010u", 8, 0, true),
+        ("0777UL", 511, 1, true),
+        ("01ll", 1, 2, false),
+        ("0b101u", 5, 0, true),
+        ("0b1LL", 1, 2, false),
+        ("0xFFull", 255, 2, true),
+        ("42lu", 42, 1, true),
+        ("7", 7, 0, false),
+    ];
+    for &(src, val, l_count, unsigned) in cases {
+        let mut h = LexHarness::new(src);
+        assert_eq!(h.next(), Token::Num, "{src}");
+        assert_eq!(h.ival(), val, "{src}");
+        assert_eq!(h.int_suffix(), (l_count, unsigned), "{src}");
+        assert_eq!(h.next(), Tok::EOF, "{src}");
+    }
+}
+
 #[test]
 fn keywords_resolve_to_their_tokens() {
     let mut h = LexHarness::new("int char if else while return sizeof");

@@ -92,6 +92,10 @@ def build_shell(badc: Path, combined: bytes, out_path: Path, optimize: bool) -> 
     cmd: list[str | os.PathLike[str]] = [str(badc)]
     if optimize:
         cmd.append("-O")
+    # stdin input has no source directory, so shell.c's quoted
+    # `#include "sqlite3.h"` needs the demo directory on the search
+    # path (gcc would need the same -I for a stdin pipeline).
+    cmd += ["-I", str(Path(__file__).resolve().parent)]
     cmd += ["-include", "msvc_compat.h", "-", "-o", str(out_path)]
     cmd += [f"-D{d}" for d in BUILD_DEFINES]
     subprocess.run(cmd, input=combined, check=True)

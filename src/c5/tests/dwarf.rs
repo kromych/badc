@@ -716,29 +716,35 @@ fn debug_line_has_per_statement_rows() {
 /// Locals that stay in the frame keep their fbreg location.
 #[test]
 fn promoted_local_has_empty_location() {
-    let src = "long f(long n){ long base = n + 100; long acc = 0; long i = 0;\
-               while (i < 3) { acc = acc + base; i = i + 1; } return acc; }\
+    let src = "long f(long n){ long base = n + 100; long keep = n; long *pk = &keep;\
+               long acc = 0; long i = 0;\
+               while (i < 3) { acc = acc + base + *pk; i = i + 1; } return acc; }\
                int main(void){ return (int)f(5); }";
     let path = build_signed_mach_o_opt(src, "promoted_local_loc", true);
     let Some(out) = dwarfdump_debug_info(&path) else {
         return;
     };
-    // `base` is single-def and read across the loop -> promoted; its
-    // location is empty. `acc` and `i` are loop-carried (a join phi),
-    // so they stay in the frame with a real fbreg location.
-    let base_at = out
-        .find("(\"base\")")
-        .unwrap_or_else(|| panic!("no `base` variable in:\n{out}"));
-    let after_base = &out[base_at..];
-    let base_loc_end = after_base.find("DW_TAG").unwrap_or(after_base.len());
+    // `base` is address-free -> promoted; its location is empty.
+    // `keep` has its address taken (`pk`), so it stays in the frame
+    // with a real fbreg location. Both checks are scoped to the
+    // variable's own DIE so unrelated subprograms can't satisfy them.
+    let loc_of = |name: &str| {
+        let at = out
+            .find(&format!("(\"{name}\")"))
+            .unwrap_or_else(|| panic!("no `{name}` variable in:\n{out}"));
+        let after = &out[at..];
+        let end = after.find("DW_TAG").unwrap_or(after.len());
+        &after[..end]
+    };
     assert!(
-        after_base[..base_loc_end].contains("DW_AT_location\t(<empty>)"),
+        loc_of("base").contains("DW_AT_location\t(<empty>)"),
         "promoted local `base` should have an empty location, got:\n{}",
-        &after_base[..base_loc_end]
+        loc_of("base"),
     );
     assert!(
-        out.contains("(\"acc\")") && out.contains("DW_OP_fbreg"),
-        "non-promoted locals should keep an fbreg location:\n{out}"
+        loc_of("keep").contains("DW_OP_fbreg"),
+        "address-taken local `keep` should keep an fbreg location, got:\n{}",
+        loc_of("keep"),
     );
     let _ = std::fs::remove_file(&path);
 }

@@ -25,12 +25,12 @@ Disassembly of section .text:
                	ldr	x5, [x0]
                	mov	x17, #0xffff            // =65535
                	and	x3, x3, x17
-               	mov	x9, x5
                	str	x4, [sp, #-0x10]!
                	str	x3, [sp, #-0x10]!
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x5
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	ldr	x2, [sp, #0x20]

@@ -49,11 +49,11 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x20, #0x1               // =1
                	mov	x3, #0x64               // =100
-               	mov	x9, x0
                	str	x3, [sp, #-0x10]!
                	str	x20, [sp, #-0x10]!
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	ldr	x2, [sp, #0x20]
@@ -65,10 +65,10 @@ Disassembly of section .text:
                	ldr	x0, [x0, #0x8]
                	sub	x1, x29, #0x10
                	sub	x2, x29, #0x40
-               	mov	x9, x0
                	str	x20, [sp, #-0x10]!
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	ldr	x2, [sp, #0x20]

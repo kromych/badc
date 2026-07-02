@@ -257,14 +257,13 @@ fn e_machine_for(machine: Machine) -> u16 {
 /// COPY-relocated data import (`environ`), whose `st_size` the loader
 /// compares against the host symbol's.
 fn data_global_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
-    use crate::c5::compiler::types::is_pointer_ty;
+    use crate::c5::compiler::types::{is_pointer_ty, strip_unsigned};
     use crate::c5::token::Ty;
-    const UNSIGNED_BIT: i64 = 1 << 30;
     let ty = sym.type_;
     let elem: u64 = if is_pointer_ty(ty) {
         8
     } else {
-        let stripped = ty & !UNSIGNED_BIT;
+        let stripped = strip_unsigned(ty);
         if stripped == Ty::Char as i64 || stripped == Ty::Bool as i64 {
             1
         } else if stripped == Ty::Short as i64 {
@@ -290,9 +289,9 @@ fn data_global_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
 
 /// Emit a relocatable ELF64 object holding the contents of
 /// `build`. The result is a standard `.o` that `ld` / `lld` can
-/// link (modulo missing relocations -- the writer doesn't yet
-/// emit `.rela.text`, so a TU with cross-TU calls produces a
-/// link error today).
+/// link: the writer emits `.rela.text` (SHT_RELA, `sh_info` = the
+/// `.text` section index) with one entry per call site, so a TU with
+/// cross-TU calls resolves at link time.
 pub(super) fn write_relocatable(
     program: &Program,
     build: &Build,
@@ -1033,8 +1032,10 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
 
-    // .data
-    let data_off = round_up(out.len() as u64, 8);
+    // .data -- `sh_addralign` carries the unit's base data alignment
+    // so the linker places this unit's data at a multiple of it.
+    let data_align = build.data_align.max(8) as u64;
+    let data_off = round_up(out.len() as u64, data_align);
     out.resize(data_off as usize, 0);
     out.extend_from_slice(&build.data);
     sh.push(Elf64Shdr {
@@ -1043,7 +1044,7 @@ pub(super) fn write_relocatable(
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: data_off,
         sh_size: build.data.len() as u64,
-        sh_addralign: 8,
+        sh_addralign: data_align,
         ..Default::default()
     });
 
@@ -1761,6 +1762,9 @@ mod tests {
             structs: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
+            entry_pragma: None,
+            auto_includes: Vec::new(),
+            data_align: 8,
             subsystem: None,
             finished_functions: Vec::new(),
             symbols: Vec::new(),
@@ -1776,6 +1780,7 @@ mod tests {
             copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),
+            data_align: 8,
             bss_size: 0,
             entry_offset: 0,
             got_fixups: Vec::new(),

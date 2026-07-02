@@ -25,8 +25,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty, struct_id_of,
-    struct_ptr_depth,
+    UNSIGNED_BIT, VOLATILE_BIT, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty,
+    struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -79,6 +79,7 @@ impl Compiler {
             let mut static_seen = false;
             let mut extern_seen = false;
             let mut atomic_base: Option<i64> = None;
+            let mut qual_bits: i64 = 0;
             let mut m = decl_base::IntModifiers::default();
             // `_Noreturn`, `__declspec(thread)`, `__declspec(dllexport)`, and
             // `inline` scope to this declaration; clear the carriers so they
@@ -88,6 +89,7 @@ impl Compiler {
             self.pending_noreturn = false;
             self.pending.attr_thread_local = false;
             self.pending.attr_dllexport = false;
+            self.pending.attr_align = 0;
             self.pending_is_inline = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
@@ -126,6 +128,8 @@ impl Compiler {
                     if self.lex.tk == Token::Noreturn {
                         self.pending_noreturn = true;
                     }
+                    // `volatile` qualifies the declared type (C99 6.7.3).
+                    qual_bits |= self.lex_volatile_bit();
                     self.next()?;
                 } else {
                     break;
@@ -214,15 +218,17 @@ impl Compiler {
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long
-            // x`, etc. The base type is already chosen; these are
-            // pure no-ops in c5 but appear in real C source.
+            // x`, etc. The base type is already chosen; a trailing
+            // `volatile` still qualifies it (C99 6.7.3).
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
                     continue;
                 }
+                qual_bits |= self.lex_volatile_bit();
                 self.next()?;
             }
+            bt |= qual_bits;
 
             // A function-pointer typedef base type contributes its lineage
             // to every declarator in the list (`fn_t a, b;`). The
@@ -292,6 +298,7 @@ impl Compiler {
                     array_size = typedef_dim;
                 }
                 self.ty = ty;
+                let prior_array_size = self.symbols[id_idx].array_size;
                 self.symbols[id_idx].array_size = array_size;
                 if fn_ptr_indirection > 0 {
                     self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
@@ -781,11 +788,13 @@ impl Compiler {
                         // neither a specifier nor a type nor a parameter
                         // name -- that is the function body.
                         let mut saw_specifier = false;
+                        let mut qual_bits: i64 = 0;
                         while self.lex.tk == Token::FuncSpec
                             || self.lex.tk == Token::Static
                             || self.lex.tk == Token::Extern
                             || self.lex.tk == Token::TypeQual
                         {
+                            qual_bits |= self.lex_volatile_bit();
                             self.next()?;
                             saw_specifier = true;
                         }
@@ -795,7 +804,7 @@ impl Compiler {
                             Ty::Int as i64
                         } else {
                             break;
-                        };
+                        } | qual_bits;
                         while self.lex.tk != ';' && self.lex.tk != 0 {
                             let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
                             if decl_idx != usize::MAX {
@@ -869,6 +878,7 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.uses_alloca_in_current_fn = false;
+                    self.func_vla_decls = 0;
                     self.ast_reset();
 
                     let ent_pc = self.next_ent_pc;
@@ -957,7 +967,7 @@ impl Compiler {
                     // float-typed code expects, and the load/store
                     // semantics stay consistent.
                     for &idx in params.indices.iter() {
-                        let pty = self.symbols[idx].type_ & !UNSIGNED_BIT;
+                        let pty = self.symbols[idx].type_ & !(UNSIGNED_BIT | VOLATILE_BIT);
                         if pty != Ty::Float as i64 {
                             continue;
                         }
@@ -1323,6 +1333,27 @@ impl Compiler {
                     } else if self.symbols[id_idx].linkage != crate::c5::symbol::Linkage::Internal {
                         self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
                     }
+                    // C11 6.7.5: a requested alignment up to 16 is
+                    // honored on file-scope objects (the writers place
+                    // `.data` at `Program::data_align`); anything
+                    // larger is a diagnostic, never a silent drop.
+                    let req_align = core::mem::take(&mut self.pending.attr_align);
+                    if req_align > 16 {
+                        return Err(self.compile_err(format!(
+                            "requested alignment {req_align} exceeds the supported maximum of 16"
+                        )));
+                    }
+                    let decl_align: usize = if req_align > 8 {
+                        if thread_local {
+                            return Err(self.compile_err(
+                                "alignment above 8 is not supported for `_Thread_local` objects",
+                            ));
+                        }
+                        self.data_align = 16;
+                        16
+                    } else {
+                        8
+                    };
                     let was_extern_only_decl =
                         extern_seen && self.lex.tk != Token::Assign && array_size != -1;
                     // `extern struct S s;` while `struct S` is still
@@ -1345,7 +1376,13 @@ impl Compiler {
                         continue;
                     }
                     if was_extern_only_decl {
-                        self.symbols[id_idx].is_extern_decl = true;
+                        // C99 6.2.2p4 + 6.9.2p2: `extern T x;` after a
+                        // prior file-scope definition (tentative or
+                        // initialized) redeclares the same object; the
+                        // definition stands.
+                        if !self.symbols[id_idx].defined_here {
+                            self.symbols[id_idx].is_extern_decl = true;
+                        }
                     } else {
                         self.symbols[id_idx].is_extern_decl = false;
                         // Default: a file-scope global declaration
@@ -1371,8 +1408,16 @@ impl Compiler {
                             // address against the defining TU's
                             // storage.
                             if extern_seen {
-                                self.symbols[id_idx].is_extern_decl = true;
-                                self.symbols[id_idx].defined_here = false;
+                                // C99 6.2.2p4: after a prior definition,
+                                // `extern T x[];` is a redeclaration of
+                                // the same object -- the definition and
+                                // its dimension stand.
+                                if self.symbols[id_idx].defined_here {
+                                    self.symbols[id_idx].array_size = prior_array_size;
+                                } else {
+                                    self.symbols[id_idx].is_extern_decl = true;
+                                    self.symbols[id_idx].defined_here = false;
+                                }
                                 self.accept(',')?;
                                 continue;
                             }
@@ -1388,7 +1433,9 @@ impl Compiler {
                             }
                             let elem = self.size_of_type(ty) as i64;
                             let aligned = ((elem + 7) / 8) * 8;
-                            if self.size_of_type(ty) > 1 {
+                            if decl_align > 8 {
+                                self.align_data_to(decl_align);
+                            } else if self.size_of_type(ty) > 1 {
                                 self.align_data_to_8();
                             }
                             let off = self.data.len() as i64;
@@ -1450,7 +1497,7 @@ impl Compiler {
                             {
                                 self.symbols[id_idx].val
                             } else {
-                                self.align_data_to_8();
+                                self.align_data_to(decl_align);
                                 let fresh = self.data.len() as i64;
                                 self.symbols[id_idx].reserved_data_bytes = needed;
                                 for _ in 0..needed {
@@ -1548,7 +1595,9 @@ impl Compiler {
                         {
                             self.symbols[id_idx].val
                         } else {
-                            if self.size_of_type(ty) > 1 {
+                            if decl_align > 8 {
+                                self.align_data_to(decl_align);
+                            } else if self.size_of_type(ty) > 1 {
                                 self.align_data_to_8();
                             }
                             let fresh = self.data.len() as i64;
@@ -1622,7 +1671,9 @@ impl Compiler {
                             }
                             off
                         } else {
-                            if self.size_of_type(ty) > 1 {
+                            if decl_align > 8 {
+                                self.align_data_to(decl_align);
+                            } else if self.size_of_type(ty) > 1 {
                                 self.align_data_to_8();
                             }
                             let off = self.data.len() as i64;

@@ -1,6 +1,6 @@
 [package]
 name = "badc"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license = "MIT"
 description = "A quick, slim cross-platform C compiler (also a compiler-as-library) (C99, C11, and more) with a JIT and native ELF / PE / Mach-O backends."

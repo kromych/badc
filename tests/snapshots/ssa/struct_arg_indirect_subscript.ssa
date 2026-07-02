@@ -62,8 +62,8 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     v5   Imm(4616189618054758400)                         -> x0
     v6   Binop { op=fmul, lhs=v4, rhs=v5 }                -> d1
     v7   LocalAddr(-2)                                    -> x1
-    v8   BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x1
-    v9   Load { addr=v8, disp=0, kind=F64 }               -> d1
+    v8   BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x2
+    v9   Load { addr=v7, disp=8, kind=F64 }               -> d1
     v10  Imm(4611686018427387904)                         -> x1
     v11  Binop { op=fmul, lhs=v9, rhs=v10 }               -> d1
     v12  Fma { a=v4, b=v5, c=v11, neg_product=false, neg_addend=false } -> d0

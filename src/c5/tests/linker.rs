@@ -945,6 +945,200 @@ fn export_data_exposes_data_globals_in_dynsym() {
 }
 
 #[test]
+fn macho_executable_exports_globals_through_dyld_info_trie() {
+    // macOS publishes every global of an executable so a dlopen'd module
+    // resolves them against the host. dyld resolves an image carrying
+    // LC_DYLD_INFO exclusively through the export trie -- a symtab-only
+    // entry is invisible to it -- so a text and a data global must both
+    // resolve through the trie at their symtab addresses.
+    use crate::c5::linker::{
+        emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             int host_data = 7;\n\
+             int host_api(int x) {{ return x + host_data; }}\n\
+             int main(void) {{ return host_api(0); }}\n"
+        ),
+        Target::MacOSAarch64,
+        CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::MacOSAarch64,
+        None,
+    )
+    .expect("write executable");
+
+    fn uleb(buf: &[u8], p: &mut usize) -> u64 {
+        let (mut v, mut shift) = (0u64, 0);
+        loop {
+            let b = buf[*p];
+            *p += 1;
+            v |= ((b & 0x7F) as u64) << shift;
+            if b & 0x80 == 0 {
+                return v;
+            }
+            shift += 7;
+        }
+    }
+    fn trie_lookup(trie: &[u8], name: &str) -> Option<u64> {
+        let bytes = name.as_bytes();
+        let (mut node, mut pos) = (0usize, 0usize);
+        loop {
+            let mut p = node;
+            let term_size = uleb(trie, &mut p) as usize;
+            if pos == bytes.len() {
+                if term_size == 0 {
+                    return None;
+                }
+                let _flags = uleb(trie, &mut p);
+                return Some(uleb(trie, &mut p));
+            }
+            p += term_size;
+            let child_count = trie[p];
+            p += 1;
+            let mut next = None;
+            for _ in 0..child_count {
+                let start = p;
+                while trie[p] != 0 {
+                    p += 1;
+                }
+                let label = &trie[start..p];
+                p += 1;
+                let child = uleb(trie, &mut p) as usize;
+                if bytes[pos..].starts_with(label) {
+                    next = Some((label.len(), child));
+                    break;
+                }
+            }
+            match next {
+                Some((len, child)) => {
+                    pos += len;
+                    node = child;
+                }
+                None => return None,
+            }
+        }
+    }
+
+    let read_u32 = |off: usize| u32::from_le_bytes(exe[off..off + 4].try_into().unwrap());
+    let read_u64 = |off: usize| u64::from_le_bytes(exe[off..off + 8].try_into().unwrap());
+    assert_eq!(read_u32(0), 0xfeed_facf, "executable must be MH_MAGIC_64");
+    // Walk the load commands for LC_DYLD_INFO_ONLY (export_off/size at
+    // +40/+44), LC_SYMTAB (symoff/nsyms/stroff at +8/+12/+16), and the
+    // __TEXT segment vmaddr (image base; trie addresses are relative to it).
+    let sizeofcmds = read_u32(20) as usize;
+    let (mut export_range, mut symtab_loc, mut image_base) = (None, None, None);
+    let mut p = 32usize;
+    while p < 32 + sizeofcmds {
+        match read_u32(p) {
+            0x8000_0022 => {
+                export_range = Some((read_u32(p + 40) as usize, read_u32(p + 44) as usize));
+            }
+            0x2 => {
+                symtab_loc = Some((
+                    read_u32(p + 8) as usize,
+                    read_u32(p + 12) as usize,
+                    read_u32(p + 16) as usize,
+                ));
+            }
+            0x19 if exe[p + 8..p + 15] == *b"__TEXT\0" => {
+                image_base = Some(read_u64(p + 24));
+            }
+            _ => {}
+        }
+        p += read_u32(p + 4) as usize;
+    }
+    let (export_off, export_size) = export_range.expect("LC_DYLD_INFO_ONLY must be present");
+    let trie = &exe[export_off..export_off + export_size];
+    let (symoff, nsyms, stroff) = symtab_loc.expect("LC_SYMTAB must be present");
+    let image_base = image_base.expect("__TEXT segment must be present");
+    let n_value_of = |name: &str| -> u64 {
+        (0..nsyms)
+            .find_map(|i| {
+                let base = symoff + i * 16;
+                let s = &exe[stroff + read_u32(base) as usize..];
+                let end = s.iter().position(|&b| b == 0).unwrap();
+                (&s[..end] == name.as_bytes()).then(|| read_u64(base + 8))
+            })
+            .unwrap_or_else(|| panic!("symtab must carry {name}"))
+    };
+    for name in ["_host_api", "_host_data"] {
+        assert_eq!(
+            trie_lookup(trie, name),
+            Some(n_value_of(name) - image_base),
+            "{name} must resolve through the export trie at its symtab address"
+        );
+    }
+}
+
+#[test]
+fn thread_local_in_elf_shared_library_is_a_link_error() {
+    // The emitted `_Thread_local` sequences use the local-exec TLS
+    // model, whose TP-relative offsets are valid only in the
+    // executable's static TLS block; baked into ET_DYN they address
+    // another module's TLS. The writer must reject the combination
+    // until the general-dynamic model is implemented.
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "_Thread_local int counter = 7;\n\
+         int bump(void) { counter += 1; return counter; }\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    assert!(
+        !merged.tls_data.is_empty(),
+        "the merged unit must carry TLS data"
+    );
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let err = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "",
+        None,
+        OutputKind::SharedLibrary,
+        Target::LinuxX64,
+        None,
+    )
+    .expect_err("a _Thread_local shared library must be rejected");
+    assert!(
+        err.to_string()
+            .contains("_Thread_local data is not supported in ELF shared-library output"),
+        "unexpected diagnostic: {err}"
+    );
+}
+
+#[test]
 fn shared_object_relocates_internal_data_pointers() {
     // A function / data pointer baked into a shared object's static data
     // must carry an R_*_RELATIVE relocation so it tracks the runtime load
@@ -1555,5 +1749,577 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
     assert!(
         bytes.contains(&0x53),
         "push rbx (callee-saved, clobbered by cpuid) must be saved"
+    );
+}
+
+#[test]
+fn same_named_statics_keep_their_own_prologue_anchor() {
+    // The post-prologue anchor map is keyed by the function's merged
+    // entry offset. Name-keying handed a later unit's same-named
+    // static the first unit's anchor, describing a framed function as
+    // frameless in the Win-x64 .pdata / DWARF CFA output.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let compile = |src: &str| {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL")
+    };
+    let a = compile(
+        "static int helper(int x) { int buf[16]; buf[0] = x; return buf[0] + 1; }\n\
+         int call_a(int x) { return helper(x); }\n",
+    );
+    let b = compile(
+        "static int helper(int x) { int buf[32]; buf[1] = x; return buf[1] + 2; }\n\
+         int call_b(int x) { return helper(x); }\n",
+    );
+    let merged = link_native_objects(&[a, b]).expect("link");
+    let helpers: alloc::vec::Vec<u64> = merged
+        .local_funcs
+        .iter()
+        .filter(|(n, _)| n == "helper")
+        .map(|(_, off)| *off)
+        .collect();
+    assert_eq!(helpers.len(), 2, "both statics survive: {helpers:?}");
+    let mut posts = alloc::vec::Vec::new();
+    for entry in &helpers {
+        let post = merged
+            .prologue_ends
+            .get(entry)
+            .unwrap_or_else(|| panic!("anchor for helper at 0x{entry:x} missing"));
+        assert!(
+            post > entry,
+            "post-prologue 0x{post:x} must lie past the entry 0x{entry:x}"
+        );
+        posts.push(*post);
+    }
+    assert_ne!(posts[0], posts[1], "each static keeps its own anchor");
+}
+
+#[test]
+fn unrouted_weak_undef_resolves_to_zero() {
+    // ELF behavior: a weak reference nothing on the link line
+    // satisfies resolves to address 0 -- not a required import
+    // against the first dylib. The call becomes a no-op, the
+    // address-of reads null, and a pointer initializer slot holds 0.
+    use crate::c5::linker::object::{NativeReloc, NativeSymbol};
+    use crate::c5::linker::{NativeMachine, NativeSymSection, link_native_objects};
+    let null_sym = || NativeSymbol {
+        name: String::new(),
+        section: NativeSymSection::Undef,
+        value: 0,
+        size: 0,
+        binding: 0,
+        kind: 0,
+    };
+    let weak_undef = || NativeSymbol {
+        name: "hook".to_string(),
+        section: NativeSymSection::Undef,
+        value: 0,
+        size: 0,
+        binding: 2, // STB_WEAK
+        kind: 0,
+    };
+    let mk = |machine: NativeMachine,
+              text: alloc::vec::Vec<u8>,
+              data: alloc::vec::Vec<u8>,
+              text_relocs: alloc::vec::Vec<NativeReloc>,
+              data_relocs: alloc::vec::Vec<NativeReloc>| {
+        crate::c5::linker::NativeObject {
+            machine,
+            text,
+            data,
+            data_align: 8,
+            bss_size: 0,
+            tls_data: alloc::vec::Vec::new(),
+            tls_bss_size: 0,
+            symbols: alloc::vec![null_sym(), weak_undef()],
+            text_relocs,
+            data_relocs,
+            dylibs: alloc::vec::Vec::new(),
+            import_dylib_map: alloc::vec::Vec::new(),
+            exports: alloc::vec::Vec::new(),
+            tls_index_fixups: alloc::vec::Vec::new(),
+            macho_tlv_descriptors: alloc::vec::Vec::new(),
+            macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
+            debug_info: alloc::vec::Vec::new(),
+            debug_abbrev: alloc::vec::Vec::new(),
+            debug_line: alloc::vec::Vec::new(),
+            debug_str: alloc::vec::Vec::new(),
+            debug_info_relocs: alloc::vec::Vec::new(),
+            debug_line_relocs: alloc::vec::Vec::new(),
+        }
+    };
+
+    // x86_64: `lea rax, [rip+hook]` (R_X86_64_PC32) then `call hook`
+    // (R_X86_64_PLT32), plus a `.data` pointer slot (R_X86_64_64).
+    let x64 = mk(
+        NativeMachine::X86_64,
+        alloc::vec![
+            0x48, 0x8D, 0x05, 0, 0, 0, 0, // lea rax, [rip+0]
+            0xE8, 0, 0, 0, 0, // call rel32
+        ],
+        alloc::vec![0u8; 8],
+        alloc::vec![
+            NativeReloc {
+                offset: 3,
+                sym_idx: 1,
+                rtype: 2, // R_X86_64_PC32
+                addend: -4,
+            },
+            NativeReloc {
+                offset: 8,
+                sym_idx: 1,
+                rtype: 4, // R_X86_64_PLT32
+                addend: -4,
+            },
+        ],
+        alloc::vec![NativeReloc {
+            offset: 0,
+            sym_idx: 1,
+            rtype: 1, // R_X86_64_64
+            addend: 0,
+        }],
+    );
+    let merged = link_native_objects(&[x64]).expect("weak undef links");
+    assert!(
+        merged.imports.is_empty(),
+        "no import for an unresolved weak ref: {:?}",
+        merged.imports
+    );
+    assert_eq!(
+        &merged.text[0..7],
+        &[0x48, 0xC7, 0xC0, 0, 0, 0, 0],
+        "lea rewritten to mov rax, 0"
+    );
+    assert_eq!(
+        &merged.text[7..12],
+        &[0x0F, 0x1F, 0x44, 0x00, 0x00],
+        "call rewritten to a 5-byte nop"
+    );
+    assert_eq!(&merged.data[0..8], &[0u8; 8], "pointer slot holds null");
+
+    // aarch64: `adrp x0, hook` + `add x0, x0, :lo12:hook` + `bl hook`.
+    let a64 = mk(
+        NativeMachine::Aarch64,
+        alloc::vec![
+            0x00, 0x00, 0x00, 0x90, // adrp x0, 0
+            0x00, 0x00, 0x00, 0x91, // add x0, x0, #0
+            0x00, 0x00, 0x00, 0x94, // bl 0
+        ],
+        alloc::vec::Vec::new(),
+        alloc::vec![
+            NativeReloc {
+                offset: 0,
+                sym_idx: 1,
+                rtype: 275, // R_AARCH64_ADR_PREL_PG_HI21
+                addend: 0,
+            },
+            NativeReloc {
+                offset: 4,
+                sym_idx: 1,
+                rtype: 277, // R_AARCH64_ADD_ABS_LO12_NC
+                addend: 0,
+            },
+            NativeReloc {
+                offset: 8,
+                sym_idx: 1,
+                rtype: 283, // R_AARCH64_CALL26
+                addend: 0,
+            },
+        ],
+        alloc::vec::Vec::new(),
+    );
+    let merged = link_native_objects(&[a64]).expect("weak undef links");
+    assert!(merged.imports.is_empty(), "{:?}", merged.imports);
+    let word = |i: usize| u32::from_le_bytes(merged.text[i..i + 4].try_into().unwrap());
+    assert_eq!(word(0), 0xd280_0000, "adrp rewritten to movz x0, #0");
+    assert_eq!(word(4), 0xd503_201f, "add pair half becomes a nop");
+    assert_eq!(word(8), 0xd503_201f, "bl becomes a nop");
+}
+
+#[test]
+fn elf_section_offsets_respect_their_claimed_alignment() {
+    // gABI: `sh_addr` (and the file offset for SHF_ALLOC sections)
+    // must be congruent to 0 modulo `sh_addralign`. Version-name
+    // strings appended to `.dynstr` after its pad used to leave
+    // `.hash` / `.gnu.version` misaligned; the check runs over every
+    // section so any future layout drift is caught. Version sections
+    // only appear when the build host's libc yields versioned imports.
+    use crate::c5::linker::{
+        emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         int main(void) {{ printf(\"x\"); return 0; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::LinuxAarch64,
+        None,
+    )
+    .expect("write executable");
+    let shoff = u64::from_le_bytes(exe[0x28..0x30].try_into().unwrap()) as usize;
+    let shentsize = u16::from_le_bytes(exe[0x3a..0x3c].try_into().unwrap()) as usize;
+    let shnum = u16::from_le_bytes(exe[0x3c..0x3e].try_into().unwrap()) as usize;
+    assert!(shnum > 0, "executable must carry section headers");
+    const SHT_NOBITS: u32 = 8;
+    for i in 0..shnum {
+        let base = shoff + i * shentsize;
+        let sh_type = u32::from_le_bytes(exe[base + 4..base + 8].try_into().unwrap());
+        let sh_addr = u64::from_le_bytes(exe[base + 16..base + 24].try_into().unwrap());
+        let sh_offset = u64::from_le_bytes(exe[base + 24..base + 32].try_into().unwrap());
+        let sh_addralign = u64::from_le_bytes(exe[base + 48..base + 56].try_into().unwrap());
+        if sh_addralign <= 1 {
+            continue;
+        }
+        assert_eq!(
+            sh_addr % sh_addralign,
+            0,
+            "section {i} sh_addr 0x{sh_addr:x} violates sh_addralign {sh_addralign}"
+        );
+        if sh_type != SHT_NOBITS {
+            assert_eq!(
+                sh_offset % sh_addralign,
+                0,
+                "section {i} sh_offset 0x{sh_offset:x} violates sh_addralign {sh_addralign}"
+            );
+        }
+    }
+}
+
+#[test]
+fn extern_redeclaration_keeps_the_tentative_definition() {
+    // C99 6.2.2p4 + 6.9.2p2: `int x; extern int x;` retains the
+    // tentative definition (the extern redeclaration refers to the
+    // same object), so the TU's object defines `x`. The same holds
+    // for the array form and for an initialized definition.
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let defined_sections = |src: &str, names: &[&str]| -> alloc::vec::Vec<bool> {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        names
+            .iter()
+            .map(|n| {
+                obj.symbols
+                    .iter()
+                    .any(|s| &s.name == n && s.section != NativeSymSection::Undef)
+            })
+            .collect()
+    };
+    let defined = defined_sections(
+        "int x;\nextern int x;\n\
+         int a[4];\nextern int a[];\n\
+         int y = 5;\nextern int y;\n\
+         int use_all(void) { return x + a[0] + y; }\n",
+        &["x", "a", "y"],
+    );
+    assert_eq!(
+        defined,
+        alloc::vec![true, true, true],
+        "the definitions must survive the extern redeclarations (x, a, y)"
+    );
+    // A genuinely extern-only declaration still emits an UNDEF.
+    let defined = defined_sections("extern int z;\nint use_z(void) { return z; }\n", &["z"]);
+    assert_eq!(defined, alloc::vec![false], "extern-only stays undefined");
+}
+
+#[test]
+fn alignas_sixteen_places_objects_and_raises_data_align() {
+    // C11 6.7.5: a 16-byte alignment request on a file-scope object
+    // is honored -- the object's section offset is 16-aligned through
+    // compaction and the unit records `data_align = 16` so the linker
+    // and the image writers keep the base congruent. Larger requests
+    // and unsupported positions are diagnostics, never silent drops.
+    use crate::c5::linker::{NativeSymSection, link_native_objects, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let compile = |src: &str| {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL")
+    };
+    let aligned_unit = "\
+        _Alignas(16) unsigned char pool[24];\n\
+        char skew[3] = \"ab\";\n\
+        __attribute__((aligned(16))) unsigned char pool2[8];\n\
+        int use_all(void) { return pool[0] + skew[0] + pool2[0]; }\n";
+    let obj = compile(aligned_unit);
+    assert_eq!(obj.data_align, 16, "unit must claim 16-byte data alignment");
+    for name in ["pool", "pool2"] {
+        let sym = obj
+            .symbols
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name} missing"));
+        assert!(
+            sym.section != NativeSymSection::Undef && sym.value.is_multiple_of(16),
+            "{name} at {:?}+0x{:x} must be 16-aligned",
+            sym.section,
+            sym.value
+        );
+    }
+    // Linked after a unit with an odd-sized data tail, the offsets
+    // stay 16-congruent (the unit base honors the claimed alignment)
+    // and the file image is padded so bss offsets keep their residue.
+    let odd = compile("char tail[5] = \"abcd\";\nint use_tail(void) { return tail[0]; }\n");
+    let merged = link_native_objects(&[odd, compile(aligned_unit)]).expect("link");
+    assert_eq!(merged.data_align, 16);
+    if merged.bss_size > 0 {
+        assert!(merged.data.len().is_multiple_of(16));
+    }
+    for name in ["pool", "pool2"] {
+        let sym = merged.defined.get(name).unwrap_or_else(|| panic!("{name}"));
+        assert!(
+            sym.value.is_multiple_of(16),
+            "{name} merged offset 0x{:x} must stay 16-aligned",
+            sym.value
+        );
+    }
+    // Diagnostics: above 16, automatic objects above 8, members above 8.
+    for src in [
+        "_Alignas(64) static char big[8];\nint main(void) { return 0; }\n",
+        "int main(void) { _Alignas(16) char buf[8]; return buf[0]; }\n",
+        "struct S { _Alignas(16) int f; };\nint main(void) { struct S s; s.f = 0; return s.f; }\n",
+    ] {
+        assert!(
+            Compiler::new(src.to_string()).compile().is_err(),
+            "must be diagnosed: {src}"
+        );
+    }
+}
+
+#[test]
+fn windows_x64_tz_globals_bind_to_msvcrt_data_exports() {
+    // msvcrt's `_tzset` writes the DLL's own `_tzname` / `_timezone` /
+    // `_daylight`; the x64 image must import them as data (the
+    // `environ` treatment) instead of resolving the externs to local
+    // zero-filled slots `_tzset` never writes.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "#include <time.h>\n\
+               #include <stdio.h>\n\
+               #pragma export(use_tz)\n\
+               long use_tz(void) { tzset(); return timezone + daylight + (tzname[0] != 0); }\n";
+    let program = Compiler::with_target(src.to_string(), Target::WindowsX64)
+        .compile()
+        .expect("compile tz TU");
+    let obj = emit_native_with_options(
+        &program,
+        Target::WindowsX64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        },
+    )
+    .expect("emit object");
+    let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+    for sym in [
+        &b"\0_tzname\0"[..],
+        &b"\0_timezone\0"[..],
+        &b"\0_daylight\0"[..],
+    ] {
+        assert!(
+            contains(sym),
+            "x64 tz output {:?} must be a data import",
+            core::str::from_utf8(sym)
+        );
+    }
+}
+
+#[test]
+fn dead_libc_bindings_fail_at_build_not_at_load() {
+    // libSystem exports none of these (dlsym-verified); the header must
+    // leave them unbound so a use fails the build loudly instead of
+    // producing an image that aborts at load with a dyld error.
+    let cases = [
+        (
+            "#include <time.h>\nint main(void) { struct timespec t; t.tv_sec = 0; t.tv_nsec = 0; return clock_nanosleep(0, 0, &t, 0); }\n",
+            "clock_nanosleep",
+        ),
+        (
+            "#include <sys/mman.h>\nint main(void) { return mremap((void *)0, 0, 0, 0) != 0; }\n",
+            "mremap",
+        ),
+        (
+            "#include <sched.h>\nint main(void) { return sched_getscheduler(0); }\n",
+            "sched_getscheduler",
+        ),
+        (
+            "#include <unistd.h>\nint main(void) { return fexecve(0, 0, 0); }\n",
+            "fexecve",
+        ),
+    ];
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let link_one = |src: &str| {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::MacOSAarch64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
+        link_native_objects(&[parse_native_elf(&bytes).expect("parse")])
+    };
+    for (src, name) in cases {
+        let err = link_one(src)
+            .err()
+            .unwrap_or_else(|| panic!("{name}: use of an unexported symbol must not link"));
+        assert!(
+            format!("{err}").contains(name),
+            "{name}: diagnostic must name the symbol: {err}"
+        );
+    }
+    // The bound neighbors still link.
+    for src in [
+        "#include <time.h>\nint main(void) { struct timespec t; return clock_gettime(0, &t); }\n",
+        "#include <sched.h>\nint main(void) { return sched_yield(); }\n",
+    ] {
+        link_one(src).expect("bound libc call must link");
+    }
+}
+
+#[test]
+fn macho_data_import_gets_no_bogus_local_text_symbol() {
+    // A Mach-O data import (`environ`, bound through the GOT) carries no
+    // PLT trampoline. The symtab previously fabricated a local text
+    // symbol for it at code offset 0 -- the first function's address --
+    // mislabeling backtraces and breakpoints. Only imports that actually
+    // have a trampoline get a local text symbol; a data import keeps just
+    // its undefined entry.
+    use crate::c5::linker::{
+        emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "#include <unistd.h>\n\
+         #include <string.h>\n\
+         int main(void) { return environ != 0 ? (int)strlen(\"x\") : 0; }\n"
+            .to_string(),
+        Target::MacOSAarch64,
+        CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::MacOSAarch64,
+        None,
+    )
+    .expect("write executable");
+
+    // Walk LC_SYMTAB collecting (name, n_type). N_STAB=0xe0, N_TYPE=0x0e,
+    // N_SECT=0x0e, N_EXT=0x01.
+    const LC_SYMTAB: u32 = 2;
+    let ncmds = u32::from_le_bytes(exe[16..20].try_into().unwrap());
+    let mut p = 32usize;
+    let mut names: alloc::vec::Vec<(String, u8)> = alloc::vec::Vec::new();
+    for _ in 0..ncmds {
+        let cmd = u32::from_le_bytes(exe[p..p + 4].try_into().unwrap());
+        let cmdsize = u32::from_le_bytes(exe[p + 4..p + 8].try_into().unwrap()) as usize;
+        if cmd == LC_SYMTAB {
+            let symoff = u32::from_le_bytes(exe[p + 8..p + 12].try_into().unwrap()) as usize;
+            let nsyms = u32::from_le_bytes(exe[p + 12..p + 16].try_into().unwrap()) as usize;
+            let stroff = u32::from_le_bytes(exe[p + 16..p + 20].try_into().unwrap()) as usize;
+            for k in 0..nsyms {
+                let e = symoff + k * 16;
+                let n_strx = u32::from_le_bytes(exe[e..e + 4].try_into().unwrap()) as usize;
+                let n_type = exe[e + 4];
+                let s = stroff + n_strx;
+                let len = exe[s..].iter().position(|&b| b == 0).unwrap();
+                names.push((
+                    String::from_utf8_lossy(&exe[s..s + len]).into_owned(),
+                    n_type,
+                ));
+            }
+            break;
+        }
+        p += cmdsize;
+    }
+    // No local (N_SECT set, N_EXT clear) symbol named `environ`.
+    assert!(
+        !names
+            .iter()
+            .any(|(n, t)| n == "environ" && t & 0x0e == 0x0e && t & 0x01 == 0),
+        "data import `environ` must not get a bogus local text symbol: {names:?}"
+    );
+    // Its undefined import entry (`_environ`, N_SECT clear) survives.
+    assert!(
+        names.iter().any(|(n, t)| n == "_environ" && t & 0x0e == 0),
+        "data import must keep its undefined `_environ` entry: {names:?}"
+    );
+    // A real function import (`_strlen`) still gets its local text symbol.
+    assert!(
+        names
+            .iter()
+            .any(|(n, t)| n == "_strlen" && t & 0x0e == 0x0e && t & 0x01 == 0),
+        "a trampolined import must keep its local text symbol: {names:?}"
     );
 }

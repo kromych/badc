@@ -282,6 +282,19 @@ impl Compiler {
             if let Some(pp) = typedef_params {
                 self.symbols[id_idx].params = pp.types;
                 self.symbols[id_idx].is_variadic = pp.is_variadic;
+            } else if let Some((proto_fixed, proto_variadic)) = self.pending.typedef_fn_proto.take()
+            {
+                // `typedef RET (*NAME)(args)` at block scope: the
+                // declarator captured the pointee prototype. Record it
+                // as the file-scope branch does, so an indirect call
+                // through a variable of this typedef narrows arguments
+                // and routes a variadic tail per the host ABI.
+                self.symbols[id_idx].params = self
+                    .pending
+                    .fn_ptr_param_types
+                    .take()
+                    .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
+                self.symbols[id_idx].is_variadic = proto_variadic;
             }
             self.accept(',')?;
         }
@@ -333,7 +346,11 @@ impl Compiler {
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
+            // C99 6.7.6.2: a non-constant array dimension at block scope
+            // is a variable-length array.
+            self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            self.pending.vla_allowed = false;
             // C99 6.3.2.1p4: a function-pointer rvalue auto-decays
             // through any unary `*` chain. The `Symbol::fn_ptr_indirection`
             // side-channel records how many indirection levels sit between
@@ -477,6 +494,10 @@ impl Compiler {
         let mut block_symbols = Vec::new();
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
+        // C99 6.2.4p2: a VLA declared directly in this block has its
+        // storage reclaimed on block exit. Track whether any appears so
+        // the block is bracketed with the alloca-arena save / restore.
+        let mut block_has_vla = false;
         while self.lex.tk != '}' {
             // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
             // lead either a declaration or a statement at block scope.
@@ -501,7 +522,11 @@ impl Compiler {
             } else if self.lex_is_type_start() {
                 let item_before = self.ast_stmts_snapshot();
                 let sym_before = block_symbols.len();
+                let vla_before = self.func_vla_decls;
                 self.parse_block_local_decl(&mut block_symbols)?;
+                if self.func_vla_decls > vla_before {
+                    block_has_vla = true;
+                }
                 if leading_maybe_unused {
                     // C23 6.7.13.5: `[[maybe_unused]]` on a declaration
                     // suppresses the unused diagnostics for the names it
@@ -533,6 +558,24 @@ impl Compiler {
                 };
                 top_level_ids.push(item_id);
             }
+        }
+        // C99 6.2.4p2: bracket a VLA-declaring block so the arena top
+        // is snapshotted on entry and restored on exit, reclaiming the
+        // VLA storage (per iteration when the block is a loop body).
+        if block_has_vla {
+            let save_slot = self.reserve_slots(1);
+            let pos = self.ast_src_pos();
+            let enter = self
+                .ast
+                .push_stmt(super::super::ast::Stmt::VlaScopeEnter { save_slot }, pos);
+            let exit = self
+                .ast
+                .push_stmt(super::super::ast::Stmt::VlaScopeExit { save_slot }, pos);
+            let mut bracketed = alloc::vec::Vec::with_capacity(top_level_ids.len() + 2);
+            bracketed.push(enter);
+            bracketed.extend_from_slice(&top_level_ids);
+            bracketed.push(exit);
+            top_level_ids = bracketed;
         }
         // Wrap the collected top-level stmt ids into a
         // `Stmt::Compound`. Only this Compound references the
@@ -919,6 +962,10 @@ impl Compiler {
     }
 
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
+        self.with_nesting("statement", |c| c.stmt_inner())
+    }
+
+    fn stmt_inner(&mut self) -> Result<(), C5Error> {
         // Function-pointer callee parameters captured for a postfix
         // indirect call never span a statement: drop any left set by a
         // producer whose call did not consume them so they cannot reach an

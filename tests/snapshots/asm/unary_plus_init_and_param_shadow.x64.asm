@@ -68,8 +68,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	leaq	0x8(%rbx), %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	0x8(%rbx,%riz), %xmm0
                	movabsq	$0x3fe6666666666666, %rdi # imm = 0x3FE6666666666666
                	movq	%rdi, %xmm1
                	callq	<addr>
@@ -80,8 +79,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	leaq	0x10(%rbx), %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	0x10(%rbx,%riz), %xmm0
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
@@ -92,8 +90,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	leaq	0x18(%rbx), %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	0x18(%rbx,%riz), %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm1
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000

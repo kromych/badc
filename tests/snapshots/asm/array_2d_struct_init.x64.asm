@@ -26,8 +26,7 @@ Disassembly of section .text:
                	orq	%r10, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	0x18(%rax), %rcx
-               	movsd	(%rcx,%riz), %xmm0
+               	movsd	0x18(%rax,%riz), %xmm0
                	movl	$0x4, %ecx
                	cvtsi2sd	%rcx, %xmm1
                	ucomisd	%xmm1, %xmm0
@@ -42,8 +41,7 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	testq	%rsi, %rsi
                	jne	<addr>
-               	leaq	0x20(%rax), %rcx
-               	movsd	(%rcx,%riz), %xmm0
+               	movsd	0x20(%rax,%riz), %xmm0
                	movl	$0x5, %ecx
                	cvtsi2sd	%rcx, %xmm1
                	ucomisd	%xmm1, %xmm0
@@ -57,8 +55,7 @@ Disassembly of section .text:
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
-               	addq	$0x38, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	0x38(%rax,%riz), %xmm0
                	movl	$0x8, %eax
                	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
@@ -86,8 +83,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	addq	$0x78, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	0x78(%rax,%riz), %xmm0
                	movl	$0x8, %eax
                	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
@@ -102,8 +98,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	leaq	<rip>, %rax
-               	addq	$0x50, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	0x50(%rax,%riz), %xmm0
                	movl	$0x6, %eax
                	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
@@ -133,8 +128,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rax
                	movl	$0x10, %ecx
-               	addq	$0x38, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	0x38(%rax,%riz), %xmm0
                	cvtsi2sd	%rcx, %xmm1
                	ucomisd	%xmm1, %xmm0
                	setne	%al
@@ -148,8 +142,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	leaq	<rip>, %rax
-               	addq	$0x10, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	0x10(%rax,%riz), %xmm0
                	movl	$0xb, %eax
                	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
@@ -175,4 +168,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

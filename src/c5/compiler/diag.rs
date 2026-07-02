@@ -13,7 +13,7 @@ use super::super::error::C5Error;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, is_floating_scalar, is_pointer_ty, is_struct_ty, struct_ptr_depth,
+    UNSIGNED_BIT, VOLATILE_BIT, is_floating_scalar, is_pointer_ty, is_struct_ty, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -294,6 +294,28 @@ impl Compiler {
         }
     }
 
+    /// Bound one level of parser recursion. Every recursive cycle in
+    /// the grammar (expressions, constant expressions, declarators,
+    /// initializer lists, statements) passes through an entry wrapped
+    /// in this helper, so one counter bounds them all and
+    /// pathological nesting gets a diagnostic instead of exhausting
+    /// the native stack. C99 5.2.4.1 requires 63 nesting levels; the
+    /// bound stays well above any real source.
+    pub(super) fn with_nesting<T>(
+        &mut self,
+        construct: &'static str,
+        f: impl FnOnce(&mut Self) -> Result<T, C5Error>,
+    ) -> Result<T, C5Error> {
+        const MAX_NEST_DEPTH: usize = 1024;
+        if self.nest_depth >= MAX_NEST_DEPTH {
+            return Err(self.compile_err(alloc::format!("{construct} nesting too deep")));
+        }
+        self.nest_depth += 1;
+        let r = f(self);
+        self.nest_depth -= 1;
+        r
+    }
+
     /// Build a `C5Error::Compile` whose message follows the
     /// gcc / clang-shape convention everything else in this codebase
     /// uses for diagnostics:
@@ -341,6 +363,10 @@ impl Compiler {
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
     ) -> Option<&'static str> {
+        // C99 6.5.16.1p1: the target may add qualifiers; volatility
+        // never affects assignment compatibility.
+        let declared = declared & !VOLATILE_BIT;
+        let actual = actual & !VOLATILE_BIT;
         if declared == actual {
             return None;
         }
@@ -378,8 +404,9 @@ impl Compiler {
         // are all interchangeable here -- the compatibility rule
         // is "is this any kind of byte pointer?", not "do the
         // signedness tags line up".
-        let decl_is_char_ptr = decl_is_ptr && (declared & !UNSIGNED_BIT) == char_ptr;
-        let act_is_char_ptr = act_is_ptr && (actual & !UNSIGNED_BIT) == char_ptr;
+        let decl_is_char_ptr =
+            decl_is_ptr && (declared & !(UNSIGNED_BIT | VOLATILE_BIT)) == char_ptr;
+        let act_is_char_ptr = act_is_ptr && (actual & !(UNSIGNED_BIT | VOLATILE_BIT)) == char_ptr;
         if decl_is_char_ptr && act_is_ptr {
             return None;
         }

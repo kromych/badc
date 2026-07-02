@@ -33,8 +33,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    is_floating_ty, is_struct_ty, is_unsigned_ty, narrow_const_int, strip_unsigned, struct_id_of,
-    struct_ptr_depth,
+    UNSIGNED_BIT, integer_promote, is_floating_ty, is_pointer_ty, is_struct_ty, is_unsigned_ty,
+    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -45,20 +45,69 @@ use super::types::{
 /// conversions"). The integer-typed callers (array sizes, enums,
 /// bitfield widths, integer global inits) truncate via
 /// [`ConstVal::as_int`] at the boundary.
+///
+/// An integer value carries its C type tag so every operator can
+/// apply the 6.3.1.8 conversions at the right width and signedness
+/// (`0xFFFFFFFFFFFFFFFFULL / 3` divides unsigned; `-1 < 1u`
+/// compares at `unsigned int`). Invariant: `val` holds the value
+/// in `ty`'s representation -- sign-extended for a signed type,
+/// zero-extended for an unsigned type narrower than 8 bytes, raw
+/// bits for an unsigned 8-byte type.
 #[derive(Copy, Clone, Debug)]
 pub(super) enum ConstVal {
-    Int(i64),
+    Int { val: i64, ty: i64 },
     Float(f64),
 }
 
+/// Operator selector for [`Compiler::const_int_binop`], the single
+/// integer fold shared by every binary operator in the
+/// constant-expression grammar.
+#[derive(Copy, Clone, PartialEq)]
+enum ConstBinOp {
+    Or,
+    Xor,
+    And,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Shl,
+    Shr,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Eq,
+    Ne,
+}
+
 impl ConstVal {
+    /// An `int`-typed value: comparison and logical results, and
+    /// the other places C99 mandates `int`.
+    fn int(v: i64) -> ConstVal {
+        ConstVal::Int {
+            val: v,
+            ty: Ty::Int as i64,
+        }
+    }
+
     /// Coerce to an `i64`. Float values truncate toward zero, matching
     /// C's "cast to integer" semantics for the destination integer
     /// constant expression.
     pub(super) fn as_int(self) -> i64 {
         match self {
-            ConstVal::Int(v) => v,
+            ConstVal::Int { val, .. } => val,
             ConstVal::Float(v) => v as i64,
+        }
+    }
+
+    /// The C type tag of an integer value (`int` for a float a
+    /// caller coerces through [`Self::as_int`]).
+    fn int_ty(self) -> i64 {
+        match self {
+            ConstVal::Int { ty, .. } => ty,
+            ConstVal::Float(_) => Ty::Int as i64,
         }
     }
 
@@ -67,7 +116,7 @@ impl ConstVal {
     /// constant c5 currently lexes).
     pub(super) fn as_float(self) -> f64 {
         match self {
-            ConstVal::Int(v) => v as f64,
+            ConstVal::Int { val, .. } => val as f64,
             ConstVal::Float(v) => v,
         }
     }
@@ -79,13 +128,114 @@ impl ConstVal {
     /// True if the value is non-zero. Used by `&&`, `||`, `?:`, `!`.
     fn is_truthy(self) -> bool {
         match self {
-            ConstVal::Int(v) => v != 0,
+            ConstVal::Int { val, .. } => val != 0,
             ConstVal::Float(v) => v != 0.0,
         }
     }
 }
 
 impl Compiler {
+    /// Fold one integer binary operator per C99 6.3.1.8: both
+    /// operands convert to their common type and the operation runs
+    /// in that type's signedness, renormalized to its width. Shifts
+    /// take the promoted left-operand type instead (6.5.7p3).
+    /// Pointer-typed operands (string addresses, offsetof chains)
+    /// fold at full 64-bit width with no conversion. A zero divisor
+    /// in an evaluated operand is a compile error (6.6p4); signed
+    /// overflow wraps, matching the runtime lowering.
+    fn const_int_binop(
+        &self,
+        op: ConstBinOp,
+        l: ConstVal,
+        r: ConstVal,
+    ) -> Result<ConstVal, C5Error> {
+        use ConstBinOp as B;
+        let (a_ty, b_ty) = (l.int_ty(), r.int_ty());
+        let ptr = is_pointer_ty(a_ty) || is_pointer_ty(b_ty);
+        if matches!(op, B::Shl | B::Shr) {
+            let pty = if ptr {
+                Ty::LongLong as i64
+            } else {
+                integer_promote(a_ty)
+            };
+            let bytes = self.size_of_type(pty);
+            let uns = is_unsigned_ty(pty);
+            let lv = narrow_const_int(bytes, uns, false, l.as_int());
+            let sh = (r.as_int() & 63) as u32;
+            let v = if op == B::Shl {
+                (lv as u64).wrapping_shl(sh) as i64
+            } else if uns {
+                ((lv as u64) >> sh) as i64
+            } else {
+                lv.wrapping_shr(sh)
+            };
+            return Ok(ConstVal::Int {
+                val: narrow_const_int(bytes, uns, false, v),
+                ty: pty,
+            });
+        }
+        let common = if ptr {
+            Ty::LongLong as i64
+        } else {
+            usual_arith_common_ty(a_ty, b_ty, self.target)
+        };
+        let bytes = self.size_of_type(common);
+        let uns = is_unsigned_ty(common);
+        let lv = narrow_const_int(bytes, uns, false, l.as_int());
+        let rv = narrow_const_int(bytes, uns, false, r.as_int());
+        let val = match op {
+            B::Or => lv | rv,
+            B::Xor => lv ^ rv,
+            B::And => lv & rv,
+            B::Add => lv.wrapping_add(rv),
+            B::Sub => lv.wrapping_sub(rv),
+            B::Mul => lv.wrapping_mul(rv),
+            B::Div | B::Rem => {
+                if rv == 0 {
+                    if self.const_unevaluated == 0 {
+                        return Err(self.compile_err("division by zero in a constant expression"));
+                    }
+                    0
+                } else if uns {
+                    let (a, b) = (lv as u64, rv as u64);
+                    (if op == B::Rem { a % b } else { a / b }) as i64
+                } else if op == B::Rem {
+                    lv.wrapping_rem(rv)
+                } else {
+                    lv.wrapping_div(rv)
+                }
+            }
+            B::Lt | B::Le | B::Gt | B::Ge | B::Eq | B::Ne => {
+                let hold = if uns {
+                    let (a, b) = (lv as u64, rv as u64);
+                    match op {
+                        B::Lt => a < b,
+                        B::Le => a <= b,
+                        B::Gt => a > b,
+                        B::Ge => a >= b,
+                        B::Eq => a == b,
+                        _ => a != b,
+                    }
+                } else {
+                    match op {
+                        B::Lt => lv < rv,
+                        B::Le => lv <= rv,
+                        B::Gt => lv > rv,
+                        B::Ge => lv >= rv,
+                        B::Eq => lv == rv,
+                        _ => lv != rv,
+                    }
+                };
+                return Ok(ConstVal::int(hold as i64));
+            }
+            B::Shl | B::Shr => unreachable!(),
+        };
+        Ok(ConstVal::Int {
+            val: narrow_const_int(bytes, uns, false, val),
+            ty: common,
+        })
+    }
+
     /// Parse a constant integer expression at parse time. Used
     /// during declarator parsing where the value has to be known
     /// before any IR-building emit (array dimensions, bitfield
@@ -100,6 +250,51 @@ impl Compiler {
     /// under `-Wpedantic`).
     pub(super) fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
         Ok(self.parse_const_expr_cond_val()?.as_int())
+    }
+
+    /// Try to fold an array-declarator dimension to an integer
+    /// constant. Returns `Some(value)` for a constant dimension, or
+    /// `None` when the dimension is a non-constant expression (a C99
+    /// 6.7.6.2 variable-length array) -- in which case the lexer is
+    /// restored so the caller can re-parse the dimension as a runtime
+    /// expression.
+    pub(super) fn try_parse_constant_dim(&mut self) -> Result<Option<i64>, C5Error> {
+        let snap = self.lex.snapshot();
+        self.pending.const_expr_nonconst = false;
+        match self.parse_const_expr_cond_val() {
+            // Folded to a constant; the caller validates the trailing `]`.
+            Ok(v) => Ok(Some(v.as_int())),
+            // Non-constant operand -> a VLA dimension: rewind for the
+            // caller's runtime-expression parse.
+            Err(_) if self.pending.const_expr_nonconst => {
+                self.lex.restore(snap);
+                Ok(None)
+            }
+            // A genuine constant-expression error (division by zero, an
+            // overflowing shift, ...) is diagnosed, not treated as a VLA.
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Consume an array-declarator dimension up to (not including) the
+    /// matching `]`. Used for a variable-length array parameter, whose
+    /// size is discarded when the array is adjusted to a pointer (C99
+    /// 6.7.6.3p7); also absorbs the `[*]` unspecified-size form.
+    pub(super) fn skip_array_dimension_expr(&mut self) -> Result<(), C5Error> {
+        let mut depth: i64 = 0;
+        loop {
+            if self.lex.tk == Token::Brak {
+                depth += 1;
+            } else if self.lex.tk == ']' {
+                if depth == 0 {
+                    return Ok(());
+                }
+                depth -= 1;
+            } else if self.lex.tk == 0 {
+                return Err(self.compile_err("close bracket expected in array declarator"));
+            }
+            self.next()?;
+        }
     }
 
     /// Parse a C11 6.7.10 `_Static_assert(<const-int-expr>,
@@ -183,33 +378,54 @@ impl Compiler {
         let cond = self.parse_const_expr_or_val()?;
         if self.lex.tk == Token::Cond {
             self.next()?;
-            let then_val = self.parse_const_expr_or_val()?;
+            // Both arms are parsed (their tokens must be consumed)
+            // but the not-taken arm is unevaluated per C99 6.5.15,
+            // so a zero divisor there must not diagnose.
+            let taken = cond.is_truthy();
+            let then_val = self.parse_const_unevaluated(!taken, Self::parse_const_expr_or_val)?;
             if self.lex.tk != ':' {
                 return Err(self.compile_err("`:` expected in conditional constant expression"));
             }
             self.next()?;
-            let else_val = self.parse_const_expr_cond_val()?;
-            Ok(if cond.is_truthy() { then_val } else { else_val })
+            let else_val = self.parse_const_unevaluated(taken, Self::parse_const_expr_cond_val)?;
+            Ok(if taken { then_val } else { else_val })
         } else {
             Ok(cond)
         }
+    }
+
+    /// Run `rule` with the unevaluated-operand depth raised when
+    /// `unevaluated` holds, so C99 6.6p4 zero-divisor diagnostics
+    /// stay scoped to evaluated operands.
+    fn parse_const_unevaluated(
+        &mut self,
+        unevaluated: bool,
+        rule: fn(&mut Self) -> Result<ConstVal, C5Error>,
+    ) -> Result<ConstVal, C5Error> {
+        if unevaluated {
+            self.const_unevaluated += 1;
+        }
+        let r = rule(self);
+        if unevaluated {
+            self.const_unevaluated -= 1;
+        }
+        r
     }
 
     pub(super) fn parse_const_expr_or_val(&mut self) -> Result<ConstVal, C5Error> {
         let mut left = self.parse_const_expr_and_val()?;
         while self.lex.tk == Token::Lor {
             self.next()?;
-            let right = self.parse_const_expr_and_val()?;
-            // Short-circuit semantics aren't observable at parse
-            // time -- the right operand was already consumed by
-            // the recursive call -- but the result still has C99's
-            // `int 0 | 1` shape.
+            // The right operand's tokens are always consumed, but a
+            // short-circuited operand is unevaluated (C99 6.5.14).
+            let right =
+                self.parse_const_unevaluated(left.is_truthy(), Self::parse_const_expr_and_val)?;
             let r = if left.is_truthy() || right.is_truthy() {
                 1
             } else {
                 0
             };
-            left = ConstVal::Int(r);
+            left = ConstVal::int(r);
         }
         Ok(left)
     }
@@ -218,13 +434,14 @@ impl Compiler {
         let mut left = self.parse_const_expr_bitor_val()?;
         while self.lex.tk == Token::Lan {
             self.next()?;
-            let right = self.parse_const_expr_bitor_val()?;
+            let right =
+                self.parse_const_unevaluated(!left.is_truthy(), Self::parse_const_expr_bitor_val)?;
             let r = if left.is_truthy() && right.is_truthy() {
                 1
             } else {
                 0
             };
-            left = ConstVal::Int(r);
+            left = ConstVal::int(r);
         }
         Ok(left)
     }
@@ -234,7 +451,7 @@ impl Compiler {
         while self.lex.tk == Token::OrOp {
             self.next()?;
             let right = self.parse_const_expr_xor_val()?;
-            left = ConstVal::Int(left.as_int() | right.as_int());
+            left = self.const_int_binop(ConstBinOp::Or, left, right)?;
         }
         Ok(left)
     }
@@ -244,7 +461,7 @@ impl Compiler {
         while self.lex.tk == Token::XorOp {
             self.next()?;
             let right = self.parse_const_expr_bitand_val()?;
-            left = ConstVal::Int(left.as_int() ^ right.as_int());
+            left = self.const_int_binop(ConstBinOp::Xor, left, right)?;
         }
         Ok(left)
     }
@@ -254,7 +471,7 @@ impl Compiler {
         while self.lex.tk == Token::AndOp {
             self.next()?;
             let right = self.parse_const_expr_eq_val()?;
-            left = ConstVal::Int(left.as_int() & right.as_int());
+            left = self.const_int_binop(ConstBinOp::And, left, right)?;
         }
         Ok(left)
     }
@@ -262,27 +479,21 @@ impl Compiler {
     fn parse_const_expr_eq_val(&mut self) -> Result<ConstVal, C5Error> {
         let mut left = self.parse_const_expr_rel_val()?;
         loop {
-            if self.lex.tk == Token::EqOp {
-                self.next()?;
-                let r = self.parse_const_expr_rel_val()?;
-                let eq = if left.is_float() || r.is_float() {
-                    left.as_float() == r.as_float()
-                } else {
-                    left.as_int() == r.as_int()
-                };
-                left = ConstVal::Int(eq as i64);
+            let op = if self.lex.tk == Token::EqOp {
+                ConstBinOp::Eq
             } else if self.lex.tk == Token::NeOp {
-                self.next()?;
-                let r = self.parse_const_expr_rel_val()?;
-                let ne = if left.is_float() || r.is_float() {
-                    left.as_float() != r.as_float()
-                } else {
-                    left.as_int() != r.as_int()
-                };
-                left = ConstVal::Int(ne as i64);
+                ConstBinOp::Ne
             } else {
                 break;
-            }
+            };
+            self.next()?;
+            let r = self.parse_const_expr_rel_val()?;
+            left = if left.is_float() || r.is_float() {
+                let eq = left.as_float() == r.as_float();
+                ConstVal::int((if op == ConstBinOp::Eq { eq } else { !eq }) as i64)
+            } else {
+                self.const_int_binop(op, left, r)?
+            };
         }
         Ok(left)
     }
@@ -291,39 +502,31 @@ impl Compiler {
         let mut left = self.parse_const_expr_shift_val()?;
         loop {
             let op = if self.lex.tk == Token::LtOp {
-                Some('<')
+                ConstBinOp::Lt
             } else if self.lex.tk == Token::LeOp {
-                Some('l')
+                ConstBinOp::Le
             } else if self.lex.tk == Token::GtOp {
-                Some('>')
+                ConstBinOp::Gt
             } else if self.lex.tk == Token::GeOp {
-                Some('g')
+                ConstBinOp::Ge
             } else {
-                None
+                break;
             };
-            let Some(op) = op else { break };
             self.next()?;
             let r = self.parse_const_expr_shift_val()?;
-            let b = if left.is_float() || r.is_float() {
+            left = if left.is_float() || r.is_float() {
                 let lf = left.as_float();
                 let rf = r.as_float();
-                match op {
-                    '<' => lf < rf,
-                    'l' => lf <= rf,
-                    '>' => lf > rf,
+                let b = match op {
+                    ConstBinOp::Lt => lf < rf,
+                    ConstBinOp::Le => lf <= rf,
+                    ConstBinOp::Gt => lf > rf,
                     _ => lf >= rf,
-                }
+                };
+                ConstVal::int(b as i64)
             } else {
-                let li = left.as_int();
-                let ri = r.as_int();
-                match op {
-                    '<' => li < ri,
-                    'l' => li <= ri,
-                    '>' => li > ri,
-                    _ => li >= ri,
-                }
+                self.const_int_binop(op, left, r)?
             };
-            left = ConstVal::Int(b as i64);
         }
         Ok(left)
     }
@@ -331,17 +534,16 @@ impl Compiler {
     fn parse_const_expr_shift_val(&mut self) -> Result<ConstVal, C5Error> {
         let mut left = self.parse_const_expr_add_val()?;
         loop {
-            if self.lex.tk == Token::ShlOp {
-                self.next()?;
-                let r = self.parse_const_expr_add_val()?;
-                left = ConstVal::Int(left.as_int() << r.as_int());
+            let op = if self.lex.tk == Token::ShlOp {
+                ConstBinOp::Shl
             } else if self.lex.tk == Token::ShrOp {
-                self.next()?;
-                let r = self.parse_const_expr_add_val()?;
-                left = ConstVal::Int(left.as_int() >> r.as_int());
+                ConstBinOp::Shr
             } else {
                 break;
-            }
+            };
+            self.next()?;
+            let r = self.parse_const_expr_add_val()?;
+            left = self.const_int_binop(op, left, r)?;
         }
         Ok(left)
     }
@@ -367,7 +569,7 @@ impl Compiler {
                 left = if left.is_float() || r.is_float() {
                     ConstVal::Float(left.as_float() + r.as_float())
                 } else {
-                    ConstVal::Int(left.as_int().wrapping_add(r.as_int()))
+                    self.const_int_binop(ConstBinOp::Add, left, r)?
                 };
             } else if self.lex.tk == Token::SubOp {
                 self.next()?;
@@ -375,7 +577,7 @@ impl Compiler {
                 left = if left.is_float() || r.is_float() {
                     ConstVal::Float(left.as_float() - r.as_float())
                 } else {
-                    ConstVal::Int(left.as_int().wrapping_sub(r.as_int()))
+                    self.const_int_binop(ConstBinOp::Sub, left, r)?
                 };
             } else {
                 break;
@@ -397,7 +599,7 @@ impl Compiler {
                 left = if left.is_float() || r.is_float() {
                     ConstVal::Float(left.as_float() * r.as_float())
                 } else {
-                    ConstVal::Int(left.as_int().wrapping_mul(r.as_int()))
+                    self.const_int_binop(ConstBinOp::Mul, left, r)?
                 };
             } else if self.lex.tk == Token::DivOp {
                 self.next()?;
@@ -408,18 +610,14 @@ impl Compiler {
                     // for 0.0/0.0, not a fold to zero.
                     ConstVal::Float(left.as_float() / r.as_float())
                 } else {
-                    let ri = r.as_int();
-                    let v = if ri == 0 { 0 } else { left.as_int() / ri };
-                    ConstVal::Int(v)
+                    self.const_int_binop(ConstBinOp::Div, left, r)?
                 };
             } else if self.lex.tk == Token::ModOp {
                 // C99 6.5.5: `%` requires integer operands. Coerce
-                // both sides through `as_int` and operate on i64.
+                // both sides through `as_int` and fold as integers.
                 self.next()?;
                 let r = self.parse_const_expr_unary_val()?;
-                let ri = r.as_int();
-                let v = if ri == 0 { 0 } else { left.as_int() % ri };
-                left = ConstVal::Int(v);
+                left = self.const_int_binop(ConstBinOp::Rem, left, r)?;
             } else {
                 break;
             }
@@ -427,11 +625,36 @@ impl Compiler {
         Ok(left)
     }
 
+    /// Renormalize a unary integer result to the operand's promoted
+    /// type (C99 6.5.3.3: `-` and `~` apply the integer promotions
+    /// and yield the promoted type). Pointer-typed operands keep
+    /// their full-width value.
+    fn const_unary_promoted(&self, v: i64, operand_ty: i64) -> ConstVal {
+        if is_pointer_ty(operand_ty) {
+            return ConstVal::Int {
+                val: v,
+                ty: operand_ty,
+            };
+        }
+        let pty = integer_promote(operand_ty);
+        ConstVal::Int {
+            val: narrow_const_int(self.size_of_type(pty), is_unsigned_ty(pty), false, v),
+            ty: pty,
+        }
+    }
+
     pub(super) fn parse_const_expr_unary_val(&mut self) -> Result<ConstVal, C5Error> {
+        // Every recursive cycle in the constant-expression grammar
+        // (parentheses, ternary arms, unary chains) passes through
+        // here, so this one guard bounds the whole cascade.
+        self.with_nesting("expression", |c| c.parse_const_expr_unary_val_inner())
+    }
+
+    fn parse_const_expr_unary_val_inner(&mut self) -> Result<ConstVal, C5Error> {
         if self.lex.tk == Token::SubOp {
             self.next()?;
             return Ok(match self.parse_const_expr_unary_val()? {
-                ConstVal::Int(v) => ConstVal::Int(v.wrapping_neg()),
+                ConstVal::Int { val, ty } => self.const_unary_promoted(val.wrapping_neg(), ty),
                 ConstVal::Float(v) => ConstVal::Float(-v),
             });
         }
@@ -442,31 +665,54 @@ impl Compiler {
         if self.lex.tk == '!' {
             self.next()?;
             let v = self.parse_const_expr_unary_val()?;
-            return Ok(ConstVal::Int(if v.is_truthy() { 0 } else { 1 }));
+            return Ok(ConstVal::int(if v.is_truthy() { 0 } else { 1 }));
         }
         if self.lex.tk == '~' {
             self.next()?;
-            let v = self.parse_const_expr_unary_val()?.as_int();
-            return Ok(ConstVal::Int(!v));
+            let v = self.parse_const_expr_unary_val()?;
+            return Ok(self.const_unary_promoted(!v.as_int(), v.int_ty()));
         }
         if self.lex.tk == Token::AndOp {
-            return Ok(ConstVal::Int(self.parse_const_offsetof()?));
+            // Address constant: full-width, no arithmetic conversion.
+            let v = self.parse_const_offsetof()?;
+            return Ok(ConstVal::Int {
+                val: v,
+                ty: Ty::Ptr as i64,
+            });
         }
         if self.lex.tk == Token::Sizeof {
             // Shared sizeof operand parser handles all three
             // shapes (type-name, bare identifier, general
             // expression). Constant-expression context just
-            // returns the byte count directly.
+            // returns the byte count, typed `size_t` (C99 6.5.3.4p4).
             self.next()?;
-            return Ok(ConstVal::Int(self.sizeof_operand_bytes()?));
+            let v = self.sizeof_operand_bytes()?;
+            return Ok(ConstVal::Int {
+                val: v,
+                ty: self.size_t_ty(),
+            });
         }
         if self.lex.tk == Token::Alignof {
             // C11 6.5.3.4: `_Alignof ( type-name )` is a constant
-            // expression; return the alignment directly.
+            // expression; the result is `size_t`.
             self.next()?;
-            return Ok(ConstVal::Int(self.alignof_operand_bytes()?));
+            let v = self.alignof_operand_bytes()?;
+            return Ok(ConstVal::Int {
+                val: v,
+                ty: self.size_t_ty(),
+            });
         }
         self.parse_const_expr_primary_val()
+    }
+
+    /// The `size_t` type tag: `unsigned long` on LP64,
+    /// `unsigned long long` on LLP64.
+    fn size_t_ty(&self) -> i64 {
+        if self.target.is_windows() {
+            Ty::LongLong as i64 | UNSIGNED_BIT
+        } else {
+            Ty::Long as i64 | UNSIGNED_BIT
+        }
     }
 
     /// Recognise the GCC-style `offsetof` expansion in a constant
@@ -668,12 +914,15 @@ impl Compiler {
                     // targets are 8 bytes and keep the full value.
                     let bytes = self.size_of_type(target_ty);
                     let is_bool = strip_unsigned(target_ty) == Ty::Bool as i64;
-                    ConstVal::Int(narrow_const_int(
-                        bytes,
-                        is_unsigned_ty(target_ty),
-                        is_bool,
-                        v.as_int(),
-                    ))
+                    ConstVal::Int {
+                        val: narrow_const_int(
+                            bytes,
+                            is_unsigned_ty(target_ty),
+                            is_bool,
+                            v.as_int(),
+                        ),
+                        ty: target_ty,
+                    }
                 });
             }
             let v = self.parse_const_expr_cond_val()?;
@@ -684,9 +933,12 @@ impl Compiler {
             return Ok(v);
         }
         if self.lex.tk == Token::Num {
+            // Type the literal per C99 6.4.4.1p5 (suffix + magnitude)
+            // before `next()` resets the lexer's suffix fields.
             let v = self.lex.ival;
+            let ty = self.literal_auto_promoted_type(v);
             self.next()?;
-            return Ok(ConstVal::Int(v));
+            return Ok(ConstVal::Int { val: v, ty });
         }
         if self.lex.tk == '"' {
             // String literal in a constant expression -- evaluates
@@ -701,7 +953,10 @@ impl Compiler {
                 self.next()?;
             }
             self.data.push(0);
-            return Ok(ConstVal::Int(addr));
+            return Ok(ConstVal::Int {
+                val: addr,
+                ty: Ty::Ptr as i64,
+            });
         }
         if self.lex.tk == Token::FloatNum {
             // Floating literal -- the lexer staged the f64 bit
@@ -718,15 +973,27 @@ impl Compiler {
         }
         if self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
         {
+            // Enumeration constants have type `int` (C99 6.7.2.2p3);
+            // a value past `int`'s range (accepted as an extension)
+            // keeps 64-bit rank so arithmetic doesn't truncate it.
             let v = self.symbols[self.lex.curr_id_idx].val;
             self.next()?;
-            return Ok(ConstVal::Int(v));
+            let ty = if v as i32 as i64 == v {
+                Ty::Int as i64
+            } else {
+                Ty::LongLong as i64
+            };
+            return Ok(ConstVal::Int { val: v, ty });
         }
         let id_suffix = if self.lex.tk == Token::Id {
             format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
         } else {
             alloc::string::String::new()
         };
+        // Reached a non-constant operand rather than a malformed
+        // constant: the array-declarator reads this to tell a C99
+        // 6.7.6.2 VLA dimension apart from a constant-expression error.
+        self.pending.const_expr_nonconst = true;
         Err(self.compile_err(format!(
             "constant integer expected (got {}{id_suffix})",
             super::super::token::describe(self.lex.tk),

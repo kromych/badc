@@ -59,6 +59,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0xaabbccdd, %eax       # imm = 0xAABBCCDD
+               	movl	%eax, -0x8(%rbp)
+               	movl	-0x8(%rbp), %eax
                	movq	%rax, %rcx
                	andq	$0xff, %rcx
                	shlq	$0x18, %rcx
@@ -105,4 +107,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

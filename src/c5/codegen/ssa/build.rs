@@ -540,10 +540,16 @@ impl SsaBuilder {
     /// 6.3.1.8); tag it f32 so the codegen keeps it in the s-view of an
     /// FP register without a widening conversion.
     pub(crate) fn load(&mut self, addr: ValueId, kind: LoadKind) -> ValueId {
+        self.load_vol(addr, kind, false)
+    }
+
+    /// [`Self::load`] with an explicit volatile mark (C99 6.7.3p6).
+    pub(crate) fn load_vol(&mut self, addr: ValueId, kind: LoadKind, volatile: bool) -> ValueId {
         let v = self.push(Inst::Load {
             addr,
             disp: 0,
             kind,
+            volatile,
         });
         if matches!(kind, LoadKind::F32) {
             self.mark_f32(v);
@@ -558,12 +564,24 @@ impl SsaBuilder {
     /// alias a local whose address escaped earlier; drop every
     /// CSE entry so a later `load_local` re-reads the slot.
     pub(crate) fn store(&mut self, addr: ValueId, value: ValueId, kind: StoreKind) -> ValueId {
+        self.store_vol(addr, value, kind, false)
+    }
+
+    /// [`Self::store`] with an explicit volatile mark (C99 6.7.3p6).
+    pub(crate) fn store_vol(
+        &mut self,
+        addr: ValueId,
+        value: ValueId,
+        kind: StoreKind,
+        volatile: bool,
+    ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Store {
             addr,
             disp: 0,
             value,
             kind,
+            volatile,
         })
     }
 
@@ -575,23 +593,39 @@ impl SsaBuilder {
     /// instructions; the codegen drops one local-slot load per
     /// match.
     pub(crate) fn load_local(&mut self, off: i64, kind: LoadKind) -> ValueId {
-        for entry in &self.local_cache {
-            if entry.off == off && entry.kind == kind {
-                return entry.value;
+        self.load_local_vol(off, kind, false)
+    }
+
+    /// [`Self::load_local`] with an explicit volatile mark. A volatile
+    /// load bypasses the CSE cache both ways: it never reuses a cached
+    /// value and never seeds one, so every source-level read performs
+    /// a memory access (C99 5.1.2.3p2).
+    pub(crate) fn load_local_vol(&mut self, off: i64, kind: LoadKind, volatile: bool) -> ValueId {
+        if !volatile {
+            for entry in &self.local_cache {
+                if entry.off == off && entry.kind == kind {
+                    return entry.value;
+                }
             }
         }
-        let v = self.push(Inst::LoadLocal { off, kind });
+        let v = self.push(Inst::LoadLocal {
+            off,
+            kind,
+            volatile,
+        });
         // A `float`-typed local load is single precision (C99 6.3.1.8);
         // tag it f32 so the codegen keeps it in the s-view of an FP
         // register without a widening conversion.
         if matches!(kind, LoadKind::F32) {
             self.mark_f32(v);
         }
-        self.local_cache.push(LocalCacheEntry {
-            off,
-            kind,
-            value: v,
-        });
+        if !volatile {
+            self.local_cache.push(LocalCacheEntry {
+                off,
+                kind,
+                value: v,
+            });
+        }
         v
     }
 
@@ -605,8 +639,24 @@ impl SsaBuilder {
     /// load would be safe, but special-casing it isn't worth the
     /// surface area; the next `load_local` simply re-emits.
     pub(crate) fn store_local(&mut self, off: i64, value: ValueId, kind: StoreKind) -> ValueId {
+        self.store_local_vol(off, value, kind, false)
+    }
+
+    /// [`Self::store_local`] with an explicit volatile mark.
+    pub(crate) fn store_local_vol(
+        &mut self,
+        off: i64,
+        value: ValueId,
+        kind: StoreKind,
+        volatile: bool,
+    ) -> ValueId {
         self.local_cache.retain(|e| e.off != off);
-        self.push(Inst::StoreLocal { off, value, kind })
+        self.push(Inst::StoreLocal {
+            off,
+            value,
+            kind,
+            volatile,
+        })
     }
 
     /// `Inst::Binop`. In-block CSE: a prior `binop(op, lhs, rhs)`

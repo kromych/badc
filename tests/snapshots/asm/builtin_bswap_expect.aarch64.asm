@@ -68,6 +68,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0xccdd             // =52445
                	movk	x0, #0xaabb, lsl #16
+               	stur	w0, [x29, #-0x8]
+               	ldur	w0, [x29, #-0x8]
                	mov	x17, #0xff              // =255
                	and	x1, x0, x17
                	lsl	x1, x1, #24

@@ -90,6 +90,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("assert.h", include_str!("../../headers/include/assert.h")),
     ("time.h", include_str!("../../headers/include/time.h")),
     ("utime.h", include_str!("../../headers/include/utime.h")),
+    (
+        "sys/utime.h",
+        include_str!("../../headers/include/sys/utime.h"),
+    ),
     ("netdb.h", include_str!("../../headers/include/netdb.h")),
     (
         "sys/utsname.h",
@@ -131,6 +135,26 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("sys/un.h", include_str!("../../headers/include/sys/un.h")),
     ("net/if.h", include_str!("../../headers/include/net/if.h")),
     (
+        "net/ethernet.h",
+        include_str!("../../headers/include/net/ethernet.h"),
+    ),
+    (
+        "sys/file.h",
+        include_str!("../../headers/include/sys/file.h"),
+    ),
+    (
+        "sys/cdefs.h",
+        include_str!("../../headers/include/sys/cdefs.h"),
+    ),
+    (
+        "CoreFoundation/CoreFoundation.h",
+        include_str!("../../headers/include/CoreFoundation/CoreFoundation.h"),
+    ),
+    (
+        "SystemConfiguration/SCDynamicStoreCopySpecific.h",
+        include_str!("../../headers/include/SystemConfiguration/SCDynamicStoreCopySpecific.h"),
+    ),
+    (
         "sys/attr.h",
         include_str!("../../headers/include/sys/attr.h"),
     ),
@@ -163,8 +187,28 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/mach/mach.h"),
     ),
     (
+        "mach/task.h",
+        include_str!("../../headers/include/mach/task.h"),
+    ),
+    (
+        "sysexits.h",
+        include_str!("../../headers/include/sysexits.h"),
+    ),
+    (
+        "sys/sys_domain.h",
+        include_str!("../../headers/include/sys/sys_domain.h"),
+    ),
+    (
+        "sys/sysctl.h",
+        include_str!("../../headers/include/sys/sysctl.h"),
+    ),
+    (
         "mach-o/dyld.h",
         include_str!("../../headers/include/mach-o/dyld.h"),
+    ),
+    (
+        "mach-o/loader.h",
+        include_str!("../../headers/include/mach-o/loader.h"),
     ),
     (
         "sys/stat.h",
@@ -188,6 +232,38 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     (
         "linux/random.h",
         include_str!("../../headers/include/linux/random.h"),
+    ),
+    (
+        "linux/auxvec.h",
+        include_str!("../../headers/include/linux/auxvec.h"),
+    ),
+    (
+        "linux/fs.h",
+        include_str!("../../headers/include/linux/fs.h"),
+    ),
+    (
+        "linux/sched.h",
+        include_str!("../../headers/include/linux/sched.h"),
+    ),
+    (
+        "linux/wait.h",
+        include_str!("../../headers/include/linux/wait.h"),
+    ),
+    (
+        "linux/memfd.h",
+        include_str!("../../headers/include/linux/memfd.h"),
+    ),
+    (
+        "linux/limits.h",
+        include_str!("../../headers/include/linux/limits.h"),
+    ),
+    (
+        "sys/auxv.h",
+        include_str!("../../headers/include/sys/auxv.h"),
+    ),
+    (
+        "sys/pidfd.h",
+        include_str!("../../headers/include/sys/pidfd.h"),
     ),
     ("pty.h", include_str!("../../headers/include/pty.h")),
     ("utmp.h", include_str!("../../headers/include/utmp.h")),
@@ -264,7 +340,46 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/semaphore.h"),
     ),
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
+    ("fenv.h", include_str!("../../headers/include/fenv.h")),
+    ("io.h", include_str!("../../headers/include/io.h")),
+    ("direct.h", include_str!("../../headers/include/direct.h")),
+    ("intrin.h", include_str!("../../headers/include/intrin.h")),
+    ("bcrypt.h", include_str!("../../headers/include/bcrypt.h")),
+    (
+        "TargetConditionals.h",
+        include_str!("../../headers/include/TargetConditionals.h"),
+    ),
+    (
+        "AvailabilityMacros.h",
+        include_str!("../../headers/include/AvailabilityMacros.h"),
+    ),
+    ("os/log.h", include_str!("../../headers/include/os/log.h")),
+    ("os/lock.h", include_str!("../../headers/include/os/lock.h")),
+    (
+        "crt_externs.h",
+        include_str!("../../headers/include/crt_externs.h"),
+    ),
     ("windows.h", include_str!("../../headers/include/windows.h")),
+    ("winbase.h", include_str!("../../headers/include/winbase.h")),
+    (
+        "winioctl.h",
+        include_str!("../../headers/include/winioctl.h"),
+    ),
+    ("pathcch.h", include_str!("../../headers/include/pathcch.h")),
+    ("psapi.h", include_str!("../../headers/include/psapi.h")),
+    (
+        "versionhelpers.h",
+        include_str!("../../headers/include/versionhelpers.h"),
+    ),
+    ("crtdbg.h", include_str!("../../headers/include/crtdbg.h")),
+    ("aclapi.h", include_str!("../../headers/include/aclapi.h")),
+    ("lmcons.h", include_str!("../../headers/include/lmcons.h")),
+    ("sddl.h", include_str!("../../headers/include/sddl.h")),
+    ("shlwapi.h", include_str!("../../headers/include/shlwapi.h")),
+    (
+        "sys/locking.h",
+        include_str!("../../headers/include/sys/locking.h"),
+    ),
     (
         "wincrypt.h",
         include_str!("../../headers/include/wincrypt.h"),

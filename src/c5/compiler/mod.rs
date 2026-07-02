@@ -214,6 +214,12 @@ pub struct CompileOptions {
     /// most but not all of the GNU C surface, so it claims `__GNUC__`
     /// only when the caller opts in.
     pub gnu: bool,
+    /// Function names an undeclared call may bind as a C89 6.3.2.2
+    /// implicit `extern int name();` instead of triggering the
+    /// auto-include retry. The driver fills this in a multi-TU build
+    /// for auto-included names another input defines, so the user's
+    /// definition wins over the header's library binding.
+    pub implicit_extern_fns: Vec<String>,
 }
 
 impl CompileOptions {
@@ -273,6 +279,12 @@ impl CompileOptions {
         self.no_entry_point = on;
         self
     }
+    /// Replace the implicit-extern function-name list. See
+    /// [`Self::implicit_extern_fns`].
+    pub fn with_implicit_extern_fns(mut self, names: Vec<String>) -> Self {
+        self.implicit_extern_fns = names;
+        self
+    }
 }
 
 /// Ephemeral side-channel state passed between parser layers --
@@ -283,6 +295,12 @@ impl CompileOptions {
 /// function-pointer chain-depth tracker into one carrier so the
 /// `Compiler` field list reads as "lexer + symbols + codegen
 /// output + transient state" instead of eleven loose fields.
+/// Sentinel `array_size` for a C99 6.7.6.2 variable-length array
+/// declarator: distinct from `0` (scalar), `> 0` (constant array),
+/// and `-1` (deferred / flexible `T x[]`). The dimension expression
+/// rides on `Pending::vla_dim_expr`.
+pub(in crate::c5::compiler) const VLA_ARRAY_SIZE: i64 = -2;
+
 #[derive(Debug)]
 pub(in crate::c5::compiler) struct Pending {
     /// Side channel from the base-type parsers
@@ -416,6 +434,26 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array length. Cleared by every base-type parse
     /// (`0` means "not from an array typedef").
     pub typedef_base_array_size: i64,
+    /// Set true while parsing a block-scope object declarator, where
+    /// a non-constant array dimension is a C99 6.7.6.2 variable-length
+    /// array. Elsewhere (file scope, struct member, typedef, cast,
+    /// sizeof) a non-constant dimension is a constraint violation.
+    pub vla_allowed: bool,
+    /// The declarator's parsed VLA dimension expression, set when the
+    /// leading `[expr]` was non-constant and `vla_allowed`. `None` for
+    /// a constant-dimension array. Consumed by the local-decl site.
+    pub vla_dim_expr: Option<crate::c5::ast::ExprId>,
+    /// Set by `sizeof_operand_bytes` to the VLA's runtime-byte-count
+    /// slot when the operand is a variable-length array (C99
+    /// 6.5.3.4p2); the `sizeof` site then emits a runtime load instead
+    /// of a constant. `None` for a constant-size operand.
+    pub sizeof_vla_size_slot: Option<i64>,
+    /// Set by the constant-expression evaluator when it fails because it
+    /// reached a non-constant operand (a runtime identifier, call, ...),
+    /// as opposed to a malformed constant (division by zero, ...). Lets
+    /// the array-declarator distinguish a C99 6.7.6.2 VLA dimension from
+    /// a genuine constant-expression error that must be diagnosed.
+    pub const_expr_nonconst: bool,
     /// Binding-site carrier for a function-pointer typedef's
     /// prototype: `Some((fixed_param_count, is_variadic))` when the
     /// base type was a typedef whose alias is a function-pointer
@@ -580,6 +618,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// skip to mark the declared locals so their unused-variable
     /// diagnostics are suppressed.
     pub attr_maybe_unused: bool,
+    /// Requested object alignment from `_Alignas(N)` /
+    /// `__attribute__((aligned(N)))` / `__declspec(align(N))`, 0 when
+    /// absent. The declaration parse takes it: file-scope objects
+    /// honor up to 16, anything larger (or an automatic object above
+    /// the 8-byte slot alignment) is a diagnostic, never silent.
+    pub attr_align: i64,
     /// A consumed `__declspec(thread)`. Read by the declaration parse to mark
     /// the declared object thread-local (the storage class `_Thread_local`
     /// reaches the same flag through the keyword path).
@@ -605,6 +649,10 @@ impl Default for Pending {
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
+            vla_allowed: false,
+            vla_dim_expr: None,
+            sizeof_vla_size_slot: None,
+            const_expr_nonconst: false,
             typedef_fn_proto: None,
             fn_ptr_param_types: None,
             indirect_callee_params: None,
@@ -625,6 +673,7 @@ impl Default for Pending {
             last_imm_was_zero: false,
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
+            attr_align: 0,
             attr_thread_local: false,
             attr_dllexport: false,
         }
@@ -682,6 +731,13 @@ pub struct Compiler {
     /// definition.
     uses_alloca_in_current_fn: bool,
 
+    /// Count of C99 6.7.6.2 variable-length arrays declared so far in
+    /// the current function. Snapshotted around a block's declarations
+    /// so `parse_block_stmt` knows whether to bracket the block with
+    /// the alloca-arena save / restore that reclaims VLA storage on
+    /// exit. Reset on each new function definition.
+    func_vla_decls: usize,
+
     /// True when the most recent decl-spec parse consumed an
     /// `inline` / `__inline` / `__inline__` keyword. Captured at
     /// function-symbol commit time onto `FinishedFunction::is_inline`
@@ -694,6 +750,13 @@ pub struct Compiler {
     /// commit time onto `Symbol::is_noreturn` and reset after, so it
     /// scopes to the immediately following declarator only.
     pending_noreturn: bool,
+
+    /// Nesting depth of unevaluated constant-expression operands
+    /// (short-circuited `&&` / `||` right sides and not-taken `?:`
+    /// arms). C99 6.6p4 forbids a zero divisor in a constant
+    /// expression, but an unevaluated operand must not trigger the
+    /// diagnostic (`1 ? 2 : 1/0` is accepted by gcc / clang).
+    const_unevaluated: u32,
 
     /// Per-function AST. The arena is reset at every function
     /// entry; the SSA walker reads from these snapshots at codegen
@@ -775,6 +838,12 @@ pub struct Compiler {
     /// Number of currently-open `continue`-eligible scopes
     /// (loops only; `switch` doesn't open one).
     loop_continue_depth: usize,
+    /// Recursion depth shared by the recursive-descent entry points
+    /// (statements, expressions, constant expressions, declarators,
+    /// initializer lists). Bounded by `MAX_NEST_DEPTH` via
+    /// `with_nesting` so pathological nesting is diagnosed instead
+    /// of exhausting the native stack.
+    nest_depth: usize,
     /// Linear table of `(label_name, text_pc)`. Per-function (cleared
     /// at every function start), so it stays small -- typically 0-2
     /// entries even in code that uses `goto`. Linear scan beats
@@ -848,10 +917,9 @@ pub struct Compiler {
     /// the .tls$ callback chain on Win64). Each `_Thread_local`
     /// global gets `slots_of_type(ty) * 8` bytes here, with
     /// `Symbol::val` holding the byte offset within `tls_data`.
-    /// Today we don't parse TLS initialisers, so the segment is
-    /// always zero-filled and goes entirely into .tbss; the layout
-    /// leaves room for a future "initialised TLS image -> .tdata"
-    /// path.
+    /// A `_Thread_local int x = 5;` initialiser fills its slice and
+    /// raises `tls_init_size` so its bytes go into .tdata; an
+    /// uninitialised variable stays zero-filled in .tbss.
     tls_data: Vec<u8>,
     /// Number of bytes at the start of [`Self::tls_data`] that
     /// are statically initialised by an explicit
@@ -958,6 +1026,15 @@ pub struct Compiler {
     /// returns a `Program` with `entry_pc = 0` /
     /// `entry_name = None` if no entry symbol exists.
     no_entry_point: bool,
+
+    /// Base alignment the `.data` image requires, at least 8. Raised
+    /// to 16 when a file-scope object requests `_Alignas(16)`.
+    data_align: usize,
+
+    /// Mirror of [`CompileOptions::implicit_extern_fns`]. An
+    /// undeclared call to a listed name binds as a C89 6.3.2.2
+    /// implicit `extern int name();` resolved at link time.
+    implicit_extern_fns: Vec<String>,
 
     /// Mirror of [`CompileOptions::export_all_functions`]. When set,
     /// `resolve_exports` adds every non-static defined function to the
@@ -1154,7 +1231,7 @@ impl Compiler {
     /// Reserve `n_slots` eight-byte frame cells and return the
     /// negative base offset, bumping the high-water mark. Callers
     /// own any `multi_cell_temps` push and any `loc_offs` recycle.
-    fn reserve_slots(&mut self, n_slots: i64) -> i64 {
+    pub(super) fn reserve_slots(&mut self, n_slots: i64) -> i64 {
         self.loc_offs += n_slots;
         if self.loc_offs > self.max_loc_offs {
             self.max_loc_offs = self.loc_offs;
@@ -1272,8 +1349,10 @@ impl Compiler {
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
             uses_alloca_in_current_fn: false,
+            func_vla_decls: 0,
             pending_is_inline: false,
             pending_noreturn: false,
+            const_unevaluated: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),
@@ -1285,6 +1364,7 @@ impl Compiler {
             pending_local_runtime_elements: Vec::new(),
             loop_break_depth: 0,
             loop_continue_depth: 0,
+            nest_depth: 0,
             labels: Vec::new(),
             unresolved_gotos: Vec::new(),
             switch_cases: Vec::new(),
@@ -1309,6 +1389,8 @@ impl Compiler {
             pending_store_symbols: Vec::new(),
             warn_dead_store: opts.warn_dead_store,
             no_entry_point: opts.no_entry_point,
+            data_align: 8,
+            implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
             source_files: Vec::new(),
             source_label: opts.source_label.clone(),
@@ -1500,6 +1582,7 @@ impl Compiler {
         // missing headers. The force-include set only grows, and a
         // header already in it ends the loop, so progress is monotone.
         let mut infos: Vec<String> = Vec::new();
+        let mut auto_names: Vec<String> = Vec::new();
         loop {
             let e = match result {
                 Ok(mut prog) => {
@@ -1510,6 +1593,7 @@ impl Compiler {
                     for info in infos.into_iter().rev() {
                         prog.warnings.insert(0, info);
                     }
+                    prog.auto_includes = auto_names;
                     return Ok(prog);
                 }
                 Err(e) => e,
@@ -1528,6 +1612,7 @@ impl Compiler {
             infos.push(format!(
                 "info: auto-including <{header}> for undeclared `{name}`"
             ));
+            auto_names.push(name);
             result = Compiler::with_options_inner(source.clone(), target, opts.clone(), false)
                 .compile_one_pass();
         }
@@ -1559,48 +1644,21 @@ impl Compiler {
         // `target_ent_pc`.
         self.emit_sys_trampolines();
         self.resolve_code_relocs()?;
-        // macOS resolves a `#pragma binding(data ...)` import (e.g.
-        // environ) through the GOT -- a flat-namespace bind to the host
-        // data symbol -- not through a COPY-relocated local slot, so the
-        // symbol must stay undefined even in a self-contained image. The
-        // no_entry_point clear below does this for relocatable objects;
-        // do the same for a data binding's local here regardless of
-        // no_entry_point so `live_glo_addr` returns `GloAddr::Extern` and
-        // routes the reference through `imm_data_extern` to the GOT
-        // rather than an uninitialized `.data` slot.
-        if self.target == Target::MacOSAarch64 {
-            let data_locals: alloc::collections::BTreeSet<String> = self
-                .dylibs
-                .iter()
-                .flat_map(|d| d.bindings.iter())
-                .filter(|b| b.is_data)
-                .map(|b| b.local_name.clone())
-                .collect();
-            for sym in self.symbols.iter_mut() {
-                if sym.class == Token::Glo as i64
-                    && sym.is_extern_decl
-                    && !sym.has_initializer
-                    && data_locals.contains(&sym.name)
-                {
-                    sym.defined_here = false;
-                    sym.val = 0;
-                }
-            }
-        }
-        // Cross-TU function imports. Every extern-declared
-        // `Token::Fun` symbol with no body in this TU gets a
-        // unique placeholder ent_pc (past `text.len()`), then has
-        // `Symbol::val` rewritten to that PC. The walker reads
-        // `Symbol::val` through `live_fun_val` when lowering an
-        // `Inst::Call`, so the matching call site carries the
-        // placeholder as its `target_pc`. The native codegen
-        // detects the placeholder (outside `[0, text.len())`)
-        // and emits a `RelocCallSite` against the symbol's name
-        // instead of resolving in place. Single-TU compiles
-        // without `no_entry_point` never reach this branch with
-        // an unresolved call: `resolve_entry_and_dllmain_pcs`
-        // errors out first.
-        let extern_imports = if self.no_entry_point {
+        // Cross-TU / undefined extern linkage. One model for every
+        // consumer: the linker resolves the references, the VM and
+        // the JIT refuse the unresolved ones, and no mode falls
+        // back to phantom storage or a colliding pc.
+        //
+        // Every extern-declared `Token::Fun` symbol with no body in
+        // this TU gets a unique placeholder ent_pc (past
+        // `text.len()`), then has `Symbol::val` rewritten to that
+        // PC. The walker reads `Symbol::val` through `live_fun_val`
+        // when lowering an `Inst::Call`, so the matching call site
+        // carries the placeholder as its `target_pc`. The native
+        // codegen detects the placeholder (outside `[0,
+        // text.len())`) and emits a `RelocCallSite` against the
+        // symbol's name instead of resolving in place.
+        let extern_imports = {
             use crate::c5::symbol::Linkage;
             let mut imports: alloc::vec::Vec<(usize, String)> = alloc::vec::Vec::new();
             let mut next_pc = self.next_ent_pc + 1;
@@ -1626,7 +1684,10 @@ impl Compiler {
             // walker emits `Inst::ImmData(stale_offset)` and the
             // ET_REL writer lowers it as a `.data section symbol +
             // 0` reloc, losing the symbol identity needed for
-            // cross-TU resolution.
+            // cross-TU resolution. The same clear keeps a `#pragma
+            // binding(data ...)` local (e.g. environ) undefined so
+            // its references route through the GOT / loader import
+            // instead of an uninitialized local slot.
             for sym in self.symbols.iter_mut() {
                 if sym.class == Token::Glo as i64
                     && sym.linkage == Linkage::External
@@ -1663,13 +1724,12 @@ impl Compiler {
                 }
             }
             imports
-        } else {
-            alloc::vec::Vec::new()
         };
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
         Ok(Program {
             data: self.data,
+            data_align: self.data_align,
             data_object_starts: self.data_object_starts,
             entry_pc,
             warnings: self.warnings,
@@ -1702,6 +1762,8 @@ impl Compiler {
             // CRT-recognised fallbacks (`wmain`, `WinMain`,
             // `wWinMain`) chosen when `main` is absent.
             entry_name: resolved_entry_name,
+            entry_pragma: self.pp_entrypoint.clone(),
+            auto_includes: Vec::new(),
             subsystem: self.pp_subsystem,
             // Compile output is pre-optimizer; only the explicit
             // `optimize()` step flips this on.

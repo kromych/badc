@@ -30,10 +30,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x2, #0x42               // =66
                	mov	x3, #0x1a4              // =420
-               	mov	x9, x1
                	str	x3, [sp, #-0x10]!
                	str	x2, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	ldr	x2, [sp, #0x20]
@@ -53,9 +53,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x400              // =1024
-               	mov	x9, x23
                	str	x1, [sp, #-0x10]!
                	str	x24, [sp, #-0x10]!
+               	mov	x9, x23
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	blr	x9
@@ -74,9 +74,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x29, #0xb8
-               	mov	x9, x22
                	str	x1, [sp, #-0x10]!
                	str	x24, [sp, #-0x10]!
+               	mov	x9, x22
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	blr	x9
@@ -112,8 +112,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x9, x20
                	str	x24, [sp, #-0x10]!
+               	mov	x9, x20
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
@@ -129,23 +129,7 @@ Disassembly of section .text:
                	ret
 
 <__c5_sys_open>:
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
-               	ldur	x0, [x29, #0x10]
-               	ldur	x1, [x29, #0x20]
-               	ldur	x2, [x29, #0x30]
-               	bl	<addr>
-               	sxtw	x0, w0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x30
-               	ret
+               	b	<addr>
 
 <__c5_sys_close>:
                	str	x0, [sp, #-0x10]!
@@ -180,23 +164,7 @@ Disassembly of section .text:
                	ret
 
 <__c5_sys_fcntl>:
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
-               	ldur	x0, [x29, #0x10]
-               	ldur	x1, [x29, #0x20]
-               	ldur	x2, [x29, #0x30]
-               	bl	<addr>
-               	sxtw	x0, w0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x30
-               	ret
+               	b	<addr>
 
 <__c5_sys_stat>:
                	str	x1, [sp, #-0x10]!

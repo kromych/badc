@@ -50,6 +50,13 @@ pub struct DataReloc {
     /// pointed at. Same data segment; cross-segment
     /// relocations (e.g., into `tls_data`) are future work.
     pub target_offset: u64,
+    /// Start offset of the object `target_offset` points into.
+    /// The raw offset alone cannot attribute a one-past-the-end
+    /// address (C99 6.5.6p8): it coincides with the next object's
+    /// start, so data compaction would track the wrong object.
+    /// Equals `target_offset` when the producer has no object
+    /// identity.
+    pub target_anchor: u64,
 }
 
 /// A function-pointer initializer that needs run-time relocation.
@@ -91,6 +98,11 @@ pub struct CodeReloc {
 #[derive(Debug, Clone)]
 pub struct Program {
     pub data: Vec<u8>,
+    /// Base alignment `data` requires in the image, at least 8;
+    /// raised to 16 when a file-scope object carries `_Alignas(16)`
+    /// (or the attribute equivalents). The native writers place the
+    /// data section at a multiple of it.
+    pub data_align: usize,
     /// Start offsets of anonymous data objects (string literals and the
     /// implicit `__func__` arrays of C99 6.4.2.2) within `data`. Named
     /// globals already carry their offset in `symbols[..].val`; these are
@@ -107,10 +119,9 @@ pub struct Program {
     /// indexed by `Inst::TlsAddr`'s operand. The image writers copy
     /// this into `.tdata` (initialised slice = `tls_data[..tls_init_size]`)
     /// and `.tbss` (zero-fill remainder = `tls_data[tls_init_size..]`).
-    /// Today everything starts zero (no `_Thread_local int x = 5;`
-    /// initialiser syntax), so `tls_init_size == 0` and the whole
-    /// block lives in .tbss; the layout is structured for future
-    /// expansion.
+    /// A `_Thread_local int x = 5;` initialiser raises
+    /// `tls_init_size` so its bytes land in `.tdata`; an
+    /// uninitialised variable keeps its slice zero and in `.tbss`.
     pub tls_data: Vec<u8>,
     /// Number of bytes of `tls_data` that are statically initialised
     /// (i.e., emitted into `.tdata`). The remainder
@@ -253,6 +264,18 @@ pub struct Program {
     /// `__getmainargs` for `__wgetmainargs`); other writers
     /// ignore it.
     pub entry_name: Option<String>,
+    /// The literal `#pragma entrypoint(<name>)` value; `None` when
+    /// the source has no such pragma. Distinct from `entry_name`,
+    /// which also reflects the CRT fallbacks. The driver reads this
+    /// to warn when a relocatable emit drops the pragma (an object
+    /// file does not carry it).
+    pub entry_pragma: Option<String>,
+    /// Function names the auto-include retry bound to a bundled
+    /// header during [`crate::c5::Compiler::compile`]. The driver
+    /// consults this in a multi-TU build: a name another input
+    /// defines is recompiled as an implicit extern so the user's
+    /// definition wins over the header's library binding.
+    pub auto_includes: Vec<String>,
     /// Source-declared Windows subsystem. Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the
     /// PE writer's default (`Console`). Read only by the PE

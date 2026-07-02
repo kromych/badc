@@ -129,6 +129,195 @@ fn archive_resolves_via_minus_l_search() {
 }
 
 #[test]
+fn archive_members_are_pulled_on_demand() {
+    // Archive semantics (SysV ar / ELF linker practice): a member
+    // joins the link iff it defines a still-undefined symbol,
+    // iterated to a fixpoint. An unreferenced member must stay out
+    // even when it carries an unresolvable reference of its own or
+    // defines a name the program also defines.
+    let dir = tempdir("archive-on-demand");
+    write_source(
+        &dir,
+        "m1.c",
+        "extern int chain(void);\nint used(void) { return 11 + chain(); }\n",
+    );
+    // Pulled only through m1's reference (fixpoint).
+    write_source(&dir, "m2.c", "int chain(void) { return 20; }\n");
+    // Never referenced: its undefined `never_defined` must not fail
+    // the link.
+    write_source(
+        &dir,
+        "m3.c",
+        "extern int never_defined(void);\nint unused_entry(void) { return never_defined(); }\n",
+    );
+    // Never referenced: its `helper` must not collide with main.c's.
+    write_source(&dir, "m4.c", "int helper(void) { return 99; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int used(void);\nint helper(void) { return 1; }\n\
+         int main(void) { return used() + helper(); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("--ar")
+            .arg("-o")
+            .arg(dir.join("libt.a"))
+            .arg(dir.join("m1.c"))
+            .arg(dir.join("m2.c"))
+            .arg(dir.join("m3.c"))
+            .arg(dir.join("m4.c"))
+            .current_dir(&dir),
+        "build archive",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("main.c"))
+            .arg(dir.join("libt.a"))
+            .current_dir(&dir),
+        "link against the archive",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    // 11 + 20 + 1 = 32.
+    assert_eq!(
+        out.status.code(),
+        Some(32),
+        "exit code mismatch: stderr={:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+// An archive-only invocation is a valid link: the members supply the
+// objects and `main` is pulled by the runtime's reference to it. The
+// input-emptiness check must count archives, not just sources/objects.
+#[cfg(target_os = "linux")]
+#[test]
+fn archive_only_invocation_links_and_pulls_main() {
+    let dir = tempdir("archive-only");
+    write_source(&dir, "prog.c", "int main(void) { return 7; }\n");
+    run(
+        Command::new(badc())
+            .arg("--ar")
+            .arg("-o")
+            .arg(dir.join("libprog.a"))
+            .arg(dir.join("prog.c"))
+            .current_dir(&dir),
+        "build archive",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("libprog.a"))
+            .current_dir(&dir),
+        "link archive-only",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(7), "exit code mismatch");
+}
+
+// A freestanding image's entry may live in a pre-compiled object; the
+// defined-entry check must run after `.o` inputs are parsed, not before.
+#[cfg(target_os = "linux")]
+#[test]
+fn freestanding_entry_defined_in_object_links() {
+    let dir = tempdir("freestanding-obj");
+    write_source(&dir, "fs.c", "void __c5_entry(void) { }\n");
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("fs.c"))
+            .arg("-o")
+            .arg(dir.join("fs.o"))
+            .current_dir(&dir),
+        "compile -c",
+    );
+    let bin = dir.join("fs.bin");
+    run(
+        Command::new(badc())
+            .arg("--freestanding")
+            .arg(dir.join("fs.o"))
+            .arg("-o")
+            .arg(&bin)
+            .current_dir(&dir),
+        "freestanding link with entry in object",
+    );
+    assert!(bin.exists(), "freestanding image was not produced");
+}
+
+// The freestanding entry is a link root: an archive member that only
+// defines the entry must be pulled so the image links.
+#[cfg(target_os = "linux")]
+#[test]
+fn freestanding_entry_from_archive_is_pulled() {
+    let dir = tempdir("freestanding-archive");
+    write_source(&dir, "fs.c", "void __c5_entry(void) { }\n");
+    run(
+        Command::new(badc())
+            .arg("--ar")
+            .arg("-o")
+            .arg(dir.join("libfs.a"))
+            .arg(dir.join("fs.c"))
+            .current_dir(&dir),
+        "build archive",
+    );
+    let bin = dir.join("fs.bin");
+    run(
+        Command::new(badc())
+            .arg("--freestanding")
+            .arg(dir.join("libfs.a"))
+            .arg("-o")
+            .arg(&bin)
+            .current_dir(&dir),
+        "freestanding link with entry in archive",
+    );
+    assert!(bin.exists(), "freestanding image was not produced");
+}
+
+#[test]
+fn compile_only_warns_when_link_pragmas_are_dropped() {
+    // `#pragma subsystem` / `#pragma entrypoint` ride the in-memory
+    // program of the invocation that links; an ET_REL object carries
+    // neither. `-c` must say so instead of silently emitting an
+    // object that later links as a console / default-entry image.
+    let dir = tempdir("compile-only-pragmas");
+    write_source(
+        &dir,
+        "gui.c",
+        "#pragma subsystem(windows)\nint main(void) { return 0; }\n",
+    );
+    write_source(
+        &dir,
+        "ep.c",
+        "#pragma entrypoint(my_entry)\nint my_entry(void) { return 0; }\n",
+    );
+    write_source(&dir, "plain.c", "int main(void) { return 0; }\n");
+    let compile = |name: &str| -> String {
+        let out = run(
+            Command::new(badc())
+                .arg("--target=windows-x64")
+                .arg("-c")
+                .arg(dir.join(name))
+                .arg("-o")
+                .arg(dir.join(name).with_extension("o"))
+                .current_dir(&dir),
+            "compile -c",
+        );
+        String::from_utf8_lossy(&out.stderr).into_owned()
+    };
+    let gui = compile("gui.c");
+    assert!(gui.contains("#pragma subsystem"), "stderr: {gui}");
+    let ep = compile("ep.c");
+    assert!(ep.contains("#pragma entrypoint"), "stderr: {ep}");
+    let plain = compile("plain.c");
+    assert!(!plain.contains("warning"), "stderr: {plain}");
+}
+
+#[test]
 fn unresolved_extern_function_fails_link() {
     let dir = tempdir("unresolved");
     write_source(
@@ -2729,5 +2918,64 @@ fn defining_c5_entry_without_flag_is_not_implicitly_freestanding() {
     assert!(
         stderr.contains("multiple definition") && stderr.contains("__c5_entry"),
         "expected a duplicate-symbol error for __c5_entry; got: {stderr:?}"
+    );
+}
+
+#[test]
+fn link_defined_symbol_wins_over_auto_included_binding() {
+    // C89 6.3.2.2 link semantics: an undeclared call binds to
+    // whatever the link defines. When a sibling TU defines a name
+    // that also exists as a bundled-header libc binding (getpid),
+    // the auto-include retry must not override the user's
+    // definition with the library import.
+    let dir = tempdir("auto-include-preference");
+    write_source(
+        &dir,
+        "caller.c",
+        "int main(void) { return getpid() == 999 ? 0 : 1; }\n",
+    );
+    write_source(&dir, "impl.c", "int getpid(void) { return 999; }\n");
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("caller.c"))
+            .arg(dir.join("impl.c"))
+            .current_dir(&dir),
+        "link with a user getpid",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "the user's getpid must win: stderr={:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // The auto-include still serves calls nothing in the link
+    // defines: an undeclared printf in a multi-TU build works.
+    write_source(
+        &dir,
+        "p1.c",
+        "int main(void) { printf(\"hi\\n\"); return 0; }\n",
+    );
+    write_source(&dir, "p2.c", "int unrelated(void) { return 0; }\n");
+    let exe2 = dir.join("prog2");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe2)
+            .arg(dir.join("p1.c"))
+            .arg(dir.join("p2.c"))
+            .current_dir(&dir),
+        "link with auto-included printf",
+    );
+    let out = Command::new(&exe2).output().expect("run prog2");
+    assert_eq!(out.status.code(), Some(0), "auto-included printf runs");
+    // The Windows CRT translates `\n` to `\r\n` on stdout; strip CR so
+    // the comparison holds on every host.
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).replace('\r', ""),
+        "hi\n"
     );
 }

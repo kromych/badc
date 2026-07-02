@@ -315,6 +315,11 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// stay in sync because both backends should faithfully execute the
 /// same fixtures; if they drift, one of them has a bug.
 const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
+    ("vla_basic_sum.c", 0),
+    ("vla_runtime_sizeof.c", 0),
+    ("vla_size_from_arg.c", 0),
+    ("vla_scope_reclaim_loop.c", 0),
+    ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
     ("goto.c", 5),
     ("switch_statement.c", 25),
@@ -324,6 +329,10 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("variadic_struct_arg.c", 18),
     ("variadic_struct_arg_16b.c", 51),
     ("libc_div.c", 0),
+    ("strtof_parses_float.c", 0),
+    ("snprintf_truncation_c99.c", 0),
+    ("ioctl_fionread_pipe.c", 0),
+    ("shm_open_mode_arg.c", 0),
     ("strength_reduce_pow2_divmod.c", 0),
     ("return_callee_saved_value.c", 0),
     ("spill_slot_reuse_disjoint_calls.c", 0),
@@ -470,6 +479,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
+    ("setenv_overwrite.c", 0),
     // Runtime dynamic linking through libdl (libdl.so.2 +
     // libc.so.6 are both DT_NEEDED). dlopen+dlsym+blr finds
     // libc atoi and the indirect call passes "123" in x0.
@@ -700,6 +710,26 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // Without that, `strtold` would land at 0.0 for any power-of-
     // two value (mantissa = 0, exponent only in v0's high half).
     ("strtold_aapcs_return.c", 0),
+    ("packed_bitfield_repack.c", 0),
+    ("nested_designator_string_member.c", 0),
+    ("union_member_unbraced_init.c", 0),
+    ("inline_multi_block_result_forward.c", 10),
+    ("sxtw_fold_source_liveness.c", 18),
+    ("data_reloc_one_past_end.c", 10),
+    ("variadic_libc_fnptr_static_init.c", 0),
+    ("block_scope_typedef_variadic_fnptr.c", 0),
+    ("atomic_operand_in_working_regs.c", 0),
+    ("setjmp_value_live_across.c", 0),
+    ("mixed_sse_int_aggregate_args.c", 0),
+    ("variadic_agg_return_classes.c", 0),
+    ("va_copy_under_pressure.c", 0),
+    ("variable_shift_rcx_loop.c", 0),
+    ("va_arg_composite_straddle.c", 0),
+    ("variadic_cast_fnptr_dispatch.c", 0),
+    ("fcntl_lock_via_cast_fnptr.c", 0),
+    ("call_sp_adjust_imm12_overflow.c", 0),
+    ("indirect_call_target_scratch_exhausted.c", 0),
+    ("fp_load_folded_disp.c", 0),
 ];
 
 #[test]

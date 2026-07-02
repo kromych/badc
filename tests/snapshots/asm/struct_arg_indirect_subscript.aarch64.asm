@@ -62,8 +62,7 @@ Disassembly of section .text:
                	ldr	d0, [x0]
                	mov	x0, #0x4010000000000000 // =4616189618054758400
                	sub	x2, x29, #0x10
-               	add	x2, x2, #0x8
-               	ldr	d1, [x2]
+               	ldr	d1, [x2, #0x8]
                	mov	x2, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x2
                	fmul	d1, d1, d17

@@ -24,8 +24,8 @@ Disassembly of section .text:
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
                	ldr	x1, [x20]
-               	mov	x9, x1
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
@@ -42,8 +42,8 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x9, x1
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10

@@ -13,12 +13,16 @@ Disassembly of section .text:
 <sext>:
                	movslq	%esi, %rsi
                	movl	%edi, %eax
+               	pushq	%rcx
                	movq	%rsi, %rcx
                	shlq	%cl, %rax
+               	popq	%rcx
                	movl	%eax, %eax
                	movslq	%eax, %rax
+               	pushq	%rcx
                	movq	%rsi, %rcx
                	sarq	%cl, %rax
+               	popq	%rcx
                	retq
 
 <main>:

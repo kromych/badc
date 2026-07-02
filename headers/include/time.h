@@ -125,7 +125,7 @@ typedef long clock_t;
 #pragma binding(libc::clock_gettime, "_clock_gettime")
 #pragma binding(libc::clock_settime, "_clock_settime")
 #pragma binding(libc::clock_getres,  "_clock_getres")
-#pragma binding(libc::clock_nanosleep, "_clock_nanosleep")
+// libSystem exports no clock_nanosleep; unbound so a use fails at link.
 #pragma binding(libc::gettimeofday,  "_gettimeofday")
 #pragma binding(libc::difftime,      "_difftime")
 #pragma binding(libc::mktime,        "_mktime")
@@ -179,6 +179,13 @@ typedef long clock_t;
 #pragma binding(msvcrt::gmtime,   "gmtime")
 #pragma binding(msvcrt::strftime, "strftime")
 #pragma binding(msvcrt::tzset,    "_tzset")
+// msvcrt.dll exports the tzset outputs as data on both x64 and
+// arm64 (probed on the real boxes); bind each as a loader-filled
+// import so a read after `tzset()` sees the CRT's values -- the
+// same treatment as `environ` (see <stdlib.h>).
+#pragma binding(data msvcrt::tzname,   "_tzname")
+#pragma binding(data msvcrt::timezone, "_timezone")
+#pragma binding(data msvcrt::daylight, "_daylight")
 // Windows doesn't ship POSIX `clock_gettime` / `gettimeofday`. SQLite
 // has its own Win32-specific code path that calls
 // `GetSystemTimeAsFileTime`; programs that want a portable shape

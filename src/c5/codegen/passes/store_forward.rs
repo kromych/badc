@@ -133,7 +133,17 @@ fn run_one(func: &mut FunctionSsa) {
                 break;
             }
             match &func.insts[i] {
-                Inst::Load { addr, disp, kind } => {
+                // A volatile load must perform its own memory access
+                // (C99 5.1.2.3p2 / 6.7.3p6): it neither reuses an
+                // available value nor seeds one. It reads only, so
+                // existing entries stay valid.
+                Inst::Load { volatile: true, .. } => {}
+                Inst::Load {
+                    addr,
+                    disp,
+                    kind,
+                    volatile: false,
+                } => {
                     let addr = *addr;
                     let disp = *disp;
                     let kind = *kind;
@@ -202,16 +212,21 @@ fn run_one(func: &mut FunctionSsa) {
                     disp,
                     value,
                     kind,
+                    volatile,
                 } => {
                     let addr = *addr;
                     let disp = *disp;
                     let value = *value;
                     let kind = *kind;
+                    let volatile = *volatile;
                     let w = store_width(kind);
                     // Drop every entry not provably disjoint from the
                     // written range.
                     table.retain(|e| e.addr == addr && !overlaps(e.disp, e.width, disp, w));
-                    if is_int_store(kind) {
+                    // A volatile store invalidates like any store but
+                    // seeds no forward: a later load of the location
+                    // must read memory (C99 6.7.3p6).
+                    if is_int_store(kind) && !volatile {
                         table.push(Entry {
                             addr,
                             disp,
@@ -443,12 +458,14 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     value: 1,
-                    kind: StoreKind::I64
+                    kind: StoreKind::I64,
+                    volatile: false,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
-                    kind: LoadKind::I64
+                    kind: LoadKind::I64,
+                    volatile: false,
                 },
             ],
             Terminator::Return(3),
@@ -479,12 +496,14 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     value: 1,
-                    kind: StoreKind::I32
+                    kind: StoreKind::I32,
+                    volatile: false,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
-                    kind: LoadKind::I32
+                    kind: LoadKind::I32,
+                    volatile: false,
                 },
             ],
             Terminator::Return(3),
@@ -522,12 +541,14 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     value: 1,
-                    kind: StoreKind::I8
+                    kind: StoreKind::I8,
+                    volatile: false,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
-                    kind: LoadKind::U8
+                    kind: LoadKind::U8,
+                    volatile: false,
                 },
             ],
             Terminator::Return(3),
@@ -540,7 +561,8 @@ mod tests {
                 Inst::Load {
                     addr: 0,
                     disp: 0,
-                    kind: LoadKind::U8
+                    kind: LoadKind::U8,
+                    volatile: false,
                 }
             ),
             "an unsigned sub-width reload must not forward",
@@ -567,7 +589,8 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     value: 1,
-                    kind: StoreKind::I64
+                    kind: StoreKind::I64,
+                    volatile: false,
                 },
                 Inst::Mcpy {
                     dst: 0,
@@ -577,7 +600,8 @@ mod tests {
                 Inst::Load {
                     addr: 0,
                     disp: 0,
-                    kind: LoadKind::I64
+                    kind: LoadKind::I64,
+                    volatile: false,
                 },
             ],
             Terminator::Return(4),
@@ -589,6 +613,94 @@ mod tests {
             "the load past a block copy must not forward",
         );
         assert!(matches!(f.insts[4], Inst::Load { .. }));
+    }
+
+    /// A volatile store seeds no forwarding entry: the reload after it
+    /// must read memory (C99 6.7.3p6).
+    #[test]
+    fn volatile_store_seeds_no_forward() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::Store {
+                    addr: 0,
+                    disp: 0,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    volatile: true,
+                },
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(3),
+            3,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(3)),
+            "a load after a volatile store must not forward",
+        );
+        assert!(matches!(f.insts[3], Inst::Load { .. }));
+    }
+
+    /// A volatile load neither reuses an available value nor seeds one:
+    /// each source-level read performs its own access (C99 5.1.2.3p2).
+    #[test]
+    fn volatile_load_neither_reuses_nor_seeds() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::Store {
+                    addr: 0,
+                    disp: 0,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: true,
+                },
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: true,
+                },
+                Inst::Binop {
+                    op: crate::c5::ir::BinOp::Add,
+                    lhs: 3,
+                    rhs: 4
+                },
+            ],
+            Terminator::Return(5),
+            5,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[5], Inst::Binop { lhs: 3, rhs: 4, .. }),
+            "volatile loads must not forward from the store or each other",
+        );
     }
 
     /// Two loads of the same location with no write between: the second
@@ -608,12 +720,14 @@ mod tests {
                 Inst::Load {
                     addr: 0,
                     disp: 0,
-                    kind: LoadKind::I64
+                    kind: LoadKind::I64,
+                    volatile: false,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
-                    kind: LoadKind::I64
+                    kind: LoadKind::I64,
+                    volatile: false,
                 },
                 Inst::Binop {
                     op: crate::c5::ir::BinOp::Add,

@@ -104,12 +104,13 @@ pub(crate) struct Allocation {
     /// skip pure-with-no-uses insts (dead-code elimination). A value
     /// with zero uses and no side effects produces no machine code.
     pub use_counts: Vec<u32>,
-    /// Highest PC index that names each value as an operand. A
-    /// value defined at PC `i` is live throughout `[i, last_use[i]]`
-    /// and the emit pass queries this to compute the set of
-    /// registers carrying live SSA values at any given PC -- needed
-    /// when picking an intra-instruction scratch that must not
-    /// clobber a value the next instruction reads.
+    /// Highest PC index that names each value as an operand, raised
+    /// across back edges by `extend_last_use_across_blocks`. A value
+    /// defined at PC `i` is live throughout `[i, last_use[i]]`. The
+    /// allocator's interval tests read it: `class_last_use` feeds
+    /// `promote_calls_after_def_to_classes` so a value whose range
+    /// spans a call takes a callee-saved home, and the coalescing
+    /// hints avoid a caller-saved register such a call would clobber.
     pub last_use: Vec<u32>,
     /// For `BinopI(Shr, X, K)` insts the allocator recognised as
     /// the upper half of a sign-narrow `Shl K; Shr K` pair (K in
@@ -529,6 +530,77 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             _ => None,
         }
     };
+    // The fold reads `places[shl_src]` when the Shr is emitted, past the
+    // source's coloring-visible live range (its last use is the Shl). It
+    // is sound only when nothing between the pair can change that place:
+    // both insts in one block, every intervening inst free of fixed
+    // emit-level clobbers (calls, div/mod, register-count shifts,
+    // atomics, mcpy), and no intervening definition colored onto the
+    // same place.
+    let mut block_of: Vec<u32> = vec![0; func.insts.len()];
+    for (b, blk) in func.blocks.iter().enumerate() {
+        for v in blk.inst_range.clone() {
+            block_of[v as usize] = b as u32;
+        }
+    }
+    let clobber_free = |inst: &Inst| -> bool {
+        match inst {
+            Inst::Imm(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::Extend { .. }
+            | Inst::FpCast { .. }
+            | Inst::Fneg(_)
+            | Inst::Fma { .. }
+            | Inst::Load { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::Store { .. }
+            | Inst::StoreLocal { .. }
+            | Inst::StoreIndexed { .. } => true,
+            Inst::BinopI { op, .. } => {
+                !matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
+            }
+            Inst::Binop { op, .. } => !matches!(
+                op,
+                BinOp::Div
+                    | BinOp::Divu
+                    | BinOp::Mod
+                    | BinOp::Modu
+                    | BinOp::Shl
+                    | BinOp::Shr
+                    | BinOp::Shru
+            ),
+            _ => false,
+        }
+    };
+    let fold_preserves_source = |shl_pc: ValueId, shr_pc: ValueId| -> bool {
+        if block_of[shl_pc as usize] != block_of[shr_pc as usize] {
+            return false;
+        }
+        let src_place = match func.insts.get(shl_pc as usize) {
+            Some(inst) => match shift_shape(inst) {
+                Some((_, src, _, _)) => places.get(src as usize).copied().unwrap_or(Place::None),
+                None => return false,
+            },
+            None => return false,
+        };
+        for p in (shl_pc + 1)..shr_pc {
+            let inst_p = &func.insts[p as usize];
+            if !clobber_free(inst_p) {
+                return false;
+            }
+            if produces_value(inst_p)
+                && places.get(p as usize).copied().unwrap_or(Place::None) == src_place
+            {
+                return false;
+            }
+        }
+        true
+    };
     for (i, inst) in func.insts.iter().enumerate() {
         let Some((shr_op, shr_lhs, shr_k, shr_imm_v)) = shift_shape(inst) else {
             continue;
@@ -546,6 +618,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             continue;
         }
         if use_counts.get(shr_lhs as usize).copied().unwrap_or(0) != 1 {
+            continue;
+        }
+        if !fold_preserves_source(shr_lhs, i as ValueId) {
             continue;
         }
         sxtw_source[i] = shl_src;
@@ -1140,6 +1215,9 @@ fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
 /// True when the inst has no side effects and can be DCE'd if its
 /// result is unread. Mirrors `is_dead_pure` in ssa_emit_common but
 /// kept here to drive the allocator's use-count fixed-point pass.
+/// A volatile load is an access the abstract machine performs even
+/// when the value is unused (C99 5.1.2.3p2 / 6.7.3p6), so it is
+/// never pure.
 fn is_pure_inst(inst: &Inst) -> bool {
     matches!(
         inst,
@@ -1149,8 +1227,14 @@ fn is_pure_inst(inst: &Inst) -> bool {
             | Inst::ImmExtCode(_)
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
-            | Inst::Load { .. }
-            | Inst::LoadLocal { .. }
+            | Inst::Load {
+                volatile: false,
+                ..
+            }
+            | Inst::LoadLocal {
+                volatile: false,
+                ..
+            }
             | Inst::LoadIndexed { .. }
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
@@ -1158,6 +1242,19 @@ fn is_pure_inst(inst: &Inst) -> bool {
             | Inst::Fma { .. }
             | Inst::FpCast { .. }
             | Inst::Extend { .. }
+    )
+}
+
+/// Whether `inst` is the inline setjmp intrinsic. A longjmp back to
+/// the setjmp site restores only the jmp_buf register set (x19-x28,
+/// x29, sp, d8-d15), so for allocation the site clobbers the
+/// caller-saved banks exactly like a call (C99 7.13.2.1p3 requires
+/// values unmodified since setjmp to survive the second return).
+pub(crate) fn is_setjmp_barrier(inst: &Inst) -> bool {
+    matches!(
+        inst,
+        Inst::Intrinsic { kind, .. }
+            if *kind == crate::c5::op::Intrinsic::SetjmpAArch64 as i64
     )
 }
 
@@ -1849,9 +1946,13 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             }
         };
         bump(b.exit_acc);
+        // A `GotoIndirect` sets `exit_acc` to its target, so the bump
+        // above already covers it; the explicit arm keeps this walk
+        // uniform with the liveness and use-count terminator walks.
         match &b.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(*cond),
             Terminator::Return(v) => bump(*v),
+            Terminator::GotoIndirect { target } => bump(*target),
             _ => {}
         }
     }
@@ -1916,6 +2017,7 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
         match &blk.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
             Terminator::Return(v) if *v != NO_VALUE => mark(*v),
+            Terminator::GotoIndirect { target } if *target != NO_VALUE => mark(*target),
             _ => {}
         }
     }
@@ -2016,7 +2118,8 @@ fn promote_calls_after_def_to_classes(
         let is_call = matches!(
             inst,
             Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)));
+        ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
+            || is_setjmp_barrier(inst);
         if is_call {
             call_pcs.push(idx as u32);
         }
@@ -2308,6 +2411,48 @@ int main(void) { return 0; }
     /// Allocate every function in quicksort.c on aarch64. The
     /// fixture has straight-line control flow and short
     /// expressions; the allocator should never spill.
+    #[test]
+    fn unused_volatile_reads_survive_dead_pure_skip() {
+        // C99 5.1.2.3p2: a volatile read is a side effect. The emit's
+        // dead-code skip must keep the unused loads and their address
+        // chains at every optimization level.
+        let funcs = lift("tests/fixtures/c/volatile_unused_read.c");
+        let main = funcs.iter().find(|f| f.name == "main").expect("main");
+        let alloc = allocate(main, Target::host());
+        let mut volatile_loads = 0;
+        for (v, inst) in main.insts.iter().enumerate() {
+            match inst {
+                Inst::Load {
+                    volatile: true,
+                    addr,
+                    ..
+                } => {
+                    volatile_loads += 1;
+                    assert!(
+                        !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc),
+                        "volatile Load v{v} must not be skipped as dead"
+                    );
+                    assert_ne!(
+                        alloc.use_counts[*addr as usize], 0,
+                        "the volatile load's address chain must stay live"
+                    );
+                }
+                Inst::LoadLocal { volatile: true, .. } => {
+                    volatile_loads += 1;
+                    assert!(
+                        !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc),
+                        "volatile LoadLocal v{v} must not be skipped as dead"
+                    );
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            volatile_loads >= 2,
+            "expected the global and the local volatile reads in SSA, saw {volatile_loads}"
+        );
+    }
+
     #[test]
     fn allocate_quicksort_no_spill() {
         let funcs = lift("tests/fixtures/c/quicksort.c");

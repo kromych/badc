@@ -632,7 +632,17 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("vla_basic_sum.c", 0),
+    ("vla_runtime_sizeof.c", 0),
+    ("vla_size_from_arg.c", 0),
+    ("vla_scope_reclaim_loop.c", 0),
+    ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
+    ("strtof_parses_float.c", 0),
+    ("snprintf_truncation_c99.c", 0),
+    // Runtime CRT shim: POSIX setenv overwrite semantics over msvcrt's
+    // 2-parameter _putenv_s.
+    ("setenv_overwrite.c", 0),
     ("control_flow.c", 1),
     ("do_while.c", 5),
     ("break_continue.c", 4),
@@ -927,6 +937,22 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // `setjmp_longjmp.c` can join this list.
     ("setjmp_basic_stack.c", 0),
     ("setjmp_misaligned.c", 0),
+    ("packed_bitfield_repack.c", 0),
+    ("nested_designator_string_member.c", 0),
+    ("union_member_unbraced_init.c", 0),
+    ("inline_multi_block_result_forward.c", 10),
+    ("sxtw_fold_source_liveness.c", 18),
+    ("data_reloc_one_past_end.c", 10),
+    ("variadic_libc_fnptr_static_init.c", 0),
+    ("block_scope_typedef_variadic_fnptr.c", 0),
+    ("atomic_operand_in_working_regs.c", 0),
+    ("setjmp_value_live_across.c", 0),
+    ("mixed_sse_int_aggregate_args.c", 0),
+    ("variadic_agg_return_classes.c", 0),
+    ("va_copy_under_pressure.c", 0),
+    ("variable_shift_rcx_loop.c", 0),
+    ("va_arg_composite_straddle.c", 0),
+    ("variadic_cast_fnptr_dispatch.c", 0),
 ];
 
 #[test]

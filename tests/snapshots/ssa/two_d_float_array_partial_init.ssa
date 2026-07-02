@@ -159,11 +159,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v66  Load { addr=v64, disp=0, kind=F32 }              -> d1 [f32]
     v67  Imm(4)                                           -> x6
     v68  BinopI { op=add, lhs=v64, rhs_imm=4 }            -> x6
-    v69  Load { addr=v68, disp=0, kind=F32 }              -> d2 [f32]
+    v69  Load { addr=v64, disp=4, kind=F32 }              -> d2 [f32]
     v70  Binop { op=fadd, lhs=v66, rhs=v69 }              -> d1 [f32]
     v71  Imm(8)                                           -> x6
-    v72  BinopI { op=add, lhs=v64, rhs_imm=8 }            -> x2
-    v73  Load { addr=v72, disp=0, kind=F32 }              -> d2 [f32]
+    v72  BinopI { op=add, lhs=v64, rhs_imm=8 }            -> x6
+    v73  Load { addr=v64, disp=8, kind=F32 }              -> d2 [f32]
     v74  Binop { op=fadd, lhs=v70, rhs=v73 }              -> d1 [f32]
     v75  Binop { op=fadd, lhs=v60, rhs=v74 }              -> d0 [f32]
     v76  Store { addr=v59, disp=0, value=v75, kind=F32 }  -> -

@@ -21,7 +21,9 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{
+    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth,
+};
 
 impl Compiler {
     /// After a leading `(TYPE)` cast in a global initializer, returns
@@ -70,6 +72,17 @@ impl Compiler {
     /// global initializer" diagnostic so the parser stays
     /// honest about what it accepts.
     pub(super) fn parse_global_initializer(
+        &mut self,
+        var_ty: i64,
+        var_offset: i64,
+        is_thread_local: bool,
+    ) -> Result<(), C5Error> {
+        self.with_nesting("initializer", |c| {
+            c.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)
+        })
+    }
+
+    fn parse_global_initializer_inner(
         &mut self,
         var_ty: i64,
         var_offset: i64,
@@ -248,6 +261,7 @@ impl Compiler {
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: target_offset as u64,
+                target_anchor: target_offset as u64,
             });
             self.data_reloc_sym_idx.push(target_idx);
             return Ok(());
@@ -271,6 +285,7 @@ impl Compiler {
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: addr as u64,
+                target_anchor: addr as u64,
             });
             // String-literal target -- no originating
             // symbol; sentinel marks the entry as
@@ -341,6 +356,7 @@ impl Compiler {
                 self.data_relocs.push(crate::c5::program::DataReloc {
                     data_offset: var_offset as u64,
                     target_offset: off as u64,
+                    target_anchor: off as u64,
                 });
                 self.data_reloc_sym_idx.push(new_idx);
                 return Ok(());
@@ -516,6 +532,7 @@ impl Compiler {
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: target_offset as u64,
+                target_anchor: self.symbols[target_idx].val as u64,
             });
             self.data_reloc_sym_idx.push(target_idx);
             return Ok(());
@@ -529,7 +546,7 @@ impl Compiler {
         // full 8 bytes the slot was sized for; a future
         // f32-narrow-storage path would shrink it for `float`.
         let var_is_float = {
-            let stripped = var_ty & !UNSIGNED_BIT;
+            let stripped = var_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
             stripped == Ty::Float as i64 || stripped == Ty::Double as i64
         };
         // Constant expression, evaluated at compile time. Handles

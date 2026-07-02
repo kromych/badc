@@ -118,11 +118,11 @@ Disassembly of section .text:
                	sub	x2, x29, #0x58
                	mov	x3, #0x8                // =8
                	mov	x4, #0x10               // =16
-               	mov	x9, x1
                	str	x4, [sp, #-0x10]!
                	str	x3, [sp, #-0x10]!
                	str	x2, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	ldr	x2, [sp, #0x20]
@@ -150,11 +150,11 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	sub	x1, x29, #0x68
                	mov	x2, #0x8                // =8
-               	mov	x9, x21
                	str	x22, [sp, #-0x10]!
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x21
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	ldr	x2, [sp, #0x20]

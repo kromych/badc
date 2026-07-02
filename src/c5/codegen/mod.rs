@@ -43,7 +43,7 @@ pub(crate) mod aarch64;
 #[allow(dead_code)]
 pub(crate) mod abi_classify;
 mod jit;
-mod passes;
+pub(crate) mod passes;
 pub(crate) mod ssa;
 pub(crate) mod x86_64;
 
@@ -232,9 +232,7 @@ pub(super) fn pc_extent_for_lowering(
     // highest `end_pc`; the codegen's per-`Inst::Call` fixup
     // pass uses the same dense `pc_to_native` table to
     // recognise them as out-of-range, so the table has to
-    // cover the placeholder range too. `extern_function_imports`
-    // is empty for every build that didn't go through the
-    // relocatable -c path.
+    // cover the placeholder range too.
     let from_imports = program
         .extern_function_imports
         .iter()
@@ -416,6 +414,55 @@ pub(super) fn plan_call_args_aggs(
                 placements.push(placement);
                 continue;
             }
+            // Windows aarch64 variadic convention: an anonymous composite
+            // is passed as if all SIMD/FP registers were unavailable -- a
+            // <= 16-byte composite (HFA or not) rides the integer bank
+            // x0-x7 then the stack, a larger one goes by reference. The
+            // callee's va_arg walks one 8-byte-stride region, so an FP
+            // bank placement would read garbage on both sides.
+            if i >= fixed_args && abi.variadic_int_only && matches!(abi.arch, Arch::Aarch64) {
+                let placement = if agg.size > 16 {
+                    if int_idx < int_max {
+                        let r = abi.int_arg_regs[int_idx];
+                        int_idx += 1;
+                        ArgPlacement::StructByRefReg(r)
+                    } else {
+                        let off = stack_used;
+                        stack_used += 8;
+                        ArgPlacement::StructByRefStack(off)
+                    }
+                } else {
+                    let need = (aligned as usize / 8).max(1);
+                    if int_idx + need <= int_max {
+                        let mut regs = [ClassReg {
+                            reg: 0,
+                            is_fp: false,
+                        }; 4];
+                        for (n, slot) in regs.iter_mut().enumerate().take(need) {
+                            *slot = ClassReg {
+                                reg: abi.int_arg_regs[int_idx],
+                                is_fp: false,
+                            };
+                            let _ = n;
+                            int_idx += 1;
+                        }
+                        ArgPlacement::StructRegs {
+                            regs,
+                            n: need as u8,
+                        }
+                    } else {
+                        int_idx = int_max;
+                        let off = stack_used;
+                        stack_used += aligned;
+                        ArgPlacement::StructStack {
+                            off,
+                            size: agg.size,
+                        }
+                    }
+                };
+                placements.push(placement);
+                continue;
+            }
             let placement = match &agg.class {
                 AggClass::Regs(classes) => {
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();
@@ -504,7 +551,10 @@ pub(super) fn plan_call_args_aggs(
             placements.push(placement);
             continue;
         }
-        let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
+        // The walker's mask covers the first 32 arguments; later
+        // positions read as integer-classed, matching the producer's
+        // bound (an unguarded shift by i >= 32 overflows).
+        let is_fp = i < 32 && (fp_arg_mask & (1u32 << i)) != 0;
         let is_variadic = i >= fixed_args;
         let force_stack = is_variadic && abi.variadic_on_stack;
         let allow_fp_reg = !is_variadic || !abi.variadic_int_only;
@@ -1175,6 +1225,11 @@ pub(crate) struct Build {
     /// segment, so a `DataFixup { data_offset: K }` resolves to
     /// byte K of this `Vec`.
     pub data: Vec<u8>,
+    /// Base alignment `data` requires in the image, at least 8.
+    /// Raised past 8 only by linked foreign sections with a larger
+    /// sh_addralign (e.g. `.rodata.cst16`); the writers place the
+    /// data section at a multiple of it.
+    pub data_align: usize,
     /// Bytes of zero-initialised data placed past the file image, in the
     /// `[data.len(), data.len() + bss_size)` offset range. Carries no file
     /// storage: the loader zero-fills it (ELF `p_memsz > p_filesz`, PE
@@ -1233,9 +1288,9 @@ pub(crate) struct Build {
     /// resolution. The `OutputKind::Relocatable` writer emits one
     /// undefined-extern symbol per unique name plus one
     /// `R_AARCH64_CALL26` / `R_X86_64_PLT32` reloc per call site
-    /// in `.rela.text`. Final-image writers leave the field
-    /// untouched because no `extern_function_imports` ever land
-    /// in a single-TU compile path.
+    /// in `.rela.text`. The JIT refuses a build with entries here
+    /// (`undefined reference`); final-image writers leave the
+    /// field untouched.
     #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
     pub user_extern_call_sites: Vec<UserExternCallSite>,
     /// Cross-TU data references. Populated by the SSA emitters
@@ -1386,7 +1441,9 @@ pub(crate) struct Build {
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
     /// `plt_trampoline_offsets[i]` is the local code address the
     /// per-format writer should expose as `imports[i].local_name`
-    /// in the static symbol table.
+    /// in the static symbol table. `None` for an import with no
+    /// trampoline (a data import bound through the GOT/IAT); the
+    /// writers must not synthesize a text symbol for those.
     ///
     /// Each trampoline is a tiny GOT/IAT-load + tail-jump (3
     /// instructions on aarch64 / 1 instruction on x86_64) that
@@ -1396,7 +1453,7 @@ pub(crate) struct Build {
     /// the GOT load -- so a debugger's `b malloc` resolves
     /// against this in-image local symbol rather than getting
     /// lost in the dynamic linker's macro-expansion sites.
-    pub plt_trampoline_offsets: Vec<usize>,
+    pub plt_trampoline_offsets: Vec<Option<usize>>,
     /// Post-prologue native byte offset of each function, keyed by
     /// `ent_pc`. The SSA emit records `code.len()` right after the
     /// prologue; the DWARF CFI pass turns the value into the FDE's

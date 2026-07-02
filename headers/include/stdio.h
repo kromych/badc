@@ -243,29 +243,31 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::wprintf,   "wprintf")
 #pragma binding(msvcrt::fprintf,   "fprintf")
 #pragma binding(msvcrt::sprintf,   "sprintf")
-// MSVC renamed the safe forms; the original `snprintf` only landed
-// in msvcrt circa VS2015. `_snprintf` is the universally available
-// spelling and behaves the same way for our usage (no NUL guarantee
-// on overflow, but neither does our other targets' `snprintf` once
-// the buffer fills). Note that msvcrt's printf family prints
-// infinity / NaN as `1.#INF` / `1.#IND` / `1.#QNAN` rather than
-// C99 `inf` / `nan`; programs that classify formatted output
-// by a digit-prefix regex misclassify the msvcrt output as
-// numeric.
-// Routing through `ucrtbase._snprintf` would emit the C99
-// spelling but that entry point fails with
-// STATUS_ENTRYPOINT_NOT_FOUND at PE load time on the GitHub
-// Windows runners -- the documented UCRT import path is via the
-// `api-ms-win-crt-stdio-l1-1-0.dll` proxy set, not ucrtbase
-// directly. Tracked under the TODO marker until c5 grows
+// The original `snprintf` only landed in msvcrt circa VS2015, and
+// `_snprintf` deviates from C99 7.19.6.5 (returns -1 and omits the
+// NUL on truncation). The standard `snprintf` / `vsnprintf`
+// spellings carry no binding here: they resolve at link time against
+// the conforming definitions in the auto-linked runtime, which wrap
+// `_vsnprintf` + `_vscprintf`. The underscored spellings keep the
+// msvcrt entry points for source written against msvcrt semantics.
+// Note that msvcrt's printf family prints infinity / NaN as
+// `1.#INF` / `1.#IND` / `1.#QNAN` rather than C99 `inf` / `nan`;
+// programs that classify formatted output by a digit-prefix regex
+// misclassify the msvcrt output as numeric.
+// Routing through `ucrtbase` would emit the C99 spelling but its
+// entry points fail with STATUS_ENTRYPOINT_NOT_FOUND at PE load
+// time on the GitHub Windows runners -- the documented UCRT import
+// path is via the `api-ms-win-crt-stdio-l1-1-0.dll` proxy set, not
+// ucrtbase directly. Tracked under the TODO marker until c5 grows
 // support for the UCRT proxy DLLs.
-#pragma binding(msvcrt::snprintf,  "_snprintf")
 #pragma binding(msvcrt::_snprintf, "_snprintf")
+#pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
 #pragma binding(msvcrt::vprintf,   "vprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
-#pragma binding(msvcrt::vsnprintf, "_vsnprintf")
-#pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
+// The runtime's `vsnprintf` needs a prototype on Windows; every
+// other target binds the name straight to libc.
+int vsnprintf(char *buf, int size, char *fmt, char *ap);
 #pragma binding(msvcrt::scanf,     "scanf")
 #pragma binding(msvcrt::fscanf,    "fscanf")
 #pragma binding(msvcrt::sscanf,    "sscanf")
@@ -291,7 +293,9 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::fseek,     "fseek")
 #pragma binding(msvcrt::ftell,     "ftell")
 #pragma binding(msvcrt::_fseeki64, "_fseeki64")
-#pragma binding(msvcrt::_ftelli64, "_ftelli64")
+// The legacy msvcrt.dll exports no _ftelli64 (unlike _fseeki64); UCRT does.
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::_ftelli64, "_ftelli64")
 #pragma binding(msvcrt::fgetpos,   "fgetpos")
 #pragma binding(msvcrt::fsetpos,   "fsetpos")
 #pragma binding(msvcrt::rewind,    "rewind")
@@ -369,7 +373,7 @@ typedef struct __c5_fpos_t fpos_t;
 // SDK macros. badc's time_t is 64-bit on Windows, so the ABI matches.
 #pragma binding(msvcrt::localtime_s,    "_localtime64_s")
 #pragma binding(msvcrt::gmtime_s,       "_gmtime64_s")
-#pragma binding(msvcrt::ctime_s,        "ctime_s")
+#pragma binding(msvcrt::ctime_s,        "_ctime64_s")
 #pragma binding(msvcrt::asctime_s,      "asctime_s")
 #pragma binding(msvcrt::strerror_s,     "strerror_s")
 #pragma binding(msvcrt::_strdup,        "_strdup")
@@ -402,7 +406,12 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::_unlink,        "_unlink")
 #pragma binding(msvcrt::_getcwd,        "_getcwd")
 #pragma binding(msvcrt::_chdir,         "_chdir")
+// The legacy arm64 msvcrt.dll does not export `_getpid`; UCRT does.
+#if defined(__aarch64__)
+#pragma binding(ucrtbase::_getpid,      "_getpid")
+#else
 #pragma binding(msvcrt::_getpid,        "_getpid")
+#endif
 #pragma binding(msvcrt::_dup,           "_dup")
 #pragma binding(msvcrt::_dup2,          "_dup2")
 #pragma binding(msvcrt::_fdopen,        "_fdopen")
@@ -410,9 +419,10 @@ typedef struct __c5_fpos_t fpos_t;
 // form, so the portable spelling binds to the same entry point.
 #pragma binding(msvcrt::fdopen,         "_fdopen")
 #pragma binding(msvcrt::fileno,         "_fileno")
-#pragma binding(msvcrt::_byteswap_ulong,  "_byteswap_ulong")
-#pragma binding(msvcrt::_byteswap_uint64, "_byteswap_uint64")
-#pragma binding(msvcrt::_byteswap_ushort, "_byteswap_ushort")
+// The legacy msvcrt.dll exports no _byteswap_*; UCRT does.
+#pragma binding(ucrtbase::_byteswap_ulong,  "_byteswap_ulong")
+#pragma binding(ucrtbase::_byteswap_uint64, "_byteswap_uint64")
+#pragma binding(ucrtbase::_byteswap_ushort, "_byteswap_ushort")
 // `__acrt_iob_func(int)` is the CRT helper that returns a
 // FILE * to the requested standard stream (0=stdin, 1=stdout,
 // 2=stderr). Used by `__c5_lazy_stream` above to back the
@@ -797,9 +807,12 @@ static char *__c5_lazy_stream(int idx) {
 // Windows-flavoured sources spell the v* names with a leading underscore
 // (`#define vsnprintf _vsnprintf` is a common MSVC idiom). Alias the
 // underscored spellings to the canonical names so they resolve through the
-// same per-target bindings -- on Windows the canonical names already bind
-// to the underscored CRT entry points.
+// same per-target bindings. On Windows `_vsnprintf` stays a direct msvcrt
+// binding with msvcrt semantics; the canonical `vsnprintf` is the C99
+// definition in the auto-linked runtime.
 #define _vfprintf  vfprintf
 #define _vprintf   vprintf
 #define _vsprintf  vsprintf
+#ifndef _WIN32
 #define _vsnprintf vsnprintf
+#endif

@@ -54,8 +54,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0xa                // =10
                	ldur	x1, [x29, #-0x8]
-               	mov	x9, x1
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
@@ -82,8 +82,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xa                // =10
-               	mov	x9, x1
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
@@ -106,8 +106,8 @@ Disassembly of section .text:
                	cbnz	x1, <addr>
                	mov	x0, #0x3                // =3
                	ldur	x1, [x29, #-0x20]
-               	mov	x9, x1
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10

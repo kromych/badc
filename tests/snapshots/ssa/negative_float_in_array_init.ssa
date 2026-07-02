@@ -17,7 +17,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v7   ImmData(40)                                      -> x1
     v8   Imm(8)                                           -> x1
     v9   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
-    v10  Load { addr=v9, disp=0, kind=F64 }               -> d0
+    v10  Load { addr=v1, disp=8, kind=F64 }               -> d0
     v11  Imm(4612811918334230528)                         -> x1
     v12  Fneg(v11)                                        -> d1
     v13  Binop { op=fne, lhs=v10, rhs=v12 }               -> x1
@@ -29,7 +29,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v15  ImmData(40)                                      -> x1
     v16  Imm(16)                                          -> x1
     v17  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x1
-    v18  Load { addr=v17, disp=0, kind=F64 }              -> d0
+    v18  Load { addr=v1, disp=16, kind=F64 }              -> d0
     v19  Imm(4764320886503243776)                         -> x1
     v20  Fneg(v19)                                        -> d1
     v21  Binop { op=fne, lhs=v18, rhs=v20 }               -> x1
@@ -43,11 +43,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v25  Load { addr=v1, disp=0, kind=F64 }               -> d0
     v26  Imm(8)                                           -> x1
     v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
-    v28  Load { addr=v27, disp=0, kind=F64 }              -> d1
+    v28  Load { addr=v1, disp=8, kind=F64 }               -> d1
     v29  Binop { op=fadd, lhs=v25, rhs=v28 }              -> d0
     v30  Imm(16)                                          -> x1
-    v31  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
-    v32  Load { addr=v31, disp=0, kind=F64 }              -> d1
+    v31  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x1
+    v32  Load { addr=v1, disp=16, kind=F64 }              -> d1
     v33  Binop { op=fadd, lhs=v29, rhs=v32 }              -> d0
     v34  Imm(0)                                           -> x0
     v35  LoadLocal { off=-1, kind=F64 }                   -> d1

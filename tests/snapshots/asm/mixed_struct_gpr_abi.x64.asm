@@ -24,8 +24,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	cvtsi2sd	%rax, %xmm0
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x8, %rax
-               	movsd	(%rax,%riz), %xmm1
+               	movsd	0x8(%rax,%riz), %xmm1
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movapd	%xmm1, %xmm14
                	movq	%rax, %xmm15
@@ -60,8 +59,7 @@ Disassembly of section .text:
                	movq	(%rcx), %rcx
                	addq	%rcx, %rax
                	leaq	-0x10(%rbp), %rcx
-               	addq	$0x8, %rcx
-               	movsd	(%rcx,%riz), %xmm0
+               	movsd	0x8(%rcx,%riz), %xmm0
                	cvttsd2si	%xmm0, %rcx
                	addq	%rcx, %rax
                	addq	$0x10, %rsp
@@ -85,9 +83,8 @@ Disassembly of section .text:
                	popq	%rdx
                	leaq	-0x10(%rbp), %rdi
                	movl	$0x2, %esi
-               	movq	%rdi, %r10
-               	movq	(%r10), %rdi
-               	movsd	0x8(%r10,%riz), %xmm0
+               	movsd	0x8(%rdi,%riz), %xmm0
+               	movq	(%rdi), %rdi
                	callq	<addr>
                	cmpq	$0xe, %rax
                	je	<addr>
@@ -120,3 +117,4 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

@@ -50,6 +50,9 @@ impl Compiler {
     }
 
     pub(super) fn sizeof_operand_bytes(&mut self) -> Result<i64, C5Error> {
+        // Cleared each call; set only when the operand is a VLA whose
+        // size the `sizeof` site must read at runtime (C99 6.5.3.4p2).
+        self.pending.sizeof_vla_size_slot = None;
         // Snapshot the lex state before any speculative paren
         // consumption so the operand-shape dispatch below can
         // restore when `sizeof (expr)->m` turns out to wrap the
@@ -155,6 +158,12 @@ impl Compiler {
             let idx = self.lex.curr_id_idx;
             let var_ty = self.symbols[idx].type_;
             let arr = self.symbols[idx].array_size;
+            // C99 6.5.3.4p2: `sizeof` of a VLA is the runtime byte
+            // count. Signal the caller to load it from the VLA's
+            // size slot; the returned constant is unused in that case.
+            if self.symbols[idx].is_vla {
+                self.pending.sizeof_vla_size_slot = Some(self.symbols[idx].vla_size_slot);
+            }
             self.next()?;
             if arr > 0 {
                 arr * self.size_of_type(var_ty) as i64

@@ -32,32 +32,46 @@ struct winsize {
 #define TIOCGWINSZ 0x5413
 #endif
 
-int ioctl(int fd, unsigned long request, void *argp);
+// POSIX (XSH) and both target libcs declare ioctl variadic; Darwin's
+// wrapper reads the argument via va_arg, so a fixed-arity prototype
+// passes it where the callee does not look (Darwin arm64 takes
+// variadic arguments from the stack).
+int ioctl(int fd, unsigned long request, ...);
 
 // ioctl request codes referenced by terminal/file modules. Per-target codes.
 #ifndef FIOASYNC
 #if defined(__APPLE__)
 #define FIOASYNC 2147772029
+#elif defined(__linux__)
+#define FIOASYNC 0x5452
 #endif
 #endif
 #ifndef FIOCLEX
 #if defined(__APPLE__)
 #define FIOCLEX 536897025
+#elif defined(__linux__)
+#define FIOCLEX 0x5451
 #endif
 #endif
 #ifndef FIONBIO
 #if defined(__APPLE__)
 #define FIONBIO 2147772030
+#elif defined(__linux__)
+#define FIONBIO 0x5421
 #endif
 #endif
 #ifndef FIONCLEX
 #if defined(__APPLE__)
 #define FIONCLEX 536897026
+#elif defined(__linux__)
+#define FIONCLEX 0x5450
 #endif
 #endif
 #ifndef FIONREAD
 #if defined(__APPLE__)
 #define FIONREAD 1074030207
+#elif defined(__linux__)
+#define FIONREAD 0x541b
 #endif
 #endif
 #ifdef __APPLE__

@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_decl_modifier, struct_ty_for};
+use super::types::{UNSIGNED_BIT, VOLATILE_BIT, is_decl_modifier, struct_ty_for};
 
 /// Accumulator for the int-modifier soup that prefixes a C base
 /// type. `signed` / `unsigned` / `short` / `long` (any count) /
@@ -291,6 +291,7 @@ impl Compiler {
         thread_local: &mut bool,
         noreturn: &mut bool,
         dllexport: &mut bool,
+        aligned: &mut bool,
     ) {
         if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.as_str();
@@ -309,6 +310,9 @@ impl Compiler {
                 // MSVC `__declspec(dllexport)`: export the symbol, the
                 // equivalent of `#pragma export(name)`.
                 *dllexport = true;
+            } else if n == "aligned" || n == "__aligned__" || n == "align" {
+                // GNU `aligned(N)` / MSVC `__declspec(align(N))`.
+                *aligned = true;
             }
         }
     }
@@ -328,14 +332,43 @@ impl Compiler {
         let mut thread_local = false;
         let mut noreturn = false;
         let mut dllexport = false;
+        let mut align: i64 = 0;
         loop {
             if self.lex.tk == Token::Attribute {
                 // `__attribute__((...))`, `__declspec(...)`,
                 // `_Alignas(...)`. Consume the balanced parenthesised
                 // payload, recording the `packed` attribute.
+                let is_alignas = self.symbols[self.lex.curr_id_idx].name == "_Alignas";
                 self.next()?;
                 if self.lex.tk != '(' {
                     return Err(self.compile_err("`(` expected after attribute specifier"));
+                }
+                // C11 6.7.5 `_Alignas(constant-expression)`. The
+                // type-name form's alignment never exceeds 8 in this
+                // dialect and stays advisory.
+                if is_alignas {
+                    self.next()?; // (
+                    if self.lex.tk == Token::Num {
+                        let n = self.parse_constant_int()?;
+                        align = align.max(n);
+                        if self.lex.tk != ')' {
+                            return Err(self.compile_err("`)` expected after `_Alignas` operand"));
+                        }
+                        self.next()?;
+                    } else {
+                        let mut depth = 1i32;
+                        while depth > 0 {
+                            if self.lex.tk == '(' {
+                                depth += 1;
+                            } else if self.lex.tk == ')' {
+                                depth -= 1;
+                            } else if self.lex.tk == 0 {
+                                return Err(self.compile_err("unterminated `_Alignas`"));
+                            }
+                            self.next()?;
+                        }
+                    }
+                    continue;
                 }
                 let mut depth = 0i32;
                 loop {
@@ -351,14 +384,34 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err("unterminated attribute specifier"));
                     } else {
+                        let mut saw_aligned = false;
                         self.note_attribute_name(
                             &mut packed,
                             &mut maybe_unused,
                             &mut thread_local,
                             &mut noreturn,
                             &mut dllexport,
+                            &mut saw_aligned,
                         );
                         self.next()?;
+                        if saw_aligned {
+                            if self.lex.tk == '(' {
+                                self.next()?;
+                                let n = self.parse_constant_int()?;
+                                align = align.max(n);
+                                if self.lex.tk != ')' {
+                                    return Err(
+                                        self.compile_err("`)` expected after `aligned` operand")
+                                    );
+                                }
+                                self.next()?;
+                            } else {
+                                // Bare `aligned`: the target's largest
+                                // fundamental alignment (16 on the
+                                // supported targets).
+                                align = align.max(16);
+                            }
+                        }
                     }
                 }
             } else if self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'[') {
@@ -389,14 +442,27 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err("unterminated `[[` attribute"));
                     } else {
+                        let mut saw_aligned = false;
                         self.note_attribute_name(
                             &mut packed,
                             &mut maybe_unused,
                             &mut thread_local,
                             &mut noreturn,
                             &mut dllexport,
+                            &mut saw_aligned,
                         );
                         self.next()?;
+                        if saw_aligned && self.lex.tk == '(' {
+                            self.next()?;
+                            let n = self.parse_constant_int()?;
+                            align = align.max(n);
+                            if self.lex.tk != ')' {
+                                return Err(
+                                    self.compile_err("`)` expected after `aligned` operand")
+                                );
+                            }
+                            self.next()?;
+                        }
                     }
                 }
             } else {
@@ -414,6 +480,9 @@ impl Compiler {
         }
         if dllexport {
             self.pending.attr_dllexport = true;
+        }
+        if align > 0 {
+            self.pending.attr_align = self.pending.attr_align.max(align);
         }
         Ok(packed)
     }
@@ -461,6 +530,21 @@ impl Compiler {
         Ok(Some(bt))
     }
 
+    /// `VOLATILE_BIT` when the current token is the `volatile` type
+    /// qualifier (C99 6.7.3), 0 for any other spelling mapped to
+    /// `Token::TypeQual` (`const`, `restrict`, calling-convention
+    /// decorations). Qualifier identity lives on the interned keyword
+    /// symbol; the caller consumes the token.
+    pub(super) fn lex_volatile_bit(&self) -> i64 {
+        if self.lex.tk != Token::TypeQual {
+            return 0;
+        }
+        match self.symbols[self.lex.curr_id_idx].name.as_str() {
+            "volatile" | "__volatile" | "__volatile__" => VOLATILE_BIT,
+            _ => 0,
+        }
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -486,6 +570,7 @@ impl Compiler {
         // collect everything we see, then look at the next token
         // for the type keyword.
         let mut m = IntModifiers::default();
+        let mut qual_bits: i64 = 0;
         loop {
             // C23 6.7.13 `[[...]]` and GNU `__attribute__`/`__declspec`
             // may lead the declaration specifiers.
@@ -514,8 +599,9 @@ impl Compiler {
                 self.pending_noreturn = true;
             }
             if !self.try_consume_int_modifier(&mut m)? {
-                // const / volatile / restrict / _Atomic / etc. --
-                // all no-ops in c5, just consume.
+                // `volatile` sets the tag's qualifier bit (C99 6.7.3);
+                // const / restrict / _Atomic / etc. are no-ops.
+                qual_bits |= self.lex_volatile_bit();
                 self.next()?;
             }
         }
@@ -528,7 +614,8 @@ impl Compiler {
             return self.parse_typeof_specifier();
         }
 
-        let bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
+        let base_tok = self.lex.tk;
+        let mut bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
             scalar
         } else if self.lex.tk == Token::Enum {
             // `enum [Tag] [{ ... }]` collapses to `int`; the shared
@@ -590,17 +677,57 @@ impl Compiler {
             return Err(self.compile_err("type expected"));
         };
 
-        // Trailing qualifiers / modifiers: `int const`, `int long`,
-        // `unsigned int long long`, etc. all collapse to the base type
-        // already chosen.
+        // Trailing specifiers: C99 6.7.2p2 admits the specifier
+        // multiset in any order, so `int long`, `int unsigned`,
+        // `char unsigned`, `double long` re-derive the base tag from
+        // the folded modifiers; trailing qualifiers fold into the
+        // qualifier bits. A non-scalar base (typedef, struct, enum)
+        // has no valid int-modifier combination; the tokens are
+        // consumed as before.
+        let (saw_int_mod, trailing_quals) = self.consume_trailing_decl_modifiers(&mut m)?;
+        qual_bits |= trailing_quals;
+        if saw_int_mod {
+            if base_tok == Token::Int {
+                bt = m.int_base();
+            } else if base_tok == Token::Char {
+                bt = m.char_tag(self.target.plain_char_signed());
+            } else if base_tok == Token::Double && m.saw_long() {
+                self.pending.base_was_long_double = true;
+            }
+        }
+
+        Ok(bt | qual_bits)
+    }
+
+    /// Consume the specifiers that may trail the base-type keyword:
+    /// int modifiers fold into `m` (the caller re-derives the base
+    /// tag), qualifier bits are returned for the caller to fold into
+    /// the type, and `inline` / `_Noreturn` set the same pending
+    /// flags as in leading position.
+    pub(super) fn consume_trailing_decl_modifiers(
+        &mut self,
+        m: &mut IntModifiers,
+    ) -> Result<(bool, i64), C5Error> {
+        let mut saw_int_mod = false;
+        let mut qual_bits = 0i64;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::Attribute {
                 self.skip_attribute_specifiers()?;
                 continue;
             }
+            if self.lex.tk == Token::Inline {
+                self.pending_is_inline = true;
+            }
+            if self.lex.tk == Token::Noreturn {
+                self.pending_noreturn = true;
+            }
+            if self.try_consume_int_modifier(m)? {
+                saw_int_mod = true;
+                continue;
+            }
+            qual_bits |= self.lex_volatile_bit();
             self.next()?;
         }
-
-        Ok(bt)
+        Ok((saw_int_mod, qual_bits))
     }
 }

@@ -109,7 +109,7 @@ impl Compiler {
     /// With `u`/`U`: same hierarchy in the unsigned variants.
     /// With `l`/`L` / `ll`/`LL`: floor at the named width and let
     /// the magnitude bump further as needed.
-    fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
+    pub(super) fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
         let suffix_long = self.lex.int_suffix_long;
         let mut is_unsigned = self.lex.int_suffix_unsigned;
         // C99 6.4.4.1: a hexadecimal, octal, or binary constant may take
@@ -133,7 +133,9 @@ impl Compiler {
                 if bits >= 128 {
                     true
                 } else {
-                    mag <= (1u128 << (bits - 1))
+                    // Signed max is 2^(bits-1) - 1; 2^31 / 2^63 exactly
+                    // must move to the next rank (or unsigned type).
+                    mag < (1u128 << (bits - 1))
                 }
             } else if bits >= 128 {
                 true
@@ -431,6 +433,10 @@ impl Compiler {
     }
 
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
+        self.with_nesting("expression", |c| c.expr_inner(lev))
+    }
+
+    fn expr_inner(&mut self, lev: i64) -> Result<(), C5Error> {
         let mut t: i64;
 
         if self.lex.tk == 0 {
@@ -500,12 +506,15 @@ impl Compiler {
             let total_bytes = self.sizeof_operand_bytes()?;
             self.emit_imm(total_bytes);
             self.ty = Ty::Int as i64;
-            // Dual-emit: sizeof is a compile-time constant per
-            // 6.5.3.4p2. Seed the accumulator with the matching
-            // IntLit so a wrapping expression (call argument,
-            // binary op, assignment) finds the value on
-            // `ast_acc`.
-            self.ast_emit_int_lit(total_bytes, self.ty);
+            // C99 6.5.3.4p2: `sizeof` of a variable-length array is a
+            // runtime value -- emit a load of the VLA's byte-count
+            // slot. Every other operand folds to a compile-time
+            // constant; seed the accumulator with the matching IntLit.
+            if let Some(size_slot) = self.pending.sizeof_vla_size_slot.take() {
+                self.ast_emit_vla_sizeof(size_slot);
+            } else {
+                self.ast_emit_int_lit(total_bytes, self.ty);
+            }
         } else if self.lex.tk == Token::Alignof {
             // C11 6.5.3.4: `_Alignof ( type-name )`, a compile-time
             // constant. Emit the alignment as a runtime immediate and
@@ -540,6 +549,23 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == '(' {
                 self.next()?;
+                // C89 6.3.2.2 implicit declaration, restricted to the
+                // names the driver listed: the link set defines them,
+                // so the call binds `extern int name();` and resolves
+                // against the user's definition rather than through a
+                // header's library binding.
+                if self.symbols[id_idx].class == 0
+                    && !self.implicit_extern_fns.is_empty()
+                    && self
+                        .implicit_extern_fns
+                        .iter()
+                        .any(|n| n == &self.symbols[id_idx].name)
+                {
+                    self.symbols[id_idx].class = Token::Fun as i64;
+                    self.symbols[id_idx].type_ = Ty::Int as i64;
+                    self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
+                    self.symbols[id_idx].defined_here = false;
+                }
                 // C11 7.17 atomic operations and the other compiler
                 // builtins share the `#pragma intrinsic` registry
                 // (`<stdatomic.h>` declares the atomics). An atomic op is
@@ -1294,6 +1320,7 @@ impl Compiler {
                 self.ty = self.symbols[id_idx].type_;
                 let is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                 let is_array_var = self.symbols[id_idx].array_size != 0;
+                let is_vla_var = self.symbols[id_idx].is_vla;
                 // A function-pointer variable carries its callee parameter
                 // types so the dereferenced-call shape `(*fp)(args)` (which
                 // reaches the postfix path rather than the direct-identifier
@@ -1312,7 +1339,14 @@ impl Compiler {
                 // "address-as-value" rule but keep their type
                 // because the `.field` operator needs the struct's
                 // value type to look up offsets.
-                if is_array_var {
+                if is_vla_var {
+                    // C99 6.3.2.1p3: a VLA decays to a pointer to its
+                    // first element -- the runtime base pointer, loaded
+                    // from the hidden slot, not a fixed frame address.
+                    let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
+                    self.ty += Ty::Ptr as i64;
+                    self.ast_emit_vla_base(ptr_slot, self.ty);
+                } else if is_array_var {
                     if identifier_is_local {
                         // Array decay produces the array's
                         // address rather than a scalar value, so
@@ -1502,6 +1536,7 @@ impl Compiler {
                         }
                     }
                     while self.lex.tk == Token::TypeQual {
+                        t |= self.lex_volatile_bit();
                         self.next()?;
                     }
                 }
@@ -1536,8 +1571,9 @@ impl Compiler {
                 // as a no-op pointer level. Counted-parens scan
                 // until the cast's outer `)` so even nested fp
                 // shapes consume cleanly.
+                let mut cast_fn_proto = None;
                 if self.lex.tk == '(' {
-                    let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
+                    let (nested_ptrs, proto) = self.parse_abstract_ptr_declarator(true)?;
                     t += nested_ptrs * (Ty::Ptr as i64);
                     // Abstract fn-ptr declarator: the inner `*`
                     // count IS the indirection from the cast's
@@ -1546,6 +1582,7 @@ impl Compiler {
                     if nested_ptrs > 0 {
                         cast_fpi = Some(nested_ptrs);
                     }
+                    cast_fn_proto = proto;
                 }
                 if self.lex.tk == ')' {
                     self.next()?;
@@ -1646,6 +1683,20 @@ impl Compiler {
                         && fpi > 0
                     {
                         self.pending.fn_ptr_chain_depth = fpi - 1;
+                    }
+                    // C99 6.5.2.2p7: a call through the cast pointer
+                    // uses the cast's prototype. Override the operand's
+                    // recorded callee channel so a following call
+                    // narrows each argument and splits the variadic
+                    // tail per the cast, whatever the operand's own
+                    // declared type said.
+                    if let Some(pp) = cast_fn_proto {
+                        self.pending.indirect_callee_is_variadic = pp.is_variadic;
+                        self.pending.indirect_callee_params = if pp.types.is_empty() {
+                            None
+                        } else {
+                            Some(pp.types)
+                        };
                     }
                 }
             } else {
@@ -2450,7 +2501,8 @@ impl Compiler {
                 // below when the lvalue is integer but the rhs is
                 // floating (C99 6.5.16.2 performs the operation in the
                 // common type).
-                let rhs_is_fp = is_floating_scalar(self.ty);
+                let rhs_ty = self.ty;
+                let rhs_is_fp = is_floating_scalar(rhs_ty);
                 if (binop == Token::AddOp as i64 || binop == Token::SubOp as i64)
                     && is_pointer_ty(lhs_ty)
                     && !is_floating_scalar(lhs_ty)
@@ -2503,6 +2555,16 @@ impl Compiler {
                 // converts the result back to the lvalue's integer
                 // type (C99 6.5.16.2).
                 let op_is_fp = lhs_is_fp || rhs_is_fp;
+                // C99 6.5.16.2p3: `E1 op= E2` computes `E1 op E2`, so
+                // divide / modulo signedness follows the 6.3.1.8 common
+                // type of both operands, not the lvalue alone (`int x;
+                // x /= 2u` divides unsigned). Pointer operands keep the
+                // lvalue's signedness (no arithmetic common type).
+                let div_unsigned = if op_is_fp || is_pointer_ty(lhs_ty) || is_pointer_ty(rhs_ty) {
+                    is_unsigned_ty(lhs_ty)
+                } else {
+                    is_unsigned_ty(usual_arith_common_ty(lhs_ty, rhs_ty, self.target))
+                };
                 use super::super::ir::BinOp as B;
                 let bop = match binop {
                     x if x == Token::AddOp as i64 => {
@@ -2529,14 +2591,14 @@ impl Compiler {
                     x if x == Token::DivOp as i64 => {
                         if op_is_fp {
                             B::Fdiv
-                        } else if is_unsigned_ty(lhs_ty) {
+                        } else if div_unsigned {
                             B::Divu
                         } else {
                             B::Div
                         }
                     }
                     x if x == Token::ModOp as i64 => {
-                        if is_unsigned_ty(lhs_ty) {
+                        if div_unsigned {
                             B::Modu
                         } else {
                             B::Mod
@@ -2615,18 +2677,21 @@ impl Compiler {
                 let else_ty = self.ty;
                 // C99 6.5.15p5: when both arms have arithmetic type the
                 // conditional's type is their usual-arithmetic-conversions
-                // common type and each arm converts to it. Without the cast a
-                // mixed int / floating ternary stores one arm through the
-                // other arm's store kind (integer bits read as a double). Pure
-                // integer arms already lower correctly on the I64 path, so
-                // only the floating-involved case needs the conversion here.
+                // common type and each arm converts to it. Without the cast
+                // a mixed int / floating ternary stores one arm through the
+                // other arm's store kind, and mixed-signedness integer arms
+                // take the wrong signedness (`c ? 1u : -1` must be the
+                // zero-extended unsigned value, not sign-extended int).
+                // Same-typed integer arms need no conversion.
                 let mut result_ty = self.ty;
                 let arith = |t: i64| !is_pointer_ty(t) && !is_struct_ty(t);
-                if (is_floating_scalar(then_ty) || is_floating_scalar(else_ty))
-                    && arith(then_ty)
-                    && arith(else_ty)
-                {
-                    let common = fp_result_ty(then_ty, else_ty);
+                let arms_fp = is_floating_scalar(then_ty) || is_floating_scalar(else_ty);
+                if (arms_fp || then_ty != else_ty) && arith(then_ty) && arith(else_ty) {
+                    let common = if arms_fp {
+                        fp_result_ty(then_ty, else_ty)
+                    } else {
+                        usual_arith_common_ty(then_ty, else_ty, self.target)
+                    };
                     result_ty = common;
                     if then_ty != common && then_ast.is_some() {
                         let pos = self.ast_src_pos();
@@ -2798,16 +2863,18 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
-                // Pick logical (Shru) for unsigned LHS, arithmetic (Shr) otherwise.
-                // The RHS is the shift count; only the LHS sign matters.
-
+                // Pick logical (Shru) for unsigned LHS, arithmetic (Shr)
+                // otherwise; the RHS is the shift count and does not
+                // participate. C99 6.5.7p3: the result has the promoted
+                // LHS type, so a 64-bit LHS keeps its width. Set the
+                // type before building the AST node so the node carries
+                // the result type, mirroring the `<<` path.
+                let lhs_size = self.size_of_type(t);
+                self.ty = if lhs_size <= 2 { Ty::Int as i64 } else { t };
                 if is_unsigned_ty(t) {
                     self.ast_binop(crate::c5::ir::BinOp::Shru);
-                    // Preserve LHS unsigned-ness so chained shifts/compares stay unsigned.
-                    self.ty = t;
                 } else {
                     self.ast_binop(crate::c5::ir::BinOp::Shr);
-                    self.ty = Ty::Int as i64;
                 }
             } else if self.lex.tk == Token::AddOp {
                 self.next()?;

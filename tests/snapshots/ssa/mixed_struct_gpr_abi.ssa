@@ -10,8 +10,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v4   Load { addr=v3, disp=0, kind=I64 }               -> x0
     v5   FpCast { kind=IntToFp, value=v4 }                -> d0
     v6   LocalAddr(-2)                                    -> x0
-    v7   BinopI { op=add, lhs=v6, rhs_imm=8 }             -> x0
-    v8   Load { addr=v7, disp=0, kind=F64 }               -> d1
+    v7   BinopI { op=add, lhs=v6, rhs_imm=8 }             -> x1
+    v8   Load { addr=v6, disp=8, kind=F64 }               -> d1
     v9   Imm(4611686018427387904)                         -> x0
     v10  Binop { op=fmul, lhs=v8, rhs=v9 }                -> d2
     v11  Fma { a=v8, b=v9, c=v5, neg_product=false, neg_addend=false } -> d0
@@ -62,8 +62,8 @@ fn ent_pc=1 n_params=7 variadic=false locals=2
     v35  Load { addr=v34, disp=0, kind=I64 }              -> x1
     v36  Binop { op=add, lhs=v33, rhs=v35 }               -> x0
     v37  LocalAddr(-2)                                    -> x1
-    v38  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x1
-    v39  Load { addr=v38, disp=0, kind=F64 }              -> d0
+    v38  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x2
+    v39  Load { addr=v37, disp=8, kind=F64 }              -> d0
     v40  FpCast { kind=FpToInt, value=v39 }               -> x1
     v41  Binop { op=add, lhs=v36, rhs=v40 }               -> x0
     terminator Return(v41)   (exit_acc=v41)

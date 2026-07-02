@@ -48,6 +48,22 @@ impl Compiler {
         is_union: bool,
         packed: bool,
     ) -> Result<usize, C5Error> {
+        // An alignment request preceding the tag
+        // (`__declspec(align(16)) struct S { ... }`) belongs to the
+        // declaration, not to the first member; park it across the
+        // body parse so the member checks see only member attributes.
+        let decl_attr_align = core::mem::take(&mut self.pending.attr_align);
+        let r = self.parse_aggregate_body_inner(name, is_union, packed);
+        self.pending.attr_align = self.pending.attr_align.max(decl_attr_align);
+        r
+    }
+
+    fn parse_aggregate_body_inner(
+        &mut self,
+        name: &str,
+        is_union: bool,
+        packed: bool,
+    ) -> Result<usize, C5Error> {
         // Pre-register or recycle a forward declaration so
         // self-referential pointer fields can find this aggregate
         // mid-definition. C99 6.2.1: only a tag in the SAME scope
@@ -149,6 +165,15 @@ impl Compiler {
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
+                    // Member layout uses 8-byte alignment at most; a
+                    // larger request would change the struct layout
+                    // silently, so it is a diagnostic.
+                    let m_align = core::mem::take(&mut self.pending.attr_align);
+                    if m_align > 8 {
+                        return Err(self.compile_err(format!(
+                            "member alignment {m_align} is not supported (at most 8)"
+                        )));
+                    }
                     continue;
                 }
                 if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
@@ -168,7 +193,8 @@ impl Compiler {
             // unsigned, so a value with the field's high bit set
             // zero-extends rather than sign-extends.
             let mut field_base_is_enum = false;
-            let field_base = if let Some(inner) = atomic_field_base {
+            let field_base_tok = self.lex.tk;
+            let mut field_base = if let Some(inner) = atomic_field_base {
                 inner
             } else if self.lex.tk == Token::Typeof {
                 // `typeof ( ... ) member;` (C23 6.7.2.5): the operand's
@@ -310,14 +336,18 @@ impl Compiler {
                 return Err(self.compile_err("type expected in struct field"));
             };
 
-            // Trailing modifiers: `int long`, `unsigned long long`, etc.
-            while is_decl_modifier(self.lex.tk) {
-                if self.lex.tk == Token::Attribute {
-                    self.skip_attribute_specifiers()?;
-                    continue;
+            // Trailing specifiers: C99 6.7.2p2 admits any order, so
+            // `int long` / `char unsigned` fields re-derive the base
+            // tag from the folded modifiers.
+            let (saw_int_mod, trailing_quals) = self.consume_trailing_decl_modifiers(&mut mods)?;
+            if saw_int_mod {
+                if field_base_tok == Token::Int {
+                    field_base = mods.int_base();
+                } else if field_base_tok == Token::Char {
+                    field_base = mods.char_tag(self.target.plain_char_signed());
                 }
-                self.next()?;
             }
+            field_base |= trailing_quals;
 
             // Anonymous struct/union member (C11 6.7.2.1p13). The
             // type-prefix parse just registered an anon-tagged
@@ -497,6 +527,12 @@ impl Compiler {
                 // A member may carry a trailing attribute
                 // (`int x __attribute__((deprecated));`).
                 self.skip_attribute_specifiers()?;
+                let m_align = core::mem::take(&mut self.pending.attr_align);
+                if m_align > 8 {
+                    return Err(self.compile_err(format!(
+                        "member alignment {m_align} is not supported (at most 8)"
+                    )));
+                }
                 // A typedef whose alias is an array contributes
                 // its dimension when the declarator stayed at the
                 // typedef's element type (`jmp_buf b;` ->
@@ -742,24 +778,35 @@ impl Compiler {
     /// semantics: no inter-member padding and an alignment of 1. Used
     /// when the attribute marker follows the body, after the fields were
     /// placed at their natural alignment. A union only loses its tail
-    /// padding (members already sit at offset 0). Bitfield members are
-    /// left at their computed offsets; the packed bit-layout rules are
-    /// not modeled here.
+    /// padding (members already sit at offset 0). Bitfields pack at the
+    /// bit level with no storage-unit padding (the GCC/clang packed
+    /// layout; C99 6.7.2.1p11 leaves the unit implementation-defined);
+    /// a non-bitfield member starts at the next byte boundary.
     pub(super) fn repack_struct(&mut self, struct_id: usize) {
         self.structs[struct_id].align = 1;
         if self.structs[struct_id].is_union {
             return;
         }
         let n = self.structs[struct_id].fields.len();
-        let mut offset = 0usize;
+        let mut bit_cursor = 0usize;
+        let mut bitfields: Vec<(usize, usize)> = Vec::new();
         for i in 0..n {
             let (ty, array_size, bit_width) = {
                 let f = &self.structs[struct_id].fields[i];
                 (f.ty, f.array_size, f.bit_width)
             };
             if bit_width > 0 {
+                // TODO: a field whose bits would span more than an
+                // 8-byte load window (start % 8 + width > 64) is bumped
+                // to the next byte; gcc packs it contiguously.
+                if bit_cursor % 8 + bit_width as usize > 64 {
+                    bit_cursor = round_up(bit_cursor, 8);
+                }
+                bitfields.push((i, bit_cursor));
+                bit_cursor += bit_width as usize;
                 continue;
             }
+            let offset = bit_cursor.div_ceil(8);
             self.structs[struct_id].fields[i].offset = offset;
             let storage = if array_size > 0 {
                 self.size_of_type(ty) * array_size as usize
@@ -768,9 +815,26 @@ impl Compiler {
             } else {
                 self.size_of_type(ty)
             };
-            offset += storage;
+            bit_cursor = (offset + storage) * 8;
         }
-        self.structs[struct_id].size = offset.max(1);
+        let size = bit_cursor.div_ceil(8).max(1);
+        // Each bitfield's addressable unit is the smallest 1/2/4/8-byte
+        // window covering its bits, slid back when it would extend past
+        // the struct's tail (a packed struct has no tail padding to
+        // absorb the read-modify-write span).
+        for (i, bit_start) in bitfields {
+            let width = self.structs[struct_id].fields[i].bit_width as usize;
+            let unit = (bit_start % 8 + width).div_ceil(8).next_power_of_two();
+            let mut off = bit_start / 8;
+            if off + unit > size && unit <= size {
+                off = size - unit;
+            }
+            let f = &mut self.structs[struct_id].fields[i];
+            f.offset = off;
+            f.bit_offset = (bit_start - off * 8) as u32;
+            f.bit_unit_size = unit as u8;
+        }
+        self.structs[struct_id].size = size;
     }
 }
 

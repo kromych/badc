@@ -273,12 +273,14 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
+                    volatile: false,
                 },
                 Inst::ImmData(7),
                 Inst::Load {
                     addr: 2,
                     disp: 0,
                     kind: LoadKind::I64,
+                    volatile: false,
                 },
             ],
             alloc::vec![

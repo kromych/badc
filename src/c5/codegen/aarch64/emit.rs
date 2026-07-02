@@ -2022,7 +2022,9 @@ fn emit_inst(
         // (it needs the local block_offsets table for its PC-relative
         // fixup), so it never reaches emit_inst.
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
-        Inst::Load { addr, disp, kind } => emit_load(
+        Inst::Load {
+            addr, disp, kind, ..
+        } => emit_load(
             code,
             dst,
             *addr,
@@ -2038,15 +2040,16 @@ fn emit_inst(
             disp,
             value,
             kind,
+            ..
         } => emit_store(
             code, dst, *addr, *disp, *value, *kind, alloc, frame, scratch,
         ),
-        Inst::LoadLocal { off, kind } => {
+        Inst::LoadLocal { off, kind, .. } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, scratch)
         }
-        Inst::StoreLocal { off, value, kind } => {
-            emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch)
-        }
+        Inst::StoreLocal {
+            off, value, kind, ..
+        } => emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch),
         Inst::LoadIndexed {
             base,
             index,
@@ -2641,6 +2644,10 @@ fn emit_va_arg_aapcs64(
     // __vr_top (+16), 16-byte register stride. The overflow stack uses an
     // 8-byte stride for both classes (AAPCS64 rounds each variadic
     // argument to an eightbyte; a double overflow argument occupies one).
+    // TODO: an HFA composite argument rides the vector save area with
+    // one 16-byte slot per member (AAPCS64 B.5) and needs per-member
+    // composition into a contiguous temporary; the descriptor currently
+    // classes every aggregate as general-register.
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
     // A by-value aggregate (integer class) spans `ceil(size/8)` eightbytes
@@ -2675,6 +2682,13 @@ fn emit_va_arg_aapcs64(
         enc_add_imm(scratch.primary, scratch.primary, reg_advance),
     );
     emit(code, enc_str32_imm(scratch.primary, ap, off_field));
+    // AAPCS64 B.5 post-increment check: a composite whose span crosses
+    // the save area's high edge (offs + span > 0) spilled to the stack
+    // at the call; take the overflow path. The incremented offset stays
+    // written back, keeping later register-bank reads exhausted.
+    emit(code, enc_subs_imm(Reg(31), scratch.primary, 0));
+    emit(code, enc_b_cond(Cond::Gt, 0));
+    let to_stack_straddle = code.len() - 4;
     // Land the address uniformly in x16.
     emit_mov_reg(code, scratch.primary, borrow);
     emit(code, enc_b(0));
@@ -2683,6 +2697,9 @@ fn emit_va_arg_aapcs64(
     let stack_lbl = code.len();
     let delta = ((stack_lbl - to_stack) / 4) as i32;
     code[to_stack..to_stack + 4].copy_from_slice(&enc_b_cond(Cond::Ge, delta).to_le_bytes());
+    let delta = ((stack_lbl - to_stack_straddle) / 4) as i32;
+    code[to_stack_straddle..to_stack_straddle + 4]
+        .copy_from_slice(&enc_b_cond(Cond::Gt, delta).to_le_bytes());
     // x16 = __stack ; borrow = __stack + advance (next cursor) ; write back.
     emit(code, enc_ldr_imm(scratch.primary, ap, 0));
     emit(code, enc_add_imm(borrow, scratch.primary, stack_advance));
@@ -3125,6 +3142,47 @@ fn emit_intrinsic(
             emit(code, enc_str_imm(rd, scratch.primary, 0));
             true
         }
+        I::AllocaSave => {
+            // Read the arena top for a VLA block snapshot (C99 6.7.6.2).
+            if current_alloca_top == 0 {
+                bail_msg("AllocaSave: AllocaInit didn't run for this function");
+                return false;
+            }
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                bail_msg("AllocaSave: dst not int reg / spill");
+                return false;
+            };
+            emit_arena_top_addr(code, scratch.secondary, current_alloca_top);
+            emit(code, enc_ldr_imm(rd, scratch.secondary, 0));
+            spill_local_addr_to_dst(code, dst, rd, frame);
+            true
+        }
+        I::AllocaRestore => {
+            // Restore the arena top on VLA block exit.
+            if current_alloca_top == 0 {
+                bail_msg("AllocaRestore: AllocaInit didn't run for this function");
+                return false;
+            }
+            if args.len() != 1 {
+                bail_msg("AllocaRestore: expected 1 arg");
+                return false;
+            }
+            let v_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let v = match materialize_int(code, v_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("AllocaRestore: arg not int reg / spill / fp");
+                    return false;
+                }
+            };
+            emit_arena_top_addr(code, scratch.secondary, current_alloca_top);
+            emit(code, enc_str_imm(v, scratch.secondary, 0));
+            true
+        }
         I::SetjmpAArch64 => {
             // c5 binds <setjmp.h>'s setjmp() to this intrinsic on
             // Windows aarch64 because msvcrt's longjmp routes
@@ -3410,9 +3468,7 @@ fn emit_call_ext(
     // argument-register packing.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_sub_sp_imm(code, plan.scratch_bytes);
     if !marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
     ) {
@@ -3464,9 +3520,7 @@ fn emit_call_ext(
         });
         emit(code, enc_bl(0));
     }
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_add_sp_imm(code, plan.scratch_bytes);
     if ret_agg.is_some() {
         finish_call_result(
             code,
@@ -3615,9 +3669,7 @@ fn emit_call(
         //    the areas then the overflow stack.
         let plan =
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
-        if plan.scratch_bytes > 0 {
-            emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
-        }
+        emit_sub_sp_imm(code, plan.scratch_bytes);
         if !marshal_args(
             code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
         ) {
@@ -3635,9 +3687,7 @@ fn emit_call(
             kind: BranchKind::Bl,
         });
         emit(code, enc_bl(0));
-        if plan.scratch_bytes > 0 {
-            emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-        }
+        emit_add_sp_imm(code, plan.scratch_bytes);
         finish_call_result(
             code,
             ret_agg,
@@ -3666,9 +3716,7 @@ fn emit_call(
     // integer register as its `Imm` bit pattern. Feeding the mask to
     // the planner routes the FP args to d0..d7 instead of x0..x7.
     let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_sub_sp_imm(code, plan.scratch_bytes);
     if !marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
     ) {
@@ -3684,9 +3732,7 @@ fn emit_call(
         kind: BranchKind::Bl,
     });
     emit(code, enc_bl(0));
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_add_sp_imm(code, plan.scratch_bytes);
     finish_call_result(
         code,
         ret_agg,
@@ -3769,13 +3815,13 @@ fn finish_call_result(
 }
 
 /// Common return-value bridge shared by `emit_call` and
-/// `emit_call_indirect`. The c5-internal calling convention ferries
-/// every return value -- including an f64 bit pattern -- through the
-/// integer return register x0 (see `emit_return`, which moves an
-/// FP-placed return value into x0 via `fmov x0, d`). When the callee
-/// returns a floating-point scalar (`fp_return`) the call's result is
-/// FP-classed, so the x0 bit pattern is reinterpreted into the FP
-/// register file via `fmov d, x0`.
+/// `emit_call_indirect`. An integer-classed result rides x0 (AAPCS64
+/// 6.4.1); a floating-point scalar rides d0, whose low 32 bits are the
+/// s0 an f32 occupies (AAPCS64 6.4.2), which is where `emit_return`
+/// leaves it. When the callee returns a floating-point scalar
+/// (`fp_return`) this copies d0 into the FP-classed destination, or
+/// bridges it to a GPR via `fmov x, d0` when the destination is
+/// integer-classed.
 fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: bool) {
     if fp_return {
         // A floating-point scalar result arrives in d0 (C99 6.2.5p10 /
@@ -3854,10 +3900,8 @@ fn emit_call_indirect(
     // for this call. AAPCS64 doesn't assign these scratch
     // registers to int-arg slots, but the SSA allocator's
     // caller-saved pool includes them and may park an arg's
-    // source value in one. The target stage must avoid that
-    // register; otherwise the materialise below overwrites the
-    // arg's source before the marshal can push it onto the
-    // c5-stride stack.
+    // source value in one. The target stage must avoid those
+    // registers while the marshal still reads them.
     let mut arg_source_regs: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(args.len());
     for &a in args {
         if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
@@ -3867,24 +3911,17 @@ fn emit_call_indirect(
     // Capture the function pointer into a caller-saved scratch
     // disjoint from the arg sources. Prefer x9, then x10..x15 --
     // none are arg-passing registers per AAPCS64, so they are
-    // safe to clobber via the blr. The blr happens before the
-    // callee can observe the scratch, so the value reaches the
-    // indirect branch intact regardless of which scratch holds
-    // it.
+    // safe to clobber via the blr. When every candidate holds an
+    // arg source the marshal still reads, the host-ABI branch
+    // stages the pointer in a reserved stack cell instead, and the
+    // c5-stack branch captures after its pushes have consumed the
+    // sources; a blind fallback here overwrote a live source.
     const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
-    let target_reg_idx = TARGET_SCRATCH_CANDIDATES
+    let free_target_reg = TARGET_SCRATCH_CANDIDATES
         .iter()
         .copied()
         .find(|r| !arg_source_regs.contains(r))
-        .unwrap_or(9);
-    let target_reg = Reg(target_reg_idx);
-    let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
-        Some(r) => r,
-        None => return false,
-    };
-    if target_r.0 != target_reg.0 {
-        emit_mov_reg(code, target_reg, target_r);
-    }
+        .map(Reg);
     if (callee_variadic
         && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()))
         || !aggs.is_empty()
@@ -3900,13 +3937,41 @@ fn emit_call_indirect(
         // stack (Windows arm64, `variadic_int_only`), or both banks then
         // the stack (Linux aarch64, `aarch64_host_variadic`) -- the same
         // placement `emit_call` uses for a direct variadic call. The
-        // target pointer is already captured in `target_reg` (a
-        // non-arg-passing scratch), so `marshal_args` will not clobber
-        // it. `blr` through the captured register.
-        let plan =
+        // target pointer rides a non-arg-passing scratch that
+        // `marshal_args` will not clobber, or a reserved stack cell
+        // above the argument slots when no such scratch is free.
+        let mut plan =
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
-        if plan.scratch_bytes > 0 {
-            emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
+        let staged_off = match free_target_reg {
+            Some(_) => None,
+            None => {
+                // One 16-byte cell keeps SP 16-aligned; the argument
+                // slots stay below the original scratch_bytes.
+                plan.scratch_bytes += 16;
+                Some(plan.scratch_bytes - 16)
+            }
+        };
+        let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        let target_reg = match free_target_reg {
+            Some(r) => {
+                if target_r.0 != r.0 {
+                    emit_mov_reg(code, r, target_r);
+                }
+                r
+            }
+            None => {
+                if target_r.0 != scratch.primary.0 {
+                    emit_mov_reg(code, scratch.primary, target_r);
+                }
+                scratch.primary
+            }
+        };
+        emit_sub_sp_imm(code, plan.scratch_bytes);
+        if let Some(off) = staged_off {
+            emit_sp_str_x_auto(code, target_reg, off);
         }
         if !marshal_args(
             code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
@@ -3914,10 +3979,17 @@ fn emit_call_indirect(
             return false;
         }
         setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
-        emit(code, enc_blr(target_reg));
-        if plan.scratch_bytes > 0 {
-            emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-        }
+        // The marshal consumed every argument source, so x9 is free
+        // to carry the staged pointer to the blr.
+        let call_reg = match staged_off {
+            Some(off) => {
+                emit_sp_ldr_x(code, Reg(9), off);
+                Reg(9)
+            }
+            None => target_reg,
+        };
+        emit(code, enc_blr(call_reg));
+        emit_add_sp_imm(code, plan.scratch_bytes);
         finish_call_result(
             code,
             ret_agg,
@@ -3967,6 +4039,17 @@ fn emit_call_indirect(
         emit(code, enc_str_pre(src, Reg(31), -16));
     }
     let pushed_bytes = (args.len() as u32) * 16;
+    // The pushes consumed every argument source, so x9 holds no live
+    // value; capture the pointer here, with SP shifted by the pushes.
+    let target_reg = Reg(9);
+    let target_r =
+        match materialize_int_shifted(code, target_place, target_reg, frame, pushed_bytes) {
+            Some(r) => r,
+            None => return false,
+        };
+    if target_r.0 != target_reg.0 {
+        emit_mov_reg(code, target_reg, target_r);
+    }
     // Load the prefix into host arg regs from the c5-stride
     // stack we just laid down. Non-variadic callees expect this
     // shape; variadic callees ignore the host arg regs but read
@@ -3975,9 +4058,7 @@ fn emit_call_indirect(
     // past 8) stays on the c5 stack at `[sp + i*16]`, which the
     // callee prologue's overflow restripe loop also reads from.
     let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_sub_sp_imm(code, plan.scratch_bytes);
     for (i, &placement) in plan.placements.iter().enumerate() {
         match placement {
             super::ArgPlacement::IntReg(r) => {
@@ -4004,13 +4085,9 @@ fn emit_call_indirect(
         }
     }
     emit(code, enc_blr(target_reg));
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_add_sp_imm(code, plan.scratch_bytes);
     // Drop the 16-byte-stride argument pushes.
-    if pushed_bytes > 0 {
-        emit(code, enc_add_imm(Reg(31), Reg(31), pushed_bytes));
-    }
+    emit_add_sp_imm(code, pushed_bytes);
     move_call_result(code, dst, frame, fp_return);
     true
 }
@@ -4152,6 +4229,16 @@ fn atomic_operand_into(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
+    // An operand the allocator placed in a borrowed working register
+    // (x9..x12) may already have been overwritten by an earlier
+    // operand move; read its saved copy from the save area instead
+    // ([sp+0]=x9 .. [sp+24]=x12, laid out by `atomic_save_working`).
+    if let Place::IntReg(r) = place
+        && (9..=12).contains(&r)
+    {
+        emit_sp_ldr_x(code, target, (r as u32 - 9) * 8);
+        return true;
+    }
     match materialize_int_shifted(code, place, target, frame, sp_shift) {
         Some(r) => {
             if r.0 != target.0 {
@@ -4469,6 +4556,25 @@ fn spill_local_addr_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Fram
     }
 }
 
+/// Materialize the per-frame alloca-arena bookkeeping slot address
+/// (`fp - top_offset`) into `reg`. Mirrors the `AllocaInit` /
+/// `Alloca` address computation for the VLA save / restore ops.
+fn emit_arena_top_addr(code: &mut Vec<u8>, reg: Reg, top_offset: u32) {
+    if top_offset < 4096 {
+        emit(code, enc_sub_imm(reg, Reg(29), top_offset));
+    } else {
+        let high = top_offset & !0xfff;
+        let low = top_offset & 0xfff;
+        emit(
+            code,
+            super::encode::enc_sub_imm_lsl12(reg, Reg(29), high >> 12),
+        );
+        if low != 0 {
+            emit(code, enc_sub_imm(reg, reg, low));
+        }
+    }
+}
+
 /// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
 /// GPR value to 64 bits via the `SXTB` / `SXTH` / `SXTW` aliases.
 fn emit_extend(
@@ -4551,7 +4657,7 @@ fn emit_load(
                 return false;
             }
         };
-        emit(code, enc_ldr_s_imm(dd, rn, 0));
+        emit(code, enc_ldr_s_imm(dd, rn, disp));
         if !keep_f32 {
             emit(code, enc_fcvt_d_s(dd, dd));
         }
@@ -4571,7 +4677,7 @@ fn emit_load(
                 return false;
             }
         };
-        emit(code, enc_ldr_d_imm(dd, rn, 0));
+        emit(code, enc_ldr_d_imm(dd, rn, disp));
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
             emit_sp_str_d_auto(code, dd, sp_off);

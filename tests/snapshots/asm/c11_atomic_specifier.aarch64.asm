@@ -89,12 +89,13 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x30]
                	mov	x0, #0x63               // =99
                	mov	x1, #0xd                // =13
-               	ldursw	x2, [x29, #-0x30]
+               	sturh	w1, [x29, #-0x40]
+               	ldursw	x1, [x29, #-0x30]
                	mov	x17, #0xfff9            // =65529
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x2, x17
+               	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x50
@@ -106,7 +107,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	x1, #0xd
+               	ldursh	x0, [x29, #-0x40]
+               	cmp	x0, #0xd
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x50

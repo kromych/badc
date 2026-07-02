@@ -227,6 +227,14 @@ impl Compiler {
         }
     }
 
+    /// Pad `self.data` to `align` bytes -- the `_Alignas(16)` /
+    /// `aligned(16)` placement for a file-scope object.
+    pub(super) fn align_data_to(&mut self, align: usize) {
+        while !self.data.len().is_multiple_of(align.max(8)) {
+            self.data.push(0);
+        }
+    }
+
     /// True when the most recently emitted instruction is `Imm 0` --
     /// i.e. the expression that just finished compiling was the literal
     /// `0`. Used by [`Compiler::type_warning`] to suppress the NULL
@@ -553,6 +561,9 @@ impl Compiler {
         // `array_dims` for the duration of its scope. Restore
         // copies the shadow back on scope exit.
         s.h_array_dims = s.array_dims.clone();
+        s.h_is_vla = s.is_vla;
+        s.h_vla_ptr_slot = s.vla_ptr_slot;
+        s.h_vla_size_slot = s.vla_size_slot;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -568,6 +579,9 @@ impl Compiler {
         sym.array_size = sym.h_array_size;
         sym.inner_array_size = sym.h_inner_array_size;
         sym.array_dims = core::mem::take(&mut sym.h_array_dims);
+        sym.is_vla = sym.h_is_vla;
+        sym.vla_ptr_slot = sym.h_vla_ptr_slot;
+        sym.vla_size_slot = sym.h_vla_size_slot;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
     }
@@ -938,6 +952,62 @@ impl Compiler {
         );
         self.ast
             .push_stmt(super::super::ast::Stmt::Decl(decl_id), pos)
+    }
+
+    /// Push a `Decl::Vla` (C99 6.7.6.2) wrapped in a `Stmt::Decl` so
+    /// the block's item collection picks it up in source order. The
+    /// walker allocates the runtime-sized storage at this point.
+    pub(super) fn ast_emit_vla_decl(
+        &mut self,
+        sym: u32,
+        elem_ty: i64,
+        elem_size: i64,
+        ptr_slot: i64,
+        size_slot: i64,
+        dim: super::super::ast::ExprId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        let decl_id = self.ast.push_decl(
+            super::super::ast::Decl::Vla {
+                sym,
+                elem_ty,
+                elem_size,
+                ptr_slot,
+                size_slot,
+                dim,
+            },
+            pos,
+        );
+        self.ast
+            .push_stmt(super::super::ast::Stmt::Decl(decl_id), pos)
+    }
+
+    /// Push an `Expr::VlaBase` (a VLA identifier decayed to its
+    /// runtime base pointer, C99 6.3.2.1p3) and set it as the new
+    /// accumulator so the wrapping index / call-arg / assignment site
+    /// finds the pointer on `ast_acc`.
+    pub(super) fn ast_emit_vla_base(
+        &mut self,
+        ptr_slot: i64,
+        ty: i64,
+    ) -> super::super::ast::ExprId {
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_expr(super::super::ast::Expr::VlaBase { ptr_slot, ty }, pos);
+        self.ast_acc = Some(id);
+        id
+    }
+
+    /// Push an `Expr::VlaSizeof` (the runtime byte count of a VLA,
+    /// C99 6.5.3.4p2) and set it as the new accumulator.
+    pub(super) fn ast_emit_vla_sizeof(&mut self, size_slot: i64) -> super::super::ast::ExprId {
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_expr(super::super::ast::Expr::VlaSizeof { size_slot }, pos);
+        self.ast_acc = Some(id);
+        id
     }
 
     /// Push an `Expr::Call` and set it as the new accumulator.

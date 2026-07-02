@@ -66,8 +66,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=163
   block 6  start_pc=0
     v37  LocalAddr(-161)                                  -> x0
     v38  Imm(32)                                          -> x1
-    v39  BinopI { op=add, lhs=v37, rhs_imm=32 }           -> x0
-    v40  Load { addr=v39, disp=0, kind=F32 }              -> d0 [f32]
+    v39  BinopI { op=add, lhs=v37, rhs_imm=32 }           -> x1
+    v40  Load { addr=v37, disp=32, kind=F32 }             -> d0 [f32]
     v41  Imm(4611686018427387904)                         -> x0
     v42  FpCast { kind=F32ToF64, value=v40 }              -> d0
     v43  Binop { op=fne, lhs=v42, rhs=v41 }               -> x0

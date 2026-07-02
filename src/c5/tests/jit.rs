@@ -1082,11 +1082,20 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("goto.c", 5),
     ("switch_statement.c", 25),
     ("switch_binary_search.c", 0),
+    ("switch_case_label_promoted.c", 0),
+    ("int_literal_boundary_types.c", 0),
+    ("const_expr_unsigned_fold.c", 0),
+    ("shift_result_promoted_type.c", 0),
+    ("ternary_arith_common_type.c", 0),
+    ("compound_assign_unsigned_div.c", 0),
+    ("decl_specifier_any_order.c", 0),
     ("branch_relaxation.c", 21),
     ("float_register_resident.c", 45),
     ("variadic_struct_arg.c", 18),
     ("variadic_struct_arg_16b.c", 51),
     ("libc_div.c", 0),
+    ("strtof_parses_float.c", 0),
+    ("snprintf_truncation_c99.c", 0),
     ("strength_reduce_pow2_divmod.c", 0),
     ("return_callee_saved_value.c", 0),
     ("spill_slot_reuse_disjoint_calls.c", 0),
@@ -1099,6 +1108,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("inline_two_reg_struct_param.c", 0),
     ("struct_param_stack_spill.c", 0),
     ("struct_stack_arg_then_scalar.c", 0),
+    ("call_sp_adjust_imm12_overflow.c", 0),
+    ("indirect_call_target_scratch_exhausted.c", 0),
+    ("fp_load_folded_disp.c", 0),
     ("mixed_struct_gpr_abi.c", 0),
     ("unary_plus_preserves_type.c", 0),
     ("local_multidim_aggregate_array_init.c", 0),
@@ -1110,6 +1122,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("pthread_key_once_width.c", 0),
     ("dev_t_width.c", 0),
     ("libc_int_arith.c", 0),
+    // Data binding (environ) read through the fake GOT; the site
+    // patching is the JIT counterpart of the AOT flat-lookup import.
+    ("environ_single_tu.c", 0),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),
     ("do_while.c", 5),
@@ -1533,12 +1548,34 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // an operand; the fix routes through r13 (outside both
     // `caller_gprs` and `callee_gprs`).
     ("ssa_va_start_va_copy_aliasing.c", 0),
+    // C99 6.7.3p6 / 5.1.2.3p2 volatile access preservation (the
+    // setjmp variant lives only in the native lists; setjmp is not
+    // wired for the JIT lane).
+    ("volatile_ptr_alias_loop.c", 0),
+    ("volatile_unused_read.c", 0),
+    ("volatile_param_classes.c", 0),
     // `thread_local_*.c` aren't here -- the JIT path's host is
     // macOS arm64 in this repo, where TLS lowering isn't
     // implemented yet (Mach-O __thread_data + dyld
     // __tlv_bootstrap is future work). The native_elf and
     // native_elf_x64 runners validate the Linux paths once the
     // built ELF lands on the orb VMs.
+    ("packed_bitfield_repack.c", 0),
+    ("nested_designator_string_member.c", 0),
+    ("union_member_unbraced_init.c", 0),
+    ("inline_multi_block_result_forward.c", 10),
+    ("sxtw_fold_source_liveness.c", 18),
+    ("data_reloc_one_past_end.c", 10),
+    ("variadic_libc_fnptr_static_init.c", 0),
+    ("block_scope_typedef_variadic_fnptr.c", 0),
+    ("atomic_operand_in_working_regs.c", 0),
+    ("setjmp_value_live_across.c", 0),
+    ("mixed_sse_int_aggregate_args.c", 0),
+    ("variadic_agg_return_classes.c", 0),
+    ("va_copy_under_pressure.c", 0),
+    ("variable_shift_rcx_loop.c", 0),
+    ("va_arg_composite_straddle.c", 0),
+    ("variadic_cast_fnptr_dispatch.c", 0),
 ];
 
 #[test]
@@ -1744,4 +1781,103 @@ fn jit_resolves_pointer_to_extern_data() {
                char ***p = &environ;\n\
                int main(void) { return (*p == 0) ? 1 : 0; }\n";
     assert_eq!(jit_exit(src, &[]), 0);
+}
+
+// A `#pragma binding(data ...)` global read from code (not just a
+// static initializer) must patch like the AOT path: the site loads
+// the host cell's address from the fake GOT. Previously the
+// UserExternDataRef sites were never patched and the read faulted.
+#[cfg(unix)]
+#[test]
+fn jit_reads_binding_data_global() {
+    let src = "#include <unistd.h>\n\
+               int main(void) {\n\
+                   int n = 0;\n\
+                   for (char **e = environ; *e; e++) n++;\n\
+                   return n > 0 ? 0 : 1;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect("compile");
+    assert_eq!(
+        jit_run(&program, &["jit-environ".to_string()]).expect("jit_run"),
+        0
+    );
+}
+
+/// Mirror the linker: a call to a declared-but-undefined extern must
+/// refuse to run instead of dispatching to whatever function sits at
+/// the placeholder-colliding ent_pc.
+#[test]
+fn undefined_extern_call_is_a_link_error() {
+    let program = Compiler::new(
+        "int bar(int);\n\
+         int helper(int x) { return x + 1; }\n\
+         int main(void) { return bar(41); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let err = jit_run(&program, &["jit-undef-call".to_string()]).expect_err("must not run");
+    let msg = err.to_string();
+    assert!(msg.contains("undefined reference to `bar`"), "{msg}");
+}
+
+#[test]
+fn undefined_extern_object_is_a_link_error() {
+    let program = Compiler::new(
+        "extern int missing_obj;\n\
+         int main(void) { return missing_obj + 7; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let err = jit_run(&program, &["jit-undef-obj".to_string()]).expect_err("must not run");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("undefined reference to `missing_obj`"),
+        "{msg}"
+    );
+}
+
+/// C99 7.20.4.3p2: `exit` runs the registered atexit handlers. The
+/// JIT intercepts both `atexit` and `exit`, so the handler chain must
+/// drain before the process terminates with the passed status. `exit`
+/// ends the whole process, so the assertion drives a re-executed copy
+/// of this test binary gated by the marker env var.
+#[test]
+fn atexit_handlers_run_on_libc_exit() {
+    if let Ok(marker) = std::env::var("BADC_JIT_EXIT_MARKER") {
+        let src = format!(
+            "#include <stdio.h>\n\
+             #include <stdlib.h>\n\
+             static void h(void) {{\n\
+                 FILE *f = fopen(\"{marker}\", \"w\");\n\
+                 if (f) {{ fputs(\"ran\", f); fclose(f); }}\n\
+             }}\n\
+             int main(void) {{ atexit(h); exit(42); }}\n",
+        );
+        let program = Compiler::new(src).compile().expect("compile");
+        let _ = jit_run(&program, &["jit-exit".to_string()]);
+        unreachable!("exit(42) must terminate the process");
+    }
+    let marker = std::env::temp_dir().join(format!("badc_jit_exit_{}", std::process::id()));
+    let _ = std::fs::remove_file(&marker);
+    // libtest names tests without the crate segment of module_path!.
+    let module = module_path!();
+    let module = module.split_once("::").map_or(module, |(_, rest)| rest);
+    let test_name = format!("{module}::atexit_handlers_run_on_libc_exit");
+    let out = std::process::Command::new(std::env::current_exe().expect("current_exe"))
+        .args(["--exact", &test_name, "--test-threads=1"])
+        .env("BADC_JIT_EXIT_MARKER", &marker)
+        .output()
+        .expect("re-exec the test binary");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let contents = std::fs::read_to_string(&marker).expect("atexit handler must write the marker");
+    let _ = std::fs::remove_file(&marker);
+    assert_eq!(contents, "ran");
 }

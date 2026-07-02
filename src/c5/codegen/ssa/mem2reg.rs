@@ -32,6 +32,16 @@ pub(crate) fn promotable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
     let mut address_taken: BTreeSet<i64> = BTreeSet::new();
     for inst in &func.insts {
         match inst {
+            // A volatile access pins the slot to memory: every read and
+            // write must be performed as the abstract machine specifies
+            // (C99 6.7.3p6), and the object must retain its last store
+            // across control transfers the CFG does not model (7.13.2.1
+            // longjmp), so the slot is never lifted into a register.
+            Inst::LoadLocal { off, volatile, .. } | Inst::StoreLocal { off, volatile, .. }
+                if *volatile =>
+            {
+                address_taken.insert(*off);
+            }
             Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
                 touched.insert(*off);
             }
@@ -539,7 +549,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
 fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
     for inst in &func.insts {
         match inst {
-            Inst::LoadLocal { off, kind } if *off == slot && *kind != LoadKind::I64 => {
+            Inst::LoadLocal { off, kind, .. } if *off == slot && *kind != LoadKind::I64 => {
                 return false;
             }
             Inst::StoreLocal { off, kind, .. } if *off == slot && *kind != StoreKind::I64 => {
@@ -571,7 +581,7 @@ fn slot_narrow_load_kind(func: &FunctionSsa, slot: i64) -> Option<LoadKind> {
     let mut store_kind: Option<StoreKind> = None;
     for inst in &func.insts {
         match inst {
-            Inst::LoadLocal { off, kind } if *off == slot => match load_kind {
+            Inst::LoadLocal { off, kind, .. } if *off == slot => match load_kind {
                 None => load_kind = Some(*kind),
                 Some(k) if k == *kind => {}
                 Some(_) => return None,
@@ -724,7 +734,7 @@ fn slot_class(func: &FunctionSsa, slot: i64) -> Option<SlotClass> {
                     saw_int_store = true;
                 }
             }
-            Inst::LoadLocal { off, kind } if *off == slot => match kind {
+            Inst::LoadLocal { off, kind, .. } if *off == slot => match kind {
                 LoadKind::F32 | LoadKind::F64 => {
                     saw_fp_load = true;
                     match fp_load_kind {
@@ -1286,16 +1296,19 @@ mod tests {
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::I64,
+                volatile: false,
             },
             Inst::LocalAddr(-2),
             Inst::StoreLocal {
                 off: -2,
                 value: 0,
                 kind: StoreKind::I64,
+                volatile: false,
             },
         ];
         let blocks = alloc::vec![empty_block(Terminator::Return(NO_VALUE))];
@@ -1305,6 +1318,33 @@ mod tests {
         assert!(
             !p.contains(&-2),
             "address-taken slot -2 must not be promotable"
+        );
+    }
+
+    #[test]
+    fn volatile_slot_is_not_promotable() {
+        // Slot -1 is accessed only through volatile LoadLocal /
+        // StoreLocal (C99 6.7.3p6): every access must reach memory,
+        // so the slot is excluded from promotion.
+        let insts = alloc::vec![
+            Inst::Imm(1),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64,
+                volatile: true,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: true,
+            },
+        ];
+        let blocks = alloc::vec![empty_block(Terminator::Return(2))];
+        let f = func_with(insts, blocks);
+        assert!(
+            !promotable_slots(&f).contains(&-1),
+            "volatile-accessed slot -1 must stay memory-resident"
         );
     }
 
@@ -1320,12 +1360,14 @@ mod tests {
                 off: -1,
                 value: 0,
                 kind: StoreKind::I32,
+                volatile: false,
             },
             Inst::Imm(2),
             Inst::StoreLocal {
                 off: -1,
                 value: 2,
                 kind: StoreKind::I32,
+                volatile: false,
             },
             Inst::Imm(99),
         ];
@@ -1438,10 +1480,12 @@ mod tests {
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::I64,
+                volatile: false,
             },
         ];
         let blocks = alloc::vec![
@@ -1476,11 +1520,13 @@ mod tests {
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             Inst::LocalAddr(-1),
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::I64,
+                volatile: false,
             },
         ];
         let blocks = alloc::vec![Block {
@@ -1509,10 +1555,12 @@ mod tests {
                 off: -1,
                 value: 0,
                 kind: StoreKind::I8,
+                volatile: false,
             },
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::I8,
+                volatile: false,
             },
         ];
         let blocks = alloc::vec![Block {
@@ -1548,10 +1596,12 @@ mod tests {
                 off: -1,
                 value: 0,
                 kind: StoreKind::I8,
+                volatile: false,
             },
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::U8,
+                volatile: false,
             },
         ];
         let blocks = alloc::vec![Block {
@@ -1588,16 +1638,19 @@ mod tests {
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             Inst::Imm(2), // block 2
             Inst::StoreLocal {
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::I64,
+                volatile: false,
             }, // block 3
         ];
         let blocks = alloc::vec![
@@ -1655,6 +1708,7 @@ mod tests {
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             // block 2
             Inst::Imm(2),
@@ -1662,11 +1716,13 @@ mod tests {
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             // block 3
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::I64,
+                volatile: false,
             },
         ];
         let blocks = alloc::vec![
@@ -1725,7 +1781,7 @@ mod tests {
         }
         // The LoadLocal slid forward by one phi.
         match &f.insts[6] {
-            Inst::LoadLocal { off, kind } => {
+            Inst::LoadLocal { off, kind, .. } => {
                 assert_eq!(*off, -1);
                 assert_eq!(*kind, LoadKind::I64);
             }
@@ -1774,16 +1830,19 @@ mod tests {
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             Inst::Imm(2),
             Inst::StoreLocal {
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::I64,
+                volatile: false,
             },
             Inst::ImmData(0),
         ];
@@ -1857,6 +1916,7 @@ mod tests {
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             // block 2: ids 3..5
             Inst::Imm(22),
@@ -1864,11 +1924,13 @@ mod tests {
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             // block 3: id 5
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::I64,
+                volatile: false,
             },
         ];
         let blocks = alloc::vec![
@@ -1987,10 +2049,12 @@ mod tests {
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
+                volatile: false,
             },
             Inst::LoadLocal {
                 off: -1,
                 kind: LoadKind::I64,
+                volatile: false,
             }, // block 2
         ];
         let blocks = alloc::vec![
@@ -2087,7 +2151,8 @@ mod tests {
             Inst::StoreLocal {
                 off: -1,
                 value: 0,
-                kind: StoreKind::I64
+                kind: StoreKind::I64,
+                volatile: false,
             }, // v1
             // b1: condition operand (placeholder; the body emits a
             // constant so the branch is deterministic; not subject
@@ -2098,18 +2163,21 @@ mod tests {
             Inst::StoreLocal {
                 off: -1,
                 value: 3,
-                kind: StoreKind::I64
+                kind: StoreKind::I64,
+                volatile: false,
             }, // v4
             Inst::Imm(9), // v5
             Inst::StoreLocal {
                 off: -1,
                 value: 5,
-                kind: StoreKind::I64
+                kind: StoreKind::I64,
+                volatile: false,
             }, // v6
             // b3: load -1
             Inst::LoadLocal {
                 off: -1,
-                kind: LoadKind::I64
+                kind: LoadKind::I64,
+                volatile: false,
             }, // v7
         ];
         let blocks = alloc::vec![

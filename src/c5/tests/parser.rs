@@ -357,14 +357,12 @@ fn thread_local_compiles_to_op_tlslea() {
     // those gates.
     let src = "_Thread_local int counter;\n\
                int main() { counter = 42; return counter; }";
-    let p = super::Compiler::new(super::with_prelude(src))
-        .compile()
-        .expect("compile failed");
-    assert_eq!(p.tls_data.len(), 8, "single 8-byte TLS slot");
     // Every supported target now lowers `_Thread_local`. Linux
     // and Windows have full code paths; macOS arm64 routes
     // through the Mach-O `__thread_vars` + `__tlv_bootstrap`
-    // pipeline.
+    // pipeline, which needs libSystem in the dylib set -- so
+    // compile per target rather than re-emitting a host-compiled
+    // program whose dylib bindings are the host's.
     for target in [
         super::super::codegen::Target::LinuxAarch64,
         super::super::codegen::Target::LinuxX64,
@@ -372,6 +370,10 @@ fn thread_local_compiles_to_op_tlslea() {
         super::super::codegen::Target::WindowsAarch64,
         super::super::codegen::Target::MacOSAarch64,
     ] {
+        let p = super::Compiler::with_target(super::with_prelude(src), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("`{target:?}` compile failed: {e}"));
+        assert_eq!(p.tls_data.len(), 8, "single 8-byte TLS slot for {target:?}");
         super::super::object::emit_native_single_tu_for_test(
             &p,
             target,
@@ -422,22 +424,33 @@ fn field_access_on_opaque_struct_is_rejected() {
 #[test]
 fn extern_and_static_keywords_are_no_op_at_global_scope() {
     use super::run_str;
-    // `extern` and `static` may appear before the type prefix
-    // (with or without `_Thread_local`); both are accepted and
-    // ignored. The semantics of the resulting decl are
-    // identical to the no-prefix form -- the global lives in
-    // .data with zero init -- so the program runs the same
-    // way it would without the keywords.
+    // `static` (and the accepted `static extern` combination)
+    // before the type prefix produce a tentative definition (C99
+    // 6.9.2p2): the global lives in .data with zero init.
     let src = "
-        extern int a;
         static int b;
         static extern int c;
         int main() {
-            a = 1; b = 2; c = 3;
-            return a + b + c;
+            b = 2; c = 3;
+            return b + c;
         }
     ";
-    assert_eq!(run_str(&super::with_prelude(src)), 6);
+    assert_eq!(run_str(src), 5);
+    // A file-scope `extern int a;` defines no storage (C99 6.2.2p4
+    // / 6.9.2); with no defining TU anywhere, a program that uses
+    // it fails with the linker's undefined-reference diagnosis
+    // instead of reading phantom zeroed storage.
+    let src = "
+        extern int a;
+        int main() { a = 1; return a; }
+    ";
+    let err = crate::Vm::new(super::compile_str(src))
+        .run()
+        .expect_err("undefined extern object must not run");
+    assert!(
+        err.to_string().contains("undefined reference to `a`"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -760,4 +773,120 @@ fn deeply_nested_macro_expansion_does_not_overflow_the_stack() {
     src.push_str("int main(void){ return 0; }\n");
     // Must return (Ok or Err), not crash the test process.
     let _ = crate::c5::Compiler::new(src).compile();
+}
+
+// C99 6.6p4: a zero divisor in an evaluated constant expression is a
+// compile error, not a silent fold to 0; a short-circuited or
+// not-taken operand stays unevaluated and must compile.
+#[test]
+fn constant_expression_division_by_zero_is_diagnosed() {
+    expect_compile_error(
+        "int x[1/0];\nint main(void){ return 0; }",
+        "division by zero in a constant expression",
+    );
+    expect_compile_error(
+        "enum { A = 1 % 0 };\nint main(void){ return 0; }",
+        "division by zero in a constant expression",
+    );
+    expect_compile_error(
+        "static int g = 8 / (4 - 4);\nint main(void){ return 0; }",
+        "division by zero in a constant expression",
+    );
+    crate::c5::Compiler::new(
+        "int a[1 ? 2 : 1/0];\nint b[0 || 1 ? 2 : 5/0];\nenum { K = 0 && 1/0 };\n\
+         int main(void){ return 0; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("unevaluated zero divisors must compile");
+}
+
+// C99 6.5.5 with the both-operands-wrap model: LLONG_MIN / -1 and
+// LLONG_MIN % -1 fold (wrapping) instead of aborting the compiler.
+#[test]
+fn constant_expression_llong_min_div_neg_one_folds() {
+    crate::c5::Compiler::new(
+        "static long long k = (-9223372036854775807LL - 1) / -1;\n\
+         static long long r = (-9223372036854775807LL - 1) % -1;\n\
+         int main(void){ return r == 0 && k != 0 ? 0 : 1; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("LLONG_MIN / -1 must fold, not panic");
+}
+
+/// Run on a thread with the same explicit stack reservation the CLI
+/// driver uses: deeply nested source costs more native stack in debug
+/// builds than the default test-thread allotment provides.
+fn on_big_stack(f: impl FnOnce() + Send + 'static) {
+    std::thread::Builder::new()
+        .stack_size(256 * 1024 * 1024)
+        .spawn(f)
+        .expect("spawn compile thread")
+        .join()
+        .expect("join compile thread");
+}
+
+fn expect_compile_error_on_big_stack(src: String, needle: &'static str) {
+    on_big_stack(move || expect_compile_error(&src, needle));
+}
+
+#[test]
+fn deep_expression_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!(
+        "int main(void) {{ return {}1{}; }}",
+        "(".repeat(n),
+        ")".repeat(n)
+    );
+    expect_compile_error_on_big_stack(src, "expression nesting too deep");
+}
+
+#[test]
+fn deep_global_initializer_expression_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!("int x = {}1{};", "(".repeat(n), ")".repeat(n));
+    expect_compile_error_on_big_stack(src, "nesting too deep");
+}
+
+#[test]
+fn deep_declarator_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!("int {}x{};", "(".repeat(n), ")".repeat(n));
+    expect_compile_error_on_big_stack(src, "declarator nesting too deep");
+}
+
+#[test]
+fn deep_initializer_brace_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!(
+        "int main(void) {{ int q[1] = {}1{}; return q[0]; }}",
+        "{".repeat(n),
+        "}".repeat(n)
+    );
+    expect_compile_error_on_big_stack(src, "initializer nesting too deep");
+}
+
+#[test]
+fn deep_statement_block_nesting_is_diagnosed() {
+    let n = 2000;
+    let src = format!(
+        "int main(void) {{ {}{} return 0; }}",
+        "{".repeat(n),
+        "}".repeat(n)
+    );
+    expect_compile_error_on_big_stack(src, "statement nesting too deep");
+}
+
+#[test]
+fn c99_minimum_expression_nesting_compiles() {
+    // C99 5.2.4.1: 63 nesting levels of parenthesized expressions
+    // must be accepted; the depth bound sits far above this.
+    let n = 63;
+    let src = format!(
+        "int main(void) {{ return {}0{}; }}",
+        "(".repeat(n),
+        ")".repeat(n)
+    );
+    on_big_stack(move || assert_eq!(super::run_str(&src), 0));
 }

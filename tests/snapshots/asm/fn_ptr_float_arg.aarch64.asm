@@ -40,10 +40,10 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	str	x19, [sp]
                	sxtw	x0, w0
-               	mov	x9, x1
                	fmov	x16, d0
                	str	x16, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	ldr	d0, [sp, #0x10]
                	blr	x9
@@ -77,9 +77,9 @@ Disassembly of section .text:
                	mov	x0, #0x4004000000000000 // =4612811918334230528
                	fmov	d16, x0
                	fcvt	s0, d16
-               	mov	x9, x20
                	fmov	x16, d0
                	str	x16, [sp, #-0x10]!
+               	mov	x9, x20
                	ldr	d0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
@@ -98,10 +98,10 @@ Disassembly of section .text:
                	mov	x2, #0x4012000000000000 // =4616752568008179712
                	fmov	d16, x2
                	fcvt	s0, d16
-               	mov	x9, x0
                	fmov	x16, d0
                	str	x16, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	ldr	d0, [sp, #0x10]
                	blr	x9
@@ -133,9 +133,9 @@ Disassembly of section .text:
                	mov	x0, #0x400c000000000000 // =4615063718147915776
                	fmov	d16, x0
                	fcvt	s0, d16
-               	mov	x9, x20
                	fmov	x16, d0
                	str	x16, [sp, #-0x10]!
+               	mov	x9, x20
                	ldr	d0, [sp]
                	blr	x9
                	add	sp, sp, #0x10

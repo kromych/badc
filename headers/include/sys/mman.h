@@ -43,7 +43,7 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::mmap,     "_mmap")
 #pragma binding(libc::munmap,   "_munmap")
-#pragma binding(libc::mremap,   "_mremap")
+// mremap is Linux-only; unbound here so a use fails at link.
 #pragma binding(libc::msync,    "_msync")
 #pragma binding(libc::mprotect, "_mprotect")
 #pragma binding(libc::madvise,    "_madvise")
@@ -66,10 +66,8 @@
 #pragma binding(libc::shm_open,   "shm_open")
 #pragma binding(libc::shm_unlink, "shm_unlink")
 #pragma binding(libc::memfd_create, "memfd_create")
-// memfd_create flags.
-#define MFD_CLOEXEC       0x0001
-#define MFD_ALLOW_SEALING 0x0002
-#define MFD_HUGETLB       0x0004
+// The MFD_* flags live in their canonical kernel header.
+#include <linux/memfd.h>
 int memfd_create(const char *name, unsigned int flags);
 #endif
 
@@ -83,6 +81,13 @@ char *mremap(char *old, unsigned long old_size, unsigned long new_size, int flag
 int msync(char *addr, unsigned long len, int flags);
 int mprotect(char *addr, unsigned long len, int prot);
 int madvise(char *addr, unsigned long len, int advice);
-// POSIX shared memory objects; mode is mode_t (an unsigned int on the targets).
+// POSIX shared memory objects; mode is mode_t (an unsigned int on the
+// targets). Darwin declares shm_open variadic and reads the mode via
+// va_arg (from the stack on arm64), so the prototype must match; glibc
+// declares the fixed three-argument POSIX shape.
+#ifdef __APPLE__
+int shm_open(const char *name, int oflag, ...);
+#else
 int shm_open(const char *name, int oflag, int mode);
+#endif
 int shm_unlink(const char *name);

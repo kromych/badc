@@ -125,7 +125,8 @@ mod jit_impl {
     use super::super::super::error::C5Error;
     use super::super::super::program::Program;
     use super::super::Target;
-    use super::super::{Build, NativeOptions, ResolvedImports, aarch64, x86_64};
+    use super::super::{Build, GotFixup, NativeOptions, ResolvedImport, ResolvedImports};
+    use super::super::{aarch64, x86_64};
     use super::host_target;
     use alloc::format;
     use alloc::string::String;
@@ -198,19 +199,34 @@ mod jit_impl {
         0
     }
 
-    /// Return the JIT-side thunk address for any libc atexit-shape
-    /// symbol, otherwise 0. The host's libc atexit registers
-    /// handler PCs into the host's own `__cxa_finalize` list, but
-    /// those PCs sit in the JIT mmap region that `JitRegion::drop`
-    /// unmaps before the host process exits -- so handing the
-    /// host's atexit address to JIT'd code yields a dangling
-    /// pointer at process teardown. Intercepting the binding at
+    /// Replacement for libc's `exit` when JIT'd code resolves the
+    /// symbol through `dlsym`. C99 7.20.4.3p2: `exit` runs the
+    /// registered atexit handlers first. `atexit` was intercepted
+    /// into the JIT-side chain, which the host's `exit` knows
+    /// nothing about, so drain the chain before terminating with
+    /// the given status. `_Exit` / `quick_exit` stay on the host
+    /// symbols -- neither runs atexit handlers (7.20.4.5).
+    extern "C" fn jit_exit_thunk(status: c_int) -> ! {
+        drain_jit_atexit_chain();
+        std::process::exit(status);
+    }
+
+    /// Return the JIT-side thunk address for a libc symbol whose
+    /// host implementation must not be handed to JIT'd code,
+    /// otherwise 0. The host's libc atexit registers handler PCs
+    /// into the host's own `__cxa_finalize` list, but those PCs
+    /// sit in the JIT mmap region that `JitRegion::drop` unmaps
+    /// before the host process exits -- so handing the host's
+    /// atexit address to JIT'd code yields a dangling pointer at
+    /// process teardown; the host's `exit` would skip the
+    /// intercepted handlers entirely. Intercepting the binding at
     /// JIT bind_imports time means every JIT'd `atexit` /
-    /// `__cxa_atexit` call lands on our thunk instead.
+    /// `__cxa_atexit` / `exit` call lands on our thunk instead.
     fn atexit_thunk_addr(name: &str) -> u64 {
         match name {
             "atexit" => jit_atexit_thunk as *const () as usize as u64,
             "__cxa_atexit" => jit_cxa_atexit_thunk as *const () as usize as u64,
+            "exit" => jit_exit_thunk as *const () as usize as u64,
             _ => 0,
         }
     }
@@ -259,7 +275,18 @@ mod jit_impl {
         options: NativeOptions,
     ) -> Result<i32, C5Error> {
         let target = host_target()?;
-        let build = lower_for_jit(program, target, options)?;
+        let mut build = lower_for_jit(program, target, options)?;
+
+        // Undefined extern functions: the lowering partitioned each
+        // call / address site targeting a placeholder ent_pc into
+        // `user_extern_call_sites`, and there is no link step to
+        // resolve them. Executing such a site would branch to the
+        // zeroed placeholder, so refuse up front, mirroring the
+        // linker's diagnosis.
+        if let Some(site) = build.user_extern_call_sites.first() {
+            return Err(undefined_reference(&site.symbol_name));
+        }
+        route_jit_data_imports(&mut build)?;
 
         // Allocate a writable data region, copy `build.data` in. The
         // page is RW (no exec permission); an attempt to execute
@@ -307,6 +334,20 @@ mod jit_impl {
         // exactly the way the ELF loader's relocations would.
         let mut got_region = GotRegion::new(build.imports.imports.len())?;
         got_region.bind_imports(&build.imports)?;
+        // A data import's GOT slot must resolve: unlike a function
+        // import (whose 0 slot faults only if called), the patched
+        // code loads the slot's value as an object address and
+        // dereferences it.
+        for fx in &build.got_fixups {
+            if fx.is_data_load && got_region.slot_value(fx.import_index) == 0 {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "JIT: unresolved extern data symbol `{}`",
+                        build.imports.imports[fx.import_index].real_symbol,
+                    ),
+                )));
+            }
+        }
         let got_vmaddr = got_region.as_ptr() as u64;
 
         // Allocate the code region. Patch fixups against the mmap'd
@@ -586,6 +627,62 @@ mod jit_impl {
             )));
         }
         Ok(exit_code as i32)
+    }
+
+    /// Mirror the linker's undefined-symbol diagnostic wording.
+    fn undefined_reference(name: &str) -> C5Error {
+        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+            "undefined reference to `{name}`"
+        )))
+    }
+
+    /// Route `#pragma binding(data ...)` references through the fake
+    /// GOT. The emitters record each extern-data site as a named
+    /// [`super::super::UserExternDataRef`]; register the binding's host
+    /// symbol as a flat-lookup import so `bind_imports` resolves it via
+    /// the loader and `apply_jit_fixups` rewrites the site into a
+    /// GOT-slot load -- the JIT equivalent of the loader-bound data
+    /// import an AOT image gets. A leftover reference has no binding
+    /// and no definition anywhere: refuse it like the linker would.
+    fn route_jit_data_imports(build: &mut Build) -> Result<(), C5Error> {
+        if build.user_extern_data_refs.is_empty() {
+            return Ok(());
+        }
+        let hosts: alloc::collections::BTreeMap<String, (String, usize)> = build
+            .imports
+            .data_bindings
+            .iter()
+            .map(|(local, host, dylib)| (local.clone(), (host.clone(), *dylib)))
+            .collect();
+        let mut import_for: alloc::collections::BTreeMap<String, usize> =
+            alloc::collections::BTreeMap::new();
+        for r in core::mem::take(&mut build.user_extern_data_refs) {
+            let Some((host, dylib)) = hosts.get(&r.symbol_name) else {
+                return Err(undefined_reference(&r.symbol_name));
+            };
+            let idx = *import_for.entry(r.symbol_name.clone()).or_insert_with(|| {
+                let i = build.imports.imports.len();
+                build.imports.imports.push(ResolvedImport {
+                    binding_idx: i as i64,
+                    local_name: r.symbol_name.clone(),
+                    real_symbol: host.clone(),
+                    dylib_index: *dylib,
+                    flat_lookup: true,
+                    is_variadic: false,
+                    fixed_args: 0,
+                    return_type_tag: 0,
+                    returns_long_double: false,
+                    param_types: alloc::vec::Vec::new(),
+                });
+                i
+            });
+            build.got_fixups.push(GotFixup {
+                adrp_offset: r.instr_offset,
+                import_index: idx,
+                is_data_load: true,
+            });
+        }
+        Ok(())
     }
 
     fn lower_for_jit(
@@ -1026,10 +1123,14 @@ mod jit_impl {
         // with MEM_RELEASE requires size = 0.
         #[cfg_attr(target_os = "windows", allow(dead_code))]
         len: usize,
-        /// Library handles to release on drop. POSIX uses one
-        /// `dlopen(NULL)` handle (so this is at most one entry);
-        /// Windows uses one per declared dylib.
-        lib_handles: Vec<*mut c_void>,
+        /// Loader handles for both import binding and extern-data
+        /// resolution, paired with whether Drop must release the handle.
+        /// POSIX opens each with `dlopen` (owned). Windows takes a
+        /// non-owned `GetModuleHandleA` handle for an already-loaded
+        /// module and an owned `LoadLibraryA` handle otherwise; a
+        /// `GetModuleHandleA` handle carries no refcount, so it must not
+        /// be freed. Both bind and resolve search the full set.
+        lib_handles: Vec<(*mut c_void, bool)>,
     }
 
     impl GotRegion {
@@ -1119,7 +1220,7 @@ mod jit_impl {
                     "JIT: dlopen(NULL, RTLD_NOW) returned null -- can't resolve libc symbols",
                 )));
             }
-            self.lib_handles.push(handle);
+            self.lib_handles.push((handle, true));
 
             // On Linux every declared dylib is its own .so (libc.so.6,
             // libm.so.6, libdl.so.2, ...) -- the Rust test binary
@@ -1139,7 +1240,7 @@ mod jit_impl {
                     if let Ok(cs) = CString::new(d.path.as_str()) {
                         let h = unsafe { dlopen(cs.as_ptr(), RTLD_NOW) };
                         if !h.is_null() {
-                            self.lib_handles.push(h);
+                            self.lib_handles.push((h, true));
                         }
                     }
                 }
@@ -1166,7 +1267,7 @@ mod jit_impl {
                         Ok(cs) => cs,
                         Err(_) => continue, // unreachable: symbol names are static ASCII
                     };
-                    for h in &self.lib_handles {
+                    for (h, _) in &self.lib_handles {
                         let a = unsafe { dlsym(*h, cs.as_ptr()) } as u64;
                         if a != 0 {
                             addr = a;
@@ -1222,10 +1323,10 @@ mod jit_impl {
                     owned = true;
                 }
                 handles.push(h);
-                if owned {
-                    // Track the handle so Drop releases it.
-                    self.lib_handles.push(h);
-                }
+                // Every handle joins the shared set so extern-data
+                // resolution searches exactly what import binding used;
+                // `owned` gates release in Drop.
+                self.lib_handles.push((h, owned));
             }
             for (i, imp) in imports.imports.iter().enumerate() {
                 let mut addr = atexit_thunk_addr(imp.real_symbol.as_str());
@@ -1250,6 +1351,14 @@ mod jit_impl {
             self.ptr
         }
 
+        /// Read back the resolved address in slot `idx`; 0 means
+        /// `bind_imports` could not resolve the symbol.
+        fn slot_value(&self, idx: usize) -> u64 {
+            // SAFETY: `bind_imports` wrote slot `idx` within the
+            // region sized from the import count.
+            unsafe { std::ptr::read_unaligned(self.ptr.add(idx * 8) as *const u64) }
+        }
+
         /// Resolve a symbol name to its runtime address through the
         /// loader handles bound by `bind_imports`. Used for
         /// pointer-to-extern-data initializers; 0 means unresolved.
@@ -1270,7 +1379,7 @@ mod jit_impl {
                 Ok(cs) => cs,
                 Err(_) => return 0,
             };
-            for &h in &self.lib_handles {
+            for &(h, _) in &self.lib_handles {
                 let a = unsafe { dlsym(h, cs.as_ptr()) } as u64;
                 if a != 0 {
                     return a;
@@ -1279,16 +1388,17 @@ mod jit_impl {
             0
         }
 
-        /// Windows resolver: best-effort over the handles opened for
-        /// imports (`LoadLibraryA`). A data symbol in a module that was
-        /// not an import target won't resolve and the caller errors.
+        /// Windows resolver over the same handle set `bind_imports`
+        /// populated (both `GetModuleHandleA` and `LoadLibraryA`), so an
+        /// extern-data symbol in an already-loaded module resolves. 0
+        /// means unresolved and the caller errors.
         #[cfg(target_os = "windows")]
         fn resolve_symbol(&self, name: &str) -> u64 {
             let cs = match CString::new(name) {
                 Ok(cs) => cs,
                 Err(_) => return 0,
             };
-            for &h in &self.lib_handles {
+            for &(h, _) in &self.lib_handles {
                 let a = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
                 if a != 0 {
                     return a;
@@ -1306,7 +1416,7 @@ mod jit_impl {
                     fn munmap(addr: *mut c_void, len: usize) -> c_int;
                     fn dlclose(handle: *mut c_void) -> c_int;
                 }
-                for &h in &self.lib_handles {
+                for &(h, _) in &self.lib_handles {
                     if !h.is_null() {
                         dlclose(h);
                     }
@@ -1315,8 +1425,10 @@ mod jit_impl {
             }
             #[cfg(target_os = "windows")]
             unsafe {
-                for &h in &self.lib_handles {
-                    if !h.is_null() {
+                // Release only owned handles; a `GetModuleHandleA` handle
+                // carries no refcount to drop.
+                for &(h, owned) in &self.lib_handles {
+                    if owned && !h.is_null() {
                         FreeLibrary(h);
                     }
                 }
@@ -1343,14 +1455,26 @@ mod jit_impl {
         build: &Build,
     ) -> Result<(), C5Error> {
         for fx in &build.got_fixups {
-            patch_got_call(
-                target,
-                code,
-                code_vmaddr,
-                fx.adrp_offset as u64,
-                got_vmaddr + (fx.import_index as u64) * 8,
-                "GOT fixup",
-            )?;
+            let slot_vmaddr = got_vmaddr + (fx.import_index as u64) * 8;
+            if fx.is_data_load {
+                patch_got_data_load(
+                    target,
+                    code,
+                    code_vmaddr,
+                    fx.adrp_offset as u64,
+                    slot_vmaddr,
+                    "GOT data fixup",
+                )?;
+            } else {
+                patch_got_call(
+                    target,
+                    code,
+                    code_vmaddr,
+                    fx.adrp_offset as u64,
+                    slot_vmaddr,
+                    "GOT fixup",
+                )?;
+            }
         }
         for fx in &build.data_fixups {
             patch_addr_load(
@@ -1398,8 +1522,11 @@ mod jit_impl {
     }
 
     /// aarch64 `adrp Xd, page; ldr Xd, [Xd, #imm12]` patcher. The
-    /// loaded value at `target_vmaddr` is the GOT slot's stored
-    /// libc address; the JIT'd `blr xd` then dispatches there.
+    /// value loaded from `target_vmaddr` is the GOT slot's stored
+    /// host address; a call site follows with `blr xd`, a data
+    /// site continues with the address in `xd`. The destination
+    /// register is recovered from the placeholder adrp (x16 at
+    /// call sites, the allocator's choice at data sites).
     fn patch_adrp_ldr(
         code: &mut [u8],
         code_vmaddr: u64,
@@ -1424,15 +1551,49 @@ mod jit_impl {
                 &format!("JIT: {label} slot offset {in_page:#x} not 8-aligned"),
             )));
         }
-        let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg::X16, imm21);
-        let ldr_word = super::super::aarch64::enc_ldr_imm(
-            super::super::aarch64::Reg::X16,
-            super::super::aarch64::Reg::X16,
-            in_page,
-        );
+        let prev_adrp =
+            u32::from_le_bytes([code[off], code[off + 1], code[off + 2], code[off + 3]]);
+        let rd = super::super::aarch64::Reg((prev_adrp & 0x1F) as u8);
+        let adrp_word = super::super::aarch64::enc_adrp(rd, imm21);
+        let ldr_word = super::super::aarch64::enc_ldr_imm(rd, rd, in_page);
         code[off..off + 4].copy_from_slice(&adrp_word.to_le_bytes());
         code[off + 4..off + 8].copy_from_slice(&ldr_word.to_le_bytes());
         Ok(())
+    }
+
+    /// Patch an extern-data reference so the register receives the
+    /// imported object's address from its GOT slot. aarch64 rewrites
+    /// the `adrp + add` placeholder into `adrp + ldr` (same shape as
+    /// a call's slot load); x86_64 flips the emitter's
+    /// `lea rd, [rip+disp32]` into `mov rd, [rip+disp32]` -- the
+    /// rewrite the PE writer's IAT data path applies.
+    fn patch_got_data_load(
+        target: Target,
+        code: &mut [u8],
+        code_vmaddr: u64,
+        instr_offset: u64,
+        target_vmaddr: u64,
+        label: &str,
+    ) -> Result<(), C5Error> {
+        match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, label)
+            }
+            Target::LinuxX64 | Target::WindowsX64 => {
+                let op_off = instr_offset as usize + 1;
+                if code[op_off] != 0x8D {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "JIT: {label} expected lea opcode 0x8D at text+{op_off:#x}, \
+                             found {:#04x}",
+                            code[op_off],
+                        ),
+                    )));
+                }
+                code[op_off] = 0x8B;
+                patch_lea_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
+            }
+        }
     }
 
     /// x86_64 `call qword [rip + disp32]` patcher. disp32 is

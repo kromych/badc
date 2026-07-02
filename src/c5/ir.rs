@@ -79,29 +79,41 @@ pub(crate) enum Inst {
     /// Load from `addr + disp`. Width / signedness driven by the
     /// source load op. `disp` is a byte offset folded from a constant
     /// pointer addition (a struct field offset) into the addressing
-    /// mode; it is zero for a plain dereference.
+    /// mode; it is zero for a plain dereference. `volatile` marks an
+    /// access to a volatile-qualified object (C99 6.7.3p6): the load
+    /// must be performed strictly per the abstract machine, so no pass
+    /// may delete, duplicate, or forward it (5.1.2.3p2).
     Load {
         addr: ValueId,
         disp: i32,
         kind: LoadKind,
+        volatile: bool,
     },
     /// Store to `addr + disp`. The c5 semantics leave the stored value
     /// in the accumulator afterward; downstream uses of this
     /// instruction's id read that value. `disp` is a byte offset folded
     /// from a constant pointer addition, zero for a plain dereference.
+    /// `volatile` as for [`Self::Load`].
     Store {
         addr: ValueId,
         disp: i32,
         value: ValueId,
         kind: StoreKind,
+        volatile: bool,
     },
     /// Load from a local / parameter slot. Equivalent to a
     /// `LocalAddr(off)` followed by `Load { kind }`, but
     /// represented as a single instruction so the per-arch emit
     /// folds the address into the load's addressing mode and
     /// the allocator does not need to assign a register to the
-    /// intermediate address.
-    LoadLocal { off: i64, kind: LoadKind },
+    /// intermediate address. `volatile` as for [`Self::Load`]; a
+    /// slot with any volatile access also stays out of mem2reg
+    /// promotion and slot coalescing.
+    LoadLocal {
+        off: i64,
+        kind: LoadKind,
+        volatile: bool,
+    },
     /// Store to a local / parameter slot. Same shape as
     /// [`Self::Store`] but with the address represented as a
     /// constant slot offset, so the emit folds it into the
@@ -110,6 +122,7 @@ pub(crate) enum Inst {
         off: i64,
         value: ValueId,
         kind: StoreKind,
+        volatile: bool,
     },
     /// Load from `base + index * scale`. Folded form of
     /// `Add(base, Mul/Shl(index, scale))` followed by a `Load`,
@@ -117,7 +130,8 @@ pub(crate) enum Inst {
     /// (`ldr Wt, [Xn, Xm, lsl #log2(scale)]` on aarch64, scaled
     /// SIB on x86_64). `scale` is in bytes and matches the
     /// natural width of `kind` (1 for I8/U8, 2 for I16/U16, 4 for
-    /// I32/U32, 8 for I64).
+    /// I32/U32, 8 for I64). Carries no volatile flag: `index_fold`
+    /// leaves volatile accesses on the plain `Load` / `Store` forms.
     LoadIndexed {
         base: ValueId,
         index: ValueId,
@@ -281,6 +295,9 @@ pub(crate) enum Inst {
     /// (control transfers out).
     TailExt(i64),
     /// Whole-struct memory copy.
+    /// TODO: carries no volatile flag; a copy of a volatile-qualified
+    /// aggregate (C99 6.7.3p6) is not marked. Scalar volatile
+    /// accesses ride `Load` / `Store`, which cover the defined uses.
     Mcpy {
         dst: ValueId,
         src: ValueId,

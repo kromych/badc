@@ -238,12 +238,11 @@ const SEG_INDEX_DATA: u8 = 2;
 const S_ATTR_DEBUG: u32 = 0x0200_0000;
 
 /// Mach-O section type bits used by the TLV layout. See
-/// `<mach-o/loader.h>` for the full set; we only need
-/// `__thread_bss` (zero-fill, the only flavour the c5 frontend
-/// generates today since `_Thread_local` initialisers aren't
-/// supported) and `__thread_vars` (descriptors). The matching
-/// `__thread_data` (S_THREAD_LOCAL_REGULAR = 0x11) would be
-/// emitted alongside if we ever support TLS initialisers.
+/// `<mach-o/loader.h>` for the full set. `__thread_vars` holds the
+/// descriptors; the per-thread storage is `__thread_bss` (zero-fill)
+/// when every `_Thread_local` starts zero, or `__thread_data`
+/// (S_THREAD_LOCAL_REGULAR = 0x11, file-backed init template) once any
+/// initialiser makes `build.tls_init_size` non-zero.
 #[allow(dead_code)]
 const S_ZEROFILL: u32 = 0x1; // __bss (zero-fill, no file backing)
 const S_THREAD_LOCAL_REGULAR: u32 = 0x11; // __thread_data (init data)
@@ -753,6 +752,7 @@ fn segment_data_with_tlv(
     data_addr: u64,
     data_size: u64,
     data_offset: u32,
+    data_align_log2: u32,
     thread_vars_addr: u64,
     thread_vars_size: u64,
     thread_vars_offset: u32,
@@ -809,7 +809,7 @@ fn segment_data_with_tlv(
             addr: data_addr,
             size: data_size,
             offset: data_offset,
-            align: 3,
+            align: data_align_log2,
             reloff: 0,
             nreloc: 0,
             flags: 0,
@@ -924,6 +924,7 @@ fn segment_data(
     data_addr: u64,
     data_size: u64,
     data_offset: u32,
+    data_align_log2: u32,
     bss_addr: u64,
     bss_size: u64,
 ) -> Vec<u8> {
@@ -979,7 +980,7 @@ fn segment_data(
             addr: data_addr,
             size: data_size,
             offset: data_offset,
-            align: 3, // log2 -- 8 bytes
+            align: data_align_log2,
             reloff: 0,
             nreloc: 0,
             flags: 0, // S_REGULAR
@@ -1606,6 +1607,27 @@ struct TlvBindContext {
     segment_offset: u64,
     /// Number of TLV descriptors that need binding.
     tlv_count: usize,
+    /// 1-based LC_LOAD_DYLIB ordinal of libSystem, which defines
+    /// `__tlv_bootstrap` (see [`tlv_bootstrap_ordinal`]).
+    bootstrap_ordinal: u64,
+}
+
+/// 1-based LC_LOAD_DYLIB ordinal of libSystem, the dylib that defines
+/// `__tlv_bootstrap`. The bind stream and the matching nlist entry both
+/// resolve the ordinal through here so they cannot diverge. An image
+/// using TLV without linking libSystem cannot bind the descriptors, so
+/// that is an error rather than a guessed ordinal.
+fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result<u64, C5Error> {
+    dylibs
+        .iter()
+        .position(|d| d.path.contains("libSystem"))
+        .map(|i| (i + 1) as u64)
+        .ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "Mach-O: `_Thread_local` requires libSystem for `__tlv_bootstrap`, \
+                 but no linked dylib matches libSystem",
+            ))
+        })
 }
 
 /// Bind opcode stream that resolves the program's imports plus,
@@ -1718,20 +1740,7 @@ fn build_bind_opcodes(
         out.push(BIND_OPCODE_DO_BIND);
     }
     if let Some(ctx) = tlv_ctx {
-        // `__tlv_bootstrap` always lives in libSystem; its
-        // dylib ordinal is the position of libSystem in the
-        // per-image dylib list, +1. We reuse the first dylib
-        // (libSystem is always present on macOS targets) for
-        // simplicity; if the order ever changes, the
-        // matching nlist entry's ordinal is computed the same
-        // way.
-        let bootstrap_ordinal = imports
-            .dylibs
-            .iter()
-            .position(|d| d.path.contains("libSystem"))
-            .map(|i| (i + 1) as u64)
-            .unwrap_or(1);
-        let bootstrap_source = BindSource::Dylib(bootstrap_ordinal);
+        let bootstrap_source = BindSource::Dylib(ctx.bootstrap_ordinal);
         if current_source != Some(bootstrap_source) {
             push_bind_source(&mut out, bootstrap_source);
         }
@@ -1994,7 +2003,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let data_vmaddr = TEXT_VMADDR_BASE + text_vmsize;
     let got_size = (build.imports.imports.len() * 8) as u64;
     let got_section_offset_in_segment: u64 = 0;
-    let data_section_offset_in_segment: u64 = round_up(got_size, 8);
+    // __data's base alignment: the segment base is page-aligned, so
+    // aligning the in-segment offset aligns both fileoff and vmaddr.
+    let data_align = build.data_align.max(8) as u64;
+    let data_section_offset_in_segment: u64 = round_up(got_size, data_align);
     let program_data_size = build.data.len() as u64;
     let post_data_offset_in_segment: u64 =
         round_up(data_section_offset_in_segment + program_data_size, 8);
@@ -2087,6 +2099,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             Some(TlvBindContext {
                 segment_offset: thread_vars_offset_in_segment,
                 tlv_count: n_tlv,
+                bootstrap_ordinal: tlv_bootstrap_ordinal(&build.imports.dylibs)?,
             })
         } else {
             None
@@ -2126,25 +2139,20 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // `real_symbol` ("_malloc") so `nm`/`lldb` show the name
     // the C source uses.
     //
-    // Test fixtures sometimes hand us a `Build` with imports but
-    // no trampoline offsets (no per-arch lower() ran); in that
-    // case we skip the local section.
-    let emit_plt_locals = !build.plt_trampoline_offsets.is_empty();
-    // One local symbol per PLT trampoline. Function imports carry a
-    // trampoline; data imports (bound through the GOT) do not, and the
-    // routing appends them after the function imports, so the first
-    // `plt_trampoline_offsets.len()` imports are exactly the trampolined
-    // ones. The remaining imports still get an undefined symtab entry +
-    // bind below.
-    let n_trampolines = build.plt_trampoline_offsets.len();
-    let mut symbol_names: Vec<&str> = if emit_plt_locals {
-        build.imports.imports[..n_trampolines]
-            .iter()
-            .map(|imp| imp.local_name.as_str())
-            .collect()
-    } else {
-        Vec::new()
-    };
+    // One local symbol per PLT trampoline. A data import (bound through
+    // the GOT) carries no trampoline (`None` slot) and gets only the
+    // undefined symtab entry + bind below -- a local text symbol for it
+    // would sit at the slot's default address (the first function's
+    // bytes) and mislabel backtraces and breakpoints. Keyed by import
+    // index, not by ordering, so the two never diverge.
+    let plt_locals: Vec<(&str, usize)> = build
+        .imports
+        .imports
+        .iter()
+        .zip(build.plt_trampoline_offsets.iter())
+        .filter_map(|(imp, off)| off.map(|o| (imp.local_name.as_str(), o)))
+        .collect();
+    let mut symbol_names: Vec<&str> = plt_locals.iter().map(|&(name, _)| name).collect();
     // Executable dynamic exports: every defined global symbol, so a
     // dlopen'd module binds the program's symbols. `#pragma export`
     // populates `build.exports` for shared libraries instead, so the
@@ -2182,16 +2190,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
 
     // [Locals] one entry per PLT trampoline. Data imports have no
     // trampoline; they appear only as undefined import symbols below.
-    if emit_plt_locals {
-        debug_assert!(
-            n_trampolines <= build.imports.imports.len(),
-            "more trampolines than imports"
-        );
-        for (i, &tramp_offset) in build.plt_trampoline_offsets.iter().enumerate() {
-            let n_strx = str_indices[i];
-            let n_value = code_vmaddr_base + tramp_offset as u64;
-            symtab.extend_from_slice(&nlist_local(n_strx, n_value, SECT_INDEX_TEXT));
-        }
+    for (i, &(_, tramp_offset)) in plt_locals.iter().enumerate() {
+        let n_strx = str_indices[i];
+        let n_value = code_vmaddr_base + tramp_offset as u64;
+        symtab.extend_from_slice(&nlist_local(n_strx, n_value, SECT_INDEX_TEXT));
     }
 
     // [Defined exports] (N_EXT | N_SECT). Each one's `n_value`
@@ -2226,7 +2228,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // global symbols, so a dlopen'd module binds against them. A text
     // symbol's value is the code base plus its byte offset within
     // `build.text`; a data symbol's value is the `__data` section
-    // vmaddr plus its byte offset within `build.data`.
+    // vmaddr plus its byte offset within `build.data`. dyld resolves
+    // an image carrying LC_DYLD_INFO through the export trie only, so
+    // each dynamic export joins the trie alongside its symtab entry.
     let dyn_export_str_base = n_locals + export_disk_names.len();
     for (i, d) in dyn_exports_emit.iter().enumerate() {
         let n_strx = str_indices[dyn_export_str_base + i];
@@ -2243,6 +2247,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             }
         };
         symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect));
+        export_trie_entries.push((dyn_export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE));
     }
     // [Undefined imports] (N_EXT | N_UNDF). Indices in
     // `str_indices` are shifted past the locals + exports.
@@ -2252,16 +2257,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         symtab.extend_from_slice(&nlist_undef(n_strx, ordinal));
     }
     if tls_present {
-        // `__tlv_bootstrap` comes from libSystem.B.dylib (which is
-        // already in the dylib list because every macOS Mach-O
-        // we emit links libSystem). Find its ordinal.
-        let bootstrap_dylib_ordinal = build
-            .imports
-            .dylibs
-            .iter()
-            .position(|d| d.path.contains("libSystem"))
-            .map(|i| (i + 1) as u8)
-            .unwrap_or(1);
+        let bootstrap_dylib_ordinal = tlv_bootstrap_ordinal(&build.imports.dylibs)? as u8;
         let bootstrap_strx = str_indices[symbol_names.len() - 1];
         symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal));
     }
@@ -2435,6 +2431,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             data_section_vmaddr,
             program_data_size,
             data_section_fileoff as u32,
+            data_align.trailing_zeros(),
             thread_vars_vmaddr,
             thread_vars_size,
             thread_vars_fileoff as u32,
@@ -2457,6 +2454,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             data_section_vmaddr,
             program_data_size,
             data_section_fileoff as u32,
+            data_align.trailing_zeros(),
             bss_base_vmaddr,
             build.bss_size as u64,
         )
@@ -2562,9 +2560,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // then dyld_info family, then symbol tables, then dylinker /
     // dylib / build_version / main (or LC_ID_DYLIB for shared libs).
     // Segment LC order: __PAGEZERO, __TEXT, __DATA, __DWARF
-    // (executables only), __LINKEDIT -- the layout
-    // `go build` produces for executables. __DWARF reuses
-    // __LINKEDIT's vmaddr with vmsize=0, so the loaded image's
+    // (present when debug info is emitted, for both executables and
+    // dylibs), __LINKEDIT. __DWARF occupies its own page-aligned
+    // vmaddr slot between __DATA and __LINKEDIT, so the loaded image's
     // address space stays monotonic non-decreasing.
     // File-resident order matches LC order.
     out.extend_from_slice(&pagezero);
@@ -2736,9 +2734,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     }
     out.resize((data_fileoff + data_filesize) as usize, 0);
 
-    // __DWARF contents (executables only -- dylibs skip phase
-    // 1 DWARF, see `emit_dwarf`). Order matches what
-    // `segment_dwarf` pointed each section at: info, abbrev,
+    // __DWARF contents, emitted whenever debug info is requested
+    // (executables and dylibs, gated by `emit_dwarf`). Order matches
+    // what `segment_dwarf` pointed each section at: info, abbrev,
     // line, str. Sits ahead of __LINKEDIT so codesign can grow
     // __LINKEDIT at the file tail without trampling debug
     // bytes.
@@ -2811,6 +2809,9 @@ mod tests {
             structs: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
+            entry_pragma: None,
+            auto_includes: Vec::new(),
+            data_align: 8,
             subsystem: None,
             finished_functions: alloc::vec::Vec::new(),
             symbols: alloc::vec::Vec::new(),
@@ -2828,6 +2829,7 @@ mod tests {
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
+            data_align: 8,
             bss_size: 0,
             entry_offset: 0,
             got_fixups: Vec::new(),
@@ -2970,6 +2972,26 @@ mod tests {
             "image too small: {} bytes",
             bytes.len()
         );
+    }
+
+    /// `__tlv_bootstrap` binds against libSystem's real ordinal; an
+    /// image whose dylib list lacks libSystem cannot bind the TLV
+    /// descriptors and must fail rather than guess ordinal 1.
+    #[test]
+    fn tlv_bootstrap_ordinal_requires_libsystem() {
+        use crate::c5::codegen::ResolvedDylib;
+        let dylibs = vec![
+            ResolvedDylib {
+                name: "libfoo".into(),
+                path: "/usr/lib/libfoo.dylib".into(),
+            },
+            ResolvedDylib {
+                name: "libSystem".into(),
+                path: "/usr/lib/libSystem.B.dylib".into(),
+            },
+        ];
+        assert_eq!(tlv_bootstrap_ordinal(&dylibs).unwrap(), 2);
+        assert!(tlv_bootstrap_ordinal(&dylibs[..1]).is_err());
     }
 
     #[test]

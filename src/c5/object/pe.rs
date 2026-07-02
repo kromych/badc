@@ -177,11 +177,12 @@ const NUM_DATA_DIRS: u32 = 16;
 /// appears when the c5 program has initialized data -- string
 /// literals, globals, or `_Thread_local` storage -- because
 /// real Windows kernels reject images that list a zero-sized
-/// section. The optional `.reloc` only appears when the
-/// program declares any `_Thread_local` global; that's the
-/// only path that puts absolute VAs into the image (the three
-/// pointer fields of `IMAGE_TLS_DIRECTORY64`), which the
-/// ASLR-aware loader needs to fix up after sliding.
+/// section. The optional `.reloc` appears when the image holds
+/// any absolute VA the ASLR-aware loader must fix up after
+/// sliding: the three `IMAGE_TLS_DIRECTORY64` pointer fields
+/// (when the program declares a `_Thread_local` global) and any
+/// absolute pointer baked by an address-of-static data or code
+/// relocation.
 ///
 /// `.pdata` is the Exception Directory, mandatory under the
 /// 64-bit Windows ABI: the loader looks up `RUNTIME_FUNCTION`
@@ -191,13 +192,13 @@ const NUM_DATA_DIRS: u32 = 16;
 /// hosts can reject a missing entry, so we emit it on both
 /// arches.
 ///
-/// `.reloc` is omitted for TLS-free images because every
-/// cross-section reference the codegen emits is RIP-relative
-/// (x86_64) or PC-relative (aarch64 ADRP+ADD), so the
-/// DYNAMIC_BASE-flagged image can be slid to any address
-/// without touching any absolute pointer in the file. The
-/// only absolute pointers we ever emit live inside the TLS
-/// directory, which is why `.reloc` follows TLS presence.
+/// `.reloc` is omitted only when the image holds no absolute
+/// pointer: most cross-section references are RIP-relative
+/// (x86_64) or PC-relative (aarch64 ADRP+ADD), and a
+/// DYNAMIC_BASE-flagged image slides freely without touching
+/// them. Absolute VAs live in the TLS directory and in
+/// address-of-static initializers, so `.reloc` follows their
+/// presence.
 fn num_sections(
     data_section_present: bool,
     reloc_section_present: bool,
@@ -391,7 +392,13 @@ pub(super) fn write(
     let reloc_section_present = !build.tls_data.is_empty()
         || !build.data_relocs.is_empty()
         || !build.code_relocs.is_empty();
-    let edata_section_present = is_dll && !build.exports.is_empty();
+    // `.edata` is present whenever the image exports anything: a
+    // `#pragma export` set (shared library or executable, matching the
+    // ELF `.dynsym` behaviour) or an executable's `--export-all` /
+    // `--export-data` dynamic exports. A PE executable may legally carry
+    // an export directory; GetProcAddress resolves against it, which is
+    // what a plugin host loading modules relies on.
+    let edata_section_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
     // Emit DWARF debug sections in PE images so lldb /
     // gdb can resolve user-function names + types in PE
     // backtraces. Suppressed when the user passed `--no-debug` /
@@ -602,11 +609,10 @@ pub(super) fn write(
 
     // `.edata` holds the IMAGE_EXPORT_DIRECTORY plus the
     // arrays it references -- function RVAs, name RVAs,
-    // ordinals, plus the DLL name and each export name.
-    // Only present in shared-library output with at least one
-    // `#pragma export` symbol. (`edata_section_present` was
-    // already computed above so the headers-size pass knew
-    // about it.)
+    // ordinals, plus the image name and each export name.
+    // Present when the image exports anything (see
+    // `edata_section_present` above, computed early so the
+    // headers-size pass knew about it).
     let edata_rva: u32 = if edata_section_present {
         round_up(
             if reloc_section_present {
@@ -633,13 +639,51 @@ pub(super) fn write(
         0
     };
     let edata_bytes: Vec<u8> = if edata_section_present {
-        build_export_directory(
-            edata_rva,
-            text_rva + text_prologue_len,
-            &build.exports,
-            &build.pc_to_native,
-            build.shared_lib_name.as_deref(),
-        )?
+        // Resolve every export to its runtime RVA. `#pragma export`
+        // entries carry a bc PC that maps through `pc_to_native`;
+        // dynamic exports already carry a byte offset within
+        // `build.text` / `build.data`. Names may overlap when
+        // `--export-all` re-covers a `#pragma export` symbol; the
+        // pragma entry wins (both resolve to the same address).
+        let mut entries: Vec<(String, u32)> = Vec::new();
+        for exp in &build.exports {
+            let native_off = build
+                .pc_to_native
+                .get(exp.ent_pc)
+                .copied()
+                .unwrap_or(usize::MAX);
+            if native_off == usize::MAX {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: exported function `{}` (bc PC {}) doesn't \
+                     align with any native instruction",
+                        exp.name, exp.ent_pc
+                    ),
+                )));
+            }
+            entries.push((
+                exp.name.clone(),
+                text_rva + text_prologue_len + native_off as u32,
+            ));
+        }
+        for d in &build.dynamic_exports {
+            if entries.iter().any(|(n, _)| n == &d.name) {
+                continue;
+            }
+            let rva = match d.section {
+                super::DynamicExportSection::Text => text_rva + text_prologue_len + d.offset as u32,
+                super::DynamicExportSection::Data => {
+                    if !data_section_present {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &format!("PE: data export `{}` without a .data section", d.name),
+                        )));
+                    }
+                    data_rva + d.offset as u32
+                }
+            };
+            entries.push((d.name.clone(), rva));
+        }
+        build_export_directory(edata_rva, entries, build.shared_lib_name.as_deref())?
     } else {
         Vec::new()
     };
@@ -779,9 +823,19 @@ pub(super) fn write(
     // of `b malloc` resolution by some tool versions.
     let mut coff_symbols: Vec<u8> = Vec::new();
     if emit_plt_coff_symbols {
-        for (i, imp) in build.imports.imports.iter().enumerate() {
-            let trampoline_rva =
-                text_rva + text_prologue_len + build.plt_trampoline_offsets[i] as u32;
+        for (imp, off) in build
+            .imports
+            .imports
+            .iter()
+            .zip(build.plt_trampoline_offsets.iter())
+        {
+            // A data import (bound through the IAT) has no trampoline;
+            // a text symbol for it would mislabel the code at the
+            // fabricated RVA.
+            let Some(tramp_offset) = *off else {
+                continue;
+            };
+            let trampoline_rva = text_rva + text_prologue_len + tramp_offset as u32;
             let mut name_field = [0u8; 8];
             let name_bytes = imp.local_name.as_bytes();
             if name_bytes.len() <= 8 {
@@ -1090,13 +1144,13 @@ pub(super) fn write(
         });
     }
     write_section_headers(&mut out, &sections);
-    pad_to(&mut out, text_file_off as usize);
+    pad_to(&mut out, text_file_off as usize)?;
     out.extend_from_slice(&text_bytes);
-    pad_to(&mut out, (text_file_off + text_raw_size) as usize);
+    pad_to(&mut out, (text_file_off + text_raw_size) as usize)?;
     out.extend_from_slice(&pdata_bytes);
-    pad_to(&mut out, (pdata_file_off + pdata_raw_size) as usize);
+    pad_to(&mut out, (pdata_file_off + pdata_raw_size) as usize)?;
     out.extend_from_slice(&idata_bytes);
-    pad_to(&mut out, (idata_file_off + idata_raw_size) as usize);
+    pad_to(&mut out, (idata_file_off + idata_raw_size) as usize)?;
     if data_section_present {
         // Apply pointer-to-global initializers in `.data`:
         // each `int *p = &x;` slot holds the preferred VA
@@ -1156,7 +1210,7 @@ pub(super) fn write(
             pad_to(
                 &mut out,
                 (data_file_off + tls_layout.tls_index_offset_in_data) as usize,
-            );
+            )?;
             // `_tls_index` -- 4-byte slot, zero-initialised; the
             // Windows loader writes the chosen slot index here at
             // module-init time.
@@ -1166,7 +1220,7 @@ pub(super) fn write(
             pad_to(
                 &mut out,
                 (data_file_off + tls_layout.directory_offset_in_data) as usize,
-            );
+            )?;
             // IMAGE_TLS_DIRECTORY64. Layout:
             //   StartAddressOfRawData : u64  -- VA of init data start
             //   EndAddressOfRawData   : u64  -- VA of init data end
@@ -1189,13 +1243,13 @@ pub(super) fn write(
             // subsequent `tls_array[0] + offset` then lands
             // inside another module's per-thread storage and
             // reads non-zero data, which trips
-            // `thread_local_basic.c`'s "counter != 0" check.
-            // The c5 frontend never produces non-zero TLS init
-            // bytes today (no `_Thread_local int x = 5;`
-            // syntax), so emitting the whole block as zero
-            // template bytes is byte-for-byte identical to the
-            // SizeOfZeroFill scheme but sidesteps the loader
-            // edge case.
+            // the "counter != 0" check in a per-thread test.
+            // The frontend may produce non-zero TLS init bytes
+            // (`_Thread_local int x = 5;`); `build.tls_data`
+            // already holds the init template followed by the
+            // zero-init tail, so emitting the whole block as
+            // template bytes carries both correctly and sidesteps
+            // the empty-template edge case.
             let tls_init_start_va =
                 IMAGE_BASE + (data_rva + tls_layout.tls_init_offset_in_data) as u64;
             let tls_init_end_va = tls_init_start_va + build.tls_data.len() as u64;
@@ -1207,40 +1261,46 @@ pub(super) fn write(
             out.extend_from_slice(&0u64.to_le_bytes()); // AddressOfCallBacks
             out.extend_from_slice(&zero_fill.to_le_bytes());
             out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
-            // TLS template -- copied verbatim into each
-            // thread's per-thread region by the loader. The c5
-            // frontend zero-initialises every TLS variable
-            // today, so this is effectively N bytes of zeros.
+            // TLS template -- copied verbatim into each thread's
+            // per-thread region by the loader. `tls_data` holds the
+            // initialised bytes followed by the zero-init tail.
             out.extend_from_slice(&build.tls_data);
         }
     }
     if reloc_section_present {
-        pad_to(&mut out, reloc_file_off as usize);
+        pad_to(&mut out, reloc_file_off as usize)?;
         out.extend_from_slice(&reloc_bytes);
     }
     if edata_section_present {
-        pad_to(&mut out, edata_file_off as usize);
+        pad_to(&mut out, edata_file_off as usize)?;
         out.extend_from_slice(&edata_bytes);
     }
     // DWARF debug sections come last in the file image
     // (before the COFF string table that names them).
     for slot in &dwarf_pe_sections {
-        pad_to(&mut out, slot.file_off as usize);
+        pad_to(&mut out, slot.file_off as usize)?;
         out.extend_from_slice(&slot.bytes);
     }
     // COFF symbol table immediately before its string
     // table. Both live at the file tail (post-DWARF). Emitted
     // when there are PLT trampolines; absent otherwise.
     if !coff_symbols.is_empty() {
-        pad_to(&mut out, coff_symtab_file_off as usize);
+        pad_to(&mut out, coff_symtab_file_off as usize)?;
         out.extend_from_slice(&coff_symbols);
     }
     if !coff_strtab.is_empty() {
-        pad_to(&mut out, coff_strtab_file_off as usize);
+        pad_to(&mut out, coff_strtab_file_off as usize)?;
         out.extend_from_slice(&coff_strtab);
     }
-    pad_to(&mut out, total_file_size);
-    debug_assert_eq!(out.len(), total_file_size, "file size mismatch");
+    pad_to(&mut out, total_file_size)?;
+    if out.len() != total_file_size {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "PE layout drift: emitted {:#x} bytes, layout computed {total_file_size:#x}",
+                out.len(),
+            ),
+        )));
+    }
     Ok(out)
 }
 
@@ -1303,21 +1363,20 @@ struct ImageExportDirectory {
 const IMAGE_EXPORT_DIRECTORY_SIZE: usize = 40;
 const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPORT_DIRECTORY_SIZE);
 
-/// Build the `.edata` section bytes for a DLL with exports.
+/// Build the `.edata` section bytes for an image with exports.
 /// Layout: `IMAGE_EXPORT_DIRECTORY` followed by
 /// AddressOfFunctions / AddressOfNames /
-/// AddressOfNameOrdinals arrays, then the DLL-name and
+/// AddressOfNameOrdinals arrays, then the image-name and
 /// per-export-name strings (NUL-terminated).
 ///
-/// All RVAs in the directory are image-relative; the
-/// `text_prologue_rva` is `text_rva + stub_len`, the byte
-/// where `build.text` starts. Each export's runtime RVA is
-/// `text_prologue_rva + pc_to_native[ent_pc]`.
+/// `exports` pairs each export name with its resolved image-relative
+/// RVA (functions and data alike). The name pointer table is lexically
+/// ordered, as the loader and GetProcAddress binary-search it; the
+/// parallel ordinal table maps each name back to its
+/// AddressOfFunctions slot.
 fn build_export_directory(
     edata_rva: u32,
-    text_prologue_rva: u32,
-    exports: &[crate::c5::program::ExportedFunction],
-    pc_to_native: &[usize],
+    exports: Vec<(String, u32)>,
     image_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
     let n = exports.len() as u32;
@@ -1328,7 +1387,7 @@ fn build_export_directory(
     let ordinals_off = names_off + 4 * n;
     let strings_off = ordinals_off + 2 * n;
 
-    // The DLL-name string heads the string blob; per-export
+    // The image-name string heads the string blob; per-export
     // names follow, each NUL-terminated. We compute their
     // RVAs as we go so the AddressOfNames entries match.
     let dll_name = image_name.unwrap_or("c5-output.dll");
@@ -1355,39 +1414,34 @@ fn build_export_directory(
         },
     );
 
-    // AddressOfFunctions -- RVA of each function.
-    for exp in exports {
-        let native_off = pc_to_native.get(exp.ent_pc).copied().unwrap_or(usize::MAX);
-        if native_off == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "PE: exported function `{}` (bc PC {}) doesn't \
-                 align with any native instruction",
-                    exp.name, exp.ent_pc
-                ),
-            )));
-        }
-        let rva = text_prologue_rva + native_off as u32;
+    // AddressOfFunctions -- resolved RVA of each export.
+    for (_, rva) in &exports {
         out.extend_from_slice(&rva.to_le_bytes());
     }
 
+    // The name pointer table must be lexically ordered; the parallel
+    // ordinal table maps each name back to its AddressOfFunctions slot.
+    let mut by_name: Vec<usize> = (0..exports.len()).collect();
+    by_name.sort_by(|&a, &b| exports[a].0.as_bytes().cmp(exports[b].0.as_bytes()));
+
     // AddressOfNames -- RVA of each export's name string.
     let mut cur = strings_rva + dll_name.len() as u32 + 1;
-    for exp in exports {
+    for &i in &by_name {
         out.extend_from_slice(&cur.to_le_bytes());
-        cur += exp.name.len() as u32 + 1;
+        cur += exports[i].0.len() as u32 + 1;
     }
 
-    // AddressOfNameOrdinals -- u16 ordinal per export.
-    for i in 0..n {
+    // AddressOfNameOrdinals -- u16 unbiased ordinal per name.
+    for &i in &by_name {
         out.extend_from_slice(&(i as u16).to_le_bytes());
     }
 
-    // String blob: DLL name first, then each export name.
+    // String blob: image name first, then each export name in
+    // name-pointer-table order.
     out.extend_from_slice(dll_name.as_bytes());
     out.push(0);
-    for exp in exports {
-        out.extend_from_slice(exp.name.as_bytes());
+    for &i in &by_name {
+        out.extend_from_slice(exports[i].0.as_bytes());
         out.push(0);
     }
 
@@ -2853,10 +2907,11 @@ fn patch_aarch64_adrp_ldr(
     Ok(())
 }
 
-/// Patch an aarch64 `adrp xd, _; add xd, xd, #_` pair so the final
-/// xd holds the absolute-address-mod-image-base equivalent of
-/// `target_rva` (resolved by the loader at fixed image base since
-/// we don't ship base relocations).
+/// Patch an aarch64 `adrp xd, _; add xd, xd, #_` pair to point at
+/// `target_rva`. The encoding is PC-relative: `adrp` takes the signed
+/// 4 KiB page delta from its own page and `add` the 12-bit in-page
+/// offset, so an ASLR slide moves the instruction and its target by
+/// the same delta and the pair needs no base relocation.
 fn patch_aarch64_adrp_add(
     text: &mut [u8],
     adrp_offset_in_text: u32,
@@ -2898,10 +2953,21 @@ fn round_up_usize(value: usize, align: usize) -> usize {
     (value + align - 1) & !(align - 1)
 }
 
-fn pad_to(out: &mut Vec<u8>, target_len: usize) {
-    if out.len() < target_len {
-        out.resize(target_len, 0);
+/// Zero-pad `out` to the precomputed file offset of the next section.
+/// A write cursor already past the target means the layout pass and
+/// the emission pass disagree; every later `pointer_to_raw_data` would
+/// then be wrong, so that is a hard error rather than a silent overlap.
+fn pad_to(out: &mut Vec<u8>, target_len: usize) -> Result<(), C5Error> {
+    if out.len() > target_len {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "PE layout drift: write cursor {:#x} past computed file offset {target_len:#x}",
+                out.len(),
+            ),
+        )));
     }
+    out.resize(target_len, 0);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -2940,6 +3006,56 @@ mod tests {
         assert_eq!(round_up(1, 0x200), 0x200);
         assert_eq!(round_up(0x200, 0x200), 0x200);
         assert_eq!(round_up(0x201, 0x200), 0x400);
+    }
+
+    /// `pad_to` rejects a write cursor already past the layout's
+    /// computed file offset instead of silently overlapping sections.
+    #[test]
+    fn pad_to_rejects_cursor_past_target() {
+        let mut out = alloc::vec![0u8; 16];
+        assert!(pad_to(&mut out, 8).is_err());
+        assert!(pad_to(&mut out, 16).is_ok());
+        pad_to(&mut out, 32).expect("grow");
+        assert_eq!(out.len(), 32);
+    }
+
+    /// The export name pointer table is binary-searched by
+    /// GetProcAddress, so `build_export_directory` orders the entries
+    /// lexically with the ordinal table pointing back at each name's
+    /// AddressOfFunctions slot.
+    #[test]
+    fn export_directory_sorts_names_lexically() {
+        let bytes = build_export_directory(
+            0x5000,
+            alloc::vec![
+                ("zeta".to_string(), 0x1000u32),
+                ("alpha".to_string(), 0x2000u32),
+            ],
+            Some("t.dll"),
+        )
+        .expect("build export directory");
+        let name_pos = |needle: &[u8]| {
+            bytes
+                .windows(needle.len())
+                .position(|w| w == needle)
+                .expect("name present")
+        };
+        assert!(name_pos(b"alpha\0") < name_pos(b"zeta\0"));
+        // AddressOfFunctions stays in declaration order.
+        let funcs_off = IMAGE_EXPORT_DIRECTORY_SIZE;
+        let rva0 = u32::from_le_bytes(bytes[funcs_off..funcs_off + 4].try_into().unwrap());
+        let rva1 = u32::from_le_bytes(bytes[funcs_off + 4..funcs_off + 8].try_into().unwrap());
+        assert_eq!((rva0, rva1), (0x1000, 0x2000));
+        // Ordinal table (after funcs + names arrays) maps sorted names
+        // back to their slots: alpha -> slot 1, zeta -> slot 0.
+        let ordinals_off = funcs_off + 4 * 2 + 4 * 2;
+        let ord0 = u16::from_le_bytes(bytes[ordinals_off..ordinals_off + 2].try_into().unwrap());
+        let ord1 = u16::from_le_bytes(
+            bytes[ordinals_off + 2..ordinals_off + 4]
+                .try_into()
+                .unwrap(),
+        );
+        assert_eq!((ord0, ord1), (1, 0));
     }
 
     /// The packed AArch64 RUNTIME_FUNCTION encodes `FunctionLength`
@@ -3040,6 +3156,62 @@ mod tests {
         let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
         assert_eq!(rva, 0, "TLS RVA must be 0 when no TLS present");
         assert_eq!(size, 0, "TLS size must be 0 when no TLS present");
+    }
+
+    /// A PE executable may legally carry an export directory (a plugin
+    /// host publishing its API for GetProcAddress). `--export-all` /
+    /// `--export-data` reach PE executables through `dynamic_exports`;
+    /// the flags previously no-op'd for PE, leaving the directory empty.
+    #[test]
+    fn executable_dynamic_exports_emit_export_directory() {
+        use crate::Compiler;
+        let program = Compiler::new("int main() { return 0; }".to_string())
+            .compile()
+            .expect("compile");
+        let mut build = lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        build.dynamic_exports = alloc::vec![crate::c5::codegen::DynamicExport {
+            name: "bump".to_string(),
+            section: super::super::DynamicExportSection::Text,
+            offset: 0,
+        }];
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
+        let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_EXPORT);
+        assert_ne!(rva, 0, "export directory RVA must be set");
+        assert_ne!(size, 0, "export directory size must be set");
+        assert!(
+            bytes.windows(5).any(|w| w == b"bump\0"),
+            "the export name must appear in the image"
+        );
+
+        // Without dynamic exports the executable carries no directory.
+        let plain = write(
+            &program,
+            &lower_for(
+                &program,
+                super::super::Target::WindowsX64,
+                super::super::NativeOptions::default(),
+            )
+            .expect("lower"),
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
+        assert_eq!(
+            read_data_directory(&plain, DATA_DIRECTORY_EXPORT),
+            (0, 0),
+            "a plain executable must carry no export directory"
+        );
     }
 
     /// PE with `_Thread_local`: TLS directory entry must point

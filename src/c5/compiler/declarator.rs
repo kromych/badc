@@ -108,13 +108,31 @@ impl Compiler {
     /// (0 when the parentheses enclose no `*`). Used by both the cast
     /// operand parser and the `sizeof` type-name parser.
     pub(super) fn parse_abstract_ptr_declarator_levels(&mut self) -> Result<i64, C5Error> {
+        self.parse_abstract_ptr_declarator(false)
+            .map(|(levels, _)| levels)
+    }
+
+    /// As [`Self::parse_abstract_ptr_declarator_levels`], but with
+    /// `capture_proto` the plain fn-pointer shape's `(args)` list is
+    /// parsed and returned so a cast expression can record the pointee
+    /// prototype (parameter types, variadic split) for a following
+    /// call. Nested declarator shapes keep the skip behaviour.
+    pub(super) fn parse_abstract_ptr_declarator(
+        &mut self,
+        capture_proto: bool,
+    ) -> Result<(i64, Option<super::function::ParsedParams>), C5Error> {
         debug_assert!(self.lex.tk == '(');
         let mut depth: i64 = 1;
         self.next()?;
         let mut nested_ptrs: i64 = 0;
+        // The plain fn-pointer shape holds only `*`s (and qualifiers)
+        // inside one paren level; anything else is a nested declarator
+        // whose trailing `(args)` is not the pointee prototype.
+        let mut plain = true;
         while depth > 0 && self.lex.tk != 0 {
             if self.lex.tk == '(' {
                 depth += 1;
+                plain = false;
             } else if self.lex.tk == ')' {
                 depth -= 1;
                 if depth == 0 {
@@ -123,6 +141,8 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::MulOp && depth == 1 {
                 nested_ptrs += 1;
+            } else if self.lex.tk != Token::TypeQual {
+                plain = false;
             }
             self.next()?;
         }
@@ -130,9 +150,18 @@ impl Compiler {
         // function-pointer / function-returning-fn shape, or one or more
         // `[N]` / `[]` suffixes for the pointer-to-array shape
         // (`T (*)[N][M]`). Both are no-ops at c5's type-tag granularity.
+        let mut proto = None;
         if self.lex.tk == '(' {
             self.next()?;
-            self.skip_balanced_parens_after_open()?;
+            if capture_proto && plain && nested_ptrs > 0 {
+                let pp = self.parse_function_params()?;
+                for &p in &pp.indices {
+                    Self::restore_shadowed_symbol(&mut self.symbols[p]);
+                }
+                proto = Some(pp);
+            } else {
+                self.skip_balanced_parens_after_open()?;
+            }
         }
         while self.lex.tk == Token::Brak {
             self.next()?;
@@ -143,7 +172,7 @@ impl Compiler {
                 self.accept(']')?;
             }
         }
-        Ok(nested_ptrs)
+        Ok((nested_ptrs, proto))
     }
 
     /// Parse a single declarator: zero-or-more `*` (pointer levels)
@@ -160,6 +189,10 @@ impl Compiler {
     /// the decay happened, but for c5 today the equivalence is
     /// sufficient.
     pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
+        self.with_nesting("declarator", |c| c.parse_declarator_inner(base))
+    }
+
+    fn parse_declarator_inner(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
         // Taken once so it scopes to this parameter's own declarator, not
         // any nested one (a function-pointer parameter's prototype).
         let param_ctx = core::mem::take(&mut self.pending.param_decl_context);
@@ -170,6 +203,7 @@ impl Compiler {
         // it lexes as a no-op type qualifier. Consume any here so it does
         // not stand in for the declarator name.
         while self.lex.tk == Token::TypeQual {
+            ty |= self.lex_volatile_bit();
             self.next()?;
         }
         let mut leading_ptr_count: i64 = 0;
@@ -178,11 +212,13 @@ impl Compiler {
             ty += Ty::Ptr as i64;
             leading_ptr_count += 1;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
-            // `char *restrict s`. Consumed; no semantic effect. An
-            // attribute may sit here too (`void * __attribute__((malloc))
-            // p`).
+            // `char *restrict s`. A pointer-level `volatile` sets the
+            // tag's qualifier bit (C99 6.7.3; the single bit does not
+            // record the level). An attribute may sit here too
+            // (`void * __attribute__((malloc)) p`).
             loop {
                 if self.lex.tk == Token::TypeQual {
+                    ty |= self.lex_volatile_bit();
                     self.next()?;
                 } else if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
@@ -473,15 +509,13 @@ impl Compiler {
                 // decide how to interpret it.
                 self.next()?;
                 array_size = -1;
-            } else {
-                // `int xs[N]` -- N must fold to a positive integer
-                // constant. The constant-expression evaluator
-                // accepts integer literals (with optional unary
-                // minus) and identifiers bound to compile-time
-                // integer constants (Token::Num via enum or via
-                // `#define`s the preprocessor folded into the
-                // source token stream).
-                let n = self.parse_constant_int()?;
+            } else if let Some(n) = self.try_parse_constant_dim()? {
+                // `int xs[N]` -- N folded to an integer constant. The
+                // constant-expression evaluator accepts integer literals
+                // (with optional unary minus) and identifiers bound to
+                // compile-time integer constants (Token::Num via enum or
+                // via `#define`s the preprocessor folded into the source
+                // token stream).
                 if n < 0 {
                     return Err(
                         self.compile_err(format!("array dimension must be positive (got {n})"))
@@ -497,6 +531,39 @@ impl Compiler {
                 // allocated past the fixed part. Route it through the same
                 // `array_size = -1` sentinel.
                 array_size = if n == 0 { -1 } else { n };
+            } else {
+                // Non-constant dimension (C99 6.7.6.2). In a parameter it
+                // is adjusted to a pointer, so the size is parsed and
+                // discarded (6.7.6.3p7). At block scope it declares a
+                // variable-length array. Everywhere else it is a
+                // constraint violation.
+                if param_ctx {
+                    self.skip_array_dimension_expr()?;
+                    // `skip_array_dimension_expr` stops at the `]`; consume
+                    // it so the declarator resumes past the dimension.
+                    self.next()?;
+                    array_size = -1;
+                } else if self.pending.vla_allowed {
+                    self.expr(Token::Assign as i64)?;
+                    self.pending.vla_dim_expr = self.ast_acc.take();
+                    if self.lex.tk != ']' {
+                        return Err(self.compile_err("close bracket expected in array declarator"));
+                    }
+                    self.next()?;
+                    if self.lex.tk == Token::Brak {
+                        return Err(self.compile_err(
+                            "multidimensional variable-length arrays are not supported",
+                        ));
+                    }
+                    array_size = super::VLA_ARRAY_SIZE;
+                    if idx != usize::MAX {
+                        return Ok((idx, ty, array_size));
+                    }
+                } else {
+                    return Err(
+                        self.compile_err("variable-length array is only allowed at block scope")
+                    );
+                }
             }
             // Trailing dimensions for N-dim arrays. c5 stores
             // `array_size = product(dims)` (total element count),
@@ -520,7 +587,18 @@ impl Compiler {
                     self.next()?;
                     continue;
                 }
-                let m = self.parse_constant_int()?;
+                let Some(m) = self.try_parse_constant_dim()? else {
+                    // A non-constant inner dimension makes the whole
+                    // object a variably-modified type (C99 6.7.6.2); c5's
+                    // stride model is compile-time only, so reject it
+                    // cleanly rather than miscompile the row stride.
+                    if self.pending.vla_allowed || param_ctx {
+                        return Err(self.compile_err(
+                            "multidimensional variable-length arrays are not supported",
+                        ));
+                    }
+                    return Err(self.compile_err("constant integer expected in array declarator"));
+                };
                 if m <= 0 {
                     return Err(
                         self.compile_err(format!("array dimension must be positive (got {m})"))

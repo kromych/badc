@@ -127,8 +127,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movl	$0x7, %ebx
                	leaq	<rip>, %rax
-               	addq	$0x4, %rax
-               	movss	(%rax,%riz), %xmm0
+               	movss	0x4(%rax,%riz), %xmm0
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
@@ -142,16 +141,14 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
-               	addq	$0x4, %rax
-               	movss	(%rax,%riz), %xmm0
+               	movss	0x4(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x8, %ebx
                	leaq	<rip>, %rax
-               	addq	$0x8, %rax
-               	movss	(%rax,%riz), %xmm0
+               	movss	0x8(%rax,%riz), %xmm0
                	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
@@ -165,16 +162,14 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
-               	addq	$0x8, %rax
-               	movss	(%rax,%riz), %xmm0
+               	movss	0x8(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x9, %ebx
                	leaq	<rip>, %rax
-               	addq	$0xc, %rax
-               	movss	(%rax,%riz), %xmm0
+               	movss	0xc(%rax,%riz), %xmm0
                	movabsq	$0x4012000000000000, %rax # imm = 0x4012000000000000
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
@@ -188,8 +183,7 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
-               	addq	$0xc, %rax
-               	movss	(%rax,%riz), %xmm0
+               	movss	0xc(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
@@ -356,5 +350,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

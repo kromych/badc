@@ -26,29 +26,25 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movss	(%rax,%riz), %xmm1
                	leaq	-0x8(%rbp), %rax
-               	addq	$0x4, %rax
-               	movss	(%rax,%riz), %xmm2
+               	movss	0x4(%rax,%riz), %xmm2
                	addss	%xmm2, %xmm1
                	leaq	-0x10(%rbp), %rax
                	movss	(%rax,%riz), %xmm2
                	addss	%xmm2, %xmm1
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x4, %rax
-               	movss	(%rax,%riz), %xmm2
+               	movss	0x4(%rax,%riz), %xmm2
                	addss	%xmm2, %xmm1
                	leaq	-0x18(%rbp), %rax
                	movss	(%rax,%riz), %xmm2
                	addss	%xmm2, %xmm1
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x4, %rax
-               	movss	(%rax,%riz), %xmm2
+               	movss	0x4(%rax,%riz), %xmm2
                	addss	%xmm2, %xmm1
                	leaq	-0x20(%rbp), %rax
                	movss	(%rax,%riz), %xmm2
                	addss	%xmm2, %xmm1
                	leaq	-0x20(%rbp), %rax
-               	addq	$0x4, %rax
-               	movss	(%rax,%riz), %xmm2
+               	movss	0x4(%rax,%riz), %xmm2
                	addss	%xmm2, %xmm1
                	movapd	%xmm0, %xmm15
                	movapd	%xmm1, %xmm0

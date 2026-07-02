@@ -21,8 +21,7 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	cset	x1, ne
                	cbnz	x1, <addr>
-               	add	x1, x0, #0x18
-               	ldr	d0, [x1]
+               	ldr	d0, [x0, #0x18]
                	mov	x1, #0x4                // =4
                	scvtf	d1, x1
                	fcmp	d0, d1
@@ -31,8 +30,7 @@ Disassembly of section .text:
                	cset	x3, ne
                	mov	x2, #0x1                // =1
                	cbnz	x3, <addr>
-               	add	x1, x0, #0x20
-               	ldr	d0, [x1]
+               	ldr	d0, [x0, #0x20]
                	mov	x1, #0x5                // =5
                	scvtf	d1, x1
                	fcmp	d0, d1
@@ -40,8 +38,7 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	cset	x2, ne
                	cbnz	x2, <addr>
-               	add	x0, x0, #0x38
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x38]
                	mov	x0, #0x8                // =8
                	scvtf	d1, x0
                	fcmp	d0, d1
@@ -61,8 +58,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x78
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x78]
                	mov	x0, #0x8                // =8
                	scvtf	d1, x0
                	fcmp	d0, d1
@@ -72,8 +68,7 @@ Disassembly of section .text:
                	cbnz	x2, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x50
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x50]
                	mov	x0, #0x6                // =6
                	scvtf	d1, x0
                	fcmp	d0, d1
@@ -95,8 +90,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x10               // =16
-               	add	x0, x0, #0x38
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x38]
                	scvtf	d1, x1
                	fcmp	d0, d1
                	cset	x0, ne
@@ -105,8 +99,7 @@ Disassembly of section .text:
                	cbnz	x2, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x10
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x10]
                	mov	x0, #0xb                // =11
                	scvtf	d1, x0
                	fcmp	d0, d1

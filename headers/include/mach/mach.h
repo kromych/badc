@@ -4,12 +4,17 @@
 #pragma once
 
 #ifdef __APPLE__
-// Mach kernel scalar types (all 32-bit on Darwin).
+// Mach kernel scalar types (32-bit on Darwin; the mach_vm_* pair is
+// 64-bit).
 typedef unsigned int mach_port_t;
 typedef mach_port_t  task_t;
 typedef mach_port_t  thread_t;
 typedef int          kern_return_t;
 typedef unsigned int mach_msg_type_number_t;
+typedef unsigned int natural_t;
+typedef int          integer_t;
+typedef unsigned long long mach_vm_size_t;
+typedef unsigned long long mach_vm_address_t;
 // An out-of-line array of thread ports returned by task_threads().
 typedef thread_t    *thread_array_t;
 

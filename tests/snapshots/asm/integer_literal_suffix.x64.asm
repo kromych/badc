@@ -26,8 +26,10 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movq	%rax, %r10
                	movq	%rcx, %rax
+               	pushq	%rcx
                	movq	%r10, %rcx
                	shlq	%cl, %rax
+               	popq	%rcx
                	decq	%rax
                	movabsq	$0xfffffffff, %r11      # imm = 0xFFFFFFFFF
                	cmpq	%r11, %rax
@@ -81,3 +83,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)

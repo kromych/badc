@@ -13,8 +13,10 @@ Disassembly of section .text:
 <rotr_var>:
                	movslq	%esi, %rsi
                	movq	%rdi, %rax
+               	pushq	%rcx
                	movq	%rsi, %rcx
                	rorq	%cl, %rax
+               	popq	%rcx
                	retq
 
 <ref_ror>:
@@ -151,3 +153,4 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

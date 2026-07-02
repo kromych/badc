@@ -74,25 +74,7 @@ Disassembly of section .text:
                	retq
 
 <__c5_sys_open>:
-               	popq	%r10
-               	subq	$0x30, %rsp
-               	movq	%rdi, (%rsp)
-               	movq	%rsi, 0x10(%rsp)
-               	movq	%rdx, 0x20(%rsp)
-               	pushq	%r10
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rdi
-               	movq	0x20(%rbp), %rsi
-               	movq	0x30(%rbp), %rdx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x30, %rsp
-               	pushq	%r11
-               	retq
+               	jmp	<addr>
 
 <__c5_sys_read>:
                	popq	%r10
@@ -151,4 +133,3 @@ Disassembly of section .text:
                	pushq	%r11
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

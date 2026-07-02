@@ -60,6 +60,8 @@ Disassembly of section .text:
                	add	x9, x9, x16
                	add	x16, x16, #0x8
                	str	w16, [x17, #0x18]
+               	cmp	x16, #0x0
+               	b.gt	<addr>
                	mov	x16, x9
                	b	<addr>
                	ldr	x16, [x17]
@@ -78,6 +80,8 @@ Disassembly of section .text:
                	add	x9, x9, x16
                	add	x16, x16, #0x8
                	str	w16, [x17, #0x18]
+               	cmp	x16, #0x0
+               	b.gt	<addr>
                	mov	x16, x9
                	b	<addr>
                	ldr	x16, [x17]
@@ -159,6 +163,8 @@ Disassembly of section .text:
                	add	x9, x9, x16
                	add	x16, x16, #0x8
                	str	w16, [x17, #0x18]
+               	cmp	x16, #0x0
+               	b.gt	<addr>
                	mov	x16, x9
                	b	<addr>
                	ldr	x16, [x17]
@@ -177,6 +183,8 @@ Disassembly of section .text:
                	add	x9, x9, x16
                	add	x16, x16, #0x8
                	str	w16, [x17, #0x18]
+               	cmp	x16, #0x0
+               	b.gt	<addr>
                	mov	x16, x9
                	b	<addr>
                	ldr	x16, [x17]

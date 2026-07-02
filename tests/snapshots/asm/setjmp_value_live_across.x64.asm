@@ -1,0 +1,66 @@
+
+setjmp_value_live_across.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$<entry_off>, %esi
+               	callq	<addr>
+               	ud2
+
+<h>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	leaq	<rip>, %rdi
+               	movl	$0x1, %esi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movzbq	%al, %rax
+               	xorq	%rax, %rax
+               	popq	%rbp
+               	retq
+
+<test>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x20, %rsp
+               	movq	%rbx, (%rsp)
+               	imulq	$0x7, %rdi, %rax
+               	addq	%rsi, %rax
+               	movslq	%eax, %rbx
+               	leaq	<rip>, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movq	%rbx, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	callq	<addr>
+               	xorq	%rax, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x20, %rsp
+               	movl	$0x5, %edi
+               	movl	$0x7, %esi
+               	callq	<addr>
+               	cmpq	$0x2a, %rax
+               	jne	<addr>
+               	xorq	%rcx, %rcx
+               	jmp	<addr>
+               	movl	$0x1, %ecx
+               	movq	%rcx, %rax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq

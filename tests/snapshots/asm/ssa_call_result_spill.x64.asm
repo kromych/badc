@@ -13,8 +13,10 @@ Disassembly of section .text:
 <rot>:
                	movslq	%esi, %rsi
                	movq	%rdi, %rax
+               	pushq	%rcx
                	movq	%rsi, %rcx
                	rorq	%cl, %rax
+               	popq	%rcx
                	retq
 
 <ch>:
@@ -31,8 +33,10 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movq	%rax, %r10
                	movq	%rdi, %rax
+               	pushq	%rcx
                	movq	%r10, %rcx
                	rorq	%cl, %rax
+               	popq	%rcx
                	movl	$0x12, %ecx
                	movslq	%ecx, %rcx
                	movq	%rcx, %r10

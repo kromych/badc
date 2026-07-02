@@ -85,9 +85,8 @@ Disassembly of section .text:
                	popq	%rdx
                	leaq	-0x10(%rbp), %rdi
                	movl	$0x2, %esi
-               	movq	%rdi, %r10
-               	movq	(%r10), %rdi
-               	movsd	0x8(%r10,%riz), %xmm0
+               	movsd	0x8(%rdi,%riz), %xmm0
+               	movq	(%rdi), %rdi
                	callq	<addr>
                	cmpq	$0xe, %rax
                	je	<addr>

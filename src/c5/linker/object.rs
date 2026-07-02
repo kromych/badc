@@ -340,6 +340,10 @@ pub struct NativeObject {
     pub machine: NativeMachine,
     pub text: Vec<u8>,
     pub data: Vec<u8>,
+    /// Largest sh_addralign among the data-family sections. The linker
+    /// aligns this object's base in the merged `.data` to it and the
+    /// image writers keep the merged stream's base alignment.
+    pub data_align: usize,
     /// Size of the `.bss` section in bytes. The reader doesn't
     /// allocate bytes for it (the writer doesn't either --
     /// `SHT_NOBITS` records size but no file content).
@@ -620,6 +624,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         text_bytes.extend_from_slice(section_slice(bytes, sh)?);
     }
     let mut data_bytes: Vec<u8> = Vec::new();
+    let mut data_align: usize = 1;
     let mut data_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(data_section_indices.len());
     for &sh_i in &data_section_indices {
         let sh = &shdrs[sh_i];
@@ -628,6 +633,17 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                 "data-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
             )));
         }
+        // Honor the section's sh_addralign (e.g. `.rodata.cst16` carries
+        // 16 for SSE constants): pad the merged blob before appending and
+        // carry the maximum outward so the image placement keeps it.
+        let align = sh.sh_addralign.max(1) as usize;
+        if !align.is_power_of_two() {
+            return Err(err(&format!(
+                "data-family section at index {sh_i} has non-power-of-two sh_addralign {align}",
+            )));
+        }
+        data_align = data_align.max(align);
+        data_bytes.resize(data_bytes.len().next_multiple_of(align), 0);
         let base = data_bytes.len() as u64;
         data_base_per_shndx.push((sh_i, base));
         data_bytes.extend_from_slice(section_slice(bytes, sh)?);
@@ -1025,6 +1041,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         machine,
         text: text_bytes,
         data: data_bytes,
+        data_align,
         bss_size,
         tls_data: tls_data_bytes,
         tls_bss_size,

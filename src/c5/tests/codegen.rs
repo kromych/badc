@@ -1622,3 +1622,165 @@ fn pe_export_name_table_is_lexically_sorted() {
         );
     }
 }
+
+/// Minimal foreign ET_REL mirroring clang -O2's SSE constant pool: a
+/// 4-byte `.rodata` (align 4) followed by `.rodata.cst16` (align 16)
+/// holding `mask`, with a global object symbol `c16_mask` on it.
+fn foreign_et_rel_with_cst16(mask: &[u8; 16]) -> alloc::vec::Vec<u8> {
+    let rodata: [u8; 4] = [1, 2, 3, 4];
+    let strtab = b"\0c16_mask\0";
+    let shstrtab = b"\0.rodata\0.rodata.cst16\0.symtab\0.strtab\0.shstrtab\0";
+    let rodata_off = 64usize;
+    let cst16_off = rodata_off + rodata.len();
+    let symtab_off = cst16_off + mask.len();
+    // Elf64Sym pair: the null symbol, then GLOBAL OBJECT `c16_mask`
+    // at offset 0 of section 2 (`.rodata.cst16`).
+    let mut symtab = alloc::vec![0u8; 24];
+    symtab.extend_from_slice(&1u32.to_le_bytes());
+    symtab.push(0x11); // (STB_GLOBAL << 4) | STT_OBJECT
+    symtab.push(0);
+    symtab.extend_from_slice(&2u16.to_le_bytes());
+    symtab.extend_from_slice(&0u64.to_le_bytes());
+    symtab.extend_from_slice(&16u64.to_le_bytes());
+    let strtab_off = symtab_off + symtab.len();
+    let shstr_off = strtab_off + strtab.len();
+    let shoff = (shstr_off + shstrtab.len()).next_multiple_of(8);
+
+    let mut out = alloc::vec![0u8; 64];
+    out[0..4].copy_from_slice(b"\x7fELF");
+    out[4] = 2; // ELFCLASS64
+    out[5] = 1; // ELFDATA2LSB
+    out[6] = 1; // EV_CURRENT
+    out[16..18].copy_from_slice(&1u16.to_le_bytes()); // ET_REL
+    out[18..20].copy_from_slice(&62u16.to_le_bytes()); // EM_X86_64
+    out[20..24].copy_from_slice(&1u32.to_le_bytes()); // e_version
+    out[40..48].copy_from_slice(&(shoff as u64).to_le_bytes());
+    out[52..54].copy_from_slice(&64u16.to_le_bytes()); // e_ehsize
+    out[58..60].copy_from_slice(&64u16.to_le_bytes()); // e_shentsize
+    out[60..62].copy_from_slice(&6u16.to_le_bytes()); // e_shnum
+    out[62..64].copy_from_slice(&5u16.to_le_bytes()); // e_shstrndx
+    out.extend_from_slice(&rodata);
+    out.extend_from_slice(mask);
+    out.extend_from_slice(&symtab);
+    out.extend_from_slice(strtab);
+    out.extend_from_slice(shstrtab);
+    out.resize(shoff, 0);
+    let mut shdr = |name: u32,
+                    ty: u32,
+                    flags: u64,
+                    off: usize,
+                    size: usize,
+                    link: u32,
+                    info: u32,
+                    align: u64,
+                    entsize: u64| {
+        out.extend_from_slice(&name.to_le_bytes());
+        out.extend_from_slice(&ty.to_le_bytes());
+        out.extend_from_slice(&flags.to_le_bytes());
+        out.extend_from_slice(&0u64.to_le_bytes()); // sh_addr
+        out.extend_from_slice(&(off as u64).to_le_bytes());
+        out.extend_from_slice(&(size as u64).to_le_bytes());
+        out.extend_from_slice(&link.to_le_bytes());
+        out.extend_from_slice(&info.to_le_bytes());
+        out.extend_from_slice(&align.to_le_bytes());
+        out.extend_from_slice(&entsize.to_le_bytes());
+    };
+    shdr(0, 0, 0, 0, 0, 0, 0, 0, 0);
+    shdr(1, 1, 2, rodata_off, rodata.len(), 0, 0, 4, 0); // .rodata
+    shdr(9, 1, 2, cst16_off, mask.len(), 0, 0, 16, 0); // .rodata.cst16
+    shdr(23, 2, 0, symtab_off, symtab.len(), 4, 1, 8, 24); // .symtab
+    shdr(31, 3, 0, strtab_off, strtab.len(), 0, 0, 1, 0); // .strtab
+    shdr(39, 3, 0, shstr_off, shstrtab.len(), 0, 0, 1, 0); // .shstrtab
+    out
+}
+
+/// `(sh_addr, sh_offset)` of the named section in an ELF64 image.
+fn elf64_shdr_addr_off(b: &[u8], want: &str) -> Option<(u64, u64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let shstrndx = u16a(0x3e) as usize;
+    let str_off = u64a(shoff + shstrndx * shentsize + 0x18) as usize;
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let name_off = str_off + u32a(sh) as usize;
+        let end = b[name_off..]
+            .iter()
+            .position(|&c| c == 0)
+            .map_or(name_off, |n| name_off + n);
+        if &b[name_off..end] == want.as_bytes() {
+            return Some((u64a(sh + 0x10), u64a(sh + 0x18)));
+        }
+    }
+    None
+}
+
+/// A foreign object's `.rodata.cst16`-style section (sh_addralign 16 --
+/// clang/gcc -O2 SSE constant pools) must keep its alignment through the
+/// family concatenation, the unit merge, and the final image placement:
+/// legacy-SSE aligned loads (`xorps`/`movaps`) fault on a misaligned
+/// operand. Link the foreign object after a badc unit and check the
+/// constant's final vaddr.
+#[test]
+fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let mask: [u8; 16] = [
+        0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae,
+        0xaf,
+    ];
+    let foreign = parse_native_elf(&foreign_et_rel_with_cst16(&mask)).expect("parse foreign");
+    assert_eq!(foreign.data_align, 16, "sh_addralign must be recorded");
+    // Intra-object: the 4-byte `.rodata` ahead forces 12 bytes of pad.
+    assert_eq!(&foreign.data[16..32], &mask);
+
+    // A badc unit with an import so the image carries `.dynamic` and a
+    // non-empty `.got` ahead of `.data` (the placement the alignment
+    // rounding must correct).
+    let program = super::compile_str_bare(
+        "int puts(const char *s); \
+         int main(void) { return puts(\"x\"); }",
+    );
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let tu = parse_native_elf(&bytes).expect("parse TU");
+    let mut merged = link_native_objects(&[tu, foreign]).expect("link");
+    assert_eq!(merged.data_align, 16, "merge must carry the max alignment");
+    let sym_value = merged
+        .defined
+        .get("c16_mask")
+        .expect("foreign data symbol must survive the merge")
+        .value;
+    assert_eq!(sym_value % 16, 0, "merged .data offset must stay aligned");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::LinuxX64,
+        None,
+    )
+    .expect("write executable");
+    let (data_addr, data_off) = elf64_shdr_addr_off(&exe, ".data").expect(".data section header");
+    assert_eq!(
+        (data_addr + sym_value) % 16,
+        0,
+        "the 16-byte constant's runtime address must be 16-aligned"
+    );
+    let at = (data_off + sym_value) as usize;
+    assert_eq!(
+        &exe[at..at + 16],
+        &mask,
+        "the constant's bytes must land at the placed offset"
+    );
+}

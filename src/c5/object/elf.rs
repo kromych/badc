@@ -1627,7 +1627,10 @@ pub(super) fn write(
     let dynamic_size = (build.imports.dylibs.len() as u64 + 11 + version_dyn_tags) * ELF64_DYN_SIZE;
     let got_off = dynamic_off + dynamic_size;
     let got_size = (n_imports as u64) * 8;
-    let data_off = got_off + got_size;
+    // `.data`'s base alignment: p_vaddr == p_offset within the RW
+    // segment, so aligning the file offset aligns the vaddr.
+    let data_align = build.data_align.max(8) as u64;
+    let data_off = round_up(got_off + got_size, data_align);
     let data_size = build.data.len() as u64;
     // PT_TLS requires `p_vaddr % p_align == 0` (ELF gABI), and glibc
     // computes a `_Thread_local`'s address as `tp - roundup(p_memsz,
@@ -2216,6 +2219,11 @@ pub(super) fn write(
     // .got -- one zero-filled u64 per import. Loader fills these in
     // via .rela.dyn / R_AARCH64_GLOB_DAT before _start runs.
     out.extend(vec![0u8; got_size as usize]);
+    // Pad to the aligned `data_off` (see the layout).
+    while (out.len() as u64) < data_off {
+        out.push(0);
+    }
+    debug_assert_eq!(out.len() as u64, data_off);
 
     // build.data -- the program's static data segment, with
     // pointer-to-global initializers resolved to absolute VAs.
@@ -2568,7 +2576,7 @@ pub(super) fn write(
                 sh_size: data_size,
                 sh_link: 0,
                 sh_info: 0,
-                sh_addralign: 8,
+                sh_addralign: data_align,
                 sh_entsize: 0,
             },
         );
@@ -2906,6 +2914,7 @@ mod tests {
             copy_relocs: Default::default(),
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
+            data_align: 8,
             bss_size: 0,
             entry_offset: 0,
             got_fixups: Vec::new(),

@@ -753,6 +753,7 @@ fn segment_data_with_tlv(
     data_addr: u64,
     data_size: u64,
     data_offset: u32,
+    data_align_log2: u32,
     thread_vars_addr: u64,
     thread_vars_size: u64,
     thread_vars_offset: u32,
@@ -809,7 +810,7 @@ fn segment_data_with_tlv(
             addr: data_addr,
             size: data_size,
             offset: data_offset,
-            align: 3,
+            align: data_align_log2,
             reloff: 0,
             nreloc: 0,
             flags: 0,
@@ -924,6 +925,7 @@ fn segment_data(
     data_addr: u64,
     data_size: u64,
     data_offset: u32,
+    data_align_log2: u32,
     bss_addr: u64,
     bss_size: u64,
 ) -> Vec<u8> {
@@ -979,7 +981,7 @@ fn segment_data(
             addr: data_addr,
             size: data_size,
             offset: data_offset,
-            align: 3, // log2 -- 8 bytes
+            align: data_align_log2,
             reloff: 0,
             nreloc: 0,
             flags: 0, // S_REGULAR
@@ -1994,7 +1996,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let data_vmaddr = TEXT_VMADDR_BASE + text_vmsize;
     let got_size = (build.imports.imports.len() * 8) as u64;
     let got_section_offset_in_segment: u64 = 0;
-    let data_section_offset_in_segment: u64 = round_up(got_size, 8);
+    // __data's base alignment: the segment base is page-aligned, so
+    // aligning the in-segment offset aligns both fileoff and vmaddr.
+    let data_align = build.data_align.max(8) as u64;
+    let data_section_offset_in_segment: u64 = round_up(got_size, data_align);
     let program_data_size = build.data.len() as u64;
     let post_data_offset_in_segment: u64 =
         round_up(data_section_offset_in_segment + program_data_size, 8);
@@ -2438,6 +2443,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             data_section_vmaddr,
             program_data_size,
             data_section_fileoff as u32,
+            data_align.trailing_zeros(),
             thread_vars_vmaddr,
             thread_vars_size,
             thread_vars_fileoff as u32,
@@ -2460,6 +2466,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             data_section_vmaddr,
             program_data_size,
             data_section_fileoff as u32,
+            data_align.trailing_zeros(),
             bss_base_vmaddr,
             build.bss_size as u64,
         )
@@ -2831,6 +2838,7 @@ mod tests {
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
+            data_align: 8,
             bss_size: 0,
             entry_offset: 0,
             got_fixups: Vec::new(),

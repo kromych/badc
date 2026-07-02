@@ -339,6 +339,7 @@ fn synth_program_and_build(
         dynamic_exports,
         text: merged.text.clone(),
         data: merged.data.clone(),
+        data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
         entry_offset,
         got_fixups,
@@ -953,6 +954,7 @@ mod tests {
             // aarch64: `mov w0, #42; ret`.
             text: alloc::vec![0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6],
             data: alloc::vec![],
+            data_align: 8,
             bss_size: 0,
             defined,
             imports: alloc::vec![],

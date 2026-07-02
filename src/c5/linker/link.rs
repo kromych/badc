@@ -49,6 +49,10 @@ pub struct MergedNative {
     pub text: Vec<u8>,
     /// Concatenated `.data` bytes.
     pub data: Vec<u8>,
+    /// Base alignment the merged `.data` requires: the largest input
+    /// section alignment, at least 8. The image writers place the
+    /// data stream at a multiple of this.
+    pub data_align: usize,
     /// Sum of every unit's `.bss` size. The final-image writer
     /// emits a single `.bss` of this size; no file bytes.
     pub bss_size: usize,
@@ -357,18 +361,21 @@ pub fn link_native_objects_with_options(
     // Pass 1 -- layout. Compute each unit's `.text` / `.data` /
     // `.bss` base in the merged image. 16-byte alignment for
     // `.text` (matches the writer's section header) and 8-byte
-    // for `.data` / `.bss`.
+    // for `.data` / `.bss`, raised to a unit's own data alignment
+    // (a foreign object's high-align sections, e.g. `.rodata.cst16`).
     let mut text_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut data_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut bss_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut text: Vec<u8> = Vec::new();
     let mut data: Vec<u8> = Vec::new();
     let mut bss_size: usize = 0;
+    let mut data_align: usize = 8;
     for obj in objs {
         align_up(&mut text, 16);
         text_bases.push(text.len());
         text.extend_from_slice(&obj.text);
-        align_up(&mut data, 8);
+        align_up(&mut data, obj.data_align.max(8));
+        data_align = data_align.max(obj.data_align);
         data_bases.push(data.len());
         data.extend_from_slice(&obj.data);
         bss_size = align_usize(bss_size, 8);
@@ -1172,6 +1179,7 @@ pub fn link_native_objects_with_options(
     Ok(MergedNative {
         text,
         data,
+        data_align,
         bss_size,
         defined,
         imports,
@@ -2099,6 +2107,7 @@ mod tests {
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
+            data_align: 1,
             bss_size: 0,
             tls_data: alloc::vec::Vec::new(),
             tls_bss_size: 0,
@@ -2168,6 +2177,7 @@ mod tests {
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
+            data_align: 1,
             bss_size: 0,
             tls_data: alloc::vec::Vec::new(),
             tls_bss_size: 0,
@@ -2212,6 +2222,7 @@ mod tests {
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec![0u8; 4],
+            data_align: 1,
             bss_size: 0,
             tls_data: alloc::vec::Vec::new(),
             tls_bss_size: 0,
@@ -2286,6 +2297,7 @@ mod tests {
                 machine: NativeMachine::X86_64,
                 text,
                 data,
+                data_align: 1,
                 bss_size: 0,
                 tls_data: alloc::vec::Vec::new(),
                 tls_bss_size: 0,

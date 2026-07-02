@@ -1175,6 +1175,11 @@ pub(crate) struct Build {
     /// segment, so a `DataFixup { data_offset: K }` resolves to
     /// byte K of this `Vec`.
     pub data: Vec<u8>,
+    /// Base alignment `data` requires in the image, at least 8.
+    /// Raised past 8 only by linked foreign sections with a larger
+    /// sh_addralign (e.g. `.rodata.cst16`); the writers place the
+    /// data section at a multiple of it.
+    pub data_align: usize,
     /// Bytes of zero-initialised data placed past the file image, in the
     /// `[data.len(), data.len() + bss_size)` offset range. Carries no file
     /// storage: the loader zero-fills it (ELF `p_memsz > p_filesz`, PE

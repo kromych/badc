@@ -944,6 +944,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("variable_shift_rcx_loop.c", 0),
     ("va_arg_composite_straddle.c", 0),
     ("variadic_hfa_struct_arg.c", 0),
+    ("variadic_cast_fnptr_dispatch.c", 0),
+    ("fcntl_lock_via_cast_fnptr.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

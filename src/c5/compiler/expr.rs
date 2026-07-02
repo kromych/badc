@@ -1539,8 +1539,9 @@ impl Compiler {
                 // as a no-op pointer level. Counted-parens scan
                 // until the cast's outer `)` so even nested fp
                 // shapes consume cleanly.
+                let mut cast_fn_proto = None;
                 if self.lex.tk == '(' {
-                    let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
+                    let (nested_ptrs, proto) = self.parse_abstract_ptr_declarator(true)?;
                     t += nested_ptrs * (Ty::Ptr as i64);
                     // Abstract fn-ptr declarator: the inner `*`
                     // count IS the indirection from the cast's
@@ -1549,6 +1550,7 @@ impl Compiler {
                     if nested_ptrs > 0 {
                         cast_fpi = Some(nested_ptrs);
                     }
+                    cast_fn_proto = proto;
                 }
                 if self.lex.tk == ')' {
                     self.next()?;
@@ -1649,6 +1651,20 @@ impl Compiler {
                         && fpi > 0
                     {
                         self.pending.fn_ptr_chain_depth = fpi - 1;
+                    }
+                    // C99 6.5.2.2p7: a call through the cast pointer
+                    // uses the cast's prototype. Override the operand's
+                    // recorded callee channel so a following call
+                    // narrows each argument and splits the variadic
+                    // tail per the cast, whatever the operand's own
+                    // declared type said.
+                    if let Some(pp) = cast_fn_proto {
+                        self.pending.indirect_callee_is_variadic = pp.is_variadic;
+                        self.pending.indirect_callee_params = if pp.types.is_empty() {
+                            None
+                        } else {
+                            Some(pp.types)
+                        };
                     }
                 }
             } else {

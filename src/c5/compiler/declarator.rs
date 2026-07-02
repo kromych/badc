@@ -108,13 +108,31 @@ impl Compiler {
     /// (0 when the parentheses enclose no `*`). Used by both the cast
     /// operand parser and the `sizeof` type-name parser.
     pub(super) fn parse_abstract_ptr_declarator_levels(&mut self) -> Result<i64, C5Error> {
+        self.parse_abstract_ptr_declarator(false)
+            .map(|(levels, _)| levels)
+    }
+
+    /// As [`Self::parse_abstract_ptr_declarator_levels`], but with
+    /// `capture_proto` the plain fn-pointer shape's `(args)` list is
+    /// parsed and returned so a cast expression can record the pointee
+    /// prototype (parameter types, variadic split) for a following
+    /// call. Nested declarator shapes keep the skip behaviour.
+    pub(super) fn parse_abstract_ptr_declarator(
+        &mut self,
+        capture_proto: bool,
+    ) -> Result<(i64, Option<super::function::ParsedParams>), C5Error> {
         debug_assert!(self.lex.tk == '(');
         let mut depth: i64 = 1;
         self.next()?;
         let mut nested_ptrs: i64 = 0;
+        // The plain fn-pointer shape holds only `*`s (and qualifiers)
+        // inside one paren level; anything else is a nested declarator
+        // whose trailing `(args)` is not the pointee prototype.
+        let mut plain = true;
         while depth > 0 && self.lex.tk != 0 {
             if self.lex.tk == '(' {
                 depth += 1;
+                plain = false;
             } else if self.lex.tk == ')' {
                 depth -= 1;
                 if depth == 0 {
@@ -123,6 +141,8 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::MulOp && depth == 1 {
                 nested_ptrs += 1;
+            } else if self.lex.tk != Token::TypeQual {
+                plain = false;
             }
             self.next()?;
         }
@@ -130,9 +150,18 @@ impl Compiler {
         // function-pointer / function-returning-fn shape, or one or more
         // `[N]` / `[]` suffixes for the pointer-to-array shape
         // (`T (*)[N][M]`). Both are no-ops at c5's type-tag granularity.
+        let mut proto = None;
         if self.lex.tk == '(' {
             self.next()?;
-            self.skip_balanced_parens_after_open()?;
+            if capture_proto && plain && nested_ptrs > 0 {
+                let pp = self.parse_function_params()?;
+                for &p in &pp.indices {
+                    Self::restore_shadowed_symbol(&mut self.symbols[p]);
+                }
+                proto = Some(pp);
+            } else {
+                self.skip_balanced_parens_after_open()?;
+            }
         }
         while self.lex.tk == Token::Brak {
             self.next()?;
@@ -143,7 +172,7 @@ impl Compiler {
                 self.accept(']')?;
             }
         }
-        Ok(nested_ptrs)
+        Ok((nested_ptrs, proto))
     }
 
     /// Parse a single declarator: zero-or-more `*` (pointer levels)

@@ -1569,6 +1569,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("va_copy_under_pressure.c", 0),
     ("variable_shift_rcx_loop.c", 0),
     ("va_arg_composite_straddle.c", 0),
+    ("variadic_cast_fnptr_dispatch.c", 0),
 ];
 
 #[test]

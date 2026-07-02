@@ -143,6 +143,18 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/sys/file.h"),
     ),
     (
+        "sys/cdefs.h",
+        include_str!("../../headers/include/sys/cdefs.h"),
+    ),
+    (
+        "CoreFoundation/CoreFoundation.h",
+        include_str!("../../headers/include/CoreFoundation/CoreFoundation.h"),
+    ),
+    (
+        "SystemConfiguration/SCDynamicStoreCopySpecific.h",
+        include_str!("../../headers/include/SystemConfiguration/SCDynamicStoreCopySpecific.h"),
+    ),
+    (
         "sys/attr.h",
         include_str!("../../headers/include/sys/attr.h"),
     ),

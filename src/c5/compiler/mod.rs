@@ -1567,48 +1567,21 @@ impl Compiler {
         // `target_ent_pc`.
         self.emit_sys_trampolines();
         self.resolve_code_relocs()?;
-        // macOS resolves a `#pragma binding(data ...)` import (e.g.
-        // environ) through the GOT -- a flat-namespace bind to the host
-        // data symbol -- not through a COPY-relocated local slot, so the
-        // symbol must stay undefined even in a self-contained image. The
-        // no_entry_point clear below does this for relocatable objects;
-        // do the same for a data binding's local here regardless of
-        // no_entry_point so `live_glo_addr` returns `GloAddr::Extern` and
-        // routes the reference through `imm_data_extern` to the GOT
-        // rather than an uninitialized `.data` slot.
-        if self.target == Target::MacOSAarch64 {
-            let data_locals: alloc::collections::BTreeSet<String> = self
-                .dylibs
-                .iter()
-                .flat_map(|d| d.bindings.iter())
-                .filter(|b| b.is_data)
-                .map(|b| b.local_name.clone())
-                .collect();
-            for sym in self.symbols.iter_mut() {
-                if sym.class == Token::Glo as i64
-                    && sym.is_extern_decl
-                    && !sym.has_initializer
-                    && data_locals.contains(&sym.name)
-                {
-                    sym.defined_here = false;
-                    sym.val = 0;
-                }
-            }
-        }
-        // Cross-TU function imports. Every extern-declared
-        // `Token::Fun` symbol with no body in this TU gets a
-        // unique placeholder ent_pc (past `text.len()`), then has
-        // `Symbol::val` rewritten to that PC. The walker reads
-        // `Symbol::val` through `live_fun_val` when lowering an
-        // `Inst::Call`, so the matching call site carries the
-        // placeholder as its `target_pc`. The native codegen
-        // detects the placeholder (outside `[0, text.len())`)
-        // and emits a `RelocCallSite` against the symbol's name
-        // instead of resolving in place. Single-TU compiles
-        // without `no_entry_point` never reach this branch with
-        // an unresolved call: `resolve_entry_and_dllmain_pcs`
-        // errors out first.
-        let extern_imports = if self.no_entry_point {
+        // Cross-TU / undefined extern linkage. One model for every
+        // consumer: the linker resolves the references, the VM and
+        // the JIT refuse the unresolved ones, and no mode falls
+        // back to phantom storage or a colliding pc.
+        //
+        // Every extern-declared `Token::Fun` symbol with no body in
+        // this TU gets a unique placeholder ent_pc (past
+        // `text.len()`), then has `Symbol::val` rewritten to that
+        // PC. The walker reads `Symbol::val` through `live_fun_val`
+        // when lowering an `Inst::Call`, so the matching call site
+        // carries the placeholder as its `target_pc`. The native
+        // codegen detects the placeholder (outside `[0,
+        // text.len())`) and emits a `RelocCallSite` against the
+        // symbol's name instead of resolving in place.
+        let extern_imports = {
             use crate::c5::symbol::Linkage;
             let mut imports: alloc::vec::Vec<(usize, String)> = alloc::vec::Vec::new();
             let mut next_pc = self.next_ent_pc + 1;
@@ -1634,7 +1607,10 @@ impl Compiler {
             // walker emits `Inst::ImmData(stale_offset)` and the
             // ET_REL writer lowers it as a `.data section symbol +
             // 0` reloc, losing the symbol identity needed for
-            // cross-TU resolution.
+            // cross-TU resolution. The same clear keeps a `#pragma
+            // binding(data ...)` local (e.g. environ) undefined so
+            // its references route through the GOT / loader import
+            // instead of an uninitialized local slot.
             for sym in self.symbols.iter_mut() {
                 if sym.class == Token::Glo as i64
                     && sym.linkage == Linkage::External
@@ -1671,8 +1647,6 @@ impl Compiler {
                 }
             }
             imports
-        } else {
-            alloc::vec::Vec::new()
         };
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;

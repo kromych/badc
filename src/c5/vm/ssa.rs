@@ -244,10 +244,13 @@ impl Memory {
                 "vm_ssa: stack overflow allocating {frame_bytes} bytes from {base}",
             ))
         })?;
-        if next > self.bytes.len() {
+        // Frames must stay inside [stack_base, heap_base); a frame
+        // written past heap_base would zero live heap allocations.
+        if next > self.heap_base {
             return Err(C5Error::Runtime(format!(
-                "vm_ssa: stack overflow ({next} > {})",
-                self.bytes.len(),
+                "vm_ssa: stack overflow: frame of {frame_bytes} bytes exceeds the \
+                 {}-byte stack region",
+                self.heap_base - self.stack_base,
             )));
         }
         // Zero the new frame's bytes so undefined reads observe
@@ -512,7 +515,30 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     } else {
         &entry_args
     };
-    run_func(&prog, &mut mem, host, entry, slice)
+    match run_func(&prog, &mut mem, host, entry, slice) {
+        Err(e) => match exit_status_of(&e) {
+            Some(status) => Ok(status),
+            None => Err(e),
+        },
+        ok => ok,
+    }
+}
+
+/// `exit(status)` unwinds the interpreter through the `Result`
+/// channel. The sentinel stays private to this module: it is
+/// produced only by the `exit` shim and consumed at the program
+/// boundary above, so it never surfaces as a user-visible error.
+const EXIT_SIGNAL_PREFIX: &str = "vm_ssa-exit-status:";
+
+fn exit_signal(status: i64) -> C5Error {
+    C5Error::Runtime(format!("{EXIT_SIGNAL_PREFIX}{status}"))
+}
+
+fn exit_status_of(e: &C5Error) -> Option<i64> {
+    match e {
+        C5Error::Runtime(msg) => msg.strip_prefix(EXIT_SIGNAL_PREFIX)?.parse().ok(),
+        _ => None,
+    }
 }
 
 /// Lay out the argv strings + the argv pointer array at the end
@@ -1142,13 +1168,13 @@ fn dispatch_callext<H: Host>(
     host: &mut H,
 ) -> Result<i64, C5Error> {
     match name {
-        // `exit(int code)` terminates the host process in libc;
-        // inside the SSA-VM we route it through a sentinel error
-        // that the outer driver can catch and convert to the
-        // overall return value.
+        // `exit(int code)` terminates the hosted program (C99
+        // 7.20.4.3). The Err unwinds every interpreter frame;
+        // `run_program_with_args_tracked` converts the sentinel
+        // back into an Ok(status) at the program boundary.
         "exit" => {
             let code = args.first().copied().unwrap_or(0);
-            Err(C5Error::Runtime(format!("vm_ssa: exit({code})")))
+            Err(exit_signal(code))
         }
         // `void *memcpy(void *dst, const void *src, size_t n)`.
         // c5's cdecl pushes args right-to-left; the walker
@@ -1282,12 +1308,10 @@ fn dispatch_callext<H: Host>(
             }
             Ok(0)
         }
-        // `int printf(const char *fmt, ...)` -- minimal subset
-        // (%d / %u / %x / %c / %s / %%). Walks the variadic
-        // tail in `args[1..]`, formats into a String, and writes
-        // it to stdout via the host. Returns 0 (printf returns
-        // bytes written; no caller depends on the exact value
-        // in the current fixture set).
+        // `int printf(const char *fmt, ...)` -- formats the
+        // variadic tail in `args[1..]` per C99 7.19.6.1 and
+        // writes the bytes to stdout via the host. Returns the
+        // number of bytes transmitted (7.19.6.3p3).
         "printf" => {
             let fmt_addr = *args
                 .first()
@@ -1300,7 +1324,7 @@ fn dispatch_callext<H: Host>(
             let fmt = read_cstring_bytes(mem, fmt_addr as usize)?;
             let out = format_printf(&fmt, &args[1..], mem)?;
             let _ = host.write(1, &out);
-            Ok(0)
+            Ok(out.len() as i64)
         }
         // `int putchar(int c)` -- write one byte to stdout, returns
         // the byte (or EOF on error; we return the byte unconditionally).
@@ -1458,16 +1482,51 @@ fn read_cstring(mem: &Memory, addr: usize) -> Result<alloc::string::String, C5Er
     Ok(alloc::string::String::from_utf8_lossy(&bytes).into_owned())
 }
 
-/// Minimal printf formatter. Walks `fmt`'s `%c / %d / %u / %x /
-/// %s / %%` conversions and pulls one i64 from `args` per
-/// non-literal conversion. Width / precision / flags are not
-/// honoured. Returns the formatted string for the caller to
-/// hand to `host.write`.
-fn format_printf(fmt: &[u8], args: &[i64], mem: &Memory) -> Result<Vec<u8>, C5Error> {
-    use core::fmt::Write;
+/// Argument-width selector from a conversion spec's length
+/// modifier (C99 7.19.6.1p7). The variadic tail holds one i64
+/// per argument; the modifier decides how many low bits carry
+/// the value.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ArgLen {
+    Char,  // hh
+    Short, // h
+    Int,   // (none)
+    Long,  // l / ll / j / z / t / L
+}
+
+/// One parsed conversion specification (C99 7.19.6.1p4).
+struct PrintfSpec {
+    minus: bool,
+    plus: bool,
+    space: bool,
+    alt: bool,
+    zero: bool,
+    width: Option<usize>,
+    precision: Option<usize>,
+    len: ArgLen,
+    conv: u8,
+}
+
+/// printf formatter (C99 7.19.6.1). Parses the full spec grammar
+/// -- flags, width (incl. `*`), precision (incl. `.*`), length
+/// modifiers -- and pulls arguments from `args` as each
+/// conversion requires. Returns the raw output bytes for the
+/// caller to hand to `host.write`. An unrecognised conversion
+/// emits its spec text verbatim without consuming an argument
+/// (undefined per 7.19.6.1p9).
+fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, C5Error> {
     let mut out: Vec<u8> = Vec::new();
-    let mut num = alloc::string::String::new();
     let mut arg_idx = 0usize;
+    let next_arg = |arg_idx: &mut usize| -> Result<i64, C5Error> {
+        let val = args.get(*arg_idx).copied().ok_or_else(|| {
+            C5Error::Runtime(format!(
+                "vm_ssa: printf: format wants arg #{arg_idx} but only {} supplied",
+                args.len(),
+            ))
+        })?;
+        *arg_idx += 1;
+        Ok(val)
+    };
     let mut i = 0usize;
     while i < fmt.len() {
         let c = fmt[i];
@@ -1476,68 +1535,324 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &Memory) -> Result<Vec<u8>, C5Er
             out.push(c);
             continue;
         }
-        let Some(&spec) = fmt.get(i) else {
+        let spec_start = i;
+        let mut s = PrintfSpec {
+            minus: false,
+            plus: false,
+            space: false,
+            alt: false,
+            zero: false,
+            width: None,
+            precision: None,
+            len: ArgLen::Int,
+            conv: 0,
+        };
+        while let Some(&f) = fmt.get(i) {
+            match f {
+                b'-' => s.minus = true,
+                b'+' => s.plus = true,
+                b' ' => s.space = true,
+                b'#' => s.alt = true,
+                b'0' => s.zero = true,
+                _ => break,
+            }
+            i += 1;
+        }
+        if fmt.get(i) == Some(&b'*') {
+            i += 1;
+            // A negative `*` width means `-` flag plus the
+            // absolute value (7.19.6.1p5).
+            let w = next_arg(&mut arg_idx)? as i32;
+            s.width = Some(w.unsigned_abs() as usize);
+            s.minus |= w < 0;
+        } else {
+            while let Some(d) = fmt.get(i).filter(|d| d.is_ascii_digit()) {
+                s.width = Some(s.width.unwrap_or(0) * 10 + (d - b'0') as usize);
+                i += 1;
+            }
+        }
+        if fmt.get(i) == Some(&b'.') {
+            i += 1;
+            if fmt.get(i) == Some(&b'*') {
+                i += 1;
+                // A negative `*` precision reads as omitted (p5).
+                let p = next_arg(&mut arg_idx)? as i32;
+                s.precision = (p >= 0).then_some(p as usize);
+            } else {
+                s.precision = Some(0);
+                while let Some(d) = fmt.get(i).filter(|d| d.is_ascii_digit()) {
+                    s.precision = Some(s.precision.unwrap_or(0) * 10 + (d - b'0') as usize);
+                    i += 1;
+                }
+            }
+        }
+        match fmt.get(i) {
+            Some(b'h') => {
+                i += 1;
+                s.len = ArgLen::Short;
+                if fmt.get(i) == Some(&b'h') {
+                    i += 1;
+                    s.len = ArgLen::Char;
+                }
+            }
+            Some(b'l') => {
+                i += 1;
+                s.len = ArgLen::Long;
+                if fmt.get(i) == Some(&b'l') {
+                    i += 1;
+                }
+            }
+            Some(b'j') | Some(b'z') | Some(b't') | Some(b'L') => {
+                i += 1;
+                s.len = ArgLen::Long;
+            }
+            _ => {}
+        }
+        let Some(&conv) = fmt.get(i) else {
+            // Incomplete trailing spec: emit verbatim.
+            out.push(b'%');
+            out.extend_from_slice(&fmt[spec_start..]);
             break;
         };
         i += 1;
-        if spec == b'%' {
-            out.push(b'%');
-            continue;
-        }
-        let Some(val) = args.get(arg_idx).copied() else {
-            return Err(C5Error::Runtime(format!(
-                "vm_ssa: printf: format wants arg #{arg_idx} but only {} supplied",
-                args.len(),
-            )));
-        };
-        arg_idx += 1;
-        match spec {
+        s.conv = conv;
+        match conv {
+            b'%' => out.push(b'%'),
             b'd' | b'i' => {
-                num.clear();
-                let _ = write!(num, "{}", val as i32 as i64);
-                out.extend_from_slice(num.as_bytes());
+                let raw = next_arg(&mut arg_idx)?;
+                let v = match s.len {
+                    ArgLen::Char => raw as i8 as i64,
+                    ArgLen::Short => raw as i16 as i64,
+                    ArgLen::Int => raw as i32 as i64,
+                    ArgLen::Long => raw,
+                };
+                let sign = if v < 0 {
+                    "-"
+                } else if s.plus {
+                    "+"
+                } else if s.space {
+                    " "
+                } else {
+                    ""
+                };
+                let digits = format!("{}", v.unsigned_abs());
+                push_int(&mut out, &s, sign, &digits, v == 0);
             }
-            b'u' => {
-                num.clear();
-                let _ = write!(num, "{}", val as u32 as u64);
-                out.extend_from_slice(num.as_bytes());
-            }
-            b'x' => {
-                num.clear();
-                let _ = write!(num, "{:x}", val as u32);
-                out.extend_from_slice(num.as_bytes());
-            }
-            b'X' => {
-                num.clear();
-                let _ = write!(num, "{:X}", val as u32);
-                out.extend_from_slice(num.as_bytes());
+            b'u' | b'o' | b'x' | b'X' => {
+                let raw = next_arg(&mut arg_idx)?;
+                let v = match s.len {
+                    ArgLen::Char => raw as u8 as u64,
+                    ArgLen::Short => raw as u16 as u64,
+                    ArgLen::Int => raw as u32 as u64,
+                    ArgLen::Long => raw as u64,
+                };
+                let digits = match conv {
+                    b'u' => format!("{v}"),
+                    b'o' => format!("{v:o}"),
+                    b'x' => format!("{v:x}"),
+                    _ => format!("{v:X}"),
+                };
+                // `#`: force a leading 0 on octal; prefix 0x / 0X
+                // on a nonzero hex value (7.19.6.1p6).
+                let (prefix, digits) = match conv {
+                    b'o' if s.alt && !digits.starts_with('0') => ("", format!("0{digits}")),
+                    b'x' if s.alt && v != 0 => ("0x", digits),
+                    b'X' if s.alt && v != 0 => ("0X", digits),
+                    _ => ("", digits),
+                };
+                push_int(&mut out, &s, prefix, &digits, v == 0);
             }
             b'c' => {
-                out.push(val as u8);
+                let v = next_arg(&mut arg_idx)?;
+                push_padded(&mut out, &s, &[v as u8]);
             }
             b's' => {
+                let val = next_arg(&mut arg_idx)?;
                 if val < 0 {
                     return Err(C5Error::Runtime(format!(
                         "vm_ssa: printf %s: bad ptr 0x{val:x}",
                     )));
                 }
-                let s = read_cstring_bytes(mem, val as usize)?;
-                out.extend_from_slice(&s);
+                let mut bytes = read_cstring_bytes(mem, val as usize)?;
+                if let Some(p) = s.precision {
+                    bytes.truncate(p);
+                }
+                push_padded(&mut out, &s, &bytes);
             }
             b'p' => {
-                num.clear();
-                let _ = write!(num, "0x{:x}", val as u64);
-                out.extend_from_slice(num.as_bytes());
+                let v = next_arg(&mut arg_idx)? as u64;
+                push_padded(&mut out, &s, format!("0x{v:x}").as_bytes());
             }
-            other => {
-                // Unrecognised conversion: emit the literal
-                // `%X` so the caller sees what was wrong.
+            b'f' | b'F' | b'e' | b'E' | b'g' | b'G' => {
+                let v = f64::from_bits(next_arg(&mut arg_idx)? as u64);
+                let body = format_float(v, &s);
+                push_int(
+                    &mut out,
+                    &s,
+                    if v.is_sign_negative() && !v.is_nan() {
+                        "-"
+                    } else if s.plus {
+                        "+"
+                    } else if s.space {
+                        " "
+                    } else {
+                        ""
+                    },
+                    &body,
+                    false,
+                );
+            }
+            b'n' => {
+                // Store the byte count written so far (7.19.6.1p8).
+                let addr = next_arg(&mut arg_idx)?;
+                if addr < 0 {
+                    return Err(C5Error::Runtime(format!(
+                        "vm_ssa: printf %n: bad ptr 0x{addr:x}",
+                    )));
+                }
+                let kind = match s.len {
+                    ArgLen::Char => StoreKind::I8,
+                    ArgLen::Short => StoreKind::I16,
+                    ArgLen::Int => StoreKind::I32,
+                    ArgLen::Long => StoreKind::I64,
+                };
+                store_to_memory(mem, addr as usize, out.len() as i64, kind)?;
+            }
+            _ => {
                 out.push(b'%');
-                out.push(other);
+                out.extend_from_slice(&fmt[spec_start..i]);
             }
         }
     }
     Ok(out)
+}
+
+/// Pad `body` to the spec's field width (7.19.6.1p5): spaces on
+/// the left by default, on the right under `-`.
+fn push_padded(out: &mut Vec<u8>, s: &PrintfSpec, body: &[u8]) {
+    let pad = s.width.unwrap_or(0).saturating_sub(body.len());
+    if !s.minus {
+        out.resize(out.len() + pad, b' ');
+    }
+    out.extend_from_slice(body);
+    if s.minus {
+        out.resize(out.len() + pad, b' ');
+    }
+}
+
+/// Assemble a numeric conversion: precision zero-extends the
+/// digit string (and suppresses a zero value at precision 0);
+/// the `0` flag zero-pads between the sign / base prefix and the
+/// digits unless `-` or an explicit precision overrides it
+/// (7.19.6.1p6).
+fn push_int(out: &mut Vec<u8>, s: &PrintfSpec, prefix: &str, digits: &str, is_zero: bool) {
+    let mut digits = alloc::string::String::from(digits);
+    if let Some(p) = s.precision
+        && !matches!(s.conv, b'f' | b'F' | b'e' | b'E' | b'g' | b'G')
+    {
+        if is_zero && p == 0 {
+            digits.clear();
+        }
+        while digits.len() < p {
+            digits.insert(0, '0');
+        }
+    }
+    let body_len = prefix.len() + digits.len();
+    let pad = s.width.unwrap_or(0).saturating_sub(body_len);
+    let zero_pad = s.zero
+        && !s.minus
+        && (matches!(s.conv, b'f' | b'F' | b'e' | b'E' | b'g' | b'G') || s.precision.is_none());
+    if zero_pad {
+        out.extend_from_slice(prefix.as_bytes());
+        out.resize(out.len() + pad, b'0');
+        out.extend_from_slice(digits.as_bytes());
+        return;
+    }
+    if !s.minus {
+        out.resize(out.len() + pad, b' ');
+    }
+    out.extend_from_slice(prefix.as_bytes());
+    out.extend_from_slice(digits.as_bytes());
+    if s.minus {
+        out.resize(out.len() + pad, b' ');
+    }
+}
+
+/// Format `|v|` for the f / e / g conversion families
+/// (7.19.6.1p8); the caller prepends the sign and applies the
+/// field width. Uppercase conversions upper-case the result.
+fn format_float(v: f64, s: &PrintfSpec) -> alloc::string::String {
+    let upper = matches!(s.conv, b'F' | b'E' | b'G');
+    if v.is_nan() {
+        return if upper { "NAN".into() } else { "nan".into() };
+    }
+    if v.is_infinite() {
+        return if upper { "INF".into() } else { "inf".into() };
+    }
+    let av = v.abs();
+    let p = s.precision.unwrap_or(6);
+    let body = match s.conv {
+        b'f' | b'F' => {
+            let mut b = format!("{av:.p$}");
+            if s.alt && p == 0 {
+                b.push('.');
+            }
+            b
+        }
+        b'e' | b'E' => format_exp(av, p, s.alt),
+        _ => {
+            // g/G: precision P counts significant digits (0 reads
+            // as 1). Style e when the exponent X < -4 or X >= P,
+            // else style f with precision P-1-X; trailing zeros
+            // drop unless `#`.
+            let pp = p.max(1);
+            let exp = decimal_exponent(av, pp - 1);
+            let mut b = if exp < -4 || exp >= pp as i32 {
+                format_exp(av, pp - 1, s.alt)
+            } else {
+                format!("{:.*}", (pp as i32 - 1 - exp).max(0) as usize, av)
+            };
+            if !s.alt && b.contains('.') {
+                let frac_end = b.find(['e', 'E']).unwrap_or(b.len());
+                let trimmed = b[..frac_end].trim_end_matches('0').trim_end_matches('.');
+                b = format!("{}{}", trimmed, &b[frac_end..]);
+            }
+            b
+        }
+    };
+    if upper { body.to_uppercase() } else { body }
+}
+
+/// `d.dddde±dd` with `prec` fraction digits (7.19.6.1p8, the e
+/// conversion). Rust's `{:e}` produces `d.ddddeN`; rewrite the
+/// exponent into the sign + minimum-two-digit C form.
+fn format_exp(av: f64, prec: usize, alt: bool) -> alloc::string::String {
+    let raw = format!("{av:.prec$e}");
+    let (mantissa, exp) = raw.split_once('e').unwrap_or((raw.as_str(), "0"));
+    let exp: i32 = exp.parse().unwrap_or(0);
+    let mut mantissa = alloc::string::String::from(mantissa);
+    if alt && prec == 0 {
+        mantissa.push('.');
+    }
+    format!(
+        "{mantissa}e{}{:02}",
+        if exp < 0 { '-' } else { '+' },
+        exp.unsigned_abs(),
+    )
+}
+
+/// Decimal exponent of `av` after rounding to `prec` fraction
+/// digits in e-style -- the X in C99 7.19.6.1p8's g rules.
+/// Deriving it from the rounded e form keeps the boundary cases
+/// (9.99... rounding up a decade) consistent with the output.
+fn decimal_exponent(av: f64, prec: usize) -> i32 {
+    if av == 0.0 {
+        return 0;
+    }
+    let raw = format!("{av:.prec$e}");
+    raw.split_once('e')
+        .and_then(|(_, e)| e.parse().ok())
+        .unwrap_or(0)
 }
 
 /// Parse `(dst/buf, src/buf, n)` argument triples used by
@@ -1989,16 +2304,83 @@ mod tests {
         // 0xC3 0xA9 (the UTF-8 encoding of U+00E9) must reach stdout as
         // those two raw bytes, not the 4-byte Latin-1 -> UTF-8 re-encoding
         // the old path produced.
-        let mem = Memory::new(b"\xC3\xA9\x00");
-        let out = format_printf(b"%s", &[0], &mem).expect("format");
+        let mut mem = Memory::new(b"\xC3\xA9\x00");
+        let out = format_printf(b"%s", &[0], &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0xC3u8, 0xA9]);
     }
 
     #[test]
     fn printf_char_preserves_high_byte() {
-        let mem = Memory::new(b"\x00");
-        let out = format_printf(b"%c", &[0x80], &mem).expect("format");
+        let mut mem = Memory::new(b"\x00");
+        let out = format_printf(b"%c", &[0x80], &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0x80u8]);
+    }
+
+    fn fmt1(fmt: &[u8], args: &[i64]) -> alloc::string::String {
+        let mut mem = Memory::new(b"abcdef\x00");
+        let out = format_printf(fmt, args, &mut mem).expect("format");
+        alloc::string::String::from_utf8(out).expect("utf8")
+    }
+
+    #[test]
+    fn printf_width_precision_flags() {
+        // C99 7.19.6.1p5-p6: field width, precision, and the
+        // -, +, 0, # flags across the integer conversions.
+        assert_eq!(fmt1(b"%5d", &[42]), "   42");
+        assert_eq!(fmt1(b"%-5d|", &[42]), "42   |");
+        assert_eq!(fmt1(b"%05d", &[-42]), "-0042");
+        assert_eq!(fmt1(b"%+d %+d", &[7, -7]), "+7 -7");
+        assert_eq!(fmt1(b"% d", &[7]), " 7");
+        assert_eq!(fmt1(b"%.5d", &[42]), "00042");
+        assert_eq!(fmt1(b"%8.5d", &[42]), "   00042");
+        assert_eq!(fmt1(b"%.0d", &[0]), "");
+        assert_eq!(fmt1(b"%#x %#o", &[255, 8]), "0xff 010");
+        assert_eq!(fmt1(b"%08x", &[0xbeef]), "0000beef");
+        assert_eq!(fmt1(b"%*d", &[5, 42]), "   42");
+        assert_eq!(fmt1(b"%-*d|", &[5, 42]), "42   |");
+        assert_eq!(fmt1(b"%.*d", &[4, 42]), "0042");
+        assert_eq!(fmt1(b"%10.3s|", &[0]), "       abc|");
+        assert_eq!(fmt1(b"%-6.2s|", &[0]), "ab    |");
+        assert_eq!(fmt1(b"%3c|", &[b'z' as i64]), "  z|");
+    }
+
+    #[test]
+    fn printf_length_modifiers() {
+        // C99 7.19.6.1p7: hh / h narrow, l / ll / z / j keep the
+        // full 64-bit value; the default int case truncates to 32.
+        assert_eq!(fmt1(b"%ld", &[0x1_0000_0001]), "4294967297");
+        assert_eq!(fmt1(b"%lld", &[-1]), "-1");
+        assert_eq!(fmt1(b"%d", &[0x1_0000_0001]), "1");
+        assert_eq!(fmt1(b"%hhd", &[0x1ff]), "-1");
+        assert_eq!(fmt1(b"%hu", &[0x1_0005]), "5");
+        assert_eq!(fmt1(b"%zu", &[u64::MAX as i64]), "18446744073709551615");
+        assert_eq!(fmt1(b"%lx", &[-1]), "ffffffffffffffff");
+    }
+
+    #[test]
+    fn printf_float_conversions() {
+        let b = |v: f64| v.to_bits() as i64;
+        assert_eq!(fmt1(b"%f", &[b(3.5)]), "3.500000");
+        assert_eq!(fmt1(b"%.2f", &[b(6.54321)]), "6.54");
+        assert_eq!(fmt1(b"%8.3f", &[b(-6.54321)]), "  -6.543");
+        assert_eq!(fmt1(b"%08.3f", &[b(-6.54321)]), "-006.543");
+        assert_eq!(fmt1(b"%e", &[b(65432.1875)]), "6.543219e+04");
+        assert_eq!(fmt1(b"%.2E", &[b(0.00123)]), "1.23E-03");
+        assert_eq!(fmt1(b"%g", &[b(0.0001)]), "0.0001");
+        assert_eq!(fmt1(b"%g", &[b(0.00001)]), "1e-05");
+        assert_eq!(fmt1(b"%g", &[b(100.0)]), "100");
+        assert_eq!(fmt1(b"%.3g", &[b(1234.5)]), "1.23e+03");
+        assert_eq!(fmt1(b"%f", &[b(f64::NAN)]), "nan");
+        assert_eq!(fmt1(b"%F", &[b(f64::INFINITY)]), "INF");
+    }
+
+    #[test]
+    fn printf_percent_n_stores_count() {
+        // C99 7.19.6.1p8: %n stores the bytes written so far.
+        let mut mem = Memory::new(&[0u8; 16]);
+        let out = format_printf(b"abc%nd", &[8], &mut mem).expect("format");
+        assert_eq!(out, b"abcd".to_vec());
+        assert_eq!(load_from_memory(&mem, 8, LoadKind::I32).unwrap(), 3);
     }
 
     fn ssa_main_of(src: &str) -> FunctionSsa {
@@ -2039,6 +2421,127 @@ mod tests {
             &mut host,
         )
         .expect("ssa run")
+    }
+
+    #[test]
+    fn exit_terminates_with_status() {
+        // C99 7.20.4.3: `exit(status)` ends the program with that
+        // status; the interpreter reports it as the program result
+        // instead of a runtime error.
+        assert_eq!(
+            run_full_program(
+                "#include <stdlib.h>
+                 int main(void) { exit(7); return 1; }",
+            ),
+            7,
+        );
+    }
+
+    #[test]
+    fn frame_allocation_is_bounded_by_the_stack_region() {
+        // A frame past `heap_base` would zero live heap
+        // allocations; exhaustion must be a hard error instead.
+        let mut mem = Memory::new(&[]);
+        let heap = mem.heap_alloc(16);
+        mem.bytes[heap] = 7;
+        let stack_bytes = mem.heap_base - mem.stack_base;
+        let err = mem.alloc_frame(stack_bytes + 8).expect_err("must overflow");
+        match err {
+            C5Error::Runtime(m) => assert!(m.contains("stack overflow"), "{m}"),
+            other => panic!("expected Runtime, got {other:?}"),
+        }
+        assert_eq!(
+            mem.bytes[heap], 7,
+            "heap byte must survive the failed frame"
+        );
+    }
+
+    #[test]
+    fn deep_recursion_errors_instead_of_corrupting_the_heap() {
+        // 40 frames x ~8 KiB exceeds the 256 KiB stack region but
+        // stays inside the old `bytes.len()` bound, which silently
+        // wiped heap allocations.
+        let program = Compiler::new(
+            "int f(int n) { char buf[8192]; buf[0] = (char)n; \
+             if (n == 0) return buf[0]; return f(n - 1); } \
+             int main(void) { return f(40); }"
+                .to_string(),
+        )
+        .compile()
+        .expect("compile fixture");
+        let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            super::super::super::Target::MacOSAarch64,
+        )
+        .expect("ssa lift");
+        let mut host = super::super::super::host::StdHost::default();
+        let err = run_program(&funcs, &program.data, &[], program.entry_pc, &mut host)
+            .expect_err("recursion past the stack region must fail");
+        match err {
+            crate::C5Error::Runtime(m) => assert!(m.contains("stack overflow"), "{m}"),
+            other => panic!("expected Runtime, got {other:?}"),
+        }
+    }
+
+    fn expect_runtime_err(src: &str, needle: &str) {
+        let program = Compiler::new(src.to_string())
+            .compile()
+            .expect("compile fixture");
+        let err = crate::Vm::new(program).run().expect_err("run must fail");
+        match err {
+            crate::C5Error::Runtime(m) => assert!(m.contains(needle), "`{m}` lacks `{needle}`"),
+            other => panic!("expected Runtime, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn undefined_extern_call_is_undefined_reference() {
+        // A declared-but-undefined callee must not dispatch to the
+        // function whose ent_pc collides with the placeholder.
+        expect_runtime_err(
+            "int bar(int); int helper(int x) { return x + 1; } \
+             int main(void) { return bar(41); }",
+            "undefined reference to `bar`",
+        );
+    }
+
+    #[test]
+    fn undefined_variadic_extern_call_is_undefined_reference() {
+        // main sits at ent_pc 0 here; the pre-fix sentinel made
+        // this call recurse into main until the host stack overflowed.
+        expect_runtime_err(
+            "int ghost(int, ...); int main(void) { return ghost(1, 2); }",
+            "undefined reference to `ghost`",
+        );
+    }
+
+    #[test]
+    fn undefined_extern_object_is_undefined_reference() {
+        // C99 6.9.2: `extern int x;` defines no storage; reading it
+        // with no defining TU is a link error, not a zero read.
+        expect_runtime_err(
+            "extern int missing_obj; int main(void) { return missing_obj + 7; }",
+            "undefined reference to `missing_obj`",
+        );
+    }
+
+    #[test]
+    fn undefined_extern_fn_pointer_is_undefined_reference() {
+        expect_runtime_err(
+            "int bar(int); int main(void) { int (*fp)(int) = bar; return fp(1); }",
+            "undefined reference to `bar`",
+        );
+    }
+
+    #[test]
+    fn bound_data_global_is_diagnosed_under_interp() {
+        // `environ` binds to host data; the interpreter's memory
+        // model cannot reach the host cell, so the reference is a
+        // clean diagnostic rather than a phantom NULL read.
+        expect_runtime_err(
+            "#include <unistd.h>\nint main(void) { return environ != 0; }",
+            "bound to host data",
+        );
     }
 
     #[test]

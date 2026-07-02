@@ -1119,6 +1119,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("pthread_key_once_width.c", 0),
     ("dev_t_width.c", 0),
     ("libc_int_arith.c", 0),
+    // Data binding (environ) read through the fake GOT; the site
+    // patching is the JIT counterpart of the AOT flat-lookup import.
+    ("environ_single_tu.c", 0),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),
     ("do_while.c", 5),
@@ -1775,4 +1778,103 @@ fn jit_resolves_pointer_to_extern_data() {
                char ***p = &environ;\n\
                int main(void) { return (*p == 0) ? 1 : 0; }\n";
     assert_eq!(jit_exit(src, &[]), 0);
+}
+
+// A `#pragma binding(data ...)` global read from code (not just a
+// static initializer) must patch like the AOT path: the site loads
+// the host cell's address from the fake GOT. Previously the
+// UserExternDataRef sites were never patched and the read faulted.
+#[cfg(unix)]
+#[test]
+fn jit_reads_binding_data_global() {
+    let src = "#include <unistd.h>\n\
+               int main(void) {\n\
+                   int n = 0;\n\
+                   for (char **e = environ; *e; e++) n++;\n\
+                   return n > 0 ? 0 : 1;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect("compile");
+    assert_eq!(
+        jit_run(&program, &["jit-environ".to_string()]).expect("jit_run"),
+        0
+    );
+}
+
+/// Mirror the linker: a call to a declared-but-undefined extern must
+/// refuse to run instead of dispatching to whatever function sits at
+/// the placeholder-colliding ent_pc.
+#[test]
+fn undefined_extern_call_is_a_link_error() {
+    let program = Compiler::new(
+        "int bar(int);\n\
+         int helper(int x) { return x + 1; }\n\
+         int main(void) { return bar(41); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let err = jit_run(&program, &["jit-undef-call".to_string()]).expect_err("must not run");
+    let msg = err.to_string();
+    assert!(msg.contains("undefined reference to `bar`"), "{msg}");
+}
+
+#[test]
+fn undefined_extern_object_is_a_link_error() {
+    let program = Compiler::new(
+        "extern int missing_obj;\n\
+         int main(void) { return missing_obj + 7; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let err = jit_run(&program, &["jit-undef-obj".to_string()]).expect_err("must not run");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("undefined reference to `missing_obj`"),
+        "{msg}"
+    );
+}
+
+/// C99 7.20.4.3p2: `exit` runs the registered atexit handlers. The
+/// JIT intercepts both `atexit` and `exit`, so the handler chain must
+/// drain before the process terminates with the passed status. `exit`
+/// ends the whole process, so the assertion drives a re-executed copy
+/// of this test binary gated by the marker env var.
+#[test]
+fn atexit_handlers_run_on_libc_exit() {
+    if let Ok(marker) = std::env::var("BADC_JIT_EXIT_MARKER") {
+        let src = format!(
+            "#include <stdio.h>\n\
+             #include <stdlib.h>\n\
+             static void h(void) {{\n\
+                 FILE *f = fopen(\"{marker}\", \"w\");\n\
+                 if (f) {{ fputs(\"ran\", f); fclose(f); }}\n\
+             }}\n\
+             int main(void) {{ atexit(h); exit(42); }}\n",
+        );
+        let program = Compiler::new(src).compile().expect("compile");
+        let _ = jit_run(&program, &["jit-exit".to_string()]);
+        unreachable!("exit(42) must terminate the process");
+    }
+    let marker = std::env::temp_dir().join(format!("badc_jit_exit_{}", std::process::id()));
+    let _ = std::fs::remove_file(&marker);
+    // libtest names tests without the crate segment of module_path!.
+    let module = module_path!();
+    let module = module.split_once("::").map_or(module, |(_, rest)| rest);
+    let test_name = format!("{module}::atexit_handlers_run_on_libc_exit");
+    let out = std::process::Command::new(std::env::current_exe().expect("current_exe"))
+        .args(["--exact", &test_name, "--test-threads=1"])
+        .env("BADC_JIT_EXIT_MARKER", &marker)
+        .output()
+        .expect("re-exec the test binary");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let contents = std::fs::read_to_string(&marker).expect("atexit handler must write the marker");
+    let _ = std::fs::remove_file(&marker);
+    assert_eq!(contents, "ran");
 }

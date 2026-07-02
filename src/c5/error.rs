@@ -67,7 +67,7 @@ pub(crate) fn fmt_internal_err(message: &str) -> String {
 /// live in the linker module and the final-image writers, so under
 /// `--no-default-features --lib` this helper would otherwise
 /// trip the dead-code lint.
-#[cfg(feature = "native-emit")]
+#[cfg(any(feature = "native-emit", feature = "std"))]
 pub(crate) fn fmt_link_err(message: &str) -> String {
     use alloc::format;
     format!("error: {message}")

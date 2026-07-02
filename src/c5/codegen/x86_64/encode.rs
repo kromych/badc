@@ -2146,8 +2146,7 @@ pub(crate) fn lower(
     // `apply_fixups` and re-emit them as
     // `Build::user_extern_call_sites` entries that the writer
     // surfaces as `R_X86_64_PLT32` relocs against the
-    // callee's symbol. Empty for builds without
-    // `CompileOptions::no_entry_point`.
+    // callee's symbol.
     let extern_pc_lookup: alloc::collections::BTreeMap<usize, &str> = program
         .extern_function_imports
         .iter()

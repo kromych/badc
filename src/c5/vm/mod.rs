@@ -57,6 +57,18 @@ pub struct Vm<H: Host> {
     /// (walker compile errors, etc.) are deferred to `run`
     /// because `with_host` doesn't return `Result`.
     ssa_funcs: Result<Vec<FunctionSsa>, C5Error>,
+    /// Cross-TU placeholder ent_pc -> symbol name for every
+    /// declared-but-undefined extern function. `run` refuses any
+    /// reference to these, mirroring the linker.
+    extern_fn_names: alloc::collections::BTreeMap<usize, String>,
+    /// `(name, defined_here)` per parser symbol, indexed by the
+    /// sym idx the `FunctionSsa::extern_*_refs` tables carry.
+    symbol_defs: Vec<(String, bool)>,
+    /// Local names bound to host data (`#pragma binding(data ...)`).
+    data_binding_locals: alloc::collections::BTreeSet<String>,
+    /// `target_ent_pc` of every static-initializer function
+    /// pointer, checked against `extern_fn_names` at `run`.
+    code_reloc_pcs: Vec<usize>,
 }
 
 /// `Vm::new` is only available with the `std` feature; it picks the
@@ -85,6 +97,28 @@ impl<H: Host> Vm<H> {
             .dylibs
             .iter()
             .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
+            .collect();
+        let extern_fn_names = program
+            .extern_function_imports
+            .iter()
+            .map(|(pc, name)| (*pc, name.clone()))
+            .collect();
+        let symbol_defs = program
+            .symbols
+            .iter()
+            .map(|s| (s.name.clone(), s.defined_here))
+            .collect();
+        let data_binding_locals = program
+            .dylibs
+            .iter()
+            .flat_map(|d| d.bindings.iter())
+            .filter(|b| b.is_data)
+            .map(|b| b.local_name.clone())
+            .collect();
+        let code_reloc_pcs = program
+            .code_relocs
+            .iter()
+            .map(|r| r.target_ent_pc as usize)
             .collect();
         // Concatenate the TLS block onto the data segment so
         // `Inst::TlsAddr` resolutions ride the existing data-side
@@ -115,7 +149,65 @@ impl<H: Host> Vm<H> {
             track_pointers: false,
             tls_base,
             ssa_funcs,
+            extern_fn_names,
+            symbol_defs,
+            data_binding_locals,
+            code_reloc_pcs,
         }
+    }
+
+    /// Refuse any reference to a symbol with no definition in
+    /// this unit before execution starts, mirroring the linker's
+    /// undefined-symbol diagnosis. Without this, a call whose
+    /// placeholder pc collides with a real `ent_pc` dispatches to
+    /// the wrong function and an extern object reads a zero slot.
+    fn check_extern_refs(&self, funcs: &[FunctionSsa]) -> Result<(), C5Error> {
+        use super::ir::Inst;
+        let undef =
+            |name: &str| C5Error::Runtime(alloc::format!("undefined reference to `{name}`"));
+        for f in funcs {
+            for inst in &f.insts {
+                let pc = match inst {
+                    Inst::Call { target_pc, .. } => *target_pc,
+                    Inst::ImmCode(pc) => *pc,
+                    _ => continue,
+                };
+                if let Some(name) = self.extern_fn_names.get(&pc) {
+                    return Err(undef(name));
+                }
+            }
+            // `target_pc == 0` call / code-address sites record the
+            // parser sym; the sentinel is ambiguous (the first
+            // function's ent_pc is also 0), so consult the symbol.
+            for &(_, sym) in f.extern_call_refs.iter().chain(&f.extern_imm_code_refs) {
+                if let Some((name, defined)) = self.symbol_defs.get(sym as usize)
+                    && !defined
+                {
+                    return Err(undef(name));
+                }
+            }
+            for &(_, sym) in f.extern_imm_data_refs.iter().chain(&f.extern_tls_refs) {
+                let Some((name, defined)) = self.symbol_defs.get(sym as usize) else {
+                    continue;
+                };
+                if *defined {
+                    continue;
+                }
+                if self.data_binding_locals.contains(name) {
+                    return Err(C5Error::Runtime(alloc::format!(
+                        "`{name}` is bound to host data; the interpreter cannot \
+                         reach host memory (use --jit or compile natively)"
+                    )));
+                }
+                return Err(undef(name));
+            }
+        }
+        for pc in &self.code_reloc_pcs {
+            if let Some(name) = self.extern_fn_names.get(pc) {
+                return Err(undef(name));
+            }
+        }
+        Ok(())
     }
 
     /// Enable per-instruction trace output. Mirrors
@@ -164,6 +256,7 @@ impl<H: Host> Vm<H> {
         if funcs.is_empty() {
             return Err(C5Error::Runtime("empty program".to_string()));
         }
+        self.check_extern_refs(funcs)?;
         ssa::run_program_with_args_tracked(
             funcs,
             &self.data,

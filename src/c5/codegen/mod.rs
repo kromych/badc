@@ -232,9 +232,7 @@ pub(super) fn pc_extent_for_lowering(
     // highest `end_pc`; the codegen's per-`Inst::Call` fixup
     // pass uses the same dense `pc_to_native` table to
     // recognise them as out-of-range, so the table has to
-    // cover the placeholder range too. `extern_function_imports`
-    // is empty for every build that didn't go through the
-    // relocatable -c path.
+    // cover the placeholder range too.
     let from_imports = program
         .extern_function_imports
         .iter()
@@ -1287,9 +1285,9 @@ pub(crate) struct Build {
     /// resolution. The `OutputKind::Relocatable` writer emits one
     /// undefined-extern symbol per unique name plus one
     /// `R_AARCH64_CALL26` / `R_X86_64_PLT32` reloc per call site
-    /// in `.rela.text`. Final-image writers leave the field
-    /// untouched because no `extern_function_imports` ever land
-    /// in a single-TU compile path.
+    /// in `.rela.text`. The JIT refuses a build with entries here
+    /// (`undefined reference`); final-image writers leave the
+    /// field untouched.
     #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
     pub user_extern_call_sites: Vec<UserExternCallSite>,
     /// Cross-TU data references. Populated by the SSA emitters

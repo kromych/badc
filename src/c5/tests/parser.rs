@@ -422,22 +422,33 @@ fn field_access_on_opaque_struct_is_rejected() {
 #[test]
 fn extern_and_static_keywords_are_no_op_at_global_scope() {
     use super::run_str;
-    // `extern` and `static` may appear before the type prefix
-    // (with or without `_Thread_local`); both are accepted and
-    // ignored. The semantics of the resulting decl are
-    // identical to the no-prefix form -- the global lives in
-    // .data with zero init -- so the program runs the same
-    // way it would without the keywords.
+    // `static` (and the accepted `static extern` combination)
+    // before the type prefix produce a tentative definition (C99
+    // 6.9.2p2): the global lives in .data with zero init.
     let src = "
-        extern int a;
         static int b;
         static extern int c;
         int main() {
-            a = 1; b = 2; c = 3;
-            return a + b + c;
+            b = 2; c = 3;
+            return b + c;
         }
     ";
-    assert_eq!(run_str(&super::with_prelude(src)), 6);
+    assert_eq!(run_str(src), 5);
+    // A file-scope `extern int a;` defines no storage (C99 6.2.2p4
+    // / 6.9.2); with no defining TU anywhere, a program that uses
+    // it fails with the linker's undefined-reference diagnosis
+    // instead of reading phantom zeroed storage.
+    let src = "
+        extern int a;
+        int main() { a = 1; return a; }
+    ";
+    let err = crate::Vm::new(super::compile_str(src))
+        .run()
+        .expect_err("undefined extern object must not run");
+    assert!(
+        err.to_string().contains("undefined reference to `a`"),
+        "{err}"
+    );
 }
 
 #[test]

@@ -1819,7 +1819,9 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
     // non-empty `.got` ahead of `.data` (the placement the alignment
     // rounding must correct).
     let program = super::compile_str_bare(
-        "int puts(const char *s); \
+        "#pragma dylib(libc, \"libc.so.6\")\n\
+         #pragma binding(libc::puts, \"puts\")\n\
+         int puts(const char *s); \
          int main(void) { return puts(\"x\"); }",
     );
     let opts = NativeOptions {

@@ -718,6 +718,9 @@ impl Preprocessor {
     /// about; the top-level call uses `"<source>"`, `#include`'d
     /// files use the header name (`"stdio.h"`).
     fn process_named(&mut self, source: &str, filename: &str) -> Result<String, C5Error> {
+        // A UTF-8 byte-order mark opening the file is accepted and
+        // skipped, following gcc and clang.
+        let source = source.strip_prefix('\u{feff}').unwrap_or(source);
         // c99 sec 5.1.1.2 phase 2: every `\\\n` joins lines. We do this
         // up-front so the line-by-line preprocessor never sees a
         // continuation. Line counts are preserved by emitting blank
@@ -872,7 +875,7 @@ impl Preprocessor {
                         active = taken;
                     }
                     Directive::If(expr) => {
-                        let taken = active && self.eval_condition(expr, source_line)?;
+                        let taken = active && self.eval_condition(expr, source_line, filename)?;
                         cond_stack.push(CondFrame {
                             parent_active: active,
                             this_branch_taken: taken,
@@ -882,73 +885,18 @@ impl Preprocessor {
                         active = taken;
                     }
                     Directive::Else => {
-                        let frame = cond_stack.last_mut().ok_or_else(|| {
-                            C5Error::Compile(super::error::fmt_compile_err(
-                                filename,
-                                line_no,
-                                "`#else` with no matching `#if`",
-                            ))
-                        })?;
-                        if frame.saw_else {
-                            return Err(C5Error::Compile(super::error::fmt_compile_err(
-                                filename,
-                                line_no,
-                                "duplicate `#else` for the same `#if`",
-                            )));
-                        }
-                        frame.saw_else = true;
-                        let taken = frame.parent_active && !frame.any_branch_taken;
-                        frame.this_branch_taken = taken;
-                        frame.any_branch_taken |= taken;
-                        active = taken;
+                        active = apply_else(&mut cond_stack, filename, line_no)?;
                     }
                     Directive::Elif(expr) => {
-                        // The directive eval needs a `&Self`, but
-                        // `cond_stack.last_mut()` borrows `self` for
-                        // the frame -- evaluate the expression first
-                        // and only then mutate the frame.
-                        let parent_active =
-                            cond_stack.last().map(|f| f.parent_active).ok_or_else(|| {
-                                C5Error::Compile(super::error::fmt_compile_err(
-                                    filename,
-                                    line_no,
-                                    "`#elif` with no matching `#if`",
-                                ))
-                            })?;
-                        let any_taken_so_far = cond_stack
-                            .last()
-                            .map(|f| f.any_branch_taken)
-                            .unwrap_or(false);
-                        let eligible = parent_active && !any_taken_so_far;
-                        let cond = if eligible {
-                            self.eval_condition(expr, source_line)?
-                        } else {
-                            false
-                        };
-                        // Non-empty by the `parent_active` ok_or_else above.
-                        let frame = cond_stack
-                            .last_mut()
-                            .expect("cond_stack non-empty after parent_active check");
-                        if frame.saw_else {
-                            return Err(C5Error::Compile(super::error::fmt_compile_err(
-                                filename,
-                                line_no,
-                                "`#elif` after `#else` for the same `#if`",
-                            )));
-                        }
-                        frame.this_branch_taken = cond;
-                        frame.any_branch_taken |= cond;
-                        active = cond;
+                        // The directive eval needs a `&Self`, but the
+                        // frame update borrows `cond_stack` -- check
+                        // eligibility first, evaluate, then mutate.
+                        let eligible = elif_eligible(&cond_stack, filename, line_no)?;
+                        let cond = eligible && self.eval_condition(expr, source_line, filename)?;
+                        active = apply_elif(&mut cond_stack, cond, filename, line_no)?;
                     }
                     Directive::Endif => {
-                        let frame = cond_stack.pop().ok_or_else(|| {
-                            C5Error::Compile(super::error::fmt_compile_err(
-                                filename,
-                                line_no,
-                                "`#endif` with no matching `#if`",
-                            ))
-                        })?;
-                        active = frame.parent_active;
+                        active = apply_endif(&mut cond_stack, filename, line_no)?;
                     }
                     Directive::Pragma(args) => {
                         if active {
@@ -1238,8 +1186,8 @@ impl Preprocessor {
                                 join_active = taken;
                             }
                             Directive::If(expr) => {
-                                let taken =
-                                    join_active && self.eval_condition(expr, source_line)?;
+                                let taken = join_active
+                                    && self.eval_condition(expr, source_line, filename)?;
                                 join_stack.push(CondFrame {
                                     parent_active: join_active,
                                     this_branch_taken: taken,
@@ -1248,37 +1196,45 @@ impl Preprocessor {
                                 });
                                 join_active = taken;
                             }
+                            // An `#elif` / `#else` / `#endif` with no
+                            // frame opened inside the argument list
+                            // belongs to the conditional enclosing the
+                            // macro call; apply it to the outer stack so
+                            // argument gathering resumes in the right
+                            // branch and the outer frame still closes.
                             Directive::Elif(expr) => {
-                                let parent_active =
-                                    join_stack.last().map(|f| f.parent_active).unwrap_or(false);
-                                let any_taken = join_stack
-                                    .last()
-                                    .map(|f| f.any_branch_taken)
-                                    .unwrap_or(true);
-                                let eligible = parent_active && !any_taken;
-                                let cond = if eligible {
-                                    self.eval_condition(expr, source_line)?
+                                let stack = if join_stack.is_empty() {
+                                    &mut cond_stack
                                 } else {
-                                    false
+                                    &mut join_stack
                                 };
-                                if let Some(frame) = join_stack.last_mut() {
-                                    frame.this_branch_taken = cond;
-                                    frame.any_branch_taken |= cond;
+                                let eligible = elif_eligible(stack, filename, source_line)?;
+                                let cond =
+                                    eligible && self.eval_condition(expr, source_line, filename)?;
+                                let taken = apply_elif(stack, cond, filename, source_line)?;
+                                if join_stack.is_empty() {
+                                    active = taken;
                                 }
-                                join_active = cond;
+                                join_active = taken;
                             }
                             Directive::Else => {
-                                if let Some(frame) = join_stack.last_mut() {
-                                    let taken = frame.parent_active && !frame.any_branch_taken;
-                                    frame.saw_else = true;
-                                    frame.this_branch_taken = taken;
-                                    frame.any_branch_taken |= taken;
-                                    join_active = taken;
+                                let stack = if join_stack.is_empty() {
+                                    &mut cond_stack
+                                } else {
+                                    &mut join_stack
+                                };
+                                let taken = apply_else(stack, filename, source_line)?;
+                                if join_stack.is_empty() {
+                                    active = taken;
                                 }
+                                join_active = taken;
                             }
                             Directive::Endif => {
                                 if let Some(frame) = join_stack.pop() {
                                     join_active = frame.parent_active;
+                                } else {
+                                    active = apply_endif(&mut cond_stack, filename, source_line)?;
+                                    join_active = active;
                                 }
                             }
                             // Other directives inside a macro argument are
@@ -1774,10 +1730,19 @@ impl Preprocessor {
                 // INC(...) calls expanded too. Hot path is the
                 // not-a-macro case -- the early `None` saves an
                 // allocation per source identifier.
-                match self.expand(ident) {
+                match self.expand_chain(ident) {
                     None => out.push_str(ident),
-                    Some(expanded) => {
-                        let nested = Blocklist::Cons(ident, blocklist);
+                    Some((expanded, chain)) => {
+                        // Paint the name and every chain intermediate
+                        // (C99 6.10.3.4p2) so the rescan cannot re-fire
+                        // a macro the walk already went through.
+                        let mut painted: Vec<&str> = alloc::vec![ident];
+                        for c in &chain {
+                            if !painted.contains(&c.as_str()) {
+                                painted.push(c);
+                            }
+                        }
+                        let nested = Blocklist::Many(&painted, blocklist);
                         // Token-stream rescan (C99 6.10.3.4): if the
                         // expansion is a single identifier and the
                         // *source* token immediately after the
@@ -1884,18 +1849,31 @@ impl Preprocessor {
     /// non-macro identifiers than macro hits) and lets callers skip
     /// allocating a String just to compare it back against the input.
     fn expand(&self, name: &str) -> Option<String> {
+        self.expand_chain(name).map(|(body, _)| body)
+    }
+
+    /// `expand` plus the chain of intermediate macro names the walk
+    /// passed through. C99 6.10.3.4p2 paints every name replaced
+    /// during the rescan, so the caller must add the chain to the
+    /// blocklist -- otherwise a terminal body that re-mentions an
+    /// intermediate (`#define B C` / `#define C B x`) re-fires it and
+    /// duplicates tokens. A revisited name ends the walk.
+    fn expand_chain(&self, name: &str) -> Option<(String, Vec<String>)> {
         let first = self.macros.get(name)?;
-        // We've got at least one substitution. Follow the
-        // `#define A B` -> `#define B 5` chain up to a fixed depth so
-        // a `#define A A` self-loop doesn't spin forever.
+        let mut chain: Vec<String> = Vec::new();
         let mut current = first.clone();
-        for _ in 0..32 {
+        while chain.len() < 32 {
+            if current == name || chain.iter().any(|c| c == &current) {
+                break;
+            }
             match self.macros.get(&current) {
-                Some(next) if next != &current => current = next.clone(),
-                _ => break,
+                Some(next) => {
+                    chain.push(core::mem::replace(&mut current, next.clone()));
+                }
+                None => break,
             }
         }
-        Some(current)
+        Some((current, chain))
     }
 
     /// `expand` but with the original name returned (allocated as a
@@ -1986,7 +1964,7 @@ impl Preprocessor {
         strip_c_comments(&substituted)
     }
 
-    fn eval_condition(&self, expr: &str, line_no: usize) -> Result<bool, C5Error> {
+    fn eval_condition(&self, expr: &str, line_no: usize, filename: &str) -> Result<bool, C5Error> {
         // Full c99 `#if` expression evaluator: integer constants,
         // identifiers (treated as 0 if undefined), `defined(X)`,
         // unary `!`, comparisons, and boolean operators with
@@ -2003,7 +1981,7 @@ impl Preprocessor {
         // substitute would otherwise expand X away.
         let prepared = self.expand_for_if(expr, line_no);
         self.take_pending_error()?;
-        let mut p = IfExprParser::new(&prepared, self);
+        let mut p = IfExprParser::new(&prepared, self, filename);
         let v = p.parse_ternary()?;
         p.skip_ws();
         if !p.at_end() {
@@ -3410,6 +3388,89 @@ impl CondFrame {
     }
 }
 
+/// `#else` state transition on the innermost frame; returns the new
+/// active state. Shared by the main directive loop and the
+/// macro-argument line joiner so both agree on the semantics.
+fn apply_else(stack: &mut [CondFrame], filename: &str, line_no: usize) -> Result<bool, C5Error> {
+    let frame = stack.last_mut().ok_or_else(|| {
+        C5Error::Compile(super::error::fmt_compile_err(
+            filename,
+            line_no,
+            "`#else` with no matching `#if`",
+        ))
+    })?;
+    if frame.saw_else {
+        return Err(C5Error::Compile(super::error::fmt_compile_err(
+            filename,
+            line_no,
+            "duplicate `#else` for the same `#if`",
+        )));
+    }
+    frame.saw_else = true;
+    let taken = frame.parent_active && !frame.any_branch_taken;
+    frame.this_branch_taken = taken;
+    frame.any_branch_taken |= taken;
+    Ok(taken)
+}
+
+/// Whether an `#elif` on the innermost frame is eligible to take
+/// (parent branch active, no earlier arm taken). C99 6.10.1p3: the
+/// controlling expression of an ineligible group is not evaluated,
+/// so the caller evaluates only when this returns true.
+fn elif_eligible(stack: &[CondFrame], filename: &str, line_no: usize) -> Result<bool, C5Error> {
+    let frame = stack.last().ok_or_else(|| {
+        C5Error::Compile(super::error::fmt_compile_err(
+            filename,
+            line_no,
+            "`#elif` with no matching `#if`",
+        ))
+    })?;
+    Ok(frame.parent_active && !frame.any_branch_taken)
+}
+
+/// `#elif` state transition with the already-evaluated condition;
+/// returns the new active state.
+fn apply_elif(
+    stack: &mut [CondFrame],
+    cond: bool,
+    filename: &str,
+    line_no: usize,
+) -> Result<bool, C5Error> {
+    let frame = stack.last_mut().ok_or_else(|| {
+        C5Error::Compile(super::error::fmt_compile_err(
+            filename,
+            line_no,
+            "`#elif` with no matching `#if`",
+        ))
+    })?;
+    if frame.saw_else {
+        return Err(C5Error::Compile(super::error::fmt_compile_err(
+            filename,
+            line_no,
+            "`#elif` after `#else` for the same `#if`",
+        )));
+    }
+    frame.this_branch_taken = cond;
+    frame.any_branch_taken |= cond;
+    Ok(cond)
+}
+
+/// `#endif` pops the innermost frame; returns the restored active state.
+fn apply_endif(
+    stack: &mut Vec<CondFrame>,
+    filename: &str,
+    line_no: usize,
+) -> Result<bool, C5Error> {
+    let frame = stack.pop().ok_or_else(|| {
+        C5Error::Compile(super::error::fmt_compile_err(
+            filename,
+            line_no,
+            "`#endif` with no matching `#if`",
+        ))
+    })?;
+    Ok(frame.parent_active)
+}
+
 enum Directive<'a> {
     /// Object-like macro: `#define NAME body`.
     Define(&'a str, &'a str),
@@ -4009,6 +4070,11 @@ struct IfExprParser<'a> {
     src: &'a str,
     pos: usize,
     pp: &'a Preprocessor,
+    /// Path of the file whose `#if` is being evaluated;
+    /// `__has_include("h")` resolves its quoted form against this
+    /// file's directory, and `__has_include_next` resumes the search
+    /// past this file's search-path entry.
+    filename: &'a str,
     /// Recursion depth, bounded by [`MAX_IF_EXPR_DEPTH`]. Every recursive
     /// cycle in the grammar passes through `parse_unary`, so the bound is
     /// checked there.
@@ -4021,11 +4087,12 @@ struct IfExprParser<'a> {
 }
 
 impl<'a> IfExprParser<'a> {
-    fn new(src: &'a str, pp: &'a Preprocessor) -> Self {
+    fn new(src: &'a str, pp: &'a Preprocessor, filename: &'a str) -> Self {
         Self {
             src,
             pos: 0,
             pp,
+            filename,
             depth: 0,
             live: true,
         }
@@ -4109,7 +4176,15 @@ impl<'a> IfExprParser<'a> {
         self.live = saved && !cond.truthy();
         let else_v = self.parse_ternary()?;
         self.live = saved;
-        Ok(if cond.truthy() { then_v } else { else_v })
+        // C99 6.5.15p5: the arms undergo the usual arithmetic
+        // conversions, so either arm being unsigned makes the result
+        // unsigned regardless of which arm is picked.
+        let uns = then_v.is_unsigned() || else_v.is_unsigned();
+        let picked = if cond.truthy() { then_v } else { else_v };
+        Ok(match picked {
+            IfValue::Int { val, .. } => IfValue::with_sign(val, uns),
+            other => other,
+        })
     }
 
     fn parse_and(&mut self) -> Result<IfValue, C5Error> {
@@ -4410,34 +4485,73 @@ impl<'a> IfExprParser<'a> {
             self.pos += 1;
         }
         if self.eat_byte(b'\'') {
-            // Character literal -- a single byte, optionally escaped.
-            // Multi-char (`'AB'`) is implementation-defined; we use
-            // the last byte, which matches gcc's choice.
+            // Character literal. Multi-char (`'AB'`) is
+            // implementation-defined; each byte shifts into the
+            // accumulator, matching gcc.
             let bytes = self.src.as_bytes();
             let mut acc: i64 = 0;
+            let mut count = 0usize;
             while let Some(b) = self.peek_byte() {
                 if b == b'\'' {
                     self.pos += 1;
+                    // C99 6.4.4.4p10: a single-character constant has
+                    // the char's value as int -- sign-extended on
+                    // signed-plain-char targets, matching the lexer.
+                    if count == 1 && self.pp.target.plain_char_signed() && (0..=0xFF).contains(&acc)
+                    {
+                        acc = acc as u8 as i8 as i64;
+                    }
                     return Ok(IfValue::signed(acc));
                 }
+                count += 1;
                 if b == b'\\' && self.pos + 1 < bytes.len() {
                     self.pos += 2;
                     let esc = bytes[self.pos - 1];
-                    let ch = match esc {
+                    // C99 6.4.4.4: simple, octal (`\N` up to three
+                    // digits), and hexadecimal (`\xN...`) escapes.
+                    let ch: i64 = match esc {
                         b'n' => 0x0A,
                         b't' => 0x09,
                         b'r' => 0x0D,
-                        b'0' => 0x00,
-                        b'\\' => b'\\',
-                        b'\'' => b'\'',
-                        b'"' => b'"',
+                        b'\\' => b'\\' as i64,
+                        b'\'' => b'\'' as i64,
+                        b'"' => b'"' as i64,
                         b'a' => 0x07,
                         b'b' => 0x08,
                         b'f' => 0x0C,
                         b'v' => 0x0B,
-                        other => other,
+                        b'x' => {
+                            let mut v: i64 = 0;
+                            while let Some(&h) = bytes.get(self.pos) {
+                                let d = match h {
+                                    b'0'..=b'9' => h - b'0',
+                                    b'a'..=b'f' => h - b'a' + 10,
+                                    b'A'..=b'F' => h - b'A' + 10,
+                                    _ => break,
+                                };
+                                v = (v << 4) | d as i64;
+                                self.pos += 1;
+                            }
+                            v & 0xFF
+                        }
+                        b'0'..=b'7' => {
+                            let mut v = (esc - b'0') as i64;
+                            let mut n = 1;
+                            while n < 3 {
+                                match bytes.get(self.pos) {
+                                    Some(&o @ b'0'..=b'7') => {
+                                        v = (v << 3) | (o - b'0') as i64;
+                                        self.pos += 1;
+                                        n += 1;
+                                    }
+                                    _ => break,
+                                }
+                            }
+                            v
+                        }
+                        other => other as i64,
                     };
-                    acc = (acc << 8) | (ch as i64);
+                    acc = (acc << 8) | ch;
                 } else {
                     acc = (acc << 8) | (b as i64);
                     self.pos += 1;
@@ -4619,7 +4733,22 @@ impl<'a> IfExprParser<'a> {
                     "preprocessor: missing `)` in `__has_include`".to_string(),
                 ));
             }
-            let found = self.pp.find_include(&header, None).is_some();
+            // Resolve exactly as the matching directive would: the
+            // quoted form probes the including file's directory first
+            // (C99 6.10.2p2), and `__has_include_next` resumes past
+            // the search-path entry that supplied the current file.
+            let found = if name == "__has_include_next" {
+                self.pp.find_include_next(&header, self.filename).is_some()
+            } else {
+                let source_dir = if close == b'"' {
+                    include_parent_dir(self.filename)
+                } else {
+                    None
+                };
+                self.pp
+                    .find_include(&header, source_dir.as_deref())
+                    .is_some()
+            };
             return Ok(IfValue::signed(found as i64));
         }
         // Identifier -- look up in the macro table. Function-like
@@ -5877,6 +6006,119 @@ int x_2 = __COUNTER__;
             super::include_parent_dir("/abs/dir/src.c"),
             Some("/abs/dir".to_string())
         );
+        // The stdin label behaves like a bare filename: gcc resolves a
+        // quoted include in piped source against the working directory.
+        assert_eq!(super::include_parent_dir("-"), Some(String::new()));
+    }
+
+    #[test]
+    fn object_like_alias_chain_blue_paints_intermediates() {
+        // C99 6.10.3.4p2: every name replaced on the way to the terminal
+        // body stays painted for the rescan. Without that, the rescan of
+        // `B x` re-fires B -> C -> `B x` and duplicates the tail.
+        let out = process("#define A B\n#define B C\n#define C B x\nA\n");
+        let line = out.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert_eq!(line.trim(), "B x", "{out}");
+        // Mutual recursion through an alias stops at the painted name.
+        let out = process("#define P Q\n#define Q P\nP\n");
+        let line = out.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert_eq!(line.trim(), "P", "{out}");
+    }
+
+    #[test]
+    fn if_char_constant_decodes_hex_and_octal_escapes() {
+        for e in [
+            "'\\x41' == 65",
+            "'\\101' == 65",
+            // Signed plain char on this target: '\xff' sign-extends.
+            "'\\xff' == -1",
+            "'\\x7f' == 127",
+            "'\\0' == 0",
+            "'\\11' == 9",
+            "'AB' == 0x4142",
+        ] {
+            let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
+            assert!(out.contains("TAKEN"), "{e}: {out}");
+        }
+    }
+
+    #[test]
+    fn if_ternary_applies_usual_arithmetic_conversions() {
+        // C99 6.5.15p5: the arms convert to a common type, so an
+        // unsigned arm makes the picked signed arm's value unsigned.
+        for e in ["(1 ? -1 : 0u) > 0", "(0 ? 0u : -1) > 0"] {
+            let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
+            assert!(out.contains("TAKEN"), "{e}: {out}");
+        }
+        // Both arms signed: the value stays signed.
+        let out = process("#if (1 ? -1 : 0) < 0\nTAKEN\n#endif\n");
+        assert!(out.contains("TAKEN"), "{out}");
+    }
+
+    #[test]
+    fn macro_args_split_across_an_enclosing_conditional() {
+        // An `#else` / `#endif` seen while joining macro-argument lines
+        // with no locally opened frame belongs to the enclosing
+        // conditional: the joiner must apply it to the outer stack, skip
+        // the inactive branch's lines, and leave the block terminated.
+        let src = "#define m(a,b) a+b\n#define A 1\n#if A\nint x = m(1,\n#else\nint x = m(2,\n#endif\n3);\n";
+        let out = process(src);
+        assert!(out.contains("1+3"), "{out}");
+        assert!(!out.contains("2+"), "{out}");
+        // The not-taken arm joins the other branch's argument line.
+        let src = "#define m(a,b) a+b\n#if 0\nint x = m(1,\n#else\nint x = m(2,\n#endif\n3);\n";
+        let out = process(src);
+        assert!(out.contains("2+3"), "{out}");
+    }
+
+    #[test]
+    fn has_include_quoted_form_searches_the_including_dir() {
+        // C99 6.10.2p2 via C23 6.10.1: the quoted `__has_include` form
+        // probes the including file's directory exactly as the matching
+        // `#include "h"` would.
+        let base = std::env::temp_dir().join(format!("badc-hasinc-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("inner.h"), "int inner;\n").unwrap();
+        std::fs::write(
+            base.join("probe.h"),
+            "#if __has_include(\"inner.h\")\nint FOUND;\n#else\nint MISSING;\n#endif\n",
+        )
+        .unwrap();
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(base.to_str().unwrap());
+        let out = pp.process("#include <probe.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert!(out.contains("FOUND"), "{out}");
+    }
+
+    #[test]
+    fn has_include_next_resumes_after_the_current_entry() {
+        // `__has_include_next` must answer what `#include_next` would
+        // resolve: found through a later search-path entry, not the
+        // probing shim's own file.
+        let base = std::env::temp_dir().join(format!("badc-hasincnext-{}", std::process::id()));
+        let d1 = base.join("d1");
+        let d2 = base.join("d2");
+        std::fs::create_dir_all(&d1).unwrap();
+        std::fs::create_dir_all(&d2).unwrap();
+        std::fs::write(
+            d1.join("foo.h"),
+            "#if __has_include_next(<foo.h>)\nint NEXT_FOUND;\n#else\nint NEXT_MISSING;\n#endif\n",
+        )
+        .unwrap();
+        std::fs::write(d2.join("foo.h"), "int real;\n").unwrap();
+
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(d1.to_str().unwrap());
+        pp.add_search_path(d2.to_str().unwrap());
+        let out = pp.process("#include <foo.h>\n").unwrap();
+        assert!(out.contains("NEXT_FOUND"), "{out}");
+
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(d1.to_str().unwrap());
+        let out = pp.process("#include <foo.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert!(out.contains("NEXT_MISSING"), "{out}");
     }
 
     #[test]

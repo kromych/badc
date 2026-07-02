@@ -341,6 +341,10 @@ impl Compiler {
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
     ) -> Option<&'static str> {
+        // C99 6.5.16.1p1: the target may add qualifiers; volatility
+        // never affects assignment compatibility.
+        let declared = declared & !VOLATILE_BIT;
+        let actual = actual & !VOLATILE_BIT;
         if declared == actual {
             return None;
         }

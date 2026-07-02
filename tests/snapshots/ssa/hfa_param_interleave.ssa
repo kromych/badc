@@ -9,29 +9,29 @@ fn ent_pc=0 n_params=6 variadic=false locals=6
     v3   LocalAddr(-1)                                    -> x0
     v4   Load { addr=v3, disp=0, kind=F32 }               -> d1 [f32]
     v5   LocalAddr(-1)                                    -> x0
-    v6   BinopI { op=add, lhs=v5, rhs_imm=4 }             -> x0
-    v7   Load { addr=v6, disp=0, kind=F32 }               -> d2 [f32]
+    v6   BinopI { op=add, lhs=v5, rhs_imm=4 }             -> x1
+    v7   Load { addr=v5, disp=4, kind=F32 }               -> d2 [f32]
     v8   Binop { op=fadd, lhs=v4, rhs=v7 }                -> d1 [f32]
     v9   LocalAddr(-2)                                    -> x0
     v10  Load { addr=v9, disp=0, kind=F32 }               -> d2 [f32]
     v11  Binop { op=fadd, lhs=v8, rhs=v10 }               -> d1 [f32]
     v12  LocalAddr(-2)                                    -> x0
-    v13  BinopI { op=add, lhs=v12, rhs_imm=4 }            -> x0
-    v14  Load { addr=v13, disp=0, kind=F32 }              -> d2 [f32]
+    v13  BinopI { op=add, lhs=v12, rhs_imm=4 }            -> x1
+    v14  Load { addr=v12, disp=4, kind=F32 }              -> d2 [f32]
     v15  Binop { op=fadd, lhs=v11, rhs=v14 }              -> d1 [f32]
     v16  LocalAddr(-3)                                    -> x0
     v17  Load { addr=v16, disp=0, kind=F32 }              -> d2 [f32]
     v18  Binop { op=fadd, lhs=v15, rhs=v17 }              -> d1 [f32]
     v19  LocalAddr(-3)                                    -> x0
-    v20  BinopI { op=add, lhs=v19, rhs_imm=4 }            -> x0
-    v21  Load { addr=v20, disp=0, kind=F32 }              -> d2 [f32]
+    v20  BinopI { op=add, lhs=v19, rhs_imm=4 }            -> x1
+    v21  Load { addr=v19, disp=4, kind=F32 }              -> d2 [f32]
     v22  Binop { op=fadd, lhs=v18, rhs=v21 }              -> d1 [f32]
     v23  LocalAddr(-4)                                    -> x0
     v24  Load { addr=v23, disp=0, kind=F32 }              -> d2 [f32]
     v25  Binop { op=fadd, lhs=v22, rhs=v24 }              -> d1 [f32]
     v26  LocalAddr(-4)                                    -> x0
-    v27  BinopI { op=add, lhs=v26, rhs_imm=4 }            -> x0
-    v28  Load { addr=v27, disp=0, kind=F32 }              -> d2 [f32]
+    v27  BinopI { op=add, lhs=v26, rhs_imm=4 }            -> x1
+    v28  Load { addr=v26, disp=4, kind=F32 }              -> d2 [f32]
     v29  Binop { op=fadd, lhs=v25, rhs=v28 }              -> d1 [f32]
     v30  LoadLocal { off=-6, kind=F32 }                   -> d2 [f32]
     v31  Binop { op=fadd, lhs=v29, rhs=v1 }               -> d0 [f32]

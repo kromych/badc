@@ -34,29 +34,25 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	ldr	s1, [x0]
                	sub	x0, x29, #0x8
-               	add	x0, x0, #0x4
-               	ldr	s2, [x0]
+               	ldr	s2, [x0, #0x4]
                	fadd	s1, s1, s2
                	sub	x0, x29, #0x10
                	ldr	s2, [x0]
                	fadd	s1, s1, s2
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x4
-               	ldr	s2, [x0]
+               	ldr	s2, [x0, #0x4]
                	fadd	s1, s1, s2
                	sub	x0, x29, #0x18
                	ldr	s2, [x0]
                	fadd	s1, s1, s2
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x4
-               	ldr	s2, [x0]
+               	ldr	s2, [x0, #0x4]
                	fadd	s1, s1, s2
                	sub	x0, x29, #0x20
                	ldr	s2, [x0]
                	fadd	s1, s1, s2
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x4
-               	ldr	s2, [x0]
+               	ldr	s2, [x0, #0x4]
                	fadd	s1, s1, s2
                	fadd	s0, s1, s0
                	sub	x0, x29, #0x28

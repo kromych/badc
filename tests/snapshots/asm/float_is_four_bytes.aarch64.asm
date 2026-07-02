@@ -130,8 +130,7 @@ Disassembly of section .text:
                	mov	x20, #0x7               // =7
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x4
-               	ldr	s0, [x0]
+               	ldr	s0, [x0, #0x4]
                	mov	x0, #0x4004000000000000 // =4612811918334230528
                	fcvt	d0, s0
                	fmov	d17, x0
@@ -142,16 +141,14 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	add	x1, x1, #0x4
-               	ldr	s0, [x1]
+               	ldr	s0, [x1, #0x4]
                	fcvt	d0, s0
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x8               // =8
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x8
-               	ldr	s0, [x0]
+               	ldr	s0, [x0, #0x8]
                	mov	x0, #0x400c000000000000 // =4615063718147915776
                	fcvt	d0, s0
                	fmov	d17, x0
@@ -162,16 +159,14 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	add	x1, x1, #0x8
-               	ldr	s0, [x1]
+               	ldr	s0, [x1, #0x8]
                	fcvt	d0, s0
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x9               // =9
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0xc
-               	ldr	s0, [x0]
+               	ldr	s0, [x0, #0xc]
                	mov	x0, #0x4012000000000000 // =4616752568008179712
                	fcvt	d0, s0
                	fmov	d17, x0
@@ -182,8 +177,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	add	x1, x1, #0xc
-               	ldr	s0, [x1]
+               	ldr	s0, [x1, #0xc]
                	fcvt	d0, s0
                	bl	<addr>
                	sxtw	x0, w0

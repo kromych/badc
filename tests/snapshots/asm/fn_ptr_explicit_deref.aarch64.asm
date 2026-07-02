@@ -25,8 +25,8 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	mov	x0, #0x28               // =40
                	ldur	x1, [x29, #-0x8]
-               	mov	x9, x1
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
@@ -41,8 +41,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x28               // =40
                	ldur	x1, [x29, #-0x8]
-               	mov	x9, x1
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x1
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
@@ -58,8 +58,8 @@ Disassembly of section .text:
                	sub	x20, x29, #0x8
                	ldr	x0, [x20]
                	mov	x1, #0x28               // =40
-               	mov	x9, x0
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
@@ -74,8 +74,8 @@ Disassembly of section .text:
                	ret
                	ldr	x0, [x20]
                	mov	x1, #0x28               // =40
-               	mov	x9, x0
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10

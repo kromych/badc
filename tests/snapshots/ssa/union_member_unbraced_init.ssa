@@ -131,8 +131,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
   block 24  start_pc=0
     v78  ImmData(64)                                      -> x0
     v79  Imm(24)                                          -> x1
-    v80  BinopI { op=add, lhs=v78, rhs_imm=24 }           -> x0
-    v81  Load { addr=v80, disp=0, kind=F64 }              -> d0
+    v80  BinopI { op=add, lhs=v78, rhs_imm=24 }           -> x1
+    v81  Load { addr=v78, disp=24, kind=F64 }             -> d0
     v82  Imm(4616189618054758400)                         -> x0
     v83  Binop { op=fne, lhs=v81, rhs=v82 }               -> x1
     v84  Imm(0)                                           -> x0

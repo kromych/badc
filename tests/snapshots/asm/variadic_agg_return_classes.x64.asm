@@ -39,10 +39,9 @@ Disassembly of section .text:
                	mulsd	%xmm15, %xmm0
                	movsd	%xmm0, (%rax,%riz)
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x8, %rax
                	movabsq	$0x4002000000000000, %rcx # imm = 0x4002000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, (%rax,%riz)
+               	movsd	%xmm14, 0x8(%rax,%riz)
                	leaq	-0x10(%rbp), %rax
                	movq	%rax, %rcx
                	movsd	(%rcx,%riz), %xmm0
@@ -120,8 +119,7 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x8, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	0x8(%rax,%riz), %xmm0
                	movabsq	$0x4002000000000000, %rax # imm = 0x4002000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -182,4 +180,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

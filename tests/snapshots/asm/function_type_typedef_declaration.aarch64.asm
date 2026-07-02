@@ -26,9 +26,9 @@ Disassembly of section .text:
                	str	x19, [sp]
                	sxtw	x1, w1
                	sxtw	x2, w2
-               	mov	x9, x0
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	blr	x9
@@ -70,9 +70,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x2                // =2
                	mov	x2, #0x5                // =5
-               	mov	x9, x0
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	blr	x9
@@ -101,9 +101,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x8                // =8
                	mov	x2, #0x3                // =3
-               	mov	x9, x0
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
+               	mov	x9, x0
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]
                	blr	x9

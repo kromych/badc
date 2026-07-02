@@ -81,8 +81,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x30
                	ldr	d0, [x0]
                	sub	x0, x29, #0x30
-               	add	x0, x0, #0x8
-               	ldr	d1, [x0]
+               	ldr	d1, [x0, #0x8]
                	fadd	d0, d0, d1
                	ldr	x19, [sp]
                	add	sp, sp, #0x40
@@ -99,10 +98,9 @@ Disassembly of section .text:
                	fmov	d16, x1
                	str	d16, [x0]
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x8
                	mov	x1, #0x4002000000000000 // =4612248968380809216
                	fmov	d16, x1
-               	str	d16, [x0]
+               	str	d16, [x0, #0x8]
                	mov	x0, #0x1                // =1
                	sub	x1, x29, #0x10
                	ldr	d0, [x1]

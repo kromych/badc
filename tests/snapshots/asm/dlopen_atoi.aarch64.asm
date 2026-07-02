@@ -48,8 +48,8 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x9, x21
                	str	x0, [sp, #-0x10]!
+               	mov	x9, x21
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10

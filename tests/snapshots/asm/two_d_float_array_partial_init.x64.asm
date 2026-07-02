@@ -147,11 +147,9 @@ Disassembly of section .text:
                	shlq	$0x4, %rsi
                	addq	%rsi, %rdx
                	movss	(%rdx,%riz), %xmm1
-               	leaq	0x4(%rdx), %rsi
-               	movss	(%rsi,%riz), %xmm2
+               	movss	0x4(%rdx,%riz), %xmm2
                	addss	%xmm2, %xmm1
-               	addq	$0x8, %rdx
-               	movss	(%rdx,%riz), %xmm2
+               	movss	0x8(%rdx,%riz), %xmm2
                	addss	%xmm2, %xmm1
                	addss	%xmm1, %xmm0
                	movss	%xmm0, (%rax,%riz)
@@ -190,4 +188,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

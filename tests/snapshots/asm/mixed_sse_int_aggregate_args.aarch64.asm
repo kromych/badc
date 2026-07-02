@@ -58,8 +58,7 @@ Disassembly of section .text:
                	cset	x1, ne
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x8
-               	ldr	d1, [x0]
+               	ldr	d1, [x0, #0x8]
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fcmp	d1, d17
@@ -88,8 +87,7 @@ Disassembly of section .text:
                	cset	x1, ne
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x30
-               	add	x0, x0, #0x8
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x8]
                	mov	x0, #0x4012000000000000 // =4616752568008179712
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -140,19 +138,17 @@ Disassembly of section .text:
                	mov	x1, #0xb                // =11
                	str	x1, [x0]
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x8
                	mov	x1, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x1
-               	str	d16, [x0]
+               	str	d16, [x0, #0x8]
                	sub	x0, x29, #0x30
                	mov	x1, #0x400c000000000000 // =4615063718147915776
                	fmov	d16, x1
                	str	d16, [x0]
                	sub	x0, x29, #0x30
-               	add	x0, x0, #0x8
                	mov	x1, #0x4012000000000000 // =4616752568008179712
                	fmov	d16, x1
-               	str	d16, [x0]
+               	str	d16, [x0, #0x8]
                	mov	x0, #0x4                // =4
                	sub	x1, x29, #0x10
                	sub	x2, x29, #0x20

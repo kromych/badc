@@ -168,25 +168,21 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movsd	%xmm14, (%rax,%riz)
                	leaq	-0x28(%rbp), %rax
-               	addq	$0x8, %rax
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movq	%rdx, %xmm14
-               	movsd	%xmm14, (%rax,%riz)
+               	movsd	%xmm14, 0x8(%rax,%riz)
                	leaq	-0x28(%rbp), %rax
-               	addq	$0x10, %rax
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, (%rax,%riz)
+               	movsd	%xmm14, 0x10(%rax,%riz)
                	leaq	-0x28(%rbp), %rax
-               	addq	$0x18, %rax
                	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, (%rax,%riz)
+               	movsd	%xmm14, 0x18(%rax,%riz)
                	leaq	-0x28(%rbp), %rax
-               	addq	$0x20, %rax
                	movabsq	$0x4014000000000000, %rcx # imm = 0x4014000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, (%rax,%riz)
+               	movsd	%xmm14, 0x20(%rax,%riz)
                	leaq	-0x28(%rbp), %rdi
                	movl	$0x5, %esi
                	movq	%rdx, %xmm0

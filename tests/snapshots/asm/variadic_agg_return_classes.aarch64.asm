@@ -38,10 +38,9 @@ Disassembly of section .text:
                	fmul	d0, d16, d0
                	str	d0, [x0]
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x8
                	mov	x1, #0x4002000000000000 // =4612248968380809216
                	fmov	d16, x1
-               	str	d16, [x0]
+               	str	d16, [x0, #0x8]
                	sub	x0, x29, #0x10
                	mov	x16, x0
                	ldr	d0, [x16]
@@ -117,8 +116,7 @@ Disassembly of section .text:
                	cset	x20, ne
                	cbnz	x20, <addr>
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x8
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x8]
                	mov	x0, #0x4002000000000000 // =4612248968380809216
                	fmov	d17, x0
                	fcmp	d0, d17

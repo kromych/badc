@@ -138,25 +138,21 @@ Disassembly of section .text:
                	fmov	d16, x1
                	str	d16, [x0]
                	sub	x0, x29, #0x28
-               	add	x0, x0, #0x8
                	mov	x2, #0x4000000000000000 // =4611686018427387904
                	fmov	d16, x2
-               	str	d16, [x0]
+               	str	d16, [x0, #0x8]
                	sub	x0, x29, #0x28
-               	add	x0, x0, #0x10
                	mov	x1, #0x4008000000000000 // =4613937818241073152
                	fmov	d16, x1
-               	str	d16, [x0]
+               	str	d16, [x0, #0x10]
                	sub	x0, x29, #0x28
-               	add	x0, x0, #0x18
                	mov	x1, #0x4010000000000000 // =4616189618054758400
                	fmov	d16, x1
-               	str	d16, [x0]
+               	str	d16, [x0, #0x18]
                	sub	x0, x29, #0x28
-               	add	x0, x0, #0x20
                	mov	x1, #0x4014000000000000 // =4617315517961601024
                	fmov	d16, x1
-               	str	d16, [x0]
+               	str	d16, [x0, #0x20]
                	sub	x0, x29, #0x28
                	mov	x1, #0x5                // =5
                	fmov	d0, x2

@@ -56,8 +56,7 @@ Disassembly of section .text:
                	movss	%xmm0, (%rax,%riz)
                	jmp	<addr>
                	leaq	-0x508(%rbp), %rax
-               	addq	$0x20, %rax
-               	movss	(%rax,%riz), %xmm0
+               	movss	0x20(%rax,%riz), %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
@@ -98,4 +97,3 @@ Disassembly of section .text:
                	addq	$0x520, %rsp            # imm = 0x520
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

@@ -123,9 +123,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=11
     terminator Return(v74)   (exit_acc=v74)
   block 22  start_pc=0
     v75  LocalAddr(-4)                                    -> x0
-    v76  BinopI { op=add, lhs=v75, rhs_imm=8 }            -> x0
+    v76  BinopI { op=add, lhs=v75, rhs_imm=8 }            -> x1
     v77  Imm(4614253070214989087)                         -> x1
-    v78  Store { addr=v76, disp=0, value=v77, kind=F64 }  -> -
+    v78  Store { addr=v75, disp=8, value=v77, kind=F64 }  -> -
     v79  LocalAddr(-4)                                    -> x0
     v80  Load { addr=v79, disp=0, kind=I32 }              -> x0
     v81  BinopI { op=ne, lhs=v80, rhs_imm=1 }             -> x0

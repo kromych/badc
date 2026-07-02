@@ -138,13 +138,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x8
                	mov	x1, #0x851f             // =34079
                	movk	x1, #0x51eb, lsl #16
                	movk	x1, #0x1eb8, lsl #32
                	movk	x1, #0x4009, lsl #48
                	fmov	d16, x1
-               	str	d16, [x0]
+               	str	d16, [x0, #0x8]
                	sub	x0, x29, #0x20
                	ldrsw	x0, [x0]
                	cmp	x0, #0x1

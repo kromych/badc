@@ -27,8 +27,7 @@ Disassembly of section .text:
                	cset	x0, eq
                	cbz	x0, <addr>
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x8
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x8]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -38,8 +37,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	cbz	x2, <addr>
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x10
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x10]
                	mov	x0, #0x400000000000     // =70368744177664
                	movk	x0, #0x408a, lsl #48
                	fmov	d17, x0
@@ -50,8 +48,7 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	cbz	x1, <addr>
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x18
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x18]
                	mov	x0, #0xe00000000000     // =246290604621824
                	movk	x0, #0x4080, lsl #48
                	fmov	d17, x0
@@ -91,8 +88,7 @@ Disassembly of section .text:
                	str	d0, [x0]
                	scvtf	d0, x21
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x8
-               	str	d0, [x0]
+               	str	d0, [x0, #0x8]
                	sub	x0, x29, #0x20
                	ldr	d0, [x0]
                	mov	x0, #0x400000000000     // =70368744177664
@@ -102,8 +98,7 @@ Disassembly of section .text:
                	cset	x22, ne
                	cbnz	x22, <addr>
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x8
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x8]
                	mov	x0, #0xe00000000000     // =246290604621824
                	movk	x0, #0x4080, lsl #48
                	fmov	d17, x0
@@ -135,19 +130,15 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	str	d0, [x0]
                	sub	x0, x29, #0x40
-               	add	x0, x0, #0x8
-               	str	d0, [x0]
+               	str	d0, [x0, #0x8]
                	scvtf	d0, x20
                	sub	x0, x29, #0x40
-               	add	x0, x0, #0x10
-               	str	d0, [x0]
+               	str	d0, [x0, #0x10]
                	scvtf	d0, x21
                	sub	x0, x29, #0x40
-               	add	x0, x0, #0x18
-               	str	d0, [x0]
+               	str	d0, [x0, #0x18]
                	sub	x0, x29, #0x40
-               	add	x0, x0, #0x10
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x10]
                	mov	x0, #0x400000000000     // =70368744177664
                	movk	x0, #0x408a, lsl #48
                	fmov	d17, x0
@@ -155,8 +146,7 @@ Disassembly of section .text:
                	cset	x22, ne
                	cbnz	x22, <addr>
                	sub	x0, x29, #0x40
-               	add	x0, x0, #0x18
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x18]
                	mov	x0, #0xe00000000000     // =246290604621824
                	movk	x0, #0x4080, lsl #48
                	fmov	d17, x0
@@ -184,8 +174,7 @@ Disassembly of section .text:
                	str	d0, [x0]
                	scvtf	d0, x21
                	sub	x0, x29, #0x50
-               	add	x0, x0, #0x8
-               	str	d0, [x0]
+               	str	d0, [x0, #0x8]
                	sub	x0, x29, #0x50
                	ldr	d0, [x0]
                	mov	x0, #0x400000000000     // =70368744177664
@@ -195,8 +184,7 @@ Disassembly of section .text:
                	cset	x22, ne
                	cbnz	x22, <addr>
                	sub	x0, x29, #0x50
-               	add	x0, x0, #0x8
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x8]
                	mov	x0, #0xe00000000000     // =246290604621824
                	movk	x0, #0x4080, lsl #48
                	fmov	d17, x0
@@ -330,16 +318,13 @@ Disassembly of section .text:
                	sub	x0, x29, #0x98
                	str	d0, [x0]
                	sub	x0, x29, #0x98
-               	add	x0, x0, #0x8
-               	str	d0, [x0]
+               	str	d0, [x0, #0x8]
                	scvtf	d0, x20
                	sub	x0, x29, #0x98
-               	add	x0, x0, #0x10
-               	str	d0, [x0]
+               	str	d0, [x0, #0x10]
                	scvtf	d0, x21
                	sub	x0, x29, #0x98
-               	add	x0, x0, #0x18
-               	str	d0, [x0]
+               	str	d0, [x0, #0x18]
                	sub	x0, x29, #0x98
                	ldr	d0, [x0]
                	ldr	d1, [x0, #0x8]

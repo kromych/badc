@@ -153,11 +153,9 @@ Disassembly of section .text:
                	lsl	x3, x3, #4
                	add	x2, x2, x3
                	ldr	s1, [x2]
-               	add	x3, x2, #0x4
-               	ldr	s2, [x3]
+               	ldr	s2, [x2, #0x4]
                	fadd	s1, s1, s2
-               	add	x2, x2, #0x8
-               	ldr	s2, [x2]
+               	ldr	s2, [x2, #0x8]
                	fadd	s1, s1, s2
                	fadd	s0, s0, s1
                	str	s0, [x0]

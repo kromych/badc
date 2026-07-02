@@ -1889,3 +1889,157 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
         "the constant's bytes must land at the placed offset"
     );
 }
+
+/// A constant struct-field offset folds into the displacement of a
+/// floating-point load and store, and the AArch64 emit carries that
+/// displacement into the immediate-offset encoding. The load side used
+/// to hard-code offset 0 while the store side honored it, masked only
+/// by the fold declining FP kinds.
+#[test]
+fn aarch64_fp_access_folds_constant_displacement() {
+    use crate::c5::ir::{Inst, LoadKind, StoreKind};
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let target = Target::LinuxAarch64;
+    let program = Compiler::with_target(
+        "struct s { long tag; float f; double d; }; \
+         float rf(struct s *p) { return p->f; } \
+         double rd(struct s *p) { return p->d; } \
+         void wd(struct s *p) { p->d = p->d + 0.5; } \
+         int main(void) { return 0; }"
+            .to_string(),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+    crate::c5::codegen::passes::index_fold::run(&mut funcs);
+    let mut f32_load = false;
+    let mut f64_load = false;
+    let mut f64_store = false;
+    for inst in funcs.iter().flat_map(|f| f.insts.iter()) {
+        match inst {
+            Inst::Load {
+                disp: 8,
+                kind: LoadKind::F32,
+                ..
+            } => f32_load = true,
+            Inst::Load {
+                disp: 16,
+                kind: LoadKind::F64,
+                ..
+            } => f64_load = true,
+            Inst::Store {
+                disp: 16,
+                kind: StoreKind::F64,
+                ..
+            } => f64_store = true,
+            _ => {}
+        }
+    }
+    assert!(f32_load, "p->f must fold to Load {{ disp: 8, F32 }}");
+    assert!(f64_load, "p->d must fold to Load {{ disp: 16, F64 }}");
+    assert!(
+        f64_store,
+        "p->d = ... must fold to Store {{ disp: 16, F64 }}"
+    );
+    let obj = emit_native_with_options(
+        &program,
+        target,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        },
+    )
+    .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let words = || {
+        text.chunks_exact(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+    };
+    // Unsigned-offset FP loads/stores scale the immediate by the access
+    // width, so #8 (F32) and #16 (F64) both encode imm12 = 2. Register
+    // fields are masked out.
+    let imm2 = |w: u32, class: u32| (w & 0xFFC0_0000) == class && (w >> 10) & 0xFFF == 2;
+    assert!(
+        words().any(|w| imm2(w, 0xBD40_0000)),
+        "expected `ldr s, [xN, #8]` for the folded F32 load"
+    );
+    assert!(
+        words().any(|w| imm2(w, 0xFD40_0000)),
+        "expected `ldr d, [xN, #16]` for the folded F64 load"
+    );
+    assert!(
+        words().any(|w| imm2(w, 0xFD00_0000)),
+        "expected `str d, [xN, #16]` for the folded F64 store"
+    );
+}
+
+/// A call whose outgoing-argument area exceeds the 12-bit add/sub
+/// immediate must split the call-site SP adjustment into the
+/// shifted-12 + remainder pair, as the prologue path does. 261
+/// by-value 16-byte structs leave 257 on the AAPCS64 stack: 257 * 16 =
+/// 4112 = 4096 + 16 bytes. The raw encoder used to fold 4112 into the
+/// `lsl #12` bit and adjust SP by 65536 instead.
+#[test]
+fn aarch64_call_sp_adjust_covers_wide_outgoing_area() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let mut src = String::from("struct pair { long a; long b; };\nstatic struct pair g[261];\n");
+    src.push_str("long take(");
+    for i in 0..261 {
+        src.push_str(&format!("struct pair p{i}"));
+        src.push_str(if i < 260 { ", " } else { ");\n" });
+    }
+    src.push_str("long caller(void) { return take(");
+    for i in 0..261 {
+        src.push_str(&format!("g[{i}]"));
+        src.push_str(if i < 260 { ", " } else { "); }\n" });
+    }
+    src.push_str("int main(void) { return (int)caller(); }\n");
+    let program = Compiler::with_target(src, Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let obj = emit_native_with_options(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        },
+    )
+    .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let entry = elf_func_value(&obj, "caller").expect("caller symbol") as usize;
+    let size = elf_func_symbols(&obj)
+        .into_iter()
+        .find(|(n, _)| n == "caller")
+        .map(|(_, s)| s as usize)
+        .expect("caller size");
+    let body = &text[entry..(entry + size).min(text.len())];
+    let words: alloc::vec::Vec<u32> = body
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+    // 4112 bytes split as `sub sp, sp, #1, lsl #12` + `sub sp, sp, #16`
+    // and restore with the matching adds. The caller's own frame stays
+    // below 4096, so only the call site produces the shifted forms.
+    for (word, what) in [
+        (0xD140_07FFu32, "sub sp, sp, #1, lsl #12"),
+        (0xD100_43FF, "sub sp, sp, #16"),
+        (0x9140_07FF, "add sp, sp, #1, lsl #12"),
+        (0x9100_43FF, "add sp, sp, #16"),
+    ] {
+        assert!(
+            words.contains(&word),
+            "caller must contain `{what}` ({word:#010x}) for the 4112-byte outgoing area"
+        );
+    }
+    // The raw-encoder overflow artifact: 4112 << 10 sets the shift bit
+    // and leaves imm12 = 16, i.e. a 65536-byte adjustment.
+    for word in [0xD140_43FFu32, 0x9140_43FF] {
+        assert!(
+            !words.contains(&word),
+            "caller must not adjust SP by 65536 (mis-encoded 4112): {word:#010x}"
+        );
+    }
+}

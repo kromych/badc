@@ -695,24 +695,18 @@ pub(crate) fn enc_mrs_tpidr_el0(rt: Reg) -> u32 {
 
 /// `LDR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/8`; the
-/// caller passes raw bytes (must be multiple of 8 in 0..32760).
-/// Used by the variadic-FP packer to pull a c5-stack slot
-/// straight into a `dN` register before a libc call.
+/// caller passes raw bytes (a multiple of 8, up to 32760).
 pub(crate) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(dt < 32);
-    debug_assert!(imm.is_multiple_of(8) && imm < 32760);
-    0xFD40_0000 | ((imm / 8) << 10) | ((rn.0 as u32) << 5) | (dt as u32)
+    enc_ldst_scaled(0xFD40_0000, 3, Reg(dt), rn, imm)
 }
 
 /// `LDR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
-/// load. The offset is byte-addressed but encoded as `imm/4`;
-/// caller passes raw bytes (must be multiple of 4 in 0..16380).
-/// Used by [`LoadKind::F32`] to load a `float`-typed lvalue's storage
-/// directly into the `sN` half of `dN` before the widening fcvt.
+/// load. The offset is byte-addressed but encoded as `imm/4`; the
+/// caller passes raw bytes (a multiple of 4, up to 16380).
 pub(crate) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(st < 32);
-    debug_assert!(imm.is_multiple_of(4) && imm < 16380);
-    0xBD40_0000 | ((imm / 4) << 10) | ((rn.0 as u32) << 5) | (st as u32)
+    enc_ldst_scaled(0xBD40_0000, 2, Reg(st), rn, imm)
 }
 
 /// `STR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
@@ -720,17 +714,14 @@ pub(crate) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
 /// to the `StoreKind::F32` lowering.
 pub(crate) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(st < 32);
-    debug_assert!(imm.is_multiple_of(4) && imm < 16380);
-    0xBD00_0000 | ((imm / 4) << 10) | ((rn.0 as u32) << 5) | (st as u32)
+    enc_ldst_scaled(0xBD00_0000, 2, Reg(st), rn, imm)
 }
 
 /// `STR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
-/// store, the partner of [`enc_ldr_d_imm`]. Used by the AArch64
-/// setjmp intrinsic to spill d8-d15 into the user's `jmp_buf`.
+/// store, the partner of [`enc_ldr_d_imm`].
 pub(crate) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(dt < 32);
-    debug_assert!(imm.is_multiple_of(8) && imm < 32760);
-    0xFD00_0000 | ((imm / 8) << 10) | ((rn.0 as u32) << 5) | (dt as u32)
+    enc_ldst_scaled(0xFD00_0000, 3, Reg(dt), rn, imm)
 }
 
 /// `ADR <Xd>, label` -- compute a PC-relative byte address (signed

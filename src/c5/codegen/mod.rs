@@ -43,7 +43,7 @@ pub(crate) mod aarch64;
 #[allow(dead_code)]
 pub(crate) mod abi_classify;
 mod jit;
-mod passes;
+pub(crate) mod passes;
 pub(crate) mod ssa;
 pub(crate) mod x86_64;
 
@@ -551,7 +551,10 @@ pub(super) fn plan_call_args_aggs(
             placements.push(placement);
             continue;
         }
-        let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
+        // The walker's mask covers the first 32 arguments; later
+        // positions read as integer-classed, matching the producer's
+        // bound (an unguarded shift by i >= 32 overflows).
+        let is_fp = i < 32 && (fp_arg_mask & (1u32 << i)) != 0;
         let is_variadic = i >= fixed_args;
         let force_stack = is_variadic && abi.variadic_on_stack;
         let allow_fp_reg = !is_variadic || !abi.variadic_int_only;

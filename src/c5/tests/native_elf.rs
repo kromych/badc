@@ -722,6 +722,9 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("va_arg_composite_straddle.c", 0),
     ("variadic_cast_fnptr_dispatch.c", 0),
     ("fcntl_lock_via_cast_fnptr.c", 0),
+    ("call_sp_adjust_imm12_overflow.c", 0),
+    ("indirect_call_target_scratch_exhausted.c", 0),
+    ("fp_load_folded_disp.c", 0),
 ];
 
 #[test]

@@ -26,6 +26,7 @@
 //! The same pass folds a constant pointer offset (a struct field offset)
 //! into the load/store displacement: a `BinopI(Add, base, c)` address
 //! with an aligned, in-range `c` becomes `Load { addr=base, disp=c }`.
+//! Unlike the scaled-index fold this covers the floating kinds too.
 //! As with the scaled-index case this fires for a shared address too --
 //! the load and store of a read-modify-write of one field fold the
 //! offset into both accesses, provided every use is a same-width access.
@@ -34,27 +35,43 @@ use alloc::vec::Vec;
 
 use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
 
-/// Access width in bytes for a load kind, or `None` for the floating
-/// kinds (the indexed emit handles integers only).
-fn load_width(kind: LoadKind) -> Option<u8> {
+/// Access width in bytes for a load kind. Used by the displacement
+/// fold, which applies to integer and floating accesses alike (the
+/// immediate-offset emit honors `disp` for every kind on both targets).
+fn load_width(kind: LoadKind) -> u8 {
     match kind {
-        LoadKind::I64 => Some(8),
-        LoadKind::I32 | LoadKind::U32 => Some(4),
-        LoadKind::I16 | LoadKind::U16 => Some(2),
-        LoadKind::I8 | LoadKind::U8 => Some(1),
-        LoadKind::F32 | LoadKind::F64 => None,
+        LoadKind::I64 | LoadKind::F64 => 8,
+        LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I8 | LoadKind::U8 => 1,
     }
 }
 
-/// Access width in bytes for a store kind, or `None` for the floating
-/// kinds.
-fn store_width(kind: StoreKind) -> Option<u8> {
+/// Access width in bytes for a store kind. See [`load_width`].
+fn store_width(kind: StoreKind) -> u8 {
     match kind {
-        StoreKind::I64 => Some(8),
-        StoreKind::I32 => Some(4),
-        StoreKind::I16 => Some(2),
-        StoreKind::I8 => Some(1),
+        StoreKind::I64 | StoreKind::F64 => 8,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+    }
+}
+
+/// [`load_width`] restricted to the integer kinds, `None` for the
+/// floating kinds (the indexed emit handles integers only).
+fn int_load_width(kind: LoadKind) -> Option<u8> {
+    match kind {
+        LoadKind::F32 | LoadKind::F64 => None,
+        k => Some(load_width(k)),
+    }
+}
+
+/// [`store_width`] restricted to the integer kinds; the scaled-index
+/// emit and the narrowing-store rewrite apply to integer values only.
+fn int_store_width(kind: StoreKind) -> Option<u8> {
+    match kind {
         StoreKind::F32 | StoreKind::F64 => None,
+        k => Some(store_width(k)),
     }
 }
 
@@ -134,14 +151,14 @@ fn foldable_scaled_addresses(
                 disp: 0,
                 kind,
                 volatile: false,
-            } => (*addr, load_width(*kind)),
+            } => (*addr, int_load_width(*kind)),
             Inst::Store {
                 addr,
                 disp: 0,
                 kind,
                 volatile: false,
                 ..
-            } => (*addr, store_width(*kind)),
+            } => (*addr, int_store_width(*kind)),
             _ => continue,
         };
         if let Some(&(_, _, scale)) = cand.get(&addr)
@@ -199,7 +216,7 @@ fn foldable_displaced_addresses(
         alloc::collections::BTreeMap::new();
     let mut valid: alloc::collections::BTreeMap<ValueId, u32> = alloc::collections::BTreeMap::new();
     for inst in &func.insts {
-        let (addr, width) = match inst {
+        let (addr, w) = match inst {
             Inst::Load {
                 addr,
                 disp: 0,
@@ -215,9 +232,9 @@ fn foldable_displaced_addresses(
             } => (*addr, store_width(*kind)),
             _ => continue,
         };
-        let (Some(w), true) = (width, cand.contains_key(&addr)) else {
+        if !cand.contains_key(&addr) {
             continue;
-        };
+        }
         let seen = width_seen.entry(addr).or_insert(0);
         *seen = if *seen == 0 || *seen == w { w } else { 0xff };
         *valid.entry(addr).or_insert(0) += 1;
@@ -292,7 +309,7 @@ fn narrow_store_values(func: &mut FunctionSsa) {
     let n = func.insts.len();
     for idx in 0..n {
         let (value, width) = match &func.insts[idx] {
-            Inst::Store { value, kind, .. } => match store_width(*kind) {
+            Inst::Store { value, kind, .. } => match int_store_width(*kind) {
                 Some(w) => (*value, w),
                 None => continue,
             },
@@ -324,29 +341,29 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     kind,
                     volatile: false,
                 } => {
-                    if let Some(width) = load_width(*kind) {
-                        if let Some(&(base, index, scale)) = scaled.get(addr) {
-                            debug_assert_eq!(scale, width);
-                            rewrites.push((
-                                idx,
-                                Inst::LoadIndexed {
-                                    base,
-                                    index,
-                                    scale,
-                                    kind: *kind,
-                                },
-                            ));
-                        } else if let Some(&(base, disp)) = displaced.get(addr) {
-                            rewrites.push((
-                                idx,
-                                Inst::Load {
-                                    addr: base,
-                                    disp,
-                                    kind: *kind,
-                                    volatile: false,
-                                },
-                            ));
-                        }
+                    if let (Some(width), Some(&(base, index, scale))) =
+                        (int_load_width(*kind), scaled.get(addr))
+                    {
+                        debug_assert_eq!(scale, width);
+                        rewrites.push((
+                            idx,
+                            Inst::LoadIndexed {
+                                base,
+                                index,
+                                scale,
+                                kind: *kind,
+                            },
+                        ));
+                    } else if let Some(&(base, disp)) = displaced.get(addr) {
+                        rewrites.push((
+                            idx,
+                            Inst::Load {
+                                addr: base,
+                                disp,
+                                kind: *kind,
+                                volatile: false,
+                            },
+                        ));
                     }
                 }
                 Inst::Store {
@@ -356,31 +373,31 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     kind,
                     volatile: false,
                 } => {
-                    if let Some(width) = store_width(*kind) {
-                        if let Some(&(base, index, scale)) = scaled.get(addr) {
-                            debug_assert_eq!(scale, width);
-                            rewrites.push((
-                                idx,
-                                Inst::StoreIndexed {
-                                    base,
-                                    index,
-                                    scale,
-                                    value: *value,
-                                    kind: *kind,
-                                },
-                            ));
-                        } else if let Some(&(base, disp)) = displaced.get(addr) {
-                            rewrites.push((
-                                idx,
-                                Inst::Store {
-                                    addr: base,
-                                    disp,
-                                    value: *value,
-                                    kind: *kind,
-                                    volatile: false,
-                                },
-                            ));
-                        }
+                    if let (Some(width), Some(&(base, index, scale))) =
+                        (int_store_width(*kind), scaled.get(addr))
+                    {
+                        debug_assert_eq!(scale, width);
+                        rewrites.push((
+                            idx,
+                            Inst::StoreIndexed {
+                                base,
+                                index,
+                                scale,
+                                value: *value,
+                                kind: *kind,
+                            },
+                        ));
+                    } else if let Some(&(base, disp)) = displaced.get(addr) {
+                        rewrites.push((
+                            idx,
+                            Inst::Store {
+                                addr: base,
+                                disp,
+                                value: *value,
+                                kind: *kind,
+                                volatile: false,
+                            },
+                        ));
                     }
                 }
                 _ => {}

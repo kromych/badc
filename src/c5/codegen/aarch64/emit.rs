@@ -3427,9 +3427,7 @@ fn emit_call_ext(
     // argument-register packing.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_sub_sp_imm(code, plan.scratch_bytes);
     if !marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
     ) {
@@ -3481,9 +3479,7 @@ fn emit_call_ext(
         });
         emit(code, enc_bl(0));
     }
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_add_sp_imm(code, plan.scratch_bytes);
     if ret_agg.is_some() {
         finish_call_result(
             code,
@@ -3632,9 +3628,7 @@ fn emit_call(
         //    the areas then the overflow stack.
         let plan =
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
-        if plan.scratch_bytes > 0 {
-            emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
-        }
+        emit_sub_sp_imm(code, plan.scratch_bytes);
         if !marshal_args(
             code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
         ) {
@@ -3652,9 +3646,7 @@ fn emit_call(
             kind: BranchKind::Bl,
         });
         emit(code, enc_bl(0));
-        if plan.scratch_bytes > 0 {
-            emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-        }
+        emit_add_sp_imm(code, plan.scratch_bytes);
         finish_call_result(
             code,
             ret_agg,
@@ -3683,9 +3675,7 @@ fn emit_call(
     // integer register as its `Imm` bit pattern. Feeding the mask to
     // the planner routes the FP args to d0..d7 instead of x0..x7.
     let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_sub_sp_imm(code, plan.scratch_bytes);
     if !marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
     ) {
@@ -3701,9 +3691,7 @@ fn emit_call(
         kind: BranchKind::Bl,
     });
     emit(code, enc_bl(0));
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_add_sp_imm(code, plan.scratch_bytes);
     finish_call_result(
         code,
         ret_agg,
@@ -3871,10 +3859,8 @@ fn emit_call_indirect(
     // for this call. AAPCS64 doesn't assign these scratch
     // registers to int-arg slots, but the SSA allocator's
     // caller-saved pool includes them and may park an arg's
-    // source value in one. The target stage must avoid that
-    // register; otherwise the materialise below overwrites the
-    // arg's source before the marshal can push it onto the
-    // c5-stride stack.
+    // source value in one. The target stage must avoid those
+    // registers while the marshal still reads them.
     let mut arg_source_regs: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(args.len());
     for &a in args {
         if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
@@ -3884,24 +3870,17 @@ fn emit_call_indirect(
     // Capture the function pointer into a caller-saved scratch
     // disjoint from the arg sources. Prefer x9, then x10..x15 --
     // none are arg-passing registers per AAPCS64, so they are
-    // safe to clobber via the blr. The blr happens before the
-    // callee can observe the scratch, so the value reaches the
-    // indirect branch intact regardless of which scratch holds
-    // it.
+    // safe to clobber via the blr. When every candidate holds an
+    // arg source the marshal still reads, the host-ABI branch
+    // stages the pointer in a reserved stack cell instead, and the
+    // c5-stack branch captures after its pushes have consumed the
+    // sources; a blind fallback here overwrote a live source.
     const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
-    let target_reg_idx = TARGET_SCRATCH_CANDIDATES
+    let free_target_reg = TARGET_SCRATCH_CANDIDATES
         .iter()
         .copied()
         .find(|r| !arg_source_regs.contains(r))
-        .unwrap_or(9);
-    let target_reg = Reg(target_reg_idx);
-    let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
-        Some(r) => r,
-        None => return false,
-    };
-    if target_r.0 != target_reg.0 {
-        emit_mov_reg(code, target_reg, target_r);
-    }
+        .map(Reg);
     if (callee_variadic
         && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()))
         || !aggs.is_empty()
@@ -3917,13 +3896,41 @@ fn emit_call_indirect(
         // stack (Windows arm64, `variadic_int_only`), or both banks then
         // the stack (Linux aarch64, `aarch64_host_variadic`) -- the same
         // placement `emit_call` uses for a direct variadic call. The
-        // target pointer is already captured in `target_reg` (a
-        // non-arg-passing scratch), so `marshal_args` will not clobber
-        // it. `blr` through the captured register.
-        let plan =
+        // target pointer rides a non-arg-passing scratch that
+        // `marshal_args` will not clobber, or a reserved stack cell
+        // above the argument slots when no such scratch is free.
+        let mut plan =
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
-        if plan.scratch_bytes > 0 {
-            emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
+        let staged_off = match free_target_reg {
+            Some(_) => None,
+            None => {
+                // One 16-byte cell keeps SP 16-aligned; the argument
+                // slots stay below the original scratch_bytes.
+                plan.scratch_bytes += 16;
+                Some(plan.scratch_bytes - 16)
+            }
+        };
+        let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        let target_reg = match free_target_reg {
+            Some(r) => {
+                if target_r.0 != r.0 {
+                    emit_mov_reg(code, r, target_r);
+                }
+                r
+            }
+            None => {
+                if target_r.0 != scratch.primary.0 {
+                    emit_mov_reg(code, scratch.primary, target_r);
+                }
+                scratch.primary
+            }
+        };
+        emit_sub_sp_imm(code, plan.scratch_bytes);
+        if let Some(off) = staged_off {
+            emit_sp_str_x_auto(code, target_reg, off);
         }
         if !marshal_args(
             code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
@@ -3931,10 +3938,17 @@ fn emit_call_indirect(
             return false;
         }
         setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
-        emit(code, enc_blr(target_reg));
-        if plan.scratch_bytes > 0 {
-            emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-        }
+        // The marshal consumed every argument source, so x9 is free
+        // to carry the staged pointer to the blr.
+        let call_reg = match staged_off {
+            Some(off) => {
+                emit_sp_ldr_x(code, Reg(9), off);
+                Reg(9)
+            }
+            None => target_reg,
+        };
+        emit(code, enc_blr(call_reg));
+        emit_add_sp_imm(code, plan.scratch_bytes);
         finish_call_result(
             code,
             ret_agg,
@@ -3984,6 +3998,17 @@ fn emit_call_indirect(
         emit(code, enc_str_pre(src, Reg(31), -16));
     }
     let pushed_bytes = (args.len() as u32) * 16;
+    // The pushes consumed every argument source, so x9 holds no live
+    // value; capture the pointer here, with SP shifted by the pushes.
+    let target_reg = Reg(9);
+    let target_r =
+        match materialize_int_shifted(code, target_place, target_reg, frame, pushed_bytes) {
+            Some(r) => r,
+            None => return false,
+        };
+    if target_r.0 != target_reg.0 {
+        emit_mov_reg(code, target_reg, target_r);
+    }
     // Load the prefix into host arg regs from the c5-stride
     // stack we just laid down. Non-variadic callees expect this
     // shape; variadic callees ignore the host arg regs but read
@@ -3992,9 +4017,7 @@ fn emit_call_indirect(
     // past 8) stays on the c5 stack at `[sp + i*16]`, which the
     // callee prologue's overflow restripe loop also reads from.
     let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_sub_sp_imm(code, plan.scratch_bytes);
     for (i, &placement) in plan.placements.iter().enumerate() {
         match placement {
             super::ArgPlacement::IntReg(r) => {
@@ -4021,13 +4044,9 @@ fn emit_call_indirect(
         }
     }
     emit(code, enc_blr(target_reg));
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
+    emit_add_sp_imm(code, plan.scratch_bytes);
     // Drop the 16-byte-stride argument pushes.
-    if pushed_bytes > 0 {
-        emit(code, enc_add_imm(Reg(31), Reg(31), pushed_bytes));
-    }
+    emit_add_sp_imm(code, pushed_bytes);
     move_call_result(code, dst, frame, fp_return);
     true
 }
@@ -4578,7 +4597,7 @@ fn emit_load(
                 return false;
             }
         };
-        emit(code, enc_ldr_s_imm(dd, rn, 0));
+        emit(code, enc_ldr_s_imm(dd, rn, disp));
         if !keep_f32 {
             emit(code, enc_fcvt_d_s(dd, dd));
         }
@@ -4598,7 +4617,7 @@ fn emit_load(
                 return false;
             }
         };
-        emit(code, enc_ldr_d_imm(dd, rn, 0));
+        emit(code, enc_ldr_d_imm(dd, rn, disp));
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
             emit_sp_str_d_auto(code, dd, sp_off);

@@ -1484,6 +1484,12 @@ pub(super) fn write(
         };
         import_versym[i] = idx;
     }
+    // Version names extend `.dynstr` past `build_dynstr`'s pad; re-pad
+    // so the sections laid out from `dynstr.len()` (`.hash`,
+    // `.gnu.version`) stay congruent with their claimed sh_addralign.
+    while !dynstr.len().is_multiple_of(8) {
+        dynstr.push(0);
+    }
     let has_versions = !verneed_groups.is_empty();
     // Two extra allocated sections (.gnu.version / .gnu.version_r) precede
     // .rela.dyn when has_versions, shifting .text onward by two. Symbols

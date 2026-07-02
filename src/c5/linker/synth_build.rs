@@ -198,7 +198,7 @@ fn synth_program_and_build(
             pc_to_native.resize(pc + 1, usize::MAX);
         }
         pc_to_native[pc] = pc;
-        if let Some(&post_native) = merged.prologue_ends.get(name) {
+        if let Some(&post_native) = merged.prologue_ends.get(&(pc as u64)) {
             func_prologue_native.insert(pc, post_native as usize);
         }
     }
@@ -213,7 +213,7 @@ fn synth_program_and_build(
             pc_to_native.resize(pc + 1, usize::MAX);
         }
         pc_to_native[pc] = pc;
-        if let Some(&post_native) = merged.prologue_ends.get(name) {
+        if let Some(&post_native) = merged.prologue_ends.get(&(pc as u64)) {
             func_prologue_native.insert(pc, post_native as usize);
         }
     }

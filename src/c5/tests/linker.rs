@@ -1751,3 +1751,268 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
         "push rbx (callee-saved, clobbered by cpuid) must be saved"
     );
 }
+
+#[test]
+fn same_named_statics_keep_their_own_prologue_anchor() {
+    // The post-prologue anchor map is keyed by the function's merged
+    // entry offset. Name-keying handed a later unit's same-named
+    // static the first unit's anchor, describing a framed function as
+    // frameless in the Win-x64 .pdata / DWARF CFA output.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let compile = |src: &str| {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL")
+    };
+    let a = compile(
+        "static int helper(int x) { int buf[16]; buf[0] = x; return buf[0] + 1; }\n\
+         int call_a(int x) { return helper(x); }\n",
+    );
+    let b = compile(
+        "static int helper(int x) { int buf[32]; buf[1] = x; return buf[1] + 2; }\n\
+         int call_b(int x) { return helper(x); }\n",
+    );
+    let merged = link_native_objects(&[a, b]).expect("link");
+    let helpers: alloc::vec::Vec<u64> = merged
+        .local_funcs
+        .iter()
+        .filter(|(n, _)| n == "helper")
+        .map(|(_, off)| *off)
+        .collect();
+    assert_eq!(helpers.len(), 2, "both statics survive: {helpers:?}");
+    let mut posts = alloc::vec::Vec::new();
+    for entry in &helpers {
+        let post = merged
+            .prologue_ends
+            .get(entry)
+            .unwrap_or_else(|| panic!("anchor for helper at 0x{entry:x} missing"));
+        assert!(
+            post > entry,
+            "post-prologue 0x{post:x} must lie past the entry 0x{entry:x}"
+        );
+        posts.push(*post);
+    }
+    assert_ne!(posts[0], posts[1], "each static keeps its own anchor");
+}
+
+#[test]
+fn unrouted_weak_undef_resolves_to_zero() {
+    // ELF behavior: a weak reference nothing on the link line
+    // satisfies resolves to address 0 -- not a required import
+    // against the first dylib. The call becomes a no-op, the
+    // address-of reads null, and a pointer initializer slot holds 0.
+    use crate::c5::linker::object::{NativeReloc, NativeSymbol};
+    use crate::c5::linker::{NativeMachine, NativeSymSection, link_native_objects};
+    let null_sym = || NativeSymbol {
+        name: String::new(),
+        section: NativeSymSection::Undef,
+        value: 0,
+        size: 0,
+        binding: 0,
+        kind: 0,
+    };
+    let weak_undef = || NativeSymbol {
+        name: "hook".to_string(),
+        section: NativeSymSection::Undef,
+        value: 0,
+        size: 0,
+        binding: 2, // STB_WEAK
+        kind: 0,
+    };
+    let mk = |machine: NativeMachine,
+              text: alloc::vec::Vec<u8>,
+              data: alloc::vec::Vec<u8>,
+              text_relocs: alloc::vec::Vec<NativeReloc>,
+              data_relocs: alloc::vec::Vec<NativeReloc>| {
+        crate::c5::linker::NativeObject {
+            machine,
+            text,
+            data,
+            data_align: 8,
+            bss_size: 0,
+            tls_data: alloc::vec::Vec::new(),
+            tls_bss_size: 0,
+            symbols: alloc::vec![null_sym(), weak_undef()],
+            text_relocs,
+            data_relocs,
+            dylibs: alloc::vec::Vec::new(),
+            import_dylib_map: alloc::vec::Vec::new(),
+            exports: alloc::vec::Vec::new(),
+            tls_index_fixups: alloc::vec::Vec::new(),
+            macho_tlv_descriptors: alloc::vec::Vec::new(),
+            macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
+            debug_info: alloc::vec::Vec::new(),
+            debug_abbrev: alloc::vec::Vec::new(),
+            debug_line: alloc::vec::Vec::new(),
+            debug_str: alloc::vec::Vec::new(),
+            debug_info_relocs: alloc::vec::Vec::new(),
+            debug_line_relocs: alloc::vec::Vec::new(),
+        }
+    };
+
+    // x86_64: `lea rax, [rip+hook]` (R_X86_64_PC32) then `call hook`
+    // (R_X86_64_PLT32), plus a `.data` pointer slot (R_X86_64_64).
+    let x64 = mk(
+        NativeMachine::X86_64,
+        alloc::vec![
+            0x48, 0x8D, 0x05, 0, 0, 0, 0, // lea rax, [rip+0]
+            0xE8, 0, 0, 0, 0, // call rel32
+        ],
+        alloc::vec![0u8; 8],
+        alloc::vec![
+            NativeReloc {
+                offset: 3,
+                sym_idx: 1,
+                rtype: 2, // R_X86_64_PC32
+                addend: -4,
+            },
+            NativeReloc {
+                offset: 8,
+                sym_idx: 1,
+                rtype: 4, // R_X86_64_PLT32
+                addend: -4,
+            },
+        ],
+        alloc::vec![NativeReloc {
+            offset: 0,
+            sym_idx: 1,
+            rtype: 1, // R_X86_64_64
+            addend: 0,
+        }],
+    );
+    let merged = link_native_objects(&[x64]).expect("weak undef links");
+    assert!(
+        merged.imports.is_empty(),
+        "no import for an unresolved weak ref: {:?}",
+        merged.imports
+    );
+    assert_eq!(
+        &merged.text[0..7],
+        &[0x48, 0xC7, 0xC0, 0, 0, 0, 0],
+        "lea rewritten to mov rax, 0"
+    );
+    assert_eq!(
+        &merged.text[7..12],
+        &[0x0F, 0x1F, 0x44, 0x00, 0x00],
+        "call rewritten to a 5-byte nop"
+    );
+    assert_eq!(&merged.data[0..8], &[0u8; 8], "pointer slot holds null");
+
+    // aarch64: `adrp x0, hook` + `add x0, x0, :lo12:hook` + `bl hook`.
+    let a64 = mk(
+        NativeMachine::Aarch64,
+        alloc::vec![
+            0x00, 0x00, 0x00, 0x90, // adrp x0, 0
+            0x00, 0x00, 0x00, 0x91, // add x0, x0, #0
+            0x00, 0x00, 0x00, 0x94, // bl 0
+        ],
+        alloc::vec::Vec::new(),
+        alloc::vec![
+            NativeReloc {
+                offset: 0,
+                sym_idx: 1,
+                rtype: 275, // R_AARCH64_ADR_PREL_PG_HI21
+                addend: 0,
+            },
+            NativeReloc {
+                offset: 4,
+                sym_idx: 1,
+                rtype: 277, // R_AARCH64_ADD_ABS_LO12_NC
+                addend: 0,
+            },
+            NativeReloc {
+                offset: 8,
+                sym_idx: 1,
+                rtype: 283, // R_AARCH64_CALL26
+                addend: 0,
+            },
+        ],
+        alloc::vec::Vec::new(),
+    );
+    let merged = link_native_objects(&[a64]).expect("weak undef links");
+    assert!(merged.imports.is_empty(), "{:?}", merged.imports);
+    let word = |i: usize| u32::from_le_bytes(merged.text[i..i + 4].try_into().unwrap());
+    assert_eq!(word(0), 0xd280_0000, "adrp rewritten to movz x0, #0");
+    assert_eq!(word(4), 0xd503_201f, "add pair half becomes a nop");
+    assert_eq!(word(8), 0xd503_201f, "bl becomes a nop");
+}
+
+#[test]
+fn elf_section_offsets_respect_their_claimed_alignment() {
+    // gABI: `sh_addr` (and the file offset for SHF_ALLOC sections)
+    // must be congruent to 0 modulo `sh_addralign`. Version-name
+    // strings appended to `.dynstr` after its pad used to leave
+    // `.hash` / `.gnu.version` misaligned; the check runs over every
+    // section so any future layout drift is caught. Version sections
+    // only appear when the build host's libc yields versioned imports.
+    use crate::c5::linker::{
+        emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         int main(void) {{ printf(\"x\"); return 0; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::LinuxAarch64,
+        None,
+    )
+    .expect("write executable");
+    let shoff = u64::from_le_bytes(exe[0x28..0x30].try_into().unwrap()) as usize;
+    let shentsize = u16::from_le_bytes(exe[0x3a..0x3c].try_into().unwrap()) as usize;
+    let shnum = u16::from_le_bytes(exe[0x3c..0x3e].try_into().unwrap()) as usize;
+    assert!(shnum > 0, "executable must carry section headers");
+    const SHT_NOBITS: u32 = 8;
+    for i in 0..shnum {
+        let base = shoff + i * shentsize;
+        let sh_type = u32::from_le_bytes(exe[base + 4..base + 8].try_into().unwrap());
+        let sh_addr = u64::from_le_bytes(exe[base + 16..base + 24].try_into().unwrap());
+        let sh_offset = u64::from_le_bytes(exe[base + 24..base + 32].try_into().unwrap());
+        let sh_addralign = u64::from_le_bytes(exe[base + 48..base + 56].try_into().unwrap());
+        if sh_addralign <= 1 {
+            continue;
+        }
+        assert_eq!(
+            sh_addr % sh_addralign,
+            0,
+            "section {i} sh_addr 0x{sh_addr:x} violates sh_addralign {sh_addralign}"
+        );
+        if sh_type != SHT_NOBITS {
+            assert_eq!(
+                sh_offset % sh_addralign,
+                0,
+                "section {i} sh_offset 0x{sh_offset:x} violates sh_addralign {sh_addralign}"
+            );
+        }
+    }
+}

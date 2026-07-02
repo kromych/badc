@@ -161,8 +161,10 @@ pub struct MergedNative {
     /// the result in little-endian over `width` bytes.
     pub debug_info_text_relocs: Vec<DebugTextReloc>,
     pub debug_line_text_relocs: Vec<DebugTextReloc>,
-    /// Per-function post-prologue byte offset in [`Self::text`].
-    /// Sourced from the writer's synthetic
+    /// Post-prologue byte offset in [`Self::text`], keyed by the
+    /// function's merged entry offset (name-keying would collapse
+    /// same-named statics across units onto one anchor). Sourced
+    /// from the writer's synthetic
     /// `.Lc5_prologue_end_<funcname>` STB_LOCAL STT_NOTYPE symbols
     /// (see `elf_reloc::PROLOGUE_END_PREFIX`), rebased by the
     /// per-unit text base. The synth path consults this to
@@ -170,7 +172,7 @@ pub struct MergedNative {
     /// `dwarf::build_debug_frame` emits
     /// `DW_CFA_advance_loc <prologue_size>` ahead of the
     /// post-prologue CFA rule.
-    pub prologue_ends: BTreeMap<String, u64>,
+    pub prologue_ends: BTreeMap<u64, u64>,
     /// Defined `STT_FUNC STB_LOCAL` (static) functions as
     /// `(name, merged_text_offset)`, rebased by the per-unit text base.
     /// Kept as a flat list separate from `defined` -- which is
@@ -378,9 +380,18 @@ pub fn link_native_objects_with_options(
         data_align = data_align.max(obj.data_align);
         data_bases.push(data.len());
         data.extend_from_slice(&obj.data);
-        bss_size = align_usize(bss_size, 8);
+        // Each unit's bss offsets carry an alignment residue modulo 16
+        // (the `.bss` sh_addralign the per-unit writer claims); a
+        // 16-aligned unit base preserves it.
+        bss_size = align_usize(bss_size, 16);
         bss_bases.push(bss_size);
         bss_size += obj.bss_size;
+    }
+    // The merged bss region begins at `data.len()` in the unified
+    // data-offset space; pad the file image so bss offsets keep their
+    // per-unit alignment residues in the final image.
+    if bss_size > 0 {
+        align_up(&mut data, data_align.max(16));
     }
 
     // Pass 2 -- defined symbols. Every `STB_GLOBAL` symbol that
@@ -447,10 +458,12 @@ pub fn link_native_objects_with_options(
     // STB_LOCAL STT_NOTYPE symbol per function at the post-
     // prologue native byte offset, named with the
     // `PROLOGUE_END_PREFIX` prefix; rebase its value by the
-    // unit's text base and key it on the source function name
-    // (the suffix). Duplicate names lose to the first writer
-    // (matches the `defined` rule for STB_GLOBAL above).
-    let mut prologue_ends: BTreeMap<String, u64> = BTreeMap::new();
+    // unit's text base and key it on the *same unit's* function
+    // entry offset. Name-keying would hand a later unit's
+    // same-named static the first unit's anchor, describing a
+    // framed function as frameless in the Win-x64 .pdata / DWARF
+    // CFA output.
+    let mut prologue_ends: BTreeMap<u64, u64> = BTreeMap::new();
     for (i, obj) in objs.iter().enumerate() {
         for sym in &obj.symbols {
             if !matches!(sym.section, NativeSymSection::Text) {
@@ -462,10 +475,16 @@ pub fn link_native_objects_with_options(
             if fn_name.is_empty() {
                 continue;
             }
-            let merged_offset = text_bases[i] as u64 + sym.value;
-            prologue_ends
-                .entry(fn_name.to_string())
-                .or_insert(merged_offset);
+            // STT_FUNC = 2.
+            let Some(fsym) = obj.symbols.iter().find(|s| {
+                s.kind == 2 && matches!(s.section, NativeSymSection::Text) && s.name == fn_name
+            }) else {
+                continue;
+            };
+            prologue_ends.insert(
+                text_bases[i] as u64 + fsym.value,
+                text_bases[i] as u64 + sym.value,
+            );
         }
     }
 
@@ -551,6 +570,15 @@ pub fn link_native_objects_with_options(
     // (Mach-O). The PLT pass consults this to skip stub creation.
     let mut data_import_indices: alloc::collections::BTreeSet<usize> =
         alloc::collections::BTreeSet::new();
+    // Names with dylib routing from any unit's binding map. The c5 `.o`
+    // writer emits its libc imports as STB_WEAK UNDEF paired with a map
+    // entry; a weak UNDEF *without* routing is a genuine unresolved weak
+    // reference (typically from a foreign object) and resolves to
+    // address 0 per ELF practice rather than becoming a required import.
+    let routed_import_names: alloc::collections::BTreeSet<&str> = objs
+        .iter()
+        .flat_map(|o| o.import_dylib_map.iter().map(|(n, _)| n.as_str()))
+        .collect();
     let record_import = |name: &str,
                          imports: &mut Vec<String>,
                          idx_for_name: &mut BTreeMap<String, usize>|
@@ -697,6 +725,23 @@ pub fn link_native_objects_with_options(
                         // so the writer binds the host symbol through the GOT,
                         // rather than rejecting it as unresolved.
                         let is_data_binding = data_binding_locals.contains(&sym.name);
+                        // STB_WEAK = 2. An unresolved weak reference with
+                        // no dylib routing resolves to address 0 (C
+                        // practice; ELF leaves the symbol 0 so the
+                        // `if (fn) fn();` guard idiom skips the call).
+                        if sym.binding == 2
+                            && !is_data_binding
+                            && !routed_import_names.contains(sym.name.as_str())
+                        {
+                            resolve_weak_undef_to_zero(
+                                machine,
+                                &mut text,
+                                patch_offset,
+                                reloc,
+                                &sym.name,
+                            )?;
+                            continue;
+                        }
                         if sym.binding == 1 && !allow_undefined && !is_data_binding {
                             return Err(link_err(&format!(
                                 "undefined reference to `{}`",
@@ -898,12 +943,33 @@ pub fn link_native_objects_with_options(
                     // Pass 2.5 and join `defined` with section
                     // == Bss; the lookup is the same as for an
                     // Undef cross-unit reference.
-                    defined.get(&sym.name).map(|d| d.section).ok_or_else(|| {
-                        link_err(&format!(
-                            "undefined reference to `{}` (data initializer)",
-                            sym.name,
-                        ))
-                    })?
+                    match defined.get(&sym.name) {
+                        Some(d) => d.section,
+                        // An unresolved weak reference in a data
+                        // initializer takes the absolute value
+                        // 0 + addend (ELF behavior); patch the
+                        // slot now, no reloc survives.
+                        None if sym.binding == 2
+                            && !routed_import_names.contains(sym.name.as_str()) =>
+                        {
+                            let slot = slot_offset as usize;
+                            if slot + 8 > data.len() {
+                                return Err(err(&format!(
+                                    "weak data reloc slot 0x{slot:x} past end of data (len {})",
+                                    data.len(),
+                                )));
+                            }
+                            data[slot..slot + 8]
+                                .copy_from_slice(&(reloc.addend as u64).to_le_bytes());
+                            continue;
+                        }
+                        None => {
+                            return Err(link_err(&format!(
+                                "undefined reference to `{}` (data initializer)",
+                                sym.name,
+                            )));
+                        }
+                    }
                 }
                 NativeSymSection::Tls => {
                     return Err(link_err(&format!(
@@ -1574,6 +1640,96 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
 }
 
 // ---- Reloc application ----
+
+/// Resolve a reference to an unresolved STB_WEAK UNDEF symbol to
+/// address 0 (ELF behavior for a weak reference nothing on the link
+/// line satisfies). A branch becomes a no-op, matching the GNU
+/// linkers' AArch64 handling of branches to undefined weak symbols;
+/// an address-materializing instruction is rewritten to produce the
+/// constant 0 so the `if (fn) fn();` guard idiom reads a null
+/// pointer. Instruction shapes outside the supported set are a
+/// diagnostic, never a silent import.
+fn resolve_weak_undef_to_zero(
+    machine: NativeMachine,
+    text: &mut [u8],
+    patch_offset: usize,
+    reloc: &NativeReloc,
+    name: &str,
+) -> Result<(), C5Error> {
+    let unsupported = |what: &str| {
+        err(&format!(
+            "unresolved weak reference to `{name}`: cannot resolve {what} to address 0",
+        ))
+    };
+    if patch_offset
+        .checked_add(4)
+        .is_none_or(|end| end > text.len())
+    {
+        return Err(err(&format!(
+            "relocation patch offset 0x{patch_offset:x} past end of text (len {})",
+            text.len(),
+        )));
+    }
+    const AARCH64_NOP: u32 = 0xd503_201f;
+    match (machine, reloc.rtype) {
+        (NativeMachine::Aarch64, R_AARCH64_CALL26) => {
+            text[patch_offset..patch_offset + 4].copy_from_slice(&AARCH64_NOP.to_le_bytes());
+            Ok(())
+        }
+        (NativeMachine::Aarch64, R_AARCH64_ADR_PREL_PG_HI21) => {
+            // `adrp xd, <page>` -> `movz xd, #0`.
+            let instr =
+                u32::from_le_bytes(text[patch_offset..patch_offset + 4].try_into().unwrap());
+            let rd = instr & 0x1f;
+            let movz = 0xd280_0000 | rd;
+            text[patch_offset..patch_offset + 4].copy_from_slice(&movz.to_le_bytes());
+            Ok(())
+        }
+        (NativeMachine::Aarch64, R_AARCH64_ADD_ABS_LO12_NC) => {
+            // The pair's ADRP already produced 0 in `xn`; keep the
+            // destination 0 whether or not it aliases the source.
+            let instr =
+                u32::from_le_bytes(text[patch_offset..patch_offset + 4].try_into().unwrap());
+            let rd = instr & 0x1f;
+            let rn = (instr >> 5) & 0x1f;
+            let repl = if rd == rn {
+                AARCH64_NOP
+            } else {
+                0xd280_0000 | rd
+            };
+            text[patch_offset..patch_offset + 4].copy_from_slice(&repl.to_le_bytes());
+            Ok(())
+        }
+        (NativeMachine::X86_64, R_X86_64_PLT32) | (NativeMachine::X86_64, R_X86_64_PC32) => {
+            // `r_offset` names the disp32 field; classify by the
+            // instruction bytes ahead of it.
+            if patch_offset >= 1 && text[patch_offset - 1] == 0xE8 {
+                // `call rel32` -> 5-byte NOP (0F 1F 44 00 00).
+                text[patch_offset - 1..patch_offset + 4]
+                    .copy_from_slice(&[0x0F, 0x1F, 0x44, 0x00, 0x00]);
+                return Ok(());
+            }
+            if patch_offset >= 3
+                && (0x40..=0x4f).contains(&text[patch_offset - 3])
+                && text[patch_offset - 2] == 0x8D
+                && text[patch_offset - 1] & 0xC7 == 0x05
+            {
+                // `lea reg, [rip+disp32]` -> `mov reg, 0` (C7 /0
+                // imm32). The modrm reg field moves to rm, so the
+                // REX.R bit becomes REX.B; REX.W carries over.
+                let rex = text[patch_offset - 3];
+                let reg = (text[patch_offset - 1] >> 3) & 0x7;
+                text[patch_offset - 3] = 0x40 | (rex & 0x08) | ((rex & 0x04) >> 2);
+                text[patch_offset - 2] = 0xC7;
+                text[patch_offset - 1] = 0xC0 | reg;
+                text[patch_offset..patch_offset + 4].copy_from_slice(&[0, 0, 0, 0]);
+                return Ok(());
+            }
+            Err(unsupported("the referencing instruction"))
+        }
+        _ => Err(unsupported(&format!("reloc type {}", reloc.rtype))),
+    }
+}
 
 fn apply_reloc(
     machine: NativeMachine,

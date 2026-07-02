@@ -1264,10 +1264,10 @@ fn run() {
             }
             // A freestanding entry is a link root: seed it as undefined
             // so an archive member that only defines the entry is pulled.
-            if let Some(entry) = &freestanding_entry {
-                if !defined.contains(entry) {
-                    undefined.insert(entry.clone());
-                }
+            if let Some(entry) = &freestanding_entry
+                && !defined.contains(entry)
+            {
+                undefined.insert(entry.clone());
             }
             // The archive symbol index lists strong section-resident
             // definitions; a member is pulled on exactly those.

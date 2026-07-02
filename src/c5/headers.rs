@@ -225,7 +225,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "linux/auxvec.h",
         include_str!("../../headers/include/linux/auxvec.h"),
     ),
-    ("linux/fs.h", include_str!("../../headers/include/linux/fs.h")),
+    (
+        "linux/fs.h",
+        include_str!("../../headers/include/linux/fs.h"),
+    ),
     (
         "linux/sched.h",
         include_str!("../../headers/include/linux/sched.h"),

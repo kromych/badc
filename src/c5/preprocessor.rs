@@ -1919,21 +1919,8 @@ impl Preprocessor {
                 i += 1;
                 continue;
             }
-            // Strip `/* ... */` block comments and `// ...` line
-            // comments. They show up routinely on `#if` lines.
-            if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i = (i + 2).min(bytes.len());
-                out.push(' ');
-                continue;
-            }
-            if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'/') {
-                i = bytes.len();
-                continue;
-            }
+            // Comments were removed in phase 3; the literal-aware
+            // strip after substitution covers macro-introduced ones.
             // Match `defined` keyword (must be a complete word).
             if bytes[i..].starts_with(b"defined") {
                 let after = i + b"defined".len();
@@ -1987,11 +1974,12 @@ impl Preprocessor {
         }
         // Now expand all remaining identifiers (object + function-
         // like) via the standard substitute pass. Then strip block
-        // and line comments from the result -- macro bodies can
-        // carry inline `/* ... */` comments that survive expansion
-        // and would otherwise confuse the expression tokenizer.
+        // and line comments from the result -- driver-predefined
+        // macro bodies never went through phase 3 and can carry
+        // comments that would confuse the expression tokenizer.
+        // `strip_c_comments` keeps string and char literals intact.
         let substituted = self.substitute(&out, "<#if>", line_no);
-        strip_comments(&substituted)
+        strip_c_comments(&substituted)
     }
 
     fn eval_condition(&self, expr: &str, line_no: usize) -> Result<bool, C5Error> {
@@ -2710,8 +2698,8 @@ impl Preprocessor {
         self.finish_include(resolved, name, line_no, filename)
     }
 
-    /// Shared tail of `process_include` / `process_include_next`: warn on a
-    /// miss, honour `#pragma once`, bound the include depth, and process
+    /// Shared tail of `process_include` / `process_include_next`: error on
+    /// a miss, honour `#pragma once`, bound the include depth, and process
     /// the resolved body.
     fn finish_include(
         &mut self,
@@ -2721,19 +2709,22 @@ impl Preprocessor {
         filename: &str,
     ) -> Result<String, C5Error> {
         let Some((content, resolved_path)) = resolved else {
-            // Missing header. Push a warning into the same list
-            // the parser uses; the caller drains it through to
-            // `Program::warnings` after the compile finishes.
-            self.warnings.push(format!(
-                "{filename}:{line_no}: warning: include `{name}` not found, \
-                 dropping (no header search path or embedded header matched)"
-            ));
+            // Missing header is a hard error, as in gcc/clang: the
+            // directive cannot perform the replacement C99 6.10.2
+            // requires, and continuing with an empty body miscompiles.
             if self.show_includes {
                 let depth = self.include_stack.len() + 1;
                 self.include_trace
                     .push(format!("{} {} (missing)", "!".repeat(depth), name));
             }
-            return Ok(String::new());
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "include `{name}` not found \
+                     (no header search path or embedded header matched)"
+                ),
+            )));
         };
         // `#pragma once` dedups by the resolved path (file identity),
         // not the include spelling, so two different spellings that
@@ -2983,33 +2974,6 @@ impl Blocklist<'_> {
             }
         }
     }
-}
-
-/// Strip C-style `/* ... */` block comments and `// ...` line
-/// comments from a single-line buffer. Used on the post-macro-
-/// expansion `#if` expression where inlined comments would
-/// otherwise confuse the expression tokenizer.
-fn strip_comments(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
-            i += 2;
-            while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                i += 1;
-            }
-            i = (i + 2).min(bytes.len());
-            out.push(' ');
-            continue;
-        }
-        if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'/') {
-            break;
-        }
-        out.push(bytes[i] as char);
-        i += 1;
-    }
-    out
 }
 
 /// Phase-3 comment removal: strip `/* ... */` block comments and
@@ -3549,18 +3513,9 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     if let Some(after) = rest.strip_prefix("define") {
         let after = after.trim_start();
         let (name, rest_after_name) = split_ident(after);
-        // Strip `//` line comments from the macro body. Otherwise
-        // `#define X 42 // a constant` would expand to "42 // a
-        // constant", and the comment text would either swallow the
-        // rest of the substitution line (lexer treats `//` as
-        // line-comment) or land in the token stream and break
-        // parsing. C `/* ... */` comments inside macro bodies
-        // aren't supported elsewhere in this dialect, so we don't
-        // try to strip those.
-        let stripped = match rest_after_name.find("//") {
-            Some(i) => &rest_after_name[..i],
-            None => rest_after_name,
-        };
+        // Comments were removed in translation phase 3 (C99 5.1.1.2)
+        // before directives execute, so `//` or `/*` remaining here
+        // can only be string- or char-literal content and must stay.
         // Function-like form: name immediately followed by `(`. The
         // C standard requires no whitespace between the name and the
         // open paren -- a space turns it into an object-like macro
@@ -3568,7 +3523,7 @@ fn parse_directive(rest: &str) -> Directive<'_> {
         // to the object-like branch with the whole tail as the body,
         // matching how the lexer would see a syntactically broken
         // `#define`.
-        if let Some(after_paren) = stripped.strip_prefix('(')
+        if let Some(after_paren) = rest_after_name.strip_prefix('(')
             && let Some(close) = after_paren.find(')')
         {
             let params_str = &after_paren[..close];
@@ -3580,7 +3535,7 @@ fn parse_directive(rest: &str) -> Directive<'_> {
             };
             return Directive::DefineFn(name, params, body);
         }
-        return Directive::Define(name, stripped.trim());
+        return Directive::Define(name, rest_after_name.trim());
     }
     if let Some(after) = rest.strip_prefix("undef") {
         return Directive::Undef(after.trim());
@@ -5399,6 +5354,31 @@ mod tests {
     }
 
     #[test]
+    fn define_body_keeps_slashes_inside_string_literal() {
+        // Comment removal happens in translation phase 3 (C99
+        // 5.1.1.2), where a quoted string is opaque; `//` and `/*`
+        // inside one are literal content, not comment openers.
+        let out = process(
+            "#define URL \"http://x.com/*y*/\"\n#define P 'a' // note\nconst char *u = URL;\nchar c = P;\n",
+        );
+        assert!(
+            out.contains("const char *u = \"http://x.com/*y*/\";"),
+            "string body truncated:\n{out}"
+        );
+        assert!(out.contains("char c = 'a';"), "{out}");
+    }
+
+    #[test]
+    fn if_string_comparison_keeps_slashes_inside_literal() {
+        // The `#if` expression strip must also treat literals as
+        // opaque; `//` inside a compared string is not a comment.
+        let src = "#define U \"a//b\"\n#if U == \"a//b\"\nint yes;\n#else\nint no;\n#endif\n";
+        let out = process(src);
+        assert!(out.contains("int yes;"), "{out:?}");
+        assert!(!out.contains("int no;"), "{out:?}");
+    }
+
+    #[test]
     fn ifdef_keeps_active_branch() {
         let src = "#define FOO 1\n#ifdef FOO\nint a;\n#else\nint b;\n#endif\n";
         let out = process(src);
@@ -5618,23 +5598,18 @@ mod tests {
     }
 
     #[test]
-    fn unknown_include_is_silently_dropped() {
-        // Headers not in the embedded registry no-op so legacy
-        // sources sprinkled with `#include <fcntl.h>` keep building
-        // until a real header takes that slot. The compile keeps
-        // going; the warning surfaces separately via
-        // `pp.warnings`.
+    fn unknown_include_is_a_hard_error() {
+        // A header that resolves nowhere aborts the compile, as in
+        // gcc/clang; continuing with an empty body would miscompile.
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-        let out = pp
+        let err = pp
             .process("#include <not-a-real-header.h>\nint main() { return 0; }\n")
-            .expect("preprocessor failed");
-        assert!(out.contains("int main()"));
-        assert_eq!(pp.warnings.len(), 1);
-        assert!(
-            pp.warnings[0].contains("not found"),
-            "missing-include warning shape: {}",
-            pp.warnings[0]
-        );
+            .expect_err("missing include must fail");
+        let C5Error::Compile(msg) = err else {
+            panic!("expected a compile error");
+        };
+        assert!(msg.contains("not-a-real-header.h"), "{msg}");
+        assert!(msg.contains("not found"), "{msg}");
     }
 
     #[test]
@@ -5846,7 +5821,7 @@ int x_2 = __COUNTER__;
         pp.set_show_includes(true);
         let _ = pp
             .process("#include <not-a-real-header.h>\nint main() { return 0; }\n")
-            .expect("preprocessor failed");
+            .expect_err("missing include must fail");
         assert!(
             pp.include_trace
                 .iter()
@@ -5858,11 +5833,18 @@ int x_2 = __COUNTER__;
 
     #[test]
     fn quoted_include_form_is_recognised() {
-        // `"foo.h"` and `<foo.h>` go through the same registry today.
-        // The quoted form is still parsed -- we'd just look it up the
-        // same way -- so an unknown name no-ops cleanly.
-        let out = process("#include \"not-a-real-header.h\"\nint main() {}\n");
-        assert!(out.contains("int main()"));
+        // `"foo.h"` resolves through the same search chain as
+        // `<foo.h>` (C99 6.10.2p2/p3), so a search-path hit works
+        // for both spellings.
+        let base = std::env::temp_dir().join(format!("badc-quoted-inc-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("foo.h"), "int from_quoted;\n").unwrap();
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(base.to_str().unwrap());
+        let out = pp.process("#include \"foo.h\"\nint main() {}\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert!(out.contains("from_quoted"), "{out}");
+        assert!(out.contains("int main()"), "{out}");
     }
 
     #[test]

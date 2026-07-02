@@ -529,6 +529,77 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             _ => None,
         }
     };
+    // The fold reads `places[shl_src]` when the Shr is emitted, past the
+    // source's coloring-visible live range (its last use is the Shl). It
+    // is sound only when nothing between the pair can change that place:
+    // both insts in one block, every intervening inst free of fixed
+    // emit-level clobbers (calls, div/mod, register-count shifts,
+    // atomics, mcpy), and no intervening definition colored onto the
+    // same place.
+    let mut block_of: Vec<u32> = vec![0; func.insts.len()];
+    for (b, blk) in func.blocks.iter().enumerate() {
+        for v in blk.inst_range.clone() {
+            block_of[v as usize] = b as u32;
+        }
+    }
+    let clobber_free = |inst: &Inst| -> bool {
+        match inst {
+            Inst::Imm(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::Extend { .. }
+            | Inst::FpCast { .. }
+            | Inst::Fneg(_)
+            | Inst::Fma { .. }
+            | Inst::Load { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::Store { .. }
+            | Inst::StoreLocal { .. }
+            | Inst::StoreIndexed { .. } => true,
+            Inst::BinopI { op, .. } => {
+                !matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
+            }
+            Inst::Binop { op, .. } => !matches!(
+                op,
+                BinOp::Div
+                    | BinOp::Divu
+                    | BinOp::Mod
+                    | BinOp::Modu
+                    | BinOp::Shl
+                    | BinOp::Shr
+                    | BinOp::Shru
+            ),
+            _ => false,
+        }
+    };
+    let fold_preserves_source = |shl_pc: ValueId, shr_pc: ValueId| -> bool {
+        if block_of[shl_pc as usize] != block_of[shr_pc as usize] {
+            return false;
+        }
+        let src_place = match func.insts.get(shl_pc as usize) {
+            Some(inst) => match shift_shape(inst) {
+                Some((_, src, _, _)) => places.get(src as usize).copied().unwrap_or(Place::None),
+                None => return false,
+            },
+            None => return false,
+        };
+        for p in (shl_pc + 1)..shr_pc {
+            let inst_p = &func.insts[p as usize];
+            if !clobber_free(inst_p) {
+                return false;
+            }
+            if produces_value(inst_p)
+                && places.get(p as usize).copied().unwrap_or(Place::None) == src_place
+            {
+                return false;
+            }
+        }
+        true
+    };
     for (i, inst) in func.insts.iter().enumerate() {
         let Some((shr_op, shr_lhs, shr_k, shr_imm_v)) = shift_shape(inst) else {
             continue;
@@ -546,6 +617,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             continue;
         }
         if use_counts.get(shr_lhs as usize).copied().unwrap_or(0) != 1 {
+            continue;
+        }
+        if !fold_preserves_source(shr_lhs, i as ValueId) {
             continue;
         }
         sxtw_source[i] = shl_src;

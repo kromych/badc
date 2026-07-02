@@ -915,6 +915,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("nested_designator_string_member.c", 0),
     ("union_member_unbraced_init.c", 0),
     ("inline_multi_block_result_forward.c", 10),
+    ("sxtw_fold_source_liveness.c", 18),
 ];
 
 #[test]

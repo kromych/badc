@@ -354,6 +354,11 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/AvailabilityMacros.h"),
     ),
     ("os/log.h", include_str!("../../headers/include/os/log.h")),
+    ("os/lock.h", include_str!("../../headers/include/os/lock.h")),
+    (
+        "crt_externs.h",
+        include_str!("../../headers/include/crt_externs.h"),
+    ),
     ("windows.h", include_str!("../../headers/include/windows.h")),
     ("winbase.h", include_str!("../../headers/include/winbase.h")),
     (

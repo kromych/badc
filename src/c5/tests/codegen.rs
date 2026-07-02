@@ -1494,3 +1494,131 @@ fn debug_info_does_not_change_codegen() {
         );
     }
 }
+
+/// PE/COFF orders the export name pointer table lexically: the loader's
+/// import binding and GetProcAddress binary-search it, so a table in
+/// declaration order resolves names data-dependently (a miss surfaces as
+/// STATUS_ENTRYPOINT_NOT_FOUND). Export in non-alphabetical declaration
+/// order and byte-walk the emitted directory: the name table must come
+/// out sorted with each name's ordinal still selecting its own
+/// function's AddressOfFunctions slot.
+#[test]
+fn pe_export_name_table_is_lexically_sorted() {
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    // Each function carries a unique imm32 marker so the export's
+    // resolved address can be tied back to the right body.
+    let program = Compiler::with_options(
+        "#pragma export(zeta)\n\
+         #pragma export(mike)\n\
+         #pragma export(alpha)\n\
+         int zeta(void) { return 0x5a17aa01; }\n\
+         int mike(void) { return 0x5a17aa02; }\n\
+         int alpha(void) { return 0x5a17aa03; }\n"
+            .to_string(),
+        Target::WindowsX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile export TU");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let dll = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "",
+        None,
+        OutputKind::SharedLibrary,
+        Target::WindowsX64,
+        Some("exp.dll"),
+    )
+    .expect("write DLL");
+
+    let u16a = |o: usize| u16::from_le_bytes(dll[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(dll[o..o + 4].try_into().unwrap());
+    let pe = u32a(0x3c) as usize;
+    let opt = pe + 24;
+    // Section table maps RVAs to file offsets.
+    let num_sections = u16a(pe + 6) as usize;
+    let opt_size = u16a(pe + 20) as usize;
+    let sec_table = pe + 24 + opt_size;
+    let rva_to_off = |rva: u32| -> usize {
+        for s in 0..num_sections {
+            let sh = sec_table + s * 40;
+            let va = u32a(sh + 12);
+            let vsize = u32a(sh + 8);
+            let raw_off = u32a(sh + 20);
+            if rva >= va && rva < va + vsize {
+                return (raw_off + (rva - va)) as usize;
+            }
+        }
+        panic!("rva {rva:#x} outside every section");
+    };
+    let cstr_at = |off: usize| -> alloc::string::String {
+        let end = dll[off..]
+            .iter()
+            .position(|&c| c == 0)
+            .map_or(off, |n| off + n);
+        alloc::string::String::from_utf8_lossy(&dll[off..end]).into_owned()
+    };
+    // Data directory 0 is the Export Directory (PE32+: opt + 112).
+    let edata_rva = u32a(opt + 112);
+    assert_ne!(edata_rva, 0, "DLL must carry an export directory");
+    let ed = rva_to_off(edata_rva);
+    let n_names = u32a(ed + 24) as usize;
+    assert_eq!(n_names, 3);
+    let funcs_off = rva_to_off(u32a(ed + 28));
+    let names_off = rva_to_off(u32a(ed + 32));
+    let ords_off = rva_to_off(u32a(ed + 36));
+
+    let names: alloc::vec::Vec<alloc::string::String> = (0..n_names)
+        .map(|i| cstr_at(rva_to_off(u32a(names_off + 4 * i))))
+        .collect();
+    assert_eq!(
+        names,
+        ["alpha", "mike", "zeta"],
+        "name pointer table must be lexically sorted"
+    );
+    // Ground truth per function: the file offset of its unique marker.
+    let marker_off = |imm: u32| -> usize {
+        let needle = imm.to_le_bytes();
+        let hits: alloc::vec::Vec<usize> = dll
+            .windows(4)
+            .enumerate()
+            .filter(|(_, w)| *w == needle)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(hits.len(), 1, "marker {imm:#x} must be unique");
+        hits[0]
+    };
+    let markers = [
+        ("zeta", marker_off(0x5a17aa01)),
+        ("mike", marker_off(0x5a17aa02)),
+        ("alpha", marker_off(0x5a17aa03)),
+    ];
+    for (i, name) in names.iter().enumerate() {
+        let ordinal = u16a(ords_off + 2 * i) as usize;
+        let fn_off = rva_to_off(u32a(funcs_off + 4 * ordinal));
+        // The nearest marker at or past the function's entry must be
+        // this export's own -- the ordinal table maps name -> body.
+        let (owner, _) = markers
+            .iter()
+            .filter(|&&(_, m)| m >= fn_off)
+            .min_by_key(|&&(_, m)| m)
+            .expect("a marker must follow the entry");
+        assert_eq!(
+            owner, name,
+            "export `{name}` (ordinal {ordinal}) must resolve to its own body"
+        );
+    }
+}

@@ -1371,23 +1371,31 @@ fn build_export_directory(
         out.extend_from_slice(&rva.to_le_bytes());
     }
 
+    // The name pointer table must be lexically ordered (the loader
+    // and GetProcAddress binary-search it); the parallel ordinal
+    // table maps each name back to its declaration-order
+    // AddressOfFunctions slot.
+    let mut by_name: Vec<usize> = (0..exports.len()).collect();
+    by_name.sort_by(|&a, &b| exports[a].name.as_bytes().cmp(exports[b].name.as_bytes()));
+
     // AddressOfNames -- RVA of each export's name string.
     let mut cur = strings_rva + dll_name.len() as u32 + 1;
-    for exp in exports {
+    for &i in &by_name {
         out.extend_from_slice(&cur.to_le_bytes());
-        cur += exp.name.len() as u32 + 1;
+        cur += exports[i].name.len() as u32 + 1;
     }
 
-    // AddressOfNameOrdinals -- u16 ordinal per export.
-    for i in 0..n {
+    // AddressOfNameOrdinals -- u16 unbiased ordinal per name.
+    for &i in &by_name {
         out.extend_from_slice(&(i as u16).to_le_bytes());
     }
 
-    // String blob: DLL name first, then each export name.
+    // String blob: DLL name first, then each export name in
+    // name-pointer-table order.
     out.extend_from_slice(dll_name.as_bytes());
     out.push(0);
-    for exp in exports {
-        out.extend_from_slice(exp.name.as_bytes());
+    for &i in &by_name {
+        out.extend_from_slice(exports[i].name.as_bytes());
         out.push(0);
     }
 

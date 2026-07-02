@@ -26,7 +26,15 @@ Disassembly of section .text:
                	mov	w4, w0
                	str	w4, [x1, x3, lsl #2]
                	b	<addr>
+               	sub	x0, x29, #0xa0
                	mov	x1, #0x0                // =0
+               	ldr	w0, [x0]
+               	sub	x2, x29, #0xa0
+               	ldr	w2, [x2, #0x9c]
+               	add	x0, x0, x2
+               	mov	w0, w0
+               	stur	w0, [x29, #-0xb0]
+               	ldur	w0, [x29, #-0xb0]
                	mov	x0, x1
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10

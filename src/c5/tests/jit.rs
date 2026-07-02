@@ -1539,6 +1539,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // __tlv_bootstrap is future work). The native_elf and
     // native_elf_x64 runners validate the Linux paths once the
     // built ELF lands on the orb VMs.
+    ("packed_bitfield_repack.c", 0),
 ];
 
 #[test]

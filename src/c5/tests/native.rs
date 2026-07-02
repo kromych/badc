@@ -910,6 +910,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // retry. Exits 0 when the auto-include path is wired up;
     // a `BuildError` on this entry means the retry regressed.
     ("auto_include_undeclared_libc.c", 0),
+    ("packed_bitfield_repack.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

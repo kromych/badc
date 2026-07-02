@@ -649,6 +649,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // glibc's old @GLIBC_2.2.5 stub and 0 under the @@GLIBC_2.3.2
     // default.
     ("elf_symbol_version_default.c", 0),
+    ("packed_bitfield_repack.c", 0),
 ];
 
 #[test]

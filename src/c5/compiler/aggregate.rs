@@ -742,24 +742,35 @@ impl Compiler {
     /// semantics: no inter-member padding and an alignment of 1. Used
     /// when the attribute marker follows the body, after the fields were
     /// placed at their natural alignment. A union only loses its tail
-    /// padding (members already sit at offset 0). Bitfield members are
-    /// left at their computed offsets; the packed bit-layout rules are
-    /// not modeled here.
+    /// padding (members already sit at offset 0). Bitfields pack at the
+    /// bit level with no storage-unit padding (the GCC/clang packed
+    /// layout; C99 6.7.2.1p11 leaves the unit implementation-defined);
+    /// a non-bitfield member starts at the next byte boundary.
     pub(super) fn repack_struct(&mut self, struct_id: usize) {
         self.structs[struct_id].align = 1;
         if self.structs[struct_id].is_union {
             return;
         }
         let n = self.structs[struct_id].fields.len();
-        let mut offset = 0usize;
+        let mut bit_cursor = 0usize;
+        let mut bitfields: Vec<(usize, usize)> = Vec::new();
         for i in 0..n {
             let (ty, array_size, bit_width) = {
                 let f = &self.structs[struct_id].fields[i];
                 (f.ty, f.array_size, f.bit_width)
             };
             if bit_width > 0 {
+                // TODO: a field whose bits would span more than an
+                // 8-byte load window (start % 8 + width > 64) is bumped
+                // to the next byte; gcc packs it contiguously.
+                if bit_cursor % 8 + bit_width as usize > 64 {
+                    bit_cursor = round_up(bit_cursor, 8);
+                }
+                bitfields.push((i, bit_cursor));
+                bit_cursor += bit_width as usize;
                 continue;
             }
+            let offset = bit_cursor.div_ceil(8);
             self.structs[struct_id].fields[i].offset = offset;
             let storage = if array_size > 0 {
                 self.size_of_type(ty) * array_size as usize
@@ -768,9 +779,26 @@ impl Compiler {
             } else {
                 self.size_of_type(ty)
             };
-            offset += storage;
+            bit_cursor = (offset + storage) * 8;
         }
-        self.structs[struct_id].size = offset.max(1);
+        let size = bit_cursor.div_ceil(8).max(1);
+        // Each bitfield's addressable unit is the smallest 1/2/4/8-byte
+        // window covering its bits, slid back when it would extend past
+        // the struct's tail (a packed struct has no tail padding to
+        // absorb the read-modify-write span).
+        for (i, bit_start) in bitfields {
+            let width = self.structs[struct_id].fields[i].bit_width as usize;
+            let unit = (bit_start % 8 + width).div_ceil(8).next_power_of_two();
+            let mut off = bit_start / 8;
+            if off + unit > size && unit <= size {
+                off = size - unit;
+            }
+            let f = &mut self.structs[struct_id].fields[i];
+            f.offset = off;
+            f.bit_offset = (bit_start - off * 8) as u32;
+            f.bit_unit_size = unit as u8;
+        }
+        self.structs[struct_id].size = size;
     }
 }
 

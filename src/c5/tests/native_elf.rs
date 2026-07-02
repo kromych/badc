@@ -700,6 +700,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // Without that, `strtold` would land at 0.0 for any power-of-
     // two value (mantissa = 0, exponent only in v0's high half).
     ("strtold_aapcs_return.c", 0),
+    ("packed_bitfield_repack.c", 0),
 ];
 
 #[test]

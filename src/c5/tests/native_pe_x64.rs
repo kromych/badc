@@ -927,6 +927,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // `setjmp_longjmp.c` can join this list.
     ("setjmp_basic_stack.c", 0),
     ("setjmp_misaligned.c", 0),
+    ("packed_bitfield_repack.c", 0),
 ];
 
 #[test]

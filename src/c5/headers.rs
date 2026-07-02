@@ -264,6 +264,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/semaphore.h"),
     ),
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
+    (
+        "TargetConditionals.h",
+        include_str!("../../headers/include/TargetConditionals.h"),
+    ),
     ("windows.h", include_str!("../../headers/include/windows.h")),
     (
         "wincrypt.h",

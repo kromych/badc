@@ -105,6 +105,14 @@ fn fn_ptr_float_return() {
 }
 
 #[test]
+fn float_ternary_promote() {
+    // C99 6.5.15: an FP-typed conditional expression rides the fused
+    // StoreLocal / LoadLocal F32 path, keeping the synthetic merge slot
+    // mem2reg-promotable while preserving single-precision value.
+    assert_eq!(run_fixture("float_ternary_promote.c"), 0);
+}
+
+#[test]
 fn fn_ptr_float_arg() {
     // C99 6.5.2.2p7: a float argument through a function pointer is
     // converted to the pointer's declared parameter type, not promoted to

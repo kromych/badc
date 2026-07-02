@@ -1850,7 +1850,7 @@ impl<'a> Walker<'a> {
                 // substitute the `ShortCircuit` arm uses -- both
                 // arms store the arm result and the merge block
                 // loads it. Width is taken from the result type:
-                // FP-typed ternary uses `Store { kind: F32 }` /
+                // an FP-typed ternary uses `StoreLocal { kind: F32 }` /
                 // `LoadLocal { kind: F32 }` so the codegen routes
                 // through the FP register class; everything else
                 // stays on the I64 `StoreLocal` / `LoadLocal` fast
@@ -1863,23 +1863,24 @@ impl<'a> Walker<'a> {
                 let slot = b.alloc_synthetic_local();
                 let load_kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
-                // `float` keeps the value in an FP register but its
-                // 4-byte storage width forces the `LocalAddr` + `Store`
-                // path (the fused `StoreLocal { F32 }` is not lowered).
-                // `double` rides the FP register class at its full
-                // 8-byte width, so the fused `StoreLocal` / `LoadLocal`
-                // F64 path lowers it in a single `movsd` / `ldr d`.
-                let is_f32 = matches!(load_kind, super::super::ir::LoadKind::F32);
-                let is_f64 = matches!(load_kind, super::super::ir::LoadKind::F64);
+                // An FP-typed result rides the FP register class through
+                // the fused `StoreLocal` / `LoadLocal` path: the emit
+                // lowers `F32` (`movss` / `str s`, narrowing an f64 arm
+                // per C99 6.3.1.5) and `F64` (`movsd` / `ldr d`) each in
+                // a single instruction. The fused ops keep the synthetic
+                // merge slot mem2reg-promotable, unlike `LocalAddr` +
+                // `Store`. Everything else stays on the I64 fast path.
+                let is_fp = matches!(
+                    load_kind,
+                    super::super::ir::LoadKind::F32 | super::super::ir::LoadKind::F64
+                );
                 let arm_store = |b: &mut super::super::codegen::ssa::build::SsaBuilder, v| {
-                    if is_f32 {
-                        let addr = b.local_addr(slot);
-                        b.store(addr, v, store_kind);
-                    } else if is_f64 {
-                        b.store_local(slot, v, store_kind);
+                    let kind = if is_fp {
+                        store_kind
                     } else {
-                        b.store_local(slot, v, super::super::ir::StoreKind::I64);
-                    }
+                        super::super::ir::StoreKind::I64
+                    };
+                    b.store_local(slot, v, kind);
                 };
                 b.switch_to(then_blk);
                 let then_v = self.walk_expr_rvalue(b, *then_e)?;
@@ -1890,11 +1891,12 @@ impl<'a> Walker<'a> {
                 arm_store(b, else_v);
                 b.jmp(after_blk);
                 b.switch_to(after_blk);
-                if is_f32 || is_f64 {
-                    Ok(b.load_local(slot, load_kind))
+                let read_kind = if is_fp {
+                    load_kind
                 } else {
-                    Ok(b.load_local(slot, super::super::ir::LoadKind::I64))
-                }
+                    super::super::ir::LoadKind::I64
+                };
+                Ok(b.load_local(slot, read_kind))
             }
             Expr::Call { callee, args, ty } => {
                 // Out-pointer-returning c5-internal callee: allocate a

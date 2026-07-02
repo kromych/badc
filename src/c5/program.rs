@@ -265,6 +265,18 @@ pub struct Program {
     /// `__getmainargs` for `__wgetmainargs`); other writers
     /// ignore it.
     pub entry_name: Option<String>,
+    /// The literal `#pragma entrypoint(<name>)` value; `None` when
+    /// the source has no such pragma. Distinct from `entry_name`,
+    /// which also reflects the CRT fallbacks. The driver reads this
+    /// to warn when a relocatable emit drops the pragma (an object
+    /// file does not carry it).
+    pub entry_pragma: Option<String>,
+    /// Function names the auto-include retry bound to a bundled
+    /// header during [`crate::c5::Compiler::compile`]. The driver
+    /// consults this in a multi-TU build: a name another input
+    /// defines is recompiled as an implicit extern so the user's
+    /// definition wins over the header's library binding.
+    pub auto_includes: Vec<String>,
     /// Source-declared Windows subsystem. Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the
     /// PE writer's default (`Console`). Read only by the PE

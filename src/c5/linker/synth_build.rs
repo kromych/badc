@@ -156,6 +156,8 @@ fn synth_program_and_build(
         structs: Vec::new(),
         enums: Vec::new(),
         entry_name: Some(entry_name.to_string()),
+        entry_pragma: None,
+        auto_includes: Vec::new(),
         subsystem,
         finished_functions: Vec::new(),
         symbols: Vec::new(),

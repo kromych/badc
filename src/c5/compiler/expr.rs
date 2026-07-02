@@ -542,6 +542,23 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == '(' {
                 self.next()?;
+                // C89 6.3.2.2 implicit declaration, restricted to the
+                // names the driver listed: the link set defines them,
+                // so the call binds `extern int name();` and resolves
+                // against the user's definition rather than through a
+                // header's library binding.
+                if self.symbols[id_idx].class == 0
+                    && !self.implicit_extern_fns.is_empty()
+                    && self
+                        .implicit_extern_fns
+                        .iter()
+                        .any(|n| n == &self.symbols[id_idx].name)
+                {
+                    self.symbols[id_idx].class = Token::Fun as i64;
+                    self.symbols[id_idx].type_ = Ty::Int as i64;
+                    self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
+                    self.symbols[id_idx].defined_here = false;
+                }
                 // C11 7.17 atomic operations and the other compiler
                 // builtins share the `#pragma intrinsic` registry
                 // (`<stdatomic.h>` declares the atomics). An atomic op is

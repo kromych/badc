@@ -214,6 +214,12 @@ pub struct CompileOptions {
     /// most but not all of the GNU C surface, so it claims `__GNUC__`
     /// only when the caller opts in.
     pub gnu: bool,
+    /// Function names an undeclared call may bind as a C89 6.3.2.2
+    /// implicit `extern int name();` instead of triggering the
+    /// auto-include retry. The driver fills this in a multi-TU build
+    /// for auto-included names another input defines, so the user's
+    /// definition wins over the header's library binding.
+    pub implicit_extern_fns: Vec<String>,
 }
 
 impl CompileOptions {
@@ -271,6 +277,12 @@ impl CompileOptions {
     /// link-time decision.
     pub fn with_no_entry_point(mut self, on: bool) -> Self {
         self.no_entry_point = on;
+        self
+    }
+    /// Replace the implicit-extern function-name list. See
+    /// [`Self::implicit_extern_fns`].
+    pub fn with_implicit_extern_fns(mut self, names: Vec<String>) -> Self {
+        self.implicit_extern_fns = names;
         self
     }
 }
@@ -977,6 +989,11 @@ pub struct Compiler {
     /// to 16 when a file-scope object requests `_Alignas(16)`.
     data_align: usize,
 
+    /// Mirror of [`CompileOptions::implicit_extern_fns`]. An
+    /// undeclared call to a listed name binds as a C89 6.3.2.2
+    /// implicit `extern int name();` resolved at link time.
+    implicit_extern_fns: Vec<String>,
+
     /// Mirror of [`CompileOptions::export_all_functions`]. When set,
     /// `resolve_exports` adds every non-static defined function to the
     /// export list so a `--shared` consumer can `dlsym` it.
@@ -1329,6 +1346,7 @@ impl Compiler {
             warn_dead_store: opts.warn_dead_store,
             no_entry_point: opts.no_entry_point,
             data_align: 8,
+            implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
             source_files: Vec::new(),
             source_label: opts.source_label.clone(),
@@ -1520,6 +1538,7 @@ impl Compiler {
         // missing headers. The force-include set only grows, and a
         // header already in it ends the loop, so progress is monotone.
         let mut infos: Vec<String> = Vec::new();
+        let mut auto_names: Vec<String> = Vec::new();
         loop {
             let e = match result {
                 Ok(mut prog) => {
@@ -1530,6 +1549,7 @@ impl Compiler {
                     for info in infos.into_iter().rev() {
                         prog.warnings.insert(0, info);
                     }
+                    prog.auto_includes = auto_names;
                     return Ok(prog);
                 }
                 Err(e) => e,
@@ -1548,6 +1568,7 @@ impl Compiler {
             infos.push(format!(
                 "info: auto-including <{header}> for undeclared `{name}`"
             ));
+            auto_names.push(name);
             result = Compiler::with_options_inner(source.clone(), target, opts.clone(), false)
                 .compile_one_pass();
         }
@@ -1697,6 +1718,8 @@ impl Compiler {
             // CRT-recognised fallbacks (`wmain`, `WinMain`,
             // `wWinMain`) chosen when `main` is absent.
             entry_name: resolved_entry_name,
+            entry_pragma: self.pp_entrypoint.clone(),
+            auto_includes: Vec::new(),
             subsystem: self.pp_subsystem,
             // Compile output is pre-optimizer; only the explicit
             // `optimize()` step flips this on.

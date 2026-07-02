@@ -1762,6 +1762,8 @@ mod tests {
             structs: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
+            entry_pragma: None,
+            auto_includes: Vec::new(),
             data_align: 8,
             subsystem: None,
             finished_functions: Vec::new(),

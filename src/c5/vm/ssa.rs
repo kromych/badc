@@ -1397,6 +1397,28 @@ fn dispatch_callext<H: Host>(
             host.setenv(&env_name, &env_val, overwrite);
             Ok(0)
         }
+        // `int _putenv_s(const char *name, const char *value)` -- msvcrt's
+        // 2-argument setter, always replacing. The Windows `<stdlib.h>`
+        // setenv wrapper calls it after its own overwrite check, so the
+        // bridge forces the write.
+        "_putenv_s" => {
+            if args.len() < 2 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: _putenv_s expects 2 args".to_string(),
+                ));
+            }
+            let name_addr = args[0];
+            let val_addr = args[1];
+            if name_addr < 0 || val_addr < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: _putenv_s: bad addrs name=0x{name_addr:x} val=0x{val_addr:x}",
+                )));
+            }
+            let env_name = read_cstring(mem, name_addr as usize)?;
+            let env_val = read_cstring(mem, val_addr as usize)?;
+            host.setenv(&env_name, &env_val, super::super::host::Overwrite::Force);
+            Ok(0)
+        }
         // `void *dlopen(const char *filename, int flags)` -- a NULL
         // filename maps to `Option::None` so the host can produce
         // dlopen(NULL, ...) (the global symbol table).

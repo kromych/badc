@@ -5415,6 +5415,43 @@ fn emit_binop_imm(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Store a register-classed <= 16-byte aggregate return into the
+/// caller's result temp at `[rbp + base]`. Eightbytes are classified
+/// (System V AMD64 3.2.3): INTEGER arrive in rax:rdx, SSE in
+/// xmm0:xmm1; Win64 register returns classify as one INTEGER
+/// eightbyte in rax. Variadic and non-variadic callees return
+/// identically, so every call shape shares this store.
+fn store_agg_return(
+    code: &mut Vec<u8>,
+    desc: &super::super::ir::AggDesc,
+    base: i64,
+    abi: super::Abi,
+) {
+    let eb_classes = match super::abi_classify::classify_aggregate(
+        desc.size,
+        desc.align,
+        &desc.fields,
+        abi,
+        true,
+    ) {
+        super::abi_classify::AggClass::Regs(c) => c,
+        _ => alloc::vec::Vec::new(),
+    };
+    let int_ret = [Reg::RAX, Reg::RDX];
+    let mut int_i = 0usize;
+    let mut sse_i = 0u8;
+    for (k, class) in eb_classes.iter().enumerate() {
+        let disp = (base + (k as i64) * 8) as i32;
+        if matches!(class, super::abi_classify::RegClass::Sse) {
+            emit_movsd_mem_xmm(code, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
+            sse_i += 1;
+        } else {
+            emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
+            int_i += 1;
+        }
+    }
+}
+
 fn emit_call(
     code: &mut Vec<u8>,
     dst: Place,
@@ -5471,17 +5508,12 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
-        // A variadic callee may still return a <=16-byte aggregate by
-        // value in rax:rdx; store it into the caller's result temp, as
-        // the non-variadic path below does. Without this the struct
-        // result is dropped (the scalar bridge leaves the slot unwritten).
+        // A variadic callee returns a <=16-byte aggregate exactly like a
+        // non-variadic one; classify the eightbytes (SSE ones arrive in
+        // xmm0/xmm1, not rax:rdx).
         if let Some(ai) = ret_agg {
-            let size = agg_descs[ai as usize].size;
             let base = local_slot_off(ret_slot_local, func, frame, abi);
-            emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
-            if size > 8 {
-                emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
-            }
+            store_agg_return(code, &agg_descs[ai as usize], base, abi);
             return true;
         }
         // c5 internal call return convention: an integer / pointer
@@ -5542,17 +5574,12 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
-        // A variadic callee may still return a <=16-byte aggregate by
-        // value in rax:rdx; store it into the caller's result temp, as
-        // the non-variadic path below does. Without this the struct
-        // result is dropped (the scalar bridge leaves the slot unwritten).
+        // A variadic callee returns a <=16-byte aggregate exactly like a
+        // non-variadic one; classify the eightbytes (SSE ones arrive in
+        // xmm0/xmm1, not rax:rdx).
         if let Some(ai) = ret_agg {
-            let size = agg_descs[ai as usize].size;
             let base = local_slot_off(ret_slot_local, func, frame, abi);
-            emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
-            if size > 8 {
-                emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
-            }
+            store_agg_return(code, &agg_descs[ai as usize], base, abi);
             return true;
         }
         // c5 internal call return convention: an integer / pointer
@@ -5623,31 +5650,7 @@ fn emit_call(
     if let Some(ai) = ret_agg {
         let desc = &agg_descs[ai as usize];
         let base = local_slot_off(ret_slot_local, func, frame, abi);
-        let eb_classes = match super::abi_classify::classify_aggregate(
-            desc.size,
-            desc.align,
-            &desc.fields,
-            abi,
-            true,
-        ) {
-            super::abi_classify::AggClass::Regs(c) => c,
-            _ => alloc::vec::Vec::new(),
-        };
-        // SSE eightbytes arrive in xmm0/xmm1, INTEGER in rax/rdx; store each
-        // into the caller's result temp at its eightbyte offset.
-        let int_ret = [Reg::RAX, Reg::RDX];
-        let mut int_i = 0usize;
-        let mut sse_i = 0u8;
-        for (k, class) in eb_classes.iter().enumerate() {
-            let disp = (base + (k as i64) * 8) as i32;
-            if matches!(class, super::abi_classify::RegClass::Sse) {
-                emit_movsd_mem_xmm(code, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
-                sse_i += 1;
-            } else {
-                emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
-                int_i += 1;
-            }
-        }
+        store_agg_return(code, desc, base, abi);
         return true;
     }
     // c5 internal call return convention: an integer / pointer
@@ -5759,29 +5762,7 @@ fn emit_call_ext(
     if let Some(ai) = ret_agg {
         let desc = &agg_descs[ai as usize];
         let base = local_slot_off(ret_slot_local, func, frame, abi);
-        let eb_classes = match super::abi_classify::classify_aggregate(
-            desc.size,
-            desc.align,
-            &desc.fields,
-            abi,
-            true,
-        ) {
-            super::abi_classify::AggClass::Regs(c) => c,
-            _ => alloc::vec::Vec::new(),
-        };
-        let int_ret = [Reg::RAX, Reg::RDX];
-        let mut int_i = 0usize;
-        let mut sse_i = 0u8;
-        for (k, class) in eb_classes.iter().enumerate() {
-            let disp = (base + (k as i64) * 8) as i32;
-            if matches!(class, super::abi_classify::RegClass::Sse) {
-                emit_movsd_mem_xmm(code, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
-                sse_i += 1;
-            } else {
-                emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
-                int_i += 1;
-            }
-        }
+        store_agg_return(code, desc, base, abi);
         return true;
     }
     // Sub-word integer returns get the standard sign / zero
@@ -6055,31 +6036,7 @@ fn emit_call_indirect(
     if let Some(ai) = ret_agg {
         let desc = &agg_descs[ai as usize];
         let base = local_slot_off(ret_slot_local, func, frame, abi);
-        let eb_classes = match super::abi_classify::classify_aggregate(
-            desc.size,
-            desc.align,
-            &desc.fields,
-            abi,
-            true,
-        ) {
-            super::abi_classify::AggClass::Regs(c) => c,
-            _ => alloc::vec::Vec::new(),
-        };
-        // SSE eightbytes arrive in xmm0/xmm1, INTEGER in rax/rdx; store each
-        // into the caller's result temp at its eightbyte offset.
-        let int_ret = [Reg::RAX, Reg::RDX];
-        let mut int_i = 0usize;
-        let mut sse_i = 0u8;
-        for (k, class) in eb_classes.iter().enumerate() {
-            let disp = (base + (k as i64) * 8) as i32;
-            if matches!(class, super::abi_classify::RegClass::Sse) {
-                emit_movsd_mem_xmm(code, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
-                sse_i += 1;
-            } else {
-                emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
-                int_i += 1;
-            }
-        }
+        store_agg_return(code, desc, base, abi);
         return true;
     }
     // A floating-point return rides xmm0 (C99 6.2.5p10); an integer

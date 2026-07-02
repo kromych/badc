@@ -939,6 +939,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("atomic_operand_in_working_regs.c", 0),
     ("setjmp_value_live_across.c", 0),
     ("mixed_sse_int_aggregate_args.c", 0),
+    ("variadic_agg_return_classes.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

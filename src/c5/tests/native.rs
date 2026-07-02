@@ -709,6 +709,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("volatile_setjmp_longjmp.c", 0),
     ("volatile_ptr_alias_loop.c", 0),
     ("volatile_unused_read.c", 0),
+    ("volatile_param_classes.c", 0),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("global_initializer_int.c", 141),

@@ -1547,6 +1547,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // wired for the JIT lane).
     ("volatile_ptr_alias_loop.c", 0),
     ("volatile_unused_read.c", 0),
+    ("volatile_param_classes.c", 0),
     // `thread_local_*.c` aren't here -- the JIT path's host is
     // macOS arm64 in this repo, where TLS lowering isn't
     // implemented yet (Mach-O __thread_data + dyld

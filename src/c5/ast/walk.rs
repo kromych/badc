@@ -13,7 +13,7 @@ use alloc::string::String;
 use super::super::codegen::Target;
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
-    is_volatile_ty, load_kind, struct_ptr_depth,
+    is_volatile_ty, load_kind, strip_unsigned, struct_ptr_depth,
 };
 use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind};
 use super::super::symbol::Symbol;
@@ -202,11 +202,9 @@ pub(crate) fn walk_function(
     // here exactly as they are from the seed loop below.
     if !is_variadic && !ret_outptr {
         for (i, &pty) in param_tys.iter().enumerate() {
-            let stripped = pty & !(1i64 << 30);
-            let is_pointer = pty & (1i64 << 30) != 0;
-            if !is_pointer
-                && (stripped == crate::c5::token::Ty::Float as i64
-                    || stripped == crate::c5::token::Ty::Double as i64)
+            let stripped = strip_unsigned(pty);
+            if stripped == crate::c5::token::Ty::Float as i64
+                || stripped == crate::c5::token::Ty::Double as i64
             {
                 b.mark_param_fp(i);
             }
@@ -266,7 +264,7 @@ pub(crate) fn walk_function(
             if local_slot < 0 {
                 continue;
             }
-            let stripped = pty & !(1i64 << 30);
+            let stripped = strip_unsigned(pty);
             let is_struct_value =
                 stripped >= STRUCT_BASE && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
             if is_struct_value {
@@ -310,15 +308,14 @@ pub(crate) fn walk_function(
             ) {
                 continue;
             }
-            // Pointer-typed parameters carry the pointer marker
-            // bit; the body reads them as full-width pointers
-            // (8 bytes), not as the base type's narrow width.
-            // Without this check `char *fmt` would store only one
-            // byte and the high bits would diverge from the
-            // prologue's full-width spill.
+            // An unsigned-tagged parameter keeps the full 8-byte
+            // store/load so the body's zero-extending reads see the
+            // caller's extension rather than a sign-extended narrow
+            // reload. Pointer tags land in the I64 default arm by
+            // band value.
             use crate::c5::token::Ty;
-            let is_pointer = pty & (1i64 << 30) != 0;
-            let (store_kind, load_kind) = if is_pointer {
+            let unsigned = pty & UNSIGNED_BIT != 0;
+            let (store_kind, load_kind) = if unsigned {
                 (
                     super::super::ir::StoreKind::I64,
                     super::super::ir::LoadKind::I64,
@@ -354,7 +351,7 @@ pub(crate) fn walk_function(
         if local_slot >= 0 {
             continue;
         }
-        let stripped = pty & !(1i64 << 30);
+        let stripped = strip_unsigned(pty);
         let is_struct_value =
             stripped >= STRUCT_BASE && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
         if is_struct_value {

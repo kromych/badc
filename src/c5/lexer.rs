@@ -1657,8 +1657,34 @@ impl Lexer {
                     _ => {
                         if "!~;{}()],:".contains(c) {
                             self.tk = Tok(c as i64);
-                        } else {
+                        } else if matches!(c, ' ' | '\t' | '\r' | '\x0B' | '\x0C' | '\0') {
+                            // C99 6.4p3 white-space characters separate
+                            // tokens and are otherwise ignored. A NUL is
+                            // ignored too, following gcc.
                             continue;
+                        } else if c as u32 == 0xEF
+                            && self.src.get(self.pos) == Some(&0xBB)
+                            && self.src.get(self.pos + 1) == Some(&0xBF)
+                        {
+                            // UTF-8 byte-order mark; accepted and
+                            // skipped, following gcc and clang.
+                            self.pos += 2;
+                            continue;
+                        } else {
+                            // Any other byte cannot start a
+                            // preprocessing token (C99 6.4); dropping
+                            // it would let the parse re-synchronize
+                            // into a different program.
+                            let shown = if c.is_ascii_graphic() {
+                                format!("`{c}`")
+                            } else {
+                                format!("byte 0x{:02X}", c as u32)
+                            };
+                            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                                &self.file,
+                                self.line,
+                                &format!("unrecognized character {shown} in source"),
+                            )));
                         }
                     }
                 }
@@ -2068,6 +2094,40 @@ mod tests {
         lex.next(&mut symbols, &mut index, &mut data).unwrap();
         assert_eq!(lex.tk, Token::Num as i64);
         lex.ival
+    }
+
+    /// Drive the lexer over `src` until EOF or the first error.
+    fn lex_all(src: &str) -> Result<(), C5Error> {
+        let mut lex = Lexer::new(src.to_string());
+        let mut symbols: Vec<Symbol> = Vec::new();
+        let mut index = SymbolIndex::new();
+        let mut data: Vec<u8> = Vec::new();
+        loop {
+            lex.next(&mut symbols, &mut index, &mut data)?;
+            if lex.tk == Tok::EOF {
+                return Ok(());
+            }
+        }
+    }
+
+    #[test]
+    fn unrecognized_bytes_are_lex_errors() {
+        // A byte that cannot start a preprocessing token (C99 6.4) must
+        // be diagnosed, not dropped -- `*$p` re-synchronizing as `*p`
+        // compiles a different program.
+        for (src, shown) in [
+            ("int b = *$p;", "`$`"),
+            ("int a = `3`;", "``"),
+            ("int a @ b;", "`@`"),
+            ("int caf\u{e9};", "byte 0xC3"),
+        ] {
+            let err = lex_all(src).expect_err(src);
+            assert!(format!("{err}").contains(shown), "{src}: {err}");
+        }
+        // White-space characters and a leading UTF-8 BOM are not errors,
+        // and literals keep their bytes.
+        lex_all("\u{feff}int x;\x0C int \x0B y;").unwrap();
+        lex_all("const char *s = \"caf\u{e9} $ @\";").unwrap();
     }
 
     #[test]

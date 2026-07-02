@@ -1123,10 +1123,14 @@ mod jit_impl {
         // with MEM_RELEASE requires size = 0.
         #[cfg_attr(target_os = "windows", allow(dead_code))]
         len: usize,
-        /// Library handles to release on drop. POSIX uses one
-        /// `dlopen(NULL)` handle (so this is at most one entry);
-        /// Windows uses one per declared dylib.
-        lib_handles: Vec<*mut c_void>,
+        /// Loader handles for both import binding and extern-data
+        /// resolution, paired with whether Drop must release the handle.
+        /// POSIX opens each with `dlopen` (owned). Windows takes a
+        /// non-owned `GetModuleHandleA` handle for an already-loaded
+        /// module and an owned `LoadLibraryA` handle otherwise; a
+        /// `GetModuleHandleA` handle carries no refcount, so it must not
+        /// be freed. Both bind and resolve search the full set.
+        lib_handles: Vec<(*mut c_void, bool)>,
     }
 
     impl GotRegion {
@@ -1216,7 +1220,7 @@ mod jit_impl {
                     "JIT: dlopen(NULL, RTLD_NOW) returned null -- can't resolve libc symbols",
                 )));
             }
-            self.lib_handles.push(handle);
+            self.lib_handles.push((handle, true));
 
             // On Linux every declared dylib is its own .so (libc.so.6,
             // libm.so.6, libdl.so.2, ...) -- the Rust test binary
@@ -1236,7 +1240,7 @@ mod jit_impl {
                     if let Ok(cs) = CString::new(d.path.as_str()) {
                         let h = unsafe { dlopen(cs.as_ptr(), RTLD_NOW) };
                         if !h.is_null() {
-                            self.lib_handles.push(h);
+                            self.lib_handles.push((h, true));
                         }
                     }
                 }
@@ -1263,7 +1267,7 @@ mod jit_impl {
                         Ok(cs) => cs,
                         Err(_) => continue, // unreachable: symbol names are static ASCII
                     };
-                    for h in &self.lib_handles {
+                    for (h, _) in &self.lib_handles {
                         let a = unsafe { dlsym(*h, cs.as_ptr()) } as u64;
                         if a != 0 {
                             addr = a;
@@ -1319,10 +1323,10 @@ mod jit_impl {
                     owned = true;
                 }
                 handles.push(h);
-                if owned {
-                    // Track the handle so Drop releases it.
-                    self.lib_handles.push(h);
-                }
+                // Every handle joins the shared set so extern-data
+                // resolution searches exactly what import binding used;
+                // `owned` gates release in Drop.
+                self.lib_handles.push((h, owned));
             }
             for (i, imp) in imports.imports.iter().enumerate() {
                 let mut addr = atexit_thunk_addr(imp.real_symbol.as_str());
@@ -1375,7 +1379,7 @@ mod jit_impl {
                 Ok(cs) => cs,
                 Err(_) => return 0,
             };
-            for &h in &self.lib_handles {
+            for &(h, _) in &self.lib_handles {
                 let a = unsafe { dlsym(h, cs.as_ptr()) } as u64;
                 if a != 0 {
                     return a;
@@ -1384,16 +1388,17 @@ mod jit_impl {
             0
         }
 
-        /// Windows resolver: best-effort over the handles opened for
-        /// imports (`LoadLibraryA`). A data symbol in a module that was
-        /// not an import target won't resolve and the caller errors.
+        /// Windows resolver over the same handle set `bind_imports`
+        /// populated (both `GetModuleHandleA` and `LoadLibraryA`), so an
+        /// extern-data symbol in an already-loaded module resolves. 0
+        /// means unresolved and the caller errors.
         #[cfg(target_os = "windows")]
         fn resolve_symbol(&self, name: &str) -> u64 {
             let cs = match CString::new(name) {
                 Ok(cs) => cs,
                 Err(_) => return 0,
             };
-            for &h in &self.lib_handles {
+            for &(h, _) in &self.lib_handles {
                 let a = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
                 if a != 0 {
                     return a;
@@ -1411,7 +1416,7 @@ mod jit_impl {
                     fn munmap(addr: *mut c_void, len: usize) -> c_int;
                     fn dlclose(handle: *mut c_void) -> c_int;
                 }
-                for &h in &self.lib_handles {
+                for &(h, _) in &self.lib_handles {
                     if !h.is_null() {
                         dlclose(h);
                     }
@@ -1420,8 +1425,10 @@ mod jit_impl {
             }
             #[cfg(target_os = "windows")]
             unsafe {
-                for &h in &self.lib_handles {
-                    if !h.is_null() {
+                // Release only owned handles; a `GetModuleHandleA` handle
+                // carries no refcount to drop.
+                for &(h, owned) in &self.lib_handles {
+                    if owned && !h.is_null() {
                         FreeLibrary(h);
                     }
                 }

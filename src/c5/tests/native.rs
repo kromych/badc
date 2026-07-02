@@ -753,6 +753,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
+    ("setenv_overwrite.c", 0),
     // Runtime dynamic linking. Opens the global symbol table,
     // resolves libc atoi via dlsym, calls it through indirect call
     // (which loads args into x0..x7 in case the target is native),

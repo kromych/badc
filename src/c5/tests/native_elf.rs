@@ -474,6 +474,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
+    ("setenv_overwrite.c", 0),
     // Runtime dynamic linking through libdl (libdl.so.2 +
     // libc.so.6 are both DT_NEEDED). dlopen+dlsym+blr finds
     // libc atoi and the indirect call passes "123" in x0.

@@ -696,7 +696,7 @@ fn run() {
     {
         sources.push("-".to_string());
     }
-    if sources.is_empty() && objects.is_empty() {
+    if sources.is_empty() && objects.is_empty() && archives.is_empty() {
         eprint_diagnostic("badc: error: no files");
         std::process::exit(1);
     }
@@ -1035,23 +1035,17 @@ fn run() {
         }
         // A freestanding image must supply its own entry symbol; the
         // embedded runtime that would otherwise define `__c5_entry` is
-        // not linked. Report a missing entry here rather than as a bare
-        // undefined-symbol relocation at link time.
-        if freestanding {
-            let entry = entry_override.as_deref().unwrap_or("__c5_entry");
-            let defined = native_objs.iter().any(|o| {
-                o.symbols
-                    .iter()
-                    .any(|s| s.name == entry && s.section == badc::NativeSymSection::Text)
-            });
-            if !defined {
-                eprint_diagnostic(format!(
-                    "badc: error: --freestanding: image entry `{entry}` is not defined; \
-                     a freestanding image must provide its own entry point"
-                ));
-                std::process::exit(1);
-            }
-        }
+        // not linked. The entry may come from any input -- a compiled
+        // source, a `.o`, or an archive member -- so the defined-entry
+        // check runs below, after objects and archive members are
+        // parsed, rather than as a bare undefined-symbol relocation at
+        // link time.
+        let freestanding_entry = freestanding.then(|| {
+            entry_override
+                .as_deref()
+                .unwrap_or("__c5_entry")
+                .to_string()
+        });
         // The runtime's CRT section (the C99 snprintf / vsnprintf
         // definitions on Windows) links into any image that may
         // import the user-mode C library -- hosted executables and
@@ -1268,6 +1262,13 @@ fn run() {
             for o in &native_objs {
                 account(o, &mut defined, &mut undefined);
             }
+            // A freestanding entry is a link root: seed it as undefined
+            // so an archive member that only defines the entry is pulled.
+            if let Some(entry) = &freestanding_entry {
+                if !defined.contains(entry) {
+                    undefined.insert(entry.clone());
+                }
+            }
             // The archive symbol index lists strong section-resident
             // definitions; a member is pulled on exactly those.
             let mut progress = true;
@@ -1297,6 +1298,22 @@ fn run() {
         if native_objs.is_empty() {
             eprint_diagnostic("badc: error: no inputs");
             std::process::exit(1);
+        }
+        // With every source, object, and pulled archive member now
+        // parsed, a freestanding image's entry must be defined.
+        if let Some(entry) = &freestanding_entry {
+            let defined = native_objs.iter().any(|o| {
+                o.symbols
+                    .iter()
+                    .any(|s| s.name == *entry && s.section == badc::NativeSymSection::Text)
+            });
+            if !defined {
+                eprint_diagnostic(format!(
+                    "badc: error: --freestanding: image entry `{entry}` is not defined; \
+                     a freestanding image must provide its own entry point"
+                ));
+                std::process::exit(1);
+            }
         }
         // Every supported target lays out `_Thread_local` storage
         // through the native path: ELF PT_TLS, the PE TLS directory +

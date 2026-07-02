@@ -190,6 +190,94 @@ fn archive_members_are_pulled_on_demand() {
     );
 }
 
+// An archive-only invocation is a valid link: the members supply the
+// objects and `main` is pulled by the runtime's reference to it. The
+// input-emptiness check must count archives, not just sources/objects.
+#[cfg(target_os = "linux")]
+#[test]
+fn archive_only_invocation_links_and_pulls_main() {
+    let dir = tempdir("archive-only");
+    write_source(&dir, "prog.c", "int main(void) { return 7; }\n");
+    run(
+        Command::new(badc())
+            .arg("--ar")
+            .arg("-o")
+            .arg(dir.join("libprog.a"))
+            .arg(dir.join("prog.c"))
+            .current_dir(&dir),
+        "build archive",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("libprog.a"))
+            .current_dir(&dir),
+        "link archive-only",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(7), "exit code mismatch");
+}
+
+// A freestanding image's entry may live in a pre-compiled object; the
+// defined-entry check must run after `.o` inputs are parsed, not before.
+#[cfg(target_os = "linux")]
+#[test]
+fn freestanding_entry_defined_in_object_links() {
+    let dir = tempdir("freestanding-obj");
+    write_source(&dir, "fs.c", "void __c5_entry(void) { }\n");
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("fs.c"))
+            .arg("-o")
+            .arg(dir.join("fs.o"))
+            .current_dir(&dir),
+        "compile -c",
+    );
+    let bin = dir.join("fs.bin");
+    run(
+        Command::new(badc())
+            .arg("--freestanding")
+            .arg(dir.join("fs.o"))
+            .arg("-o")
+            .arg(&bin)
+            .current_dir(&dir),
+        "freestanding link with entry in object",
+    );
+    assert!(bin.exists(), "freestanding image was not produced");
+}
+
+// The freestanding entry is a link root: an archive member that only
+// defines the entry must be pulled so the image links.
+#[cfg(target_os = "linux")]
+#[test]
+fn freestanding_entry_from_archive_is_pulled() {
+    let dir = tempdir("freestanding-archive");
+    write_source(&dir, "fs.c", "void __c5_entry(void) { }\n");
+    run(
+        Command::new(badc())
+            .arg("--ar")
+            .arg("-o")
+            .arg(dir.join("libfs.a"))
+            .arg(dir.join("fs.c"))
+            .current_dir(&dir),
+        "build archive",
+    );
+    let bin = dir.join("fs.bin");
+    run(
+        Command::new(badc())
+            .arg("--freestanding")
+            .arg(dir.join("libfs.a"))
+            .arg("-o")
+            .arg(&bin)
+            .current_dir(&dir),
+        "freestanding link with entry in archive",
+    );
+    assert!(bin.exists(), "freestanding image was not produced");
+}
+
 #[test]
 fn compile_only_warns_when_link_pragmas_are_dropped() {
     // `#pragma subsystem` / `#pragma entrypoint` ride the in-memory

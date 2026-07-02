@@ -168,11 +168,11 @@
 #pragma binding(msvcrt::abort,   "abort")
 #pragma binding(msvcrt::system,  "system")
 #pragma binding(msvcrt::getenv,  "getenv")
-// POSIX putenv is msvcrt's underscored `_putenv`; msvcrt's `setenv`
-// is `_putenv_s`. Same shapes: (string) -> int and
-// (name, value, overwrite) -> int.
+// POSIX putenv is msvcrt's underscored `_putenv` (a `(string) -> int`
+// shape). POSIX setenv takes a third `overwrite` argument that msvcrt's
+// 2-parameter `_putenv_s(name, value)` lacks, so it is left unbound and
+// resolved by the runtime shim (see lib/runtime.c) that honors the flag.
 #pragma binding(msvcrt::putenv,    "_putenv")
-#pragma binding(msvcrt::setenv,    "_putenv_s")
 #pragma binding(msvcrt::_wputenv_s, "_wputenv_s")
 #pragma binding(msvcrt::qsort,     "qsort")
 #pragma binding(msvcrt::bsearch,   "bsearch")

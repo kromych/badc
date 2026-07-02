@@ -425,6 +425,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
+    ("setenv_overwrite.c", 0),
     ("dlopen_atoi.c", 123),
     ("dlopen_strlen.c", 13),
     // Multi-arg dlsym call path. glibc 2.34+ folded pthread into

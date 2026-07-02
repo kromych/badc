@@ -416,6 +416,55 @@ pub(super) fn plan_call_args_aggs(
                 placements.push(placement);
                 continue;
             }
+            // Windows aarch64 variadic convention: an anonymous composite
+            // is passed as if all SIMD/FP registers were unavailable -- a
+            // <= 16-byte composite (HFA or not) rides the integer bank
+            // x0-x7 then the stack, a larger one goes by reference. The
+            // callee's va_arg walks one 8-byte-stride region, so an FP
+            // bank placement would read garbage on both sides.
+            if i >= fixed_args && abi.variadic_int_only && matches!(abi.arch, Arch::Aarch64) {
+                let placement = if agg.size > 16 {
+                    if int_idx < int_max {
+                        let r = abi.int_arg_regs[int_idx];
+                        int_idx += 1;
+                        ArgPlacement::StructByRefReg(r)
+                    } else {
+                        let off = stack_used;
+                        stack_used += 8;
+                        ArgPlacement::StructByRefStack(off)
+                    }
+                } else {
+                    let need = (aligned as usize / 8).max(1);
+                    if int_idx + need <= int_max {
+                        let mut regs = [ClassReg {
+                            reg: 0,
+                            is_fp: false,
+                        }; 4];
+                        for (n, slot) in regs.iter_mut().enumerate().take(need) {
+                            *slot = ClassReg {
+                                reg: abi.int_arg_regs[int_idx],
+                                is_fp: false,
+                            };
+                            let _ = n;
+                            int_idx += 1;
+                        }
+                        ArgPlacement::StructRegs {
+                            regs,
+                            n: need as u8,
+                        }
+                    } else {
+                        int_idx = int_max;
+                        let off = stack_used;
+                        stack_used += aligned;
+                        ArgPlacement::StructStack {
+                            off,
+                            size: agg.size,
+                        }
+                    }
+                };
+                placements.push(placement);
+                continue;
+            }
             let placement = match &agg.class {
                 AggClass::Regs(classes) => {
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();

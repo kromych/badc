@@ -2644,6 +2644,10 @@ fn emit_va_arg_aapcs64(
     // __vr_top (+16), 16-byte register stride. The overflow stack uses an
     // 8-byte stride for both classes (AAPCS64 rounds each variadic
     // argument to an eightbyte; a double overflow argument occupies one).
+    // TODO: an HFA composite argument rides the vector save area with
+    // one 16-byte slot per member (AAPCS64 B.5) and needs per-member
+    // composition into a contiguous temporary; the descriptor currently
+    // classes every aggregate as general-register.
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
     // A by-value aggregate (integer class) spans `ceil(size/8)` eightbytes

@@ -432,6 +432,7 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I32,
+                    volatile: false,
                 },
                 Inst::Extend {
                     value: 1,
@@ -465,6 +466,7 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I32,
+                    volatile: false,
                 },
                 Inst::Extend {
                     value: 1,
@@ -492,6 +494,7 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::U32,
+                    volatile: false,
                 },
                 Inst::Extend {
                     value: 1,
@@ -536,6 +539,7 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I32,
+                    volatile: false,
                 },
                 Inst::Binop {
                     op: BinOp::Add,
@@ -551,6 +555,7 @@ mod tests {
                     disp: 0,
                     value: 3,
                     kind: store_kind,
+                    volatile: false,
                 },
             ],
             vec![Block {
@@ -594,6 +599,7 @@ mod tests {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I32,
+                    volatile: false,
                 },
                 Inst::Binop {
                     op: BinOp::Mul,

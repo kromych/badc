@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_decl_modifier, struct_ty_for};
+use super::types::{UNSIGNED_BIT, VOLATILE_BIT, is_decl_modifier, struct_ty_for};
 
 /// Accumulator for the int-modifier soup that prefixes a C base
 /// type. `signed` / `unsigned` / `short` / `long` (any count) /
@@ -461,6 +461,21 @@ impl Compiler {
         Ok(Some(bt))
     }
 
+    /// `VOLATILE_BIT` when the current token is the `volatile` type
+    /// qualifier (C99 6.7.3), 0 for any other spelling mapped to
+    /// `Token::TypeQual` (`const`, `restrict`, calling-convention
+    /// decorations). Qualifier identity lives on the interned keyword
+    /// symbol; the caller consumes the token.
+    pub(super) fn lex_volatile_bit(&self) -> i64 {
+        if self.lex.tk != Token::TypeQual {
+            return 0;
+        }
+        match self.symbols[self.lex.curr_id_idx].name.as_str() {
+            "volatile" | "__volatile" | "__volatile__" => VOLATILE_BIT,
+            _ => 0,
+        }
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -486,6 +501,7 @@ impl Compiler {
         // collect everything we see, then look at the next token
         // for the type keyword.
         let mut m = IntModifiers::default();
+        let mut qual_bits: i64 = 0;
         loop {
             // C23 6.7.13 `[[...]]` and GNU `__attribute__`/`__declspec`
             // may lead the declaration specifiers.
@@ -514,8 +530,9 @@ impl Compiler {
                 self.pending_noreturn = true;
             }
             if !self.try_consume_int_modifier(&mut m)? {
-                // const / volatile / restrict / _Atomic / etc. --
-                // all no-ops in c5, just consume.
+                // `volatile` sets the tag's qualifier bit (C99 6.7.3);
+                // const / restrict / _Atomic / etc. are no-ops.
+                qual_bits |= self.lex_volatile_bit();
                 self.next()?;
             }
         }
@@ -594,10 +611,13 @@ impl Compiler {
         // Trailing specifiers: C99 6.7.2p2 admits the specifier
         // multiset in any order, so `int long`, `int unsigned`,
         // `char unsigned`, `double long` re-derive the base tag from
-        // the folded modifiers. A non-scalar base (typedef, struct,
-        // enum) has no valid int-modifier combination; the tokens are
+        // the folded modifiers; trailing qualifiers fold into the
+        // qualifier bits. A non-scalar base (typedef, struct, enum)
+        // has no valid int-modifier combination; the tokens are
         // consumed as before.
-        if self.consume_trailing_decl_modifiers(&mut m)? {
+        let (saw_int_mod, trailing_quals) = self.consume_trailing_decl_modifiers(&mut m)?;
+        qual_bits |= trailing_quals;
+        if saw_int_mod {
             if base_tok == Token::Int {
                 bt = m.int_base();
             } else if base_tok == Token::Char {
@@ -607,19 +627,20 @@ impl Compiler {
             }
         }
 
-        Ok(bt)
+        Ok(bt | qual_bits)
     }
 
     /// Consume the specifiers that may trail the base-type keyword:
     /// int modifiers fold into `m` (the caller re-derives the base
-    /// tag), qualifiers are no-ops, and `inline` / `_Noreturn` set
-    /// the same pending flags as in leading position. Returns true
-    /// when an int modifier was consumed.
+    /// tag), qualifier bits are returned for the caller to fold into
+    /// the type, and `inline` / `_Noreturn` set the same pending
+    /// flags as in leading position.
     pub(super) fn consume_trailing_decl_modifiers(
         &mut self,
         m: &mut IntModifiers,
-    ) -> Result<bool, C5Error> {
+    ) -> Result<(bool, i64), C5Error> {
         let mut saw_int_mod = false;
+        let mut qual_bits = 0i64;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::Attribute {
                 self.skip_attribute_specifiers()?;
@@ -635,8 +656,9 @@ impl Compiler {
                 saw_int_mod = true;
                 continue;
             }
+            qual_bits |= self.lex_volatile_bit();
             self.next()?;
         }
-        Ok(saw_int_mod)
+        Ok((saw_int_mod, qual_bits))
     }
 }

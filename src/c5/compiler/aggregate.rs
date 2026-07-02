@@ -314,13 +314,15 @@ impl Compiler {
             // Trailing specifiers: C99 6.7.2p2 admits any order, so
             // `int long` / `char unsigned` fields re-derive the base
             // tag from the folded modifiers.
-            if self.consume_trailing_decl_modifiers(&mut mods)? {
+            let (saw_int_mod, trailing_quals) = self.consume_trailing_decl_modifiers(&mut mods)?;
+            if saw_int_mod {
                 if field_base_tok == Token::Int {
                     field_base = mods.int_base();
                 } else if field_base_tok == Token::Char {
                     field_base = mods.char_tag(self.target.plain_char_signed());
                 }
             }
+            field_base |= trailing_quals;
 
             // Anonymous struct/union member (C11 6.7.2.1p13). The
             // type-prefix parse just registered an anon-tagged

@@ -170,6 +170,7 @@ impl Compiler {
         // it lexes as a no-op type qualifier. Consume any here so it does
         // not stand in for the declarator name.
         while self.lex.tk == Token::TypeQual {
+            ty |= self.lex_volatile_bit();
             self.next()?;
         }
         let mut leading_ptr_count: i64 = 0;
@@ -178,11 +179,13 @@ impl Compiler {
             ty += Ty::Ptr as i64;
             leading_ptr_count += 1;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
-            // `char *restrict s`. Consumed; no semantic effect. An
-            // attribute may sit here too (`void * __attribute__((malloc))
-            // p`).
+            // `char *restrict s`. A pointer-level `volatile` sets the
+            // tag's qualifier bit (C99 6.7.3; the single bit does not
+            // record the level). An attribute may sit here too
+            // (`void * __attribute__((malloc)) p`).
             loop {
                 if self.lex.tk == Token::TypeQual {
+                    ty |= self.lex_volatile_bit();
                     self.next()?;
                 } else if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;

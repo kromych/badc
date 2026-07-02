@@ -703,6 +703,12 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // expansions in the codegen replace the missing CRT
     // surface.
     ("setjmp_longjmp_roundtrip.c", 0),
+    // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
+    // their post-longjmp value, are re-read through aliases, and
+    // unused volatile reads still execute.
+    ("volatile_setjmp_longjmp.c", 0),
+    ("volatile_ptr_alias_loop.c", 0),
+    ("volatile_unused_read.c", 0),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("global_initializer_int.c", 141),

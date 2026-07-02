@@ -66,6 +66,22 @@ pub(crate) fn is_unsigned_ty(ty: i64) -> bool {
     (ty & UNSIGNED_BIT) != 0
 }
 
+/// High-bit flag marking a type tag `volatile`-qualified (C99 6.7.3).
+/// Orthogonal to the band scheme like [`UNSIGNED_BIT`]: stripped by
+/// [`strip_unsigned`] before any band classifier consults the tag. The
+/// single bit does not record which indirection level carries the
+/// qualifier, so `volatile T *`, `T * volatile`, and `volatile T`
+/// all set it; every access through such a tag is treated as a
+/// volatile access (a conservative over-approximation -- extra
+/// volatility only inhibits optimization, per 5.1.2.3p2 an access to
+/// a volatile object may not be elided or coalesced).
+pub(crate) const VOLATILE_BIT: i64 = 1 << 29;
+
+/// `true` if `ty` carries the volatile qualifier at any level.
+pub(crate) fn is_volatile_ty(ty: i64) -> bool {
+    (ty & VOLATILE_BIT) != 0
+}
+
 /// Apply a C99 6.3.1.3 integer conversion to a constant value:
 /// narrow to `bytes` width and re-interpret by the target's
 /// signedness. `_Bool` maps any nonzero value to 1 (6.3.1.2). An
@@ -91,14 +107,14 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
     }
 }
 
-/// Drop the unsigned bit. Use to recover the bare band-encoded type
-/// before consulting a helper that classifies by band. Most of the
-/// helpers in this module call this at their entry; outside callers
-/// only need it when storing a type tag where a non-bit-flagged tag
-/// is expected (e.g., switch-table comparisons against `Ty::Int as
-/// i64`).
+/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`). Use to
+/// recover the bare band-encoded type before consulting a helper that
+/// classifies by band. Most of the helpers in this module call this at
+/// their entry; outside callers only need it when storing a type tag
+/// where a non-bit-flagged tag is expected (e.g., switch-table
+/// comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
-    ty & !UNSIGNED_BIT
+    ty & !(UNSIGNED_BIT | VOLATILE_BIT)
 }
 
 /// Round `x` up to the nearest multiple of `alignment` (which must
@@ -649,7 +665,7 @@ mod ty_tag {
     // `is_pointer_ty`. The base band ([0, 100): char / int) admits any
     // offset >= Ty::Ptr; every other band reserves even offsets.
     fn pointer_by_even_stride(ty: i64) -> bool {
-        let stripped = ty & !UNSIGNED_BIT;
+        let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
         let base = stripped - (stripped % 100);
         let off = stripped - base;
         if base == 0 {

@@ -2863,7 +2863,9 @@ fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
-        Inst::Load { addr, disp, kind } => emit_load(
+        Inst::Load {
+            addr, disp, kind, ..
+        } => emit_load(
             code,
             dst,
             *addr,
@@ -2878,13 +2880,14 @@ fn emit_inst(
             disp,
             value,
             kind,
+            ..
         } => emit_store(code, dst, v, *addr, *disp, *value, *kind, alloc, frame),
-        Inst::LoadLocal { off, kind } => {
+        Inst::LoadLocal { off, kind, .. } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
         }
-        Inst::StoreLocal { off, value, kind } => {
-            emit_store_local(code, dst, v, *off, *value, *kind, alloc, frame, func, abi)
-        }
+        Inst::StoreLocal {
+            off, value, kind, ..
+        } => emit_store_local(code, dst, v, *off, *value, *kind, alloc, frame, func, abi),
         Inst::LoadIndexed {
             base,
             index,

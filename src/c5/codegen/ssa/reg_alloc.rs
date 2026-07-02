@@ -1140,6 +1140,9 @@ fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
 /// True when the inst has no side effects and can be DCE'd if its
 /// result is unread. Mirrors `is_dead_pure` in ssa_emit_common but
 /// kept here to drive the allocator's use-count fixed-point pass.
+/// A volatile load is an access the abstract machine performs even
+/// when the value is unused (C99 5.1.2.3p2 / 6.7.3p6), so it is
+/// never pure.
 fn is_pure_inst(inst: &Inst) -> bool {
     matches!(
         inst,
@@ -1149,8 +1152,14 @@ fn is_pure_inst(inst: &Inst) -> bool {
             | Inst::ImmExtCode(_)
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
-            | Inst::Load { .. }
-            | Inst::LoadLocal { .. }
+            | Inst::Load {
+                volatile: false,
+                ..
+            }
+            | Inst::LoadLocal {
+                volatile: false,
+                ..
+            }
             | Inst::LoadIndexed { .. }
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
@@ -2308,6 +2317,48 @@ int main(void) { return 0; }
     /// Allocate every function in quicksort.c on aarch64. The
     /// fixture has straight-line control flow and short
     /// expressions; the allocator should never spill.
+    #[test]
+    fn unused_volatile_reads_survive_dead_pure_skip() {
+        // C99 5.1.2.3p2: a volatile read is a side effect. The emit's
+        // dead-code skip must keep the unused loads and their address
+        // chains at every optimization level.
+        let funcs = lift("tests/fixtures/c/volatile_unused_read.c");
+        let main = funcs.iter().find(|f| f.name == "main").expect("main");
+        let alloc = allocate(main, Target::host());
+        let mut volatile_loads = 0;
+        for (v, inst) in main.insts.iter().enumerate() {
+            match inst {
+                Inst::Load {
+                    volatile: true,
+                    addr,
+                    ..
+                } => {
+                    volatile_loads += 1;
+                    assert!(
+                        !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc),
+                        "volatile Load v{v} must not be skipped as dead"
+                    );
+                    assert_ne!(
+                        alloc.use_counts[*addr as usize], 0,
+                        "the volatile load's address chain must stay live"
+                    );
+                }
+                Inst::LoadLocal { volatile: true, .. } => {
+                    volatile_loads += 1;
+                    assert!(
+                        !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc),
+                        "volatile LoadLocal v{v} must not be skipped as dead"
+                    );
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            volatile_loads >= 2,
+            "expected the global and the local volatile reads in SSA, saw {volatile_loads}"
+        );
+    }
+
     #[test]
     fn allocate_quicksort_no_spill() {
         let funcs = lift("tests/fixtures/c/quicksort.c");

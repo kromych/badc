@@ -31,7 +31,9 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{
+    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth,
+};
 
 impl Compiler {
     /// Drain the three pending local-initializer carriers into a single
@@ -81,6 +83,7 @@ impl Compiler {
         let mut is_static = false;
         let mut is_extern = false;
         let mut saw_specifier = false;
+        let mut qual_bits: i64 = 0;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::FuncSpec
@@ -92,6 +95,8 @@ impl Compiler {
             if self.lex.tk == Token::Extern {
                 is_extern = true;
             }
+            // `volatile` qualifies the declared type (C99 6.7.3).
+            qual_bits |= self.lex_volatile_bit();
             saw_specifier = true;
             self.next()?;
         }
@@ -103,7 +108,7 @@ impl Compiler {
             Ty::Int as i64
         } else {
             self.parse_decl_base_type()?
-        };
+        } | qual_bits;
         // A function-pointer typedef base type contributes its lineage to
         // every declarator in the list (`fn_t a, b;` makes both a and b
         // function pointers). The per-declarator symbol creation consumes
@@ -1487,7 +1492,7 @@ impl Compiler {
                     if final_field.array_size > 0 {
                         if self.lex.tk == '"'
                             && !self.lex.str_is_wide
-                            && (final_field.ty & !UNSIGNED_BIT) == Ty::Char as i64
+                            && (final_field.ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
                         {
                             let start_addr = self.take_concat_string_literal()?;
                             self.data.push(0); // ensure NUL terminator
@@ -1575,7 +1580,7 @@ impl Compiler {
                 // it composes with non-constant sibling fields.
                 if self.lex.tk == '"'
                     && !self.lex.str_is_wide
-                    && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
+                    && (field.ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
                 {
                     let start_addr = self.take_concat_string_literal()?;
                     self.data.push(0); // ensure NUL terminator

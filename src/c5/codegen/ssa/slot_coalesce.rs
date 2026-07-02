@@ -202,6 +202,16 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
             Inst::Call { ret_slot_local, .. }
             | Inst::CallIndirect { ret_slot_local, .. }
             | Inst::CallExt { ret_slot_local, .. } => *ret_slot_local,
+            // A volatile-accessed slot keeps its own storage: the
+            // object must hold its last store across control
+            // transfers the CFG does not model (C99 7.13.2.1
+            // longjmp), so the liveness below cannot justify
+            // sharing or moving it.
+            Inst::LoadLocal { off, volatile, .. } | Inst::StoreLocal { off, volatile, .. }
+                if *volatile =>
+            {
+                *off
+            }
             _ => continue,
         };
         if movable(off) && !agg_cells.contains(&off) {

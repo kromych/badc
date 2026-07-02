@@ -257,14 +257,13 @@ fn e_machine_for(machine: Machine) -> u16 {
 /// COPY-relocated data import (`environ`), whose `st_size` the loader
 /// compares against the host symbol's.
 fn data_global_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
-    use crate::c5::compiler::types::is_pointer_ty;
+    use crate::c5::compiler::types::{is_pointer_ty, strip_unsigned};
     use crate::c5::token::Ty;
-    const UNSIGNED_BIT: i64 = 1 << 30;
     let ty = sym.type_;
     let elem: u64 = if is_pointer_ty(ty) {
         8
     } else {
-        let stripped = ty & !UNSIGNED_BIT;
+        let stripped = strip_unsigned(ty);
         if stripped == Ty::Char as i64 || stripped == Ty::Bool as i64 {
             1
         } else if stripped == Ty::Short as i64 {

@@ -803,7 +803,9 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = (prog.tls_base as i64).wrapping_add(*off);
             return Ok(());
         }
-        Inst::Load { addr, disp, kind } => {
+        Inst::Load {
+            addr, disp, kind, ..
+        } => {
             let a = frame.regs[*addr as usize].wrapping_add(*disp as i64);
             if a & CODE_ADDR_MASK != 0
                 || a < 0
@@ -823,6 +825,7 @@ fn run_inst<H: Host>(
             disp,
             value,
             kind,
+            ..
         } => {
             let a = frame.regs[*addr as usize].wrapping_add(*disp as i64);
             if a & CODE_ADDR_MASK != 0
@@ -842,14 +845,16 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = stored;
             return Ok(());
         }
-        Inst::LoadLocal { off, kind } => {
+        Inst::LoadLocal { off, kind, .. } => {
             let addr = frame.slot_addr(*off).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: LoadLocal: slot {off} out of range"))
             })?;
             frame.regs[v as usize] = load_from_memory(mem, addr, *kind)?;
             return Ok(());
         }
-        Inst::StoreLocal { off, value, kind } => {
+        Inst::StoreLocal {
+            off, value, kind, ..
+        } => {
             let addr = frame.slot_addr(*off).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: StoreLocal: slot {off} out of range"))
             })?;

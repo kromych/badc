@@ -21,7 +21,9 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{
+    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth,
+};
 
 impl Compiler {
     /// After a leading `(TYPE)` cast in a global initializer, returns
@@ -529,7 +531,7 @@ impl Compiler {
         // full 8 bytes the slot was sized for; a future
         // f32-narrow-storage path would shrink it for `float`.
         let var_is_float = {
-            let stripped = var_ty & !UNSIGNED_BIT;
+            let stripped = var_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
             stripped == Ty::Float as i64 || stripped == Ty::Double as i64
         };
         // Constant expression, evaluated at compile time. Handles

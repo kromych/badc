@@ -2022,7 +2022,9 @@ fn emit_inst(
         // (it needs the local block_offsets table for its PC-relative
         // fixup), so it never reaches emit_inst.
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
-        Inst::Load { addr, disp, kind } => emit_load(
+        Inst::Load {
+            addr, disp, kind, ..
+        } => emit_load(
             code,
             dst,
             *addr,
@@ -2038,15 +2040,16 @@ fn emit_inst(
             disp,
             value,
             kind,
+            ..
         } => emit_store(
             code, dst, *addr, *disp, *value, *kind, alloc, frame, scratch,
         ),
-        Inst::LoadLocal { off, kind } => {
+        Inst::LoadLocal { off, kind, .. } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, scratch)
         }
-        Inst::StoreLocal { off, value, kind } => {
-            emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch)
-        }
+        Inst::StoreLocal {
+            off, value, kind, ..
+        } => emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch),
         Inst::LoadIndexed {
             base,
             index,

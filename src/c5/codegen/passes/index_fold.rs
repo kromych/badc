@@ -133,11 +133,13 @@ fn foldable_scaled_addresses(
                 addr,
                 disp: 0,
                 kind,
+                volatile: false,
             } => (*addr, load_width(*kind)),
             Inst::Store {
                 addr,
                 disp: 0,
                 kind,
+                volatile: false,
                 ..
             } => (*addr, store_width(*kind)),
             _ => continue,
@@ -202,11 +204,13 @@ fn foldable_displaced_addresses(
                 addr,
                 disp: 0,
                 kind,
+                volatile: false,
             } => (*addr, load_width(*kind)),
             Inst::Store {
                 addr,
                 disp: 0,
                 kind,
+                volatile: false,
                 ..
             } => (*addr, store_width(*kind)),
             _ => continue,
@@ -318,6 +322,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     addr,
                     disp: 0,
                     kind,
+                    volatile: false,
                 } => {
                     if let Some(width) = load_width(*kind) {
                         if let Some(&(base, index, scale)) = scaled.get(addr) {
@@ -338,6 +343,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                     addr: base,
                                     disp,
                                     kind: *kind,
+                                    volatile: false,
                                 },
                             ));
                         }
@@ -348,6 +354,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     disp: 0,
                     value,
                     kind,
+                    volatile: false,
                 } => {
                     if let Some(width) = store_width(*kind) {
                         if let Some(&(base, index, scale)) = scaled.get(addr) {
@@ -370,6 +377,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                     disp,
                                     value: *value,
                                     kind: *kind,
+                                    volatile: false,
                                 },
                             ));
                         }

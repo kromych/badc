@@ -1542,6 +1542,11 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // an operand; the fix routes through r13 (outside both
     // `caller_gprs` and `callee_gprs`).
     ("ssa_va_start_va_copy_aliasing.c", 0),
+    // C99 6.7.3p6 / 5.1.2.3p2 volatile access preservation (the
+    // setjmp variant lives only in the native lists; setjmp is not
+    // wired for the JIT lane).
+    ("volatile_ptr_alias_loop.c", 0),
+    ("volatile_unused_read.c", 0),
     // `thread_local_*.c` aren't here -- the JIT path's host is
     // macOS arm64 in this repo, where TLS lowering isn't
     // implemented yet (Mach-O __thread_data + dyld

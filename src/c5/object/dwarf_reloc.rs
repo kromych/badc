@@ -1357,7 +1357,7 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
     const STRUCT_BASE: i64 = 1000;
     const STRUCT_STRIDE: i64 = 1000;
     let unsigned = (type_tag & UNSIGNED_BIT) != 0;
-    let bare = type_tag & !UNSIGNED_BIT;
+    let bare = crate::c5::compiler::types::strip_unsigned(type_tag);
     if bare < 0 {
         return None;
     }
@@ -1417,7 +1417,7 @@ fn base_type_for_leaf(
 ) -> Option<BaseTypeDesc> {
     const UNSIGNED_BIT: i64 = 1 << 30;
     let unsigned = (leaf & UNSIGNED_BIT) != 0;
-    let bare = leaf & !UNSIGNED_BIT;
+    let bare = crate::c5::compiler::types::strip_unsigned(leaf);
     let desc = if bare == Ty::Bool as i64 {
         BaseTypeDesc {
             name: "_Bool",

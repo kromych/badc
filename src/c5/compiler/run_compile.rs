@@ -25,8 +25,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty, struct_id_of,
-    struct_ptr_depth,
+    UNSIGNED_BIT, VOLATILE_BIT, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty,
+    struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -79,6 +79,7 @@ impl Compiler {
             let mut static_seen = false;
             let mut extern_seen = false;
             let mut atomic_base: Option<i64> = None;
+            let mut qual_bits: i64 = 0;
             let mut m = decl_base::IntModifiers::default();
             // `_Noreturn`, `__declspec(thread)`, `__declspec(dllexport)`, and
             // `inline` scope to this declaration; clear the carriers so they
@@ -126,6 +127,8 @@ impl Compiler {
                     if self.lex.tk == Token::Noreturn {
                         self.pending_noreturn = true;
                     }
+                    // `volatile` qualifies the declared type (C99 6.7.3).
+                    qual_bits |= self.lex_volatile_bit();
                     self.next()?;
                 } else {
                     break;
@@ -214,15 +217,17 @@ impl Compiler {
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long
-            // x`, etc. The base type is already chosen; these are
-            // pure no-ops in c5 but appear in real C source.
+            // x`, etc. The base type is already chosen; a trailing
+            // `volatile` still qualifies it (C99 6.7.3).
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
                     continue;
                 }
+                qual_bits |= self.lex_volatile_bit();
                 self.next()?;
             }
+            bt |= qual_bits;
 
             // A function-pointer typedef base type contributes its lineage
             // to every declarator in the list (`fn_t a, b;`). The
@@ -781,11 +786,13 @@ impl Compiler {
                         // neither a specifier nor a type nor a parameter
                         // name -- that is the function body.
                         let mut saw_specifier = false;
+                        let mut qual_bits: i64 = 0;
                         while self.lex.tk == Token::FuncSpec
                             || self.lex.tk == Token::Static
                             || self.lex.tk == Token::Extern
                             || self.lex.tk == Token::TypeQual
                         {
+                            qual_bits |= self.lex_volatile_bit();
                             self.next()?;
                             saw_specifier = true;
                         }
@@ -795,7 +802,7 @@ impl Compiler {
                             Ty::Int as i64
                         } else {
                             break;
-                        };
+                        } | qual_bits;
                         while self.lex.tk != ';' && self.lex.tk != 0 {
                             let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
                             if decl_idx != usize::MAX {
@@ -957,7 +964,7 @@ impl Compiler {
                     // float-typed code expects, and the load/store
                     // semantics stay consistent.
                     for &idx in params.indices.iter() {
-                        let pty = self.symbols[idx].type_ & !UNSIGNED_BIT;
+                        let pty = self.symbols[idx].type_ & !(UNSIGNED_BIT | VOLATILE_BIT);
                         if pty != Ty::Float as i64 {
                             continue;
                         }

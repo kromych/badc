@@ -1074,6 +1074,17 @@ impl<'a> Walker<'a> {
                     }
                     sorted.sort_by_key(|p| p.0 as u64);
                 } else {
+                    // Signed controlling type: a 4-byte type promotes to
+                    // itself and a sub-int type to signed `int`, so the
+                    // label converts by sign-truncation to 32 bits --
+                    // `case 0x80000000:` on an `int` switch must match
+                    // the sign-extended INT_MIN discriminant. An 8-byte
+                    // type keeps the full-width label.
+                    if type_size_bytes(disc_ty, self.target) <= 4 {
+                        for c in sorted.iter_mut() {
+                            c.0 = (c.0 as i32) as i64;
+                        }
+                    }
                     sorted.sort_by_key(|p| p.0);
                 }
                 let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
@@ -2992,7 +3003,7 @@ impl<'a> Walker<'a> {
                     } else if imm_safe && let Expr::IntLit { val, .. } = self.ast.expr(*rhs) {
                         b.binop_imm(*op, old, *val)
                     } else {
-                        let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
+                        let mut rhs_val = self.walk_expr_rvalue(b, *rhs)?;
                         // The walked rhs may have constant-folded to
                         // an `Imm` even when the AST shape isn't an
                         // `IntLit`; route through `binop_imm` in that
@@ -3001,7 +3012,22 @@ impl<'a> Walker<'a> {
                         if imm_safe && let Some(rk) = b.peek_imm(rhs_val) {
                             b.binop_imm(*op, old, rk)
                         } else {
-                            b.binop(*op, old, rhs_val)
+                            let mut lv = old;
+                            // C99 6.3.1.3 + 6.3.1.8: unsigned divide /
+                            // modulo at a narrower-than-register common
+                            // type masks each operand first, mirroring
+                            // the `Expr::Binary` lowering. Both operand
+                            // types <= 4 bytes means the common type is
+                            // 4 bytes (integer promotion floors at int).
+                            if matches!(*op, BinOp::Divu | BinOp::Modu) {
+                                let rhs_sz = expr_ty(self.ast.expr(*rhs))
+                                    .map_or(8, |t| type_size_bytes(t, self.target));
+                                if type_size_bytes(*ty, self.target) <= 4 && rhs_sz <= 4 {
+                                    lv = b.binop_imm(BinOp::And, lv, 0xffff_ffff);
+                                    rhs_val = b.binop_imm(BinOp::And, rhs_val, 0xffff_ffff);
+                                }
+                            }
+                            b.binop(*op, lv, rhs_val)
                         }
                     };
                 place.store(b, new_val, store_kind);

@@ -402,6 +402,11 @@ impl LexHarness {
     pub fn ival(&self) -> i64 {
         self.lex.ival
     }
+    /// `(l_count, unsigned)` suffix record of the most recently lexed
+    /// integer literal.
+    pub fn int_suffix(&self) -> (u8, bool) {
+        (self.lex.int_suffix_long, self.lex.int_suffix_unsigned)
+    }
     pub fn line(&self) -> usize {
         self.lex.line
     }

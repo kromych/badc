@@ -761,3 +761,43 @@ fn deeply_nested_macro_expansion_does_not_overflow_the_stack() {
     // Must return (Ok or Err), not crash the test process.
     let _ = crate::c5::Compiler::new(src).compile();
 }
+
+// C99 6.6p4: a zero divisor in an evaluated constant expression is a
+// compile error, not a silent fold to 0; a short-circuited or
+// not-taken operand stays unevaluated and must compile.
+#[test]
+fn constant_expression_division_by_zero_is_diagnosed() {
+    expect_compile_error(
+        "int x[1/0];\nint main(void){ return 0; }",
+        "division by zero in a constant expression",
+    );
+    expect_compile_error(
+        "enum { A = 1 % 0 };\nint main(void){ return 0; }",
+        "division by zero in a constant expression",
+    );
+    expect_compile_error(
+        "static int g = 8 / (4 - 4);\nint main(void){ return 0; }",
+        "division by zero in a constant expression",
+    );
+    crate::c5::Compiler::new(
+        "int a[1 ? 2 : 1/0];\nint b[0 || 1 ? 2 : 5/0];\nenum { K = 0 && 1/0 };\n\
+         int main(void){ return 0; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("unevaluated zero divisors must compile");
+}
+
+// C99 6.5.5 with the both-operands-wrap model: LLONG_MIN / -1 and
+// LLONG_MIN % -1 fold (wrapping) instead of aborting the compiler.
+#[test]
+fn constant_expression_llong_min_div_neg_one_folds() {
+    crate::c5::Compiler::new(
+        "static long long k = (-9223372036854775807LL - 1) / -1;\n\
+         static long long r = (-9223372036854775807LL - 1) % -1;\n\
+         int main(void){ return r == 0 && k != 0 ? 0 : 1; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("LLONG_MIN / -1 must fold, not panic");
+}

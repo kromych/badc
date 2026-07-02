@@ -528,7 +528,8 @@ impl Compiler {
             return self.parse_typeof_specifier();
         }
 
-        let bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
+        let base_tok = self.lex.tk;
+        let mut bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
             scalar
         } else if self.lex.tk == Token::Enum {
             // `enum [Tag] [{ ... }]` collapses to `int`; the shared
@@ -590,17 +591,52 @@ impl Compiler {
             return Err(self.compile_err("type expected"));
         };
 
-        // Trailing qualifiers / modifiers: `int const`, `int long`,
-        // `unsigned int long long`, etc. all collapse to the base type
-        // already chosen.
+        // Trailing specifiers: C99 6.7.2p2 admits the specifier
+        // multiset in any order, so `int long`, `int unsigned`,
+        // `char unsigned`, `double long` re-derive the base tag from
+        // the folded modifiers. A non-scalar base (typedef, struct,
+        // enum) has no valid int-modifier combination; the tokens are
+        // consumed as before.
+        if self.consume_trailing_decl_modifiers(&mut m)? {
+            if base_tok == Token::Int {
+                bt = m.int_base();
+            } else if base_tok == Token::Char {
+                bt = m.char_tag(self.target.plain_char_signed());
+            } else if base_tok == Token::Double && m.saw_long() {
+                self.pending.base_was_long_double = true;
+            }
+        }
+
+        Ok(bt)
+    }
+
+    /// Consume the specifiers that may trail the base-type keyword:
+    /// int modifiers fold into `m` (the caller re-derives the base
+    /// tag), qualifiers are no-ops, and `inline` / `_Noreturn` set
+    /// the same pending flags as in leading position. Returns true
+    /// when an int modifier was consumed.
+    pub(super) fn consume_trailing_decl_modifiers(
+        &mut self,
+        m: &mut IntModifiers,
+    ) -> Result<bool, C5Error> {
+        let mut saw_int_mod = false;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::Attribute {
                 self.skip_attribute_specifiers()?;
                 continue;
             }
+            if self.lex.tk == Token::Inline {
+                self.pending_is_inline = true;
+            }
+            if self.lex.tk == Token::Noreturn {
+                self.pending_noreturn = true;
+            }
+            if self.try_consume_int_modifier(m)? {
+                saw_int_mod = true;
+                continue;
+            }
             self.next()?;
         }
-
-        Ok(bt)
+        Ok(saw_int_mod)
     }
 }

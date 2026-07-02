@@ -695,6 +695,13 @@ pub struct Compiler {
     /// scopes to the immediately following declarator only.
     pending_noreturn: bool,
 
+    /// Nesting depth of unevaluated constant-expression operands
+    /// (short-circuited `&&` / `||` right sides and not-taken `?:`
+    /// arms). C99 6.6p4 forbids a zero divisor in a constant
+    /// expression, but an unevaluated operand must not trigger the
+    /// diagnostic (`1 ? 2 : 1/0` is accepted by gcc / clang).
+    const_unevaluated: u32,
+
     /// Per-function AST. The arena is reset at every function
     /// entry; the SSA walker reads from these snapshots at codegen
     /// entry.
@@ -1274,6 +1281,7 @@ impl Compiler {
             uses_alloca_in_current_fn: false,
             pending_is_inline: false,
             pending_noreturn: false,
+            const_unevaluated: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),

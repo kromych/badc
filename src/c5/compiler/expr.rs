@@ -109,7 +109,7 @@ impl Compiler {
     /// With `u`/`U`: same hierarchy in the unsigned variants.
     /// With `l`/`L` / `ll`/`LL`: floor at the named width and let
     /// the magnitude bump further as needed.
-    fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
+    pub(super) fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
         let suffix_long = self.lex.int_suffix_long;
         let mut is_unsigned = self.lex.int_suffix_unsigned;
         // C99 6.4.4.1: a hexadecimal, octal, or binary constant may take
@@ -133,7 +133,9 @@ impl Compiler {
                 if bits >= 128 {
                     true
                 } else {
-                    mag <= (1u128 << (bits - 1))
+                    // Signed max is 2^(bits-1) - 1; 2^31 / 2^63 exactly
+                    // must move to the next rank (or unsigned type).
+                    mag < (1u128 << (bits - 1))
                 }
             } else if bits >= 128 {
                 true
@@ -2450,7 +2452,8 @@ impl Compiler {
                 // below when the lvalue is integer but the rhs is
                 // floating (C99 6.5.16.2 performs the operation in the
                 // common type).
-                let rhs_is_fp = is_floating_scalar(self.ty);
+                let rhs_ty = self.ty;
+                let rhs_is_fp = is_floating_scalar(rhs_ty);
                 if (binop == Token::AddOp as i64 || binop == Token::SubOp as i64)
                     && is_pointer_ty(lhs_ty)
                     && !is_floating_scalar(lhs_ty)
@@ -2503,6 +2506,16 @@ impl Compiler {
                 // converts the result back to the lvalue's integer
                 // type (C99 6.5.16.2).
                 let op_is_fp = lhs_is_fp || rhs_is_fp;
+                // C99 6.5.16.2p3: `E1 op= E2` computes `E1 op E2`, so
+                // divide / modulo signedness follows the 6.3.1.8 common
+                // type of both operands, not the lvalue alone (`int x;
+                // x /= 2u` divides unsigned). Pointer operands keep the
+                // lvalue's signedness (no arithmetic common type).
+                let div_unsigned = if op_is_fp || is_pointer_ty(lhs_ty) || is_pointer_ty(rhs_ty) {
+                    is_unsigned_ty(lhs_ty)
+                } else {
+                    is_unsigned_ty(usual_arith_common_ty(lhs_ty, rhs_ty, self.target))
+                };
                 use super::super::ir::BinOp as B;
                 let bop = match binop {
                     x if x == Token::AddOp as i64 => {
@@ -2529,14 +2542,14 @@ impl Compiler {
                     x if x == Token::DivOp as i64 => {
                         if op_is_fp {
                             B::Fdiv
-                        } else if is_unsigned_ty(lhs_ty) {
+                        } else if div_unsigned {
                             B::Divu
                         } else {
                             B::Div
                         }
                     }
                     x if x == Token::ModOp as i64 => {
-                        if is_unsigned_ty(lhs_ty) {
+                        if div_unsigned {
                             B::Modu
                         } else {
                             B::Mod
@@ -2615,18 +2628,21 @@ impl Compiler {
                 let else_ty = self.ty;
                 // C99 6.5.15p5: when both arms have arithmetic type the
                 // conditional's type is their usual-arithmetic-conversions
-                // common type and each arm converts to it. Without the cast a
-                // mixed int / floating ternary stores one arm through the
-                // other arm's store kind (integer bits read as a double). Pure
-                // integer arms already lower correctly on the I64 path, so
-                // only the floating-involved case needs the conversion here.
+                // common type and each arm converts to it. Without the cast
+                // a mixed int / floating ternary stores one arm through the
+                // other arm's store kind, and mixed-signedness integer arms
+                // take the wrong signedness (`c ? 1u : -1` must be the
+                // zero-extended unsigned value, not sign-extended int).
+                // Same-typed integer arms need no conversion.
                 let mut result_ty = self.ty;
                 let arith = |t: i64| !is_pointer_ty(t) && !is_struct_ty(t);
-                if (is_floating_scalar(then_ty) || is_floating_scalar(else_ty))
-                    && arith(then_ty)
-                    && arith(else_ty)
-                {
-                    let common = fp_result_ty(then_ty, else_ty);
+                let arms_fp = is_floating_scalar(then_ty) || is_floating_scalar(else_ty);
+                if (arms_fp || then_ty != else_ty) && arith(then_ty) && arith(else_ty) {
+                    let common = if arms_fp {
+                        fp_result_ty(then_ty, else_ty)
+                    } else {
+                        usual_arith_common_ty(then_ty, else_ty, self.target)
+                    };
                     result_ty = common;
                     if then_ty != common && then_ast.is_some() {
                         let pos = self.ast_src_pos();
@@ -2798,16 +2814,18 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
-                // Pick logical (Shru) for unsigned LHS, arithmetic (Shr) otherwise.
-                // The RHS is the shift count; only the LHS sign matters.
-
+                // Pick logical (Shru) for unsigned LHS, arithmetic (Shr)
+                // otherwise; the RHS is the shift count and does not
+                // participate. C99 6.5.7p3: the result has the promoted
+                // LHS type, so a 64-bit LHS keeps its width. Set the
+                // type before building the AST node so the node carries
+                // the result type, mirroring the `<<` path.
+                let lhs_size = self.size_of_type(t);
+                self.ty = if lhs_size <= 2 { Ty::Int as i64 } else { t };
                 if is_unsigned_ty(t) {
                     self.ast_binop(crate::c5::ir::BinOp::Shru);
-                    // Preserve LHS unsigned-ness so chained shifts/compares stay unsigned.
-                    self.ty = t;
                 } else {
                     self.ast_binop(crate::c5::ir::BinOp::Shr);
-                    self.ty = Ty::Int as i64;
                 }
             } else if self.lex.tk == Token::AddOp {
                 self.next()?;

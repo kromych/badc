@@ -168,7 +168,8 @@ impl Compiler {
             // unsigned, so a value with the field's high bit set
             // zero-extends rather than sign-extends.
             let mut field_base_is_enum = false;
-            let field_base = if let Some(inner) = atomic_field_base {
+            let field_base_tok = self.lex.tk;
+            let mut field_base = if let Some(inner) = atomic_field_base {
                 inner
             } else if self.lex.tk == Token::Typeof {
                 // `typeof ( ... ) member;` (C23 6.7.2.5): the operand's
@@ -310,13 +311,15 @@ impl Compiler {
                 return Err(self.compile_err("type expected in struct field"));
             };
 
-            // Trailing modifiers: `int long`, `unsigned long long`, etc.
-            while is_decl_modifier(self.lex.tk) {
-                if self.lex.tk == Token::Attribute {
-                    self.skip_attribute_specifiers()?;
-                    continue;
+            // Trailing specifiers: C99 6.7.2p2 admits any order, so
+            // `int long` / `char unsigned` fields re-derive the base
+            // tag from the folded modifiers.
+            if self.consume_trailing_decl_modifiers(&mut mods)? {
+                if field_base_tok == Token::Int {
+                    field_base = mods.int_base();
+                } else if field_base_tok == Token::Char {
+                    field_base = mods.char_tag(self.target.plain_char_signed());
                 }
-                self.next()?;
             }
 
             // Anonymous struct/union member (C11 6.7.2.1p13). The

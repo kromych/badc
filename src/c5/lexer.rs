@@ -943,6 +943,24 @@ impl Lexer {
         items
     }
 
+    /// Consume the C99 6.4.4.1 integer suffix (`u`/`U` and one or two
+    /// `l`/`L` in any combination) and record it in the suffix fields
+    /// the expression parser types the literal from. Shared by every
+    /// integer base so no base drops the suffix.
+    fn lex_int_suffix(&mut self) {
+        let mut l_count: u8 = 0;
+        let mut u_seen = false;
+        while self.pos < self.src.len() && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L') {
+            match self.src[self.pos] {
+                b'l' | b'L' => l_count = l_count.saturating_add(1),
+                _ => u_seen = true,
+            }
+            self.pos += 1;
+        }
+        self.int_suffix_long = l_count.min(2);
+        self.int_suffix_unsigned = u_seen;
+    }
+
     /// Finalise a numeric constant: a digit/suffix run must not be
     /// immediately followed by an identifier character. `1_000`,
     /// `0x1_0000`, `1.0q` are invalid preprocessing numbers (C99 6.4.8)
@@ -1075,11 +1093,7 @@ impl Lexer {
                         val = val * 8 + (self.src[self.pos] - b'0') as i64;
                         self.pos += 1;
                     }
-                    while self.pos < self.src.len()
-                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
-                    {
-                        self.pos += 1;
-                    }
+                    self.lex_int_suffix();
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
@@ -1116,11 +1130,7 @@ impl Lexer {
                             ),
                         )));
                     }
-                    while self.pos < self.src.len()
-                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
-                    {
-                        self.pos += 1;
-                    }
+                    self.lex_int_suffix();
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
@@ -1176,30 +1186,9 @@ impl Lexer {
                             &format!("{}: hex literal `0x` has no digits", self.line),
                         )));
                     }
-                    // Hex literals can carry the standard integer suffix
-                    // letters (u/U/l/L plus ll/LL combinations such as
-                    // 0xFFFFULL). Per C99 6.4.4.1 record the longness
-                    // (one or two `l`/`L`) and the unsigned modifier
-                    // so the expression parser can type the literal
-                    // accordingly; without that the literal would
-                    // default to `int` and any arithmetic that
-                    // assumes 64-bit width truncates to 32.
-                    let mut l_count: u8 = 0;
-                    let mut u_seen = false;
-                    while self.pos < self.src.len()
-                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
-                    {
-                        match self.src[self.pos] {
-                            b'l' | b'L' => l_count = l_count.saturating_add(1),
-                            b'u' | b'U' => u_seen = true,
-                            _ => {}
-                        }
-                        self.pos += 1;
-                    }
+                    self.lex_int_suffix();
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
-                    self.int_suffix_long = l_count.min(2);
-                    self.int_suffix_unsigned = u_seen;
                     self.int_is_decimal = false;
                     return self.end_number();
                 }
@@ -1225,29 +1214,13 @@ impl Lexer {
                 // (1u, 1L, 1ULL, 1lu, ...). When any suffix letter is
                 // present, the literal is unambiguously an integer --
                 // no float-suffix `f`/`F` can follow because the
-                // standard doesn't allow it on integer literals. Per
-                // C99 6.4.4.1, count consecutive `l`/`L` characters
-                // (one => long, two => long long) and note any
-                // `u`/`U` for the unsigned modifier.
+                // standard doesn't allow it on integer literals.
                 if self.pos < self.src.len()
                     && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
                 {
-                    let mut l_count: u8 = 0;
-                    let mut u_seen = false;
-                    while self.pos < self.src.len()
-                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
-                    {
-                        match self.src[self.pos] {
-                            b'l' | b'L' => l_count = l_count.saturating_add(1),
-                            b'u' | b'U' => u_seen = true,
-                            _ => {}
-                        }
-                        self.pos += 1;
-                    }
+                    self.lex_int_suffix();
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
-                    self.int_suffix_long = l_count.min(2);
-                    self.int_suffix_unsigned = u_seen;
                     return self.end_number();
                 }
 

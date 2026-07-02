@@ -6,25 +6,24 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=F32)                            -> d0 [f32]
+    v3   ParamRef(1, kind=F32)                            -> d1 [f32]
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=2, kind=I32 }                    -> x0
     v6   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x0
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v7   LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v8   LocalAddr(-2)                                    -> x0
-    v9   Store { addr=v8, disp=0, value=v3, kind=F32 }    -> -
-    terminator Jmp(b3)   (exit_acc=v9)
+    v7   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v8   Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v3)
   block 2  start_pc=0
-    v10  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v11  Fneg(v3)                                         -> d0 [f32]
-    v12  LocalAddr(-2)                                    -> x0
-    v13  Store { addr=v12, disp=0, value=v11, kind=F32 }  -> -
-    terminator Jmp(b3)   (exit_acc=v13)
+    v9   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v10  Fneg(v3)                                         -> d1 [f32]
+    v11  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v10)
   block 3  start_pc=0
-    v14  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
-    terminator Return(v14)   (exit_acc=v14)
+    v12  Phi { incoming=[b1:v3, b2:v10], kind=F32 }       -> d1 [f32]
+    v13  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
+    terminator Return(v12)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=grad_dot
 fn ent_pc=2 n_params=3 variadic=false locals=6
@@ -33,7 +32,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=6
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=F32)                            -> d0 [f32]
+    v3   ParamRef(1, kind=F32)                            -> d2 [f32]
     v4   Imm(0)                                           -> x0
     v5   ParamRef(2, kind=F32)                            -> d1 [f32]
     v6   Imm(0)                                           -> x0
@@ -41,40 +40,38 @@ fn ent_pc=2 n_params=3 variadic=false locals=6
     v8   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x0
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
-    v9   LoadLocal { off=-1, kind=F32 }                   -> d2 [f32]
-    v10  LocalAddr(-5)                                    -> x0
-    v11  Store { addr=v10, disp=0, value=v3, kind=F32 }   -> -
-    terminator Jmp(b3)   (exit_acc=v11)
+    v9   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v10  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v3)
   block 2  start_pc=0
-    v12  LoadLocal { off=-1, kind=F32 }                   -> d2 [f32]
-    v13  Fneg(v3)                                         -> d0 [f32]
-    v14  LocalAddr(-5)                                    -> x0
-    v15  Store { addr=v14, disp=0, value=v13, kind=F32 }  -> -
-    terminator Jmp(b3)   (exit_acc=v15)
+    v11  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v12  Fneg(v3)                                         -> d2 [f32]
+    v13  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v12)
   block 3  start_pc=0
-    v16  LoadLocal { off=-5, kind=F32 }                   -> d0 [f32]
-    v17  Imm(0)                                           -> x0
-    v18  LoadLocal { off=2, kind=I32 }                    -> x0
-    v19  BinopI { op=and, lhs=v1, rhs_imm=2 }             -> x0
-    terminator Bz { cond=v19, target=b5, fall=b4 }   (exit_acc=v19)
+    v14  Phi { incoming=[b1:v3, b2:v12], kind=F32 }       -> d2 [f32]
+    v15  LoadLocal { off=-5, kind=F32 }                   -> d0 [f32]
+    v16  Imm(0)                                           -> x0
+    v17  LoadLocal { off=2, kind=I32 }                    -> x0
+    v18  BinopI { op=and, lhs=v1, rhs_imm=2 }             -> x0
+    terminator Bz { cond=v18, target=b5, fall=b4 }   (exit_acc=v18)
   block 4  start_pc=0
-    v20  LoadLocal { off=-2, kind=F32 }                   -> d2 [f32]
-    v21  LocalAddr(-6)                                    -> x0
-    v22  Store { addr=v21, disp=0, value=v5, kind=F32 }   -> -
-    terminator Jmp(b6)   (exit_acc=v22)
+    v19  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
+    v20  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v5)
   block 5  start_pc=0
-    v23  LoadLocal { off=-2, kind=F32 }                   -> d2 [f32]
-    v24  Fneg(v5)                                         -> d1 [f32]
-    v25  LocalAddr(-6)                                    -> x0
-    v26  Store { addr=v25, disp=0, value=v24, kind=F32 }  -> -
-    terminator Jmp(b6)   (exit_acc=v26)
+    v21  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
+    v22  Fneg(v5)                                         -> d1 [f32]
+    v23  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v22)
   block 6  start_pc=0
-    v27  LoadLocal { off=-6, kind=F32 }                   -> d1 [f32]
-    v28  Imm(0)                                           -> x0
-    v29  LoadLocal { off=-3, kind=F32 }                   -> d2 [f32]
-    v30  LoadLocal { off=-4, kind=F32 }                   -> d2 [f32]
-    v31  Binop { op=fadd, lhs=v16, rhs=v27 }              -> d0 [f32]
-    terminator Return(v31)   (exit_acc=v31)
+    v24  Phi { incoming=[b4:v5, b5:v22], kind=F32 }       -> d1 [f32]
+    v25  LoadLocal { off=-6, kind=F32 }                   -> d0 [f32]
+    v26  Imm(0)                                           -> x0
+    v27  LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
+    v28  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
+    v29  Binop { op=fadd, lhs=v14, rhs=v24 }              -> d0 [f32]
+    terminator Return(v29)   (exit_acc=v29)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=3

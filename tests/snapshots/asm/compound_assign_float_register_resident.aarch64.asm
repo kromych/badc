@@ -21,10 +21,155 @@ Disassembly of section .text:
                	fmov	s16, w0
                	sub	x17, x29, #0x10
                	str	s16, [x17]
-               	mov	x1, #0x0                // =0
-               	b	<addr>
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fsub	s0, s0, s17
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	sub	x16, x29, #0x10
+               	ldr	s1, [x16]
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
+               	fcvt	d1, s1
+               	fmov	d17, x0
+               	fadd	d1, d1, d17
+               	fcvt	s1, d1
+               	sub	x17, x29, #0x10
+               	str	s1, [x17]
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fsub	s0, s0, s17
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	sub	x16, x29, #0x10
+               	ldr	s1, [x16]
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
+               	fcvt	d1, s1
+               	fmov	d17, x0
+               	fadd	d1, d1, d17
+               	fcvt	s1, d1
+               	sub	x17, x29, #0x10
+               	str	s1, [x17]
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fsub	s0, s0, s17
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	sub	x16, x29, #0x10
+               	ldr	s1, [x16]
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
+               	fcvt	d1, s1
+               	fmov	d17, x0
+               	fadd	d1, d1, d17
+               	fcvt	s1, d1
+               	sub	x17, x29, #0x10
+               	str	s1, [x17]
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fsub	s0, s0, s17
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	sub	x16, x29, #0x10
+               	ldr	s1, [x16]
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
+               	fcvt	d1, s1
+               	fmov	d17, x0
+               	fadd	d1, d1, d17
+               	fcvt	s1, d1
+               	sub	x17, x29, #0x10
+               	str	s1, [x17]
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fsub	s0, s0, s17
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	sub	x16, x29, #0x10
+               	ldr	s1, [x16]
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
+               	fcvt	d1, s1
+               	fmov	d17, x0
+               	fadd	d1, d1, d17
+               	fcvt	s1, d1
+               	sub	x17, x29, #0x10
+               	str	s1, [x17]
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fsub	s0, s0, s17
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	sub	x16, x29, #0x10
+               	ldr	s1, [x16]
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
+               	fcvt	d1, s1
+               	fmov	d17, x0
+               	fadd	d1, d1, d17
+               	fcvt	s1, d1
+               	sub	x17, x29, #0x10
+               	str	s1, [x17]
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fsub	s0, s0, s17
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	sub	x16, x29, #0x10
+               	ldr	s1, [x16]
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
+               	fcvt	d1, s1
+               	fmov	d17, x0
+               	fadd	d1, d1, d17
+               	fcvt	s1, d1
+               	sub	x17, x29, #0x10
+               	str	s1, [x17]
                	mov	x0, #0x40000000         // =1073741824
                	fmov	s17, w0
                	fsub	s0, s0, s17
@@ -44,11 +189,6 @@ Disassembly of section .text:
                	fcvt	s0, d0
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0x8
-               	b.lt	<addr>
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
                	mov	x0, #0x42f00000         // =1123024896

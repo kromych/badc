@@ -90,21 +90,28 @@ Disassembly of section .text:
                	retq
                	xorq	%rcx, %rcx
                	jmp	<addr>
-               	xorq	%rdx, %rdx
-               	jmp	<addr>
                	leaq	-0x480(%rbp), %rax
-               	movslq	%ecx, %rsi
-               	imulq	$0xc, %rsi, %rdi
-               	addq	%rdi, %rax
-               	movslq	%edx, %rdi
-               	imulq	$0x64, %rsi, %rsi
-               	addq	%rdi, %rsi
-               	movl	%esi, (%rax,%rdi,4)
-               	movslq	%edx, %rax
-               	leaq	0x1(%rax), %rdx
-               	movslq	%edx, %rax
-               	cmpq	$0x3, %rax
-               	jl	<addr>
+               	movslq	%ecx, %rdx
+               	imulq	$0xc, %rdx, %rsi
+               	addq	%rsi, %rax
+               	addq	$0x0, %rax
+               	imulq	$0x64, %rdx, %rdx
+               	addq	$0x0, %rdx
+               	movl	%edx, (%rax)
+               	leaq	-0x480(%rbp), %rax
+               	movslq	%ecx, %rdx
+               	imulq	$0xc, %rdx, %rsi
+               	addq	%rsi, %rax
+               	imulq	$0x64, %rdx, %rdx
+               	incq	%rdx
+               	movl	%edx, 0x4(%rax)
+               	leaq	-0x480(%rbp), %rax
+               	movslq	%ecx, %rdx
+               	imulq	$0xc, %rdx, %rsi
+               	addq	%rsi, %rax
+               	imulq	$0x64, %rdx, %rdx
+               	addq	$0x2, %rdx
+               	movl	%edx, 0x8(%rax)
                	movslq	%ecx, %rax
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
@@ -126,24 +133,43 @@ Disassembly of section .text:
                	retq
                	xorq	%rcx, %rcx
                	jmp	<addr>
-               	xorq	%rdx, %rdx
-               	jmp	<addr>
                	leaq	-0x4a8(%rbp), %rax
-               	movslq	%ecx, %rsi
-               	movq	%rsi, %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rdi, %rax
-               	movslq	%edx, %rdi
-               	addq	%rdi, %rax
-               	addq	$0x41, %rsi
-               	addq	%rdi, %rsi
-               	movslq	%esi, %rdi
-               	movb	%dil, (%rax)
-               	movslq	%edx, %rax
-               	leaq	0x1(%rax), %rdx
-               	movslq	%edx, %rax
-               	cmpq	$0x4, %rax
-               	jl	<addr>
+               	movslq	%ecx, %rdx
+               	movq	%rdx, %rsi
+               	shlq	$0x2, %rsi
+               	addq	%rsi, %rax
+               	addq	$0x0, %rax
+               	addq	$0x41, %rdx
+               	addq	$0x0, %rdx
+               	movslq	%edx, %rsi
+               	movb	%sil, (%rax)
+               	leaq	-0x4a8(%rbp), %rax
+               	movslq	%ecx, %rdx
+               	movq	%rdx, %rsi
+               	shlq	$0x2, %rsi
+               	addq	%rsi, %rax
+               	addq	$0x41, %rdx
+               	incq	%rdx
+               	movslq	%edx, %rsi
+               	movb	%sil, 0x1(%rax)
+               	leaq	-0x4a8(%rbp), %rax
+               	movslq	%ecx, %rdx
+               	movq	%rdx, %rsi
+               	shlq	$0x2, %rsi
+               	addq	%rsi, %rax
+               	addq	$0x41, %rdx
+               	addq	$0x2, %rdx
+               	movslq	%edx, %rsi
+               	movb	%sil, 0x2(%rax)
+               	leaq	-0x4a8(%rbp), %rax
+               	movslq	%ecx, %rdx
+               	movq	%rdx, %rsi
+               	shlq	$0x2, %rsi
+               	addq	%rsi, %rax
+               	addq	$0x41, %rdx
+               	addq	$0x3, %rdx
+               	movslq	%edx, %rsi
+               	movb	%sil, 0x3(%rax)
                	movslq	%ecx, %rax
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax

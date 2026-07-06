@@ -74,20 +74,31 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x60]!
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
-               	mov	x1, #0x0                // =0
-               	b	<addr>
                	sub	x0, x29, #0x8
-               	sxtw	x2, w1
-               	add	x0, x0, x2
-               	add	x2, x2, #0x1
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	strb	w2, [x0]
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0x8
-               	b.lt	<addr>
+               	add	x0, x0, #0x0
+               	mov	x1, #0x1                // =1
+               	strb	w1, [x0]
+               	sub	x0, x29, #0x8
+               	mov	x1, #0x2                // =2
+               	strb	w1, [x0, #0x1]
+               	sub	x0, x29, #0x8
+               	mov	x1, #0x3                // =3
+               	strb	w1, [x0, #0x2]
+               	sub	x0, x29, #0x8
+               	mov	x1, #0x4                // =4
+               	strb	w1, [x0, #0x3]
+               	sub	x0, x29, #0x8
+               	mov	x1, #0x5                // =5
+               	strb	w1, [x0, #0x4]
+               	sub	x0, x29, #0x8
+               	mov	x1, #0x6                // =6
+               	strb	w1, [x0, #0x5]
+               	sub	x0, x29, #0x8
+               	mov	x1, #0x7                // =7
+               	strb	w1, [x0, #0x6]
+               	sub	x0, x29, #0x8
+               	mov	x1, #0x8                // =8
+               	strb	w1, [x0, #0x7]
                	sub	x0, x29, #0x10
                	sub	x1, x29, #0x8
                	mov	x2, #0x8                // =8

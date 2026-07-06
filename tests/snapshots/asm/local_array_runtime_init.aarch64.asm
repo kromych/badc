@@ -152,19 +152,19 @@ Disassembly of section .text:
                	mov	x0, #0x64               // =100
                	sub	x1, x29, #0x8
                	strb	w0, [x1, #0x3]
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	b	<addr>
-               	sub	x2, x29, #0x8
-               	sxtw	x3, w1
-               	add	x2, x2, x3
-               	ldrb	w2, [x2]
-               	add	x0, x0, x2
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
-               	sxtw	x2, w1
-               	cmp	x2, #0x4
-               	b.lt	<addr>
+               	sub	x0, x29, #0x8
+               	add	x0, x0, #0x0
+               	ldrb	w0, [x0]
+               	add	x0, x0, #0x0
+               	sub	x1, x29, #0x8
+               	ldrb	w1, [x1, #0x1]
+               	add	x0, x0, x1
+               	sub	x1, x29, #0x8
+               	ldrb	w1, [x1, #0x2]
+               	add	x0, x0, x1
+               	sub	x1, x29, #0x8
+               	ldrb	w1, [x1, #0x3]
+               	add	x0, x0, x1
                	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

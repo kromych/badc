@@ -55,34 +55,50 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sxtw	x2, w2
                	sxtw	x3, w3
-               	mov	x5, #0x0                // =0
-               	fmov	d16, x5
+               	mov	x4, #0x0                // =0
+               	fmov	d16, x4
                	sub	x17, x29, #0x8
                	str	d16, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x17, #0x18              // =24
                	mul	x4, x2, x17
                	add	x4, x0, x4
-               	sxtw	x6, w5
-               	lsl	x7, x6, #3
-               	add	x4, x4, x7
+               	add	x4, x4, #0x0
                	ldr	d1, [x4]
-               	mov	x17, #0x18              // =24
-               	mul	x4, x6, x17
-               	add	x4, x1, x4
-               	lsl	x6, x3, #3
-               	add	x4, x4, x6
+               	add	x4, x1, #0x0
+               	lsl	x5, x3, #3
+               	add	x4, x4, x5
                	ldr	d2, [x4]
                	fmadd	d0, d1, d2, d0
                	sub	x17, x29, #0x8
                	str	d0, [x17]
-               	sxtw	x4, w5
-               	add	x5, x4, #0x1
-               	sxtw	x4, w5
-               	cmp	x4, #0x3
-               	b.lt	<addr>
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
+               	mov	x17, #0x18              // =24
+               	mul	x4, x2, x17
+               	add	x4, x0, x4
+               	ldr	d1, [x4, #0x8]
+               	add	x4, x1, #0x18
+               	lsl	x5, x3, #3
+               	add	x4, x4, x5
+               	ldr	d2, [x4]
+               	fmadd	d0, d1, d2, d0
+               	sub	x17, x29, #0x8
+               	str	d0, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
+               	mov	x17, #0x18              // =24
+               	mul	x2, x2, x17
+               	add	x0, x0, x2
+               	ldr	d1, [x0, #0x10]
+               	add	x0, x1, #0x30
+               	lsl	x1, x3, #3
+               	add	x0, x0, x1
+               	ldr	d2, [x0]
+               	fmadd	d0, d1, d2, d0
+               	sub	x17, x29, #0x8
+               	str	d0, [x17]
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	add	sp, sp, #0x10
@@ -265,8 +281,6 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x1
                	fdiv	d0, d16, d17
-               	mov	x1, #0x0                // =0
-               	b	<addr>
                	sub	x16, x29, #0xd0
                	ldr	d1, [x16]
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
@@ -287,11 +301,306 @@ Disassembly of section .text:
                	fmadd	d1, d5, d2, d1
                	sub	x17, x29, #0xd0
                	str	d1, [x17]
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0x10
-               	b.lt	<addr>
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d5, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d1, d5, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d1, [x17]
+               	sub	x16, x29, #0xd0
+               	ldr	d1, [x16]
+               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
+               	fmadd	d3, d2, d1, d1
+               	fmadd	d2, d2, d3, d1
+               	fmadd	d4, d0, d2, d1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
+               	fdiv	d0, d0, d17
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d16, x0
+               	fmadd	d3, d16, d3, d1
+               	fmov	d16, x0
+               	fmadd	d2, d16, d2, d3
+               	fadd	d2, d2, d4
+               	fmadd	d0, d0, d2, d1
+               	sub	x17, x29, #0xd0
+               	str	d0, [x17]
                	mov	x0, #0x5769             // =22377
                	movk	x0, #0x8b14, lsl #16
                	movk	x0, #0xbf0a, lsl #32

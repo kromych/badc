@@ -36,18 +36,21 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
                	ret
-               	mov	x2, #0x0                // =0
-               	b	<addr>
-               	add	x1, x0, x2
-               	lsr	x3, x2, #12
-               	add	x3, x3, #0x1
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
-               	strb	w3, [x1]
+               	add	x1, x0, #0x0
+               	mov	x2, #0x1                // =1
+               	strb	w2, [x1]
                	mov	x17, #0x1000            // =4096
-               	add	x2, x2, x17
-               	cmp	x2, x20
-               	b.lo	<addr>
+               	add	x1, x0, x17
+               	mov	x2, #0x2                // =2
+               	strb	w2, [x1]
+               	mov	x17, #0x2000            // =8192
+               	add	x1, x0, x17
+               	mov	x2, #0x3                // =3
+               	strb	w2, [x1]
+               	mov	x17, #0x3000            // =12288
+               	add	x1, x0, x17
+               	mov	x2, #0x4                // =4
+               	strb	w2, [x1]
                	mov	x2, #0x0                // =0
                	b	<addr>
                	add	x1, x0, x2

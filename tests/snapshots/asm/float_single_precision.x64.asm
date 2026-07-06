@@ -64,18 +64,56 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
                	movss	%xmm14, -0x8(%rbp,%riz)
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movss	-0x8(%rbp,%riz), %xmm0
                	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	movss	%xmm0, -0x8(%rbp,%riz)
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0xa, %rax
-               	jl	<addr>
+               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x8(%rbp,%riz)
                	movl	$0x3f800001, %eax       # imm = 0x3F800001
                	movq	%rax, %xmm14
                	movss	%xmm14, -0x18(%rbp,%riz)
@@ -201,4 +239,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

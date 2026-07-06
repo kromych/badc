@@ -15,3 +15,4 @@ pub(crate) mod rotate;
 pub(crate) mod split_crit_edges;
 pub(crate) mod store_forward;
 pub(crate) mod struct_return_reg;
+pub(crate) mod unroll;

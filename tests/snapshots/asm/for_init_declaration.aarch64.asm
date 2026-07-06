@@ -10,66 +10,19 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	b	<addr>
-               	add	x0, x0, x1
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
-               	sxtw	x2, w1
-               	cmp	x2, #0xa
-               	b.lt	<addr>
-               	sxtw	x0, w0
+               	mov	x0, #0x2d               // =45
                	ret
 
 <multi_decl>:
-               	mov	x2, #0x0                // =0
-               	mov	x1, #0xa                // =10
-               	mov	x0, x2
-               	b	<addr>
-               	add	x3, x2, x1
-               	add	x0, x0, x3
-               	add	x2, x2, #0x1
-               	sxtw	x1, w1
-               	sub	x1, x1, #0x1
-               	sxtw	x3, w2
-               	sxtw	x4, w1
-               	cmp	x3, x4
-               	b.lt	<addr>
-               	sxtw	x0, w0
+               	mov	x0, #0x32               // =50
                	ret
 
 <shadowing>:
                	mov	x0, #0x2a               // =42
-               	mov	x2, #0x0                // =0
-               	b	<addr>
-               	sxtw	x1, w2
-               	add	x2, x1, #0x1
-               	sxtw	x1, w2
-               	cmp	x1, #0x3
-               	b.lt	<addr>
                	ret
-               	b	<addr>
 
 <adjacent_fors>:
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	b	<addr>
-               	add	x0, x0, x1
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
-               	sxtw	x2, w1
-               	cmp	x2, #0x5
-               	b.lt	<addr>
-               	mov	x2, #0xa                // =10
-               	b	<addr>
-               	add	x0, x0, x2
-               	sxtw	x1, w2
-               	add	x2, x1, #0x1
-               	sxtw	x1, w2
-               	cmp	x1, #0xd
-               	b.lt	<addr>
-               	sxtw	x0, w0
+               	mov	x0, #0x2b               // =43
                	ret
 
 <struct_ptr_init>:

@@ -43,20 +43,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	mov	x1, #0x0                // =0
-               	b	<addr>
                	sub	x0, x29, #0x28
-               	sxtw	x2, w1
-               	add	x3, x2, #0x1
-               	sxtw	x3, w3
-               	mov	x17, #0x64              // =100
-               	mul	x3, x3, x17
-               	str	x3, [x0, x2, lsl #3]
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0x5
-               	b.lt	<addr>
+               	add	x0, x0, #0x0
+               	mov	x1, #0x64               // =100
+               	str	x1, [x0]
+               	sub	x0, x29, #0x28
+               	mov	x1, #0xc8               // =200
+               	str	x1, [x0, #0x8]
+               	sub	x0, x29, #0x28
+               	mov	x1, #0x12c              // =300
+               	str	x1, [x0, #0x10]
+               	sub	x0, x29, #0x28
+               	mov	x1, #0x190              // =400
+               	str	x1, [x0, #0x18]
+               	sub	x0, x29, #0x28
+               	mov	x1, #0x1f4              // =500
+               	str	x1, [x0, #0x20]
                	sub	x0, x29, #0x28
                	mov	x1, #0x5                // =5
                	bl	<addr>

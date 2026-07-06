@@ -93,15 +93,11 @@ Disassembly of section .text:
                	fmov	s16, w0
                	sub	x17, x29, #0x18
                	str	s16, [x17]
-               	mov	x1, #0x0                // =0
-               	b	<addr>
                	sub	x16, x29, #0x18
                	ldr	s0, [x16]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	sxtw	x2, w1
-               	lsl	x2, x2, #4
-               	add	x0, x0, x2
+               	add	x0, x0, #0x0
                	ldr	s1, [x0]
                	ldr	s2, [x0, #0x4]
                	fadd	s1, s1, s2
@@ -110,11 +106,149 @@ Disassembly of section .text:
                	fadd	s0, s0, s1
                	sub	x17, x29, #0x18
                	str	s0, [x17]
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0xc
-               	b.lt	<addr>
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x10
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x20
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x30
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x40
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x50
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x60
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x70
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x80
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x90
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0xa0
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
+               	sub	x16, x29, #0x18
+               	ldr	s0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0xb0
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
                	sub	x16, x29, #0x18
                	ldr	s0, [x16]
                	mov	x0, #0x0                // =0

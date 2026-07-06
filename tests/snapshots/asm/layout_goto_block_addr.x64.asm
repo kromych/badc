@@ -64,20 +64,24 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %r12
-               	jmp	<addr>
-               	movslq	%ebx, %rdi
+               	xorq	%rdi, %rdi
                	callq	<addr>
-               	addq	%rax, %r12
-               	incq	%rbx
-               	movslq	%ebx, %rax
-               	cmpq	$0x5, %rax
-               	jl	<addr>
-               	movslq	%r12d, %rax
+               	leaq	(%rax), %rbx
+               	movl	$0x1, %edi
+               	callq	<addr>
+               	addq	%rax, %rbx
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	addq	%rax, %rbx
+               	movl	$0x3, %edi
+               	callq	<addr>
+               	addq	%rax, %rbx
+               	movl	$0x4, %edi
+               	callq	<addr>
+               	addq	%rbx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

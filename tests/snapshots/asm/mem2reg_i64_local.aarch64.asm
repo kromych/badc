@@ -12,14 +12,10 @@ Disassembly of section .text:
                	brk	#<addr>:
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
-               	mov	x2, #0x0                // =0
-               	mov	x1, x2
-               	b	<addr>
+               	add	x1, x0, #0x0
                	add	x1, x1, x0
-               	add	x2, x2, #0x1
-               	cmp	x2, #0x4
-               	b.lt	<addr>
-               	mov	x0, x1
+               	add	x1, x1, x0
+               	add	x0, x1, x0
                	ret
 
 <main>:

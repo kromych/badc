@@ -36,16 +36,17 @@ Disassembly of section .text:
                	movl	$0x7, %edi
                	callq	<addr>
                	addq	$0x3e8, %rbx            # imm = 0x3E8
-               	xorq	%r12, %r12
-               	jmp	<addr>
-               	incq	%rbx
-               	movslq	%r12d, %rax
-               	leaq	0x1(%rax), %r12
                	xorq	%rdi, %rdi
                	callq	<addr>
-               	movslq	%r12d, %rax
-               	cmpq	$0x3, %rax
-               	jl	<addr>
+               	incq	%rbx
+               	xorq	%rdi, %rdi
+               	callq	<addr>
+               	incq	%rbx
+               	xorq	%rdi, %rdi
+               	callq	<addr>
+               	incq	%rbx
+               	xorq	%rdi, %rdi
+               	callq	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x7, %rax
@@ -69,4 +70,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

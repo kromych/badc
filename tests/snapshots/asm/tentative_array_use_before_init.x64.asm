@@ -29,18 +29,19 @@ Disassembly of section .text:
                	retq
 
 <sum_first_four>:
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	movslq	%ecx, %rsi
-               	movslq	(%rdx,%rsi,4), %rdx
-               	addq	%rdx, %rax
-               	movslq	%ecx, %rcx
-               	incq	%rcx
-               	movslq	%ecx, %rdx
-               	cmpq	$0x4, %rdx
-               	jl	<addr>
+               	leaq	<rip>, %rax
+               	addq	$0x0, %rax
+               	movslq	(%rax), %rax
+               	addq	$0x0, %rax
+               	leaq	<rip>, %rcx
+               	movslq	0x4(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	0x8(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	0xc(%rcx), %rcx
+               	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
 
@@ -81,3 +82,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -108,6 +108,13 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
         say("variadic");
         return false;
     }
+    // A body calling a returns-twice function (setjmp family / vfork)
+    // stays out of line: splicing it would silently drop the caller's
+    // no-slot-share discipline (`FunctionSsa::has_returns_twice_call`).
+    if func.has_returns_twice_call {
+        say("calls a returns-twice function");
+        return false;
+    }
     // Host-ABI aggregates are admitted only in the shapes the splice can
     // reproduce: a by-value parameter passed in a single integer register
     // (it arrives as the address of the caller's copy in one argument, and
@@ -990,6 +997,9 @@ fn splice_multi_block(
         computed_goto_targets: original.computed_goto_targets,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: original.multi_cell_slots,
+        // The candidate filter rejects returns-twice callees, so only
+        // the caller's own flag can be set here.
+        has_returns_twice_call: original.has_returns_twice_call,
     };
 }
 

@@ -22,7 +22,7 @@ Disassembly of section .text:
                	movsbq	(%rax), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movl	$0x1, %edx
+               	orq	$0x1, %rdx
                	cmpq	%rax, %rax
                	je	<addr>
                	orq	$0x2, %rdx
@@ -77,4 +77,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

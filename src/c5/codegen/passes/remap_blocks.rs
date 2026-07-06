@@ -6,8 +6,10 @@
 //! flat `insts` array, so value ids, liveness, and the allocator's
 //! input are unaffected. The complete block-id reference surface is
 //! the terminators' targets (`Jmp`, `Bz`, `Bnz`, `FallThrough`),
-//! `Phi::incoming` predecessor ids, `Inst::BlockAddr`, and
-//! `FunctionSsa::computed_goto_targets`.
+//! `Phi::incoming` predecessor ids, `Inst::BlockAddr`,
+//! `FunctionSsa::computed_goto_targets`, and the
+//! `FunctionSsa::jump_tables` target lists (`Terminator::JumpTable`
+//! itself carries only the table index).
 
 use alloc::vec::Vec;
 
@@ -53,7 +55,10 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
                 *target = new_id[*target as usize];
                 *fall_through = new_id[*fall_through as usize];
             }
-            Terminator::Return(_) | Terminator::TailExt(_) | Terminator::GotoIndirect { .. } => {}
+            Terminator::Return(_)
+            | Terminator::TailExt(_)
+            | Terminator::GotoIndirect { .. }
+            | Terminator::JumpTable { .. } => {}
         }
     }
     for inst in func.insts.iter_mut() {
@@ -65,6 +70,11 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
                 }
             }
             _ => {}
+        }
+    }
+    for table in func.jump_tables.iter_mut() {
+        for t in table.iter_mut() {
+            *t = new_id[*t as usize];
         }
     }
     for t in func.computed_goto_targets.iter_mut() {
@@ -95,6 +105,25 @@ mod tests {
             terminator,
             exit_acc: NO_VALUE,
         }
+    }
+
+    #[test]
+    fn permutation_remaps_jump_table_targets() {
+        let mut f = func_with(
+            vec![Inst::Imm(0)],
+            vec![
+                block(0..1, Terminator::JumpTable { idx: 0, table: 0 }),
+                block(1..1, Terminator::Return(NO_VALUE)),
+                block(1..1, Terminator::Return(NO_VALUE)),
+            ],
+        );
+        f.jump_tables = vec![vec![1, 2, 1]];
+        permute_blocks(&mut f, &[0, 2, 1]);
+        assert_eq!(f.jump_tables[0], vec![2, 1, 2]);
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::JumpTable { table: 0, .. }
+        ));
     }
 
     #[test]

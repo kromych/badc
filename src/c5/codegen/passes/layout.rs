@@ -156,7 +156,7 @@ fn rpo_numbers(func: &FunctionSsa) -> Vec<usize> {
     visited[0] = true;
     stack.push((0, 0));
     while let Some(&(b, si)) = stack.last() {
-        let succ = successors(&func.blocks[b as usize].terminator, &[]);
+        let succ = successors(&func.blocks[b as usize].terminator, &[], &func.jump_tables);
         if si < succ.len() {
             stack.last_mut().unwrap().1 += 1;
             let s = succ[si];
@@ -204,7 +204,7 @@ fn is_irreducible(func: &FunctionSsa, idom: &[BlockId], rpo: &[usize]) -> bool {
         if rpo[b] == usize::MAX {
             continue;
         }
-        for s in successors(&block.terminator, &[]) {
+        for s in successors(&block.terminator, &[], &func.jump_tables) {
             if rpo[s as usize] <= rpo[b] && !dominates(s, b as BlockId, idom) {
                 return true;
             }
@@ -235,7 +235,7 @@ fn natural_loops(
             continue;
         }
         let b = b as BlockId;
-        for s in successors(&block.terminator, &[]) {
+        for s in successors(&block.terminator, &[], &func.jump_tables) {
             // `b -> s` is a back edge iff the header `s` dominates `b`.
             if dominates(s, b, idom) {
                 let body = bodies.entry(s).or_default();
@@ -392,6 +392,13 @@ fn lay_out(
                     Terminator::Return(_)
                     | Terminator::TailExt(_)
                     | Terminator::GotoIndirect { .. } => {}
+                    // Case blocks chain in table order; the entries are
+                    // remapped with the rest of the id surface.
+                    Terminator::JumpTable { table, .. } => {
+                        for &t in func.jump_tables[table as usize].iter().rev() {
+                            stack.push(t);
+                        }
+                    }
                 }
             }
             Some(li) => {
@@ -409,7 +416,7 @@ fn lay_out(
                 // chain.
                 let mut exits: Vec<BlockId> = Vec::new();
                 for &cb in chunk.iter().rev() {
-                    for s in successors(&func.blocks[cb as usize].terminator, &[]) {
+                    for s in successors(&func.blocks[cb as usize].terminator, &[], &func.jump_tables) {
                         if !loops[li].body.contains(&s) && !exits.contains(&s) {
                             exits.push(s);
                         }

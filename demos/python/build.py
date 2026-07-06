@@ -299,6 +299,21 @@ def _fix_winsock_fd_gates() -> None:
         sys.exit("build: select() fd-range gate not found in selectmodule.c")
 
 
+def _widen_stack_margin() -> None:
+    """badc's register allocator does not yet split live ranges, so
+    _PyEval_EvalFrameDefault's frame is several times larger than the
+    reference compilers'. CPython requires the recursion-check margin to
+    exceed one eval frame (pycore_pythonrun.h); raise it from 2^11 to
+    2^13 words until the allocator work shrinks the frame."""
+    pythonrun = SRC / "Include/internal/pycore_pythonrun.h"
+    text = pythonrun.read_text()
+    needle = "#  define _PyOS_LOG2_STACK_MARGIN 11"
+    if needle in text:
+        pythonrun.write_text(text.replace(needle, "#  define _PyOS_LOG2_STACK_MARGIN 13", 1))
+    elif "#  define _PyOS_LOG2_STACK_MARGIN 13" not in text:
+        sys.exit("build: _PyOS_LOG2_STACK_MARGIN not found in pycore_pythonrun.h")
+
+
 def _check_frozen() -> None:
     missing = [
         h for h in re.findall(r'frozen_modules/[\w.]+\.h', (SRC / "Python/frozen.c").read_text())
@@ -316,6 +331,7 @@ def ensure_inputs(target: str, log) -> None:
         sys.stderr.write(r.stdout + r.stderr)
         sys.exit("build: setup.py failed")
     cfg = TARGETS[target]
+    _widen_stack_margin()
     if cfg.get("windows"):
         # Windows derives its config from the in-tree PC/ files rather than a
         # committed manifest: disable mimalloc, wire the extra builtins into the
@@ -738,7 +754,10 @@ def run_tests(target: str, py: Path, log, tier2: bool = False) -> int:
     r = run([str(exe), "-m", "test", "-q", "-w", *ignore, *slice_], cwd=str(cwd), env=env, timeout=1800)
     print(f"build: test slice {' '.join(slice_)} exit={r.returncode}")
     if r.returncode != 0:
-        sys.stderr.write((r.stdout + r.stderr)[-3000:])
+        # Keep the head too: a fatal-error dump puts the message and the
+        # aborting frame above hundreds of repeated traceback lines.
+        blob = r.stdout + r.stderr
+        sys.stderr.write(blob[:3000] + ("\n...\n" + blob[-3000:] if len(blob) > 3000 else ""))
         return 1
     return 0
 

@@ -1003,6 +1003,12 @@
 
 /* Define to 1 if you have the 'pthread_getattr_np' function. */
 #define HAVE_PTHREAD_GETATTR_NP 1
+/* badc links the GNU C library on these targets; CPython gates the
+   pthread_getattr_np stack-bounds path on the glibc macro. */
+#ifndef __GLIBC__
+#define __GLIBC__ 2
+#define __GLIBC_MINOR__ 17
+#endif
 
 /* Define to 1 if you have the 'pthread_getcpuclockid' function. */
 #define HAVE_PTHREAD_GETCPUCLOCKID 1

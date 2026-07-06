@@ -54,8 +54,8 @@ Disassembly of section .text:
                	cmpq	$0x9, %rax
                	jne	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x5, %ecx
                	movq	%rcx, %rax
                	retq
+               	movl	$0x5, %ecx
+               	jmp	<addr>
                	jmp	<addr>

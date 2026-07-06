@@ -28,12 +28,26 @@ fn ent_pc=1 n_params=1 variadic=false locals=2
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=2, kind=I32 }                    -> x0
     v6   BinopI { op=lt, lhs=v1, rhs_imm=2 }              -> x0
-    terminator Bnz { cond=v6, target=b4, fall=b5 }   (exit_acc=v6)
+    terminator Bnz { cond=v6, target=b5, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v7   Phi { incoming=[b7:v3, b2:v18, b8:v3, b3:v20], kind=I64 } -> x1
+    v23  BinopI { op=eq, lhs=v1, rhs_imm=2 }              -> x0
+    terminator Bnz { cond=v23, target=b4, fall=b2 }   (exit_acc=v23)
+  block 2  start_pc=0
+    terminator Jmp(b3)
+  block 3  start_pc=0
+    v7   Phi { incoming=[b6:v3, b7:v18, b2:v3, b4:v20], kind=I64 } -> x1
     v8   Extend { value=v7, kind=I32 }                    -> x0
     terminator Return(v8)   (exit_acc=v8)
-  block 2  start_pc=0
+  block 4  start_pc=0
+    v20  Imm(-1)                                          -> x1
+    v21  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v20)
+  block 5  start_pc=0
+    v22  BinopI { op=eq, lhs=v1, rhs_imm=1 }              -> x0
+    terminator Bnz { cond=v22, target=b7, fall=b6 }   (exit_acc=v22)
+  block 6  start_pc=0
+    terminator Jmp(b3)
+  block 7  start_pc=0
     v9   ImmData(8)                                       -> x0
     v10  Imm(0)                                           -> x1
     v11  Imm(0)                                           -> x1
@@ -45,23 +59,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=2
     v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x1
     v18  Extend { value=v16, kind=I32 }                   -> x1
     v19  Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v18)
-  block 3  start_pc=0
-    v20  Imm(-1)                                          -> x1
-    v21  Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v20)
-  block 4  start_pc=0
-    v22  BinopI { op=eq, lhs=v1, rhs_imm=1 }              -> x0
-    terminator Bnz { cond=v22, target=b2, fall=b7 }   (exit_acc=v22)
-  block 5  start_pc=0
-    v23  BinopI { op=eq, lhs=v1, rhs_imm=2 }              -> x0
-    terminator Bnz { cond=v23, target=b3, fall=b8 }   (exit_acc=v23)
-  block 6  start_pc=0
-    terminator Jmp(b2)
-  block 7  start_pc=0
-    terminator Jmp(b1)
+    terminator Jmp(b3)   (exit_acc=v18)
   block 8  start_pc=0
-    terminator Jmp(b1)
+    terminator Jmp(b7)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=1

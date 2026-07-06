@@ -22,12 +22,6 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s16, [x17]
                	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	cmp	x0, #0xa
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
                	b	<addr>
                	sxtw	x0, w1
                	scvtf	d0, x0
@@ -42,7 +36,11 @@ Disassembly of section .text:
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x8
                	str	s0, [x17]
-               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	sxtw	x0, w1
+               	cmp	x0, #0xa
+               	b.lt	<addr>
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
                	fcvt	d0, s0

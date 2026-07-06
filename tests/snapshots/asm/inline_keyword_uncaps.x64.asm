@@ -31,7 +31,7 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>

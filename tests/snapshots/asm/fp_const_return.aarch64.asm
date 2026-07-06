@@ -18,12 +18,6 @@ Disassembly of section .text:
                	fmov	d16, x3
                	sub	x17, x29, #0x8
                	str	d16, [x17]
-               	sxtw	x2, w3
-               	cmp	x2, x1
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x2, w3
-               	add	x3, x2, #0x1
                	b	<addr>
                	sxtw	x2, w3
                	lsl	x2, x2, #3
@@ -31,7 +25,11 @@ Disassembly of section .text:
                	ldr	d0, [x2]
                	sub	x17, x29, #0x8
                	str	d0, [x17]
-               	b	<addr>
+               	sxtw	x2, w3
+               	add	x3, x2, #0x1
+               	sxtw	x2, w3
+               	cmp	x2, x1
+               	b.lt	<addr>
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	add	sp, sp, #0x10
@@ -65,21 +63,19 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	cset	x3, gt
                	cbz	x3, <addr>
-               	b	<addr>
-               	sxtw	x1, w2
-               	sub	x2, x1, #0x1
-               	b	<addr>
-               	sxtw	x1, w2
-               	cmp	x1, #0x0
-               	b.ne	<addr>
-               	b	<addr>
                	sub	x1, x2, #0x1
                	sxtw	x1, w1
                	ldr	x1, [x0, x1, lsl #3]
                	cmp	x1, #0x0
                	cset	x3, eq
                	cbz	x3, <addr>
+               	sxtw	x1, w2
+               	sub	x2, x1, #0x1
                	b	<addr>
+               	b	<addr>
+               	sxtw	x1, w2
+               	cmp	x1, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d0, x0
                	ret
@@ -88,7 +84,6 @@ Disassembly of section .text:
                	ldr	x0, [x0, x1, lsl #3]
                	scvtf	d0, x0
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

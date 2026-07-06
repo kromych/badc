@@ -13,20 +13,16 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x2
                	b.lt	<addr>
-               	b	<addr>
-               	sxtw	x0, w0
-               	ret
-               	mov	x0, #0xa                // =10
-               	b	<addr>
-               	mov	x0, #0x14               // =20
-               	b	<addr>
-               	mov	x0, #0x1e               // =30
-               	b	<addr>
-               	cmp	x0, #0x1
-               	b.eq	<addr>
-               	b	<addr>
                	cmp	x0, #0x2
                	b.eq	<addr>
+               	mov	x0, #0x1e               // =30
+               	sxtw	x0, w0
+               	ret
+               	mov	x0, #0x14               // =20
+               	b	<addr>
+               	cmp	x0, #0x1
+               	b.ne	<addr>
+               	mov	x0, #0xa                // =10
                	b	<addr>
                	b	<addr>
 

@@ -14,25 +14,25 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jge	<addr>
                	imulq	$-0x1, %rdi, %rdi
-               	jmp	<addr>
                	movq	%rdi, %rax
                	retq
+               	jmp	<addr>
 
 <llabs>:
                	testq	%rdi, %rdi
                	jge	<addr>
                	imulq	$-0x1, %rdi, %rdi
-               	jmp	<addr>
                	movq	%rdi, %rax
                	retq
+               	jmp	<addr>
 
 <imaxabs>:
                	testq	%rdi, %rdi
                	jge	<addr>
                	imulq	$-0x1, %rdi, %rdi
-               	jmp	<addr>
                	movq	%rdi, %rax
                	retq
+               	jmp	<addr>
 
 <imaxdiv>:
                	pushq	%rbp

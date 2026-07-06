@@ -26,19 +26,17 @@ Disassembly of section .text:
                	subq	$0x80, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x5, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	-0x28(%rbp), %rax
                	movslq	%ecx, %rdx
                	leaq	0x1(%rdx), %rsi
                	movslq	%esi, %rsi
                	movq	%rsi, (%rax,%rdx,8)
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0x5, %rax
+               	jl	<addr>
                	leaq	-0x28(%rbp), %rdi
                	xorq	%rbx, %rbx
                	movl	$0x4, %edx

@@ -28,16 +28,16 @@ Disassembly of section .text:
                	fsub	d0, d0, d1
                	sub	x17, x29, #0x18
                	str	d0, [x17]
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	fmov	d16, x0
-               	sub	x17, x29, #0x18
-               	str	d16, [x17]
                	sub	x16, x29, #0x18
                	ldr	d0, [x16]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x0                // =0
+               	fmov	d16, x0
+               	sub	x17, x29, #0x18
+               	str	d16, [x17]
+               	b	<addr>
                	b	<addr>
                	b	<addr>
 

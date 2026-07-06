@@ -15,9 +15,9 @@ Disassembly of section .text:
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5, %rcx
-               	jl	<addr>
+               	jge	<addr>
+               	jmp	<addr>
                	movq	%rcx, %rax
                	retq
-               	jmp	<addr>
                	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

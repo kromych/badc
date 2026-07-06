@@ -67,48 +67,48 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     v61  Mcpy { dst=v59, src=v60, size=32 }               -> x0
     v62  LoadLocal { off=-15, kind=I32 }                  -> x0
     v63  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v63)
+    terminator Jmp(b1)   (exit_acc=v63)
   block 1  start_pc=0
-    v64  Imm(1)                                           -> x0
-    terminator Return(v64)   (exit_acc=v64)
-  block 2  start_pc=0
     v65  LocalAddr(-4)                                    -> x0
     v66  Load { addr=v65, disp=0, kind=I64 }              -> x0
     v67  BinopI { op=ne, lhs=v66, rhs_imm=4369 }          -> x0
-    terminator Bz { cond=v67, target=b4, fall=b3 }   (exit_acc=v67)
-  block 3  start_pc=0
+    terminator Bz { cond=v67, target=b3, fall=b2 }   (exit_acc=v67)
+  block 2  start_pc=0
     v68  Imm(2)                                           -> x0
     terminator Return(v68)   (exit_acc=v68)
-  block 4  start_pc=0
+  block 3  start_pc=0
     v69  LocalAddr(-4)                                    -> x0
     v70  BinopI { op=add, lhs=v69, rhs_imm=8 }            -> x1
     v71  Load { addr=v69, disp=8, kind=I64 }              -> x0
     v72  BinopI { op=ne, lhs=v71, rhs_imm=8738 }          -> x0
-    terminator Bz { cond=v72, target=b6, fall=b5 }   (exit_acc=v72)
-  block 5  start_pc=0
+    terminator Bz { cond=v72, target=b5, fall=b4 }   (exit_acc=v72)
+  block 4  start_pc=0
     v73  Imm(3)                                           -> x0
     terminator Return(v73)   (exit_acc=v73)
-  block 6  start_pc=0
+  block 5  start_pc=0
     v74  LocalAddr(-4)                                    -> x0
     v75  BinopI { op=add, lhs=v74, rhs_imm=16 }           -> x1
     v76  Load { addr=v74, disp=16, kind=I64 }             -> x0
     v77  BinopI { op=ne, lhs=v76, rhs_imm=13107 }         -> x0
-    terminator Bz { cond=v77, target=b8, fall=b7 }   (exit_acc=v77)
-  block 7  start_pc=0
+    terminator Bz { cond=v77, target=b7, fall=b6 }   (exit_acc=v77)
+  block 6  start_pc=0
     v78  Imm(4)                                           -> x0
     terminator Return(v78)   (exit_acc=v78)
-  block 8  start_pc=0
+  block 7  start_pc=0
     v79  LocalAddr(-4)                                    -> x0
     v80  BinopI { op=add, lhs=v79, rhs_imm=24 }           -> x1
     v81  Load { addr=v79, disp=24, kind=I64 }             -> x0
     v82  BinopI { op=ne, lhs=v81, rhs_imm=17476 }         -> x0
-    terminator Bz { cond=v82, target=b10, fall=b9 }   (exit_acc=v82)
-  block 9  start_pc=0
+    terminator Bz { cond=v82, target=b9, fall=b8 }   (exit_acc=v82)
+  block 8  start_pc=0
     v83  Imm(5)                                           -> x0
     terminator Return(v83)   (exit_acc=v83)
-  block 10  start_pc=0
+  block 9  start_pc=0
     v84  Imm(0)                                           -> x0
     terminator Return(v84)   (exit_acc=v84)
+  block 10  start_pc=0
+    v64  Imm(1)                                           -> x0
+    terminator Return(v64)   (exit_acc=v64)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

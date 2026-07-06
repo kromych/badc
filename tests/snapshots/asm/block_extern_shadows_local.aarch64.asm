@@ -26,9 +26,6 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
@@ -40,9 +37,6 @@ Disassembly of section .text:
                	cmp	x0, #0x69
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ret
-               	b	<addr>
-               	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -70,4 +64,8 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	mov	x0, #0x0                // =0
+               	ret
+               	mov	x0, #0x1                // =1
+               	ret
+               	mov	x0, #0x3                // =3
                	ret

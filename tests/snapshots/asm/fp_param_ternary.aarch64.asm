@@ -15,10 +15,10 @@ Disassembly of section .text:
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
                	cbz	x0, <addr>
-               	b	<addr>
-               	fneg	s1, s1
                	fmov	d0, d1
                	ret
+               	fneg	s1, s1
+               	b	<addr>
 
 <grad_dot>:
                	sxtw	x0, w0
@@ -26,15 +26,15 @@ Disassembly of section .text:
                	mov	x17, #0x1               // =1
                	and	x1, x0, x17
                	cbz	x1, <addr>
-               	b	<addr>
-               	fneg	s2, s2
                	mov	x17, #0x2               // =2
                	and	x0, x0, x17
                	cbz	x0, <addr>
-               	b	<addr>
-               	fneg	s1, s1
                	fadd	s0, s2, s1
                	ret
+               	fneg	s1, s1
+               	b	<addr>
+               	fneg	s2, s2
+               	b	<addr>
 
 <main>:
                	stp	x20, x21, [sp, #-0x20]!

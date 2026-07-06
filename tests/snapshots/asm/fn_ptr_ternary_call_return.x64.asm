@@ -35,14 +35,10 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movabsq	$0x123456789, %rbx      # imm = 0x123456789
                	leaq	-<rip>, %rcx       # <addr>
-               	jmp	<addr>
-               	leaq	-<rip>, %rcx       # <addr>
                	movq	%rcx, %rax
                	movq	%rbx, %rdi
                	callq	*%rax
                	movq	%rax, %r13
-               	leaq	-<rip>, %rcx       # <addr>
-               	jmp	<addr>
                	leaq	-<rip>, %rcx       # <addr>
                	movabsq	$0x1234567890, %rdi     # imm = 0x1234567890
                	movq	%rcx, %rax
@@ -90,4 +86,9 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	leaq	-<rip>, %rcx      # <addr>
+               	jmp	<addr>
+               	leaq	-<rip>, %rcx      # <addr>
+               	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

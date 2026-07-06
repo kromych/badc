@@ -22,7 +22,9 @@ Disassembly of section .text:
 
 <test>:
                	sxtw	x0, w0
-               	b	<addr>
+               	sxtw	x1, w0
+               	lsl	x1, x1, #1
+               	sxtw	x1, w1
                	add	x2, x0, x0
                	cmp	x0, #0x3
                	b.le	<addr>
@@ -31,10 +33,6 @@ Disassembly of section .text:
                	add	x0, x1, x2
                	sxtw	x0, w0
                	ret
-               	sxtw	x1, w0
-               	lsl	x1, x1, #1
-               	sxtw	x1, w1
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

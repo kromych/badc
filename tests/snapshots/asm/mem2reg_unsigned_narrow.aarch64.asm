@@ -13,21 +13,16 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	mov	x2, x1
-               	sxtw	x3, w2
-               	cmp	x3, #0x3
-               	b.ge	<addr>
+               	b	<addr>
                	add	x0, x0, #0x2c
                	mov	x17, #0x2345            // =9029
                	add	x1, x1, x17
                	add	x2, x2, #0x1
                	sxtw	x2, w2
-               	b	<addr>
-               	mov	x3, #0x0                // =0
-               	b	<addr>
-               	mov	x3, #0x1                // =1
-               	b	<addr>
-               	add	x2, x3, #0x2
                	sxtw	x3, w2
+               	cmp	x3, #0x3
+               	b.lt	<addr>
+               	mov	x3, #0x0                // =0
                	sxtw	x0, w0
                	cmp	x0, #0x84
                	b.eq	<addr>
@@ -42,4 +37,9 @@ Disassembly of section .text:
                	sxtw	x0, w3
                	ret
                	b	<addr>
+               	b	<addr>
+               	mov	x3, #0x1                // =1
+               	b	<addr>
+               	add	x2, x3, #0x2
+               	sxtw	x3, w2
                	b	<addr>

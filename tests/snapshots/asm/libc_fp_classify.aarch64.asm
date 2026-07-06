@@ -31,28 +31,25 @@ Disassembly of section .text:
                	b.ne	<addr>
                	cmp	x1, #0x0
                	b.ne	<addr>
+               	mov	x1, #0x2                // =2
+               	mov	x0, x1
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x1, #0x3                // =3
                	b	<addr>
                	cmp	x0, #0x7ff
                	b.ne	<addr>
-               	b	<addr>
-               	mov	x1, #0x2                // =2
-               	b	<addr>
-               	mov	x1, #0x3                // =3
-               	mov	x0, x1
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	cmp	x1, #0x0
                	b.ne	<addr>
-               	b	<addr>
-               	mov	x0, #0x4                // =4
+               	mov	x1, #0x1                // =1
+               	mov	x0, x1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
-               	b	<addr>
                	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	b	<addr>
+               	mov	x0, #0x4                // =4
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

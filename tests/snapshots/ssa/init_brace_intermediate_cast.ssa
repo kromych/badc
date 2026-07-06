@@ -274,13 +274,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
   block 54  start_pc=0
     v161 LoadLocal { off=-11, kind=I64 }                  -> x0
     v162 Imm(0)                                           -> x0
-    terminator Jmp(b56)   (exit_acc=v162)
+    terminator Jmp(b55)   (exit_acc=v162)
   block 55  start_pc=0
-    v163 Imm(28)                                          -> x0
-    terminator Return(v163)   (exit_acc=v163)
-  block 56  start_pc=0
     v164 Imm(0)                                           -> x0
     terminator Return(v164)   (exit_acc=v164)
+  block 56  start_pc=0
+    v163 Imm(28)                                          -> x0
+    terminator Return(v163)   (exit_acc=v163)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

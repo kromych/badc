@@ -16,18 +16,16 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	movslq	(%rdi,%rdx,4), %rax
                	xorq	%rsi, %rsi
-               	movslq	%r8d, %rcx
-               	cmpq	%rdx, %rcx
-               	jg	<addr>
-               	jmp	<addr>
-               	movslq	%r8d, %rcx
-               	leaq	0x1(%rcx), %r8
                	jmp	<addr>
                	movslq	%r8d, %rcx
                	movslq	(%rdi,%rcx,4), %rcx
                	addq	%rsi, %rcx
                	movslq	%ecx, %rsi
-               	jmp	<addr>
+               	movslq	%r8d, %rcx
+               	leaq	0x1(%rcx), %r8
+               	movslq	%r8d, %rcx
+               	cmpq	%rdx, %rcx
+               	jle	<addr>
                	addq	%rsi, %rax
                	movslq	%eax, %rax
                	retq

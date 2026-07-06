@@ -22,12 +22,6 @@ Disassembly of section .text:
                	sub	x17, x29, #0x10
                	str	s16, [x17]
                	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	cmp	x0, #0x8
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
                	b	<addr>
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
@@ -50,7 +44,11 @@ Disassembly of section .text:
                	fcvt	s0, d0
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	sxtw	x0, w1
+               	cmp	x0, #0x8
+               	b.lt	<addr>
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
                	mov	x0, #0x42f00000         // =1123024896

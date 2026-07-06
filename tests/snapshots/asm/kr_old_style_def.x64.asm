@@ -23,12 +23,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	retq
-               	jmp	<addr>
-               	movl	$0x2, %eax
-               	retq
                	leaq	<rip>, %rax
                	movsbq	(%rax), %rax
                	cmpq	$0x5a, %rax
@@ -36,4 +30,8 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	xorq	%rax, %rax
+               	retq
+               	movl	$0x1, %eax
+               	retq
+               	movl	$0x2, %eax
                	retq

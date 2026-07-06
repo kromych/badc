@@ -79,19 +79,17 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x28]
-               	sxtw	x0, w1
-               	mov	x17, #0x4240            // =16960
-               	movk	x17, #0xf, lsl #16
-               	cmp	x0, x17
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
                	b	<addr>
                	ldursw	x0, [x29, #-0x28]
                	add	x0, x0, #0x1
                	stur	w0, [x29, #-0x28]
-               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	sxtw	x0, w1
+               	mov	x17, #0x4240            // =16960
+               	movk	x17, #0xf, lsl #16
+               	cmp	x0, x17
+               	b.lt	<addr>
                	mov	x0, #0x1                // =1
                	sub	x1, x29, #0x20
                	bl	<addr>

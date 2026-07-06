@@ -91,13 +91,11 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x10, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	movl	$0x10, %eax
+               	addq	$0x30, %rsp
+               	popq	%rbp
+               	retq

@@ -16,8 +16,8 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	cbz	x2, <addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x1                // =1
                	mov	x0, x1
                	ret
+               	mov	x1, #0x1                // =1
+               	b	<addr>
                	b	<addr>

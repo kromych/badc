@@ -3431,18 +3431,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=264
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x1
     v6   Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v5)
+    terminator Jmp(b3)   (exit_acc=v5)
   block 1  start_pc=0
-    v7   Phi { incoming=[b0:v5, b2:v11], kind=I64 }       -> x1
-    v8   LoadLocal { off=-3, kind=I64 }                   -> x0
-    v9   BinopI { op=lt, lhs=v7, rhs_imm=261 }            -> x0
-    terminator Bz { cond=v9, target=b4, fall=b3 }   (exit_acc=v9)
-  block 2  start_pc=0
-    v10  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v11  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x1
-    v12  Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v11)
-  block 3  start_pc=0
     v13  ImmData(24)                                      -> x0
     v14  LoadLocal { off=-3, kind=I64 }                   -> x2
     v15  BinopI { op=shl, lhs=v7, rhs_imm=4 }             -> x2
@@ -3456,6 +3446,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=264
     v23  BinopI { op=shl, lhs=v7, rhs_imm=1 }             -> x2
     v24  Store { addr=v20, disp=8, value=v23, kind=I64 }  -> -
     terminator Jmp(b2)   (exit_acc=v24)
+  block 2  start_pc=0
+    v10  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v11  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x1
+    v12  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v11)
+  block 3  start_pc=0
+    v7   Phi { incoming=[b0:v5, b2:v11], kind=I64 }       -> x1
+    v8   LoadLocal { off=-3, kind=I64 }                   -> x0
+    v9   BinopI { op=lt, lhs=v7, rhs_imm=261 }            -> x0
+    terminator Bnz { cond=v9, target=b1, fall=b4 }   (exit_acc=v9)
   block 4  start_pc=0
     v25  ImmData(24)                                      -> x7
     v26  Imm(0)                                           -> x0

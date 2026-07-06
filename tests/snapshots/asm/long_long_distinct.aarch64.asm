@@ -13,46 +13,6 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x90]!
                	stp	x29, x30, [sp, #0x80]
                	add	x29, sp, #0x80
-               	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x19, [sp], #0x90
-               	ret
-               	b	<addr>
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x19, [sp], #0x90
-               	ret
-               	b	<addr>
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x19, [sp], #0x90
-               	ret
-               	b	<addr>
-               	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x19, [sp], #0x90
-               	ret
-               	b	<addr>
-               	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x19, [sp], #0x90
-               	ret
-               	b	<addr>
-               	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x19, [sp], #0x90
-               	ret
-               	b	<addr>
-               	mov	x0, #0x7                // =7
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x19, [sp], #0x90
-               	ret
-               	b	<addr>
-               	mov	x0, #0x8                // =8
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x19, [sp], #0x90
-               	ret
                	sub	x0, x29, #0x40
                	mov	x1, #0xa                // =10
                	str	x1, [x0]
@@ -106,6 +66,38 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0x80]
+               	ldr	x19, [sp], #0x90
+               	ret
+               	mov	x0, #0x1                // =1
+               	ldp	x29, x30, [sp, #0x80]
+               	ldr	x19, [sp], #0x90
+               	ret
+               	mov	x0, #0x2                // =2
+               	ldp	x29, x30, [sp, #0x80]
+               	ldr	x19, [sp], #0x90
+               	ret
+               	mov	x0, #0x3                // =3
+               	ldp	x29, x30, [sp, #0x80]
+               	ldr	x19, [sp], #0x90
+               	ret
+               	mov	x0, #0x4                // =4
+               	ldp	x29, x30, [sp, #0x80]
+               	ldr	x19, [sp], #0x90
+               	ret
+               	mov	x0, #0x5                // =5
+               	ldp	x29, x30, [sp, #0x80]
+               	ldr	x19, [sp], #0x90
+               	ret
+               	mov	x0, #0x6                // =6
+               	ldp	x29, x30, [sp, #0x80]
+               	ldr	x19, [sp], #0x90
+               	ret
+               	mov	x0, #0x7                // =7
+               	ldp	x29, x30, [sp, #0x80]
+               	ldr	x19, [sp], #0x90
+               	ret
+               	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x19, [sp], #0x90
                	ret

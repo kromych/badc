@@ -63,10 +63,7 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	sxtw	x2, w1
-               	ldursw	x3, [x29, #0x10]
-               	cmp	x2, x3
-               	b.ge	<addr>
+               	b	<addr>
                	sub	x2, x29, #0x40
                	mov	x17, x2
                	str	x9, [sp, #-0x10]!
@@ -90,7 +87,10 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	add	x1, x1, #0x1
                	sxtw	x1, w1
-               	b	<addr>
+               	sxtw	x2, w1
+               	ldursw	x3, [x29, #0x10]
+               	cmp	x2, x3
+               	b.lt	<addr>
                	sub	x1, x29, #0x40
                	sub	x1, x29, #0x20
                	sxtw	x0, w0

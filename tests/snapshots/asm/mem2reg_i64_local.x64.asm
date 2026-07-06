@@ -14,11 +14,11 @@ Disassembly of section .text:
                	leaq	(%rdi,%rdi,2), %rax
                	xorq	%rdx, %rdx
                	movq	%rdx, %rcx
-               	cmpq	$0x4, %rdx
-               	jge	<addr>
+               	jmp	<addr>
                	addq	%rax, %rcx
                	incq	%rdx
-               	jmp	<addr>
+               	cmpq	$0x4, %rdx
+               	jl	<addr>
                	movq	%rcx, %rax
                	retq
 

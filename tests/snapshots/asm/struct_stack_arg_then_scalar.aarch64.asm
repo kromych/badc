@@ -39,8 +39,6 @@ Disassembly of section .text:
                	mov	x2, x3
                	cbz	x0, <addr>
                	mov	x1, #0x1                // =1
-               	b	<addr>
-               	mov	x1, #0x0                // =0
                	mov	x17, #0x4240            // =16960
                	movk	x17, #0xf, lsl #16
                	mul	x0, x1, x17
@@ -73,6 +71,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x70
                	ret
+               	mov	x1, #0x0                // =0
+               	b	<addr>
 
 <dp>:
                	sub	sp, sp, #0x10

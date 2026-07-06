@@ -167,101 +167,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x6, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x7, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x8, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x9, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xa, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xb, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xc, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xd, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xe, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xf, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x10, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x11, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x12, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x13, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rcx, %rcx
                	xorq	%rcx, %rcx
                	testq	%rcx, %rcx
@@ -342,36 +247,6 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x1e, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x1f, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x20, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x21, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x22, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x23, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
                	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
@@ -449,5 +324,104 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	movl	$0x1, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x2, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x3, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x4, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x5, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x6, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x7, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x8, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x9, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0xa, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0xb, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0xc, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0xd, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0xe, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0xf, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x10, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x11, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x12, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x13, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x1e, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x1f, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x20, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x21, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x22, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x23, %eax
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
                	addb	%al, 0x41(%rdx)

@@ -646,12 +646,6 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	movl	$0xa5a5a5a5, %r12d      # imm = 0xA5A5A5A5
                	movq	%rbx, %rax
-               	movslq	%ebx, %rcx
-               	cmpq	$0x10, %rcx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ebx, %rcx
-               	leaq	0x1(%rcx), %rbx
                	jmp	<addr>
                	movl	%eax, %r13d
                	movl	%r12d, %edi
@@ -663,7 +657,11 @@ Disassembly of section .text:
                	movl	%ecx, %ecx
                	addq	$0x3c6ef35f, %rcx       # imm = 0x3C6EF35F
                	movl	%ecx, %r12d
-               	jmp	<addr>
+               	movslq	%ebx, %rcx
+               	leaq	0x1(%rcx), %rbx
+               	movslq	%ebx, %rcx
+               	cmpq	$0x10, %rcx
+               	jl	<addr>
                	movl	%eax, %eax
                	movq	%rax, %rcx
                	shrq	$0x8, %rcx

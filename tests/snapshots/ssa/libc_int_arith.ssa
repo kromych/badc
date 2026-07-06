@@ -8,20 +8,20 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I64 }                    -> x0
     v4   BinopI { op=lt, lhs=v1, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
+    terminator Bz { cond=v4, target=b3, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
     v5   LoadLocal { off=2, kind=I64 }                    -> x0
     v6   BinopI { op=mul, lhs=v1, rhs_imm=-1 }            -> x7
     v7   Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v6)
+    terminator Jmp(b2)   (exit_acc=v6)
   block 2  start_pc=0
-    v8   LoadLocal { off=2, kind=I64 }                    -> x0
-    v9   Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v1)
-  block 3  start_pc=0
-    v10  Phi { incoming=[b1:v6, b2:v1], kind=I64 }        -> x7
+    v10  Phi { incoming=[b1:v6, b3:v1], kind=I64 }        -> x7
     v11  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Return(v10)   (exit_acc=v10)
+  block 3  start_pc=0
+    v8   LoadLocal { off=2, kind=I64 }                    -> x0
+    v9   Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=llabs
 fn ent_pc=1 n_params=1 variadic=false locals=1
@@ -32,20 +32,20 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I64 }                    -> x0
     v4   BinopI { op=lt, lhs=v1, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
+    terminator Bz { cond=v4, target=b3, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
     v5   LoadLocal { off=2, kind=I64 }                    -> x0
     v6   BinopI { op=mul, lhs=v1, rhs_imm=-1 }            -> x7
     v7   Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v6)
+    terminator Jmp(b2)   (exit_acc=v6)
   block 2  start_pc=0
-    v8   LoadLocal { off=2, kind=I64 }                    -> x0
-    v9   Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v1)
-  block 3  start_pc=0
-    v10  Phi { incoming=[b1:v6, b2:v1], kind=I64 }        -> x7
+    v10  Phi { incoming=[b1:v6, b3:v1], kind=I64 }        -> x7
     v11  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Return(v10)   (exit_acc=v10)
+  block 3  start_pc=0
+    v8   LoadLocal { off=2, kind=I64 }                    -> x0
+    v9   Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=imaxabs
 fn ent_pc=5 n_params=1 variadic=false locals=1
@@ -56,20 +56,20 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I64 }                    -> x0
     v4   BinopI { op=lt, lhs=v1, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
+    terminator Bz { cond=v4, target=b3, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
     v5   LoadLocal { off=2, kind=I64 }                    -> x0
     v6   BinopI { op=mul, lhs=v1, rhs_imm=-1 }            -> x7
     v7   Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v6)
+    terminator Jmp(b2)   (exit_acc=v6)
   block 2  start_pc=0
-    v8   LoadLocal { off=2, kind=I64 }                    -> x0
-    v9   Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v1)
-  block 3  start_pc=0
-    v10  Phi { incoming=[b1:v6, b2:v1], kind=I64 }        -> x7
+    v10  Phi { incoming=[b1:v6, b3:v1], kind=I64 }        -> x7
     v11  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Return(v10)   (exit_acc=v10)
+  block 3  start_pc=0
+    v8   LoadLocal { off=2, kind=I64 }                    -> x0
+    v9   Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=imaxdiv
 fn ent_pc=6 n_params=2 variadic=false locals=2

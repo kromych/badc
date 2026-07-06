@@ -374,12 +374,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	mov	x0, #0x1c               // =28
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x0, #0x1c               // =28
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret

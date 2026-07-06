@@ -26,12 +26,12 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movslq	(%rcx), %rax
                	addq	%rax, %rdx
                	movq	0x8(%rcx), %rcx
-               	jmp	<addr>
+               	testq	%rcx, %rcx
+               	jne	<addr>
                	movslq	%edx, %rax
                	cmpq	$0x6, %rax
                	je	<addr>

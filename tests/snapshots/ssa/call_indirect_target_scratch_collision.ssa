@@ -88,19 +88,19 @@ fn ent_pc=3 n_params=0 variadic=false locals=10
   block 2  start_pc=0
     v22  Phi { incoming=[b6:v17, b1:v20], kind=I64 }      -> x1
     v23  LoadLocal { off=-9, kind=I64 }                   -> x0
-    terminator Bz { cond=v22, target=b4, fall=b3 }   (exit_acc=v22)
+    terminator Bz { cond=v22, target=b5, fall=b3 }   (exit_acc=v22)
   block 3  start_pc=0
     v24  Imm(0)                                           -> x1
     v25  Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v24)
+    terminator Jmp(b4)   (exit_acc=v24)
   block 4  start_pc=0
-    v26  Imm(1)                                           -> x1
-    v27  Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v26)
-  block 5  start_pc=0
-    v28  Phi { incoming=[b3:v24, b4:v26], kind=I64 }      -> x1
+    v28  Phi { incoming=[b3:v24, b5:v26], kind=I64 }      -> x1
     v29  LoadLocal { off=-10, kind=I64 }                  -> x0
     terminator Return(v28)   (exit_acc=v28)
+  block 5  start_pc=0
+    v26  Imm(1)                                           -> x1
+    v27  Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v26)
   block 6  start_pc=0
     terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=0 ---

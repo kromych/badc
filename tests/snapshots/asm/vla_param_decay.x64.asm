@@ -18,12 +18,6 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	movslq	%ecx, %r8
-               	cmpq	%rdi, %r8
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
                	jmp	<addr>
                	movslq	%ecx, %r8
                	shlq	$0x2, %r8
@@ -33,7 +27,11 @@ Disassembly of section .text:
                	movslq	(%r8), %r8
                	imulq	%r9, %r8
                	addq	%r8, %rax
-               	jmp	<addr>
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	movslq	%ecx, %r8
+               	cmpq	%rdi, %r8
+               	jl	<addr>
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
@@ -67,11 +65,11 @@ Disassembly of section .text:
                	cmpq	$0x46, %rax
                	jne	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

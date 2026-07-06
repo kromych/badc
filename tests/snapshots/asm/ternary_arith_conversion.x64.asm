@@ -17,10 +17,6 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	cvtsi2sd	%rdx, %xmm0
                	movsd	%xmm0, -0x20(%rbp,%riz)
-               	jmp	<addr>
-               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
-               	movq	%rdx, %xmm14
-               	movsd	%xmm14, -0x20(%rbp,%riz)
                	movsd	-0x20(%rbp,%riz), %xmm0
                	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
                	movq	%rdx, %xmm15
@@ -36,11 +32,6 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x1, %edx
-               	cvtsi2sd	%rdx, %xmm0
-               	movsd	%xmm0, -0x28(%rbp,%riz)
-               	jmp	<addr>
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x28(%rbp,%riz)
@@ -62,10 +53,6 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
                	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x30(%rbp,%riz)
-               	jmp	<addr>
-               	movl	$0x2, %edx
-               	cvtsi2sd	%rdx, %xmm0
-               	movsd	%xmm0, -0x30(%rbp,%riz)
                	movsd	-0x30(%rbp,%riz), %xmm0
                	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
                	movq	%rdx, %xmm15
@@ -81,11 +68,6 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
-               	movq	%rdx, %xmm14
-               	movsd	%xmm14, -0x38(%rbp,%riz)
-               	jmp	<addr>
                	movl	$0x2, %edx
                	cvtsi2sd	%rdx, %xmm0
                	movsd	%xmm0, -0x38(%rbp,%riz)
@@ -108,10 +90,6 @@ Disassembly of section .text:
                	movq	%rdx, %xmm14
                	cvtss2sd	%xmm14, %xmm0
                	movsd	%xmm0, -0x40(%rbp,%riz)
-               	jmp	<addr>
-               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
-               	movq	%rdx, %xmm14
-               	movsd	%xmm14, -0x40(%rbp,%riz)
                	movsd	-0x40(%rbp,%riz), %xmm0
                	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
                	movq	%rdx, %xmm15
@@ -127,12 +105,6 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x3f800000, %edx       # imm = 0x3F800000
-               	movq	%rdx, %xmm14
-               	cvtss2sd	%xmm14, %xmm0
-               	movsd	%xmm0, -0x48(%rbp,%riz)
-               	jmp	<addr>
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x48(%rbp,%riz)
@@ -154,11 +126,6 @@ Disassembly of section .text:
                	movl	$0x3f800000, %edx       # imm = 0x3F800000
                	movq	%rdx, %xmm14
                	movss	%xmm14, -0x50(%rbp,%riz)
-               	jmp	<addr>
-               	movl	$0x2, %edx
-               	cvtsi2sd	%rdx, %xmm0
-               	cvtsd2ss	%xmm0, %xmm0
-               	movss	%xmm0, -0x50(%rbp,%riz)
                	movss	-0x50(%rbp,%riz), %xmm0
                	movl	$0x3f800000, %edx       # imm = 0x3F800000
                	movq	%rdx, %xmm15
@@ -174,11 +141,6 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x3f800000, %edx       # imm = 0x3F800000
-               	movq	%rdx, %xmm14
-               	movss	%xmm14, -0x58(%rbp,%riz)
-               	jmp	<addr>
                	movl	$0x2, %edx
                	cvtsi2sd	%rdx, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
@@ -199,17 +161,12 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0xa, %edx
-               	jmp	<addr>
-               	movl	$0x14, %edx
                	cmpq	$0xa, %rdx
                	je	<addr>
                	movl	$0x15, %eax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	jmp	<addr>
                	movl	$0x2, %ecx
                	cmpq	$0x2, %rcx
                	je	<addr>
@@ -221,4 +178,42 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
+               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
+               	movq	%rdx, %xmm14
+               	movsd	%xmm14, -0x20(%rbp,%riz)
+               	jmp	<addr>
+               	movl	$0x1, %edx
+               	cvtsi2sd	%rdx, %xmm0
+               	movsd	%xmm0, -0x28(%rbp,%riz)
+               	jmp	<addr>
+               	movl	$0x2, %edx
+               	cvtsi2sd	%rdx, %xmm0
+               	movsd	%xmm0, -0x30(%rbp,%riz)
+               	jmp	<addr>
+               	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
+               	movq	%rdx, %xmm14
+               	movsd	%xmm14, -0x38(%rbp,%riz)
+               	jmp	<addr>
+               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
+               	movq	%rdx, %xmm14
+               	movsd	%xmm14, -0x40(%rbp,%riz)
+               	jmp	<addr>
+               	movl	$0x3f800000, %edx       # imm = 0x3F800000
+               	movq	%rdx, %xmm14
+               	cvtss2sd	%xmm14, %xmm0
+               	movsd	%xmm0, -0x48(%rbp,%riz)
+               	jmp	<addr>
+               	movl	$0x2, %edx
+               	cvtsi2sd	%rdx, %xmm0
+               	cvtsd2ss	%xmm0, %xmm0
+               	movss	%xmm0, -0x50(%rbp,%riz)
+               	jmp	<addr>
+               	movl	$0x3f800000, %edx       # imm = 0x3F800000
+               	movq	%rdx, %xmm14
+               	movss	%xmm14, -0x58(%rbp,%riz)
+               	jmp	<addr>
+               	movl	$0x14, %edx
+               	jmp	<addr>
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	addb	%al, 0x41(%rdx)

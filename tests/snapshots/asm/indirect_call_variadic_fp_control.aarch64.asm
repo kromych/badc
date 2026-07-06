@@ -53,13 +53,6 @@ Disassembly of section .text:
                	fmov	d16, x1
                	sub	x17, x29, #0x28
                	str	d16, [x17]
-               	sxtw	x0, w1
-               	ldursw	x2, [x29, #0x10]
-               	cmp	x0, x2
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
                	b	<addr>
                	sxtw	x0, w1
                	asr	x2, x0, #63
@@ -70,14 +63,6 @@ Disassembly of section .text:
                	sub	x0, x0, x2
                	cmp	x0, #0x0
                	b.ne	<addr>
-               	b	<addr>
-               	sub	x0, x29, #0x20
-               	sub	x16, x29, #0x28
-               	ldr	d0, [x16]
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
-               	add	sp, sp, #0xc0
-               	ret
                	sub	x16, x29, #0x28
                	ldr	d0, [x16]
                	sub	x0, x29, #0x20
@@ -130,6 +115,19 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	sub	x17, x29, #0x28
                	str	d0, [x17]
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	sxtw	x0, w1
+               	ldursw	x2, [x29, #0x10]
+               	cmp	x0, x2
+               	b.lt	<addr>
+               	sub	x0, x29, #0x20
+               	sub	x16, x29, #0x28
+               	ldr	d0, [x16]
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x19, [sp], #0x50
+               	add	sp, sp, #0xc0
+               	ret
                	b	<addr>
 
 <main>:

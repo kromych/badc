@@ -41,29 +41,29 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v8   Imm(21474836480)                                 -> x0
     v9   Imm(5)                                           -> x0
     v10  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v10)
+    terminator Jmp(b1)   (exit_acc=v10)
   block 1  start_pc=0
-    v11  Imm(11)                                          -> x0
-    terminator Return(v11)   (exit_acc=v11)
-  block 2  start_pc=0
     v12  ImmData(36)                                      -> x7
     v13  Imm(1)                                           -> x6
     v14  Imm(2)                                           -> x2
     v15  Call { target_pc=2, args=[v12, v13, v14], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v16  BinopI { op=ne, lhs=v15, rhs_imm=42 }            -> x0
-    terminator Bz { cond=v16, target=b4, fall=b3 }   (exit_acc=v16)
-  block 3  start_pc=0
+    terminator Bz { cond=v16, target=b3, fall=b2 }   (exit_acc=v16)
+  block 2  start_pc=0
     v17  Imm(12)                                          -> x0
     terminator Return(v17)   (exit_acc=v17)
-  block 4  start_pc=0
+  block 3  start_pc=0
     v18  Imm(0)                                           -> x0
-    terminator Jmp(b6)   (exit_acc=v18)
-  block 5  start_pc=0
-    v19  Imm(13)                                          -> x0
-    terminator Return(v19)   (exit_acc=v19)
-  block 6  start_pc=0
+    terminator Jmp(b4)   (exit_acc=v18)
+  block 4  start_pc=0
     v20  Imm(0)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)
+  block 5  start_pc=0
+    v11  Imm(11)                                          -> x0
+    terminator Return(v11)   (exit_acc=v11)
+  block 6  start_pc=0
+    v19  Imm(13)                                          -> x0
+    terminator Return(v19)   (exit_acc=v19)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

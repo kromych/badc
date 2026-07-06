@@ -14,26 +14,18 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x240, %rsp            # imm = 0x240
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x240, %rsp            # imm = 0x240
-               	popq	%rbp
-               	retq
                	leaq	-0x80(%rbp), %rax
                	xorq	%rdx, %rdx
                	jmp	<addr>
-               	jmp	<addr>
-               	movslq	%edx, %rcx
-               	cmpq	$0x80, %rcx
-               	jge	<addr>
                	movslq	%edx, %rcx
                	addq	%rax, %rcx
                	xorq	%rsi, %rsi
                	movb	%sil, (%rcx)
                	leaq	0x1(%rdx), %rcx
                	movslq	%ecx, %rdx
-               	jmp	<addr>
-               	jmp	<addr>
+               	movslq	%edx, %rcx
+               	cmpq	$0x80, %rcx
+               	jl	<addr>
                	leaq	-0x80(%rbp), %rax
                	addq	$0x0, %rax
                	movzbq	(%rax), %rcx
@@ -90,21 +82,6 @@ Disassembly of section .text:
                	addq	$0x240, %rsp            # imm = 0x240
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x240, %rsp            # imm = 0x240
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x6, %eax
-               	addq	$0x240, %rsp            # imm = 0x240
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x7, %eax
-               	addq	$0x240, %rsp            # imm = 0x240
-               	popq	%rbp
-               	retq
                	leaq	-0x230(%rbp), %rax
                	movl	$0x78, %ecx
                	movb	%cl, (%rax)
@@ -135,4 +112,25 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	movl	$0x1, %eax
+               	addq	$0x240, %rsp            # imm = 0x240
+               	popq	%rbp
+               	retq
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	movl	$0x5, %eax
+               	addq	$0x240, %rsp            # imm = 0x240
+               	popq	%rbp
+               	retq
+               	movl	$0x6, %eax
+               	addq	$0x240, %rsp            # imm = 0x240
+               	popq	%rbp
+               	retq
+               	movl	$0x7, %eax
+               	addq	$0x240, %rsp            # imm = 0x240
+               	popq	%rbp
+               	retq
+               	addb	%al, (%rax)

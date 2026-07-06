@@ -42,11 +42,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x19, [sp], #0x60
                	ret
-               	b	<addr>
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
-               	ret
                	sub	x0, x29, #0x18
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -97,3 +92,7 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+               	mov	x0, #0x2                // =2
+               	ldp	x29, x30, [sp, #0x50]
+               	ldr	x19, [sp], #0x60
+               	ret

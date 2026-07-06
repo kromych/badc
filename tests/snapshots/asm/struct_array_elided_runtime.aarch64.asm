@@ -157,17 +157,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x20, #0x0               // =0
-               	sxtw	x0, w20
-               	cmp	x0, #0x14
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
                	b	<addr>
                	sxtw	x0, w20
                	bl	<addr>
-               	cbz	x0, <addr>
-               	b	<addr>
+               	cbnz	x0, <addr>
+               	sxtw	x0, w20
+               	add	x20, x0, #0x1
+               	sxtw	x0, w20
+               	cmp	x0, #0x14
+               	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

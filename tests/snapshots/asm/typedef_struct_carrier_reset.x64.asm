@@ -13,12 +13,6 @@ Disassembly of section .text:
 <zero_and_sum>:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	movslq	%eax, %rdx
-               	cmpq	$0xa, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%eax, %rax
-               	incq	%rax
                	jmp	<addr>
                	movslq	%eax, %rdx
                	movl	%eax, (%rdi,%rdx,4)
@@ -35,7 +29,11 @@ Disassembly of section .text:
                	movslq	(%rdx), %rdx
                	addq	%rsi, %rdx
                	addq	%rdx, %rcx
-               	jmp	<addr>
+               	movslq	%eax, %rax
+               	incq	%rax
+               	movslq	%eax, %rdx
+               	cmpq	$0xa, %rdx
+               	jl	<addr>
                	movl	%ecx, 0xa0(%rdi)
                	movslq	%ecx, %rax
                	retq

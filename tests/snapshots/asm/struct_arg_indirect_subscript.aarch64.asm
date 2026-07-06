@@ -34,18 +34,18 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	cbz	x0, <addr>
                	mov	x3, #0x0                // =0
-               	b	<addr>
-               	mov	x3, #0x0                // =0
                	add	x0, x1, x3
                	cbz	x2, <addr>
                	mov	x2, #0x1                // =1
-               	b	<addr>
-               	mov	x2, #0x0                // =0
                	add	x0, x0, x2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x40
                	ret
+               	mov	x2, #0x0                // =0
+               	b	<addr>
+               	mov	x3, #0x0                // =0
+               	b	<addr>
 
 <take_vec>:
                	sub	sp, sp, #0x10
@@ -189,12 +189,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x98
                	mov	x1, #0x0                // =0
                	str	x1, [x0]
-               	sxtw	x0, w1
-               	cmp	x0, #0x8
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
                	b	<addr>
                	sub	x0, x29, #0x98
                	add	x0, x0, #0x8
@@ -210,7 +204,11 @@ Disassembly of section .text:
                	lsl	x3, x2, #4
                	add	x0, x0, x3
                	str	x2, [x0, #0x8]
-               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	sxtw	x0, w1
+               	cmp	x0, #0x8
+               	b.lt	<addr>
                	sub	x0, x29, #0x98
                	mov	x1, #0x3                // =3
                	bl	<addr>

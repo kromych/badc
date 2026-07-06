@@ -22,24 +22,20 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	cmpq	$0x2, %rdi
                	jl	<addr>
-               	jmp	<addr>
+               	cmpq	$0x2, %rdi
+               	je	<addr>
                	movslq	%ecx, %rax
                	retq
-               	leaq	<rip>, %rax
-               	movzbq	(%rax), %rcx
-               	movzbq	0x1(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	jmp	<addr>
                	movabsq	$-0x1, %rcx
                	jmp	<addr>
                	cmpq	$0x1, %rdi
                	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x2, %rdi
-               	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
+               	leaq	<rip>, %rax
+               	movzbq	(%rax), %rcx
+               	movzbq	0x1(%rax), %rax
+               	addq	%rcx, %rax
+               	movslq	%eax, %rcx
                	jmp	<addr>
                	jmp	<addr>
 

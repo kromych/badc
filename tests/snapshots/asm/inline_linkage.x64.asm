@@ -34,9 +34,9 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	jmp	<addr>
                	addb	%al, 0x41(%rdx)

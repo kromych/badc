@@ -35,29 +35,17 @@ Disassembly of section .text:
                	addq	$0x64, %rbx
                	movl	$0x7, %edi
                	callq	<addr>
-               	jmp	<addr>
+               	addq	$0x3e8, %rbx            # imm = 0x3E8
                	xorq	%r12, %r12
                	jmp	<addr>
                	incq	%rbx
-               	jmp	<addr>
-               	addq	$0x3e8, %rbx            # imm = 0x3E8
-               	jmp	<addr>
-               	addq	$0x1869f, %rbx          # imm = 0x1869F
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
+               	movslq	%r12d, %rax
+               	leaq	0x1(%rax), %r12
                	xorq	%rdi, %rdi
                	callq	<addr>
                	movslq	%r12d, %rax
                	cmpq	$0x3, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%r12d, %rax
-               	leaq	0x1(%rax), %r12
-               	jmp	<addr>
-               	incq	%rbx
-               	jmp	<addr>
+               	jl	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x7, %rax
@@ -75,4 +63,10 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	incq	%rbx
+               	jmp	<addr>
+               	addq	$0x1869f, %rbx          # imm = 0x1869F
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
                	addb	%al, (%rax)

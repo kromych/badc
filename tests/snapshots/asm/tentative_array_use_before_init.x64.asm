@@ -13,38 +13,34 @@ Disassembly of section .text:
 <count_named>:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
+               	jmp	<addr>
+               	movslq	%eax, %rax
+               	incq	%rax
+               	movslq	%ecx, %rcx
+               	incq	%rcx
                	leaq	<rip>, %rdx
                	movslq	%ecx, %rsi
                	shlq	$0x4, %rsi
                	addq	%rsi, %rdx
                	movq	(%rdx), %rdx
                	testq	%rdx, %rdx
-               	je	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
-               	jmp	<addr>
-               	movslq	%eax, %rax
-               	incq	%rax
-               	jmp	<addr>
+               	jne	<addr>
                	movslq	%eax, %rax
                	retq
 
 <sum_first_four>:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	movslq	%ecx, %rdx
-               	cmpq	$0x4, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
                	jmp	<addr>
                	leaq	<rip>, %rdx
                	movslq	%ecx, %rsi
                	movslq	(%rdx,%rsi,4), %rdx
                	addq	%rdx, %rax
-               	jmp	<addr>
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	movslq	%ecx, %rdx
+               	cmpq	$0x4, %rdx
+               	jl	<addr>
                	movslq	%eax, %rax
                	retq
 

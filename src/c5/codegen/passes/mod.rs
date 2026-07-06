@@ -9,6 +9,8 @@ pub(crate) mod drop_redundant_extend;
 pub(crate) mod fma;
 pub(crate) mod index_fold;
 pub(crate) mod inline;
+pub(crate) mod layout;
+pub(crate) mod remap_blocks;
 pub(crate) mod rotate;
 pub(crate) mod split_crit_edges;
 pub(crate) mod store_forward;

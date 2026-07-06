@@ -31,17 +31,15 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	movslq	%ecx, %rdx
-               	cmpq	%rsi, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
                	jmp	<addr>
                	movslq	%ecx, %rdx
                	movq	(%rdi,%rdx,8), %rdx
                	addq	%rdx, %rax
-               	jmp	<addr>
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	movslq	%ecx, %rdx
+               	cmpq	%rsi, %rdx
+               	jl	<addr>
                	retq
 
 <main>:
@@ -49,12 +47,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
                	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x5, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	-0x28(%rbp), %rax
                	movslq	%ecx, %rdx
@@ -62,17 +54,21 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	imulq	$0x64, %rsi, %rsi
                	movq	%rsi, (%rax,%rdx,8)
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0x5, %rax
+               	jl	<addr>
                	leaq	-0x28(%rbp), %rdi
                	movl	$0x5, %esi
                	callq	<addr>
                	cmpq	$0x5dc, %rax            # imm = 0x5DC
                	jne	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	addb	%al, (%rax)

@@ -1159,6 +1159,21 @@ fn for_loop() {
 }
 
 #[test]
+fn layout_bottom_test_loop() {
+    assert_eq!(run_fixture("layout_bottom_test_loop.c"), 45);
+}
+
+#[test]
+fn layout_nested_loops() {
+    assert_eq!(run_fixture("layout_nested_loops.c"), 27);
+}
+
+#[test]
+fn layout_goto_block_addr() {
+    assert_eq!(run_fixture("layout_goto_block_addr.c"), 16);
+}
+
+#[test]
 fn recursion_factorial() {
     assert_eq!(run_fixture("recursion_factorial.c"), 120);
 }

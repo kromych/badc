@@ -13,12 +13,6 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	mov	x5, #0x0                // =0
                	mov	x4, x5
-               	sxtw	x6, w4
-               	cmp	x6, x2
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x4, w4
-               	add	x4, x4, #0x1
                	b	<addr>
                	sxtw	x6, w4
                	lsl	x6, x6, #2
@@ -40,7 +34,11 @@ Disassembly of section .text:
                	mul	x6, x7, x6
                	add	x5, x5, x6
                	sxtw	x5, w5
-               	b	<addr>
+               	sxtw	x4, w4
+               	add	x4, x4, #0x1
+               	sxtw	x6, w4
+               	cmp	x6, x2
+               	b.lt	<addr>
                	sxtw	x0, w5
                	ret
 
@@ -49,12 +47,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x70
                	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	cmp	x0, #0x8
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
                	b	<addr>
                	sub	x0, x29, #0x20
                	sxtw	x2, w1
@@ -66,7 +58,11 @@ Disassembly of section .text:
                	mov	x17, #0xa               // =10
                	mul	x3, x3, x17
                	str	w3, [x0, x2, lsl #2]
-               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	sxtw	x0, w1
+               	cmp	x0, #0x8
+               	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sub	x1, x29, #0x40
                	mov	x2, #0x8                // =8
@@ -75,9 +71,9 @@ Disassembly of section .text:
                	cmp	x0, #0xb7c
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x1                // =1
                	mov	x0, x1
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x1, #0x1                // =1
+               	b	<addr>

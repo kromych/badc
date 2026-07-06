@@ -17,15 +17,15 @@ Disassembly of section .text:
                	stur	w3, [x29, #-0x8]
                	lsl	x0, x0, #1
                	sub	x1, x29, #0x8
-               	sxtw	x2, w3
-               	cmp	x2, #0x3
-               	b.ge	<addr>
+               	b	<addr>
                	ldrsw	x2, [x1]
                	add	x2, x2, x0
                	str	w2, [x1]
                	add	x2, x3, #0x1
                	sxtw	x3, w2
-               	b	<addr>
+               	sxtw	x2, w3
+               	cmp	x2, #0x3
+               	b.lt	<addr>
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

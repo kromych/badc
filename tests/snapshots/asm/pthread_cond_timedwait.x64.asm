@@ -92,11 +92,11 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x4, %ecx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x4, %ecx
+               	jmp	<addr>
                	addb	%al, 0x41(%rdx)

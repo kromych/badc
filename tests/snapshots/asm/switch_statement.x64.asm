@@ -12,20 +12,16 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movslq	%eax, %rax
-               	retq
-               	movl	$0xa, %eax
-               	jmp	<addr>
                	movl	$0x14, %ecx
                	leaq	0x5(%rcx), %rax
                	movslq	%eax, %rax
+               	movslq	%eax, %rax
+               	retq
+               	movl	$0xa, %eax
                	jmp	<addr>
                	movl	$0x64, %eax
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

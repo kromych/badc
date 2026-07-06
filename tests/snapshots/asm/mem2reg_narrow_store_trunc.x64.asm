@@ -15,10 +15,10 @@ Disassembly of section .text:
                	cmpq	$0x2c, %rax
                	jne	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

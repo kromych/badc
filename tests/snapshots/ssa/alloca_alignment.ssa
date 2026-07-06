@@ -116,18 +116,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=1034
     terminator Jmp(b8)   (exit_acc=v84)
   block 8  start_pc=0
     v85  LoadLocal { off=-1031, kind=I64 }                -> x0
-    terminator Bz { cond=v85, target=b10, fall=b9 }   (exit_acc=v85)
+    terminator Bz { cond=v85, target=b11, fall=b9 }   (exit_acc=v85)
   block 9  start_pc=0
     v86  Imm(0)                                           -> x0
     v87  StoreLocal { off=-1034, value=v86, kind=I64 }    -> -
-    terminator Jmp(b11)   (exit_acc=v87)
+    terminator Jmp(b10)   (exit_acc=v87)
   block 10  start_pc=0
-    v88  Imm(1)                                           -> x0
-    v89  StoreLocal { off=-1034, value=v88, kind=I64 }    -> -
-    terminator Jmp(b11)   (exit_acc=v89)
-  block 11  start_pc=0
     v90  LoadLocal { off=-1034, kind=I64 }                -> x0
     terminator Return(v90)   (exit_acc=v90)
+  block 11  start_pc=0
+    v88  Imm(1)                                           -> x0
+    v89  StoreLocal { off=-1034, value=v88, kind=I64 }    -> -
+    terminator Jmp(b10)   (exit_acc=v89)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

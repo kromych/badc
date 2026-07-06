@@ -32,16 +32,14 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	movslq	%ecx, %rdx
-               	cmpq	%rdi, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
                	jmp	<addr>
                	incq	%rax
                	movslq	%eax, %rax
-               	jmp	<addr>
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	movslq	%ecx, %rdx
+               	cmpq	%rdi, %rdx
+               	jl	<addr>
                	movslq	%eax, %rax
                	retq
 
@@ -54,22 +52,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x2, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
                	movl	$0x2a, %edi
                	callq	<addr>
                	cmpq	$0x2a, %rax
@@ -77,15 +59,25 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	jmp	<addr>
+               	xorq	%rax, %rax
+               	popq	%rbp
+               	retq
+               	movl	$0x1, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x2, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x3, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x4, %eax
+               	popq	%rbp
+               	retq
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	movl	$0x7, %eax
-               	popq	%rbp
-               	retq
-               	xorq	%rax, %rax
                	popq	%rbp
                	retq
                	addb	%al, (%rax)

@@ -53,8 +53,8 @@ Disassembly of section .text:
                	cmp	x0, #0x9
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x5                // =5
                	mov	x0, x1
                	ret
+               	mov	x1, #0x5                // =5
+               	b	<addr>
                	b	<addr>

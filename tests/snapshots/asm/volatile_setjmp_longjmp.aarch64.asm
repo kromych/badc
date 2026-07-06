@@ -33,10 +33,10 @@ Disassembly of section .text:
                	cmp	x0, #0x2
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x1                // =1
                	mov	x0, x1
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x50
                	ret
+               	mov	x1, #0x1                // =1
+               	b	<addr>

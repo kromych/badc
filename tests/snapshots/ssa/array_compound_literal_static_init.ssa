@@ -48,7 +48,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v30  Load { addr=v29, disp=0, kind=I8 }               -> x1
     v31  BinopI { op=ne, lhs=v30, rhs_imm=105 }           -> x2
     v32  Imm(0)                                           -> x1
-    terminator Bnz { cond=v31, target=b27, fall=b7 }   (exit_acc=v31)
+    terminator Bnz { cond=v31, target=b28, fall=b7 }   (exit_acc=v31)
   block 7  start_pc=0
     v33  ImmData(168)                                     -> x1
     v34  Imm(8)                                           -> x1
@@ -63,7 +63,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v43  Imm(0)                                           -> x1
     terminator Jmp(b8)   (exit_acc=v42)
   block 8  start_pc=0
-    v44  Phi { incoming=[b27:v31, b7:v42], kind=I64 }     -> x2
+    v44  Phi { incoming=[b28:v31, b7:v42], kind=I64 }     -> x2
     v45  LoadLocal { off=-1, kind=I64 }                   -> x1
     terminator Bz { cond=v44, target=b10, fall=b9 }   (exit_acc=v44)
   block 9  start_pc=0
@@ -149,7 +149,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v103 Load { addr=v100, disp=24, kind=I32 }            -> x1
     v104 BinopI { op=ne, lhs=v103, rhs_imm=0 }            -> x2
     v105 Imm(0)                                           -> x1
-    terminator Bnz { cond=v104, target=b28, fall=b21 }   (exit_acc=v104)
+    terminator Bnz { cond=v104, target=b27, fall=b21 }   (exit_acc=v104)
   block 21  start_pc=0
     v106 ImmData(168)                                     -> x1
     v107 Imm(16)                                          -> x1
@@ -161,7 +161,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v113 Imm(0)                                           -> x1
     terminator Jmp(b22)   (exit_acc=v112)
   block 22  start_pc=0
-    v114 Phi { incoming=[b28:v104, b21:v112], kind=I64 }  -> x2
+    v114 Phi { incoming=[b27:v104, b21:v112], kind=I64 }  -> x2
     v115 LoadLocal { off=-2, kind=I64 }                   -> x1
     terminator Bz { cond=v114, target=b24, fall=b23 }   (exit_acc=v114)
   block 23  start_pc=0
@@ -185,9 +185,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v127 Imm(0)                                           -> x0
     terminator Return(v127)   (exit_acc=v127)
   block 27  start_pc=0
-    terminator Jmp(b8)
-  block 28  start_pc=0
     terminator Jmp(b22)
+  block 28  start_pc=0
+    terminator Jmp(b8)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

@@ -22,16 +22,14 @@ Disassembly of section .text:
 <driver>:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	sxtw	x2, w1
-               	cmp	x2, #0x7
-               	b.ge	<addr>
-               	b	<addr>
-               	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	b	<addr>
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	b	<addr>
+               	add	x1, x1, #0x1
+               	sxtw	x1, w1
+               	sxtw	x2, w1
+               	cmp	x2, #0x7
+               	b.lt	<addr>
                	mov	x17, #0x6               // =6
                	mul	x0, x0, x17
                	sxtw	x0, w0

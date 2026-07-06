@@ -266,10 +266,6 @@ Disassembly of section .text:
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
                	mov	x2, #0x0                // =0
-               	cmp	x2, #0x10
-               	b.ge	<addr>
-               	b	<addr>
-               	add	x2, x2, #0x1
                	b	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -280,7 +276,9 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	lsl	x3, x2, #1
                	str	x3, [x1, #0x8]
-               	b	<addr>
+               	add	x2, x2, #0x1
+               	cmp	x2, #0x10
+               	b.lt	<addr>
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
                	mov	x3, #0x3                // =3

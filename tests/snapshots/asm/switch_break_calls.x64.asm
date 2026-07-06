@@ -30,28 +30,22 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	cmpq	$0x1, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	movslq	%eax, %rax
-               	retq
-               	movl	$0x64, %eax
-               	jmp	<addr>
-               	movl	$0xc8, %eax
-               	jmp	<addr>
-               	movl	$0x12c, %eax            # imm = 0x12C
-               	jmp	<addr>
-               	movl	$0x190, %eax            # imm = 0x190
-               	jmp	<addr>
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	jmp	<addr>
                	cmpq	$0x2, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	cmpq	$0x1, %rdi
-               	je	<addr>
-               	jmp	<addr>
                	cmpq	$0x2, %rdi
                	je	<addr>
+               	movl	$0x190, %eax            # imm = 0x190
+               	movslq	%eax, %rax
+               	retq
+               	movl	$0x12c, %eax            # imm = 0x12C
+               	jmp	<addr>
+               	cmpq	$0x1, %rdi
+               	jne	<addr>
+               	movl	$0xc8, %eax
+               	jmp	<addr>
+               	testq	%rdi, %rdi
+               	jne	<addr>
+               	movl	$0x64, %eax
                	jmp	<addr>
                	jmp	<addr>
 

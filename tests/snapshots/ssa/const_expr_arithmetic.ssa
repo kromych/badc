@@ -11,8 +11,66 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v5   Imm(32)                                          -> x0
     v6   Imm(8)                                           -> x0
     v7   Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v7)
+    terminator Jmp(b1)   (exit_acc=v7)
   block 1  start_pc=0
+    v17  Phi { incoming=[b0:v1, b8:v15], kind=I64 }       -> x3
+    v18  Imm(24)                                          -> x0
+    v19  Imm(4)                                           -> x0
+    v20  Imm(0)                                           -> x0
+    v21  Imm(24)                                          -> x0
+    v22  Imm(6)                                           -> x0
+    v23  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v23)
+  block 2  start_pc=0
+    v33  Phi { incoming=[b1:v17, b9:v31], kind=I64 }      -> x3
+    v34  Imm(64)                                          -> x0
+    v35  Imm(4)                                           -> x0
+    v36  Imm(0)                                           -> x0
+    v37  Imm(64)                                          -> x0
+    v38  Imm(16)                                          -> x0
+    v39  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v39)
+  block 3  start_pc=0
+    v49  Phi { incoming=[b2:v33, b10:v47], kind=I64 }     -> x3
+    v50  Imm(64)                                          -> x0
+    v51  Imm(4)                                           -> x0
+    v52  Imm(0)                                           -> x0
+    v53  Imm(64)                                          -> x0
+    v54  Imm(16)                                          -> x0
+    v55  Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v55)
+  block 4  start_pc=0
+    v64  Phi { incoming=[b3:v49, b11:v58], kind=I64 }     -> x3
+    v65  Imm(24)                                          -> x0
+    v66  Imm(4)                                           -> x0
+    v67  Imm(0)                                           -> x0
+    v68  Imm(24)                                          -> x0
+    v69  Imm(6)                                           -> x0
+    v70  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v70)
+  block 5  start_pc=0
+    v80  Phi { incoming=[b4:v64, b12:v78], kind=I64 }     -> x3
+    v81  Imm(32)                                          -> x0
+    v82  Imm(4)                                           -> x0
+    v83  Imm(0)                                           -> x0
+    v84  Imm(32)                                          -> x0
+    v85  Imm(8)                                           -> x0
+    v86  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v86)
+  block 6  start_pc=0
+    v96  Phi { incoming=[b5:v80, b13:v94], kind=I64 }     -> x3
+    v97  Imm(24)                                          -> x0
+    v98  Imm(4)                                           -> x0
+    v99  Imm(0)                                           -> x0
+    v100 Imm(24)                                          -> x0
+    v101 Imm(6)                                           -> x0
+    v102 Imm(0)                                           -> x0
+    terminator Jmp(b7)   (exit_acc=v102)
+  block 7  start_pc=0
+    v112 Phi { incoming=[b6:v96, b14:v110], kind=I64 }    -> x3
+    v113 Extend { value=v112, kind=I32 }                  -> x0
+    terminator Return(v113)   (exit_acc=v113)
+  block 8  start_pc=0
     v8   ImmData(32)                                      -> x7
     v9   Imm(32)                                          -> x0
     v10  Imm(4)                                           -> x0
@@ -22,17 +80,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v14  CallExt { binding_idx=0, args=[v8, v13], fp_arg_mask=0x0 } -> x0
     v15  Imm(1)                                           -> x3
     v16  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v15)
-  block 2  start_pc=0
-    v17  Phi { incoming=[b0:v1, b1:v15], kind=I64 }       -> x3
-    v18  Imm(24)                                          -> x0
-    v19  Imm(4)                                           -> x0
-    v20  Imm(0)                                           -> x0
-    v21  Imm(24)                                          -> x0
-    v22  Imm(6)                                           -> x0
-    v23  Imm(0)                                           -> x0
-    terminator Jmp(b4)   (exit_acc=v23)
-  block 3  start_pc=0
+    terminator Jmp(b1)   (exit_acc=v15)
+  block 9  start_pc=0
     v24  ImmData(51)                                      -> x7
     v25  Imm(24)                                          -> x0
     v26  Imm(4)                                           -> x0
@@ -42,17 +91,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v30  CallExt { binding_idx=0, args=[v24, v29], fp_arg_mask=0x0 } -> x0
     v31  Imm(2)                                           -> x3
     v32  Imm(0)                                           -> x0
-    terminator Jmp(b4)   (exit_acc=v31)
-  block 4  start_pc=0
-    v33  Phi { incoming=[b2:v17, b3:v31], kind=I64 }      -> x3
-    v34  Imm(64)                                          -> x0
-    v35  Imm(4)                                           -> x0
-    v36  Imm(0)                                           -> x0
-    v37  Imm(64)                                          -> x0
-    v38  Imm(16)                                          -> x0
-    v39  Imm(0)                                           -> x0
-    terminator Jmp(b6)   (exit_acc=v39)
-  block 5  start_pc=0
+    terminator Jmp(b2)   (exit_acc=v31)
+  block 10  start_pc=0
     v40  ImmData(70)                                      -> x7
     v41  Imm(64)                                          -> x0
     v42  Imm(4)                                           -> x0
@@ -62,17 +102,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v46  CallExt { binding_idx=0, args=[v40, v45], fp_arg_mask=0x0 } -> x0
     v47  Imm(3)                                           -> x3
     v48  Imm(0)                                           -> x0
-    terminator Jmp(b6)   (exit_acc=v47)
-  block 6  start_pc=0
-    v49  Phi { incoming=[b4:v33, b5:v47], kind=I64 }      -> x3
-    v50  Imm(64)                                          -> x0
-    v51  Imm(4)                                           -> x0
-    v52  Imm(0)                                           -> x0
-    v53  Imm(64)                                          -> x0
-    v54  Imm(16)                                          -> x0
-    v55  Imm(0)                                           -> x0
-    terminator Jmp(b8)   (exit_acc=v55)
-  block 7  start_pc=0
+    terminator Jmp(b3)   (exit_acc=v47)
+  block 11  start_pc=0
     v56  ImmData(89)                                      -> x7
     v57  Imm(64)                                          -> x0
     v58  Imm(4)                                           -> x3
@@ -81,17 +112,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v61  Imm(16)                                          -> x6
     v62  CallExt { binding_idx=0, args=[v56, v61], fp_arg_mask=0x0 } -> x0
     v63  Imm(0)                                           -> x0
-    terminator Jmp(b8)   (exit_acc=v58)
-  block 8  start_pc=0
-    v64  Phi { incoming=[b6:v49, b7:v58], kind=I64 }      -> x3
-    v65  Imm(24)                                          -> x0
-    v66  Imm(4)                                           -> x0
-    v67  Imm(0)                                           -> x0
-    v68  Imm(24)                                          -> x0
-    v69  Imm(6)                                           -> x0
-    v70  Imm(0)                                           -> x0
-    terminator Jmp(b10)   (exit_acc=v70)
-  block 9  start_pc=0
+    terminator Jmp(b4)   (exit_acc=v58)
+  block 12  start_pc=0
     v71  ImmData(108)                                     -> x7
     v72  Imm(24)                                          -> x0
     v73  Imm(4)                                           -> x0
@@ -101,17 +123,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v77  CallExt { binding_idx=0, args=[v71, v76], fp_arg_mask=0x0 } -> x0
     v78  Imm(5)                                           -> x3
     v79  Imm(0)                                           -> x0
-    terminator Jmp(b10)   (exit_acc=v78)
-  block 10  start_pc=0
-    v80  Phi { incoming=[b8:v64, b9:v78], kind=I64 }      -> x3
-    v81  Imm(32)                                          -> x0
-    v82  Imm(4)                                           -> x0
-    v83  Imm(0)                                           -> x0
-    v84  Imm(32)                                          -> x0
-    v85  Imm(8)                                           -> x0
-    v86  Imm(0)                                           -> x0
-    terminator Jmp(b12)   (exit_acc=v86)
-  block 11  start_pc=0
+    terminator Jmp(b5)   (exit_acc=v78)
+  block 13  start_pc=0
     v87  ImmData(127)                                     -> x7
     v88  Imm(32)                                          -> x0
     v89  Imm(4)                                           -> x0
@@ -121,17 +134,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v93  CallExt { binding_idx=0, args=[v87, v92], fp_arg_mask=0x0 } -> x0
     v94  Imm(6)                                           -> x3
     v95  Imm(0)                                           -> x0
-    terminator Jmp(b12)   (exit_acc=v94)
-  block 12  start_pc=0
-    v96  Phi { incoming=[b10:v80, b11:v94], kind=I64 }    -> x3
-    v97  Imm(24)                                          -> x0
-    v98  Imm(4)                                           -> x0
-    v99  Imm(0)                                           -> x0
-    v100 Imm(24)                                          -> x0
-    v101 Imm(6)                                           -> x0
-    v102 Imm(0)                                           -> x0
-    terminator Jmp(b14)   (exit_acc=v102)
-  block 13  start_pc=0
+    terminator Jmp(b6)   (exit_acc=v94)
+  block 14  start_pc=0
     v103 ImmData(150)                                     -> x7
     v104 Imm(24)                                          -> x0
     v105 Imm(4)                                           -> x0
@@ -141,11 +145,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v109 CallExt { binding_idx=0, args=[v103, v108], fp_arg_mask=0x0 } -> x0
     v110 Imm(7)                                           -> x3
     v111 Imm(0)                                           -> x0
-    terminator Jmp(b14)   (exit_acc=v110)
-  block 14  start_pc=0
-    v112 Phi { incoming=[b12:v96, b13:v110], kind=I64 }   -> x3
-    v113 Extend { value=v112, kind=I32 }                  -> x0
-    terminator Return(v113)   (exit_acc=v113)
+    terminator Jmp(b7)   (exit_acc=v110)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

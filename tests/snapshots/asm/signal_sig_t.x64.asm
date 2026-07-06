@@ -21,10 +21,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>
-               	movl	$0x2, %eax
-               	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
+               	movl	$0x2, %eax
+               	retq
                	addb	%al, 0x41(%rdx)

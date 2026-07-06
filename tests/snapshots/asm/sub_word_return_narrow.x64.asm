@@ -45,18 +45,14 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	jmp	<addr>
+               	xorq	%rax, %rax
+               	retq
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x2, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x3, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x4, %eax
-               	retq
-               	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)

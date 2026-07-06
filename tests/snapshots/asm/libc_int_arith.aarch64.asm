@@ -18,9 +18,9 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	mul	x1, x1, x17
-               	b	<addr>
                	mov	x0, x1
                	ret
+               	b	<addr>
 
 <llabs>:
                	mov	x1, x0
@@ -31,9 +31,9 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	mul	x1, x1, x17
-               	b	<addr>
                	mov	x0, x1
                	ret
+               	b	<addr>
 
 <imaxabs>:
                	mov	x1, x0
@@ -44,9 +44,9 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	mul	x1, x1, x17
-               	b	<addr>
                	mov	x0, x1
                	ret
+               	b	<addr>
 
 <imaxdiv>:
                	stp	x29, x30, [sp, #-0x10]!

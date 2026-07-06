@@ -2030,6 +2030,13 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::store_forward::run (x86_64)", || {
             crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
         });
+        // Block layout: fallthrough chains, loop rotation to
+        // bottom-test, branch inversion. Reorders blocks and remaps
+        // block ids only, so it runs last; the emit elides jumps to
+        // the next block in the new order.
+        super::ssa::emit_common::time_pass("passes::layout::run (x86_64)", || {
+            crate::c5::codegen::passes::layout::run(&mut ssa_funcs);
+        });
     }
     // Upper bound on ent_pcs the lowering will reference. The
     // walker stamps `ent_pc` / `end_pc` against the ent_pc

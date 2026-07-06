@@ -14,19 +14,17 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	movslq	%ecx, %rdx
-               	cmpq	%rsi, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
                	jmp	<addr>
                	movslq	%ecx, %rdx
                	shlq	$0x4, %rdx
                	addq	%rdi, %rdx
                	movq	0x8(%rdx), %rdx
                	addq	%rdx, %rax
-               	jmp	<addr>
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	movslq	%ecx, %rdx
+               	cmpq	%rsi, %rdx
+               	jl	<addr>
                	retq
 
 <main>:

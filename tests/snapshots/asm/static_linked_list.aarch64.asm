@@ -29,12 +29,12 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
-               	cmp	x1, #0x0
-               	b.eq	<addr>
+               	b	<addr>
                	ldrsw	x0, [x1]
                	add	x2, x2, x0
                	ldr	x1, [x1, #0x8]
-               	b	<addr>
+               	cmp	x1, #0x0
+               	b.ne	<addr>
                	sxtw	x0, w2
                	cmp	x0, #0x6
                	b.eq	<addr>

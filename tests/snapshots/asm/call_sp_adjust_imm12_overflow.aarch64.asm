@@ -4450,10 +4450,6 @@ Disassembly of section .text:
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
                	mov	x1, #0x0                // =0
-               	cmp	x1, #0x105
-               	b.ge	<addr>
-               	b	<addr>
-               	add	x1, x1, #0x1
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -4464,7 +4460,9 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	lsl	x2, x1, #1
                	str	x2, [x0, #0x8]
-               	b	<addr>
+               	add	x1, x1, #0x1
+               	cmp	x1, #0x105
+               	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x1, x0, #0x10

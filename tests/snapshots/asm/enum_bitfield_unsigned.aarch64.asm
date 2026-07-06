@@ -13,40 +13,33 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x5
                	b.lt	<addr>
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x28               // =40
-               	ret
-               	mov	x0, #0x32               // =50
-               	ret
-               	mov	x0, #0x3c               // =60
-               	ret
+               	cmp	x0, #0x6
+               	b.lt	<addr>
+               	cmp	x0, #0x6
+               	b.eq	<addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ret
-               	cmp	x0, #0x4
-               	b.lt	<addr>
-               	b	<addr>
-               	cmp	x0, #0x6
-               	b.lt	<addr>
-               	b	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
-               	b	<addr>
-               	cmp	x0, #0x4
-               	b.eq	<addr>
-               	b	<addr>
+               	mov	x0, #0x3c               // =60
+               	ret
                	cmp	x0, #0x5
-               	b.eq	<addr>
-               	b	<addr>
-               	cmp	x0, #0x6
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
+               	mov	x0, #0x32               // =50
+               	ret
+               	cmp	x0, #0x4
+               	b.lt	<addr>
+               	cmp	x0, #0x4
+               	b.ne	<addr>
+               	mov	x0, #0x28               // =40
+               	ret
+               	cmp	x0, #0x0
+               	b.ne	<addr>
+               	mov	x0, #0x0                // =0
+               	ret
+               	mov	x0, #0x0                // =0
+               	ret
                	b	<addr>
 
 <main>:

@@ -76,17 +76,15 @@ Disassembly of section .text:
                	retq
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x28(%rbp)
-               	movslq	%ecx, %rax
-               	cmpq	$0xf4240, %rax          # imm = 0xF4240
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	movslq	-0x28(%rbp), %rax
                	incq	%rax
                	movl	%eax, -0x28(%rbp)
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0xf4240, %rax          # imm = 0xF4240
+               	jl	<addr>
                	movl	$0x1, %edi
                	leaq	-0x20(%rbp), %rsi
                	xorl	%eax, %eax

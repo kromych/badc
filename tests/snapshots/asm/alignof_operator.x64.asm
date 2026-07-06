@@ -17,31 +17,23 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>
+               	xorq	%rax, %rax
+               	retq
                	movl	$0x2, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x3, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x4, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x5, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x6, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x7, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x8, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x9, %eax
-               	retq
-               	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -52,6 +52,8 @@ SSA snapshots of the test fixtures. The optimized binaries will run on any moder
 ARM64 processor, and on x86_64 processors not older than Intel Haswell and AMD Zen
 (circa 2013, the optimizer uses FMA3 instructions).
 
+Here are the links the the perf run in CI: TODO
+
 `badc` emits position-independent code and the real native binaries (macOS Mach-O,
 Linux ELF, or Windows PE32+), on any of five targets, from any host:
 

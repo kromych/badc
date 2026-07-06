@@ -416,7 +416,9 @@ fn lay_out(
                 // chain.
                 let mut exits: Vec<BlockId> = Vec::new();
                 for &cb in chunk.iter().rev() {
-                    for s in successors(&func.blocks[cb as usize].terminator, &[], &func.jump_tables) {
+                    for s in
+                        successors(&func.blocks[cb as usize].terminator, &[], &func.jump_tables)
+                    {
                         if !loops[li].body.contains(&s) && !exits.contains(&s) {
                             exits.push(s);
                         }

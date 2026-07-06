@@ -238,6 +238,7 @@ mod tests {
             ent_pc: 0,
             end_pc: 0,
             locals: 0,
+            has_returns_twice_call: false,
             n_params: 0,
             is_variadic: false,
             is_inline: false,

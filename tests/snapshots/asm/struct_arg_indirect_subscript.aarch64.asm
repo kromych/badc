@@ -79,10 +79,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	sub	sp, sp, #0x10
                	sub	sp, sp, #0x20
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x40
-               	str	x19, [sp]
+               	str	x19, [sp, #-0x50]!
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
                	sub	x16, x29, #0x10
                	str	x2, [x16]
                	str	x3, [x16, #0x8]
@@ -96,9 +95,8 @@ Disassembly of section .text:
                	ldr	x2, [x1, #0x8]
                	ldr	x1, [x1]
                	blr	x9
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x19, [sp], #0x50
                	add	sp, sp, #0x50
                	ret
 
@@ -106,10 +104,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sub	sp, sp, #0x10
                	sub	sp, sp, #0x10
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	str	x19, [sp]
+               	str	x19, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	sub	x16, x29, #0x10
                	str	d0, [x16]
                	str	d1, [x16, #0x8]
@@ -121,9 +118,8 @@ Disassembly of section .text:
                	ldr	d1, [x1, #0x8]
                	mov	x0, x2
                	blr	x9
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	add	sp, sp, #0x30
                	ret
 

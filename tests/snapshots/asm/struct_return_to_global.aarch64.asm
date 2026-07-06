@@ -50,11 +50,9 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x90
-               	str	x20, [sp]
-               	str	x21, [sp, #0x8]
+               	stp	x20, x21, [sp, #-0xa0]!
+               	stp	x29, x30, [sp, #0x90]
+               	add	x29, sp, #0x90
                	mov	x2, #0x0                // =0
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
@@ -142,8 +140,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x90]
+               	ldp	x20, x21, [sp], #0xa0
                	ret

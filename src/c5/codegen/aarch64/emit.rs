@@ -54,12 +54,13 @@ use super::encode::{
     enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
     enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzu_x_d, enc_fdiv_d,
     enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
-    enc_ldaxr, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
-    enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
-    enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv,
-    enc_stlxr, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
-    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv,
-    load_imm64,
+    enc_ldaxr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off, enc_ldp_post, enc_ldr_d_imm,
+    enc_ldr_d_post, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm,
+    enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv, enc_movz,
+    enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stlxr, enc_stp_d_off,
+    enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_str_d_imm, enc_str_d_pre, enc_str_imm,
+    enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm,
+    enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv, load_imm64,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
@@ -1371,14 +1372,9 @@ fn emit_prologue(
             emit(code, enc_str_imm(Reg(r), Reg(31), off));
         }
         // Standard frame below the gr-save area. A variadic callee is
-        // never a full leaf (`param_spill_bytes != 0`), so the
-        // stp / mov-fp pair always follows.
-        emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
-        emit(code, enc_add_imm(Reg(29), Reg(31), 0));
-        if frame.frame_bytes > 0 {
-            emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
-        }
-        emit_prologue_saved_regs(code, alloc, frame);
+        // never a full leaf (`param_spill_bytes != 0`), so the frame
+        // record always follows.
+        emit_frame_and_saves(code, alloc, frame, abi);
         return;
     }
     // AAPCS64 variadic register save area (AAPCS64 Appendix B). Reserve
@@ -1414,12 +1410,7 @@ fn emit_prologue(
                 enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
             );
         }
-        emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
-        emit(code, enc_add_imm(Reg(29), Reg(31), 0));
-        if frame.frame_bytes > 0 {
-            emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
-        }
-        emit_prologue_saved_regs(code, alloc, frame);
+        emit_frame_and_saves(code, alloc, frame, abi);
         return;
     }
     // Host-arg-reg spill for non-variadic functions: spill each
@@ -1531,13 +1522,9 @@ fn emit_prologue(
     if is_full_leaf(func, frame, alloc) {
         return;
     }
-    // Standard frame: stp fp/lr; mov fp, sp; sub sp, sp, frame_bytes.
-    emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
-    emit(code, enc_add_imm(Reg(29), Reg(31), 0));
-    if frame.frame_bytes > 0 {
-        emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
-    }
-    emit_prologue_saved_regs(code, alloc, frame);
+    // Standard frame: frame record, fp, frame allocation, callee
+    // saves (folded into one pre-indexed group when the frame fits).
+    emit_frame_and_saves(code, alloc, frame, abi);
     emit_struct_param_scatter(code, func, abi, frame);
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result
@@ -1697,29 +1684,200 @@ fn emit_struct_param_scatter(
 
 /// Save the allocator-reported callee-saved GPRs + FP regs at the
 /// bottom of the frame. The saved-reg region sits just above sp; its
-/// offsets are one slot per saved register, so the 12-bit scaled
-/// immediate (range 0..32760 in multiples of 8) always covers them. The
-/// allocator spill region, by contrast, can exceed that reach and is
-/// addressed through the range-checked SP helpers. Using `stur` off fp
-/// would silently truncate the 9-bit immediate for frames larger than
-/// ~256 bytes. x19 is saved just past the allocator-saved gprs, but only
-/// when the function clobbers it; the slot is reserved either way so the
-/// surrounding offsets stay fixed.
-fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
-    for (i, &r) in alloc.fp_used.iter().enumerate() {
-        let off = (i as u32) * 8;
-        emit(code, enc_str_d_imm(r, Reg(31), off));
+/// offsets are one slot per saved register, so the pair imm7 (scaled by
+/// 8, range -512..504) and the 12-bit scaled immediate always cover
+/// them. The allocator spill region, by contrast, can exceed that reach
+/// and is addressed through the range-checked SP helpers. x19 is saved
+/// just past the allocator-saved gprs, but only when the function
+/// clobbers it; the slot is reserved either way so the surrounding
+/// offsets stay fixed. Adjacent slots within each region save as
+/// stp / ldp pairs; a region's odd tail saves alone.
+///
+/// When `fold != 0` (see [`frame_fold_bytes`]) the first save carries
+/// the whole allocation -- frame plus the fp/lr slot pair -- as a
+/// pre-indexed store of `-fold` bytes, replacing the prologue's
+/// `stp x29, x30, [sp, #-16]!` / `sub sp` pair; the first save always
+/// targets offset 0, so every other offset is unchanged.
+fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
+    let mut alloc_pending = fold != 0;
+    let fp = &alloc.fp_used;
+    let mut i = 0usize;
+    while i + 1 < fp.len() {
+        if core::mem::take(&mut alloc_pending) {
+            emit(
+                code,
+                enc_stp_d_pre(fp[i], fp[i + 1], Reg(31), -(fold as i32)),
+            );
+        } else {
+            emit(
+                code,
+                enc_stp_d_off(fp[i], fp[i + 1], Reg(31), (i as i32) * 8),
+            );
+        }
+        i += 2;
     }
-    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = saved_fpr_bytes + (i as u32) * 8;
-        emit(code, enc_str_imm(Reg(r), Reg(31), off));
+    if i < fp.len() {
+        if core::mem::take(&mut alloc_pending) {
+            emit(code, enc_str_d_pre(fp[i], Reg(31), -(fold as i32)));
+        } else {
+            emit(code, enc_str_d_imm(fp[i], Reg(31), (i as u32) * 8));
+        }
+    }
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(fp.len() as u32);
+    let gpr = &alloc.gpr_used;
+    let mut i = 0usize;
+    while i + 1 < gpr.len() {
+        let off = (saved_fpr_bytes + (i as u32) * 8) as i32;
+        if core::mem::take(&mut alloc_pending) {
+            emit(
+                code,
+                enc_stp_pre(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), -(fold as i32)),
+            );
+        } else {
+            emit(
+                code,
+                enc_stp_off(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), off),
+            );
+        }
+        i += 2;
+    }
+    if i < gpr.len() {
+        if core::mem::take(&mut alloc_pending) {
+            emit(code, enc_str_pre(Reg(gpr[i]), Reg(31), -(fold as i32)));
+        } else {
+            let off = saved_fpr_bytes + (i as u32) * 8;
+            emit(code, enc_str_imm(Reg(gpr[i]), Reg(31), off));
+        }
     }
     if frame.uses_x19 {
-        let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
-        let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
-        emit(code, enc_str_imm(Reg(19), Reg(31), x19_save_off));
+        if core::mem::take(&mut alloc_pending) {
+            emit(code, enc_str_pre(Reg(19), Reg(31), -(fold as i32)));
+        } else {
+            let saved_gpr_bytes = super::ssa::emit_common::slots16(gpr.len() as u32);
+            emit(
+                code,
+                enc_str_imm(Reg(19), Reg(31), saved_fpr_bytes + saved_gpr_bytes),
+            );
+        }
     }
+    debug_assert!(!alloc_pending, "frame fold requested with no callee save");
+}
+
+/// Restore what [`emit_prologue_saved_regs`] saved, in mirror order
+/// (x19, gprs descending, fp regs descending) so the offset-0 access
+/// comes last and, when `fold != 0`, tears the frame down as a
+/// post-indexed load of `fold` bytes, replacing the epilogue's
+/// `add sp` and the fp/lr `ldp`. `fold` is the total writeback
+/// (frame plus the fp/lr pair), or 0 for the unfolded shape.
+fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
+    let gpr = &alloc.gpr_used;
+    if frame.uses_x19 {
+        let saved_gpr_bytes = super::ssa::emit_common::slots16(gpr.len() as u32);
+        let off = saved_fpr_bytes + saved_gpr_bytes;
+        if off == 0 && fold != 0 {
+            emit(code, enc_ldr_post(Reg(19), Reg(31), fold as i32));
+        } else {
+            emit(code, enc_ldr_imm(Reg(19), Reg(31), off));
+        }
+    }
+    let mut i = gpr.len();
+    if i % 2 == 1 {
+        i -= 1;
+        let off = saved_fpr_bytes + (i as u32) * 8;
+        if off == 0 && fold != 0 {
+            emit(code, enc_ldr_post(Reg(gpr[i]), Reg(31), fold as i32));
+        } else {
+            emit(code, enc_ldr_imm(Reg(gpr[i]), Reg(31), off));
+        }
+    }
+    while i >= 2 {
+        i -= 2;
+        let off = (saved_fpr_bytes + (i as u32) * 8) as i32;
+        if off == 0 && fold != 0 {
+            emit(
+                code,
+                enc_ldp_post(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), fold as i32),
+            );
+        } else {
+            emit(
+                code,
+                enc_ldp_off(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), off),
+            );
+        }
+    }
+    let fp = &alloc.fp_used;
+    let mut i = fp.len();
+    if i % 2 == 1 {
+        i -= 1;
+        if i == 0 && fold != 0 {
+            emit(code, enc_ldr_d_post(fp[i], Reg(31), fold as i32));
+        } else {
+            emit(code, enc_ldr_d_imm(fp[i], Reg(31), (i as u32) * 8));
+        }
+    }
+    while i >= 2 {
+        i -= 2;
+        if i == 0 && fold != 0 {
+            emit(code, enc_ldp_d_post(fp[i], fp[i + 1], Reg(31), fold as i32));
+        } else {
+            emit(
+                code,
+                enc_ldp_d_off(fp[i], fp[i + 1], Reg(31), (i as i32) * 8),
+            );
+        }
+    }
+}
+
+/// Frame bytes the folded prologue / epilogue shape can carry, or 0
+/// when the fold does not apply. The folded shape extends the frame by
+/// the 16-byte fp/lr slot pair at its top: the first callee save
+/// pre-indexes `-(frame_bytes + 16)`, fp/lr store / load through the
+/// signed-offset pair form at `[sp, #frame_bytes]`, and the last
+/// restore post-indexes the whole amount back. All three must fit
+/// their immediates: the scaled imm7 pair forms reach +-504/512, so a
+/// pair-first frame folds up to 488 (16-aligned: 480); a single-register
+/// bottom save uses the unscaled imm9 (+-255) and folds up to 224.
+/// Both sides compute the fold from the same inputs so they agree.
+fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
+    let n_bottom = if !alloc.fp_used.is_empty() {
+        alloc.fp_used.len()
+    } else if !alloc.gpr_used.is_empty() {
+        alloc.gpr_used.len()
+    } else if frame.uses_x19 {
+        1
+    } else {
+        return 0;
+    };
+    debug_assert!(frame.frame_bytes >= 16, "saves imply a non-empty frame");
+    let limit = if n_bottom >= 2 { 480 } else { 224 };
+    if frame.frame_bytes <= limit {
+        frame.frame_bytes
+    } else {
+        0
+    }
+}
+
+/// Establish the frame record and fp, allocate the frame, and save the
+/// callee-saved registers. The folded shape allocates everything with
+/// the first callee save's pre-index and keeps fp and every offset
+/// identical to the unfolded `stp fp/lr; mov fp, sp; sub sp` shape;
+/// fp/lr restore first in the epilogue, so the `ret`-feeding lr load
+/// issues off an address that depends on no other restore.
+fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, abi: super::Abi) {
+    let fold = frame_fold_bytes(alloc, frame);
+    if fold != 0 {
+        emit_prologue_saved_regs(code, alloc, frame, fold + 16);
+        emit(code, enc_stp_off(Reg(29), Reg(30), Reg(31), fold as i32));
+        emit(code, enc_add_imm(Reg(29), Reg(31), fold));
+        return;
+    }
+    emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
+    emit(code, enc_add_imm(Reg(29), Reg(31), 0));
+    if frame.frame_bytes > 0 {
+        emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
+    }
+    emit_prologue_saved_regs(code, alloc, frame, 0);
 }
 
 /// Byte offset (positive) from fp to the start of the saved-reg
@@ -6477,28 +6635,6 @@ fn emit_return(
             emit_mov_reg(code, Reg(0), src);
         }
     }
-    // Restore saved callee-saved GPRs + FP regs (mirror of
-    // prologue). Addressing through sp uses `enc_ldr_imm`'s
-    // 12-bit scaled immediate (range 0..32760 in multiples of
-    // 8); the matching prologue uses `enc_str_imm` at the same
-    // offsets.
-    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = saved_fpr_bytes + (i as u32) * 8;
-        emit(code, enc_ldr_imm(Reg(r), Reg(31), off));
-    }
-    for (i, &r) in alloc.fp_used.iter().enumerate() {
-        let off = (i as u32) * 8;
-        emit(code, enc_ldr_d_imm(r, Reg(31), off));
-    }
-    // Restore x19 from the dedicated slot above the allocator saves;
-    // mirror of the prologue's save, emitted only when the function
-    // clobbers x19.
-    if frame.uses_x19 {
-        let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
-        let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
-        emit(code, enc_ldr_imm(Reg(19), Reg(31), x19_save_off));
-    }
     // Leaf-function elision: prologue emitted no save, so the
     // epilogue emits no matching restore -- the function body is
     // bracketed only by the return-value materialization and the
@@ -6508,11 +6644,22 @@ fn emit_return(
         emit(code, enc_ret(Reg(30)));
         return;
     }
-    // Tear down the frame.
-    if frame.frame_bytes > 0 {
-        emit_add_sp_imm(code, frame.frame_bytes);
+    // Restore fp/lr first in the folded shape (the lr load feeds `ret`,
+    // so it issues off sp before the writeback chain), then x19 and the
+    // callee-saved GPRs / FP regs in mirror order of the prologue's
+    // saves; the final restore's post-index tears the frame down. The
+    // unfolded shape keeps the restore / `add sp` / fp-lr `ldp` order.
+    let fold = frame_fold_bytes(alloc, frame);
+    if fold != 0 {
+        emit(code, enc_ldp_off(Reg(29), Reg(30), Reg(31), fold as i32));
+        emit_epilogue_restore_regs(code, alloc, frame, fold + 16);
+    } else {
+        emit_epilogue_restore_regs(code, alloc, frame, 0);
+        if frame.frame_bytes > 0 {
+            emit_add_sp_imm(code, frame.frame_bytes);
+        }
+        emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
     }
-    emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
     // Drop whatever bytes the prologue allocated above the saved
     // fp/lr for c5 cdecl parameter slots. The single source of
     // truth is `prologue_param_spill_bytes`, recorded on

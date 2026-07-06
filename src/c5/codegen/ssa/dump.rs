@@ -71,6 +71,13 @@ pub(crate) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
             "    terminator {}",
             fmt_terminator(block.terminator),
         ));
+        if let Terminator::JumpTable { table, .. } = block.terminator {
+            let targets: alloc::vec::Vec<String> = func.jump_tables[table as usize]
+                .iter()
+                .map(|b| format!("b{b}"))
+                .collect();
+            out.push_str(&format!("   [{}]", targets.join(", ")));
+        }
         if block.exit_acc != NO_VALUE {
             out.push_str(&format!("   (exit_acc=v{})", block.exit_acc));
         }
@@ -279,6 +286,9 @@ fn fmt_terminator(t: Terminator) -> String {
         Terminator::TailExt(b) => format!("TailExt({b})"),
         Terminator::FallThrough(b) => format!("FallThrough(b{b})"),
         Terminator::GotoIndirect { target } => format!("GotoIndirect(v{target})"),
+        Terminator::JumpTable { idx, table } => {
+            format!("JumpTable {{ idx=v{idx}, table={table} }}")
+        }
     }
 }
 

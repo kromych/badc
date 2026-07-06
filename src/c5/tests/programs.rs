@@ -1060,6 +1060,9 @@ fn switch_statement() {
     // a == 2 -> res = 20, falls through to case 3 -> res += 5 -> 25
     assert_eq!(run_fixture("switch_statement.c"), 25);
     assert_eq!(run_fixture("switch_binary_search.c"), 0);
+    assert_eq!(run_fixture("switch_jump_table_dense.c"), 0);
+    assert_eq!(run_fixture("switch_jump_table_sparse_kept.c"), 0);
+    assert_eq!(run_fixture("switch_jump_table_phi_join.c"), 0);
     assert_eq!(run_fixture("branch_relaxation.c"), 21);
     assert_eq!(run_fixture("float_register_resident.c"), 45);
     assert_eq!(run_fixture("variadic_struct_arg.c"), 18);

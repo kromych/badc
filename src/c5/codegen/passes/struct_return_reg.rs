@@ -171,7 +171,8 @@ fn promote_once(func: &mut FunctionSsa) -> bool {
             Terminator::Return(v)
             | Terminator::Bz { cond: v, .. }
             | Terminator::Bnz { cond: v, .. }
-            | Terminator::GotoIndirect { target: v } => refs.push(*v),
+            | Terminator::GotoIndirect { target: v }
+            | Terminator::JumpTable { idx: v, .. } => refs.push(*v),
             _ => {}
         }
         if block.exit_acc != NO_VALUE {
@@ -298,7 +299,8 @@ fn promote_once(func: &mut FunctionSsa) -> bool {
             Terminator::Return(v)
             | Terminator::Bz { cond: v, .. }
             | Terminator::Bnz { cond: v, .. }
-            | Terminator::GotoIndirect { target: v } => {
+            | Terminator::GotoIndirect { target: v }
+            | Terminator::JumpTable { idx: v, .. } => {
                 if let Some(&s) = la_slot.get(v) {
                     mark_disq(&mut slots, s);
                 }
@@ -439,6 +441,9 @@ fn promote_once(func: &mut FunctionSsa) -> bool {
             }
             Terminator::GotoIndirect { target } => {
                 *target = resolve(&redirect, *target);
+            }
+            Terminator::JumpTable { idx, .. } => {
+                *idx = resolve(&redirect, *idx);
             }
             Terminator::Return(v) if *v != NO_VALUE => {
                 *v = resolve(&redirect, *v);

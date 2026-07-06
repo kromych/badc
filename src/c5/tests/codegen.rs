@@ -917,6 +917,70 @@ fn jmp_to_next_block_falls_through() {
     );
 }
 
+/// Switch lowering: a dense case set (>= 8 cases, span < 2 * cases)
+/// dispatches through `Terminator::JumpTable` behind an unsigned
+/// bounds check to default; a hole's table slot routes to default.
+/// A small or sparse set keeps the balanced compare tree.
+#[test]
+fn dense_switch_lowers_to_jump_table_sparse_keeps_tree() {
+    use crate::Target;
+    use crate::c5::ir::{FunctionSsa, Terminator};
+    let program = super::compile_str_bare(
+        "int dense8(int x) { switch (x) { \
+             case 3: return 1; case 4: return 2; case 5: return 3; \
+             case 6: return 4; case 8: return 5; case 9: return 6; \
+             case 10: return 7; case 11: return 8; default: return 0; } } \
+         int dense7(int x) { switch (x) { \
+             case 0: return 1; case 1: return 2; case 2: return 3; \
+             case 3: return 4; case 4: return 5; case 5: return 6; \
+             case 6: return 7; default: return 0; } } \
+         int half8(int x) { switch (x) { \
+             case 0: return 1; case 2: return 2; case 4: return 3; \
+             case 6: return 4; case 8: return 5; case 10: return 6; \
+             case 12: return 7; case 14: return 8; default: return 0; } } \
+         int sparse8(int x) { switch (x) { \
+             case 0: return 1; case 3: return 2; case 6: return 3; \
+             case 9: return 4; case 12: return 5; case 15: return 6; \
+             case 18: return 7; case 21: return 8; default: return 0; } } \
+         int main(void) { return dense8(3) + dense7(0) + half8(0) + sparse8(0); }",
+    );
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host())
+        .expect("produce_ssa_funcs");
+    let table_of = |name: &str| -> Option<(u32, u32)> {
+        let f: &FunctionSsa = funcs.iter().find(|f| f.name == name).unwrap();
+        f.blocks.iter().enumerate().find_map(|(b, blk)| {
+            if let Terminator::JumpTable { table, .. } = blk.terminator {
+                Some((b as u32, table))
+            } else {
+                None
+            }
+        })
+    };
+    // dense8: cases 3..11 with a hole at 7 -> a 9-entry table whose
+    // hole slot names the same block the bounds check defaults to.
+    let (dispatch, table) = table_of("dense8").expect("dense8 uses a jump table");
+    let dense8: &FunctionSsa = funcs.iter().find(|f| f.name == "dense8").unwrap();
+    assert_eq!(dense8.jump_tables[table as usize].len(), 9);
+    let deflt = dense8
+        .blocks
+        .iter()
+        .find_map(|blk| match blk.terminator {
+            Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            } if fall_through == dispatch => Some(target),
+            _ => None,
+        })
+        .expect("bounds check branches to default ahead of the table");
+    assert_eq!(dense8.jump_tables[table as usize][4], deflt);
+    // half8: span 14 with 8 cases passes the 50% density gate.
+    assert!(table_of("half8").is_some(), "half-dense set uses a table");
+    // dense7 is below the case minimum; sparse8 fails the density gate.
+    assert!(table_of("dense7").is_none(), "7 cases keep the tree");
+    assert!(table_of("sparse8").is_none(), "sparse set keeps the tree");
+}
+
 /// C99 6.3.1.8 + 6.5p5: the post-binop sign-narrow that renormalizes an
 /// `int` result is built as `Inst::Extend { kind: I32 }`, which the
 /// aarch64 emit lowers to `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`) and the

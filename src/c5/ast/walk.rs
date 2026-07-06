@@ -1091,7 +1091,9 @@ impl<'a> Walker<'a> {
                     sorted.sort_by_key(|p| p.0);
                 }
                 let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
-                self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
+                if !self.emit_switch_table(b, disc_val, &sorted, deflt) {
+                    self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
+                }
 
                 // Walk the body linearly. The opening block is reachable
                 // only by a goto into the switch ahead of the first case
@@ -1335,11 +1337,62 @@ impl<'a> Walker<'a> {
         blk
     }
 
-    /// Reserve a block for every `case` value and for `default` in a
-    /// switch body, descending into nested statements but not into a
-    /// nested switch (whose labels belong to it, C99 6.8.4.2). A
-    /// duplicate case value keeps the first block; the parser already
-    /// rejects duplicates.
+    /// Emit a jump-table dispatcher for a dense case list: a bias
+    /// subtract, an unsigned bounds check branching to `deflt`, and a
+    /// `Terminator::JumpTable` indexed by the biased discriminant.
+    /// Returns false (leaving the cursor untouched) when the case set
+    /// is too small or too sparse; the caller falls back to the
+    /// compare tree. `cases` is sorted with values already converted
+    /// to the promoted controlling type, so consecutive entries differ
+    /// by their true unsigned distance regardless of signedness.
+    fn emit_switch_table(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        disc: super::super::ir::ValueId,
+        cases: &[(i64, super::super::ir::BlockId)],
+        deflt: super::super::ir::BlockId,
+    ) -> bool {
+        const MIN_CASES: usize = 8;
+        if cases.len() < MIN_CASES {
+            return false;
+        }
+        let lo = cases[0].0;
+        let hi = cases[cases.len() - 1].0;
+        // Exact unsigned span; wrapping covers the full i64 label
+        // domain (hi >= lo in the sort order, so the difference is
+        // < 2^64 and the wrapped subtraction is exact).
+        let span = (hi as u64).wrapping_sub(lo as u64);
+        // Density gate: at least half the table slots hold a real
+        // case. The bound also caps the table at 2 * cases entries.
+        if span >= 2 * cases.len() as u64 {
+            return false;
+        }
+        let mut targets = alloc::vec![deflt; span as usize + 1];
+        for &(v, blk) in cases {
+            let slot = &mut targets[(v as u64).wrapping_sub(lo as u64) as usize];
+            // First case wins on a converted-value collision, matching
+            // the compare tree's first-match order.
+            if *slot == deflt {
+                *slot = blk;
+            }
+        }
+        // idx = disc - lo; the wrapped 64-bit subtraction with the
+        // unsigned bound accepts exactly disc in [lo, hi] for every
+        // promoted width (the discriminant is already sign- or
+        // zero-extended to the same domain as the labels).
+        let idx = if lo != 0 {
+            b.binop_imm(BinOp::Sub, disc, lo)
+        } else {
+            disc
+        };
+        let inb = b.binop_imm(BinOp::Ult, idx, span as i64 + 1);
+        let dispatch = b.new_block();
+        b.branch_zero(inb, deflt, dispatch);
+        b.switch_to(dispatch);
+        b.jump_table(idx, targets);
+        true
+    }
+
     /// Emit a balanced binary search over a sorted, distinct case list
     /// as the switch dispatcher. The cursor is at an open block on entry
     /// and the block is closed on return. Internal nodes branch on
@@ -1374,6 +1427,11 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Reserve a block for every `case` value and for `default` in a
+    /// switch body, descending into nested statements but not into a
+    /// nested switch (whose labels belong to it, C99 6.8.4.2). A
+    /// duplicate case value keeps the first block; the parser already
+    /// rejects duplicates.
     fn collect_switch_cases(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,

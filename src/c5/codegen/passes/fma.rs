@@ -61,7 +61,9 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
     for block in &func.blocks {
         match block.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(cond),
-            Terminator::GotoIndirect { target } => bump(target),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                bump(target)
+            }
             Terminator::Return(v) => bump(v),
             Terminator::Jmp(_) | Terminator::TailExt(_) | Terminator::FallThrough(_) => {}
         }

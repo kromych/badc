@@ -280,7 +280,7 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
         .blocks
         .iter()
         .map(|blk| {
-            successors(&blk.terminator, &f.computed_goto_targets)
+            successors(&blk.terminator, &f.computed_goto_targets, &f.jump_tables)
                 .iter()
                 .map(|&b| b as usize)
                 .collect()

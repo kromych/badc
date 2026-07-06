@@ -171,6 +171,7 @@ impl SsaBuilder {
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             has_returns_twice_call: false,
@@ -478,6 +479,16 @@ impl SsaBuilder {
     /// address.
     pub(crate) fn goto_indirect(&mut self, target: ValueId) {
         self.close(Terminator::GotoIndirect { target }, target);
+    }
+
+    /// Close the current block with `Terminator::JumpTable`:
+    /// control transfers to `targets[idx]`. The caller must have
+    /// proven `idx` in `0..targets.len()` (an unsigned bounds
+    /// check branching to the default block).
+    pub(crate) fn jump_table(&mut self, idx: ValueId, targets: alloc::vec::Vec<BlockId>) {
+        let table = self.func.jump_tables.len() as u32;
+        self.func.jump_tables.push(targets);
+        self.close(Terminator::JumpTable { idx, table }, idx);
     }
 
     /// `Inst::ImmCode(0)` whose target lives in another TU.

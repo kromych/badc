@@ -704,6 +704,22 @@ fn run_func<H: Host>(
                 let tok = frame.regs[target as usize];
                 frame.block_idx = (tok & !CODE_ADDR_TAG) as usize;
             }
+            Terminator::JumpTable { idx, table } => {
+                // The lowering's bounds check proves the index in
+                // range; an out-of-range value here is a lowering bug.
+                let i = frame.regs[idx as usize] as u64 as usize;
+                let Some(&t) = frame
+                    .func
+                    .jump_tables
+                    .get(table as usize)
+                    .and_then(|tbl| tbl.get(i))
+                else {
+                    break Err(C5Error::Runtime(alloc::format!(
+                        "vm_ssa: JumpTable index {i} out of range"
+                    )));
+                };
+                frame.block_idx = t as usize;
+            }
             Terminator::TailExt(_) => {
                 break Err(C5Error::Runtime(
                     "vm_ssa: Terminator::TailExt not implemented".to_string(),

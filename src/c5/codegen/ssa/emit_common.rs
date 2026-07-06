@@ -450,6 +450,18 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 ..
             } => alloc::vec![target, fall_through],
             Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
+            Terminator::JumpTable { table, .. } => {
+                // Distinct targets only: entries repeat (holes point at
+                // the default block) but each CFG edge's phi moves are
+                // emitted once.
+                let mut out: alloc::vec::Vec<super::super::ir::BlockId> = alloc::vec::Vec::new();
+                for &t in &func.jump_tables[table as usize] {
+                    if !out.contains(&t) {
+                        out.push(t);
+                    }
+                }
+                out
+            }
             Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
         };
     for succ in succs {

@@ -18,47 +18,48 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
-               	movq	%rsi, %r13
-               	leaq	(%rdi), %rax
-               	movq	(%rax), %rcx
-               	movq	0x8(%rdi), %rdx
-               	movq	0x10(%rdi), %rsi
-               	movq	0x18(%rdi), %r8
-               	movq	0x20(%rdi), %r9
-               	movq	0x28(%rdi), %rbx
-               	movq	0x30(%rdi), %r12
-               	movq	0x38(%rdi), %rdi
+               	movq	%rdi, %rbx
+               	movq	%rsi, %r12
+               	leaq	(%rbx), %rax
+               	movq	(%rax), %rax
+               	movq	0x8(%rbx), %rcx
+               	movq	0x10(%rbx), %rdx
+               	movq	0x18(%rbx), %rsi
+               	movq	0x20(%rbx), %rdi
+               	movq	0x28(%rbx), %r8
+               	movq	0x30(%rbx), %r9
+               	movq	0x38(%rbx), %rbx
                	jmp	<addr>
-               	movq	%rdi, %rax
-               	shlq	$0x1, %rax
-               	addq	%r12, %rax
-               	shlq	$0x1, %r12
-               	addq	%rbx, %r12
-               	shlq	$0x1, %rbx
-               	addq	%r9, %rbx
+               	movq	%rbx, %r13
+               	shlq	$0x1, %r13
+               	addq	%r9, %r13
                	shlq	$0x1, %r9
                	addq	%r8, %r9
                	shlq	$0x1, %r8
-               	addq	%rsi, %r8
+               	addq	%rdi, %r8
+               	shlq	$0x1, %rdi
+               	addq	%rsi, %rdi
                	shlq	$0x1, %rsi
                	addq	%rdx, %rsi
                	shlq	$0x1, %rdx
                	addq	%rcx, %rdx
                	shlq	$0x1, %rcx
-               	xorq	%rdi, %rcx
-               	movq	%rax, %rdi
-               	movslq	%r13d, %rax
-               	leaq	-0x1(%rax), %r13
-               	testq	%rax, %rax
+               	addq	%rax, %rcx
+               	shlq	$0x1, %rax
+               	xorq	%rbx, %rax
+               	movq	%r13, %rbx
+               	movslq	%r12d, %r13
+               	leaq	-0x1(%r13), %r12
+               	testq	%r13, %r13
                	jg	<addr>
-               	leaq	(%rcx), %rax
+               	addq	$0x0, %rax
+               	addq	%rcx, %rax
                	addq	%rdx, %rax
                	addq	%rsi, %rax
+               	addq	%rdi, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
                	addq	%rbx, %rax
-               	addq	%r12, %rax
-               	addq	%rdi, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -109,5 +110,3 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

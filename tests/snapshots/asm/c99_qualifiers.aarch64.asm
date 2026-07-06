@@ -17,15 +17,17 @@ Disassembly of section .text:
                	ret
 
 <read_one>:
-               	mov	x3, #0x0                // =0
-               	mov	x2, x3
+               	mov	x2, x0
+               	mov	x3, x1
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
                	b	<addr>
-               	ldrsw	x4, [x0]
-               	add	x2, x2, x4
-               	add	x3, x3, #0x1
-               	cmp	x3, x1
+               	ldrsw	x4, [x2]
+               	add	x0, x0, x4
+               	add	x1, x1, #0x1
+               	cmp	x1, x3
                	b.lo	<addr>
-               	sxtw	x0, w2
+               	sxtw	x0, w0
                	ret
 
 <main>:

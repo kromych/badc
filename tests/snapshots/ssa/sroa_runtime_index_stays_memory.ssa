@@ -141,16 +141,16 @@ fn ent_pc=0 n_params=2 variadic=false locals=9
     v131 BinopI { op=and, lhs=v3, rhs_imm=7 }             -> x1
     v132 BinopI { op=shl, lhs=v131, rhs_imm=3 }           -> x2
     v133 Binop { op=add, lhs=v129, rhs=v132 }             -> x2
-    v134 LoadIndexed { base=v129, index=v131, scale=8, kind=I64 } -> x0
-    v135 LocalAddr(-8)                                    -> x1
-    v136 LoadLocal { off=3, kind=I32 }                    -> x2
-    v137 BinopI { op=add, lhs=v3, rhs_imm=5 }             -> x2
+    v134 LoadIndexed { base=v129, index=v131, scale=8, kind=I64 } -> x2
+    v135 LocalAddr(-8)                                    -> x0
+    v136 LoadLocal { off=3, kind=I32 }                    -> x1
+    v137 BinopI { op=add, lhs=v3, rhs_imm=5 }             -> x1
     v138 BinopI { op=shl, lhs=v137, rhs_imm=32 }          -> x6
-    v139 Extend { value=v137, kind=I32 }                  -> x2
-    v140 BinopI { op=and, lhs=v139, rhs_imm=7 }           -> x2
+    v139 Extend { value=v137, kind=I32 }                  -> x1
+    v140 BinopI { op=and, lhs=v139, rhs_imm=7 }           -> x1
     v141 BinopI { op=shl, lhs=v140, rhs_imm=3 }           -> x6
     v142 Binop { op=add, lhs=v135, rhs=v141 }             -> x6
-    v143 LoadIndexed { base=v135, index=v140, scale=8, kind=I64 } -> x1
+    v143 LoadIndexed { base=v135, index=v140, scale=8, kind=I64 } -> x0
     v144 Binop { op=add, lhs=v134, rhs=v143 }             -> x0
     terminator Return(v144)   (exit_acc=v144)
 ; --- SSA dump (ok=true) ent_pc=1 ---

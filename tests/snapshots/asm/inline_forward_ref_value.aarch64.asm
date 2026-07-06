@@ -15,11 +15,12 @@ Disassembly of section .text:
                	ret
 
 <combine>:
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	add	x3, x0, #0x1
-               	str	w3, [x2]
-               	add	x0, x0, x1
+               	mov	x2, x1
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	add	x1, x0, #0x1
+               	str	w1, [x3]
+               	add	x0, x0, x2
                	ret
 
 <scale>:
@@ -44,9 +45,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	lsl	x2, x1, #1
+               	lsl	x1, x1, #1
+               	mov	x16, x1
                	mov	x1, x0
-               	mov	x0, x2
+               	mov	x0, x16
                	bl	<addr>
                	sxtw	x1, w20
                	add	x0, x0, x1

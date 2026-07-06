@@ -81,16 +81,16 @@ Disassembly of section .text:
                	ldur	x1, [x29, #0x10]
                	sub	x2, x29, #0x10
                	ldrsw	x2, [x2]
-               	add	x1, x1, x2
-               	sub	x2, x29, #0x10
-               	ldrsw	x2, [x2, #0x4]
-               	add	x1, x1, x2
-               	sub	x2, x29, #0x10
-               	ldrsw	x2, [x2, #0x8]
-               	add	x1, x1, x2
-               	sub	x2, x29, #0x10
-               	ldrsw	x2, [x2, #0xc]
-               	add	x1, x1, x2
+               	add	x2, x1, x2
+               	sub	x1, x29, #0x10
+               	ldrsw	x1, [x1, #0x4]
+               	add	x2, x2, x1
+               	sub	x1, x29, #0x10
+               	ldrsw	x1, [x1, #0x8]
+               	add	x2, x2, x1
+               	sub	x1, x29, #0x10
+               	ldrsw	x1, [x1, #0xc]
+               	add	x1, x2, x1
                	ldur	x2, [x29, #0x20]
                	ldrb	w2, [x2]
                	add	x1, x1, x2

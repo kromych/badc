@@ -54,15 +54,15 @@ Disassembly of section .text:
                	popq	%rax
                	leaq	-0x18(%rbp), %rcx
                	movl	%eax, (%rcx)
-               	movl	$0x14, %eax
-               	leaq	-0x18(%rbp), %rcx
-               	movl	%eax, 0x4(%rcx)
-               	movl	$0x1e, %eax
-               	leaq	-0x18(%rbp), %rcx
-               	movl	%eax, 0x8(%rcx)
-               	movl	$0x28, %eax
-               	leaq	-0x18(%rbp), %rcx
-               	movl	%eax, 0xc(%rcx)
+               	movl	$0x14, %ecx
+               	leaq	-0x18(%rbp), %rax
+               	movl	%ecx, 0x4(%rax)
+               	movl	$0x1e, %ecx
+               	leaq	-0x18(%rbp), %rax
+               	movl	%ecx, 0x8(%rax)
+               	movl	$0x28, %ecx
+               	leaq	-0x18(%rbp), %rax
+               	movl	%ecx, 0xc(%rax)
                	leaq	-0x18(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpq	$0xa, %rax

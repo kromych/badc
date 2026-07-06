@@ -146,13 +146,11 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	cmpq	$0x24, %rax
                	jne	<addr>
-               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movslq	%eax, %rcx
+               	movslq	%eax, %rax
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

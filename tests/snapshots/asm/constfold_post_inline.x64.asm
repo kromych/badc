@@ -167,81 +167,81 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x14, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x15, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x16, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x17, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x18, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x19, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1a, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1b, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1c, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1d, %eax
                	addq	$0x80, %rsp

@@ -11,11 +11,11 @@ Disassembly of section .text:
                	ud2
 
 <counter>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	incq	%rax
+               	movl	%eax, (%rcx)
+               	movslq	%eax, %rax
                	retq
 
 <two_statics>:
@@ -28,35 +28,35 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	incq	%rax
+               	movl	%eax, (%rcx)
                	leaq	<rip>, %rdx
                	movslq	(%rdx), %rsi
-               	movslq	%ecx, %rcx
-               	addq	%rsi, %rcx
-               	movl	%ecx, (%rdx)
-               	movslq	(%rax), %rax
-               	movslq	%ecx, %rcx
+               	movslq	%eax, %rax
+               	addq	%rsi, %rax
+               	movl	%eax, (%rdx)
+               	movslq	(%rcx), %rcx
+               	movslq	%eax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
 
 <next_x>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	incq	%rax
+               	movl	%eax, (%rcx)
+               	movslq	%eax, %rax
                	retq
 
 <next_y>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	incq	%rax
+               	movl	%eax, (%rcx)
+               	movslq	%eax, %rax
                	retq
 
 <main>:

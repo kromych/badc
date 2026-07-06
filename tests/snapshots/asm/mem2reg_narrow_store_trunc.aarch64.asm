@@ -18,10 +18,9 @@ Disassembly of section .text:
                	mov	w0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	ret
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>
 
 <main>:

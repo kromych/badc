@@ -15,11 +15,11 @@ fn ent_pc=0 n_params=1 variadic=false locals=1030
     v9   StoreLocal { off=-3, value=v8, kind=I32 }        -> -
     terminator Jmp(b3)   (exit_acc=v9)
   block 1  start_pc=0
-    v16  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v17  LoadLocal { off=-3, kind=I32 }                   -> x1
-    v18  BinopI { op=shl, lhs=v17, rhs_imm=2 }            -> x2
-    v19  Binop { op=add, lhs=v16, rhs=v18 }               -> x2
-    v20  BinopI { op=shl, lhs=v17, rhs_imm=1 }            -> x2
+    v16  LoadLocal { off=-1, kind=I64 }                   -> x2
+    v17  LoadLocal { off=-3, kind=I32 }                   -> x0
+    v18  BinopI { op=shl, lhs=v17, rhs_imm=2 }            -> x1
+    v19  Binop { op=add, lhs=v16, rhs=v18 }               -> x1
+    v20  BinopI { op=shl, lhs=v17, rhs_imm=1 }            -> x1
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x6
     v22  Extend { value=v20, kind=I32 }                   -> x6
     v23  StoreIndexed { base=v16, index=v17, scale=4, value=v20, kind=I32 } -> -
@@ -40,12 +40,12 @@ fn ent_pc=0 n_params=1 variadic=false locals=1030
     v26  StoreLocal { off=-5, value=v24, kind=I32 }       -> -
     terminator Jmp(b7)   (exit_acc=v26)
   block 5  start_pc=0
-    v33  LoadLocal { off=-4, kind=I32 }                   -> x0
-    v34  LoadLocal { off=-1, kind=I64 }                   -> x1
-    v35  LoadLocal { off=-5, kind=I32 }                   -> x2
+    v33  LoadLocal { off=-4, kind=I32 }                   -> x2
+    v34  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v35  LoadLocal { off=-5, kind=I32 }                   -> x1
     v36  BinopI { op=shl, lhs=v35, rhs_imm=2 }            -> x6
     v37  Binop { op=add, lhs=v34, rhs=v36 }               -> x6
-    v38  LoadIndexed { base=v34, index=v35, scale=4, kind=I32 } -> x1
+    v38  LoadIndexed { base=v34, index=v35, scale=4, kind=I32 } -> x0
     v39  Binop { op=add, lhs=v33, rhs=v38 }               -> x0
     v40  StoreLocal { off=-4, value=v39, kind=I32 }       -> -
     v41  LoadLocal { off=-4, kind=I32 }                   -> x0

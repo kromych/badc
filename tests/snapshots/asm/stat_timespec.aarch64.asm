@@ -24,10 +24,10 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0xb0
                	ret
                	sub	x0, x29, #0x80
+               	ldr	x1, [x0, #0x58]
+               	sub	x0, x29, #0x80
                	ldr	x0, [x0, #0x58]
-               	sub	x1, x29, #0x80
-               	ldr	x1, [x1, #0x58]
-               	cmp	x0, x1
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0xa0]

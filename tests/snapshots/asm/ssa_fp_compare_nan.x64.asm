@@ -28,89 +28,89 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
+               	xorq	%rax, %rax
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	setb	%cl
+               	movzbq	%cl, %rcx
+               	setnp	%r10b
+               	movzbq	%r10b, %r10
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
+               	movl	$0x1, %eax
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setb	%al
-               	movzbq	%al, %rax
+               	seta	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
+               	orq	$0x2, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	setbe	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	movl	$0x1, %ecx
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm15
+               	orq	$0x4, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	setae	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x2, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm15
+               	orq	$0x8, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setbe	%al
-               	movzbq	%al, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x4, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm15
+               	orq	$0x10, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setae	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	orq	$0x8, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	orq	$0x10, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
+               	setne	%cl
+               	movzbq	%cl, %rcx
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	orq	%r10, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	orq	$0x20, %rcx
+               	orq	$0x20, %rax
                	ucomisd	%xmm0, %xmm0
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x40, %rcx
+               	orq	$0x40, %rax
                	ucomisd	%xmm0, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x80, %rcx
-               	movslq	%ecx, %rax
-               	testq	%rax, %rax
+               	orq	$0x80, %rax
+               	movslq	%eax, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%ecx, %rsi
+               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax

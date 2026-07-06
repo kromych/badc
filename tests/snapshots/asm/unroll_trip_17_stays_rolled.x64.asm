@@ -11,35 +11,35 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	xorq	%rsi, %rsi
-               	movq	%rsi, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %rax
                	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	movq	%rax, (%rcx,%rax,8)
+               	leaq	<rip>, %rdx
+               	movq	%rax, (%rdx,%rax,8)
                	incq	%rax
                	cmpq	$0x11, %rax
                	jl	<addr>
-               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movq	(%rax,%rcx,8), %rax
-               	addq	%rax, %rsi
-               	incq	%rcx
-               	cmpq	$0x11, %rcx
+               	leaq	<rip>, %rdx
+               	movq	(%rdx,%rax,8), %rdx
+               	addq	%rdx, %rcx
+               	incq	%rax
+               	cmpq	$0x11, %rax
                	jl	<addr>
-               	cmpq	$0x88, %rsi
-               	sete	%al
-               	movzbq	%al, %rax
-               	xorq	%rsi, %rsi
-               	testq	%rax, %rax
+               	cmpq	$0x88, %rcx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	xorq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	je	<addr>
-               	cmpq	$0x11, %rcx
+               	cmpq	$0x11, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	sete	%al
                	movzbq	%al, %rax
                	retq

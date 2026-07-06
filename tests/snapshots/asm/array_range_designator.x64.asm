@@ -29,43 +29,43 @@ Disassembly of section .text:
                	retq
                	movslq	0x10(%rax), %rcx
                	cmpq	$0x7, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x24(%rax), %rcx
                	cmpq	$0x7, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	movslq	0xc(%rax), %rcx
                	testq	%rcx, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x28(%rax), %rcx
                	testq	%rcx, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
                	movslq	0x30(%rax), %rcx
                	cmpq	$0x9, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x3c(%rax), %rax
                	cmpq	$0x9, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x6, %eax
                	retq

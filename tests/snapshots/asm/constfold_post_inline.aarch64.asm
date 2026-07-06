@@ -125,72 +125,72 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x15               // =21
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x16               // =22
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x18               // =24
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x19               // =25
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x1a               // =26
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x1b               // =27
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x1c               // =28
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x1d               // =29
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

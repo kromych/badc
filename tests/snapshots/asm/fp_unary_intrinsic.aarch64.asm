@@ -95,8 +95,8 @@ Disassembly of section .text:
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	mov	x0, #0x3333             // =13107
                	movk	x0, #0x4013, lsl #16
                	fmov	s16, w0
@@ -106,8 +106,8 @@ Disassembly of section .text:
                	fmov	s16, w0
                	fneg	s1, s16
                	fcmp	s0, s1
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
@@ -121,8 +121,8 @@ Disassembly of section .text:
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	mov	x0, #0xcccd             // =52429
                	movk	x0, #0x402c, lsl #16
                	fmov	s16, w0
@@ -132,8 +132,8 @@ Disassembly of section .text:
                	fmov	s16, w0
                	fneg	s1, s16
                	fcmp	s0, s1
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
@@ -149,8 +149,8 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fneg	d1, d16
                	fcmp	d0, d1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	mov	x0, #0x999a             // =39322
                	movk	x0, #0x4039, lsl #16
                	fmov	s16, w0
@@ -158,8 +158,8 @@ Disassembly of section .text:
                	mov	x0, #0x40000000         // =1073741824
                	fmov	s17, w0
                	fcmp	s0, s17
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50

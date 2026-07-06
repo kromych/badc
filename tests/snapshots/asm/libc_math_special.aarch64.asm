@@ -10,19 +10,19 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	fsub	d1, d0, d1
+               	fsub	d0, d0, d1
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	fcmp	d1, d0
+               	scvtf	d1, x0
+               	fcmp	d0, d1
                	cset	x0, mi
                	cbz	x0, <addr>
-               	fneg	d1, d1
+               	fneg	d0, d0
                	mov	x0, #0xed8d             // =60813
                	movk	x0, #0xa0b5, lsl #16
                	movk	x0, #0xc6f7, lsl #32
                	movk	x0, #0x3eb0, lsl #48
                	fmov	d17, x0
-               	fcmp	d1, d17
+               	fcmp	d0, d17
                	cset	x0, mi
                	ret
                	b	<addr>

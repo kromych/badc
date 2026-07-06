@@ -54,16 +54,16 @@ Disassembly of section .text:
                	ret
 
 <isblank>:
-               	sxtw	x0, w0
-               	cmp	x0, #0x20
-               	cset	x1, eq
-               	mov	x3, #0x1                // =1
-               	cbnz	x1, <addr>
-               	cmp	x0, #0x9
+               	mov	x1, x0
+               	sxtw	x1, w1
+               	cmp	x1, #0x20
+               	cset	x2, eq
+               	mov	x0, #0x1                // =1
+               	cbnz	x2, <addr>
+               	cmp	x1, #0x9
                	cset	x0, eq
                	cmp	x0, #0x0
-               	cset	x3, ne
-               	mov	x0, x3
+               	cset	x0, ne
                	ret
                	b	<addr>
 

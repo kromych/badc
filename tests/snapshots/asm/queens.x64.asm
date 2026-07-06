@@ -15,34 +15,35 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
+               	movq	%rdx, %r8
                	movslq	%esi, %rsi
-               	movslq	%edx, %rdx
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movq	%rsi, %r8
-               	subq	%rax, %r8
                	movslq	%r8d, %r8
-               	movslq	(%rdi,%rax,4), %r9
-               	movq	%r9, %r10
-               	movq	%rdx, %r9
-               	subq	%r10, %r9
-               	movslq	%r9d, %rbx
-               	testq	%rbx, %rbx
+               	xorq	%rax, %rax
+               	jmp	<addr>
+               	movq	%rsi, %rdx
+               	subq	%rcx, %rdx
+               	movslq	%edx, %r9
+               	movslq	(%rdi,%rcx,4), %rdx
+               	movq	%rdx, %r10
+               	movq	%r8, %rdx
+               	subq	%r10, %rdx
+               	movslq	%edx, %rdx
+               	testq	%rdx, %rdx
                	jge	<addr>
-               	imulq	$-0x1, %rbx, %r9
-               	movslq	%r9d, %rbx
-               	movslq	(%rdi,%rax,4), %rax
-               	cmpq	%rdx, %rax
+               	imulq	$-0x1, %rdx, %rdx
+               	movslq	%edx, %rdx
+               	movslq	(%rdi,%rcx,4), %rcx
+               	cmpq	%r8, %rcx
                	je	<addr>
-               	movslq	%ebx, %rax
-               	cmpq	%rax, %r8
+               	movslq	%edx, %rcx
+               	cmpq	%rcx, %r9
                	jne	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
+               	movslq	%eax, %rax
                	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	%rsi, %rax
+               	cmpq	%rsi, %rcx
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
@@ -69,10 +70,10 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
-               	movq	%rdi, %rbx
-               	movq	%rsi, %r12
-               	movslq	%r12d, %r12
-               	cmpq	$0x8, %r12
+               	movq	%rdi, %r14
+               	movq	%rsi, %r13
+               	movslq	%r13d, %r13
+               	cmpq	$0x8, %r13
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -82,28 +83,28 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r13, %r13
-               	movq	%r13, %r14
+               	xorq	%rbx, %rbx
+               	movq	%rbx, %r12
                	jmp	<addr>
-               	movq	%rbx, %rdi
-               	movq	%r13, %rdx
-               	movq	%r12, %rsi
+               	movq	%r14, %rdi
+               	movq	%rbx, %rdx
+               	movq	%r13, %rsi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>
-               	movl	%r13d, (%rbx,%r12,4)
-               	leaq	0x1(%r12), %rsi
-               	movq	%rbx, %rdi
+               	movl	%ebx, (%r14,%r13,4)
+               	leaq	0x1(%r13), %rsi
+               	movq	%r14, %rdi
                	callq	<addr>
-               	addq	%r14, %rax
-               	movslq	%eax, %r14
-               	leaq	0x1(%r13), %rax
-               	movslq	%eax, %r13
-               	movslq	%r13d, %rax
+               	addq	%r12, %rax
+               	movslq	%eax, %r12
+               	leaq	0x1(%rbx), %rax
+               	movslq	%eax, %rbx
+               	movslq	%ebx, %rax
                	cmpq	$0x8, %rax
                	jl	<addr>
-               	movslq	%r14d, %rax
+               	movslq	%r12d, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -130,3 +131,5 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -11,29 +11,26 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	sxtw	x0, w0
-               	fmov	d1, d0
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
                	cbz	x0, <addr>
-               	fmov	d0, d1
                	ret
-               	fneg	s1, s1
+               	fneg	s0, s0
                	b	<addr>
 
 <grad_dot>:
                	sxtw	x0, w0
-               	fmov	d2, d0
                	mov	x17, #0x1               // =1
                	and	x1, x0, x17
                	cbz	x1, <addr>
                	mov	x17, #0x2               // =2
                	and	x0, x0, x17
                	cbz	x0, <addr>
-               	fadd	s0, s2, s1
+               	fadd	s0, s0, s1
                	ret
                	fneg	s1, s1
                	b	<addr>
-               	fneg	s2, s2
+               	fneg	s0, s0
                	b	<addr>
 
 <main>:

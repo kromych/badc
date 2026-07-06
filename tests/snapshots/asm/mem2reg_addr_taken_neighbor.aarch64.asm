@@ -13,19 +13,19 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
+               	mov	x2, #0x0                // =0
+               	stur	w2, [x29, #-0x8]
                	lsl	x0, x0, #1
-               	sub	x2, x29, #0x8
-               	ldrsw	x1, [x2]
-               	add	x1, x1, x0
-               	str	w1, [x2]
-               	sxtw	x1, w1
-               	add	x1, x1, x0
-               	str	w1, [x2]
-               	sxtw	x1, w1
-               	add	x0, x1, x0
-               	str	w0, [x2]
+               	sub	x1, x29, #0x8
+               	ldrsw	x2, [x1]
+               	add	x2, x2, x0
+               	str	w2, [x1]
+               	sxtw	x2, w2
+               	add	x2, x2, x0
+               	str	w2, [x1]
+               	sxtw	x2, w2
+               	add	x0, x2, x0
+               	str	w0, [x1]
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

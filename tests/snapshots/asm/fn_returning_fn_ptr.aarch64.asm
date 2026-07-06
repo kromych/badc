@@ -17,11 +17,10 @@ Disassembly of section .text:
 <pick>:
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x0, x1
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	ret
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	b	<addr>
 
 <main>:

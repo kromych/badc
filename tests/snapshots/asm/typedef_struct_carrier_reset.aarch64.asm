@@ -29,90 +29,90 @@ Disassembly of section .text:
                	add	x2, x0, #0x28
                	mov	x3, #0x2                // =2
                	str	w3, [x2, #0x4]
-               	ldrsw	x2, [x0, #0x4]
-               	add	x3, x0, #0x28
-               	ldrsw	x3, [x3, #0x4]
-               	add	x2, x2, x3
+               	ldrsw	x3, [x0, #0x4]
+               	add	x2, x0, #0x28
+               	ldrsw	x2, [x2, #0x4]
+               	add	x2, x3, x2
                	add	x1, x1, x2
                	mov	x2, #0x2                // =2
                	str	w2, [x0, #0x8]
                	add	x2, x0, #0x28
                	mov	x3, #0x3                // =3
                	str	w3, [x2, #0x8]
-               	ldrsw	x2, [x0, #0x8]
-               	add	x3, x0, #0x28
-               	ldrsw	x3, [x3, #0x8]
-               	add	x2, x2, x3
+               	ldrsw	x3, [x0, #0x8]
+               	add	x2, x0, #0x28
+               	ldrsw	x2, [x2, #0x8]
+               	add	x2, x3, x2
                	add	x1, x1, x2
                	mov	x2, #0x3                // =3
                	str	w2, [x0, #0xc]
                	add	x2, x0, #0x28
                	mov	x3, #0x4                // =4
                	str	w3, [x2, #0xc]
-               	ldrsw	x2, [x0, #0xc]
-               	add	x3, x0, #0x28
-               	ldrsw	x3, [x3, #0xc]
-               	add	x2, x2, x3
+               	ldrsw	x3, [x0, #0xc]
+               	add	x2, x0, #0x28
+               	ldrsw	x2, [x2, #0xc]
+               	add	x2, x3, x2
                	add	x1, x1, x2
                	mov	x2, #0x4                // =4
                	str	w2, [x0, #0x10]
                	add	x2, x0, #0x28
                	mov	x3, #0x5                // =5
                	str	w3, [x2, #0x10]
-               	ldrsw	x2, [x0, #0x10]
-               	add	x3, x0, #0x28
-               	ldrsw	x3, [x3, #0x10]
-               	add	x2, x2, x3
+               	ldrsw	x3, [x0, #0x10]
+               	add	x2, x0, #0x28
+               	ldrsw	x2, [x2, #0x10]
+               	add	x2, x3, x2
                	add	x1, x1, x2
                	mov	x2, #0x5                // =5
                	str	w2, [x0, #0x14]
                	add	x2, x0, #0x28
                	mov	x3, #0x6                // =6
                	str	w3, [x2, #0x14]
-               	ldrsw	x2, [x0, #0x14]
-               	add	x3, x0, #0x28
-               	ldrsw	x3, [x3, #0x14]
-               	add	x2, x2, x3
+               	ldrsw	x3, [x0, #0x14]
+               	add	x2, x0, #0x28
+               	ldrsw	x2, [x2, #0x14]
+               	add	x2, x3, x2
                	add	x1, x1, x2
                	mov	x2, #0x6                // =6
                	str	w2, [x0, #0x18]
                	add	x2, x0, #0x28
                	mov	x3, #0x7                // =7
                	str	w3, [x2, #0x18]
-               	ldrsw	x2, [x0, #0x18]
-               	add	x3, x0, #0x28
-               	ldrsw	x3, [x3, #0x18]
-               	add	x2, x2, x3
+               	ldrsw	x3, [x0, #0x18]
+               	add	x2, x0, #0x28
+               	ldrsw	x2, [x2, #0x18]
+               	add	x2, x3, x2
                	add	x1, x1, x2
                	mov	x2, #0x7                // =7
                	str	w2, [x0, #0x1c]
                	add	x2, x0, #0x28
                	mov	x3, #0x8                // =8
                	str	w3, [x2, #0x1c]
-               	ldrsw	x2, [x0, #0x1c]
-               	add	x3, x0, #0x28
-               	ldrsw	x3, [x3, #0x1c]
-               	add	x2, x2, x3
+               	ldrsw	x3, [x0, #0x1c]
+               	add	x2, x0, #0x28
+               	ldrsw	x2, [x2, #0x1c]
+               	add	x2, x3, x2
                	add	x1, x1, x2
                	mov	x2, #0x8                // =8
                	str	w2, [x0, #0x20]
                	add	x2, x0, #0x28
                	mov	x3, #0x9                // =9
                	str	w3, [x2, #0x20]
-               	ldrsw	x2, [x0, #0x20]
-               	add	x3, x0, #0x28
-               	ldrsw	x3, [x3, #0x20]
-               	add	x2, x2, x3
+               	ldrsw	x3, [x0, #0x20]
+               	add	x2, x0, #0x28
+               	ldrsw	x2, [x2, #0x20]
+               	add	x2, x3, x2
                	add	x1, x1, x2
                	mov	x2, #0x9                // =9
                	str	w2, [x0, #0x24]
                	add	x2, x0, #0x28
                	mov	x3, #0xa                // =10
                	str	w3, [x2, #0x24]
-               	ldrsw	x2, [x0, #0x24]
-               	add	x3, x0, #0x28
-               	ldrsw	x3, [x3, #0x24]
-               	add	x2, x2, x3
+               	ldrsw	x3, [x0, #0x24]
+               	add	x2, x0, #0x28
+               	ldrsw	x2, [x2, #0x24]
+               	add	x2, x3, x2
                	add	x1, x1, x2
                	str	w1, [x0, #0xa0]
                	sxtw	x0, w1

@@ -80,11 +80,11 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x60(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movl	%ecx, (%rax)
-               	leaq	-0x60(%rbp), %rax
-               	movl	%ecx, 0x4(%rax)
+               	leaq	-0x60(%rbp), %rcx
+               	xorq	%rax, %rax
+               	movl	%eax, (%rcx)
+               	leaq	-0x60(%rbp), %rcx
+               	movl	%eax, 0x4(%rcx)
                	leaq	-0x60(%rbp), %rax
                	leaq	-0x68(%rbp), %rcx
                	pushq	%rdx

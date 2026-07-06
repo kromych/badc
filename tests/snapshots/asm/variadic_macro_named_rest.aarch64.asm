@@ -20,19 +20,18 @@ Disassembly of section .text:
                	ret
 
 <streq>:
-               	mov	x2, x0
-               	ldrb	w3, [x2]
-               	cbz	x3, <addr>
-               	ldrb	w0, [x2]
+               	ldrb	w2, [x0]
+               	cbz	x2, <addr>
+               	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	x0, x3
-               	cset	x3, eq
-               	cbz	x3, <addr>
-               	add	x2, x2, #0x1
+               	cmp	x2, x3
+               	cset	x2, eq
+               	cbz	x2, <addr>
+               	add	x0, x0, #0x1
                	add	x1, x1, #0x1
                	b	<addr>
                	b	<addr>
-               	ldrb	w0, [x2]
+               	ldrb	w0, [x0]
                	ldrb	w1, [x1]
                	cmp	x0, x1
                	cset	x0, eq

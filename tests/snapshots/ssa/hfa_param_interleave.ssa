@@ -36,10 +36,10 @@ fn ent_pc=0 n_params=6 variadic=false locals=6
     v30  LoadLocal { off=-6, kind=F32 }                   -> d2 [f32]
     v31  Binop { op=fadd, lhs=v29, rhs=v1 }               -> d0 [f32]
     v32  LocalAddr(-5)                                    -> x0
-    v33  Load { addr=v32, disp=0, kind=U8 }               -> x0
-    v34  LocalAddr(-5)                                    -> x1
+    v33  Load { addr=v32, disp=0, kind=U8 }               -> x1
+    v34  LocalAddr(-5)                                    -> x0
     v35  BinopI { op=add, lhs=v34, rhs_imm=1 }            -> x2
-    v36  Load { addr=v34, disp=1, kind=U8 }               -> x1
+    v36  Load { addr=v34, disp=1, kind=U8 }               -> x0
     v37  Binop { op=add, lhs=v33, rhs=v36 }               -> x0
     v38  BinopI { op=shl, lhs=v37, rhs_imm=32 }           -> x1
     v39  Extend { value=v37, kind=I32 }                   -> x1

@@ -394,7 +394,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=39
     v401 Imm(0)                                           -> x0
     terminator Jmp(b76)   (exit_acc=v401)
   block 76  start_pc=0
-    v402 Imm(-2147483648)                                 -> x3
+    v402 Imm(-2147483648)                                 -> x12
     v403 Imm(-9223372036854775808)                        -> x0
     v404 Imm(0)                                           -> x0
     terminator Jmp(b77)   (exit_acc=v402)
@@ -1073,7 +1073,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=39
     terminator Jmp(b75)
   block 211  start_pc=0
     v408 ImmData(1480)                                    -> x0
-    v409 Imm(134)                                         -> x12
+    v409 Imm(134)                                         -> x3
     v410 Store { addr=v408, disp=0, value=v409, kind=I32 } -> -
     v411 Imm(2)                                           -> x7
     v412 Call { target_pc=0, args=[v411], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x7

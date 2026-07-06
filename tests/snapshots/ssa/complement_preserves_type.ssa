@@ -36,18 +36,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v26  Imm(-1)                                          -> x0
     v27  Imm(0)                                           -> x0
     v28  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v29  Imm(0)                                           -> x1
-    v30  Imm(0)                                           -> x0
+    v29  Imm(0)                                           -> x0
+    v30  Imm(0)                                           -> x1
     terminator Jmp(b5)   (exit_acc=v29)
   block 5  start_pc=0
     v31  LoadLocal { off=-4, kind=I64 }                   -> x0
     v32  Imm(-1)                                          -> x0
-    v33  Imm(0)                                           -> x1
-    v34  Imm(0)                                           -> x0
+    v33  Imm(0)                                           -> x0
+    v34  Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v33)
   block 6  start_pc=0
-    v35  Phi { incoming=[b4:v29, b5:v33], kind=I64 }      -> x1
-    v36  LoadLocal { off=-6, kind=I64 }                   -> x0
+    v35  Phi { incoming=[b4:v29, b5:v33], kind=I64 }      -> x0
+    v36  LoadLocal { off=-6, kind=I64 }                   -> x1
     terminator Bz { cond=v35, target=b8, fall=b7 }   (exit_acc=v35)
   block 7  start_pc=0
     v37  Imm(5)                                           -> x0

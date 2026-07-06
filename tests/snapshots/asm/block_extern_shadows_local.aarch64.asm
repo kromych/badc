@@ -18,21 +18,22 @@ Disassembly of section .text:
                	ret
 
 <param_probe>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
-               	add	x0, x1, x0
+               	mov	x1, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x0, [x0]
+               	add	x0, x0, x1
                	sxtw	x0, w0
                	ret
 
 <main>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x0, [x1]
+               	add	x0, x0, #0x0
                	mov	x2, #0x7                // =7
-               	str	w2, [x0]
-               	add	x0, x1, #0x5
+               	str	w2, [x1]
+               	add	x0, x0, #0x5
                	sxtw	x0, w0
                	cmp	x0, #0x69
                	b.eq	<addr>

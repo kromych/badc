@@ -86,11 +86,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x60
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
-               	sub	x0, x29, #0x60
-               	str	w1, [x0, #0x4]
+               	sub	x1, x29, #0x60
+               	mov	x0, #0x0                // =0
+               	str	w0, [x1]
+               	sub	x1, x29, #0x60
+               	str	w0, [x1, #0x4]
                	sub	x0, x29, #0x60
                	sub	x1, x29, #0x68
                	str	x10, [sp, #-0x10]!

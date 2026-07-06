@@ -10,18 +10,20 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	sxtw	x1, w1
-               	mov	x3, #0x0                // =0
-               	mov	x2, x3
+               	mov	x3, x0
+               	mov	x4, x1
+               	sxtw	x4, w4
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
                	b	<addr>
-               	ldrsw	x3, [x0, x4, lsl #2]
-               	add	x2, x2, x3
-               	add	x3, x4, #0x1
-               	sxtw	x3, w3
-               	sxtw	x4, w3
-               	cmp	x4, x1
+               	ldrsw	x1, [x3, x2, lsl #2]
+               	add	x0, x0, x1
+               	add	x1, x2, #0x1
+               	sxtw	x1, w1
+               	sxtw	x2, w1
+               	cmp	x2, x4
                	b.lt	<addr>
-               	sxtw	x0, w2
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -184,84 +186,84 @@ Disassembly of section .text:
                	add	x0, x0, #0x0
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
-               	sub	x0, x29, #0x68
                	sub	x1, x29, #0x68
-               	ldrsw	x1, [x1, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x0, [x0, #0x20]
                	sub	x2, x29, #0x68
                	add	x2, x2, #0x0
                	ldrsw	x2, [x2]
-               	add	x1, x1, x2
-               	str	w1, [x0, #0x20]
+               	add	x0, x0, x2
+               	str	w0, [x1, #0x20]
                	sub	x0, x29, #0x68
                	mov	x1, #0x2                // =2
                	str	w1, [x0, #0x4]
-               	sub	x0, x29, #0x68
                	sub	x1, x29, #0x68
-               	ldrsw	x1, [x1, #0x20]
-               	sub	x2, x29, #0x68
-               	ldrsw	x2, [x2, #0x4]
-               	add	x1, x1, x2
-               	str	w1, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x2, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x0, [x0, #0x4]
+               	add	x0, x2, x0
+               	str	w0, [x1, #0x20]
                	sub	x0, x29, #0x68
                	mov	x1, #0x3                // =3
                	str	w1, [x0, #0x8]
-               	sub	x0, x29, #0x68
                	sub	x1, x29, #0x68
-               	ldrsw	x1, [x1, #0x20]
-               	sub	x2, x29, #0x68
-               	ldrsw	x2, [x2, #0x8]
-               	add	x1, x1, x2
-               	str	w1, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x2, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x0, [x0, #0x8]
+               	add	x0, x2, x0
+               	str	w0, [x1, #0x20]
                	sub	x0, x29, #0x68
                	mov	x1, #0x4                // =4
                	str	w1, [x0, #0xc]
-               	sub	x0, x29, #0x68
                	sub	x1, x29, #0x68
-               	ldrsw	x1, [x1, #0x20]
-               	sub	x2, x29, #0x68
-               	ldrsw	x2, [x2, #0xc]
-               	add	x1, x1, x2
-               	str	w1, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x2, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x0, [x0, #0xc]
+               	add	x0, x2, x0
+               	str	w0, [x1, #0x20]
                	sub	x0, x29, #0x68
                	mov	x1, #0x5                // =5
                	str	w1, [x0, #0x10]
-               	sub	x0, x29, #0x68
                	sub	x1, x29, #0x68
-               	ldrsw	x1, [x1, #0x20]
-               	sub	x2, x29, #0x68
-               	ldrsw	x2, [x2, #0x10]
-               	add	x1, x1, x2
-               	str	w1, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x2, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x0, [x0, #0x10]
+               	add	x0, x2, x0
+               	str	w0, [x1, #0x20]
                	sub	x0, x29, #0x68
                	mov	x1, #0x6                // =6
                	str	w1, [x0, #0x14]
-               	sub	x0, x29, #0x68
                	sub	x1, x29, #0x68
-               	ldrsw	x1, [x1, #0x20]
-               	sub	x2, x29, #0x68
-               	ldrsw	x2, [x2, #0x14]
-               	add	x1, x1, x2
-               	str	w1, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x2, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x0, [x0, #0x14]
+               	add	x0, x2, x0
+               	str	w0, [x1, #0x20]
                	sub	x0, x29, #0x68
                	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x18]
-               	sub	x0, x29, #0x68
                	sub	x1, x29, #0x68
-               	ldrsw	x1, [x1, #0x20]
-               	sub	x2, x29, #0x68
-               	ldrsw	x2, [x2, #0x18]
-               	add	x1, x1, x2
-               	str	w1, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x2, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x0, [x0, #0x18]
+               	add	x0, x2, x0
+               	str	w0, [x1, #0x20]
                	sub	x0, x29, #0x68
                	mov	x1, #0x8                // =8
                	str	w1, [x0, #0x1c]
-               	sub	x0, x29, #0x68
                	sub	x1, x29, #0x68
-               	ldrsw	x1, [x1, #0x20]
-               	sub	x2, x29, #0x68
-               	ldrsw	x2, [x2, #0x1c]
-               	add	x1, x1, x2
-               	str	w1, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x2, [x0, #0x20]
+               	sub	x0, x29, #0x68
+               	ldrsw	x0, [x0, #0x1c]
+               	add	x0, x2, x0
+               	str	w0, [x1, #0x20]
                	sub	x0, x29, #0x68
                	ldrsw	x0, [x0, #0x20]
                	cmp	x0, #0x24

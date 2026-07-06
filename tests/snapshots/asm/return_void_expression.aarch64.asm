@@ -37,9 +37,8 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	cmp	x0, #0x2
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>

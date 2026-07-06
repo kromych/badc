@@ -200,8 +200,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v64  Imm(6)                                           -> x0
     terminator Return(v64)   (exit_acc=v64)
   block 12  start_pc=0
-    v65  Imm(4602678819172646912)                         -> x0
-    v66  Imm(4598175219545276416)                         -> x1
+    v65  Imm(4602678819172646912)                         -> x1
+    v66  Imm(4598175219545276416)                         -> x0
     v67  Imm(4593671619917905920)                         -> x2
     v68  Imm(0)                                           -> x6
     v69  Imm(0)                                           -> x6
@@ -214,8 +214,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v74  Imm(7)                                           -> x0
     terminator Return(v74)   (exit_acc=v74)
   block 14  start_pc=0
-    v75  Imm(1056964608)                                  -> x0 [f32]
-    v76  Imm(1048576000)                                  -> x1 [f32]
+    v75  Imm(1056964608)                                  -> x1 [f32]
+    v76  Imm(1048576000)                                  -> x0 [f32]
     v77  Imm(1040187392)                                  -> x2 [f32]
     v78  Imm(0)                                           -> x6
     v79  Imm(0)                                           -> x6
@@ -239,8 +239,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v91  Imm(9)                                           -> x0
     terminator Return(v91)   (exit_acc=v91)
   block 18  start_pc=0
-    v92  Imm(4602678819172646912)                         -> x0
-    v93  Imm(4598175219545276416)                         -> x1
+    v92  Imm(4602678819172646912)                         -> x1
+    v93  Imm(4598175219545276416)                         -> x0
     v94  Imm(4593671619917905920)                         -> x2
     v95  Fma { a=v92, b=v93, c=v94, neg_product=false, neg_addend=false } -> d0
     v96  Binop { op=fne, lhs=v95, rhs=v93 }               -> x0

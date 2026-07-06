@@ -66,11 +66,9 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0xc0d, %rax            # imm = 0xC0D
                	jne	<addr>
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

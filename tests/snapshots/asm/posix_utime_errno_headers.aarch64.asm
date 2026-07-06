@@ -20,10 +20,10 @@ Disassembly of section .text:
                	mov	x1, #0xc8               // =200
                	str	x1, [x0, #0x8]
                	sub	x0, x29, #0x10
-               	ldr	x0, [x0]
-               	sub	x1, x29, #0x10
-               	ldr	x1, [x1, #0x8]
-               	add	x0, x0, x1
+               	ldr	x1, [x0]
+               	sub	x0, x29, #0x10
+               	ldr	x0, [x0, #0x8]
+               	add	x0, x1, x0
                	cmp	x0, #0x12c
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

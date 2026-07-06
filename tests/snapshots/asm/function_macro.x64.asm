@@ -11,15 +11,15 @@ Disassembly of section .text:
                	ud2
 
 <string_eq>:
-               	movsbq	(%rdi), %rcx
-               	testq	%rcx, %rcx
+               	movsbq	(%rdi), %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movsbq	(%rdi), %rax
                	movsbq	(%rsi), %rcx
                	cmpq	%rcx, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	incq	%rdi
                	incq	%rsi
@@ -27,19 +27,18 @@ Disassembly of section .text:
                	jmp	<addr>
                	movsbq	(%rdi), %rax
                	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	xorq	%rdx, %rdx
-               	testq	%rax, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	xorq	%rax, %rax
+               	testq	%rcx, %rcx
                	je	<addr>
                	movsbq	(%rsi), %rax
                	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rdx, %rax
+               	setne	%al
+               	movzbq	%al, %rax
                	retq
                	jmp	<addr>
 
@@ -164,4 +163,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

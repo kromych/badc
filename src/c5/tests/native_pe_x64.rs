@@ -764,6 +764,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
     ("quicksort.c", 0),
+    ("loop_iv_spill_priority.c", 40),
     ("binary_search_tree.c", 0),
     ("bst_free.c", 0),
     ("cast_to_struct_pointer.c", 42),

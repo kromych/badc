@@ -188,13 +188,12 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movl	$0xb, %ecx
+               	movl	$0xb, %eax
                	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
@@ -208,4 +207,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

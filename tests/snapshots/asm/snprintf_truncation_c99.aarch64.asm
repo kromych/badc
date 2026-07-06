@@ -144,16 +144,16 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x2
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50

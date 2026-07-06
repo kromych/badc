@@ -50,16 +50,16 @@ fn ent_pc=7 n_params=0 variadic=false locals=3
     v4   BinopI { op=eq, lhs=v3, rhs_imm=42 }             -> x0
     terminator Bz { cond=v4, target=b3, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
-    v5   Imm(0)                                           -> x1
-    v6   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
+    v6   Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v5)
   block 2  start_pc=0
-    v9   Phi { incoming=[b1:v5, b3:v7], kind=I64 }        -> x1
-    v10  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v9   Phi { incoming=[b1:v5, b3:v7], kind=I64 }        -> x0
+    v10  LoadLocal { off=-3, kind=I64 }                   -> x1
     terminator Return(v9)   (exit_acc=v9)
   block 3  start_pc=0
-    v7   Imm(1)                                           -> x1
-    v8   Imm(0)                                           -> x0
+    v7   Imm(1)                                           -> x0
+    v8   Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

@@ -11,12 +11,13 @@ Disassembly of section .text:
                	ud2
 
 <bump>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdx
+               	movq	%rdi, %rcx
+               	movslq	%ecx, %rcx
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rdx
                	incq	%rdx
-               	movl	%edx, (%rcx)
+               	movl	%edx, (%rax)
+               	movq	%rcx, %rax
                	retq
 
 <main>:
@@ -70,3 +71,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

@@ -17,20 +17,21 @@ Disassembly of section .text:
                	ret
 
 <driver>:
-               	sxtw	x0, w0
-               	mov	x2, #0x0                // =0
-               	cmp	x0, #0x2
+               	mov	x1, x0
+               	sxtw	x1, w1
+               	mov	x0, #0x0                // =0
+               	cmp	x1, #0x2
                	b.lt	<addr>
-               	cmp	x0, #0x2
+               	cmp	x1, #0x2
                	b.eq	<addr>
-               	sxtw	x0, w2
+               	sxtw	x0, w0
                	ret
-               	mov	x2, #0xffff             // =65535
-               	movk	x2, #0xffff, lsl #16
-               	movk	x2, #0xffff, lsl #32
-               	movk	x2, #0xffff, lsl #48
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
                	b	<addr>
-               	cmp	x0, #0x1
+               	cmp	x1, #0x1
                	b.eq	<addr>
                	b	<addr>
                	adrp	x0, <page>
@@ -38,7 +39,7 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	ldrb	w0, [x0, #0x1]
                	add	x0, x1, x0
-               	sxtw	x2, w0
+               	sxtw	x0, w0
                	b	<addr>
                	b	<addr>
 

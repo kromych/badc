@@ -11,11 +11,9 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	sxtw	x0, w0
-               	fmov	d2, d0
                	cbz	x0, <addr>
-               	fmov	d0, d2
                	ret
-               	fmov	d2, d1
+               	fmov	d0, d1
                	b	<addr>
 
 <main>:

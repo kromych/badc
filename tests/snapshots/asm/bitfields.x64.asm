@@ -281,18 +281,18 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x18(%rbp), %rax
                	leaq	-0x18(%rbp), %rcx
-               	movl	(%rcx), %ecx
-               	sarq	$0x8, %rcx
-               	andq	$0xff, %rcx
-               	incq	%rcx
-               	andq	$0xff, %rcx
-               	movl	(%rax), %edx
+               	leaq	-0x18(%rbp), %rax
+               	movl	(%rax), %eax
+               	sarq	$0x8, %rax
+               	andq	$0xff, %rax
+               	incq	%rax
+               	andq	$0xff, %rax
+               	movl	(%rcx), %edx
                	andq	$-0xff01, %rdx          # imm = 0xFFFF00FF
-               	shlq	$0x8, %rcx
-               	orq	%rdx, %rcx
-               	movl	%ecx, (%rax)
+               	shlq	$0x8, %rax
+               	orq	%rdx, %rax
+               	movl	%eax, (%rcx)
                	leaq	-0x18(%rbp), %rax
                	movl	(%rax), %eax
                	sarq	$0x8, %rax

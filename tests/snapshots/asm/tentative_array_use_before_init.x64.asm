@@ -11,21 +11,21 @@ Disassembly of section .text:
                	ud2
 
 <count_named>:
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>
-               	movslq	%eax, %rax
-               	incq	%rax
-               	leaq	0x1(%rsi), %rcx
-               	leaq	<rip>, %rdx
-               	movslq	%ecx, %rsi
-               	movq	%rsi, %rdi
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	leaq	0x1(%rdx), %rax
+               	leaq	<rip>, %rsi
+               	movslq	%eax, %rdx
+               	movq	%rdx, %rdi
                	shlq	$0x4, %rdi
-               	addq	%rdi, %rdx
-               	movq	(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	addq	%rdi, %rsi
+               	movq	(%rsi), %rsi
+               	testq	%rsi, %rsi
                	jne	<addr>
-               	movslq	%eax, %rax
+               	movslq	%ecx, %rax
                	retq
 
 <sum_first_four>:
@@ -57,16 +57,16 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	0x8(%rax), %rax
                	cmpq	$0xa, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x28(%rax), %rax
                	cmpq	$0x1e, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp

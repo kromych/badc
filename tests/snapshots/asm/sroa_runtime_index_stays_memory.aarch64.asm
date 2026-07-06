@@ -67,14 +67,14 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	mov	x17, #0x7               // =7
                	and	x2, x1, x17
-               	ldr	x0, [x0, x2, lsl #3]
-               	sub	x2, x29, #0x40
+               	ldr	x2, [x0, x2, lsl #3]
+               	sub	x0, x29, #0x40
                	add	x1, x1, #0x5
                	sxtw	x1, w1
                	mov	x17, #0x7               // =7
                	and	x1, x1, x17
-               	ldr	x1, [x2, x1, lsl #3]
-               	add	x0, x0, x1
+               	ldr	x0, [x0, x1, lsl #3]
+               	add	x0, x2, x0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

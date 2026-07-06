@@ -129,13 +129,12 @@ Disassembly of section .text:
                	mov	x20, #0x0               // =0
                	sxtw	x0, w20
                	cbz	x0, <addr>
-               	mov	x1, #0xb                // =11
-               	mov	x0, x1
+               	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
                	ret
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	b	<addr>
                	b	<addr>
                	b	<addr>

@@ -84,20 +84,20 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	xorq	%rbx, %rbx
+               	xorq	%r12, %r12
                	movl	$0x32, %esi
+               	movq	%r12, %rdi
+               	callq	<addr>
+               	movq	%rax, %rbx
+               	movl	$0x1e, %esi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%rax, %r12
-               	movl	$0x1e, %esi
-               	movq	%r12, %rdi
-               	callq	<addr>
                	movl	$0x46, %esi
-               	movq	%r12, %rdi
+               	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%r12, %rdi
+               	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%rbx, %rax
+               	movq	%r12, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp

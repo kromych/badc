@@ -101,12 +101,13 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	s0, [x1, #0x4]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	s0, [x0, #0x4]
                	fcvt	d0, s0
+               	mov	x0, x1
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x8               // =8
@@ -118,12 +119,13 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	s0, [x1, #0x8]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	s0, [x0, #0x8]
                	fcvt	d0, s0
+               	mov	x0, x1
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x9               // =9
@@ -135,12 +137,13 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	s0, [x1, #0xc]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	s0, [x0, #0xc]
                	fcvt	d0, s0
+               	mov	x0, x1
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0xa               // =10

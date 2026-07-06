@@ -32,18 +32,18 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x17, #0x2               // =2
                	orr	x1, x1, x17
-               	mov	x2, #0x0                // =0
-               	b	<addr>
-               	add	x2, x2, #0x1
-               	sxtw	x0, w2
-               	cmp	x0, #0x2
-               	b.gt	<addr>
                	mov	x0, #0x0                // =0
-               	fmov	d17, x0
+               	b	<addr>
+               	add	x0, x0, #0x1
+               	sxtw	x2, w0
+               	cmp	x2, #0x2
+               	b.gt	<addr>
+               	mov	x2, #0x0                // =0
+               	fmov	d17, x2
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	sxtw	x0, w2
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x17, #0x4               // =4
@@ -60,8 +60,8 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	cset	x0, ne
                	cbz	x0, <addr>
-               	mov	x2, #0x1                // =1
-               	sxtw	x0, w2
+               	mov	x0, #0x1                // =1
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x17, #0x10              // =16
@@ -69,19 +69,19 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x2, ne
-               	cbz	x2, <addr>
-               	mov	x2, #0x1                // =1
-               	cbz	x2, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0x1                // =1
+               	cbz	x0, <addr>
                	mov	x17, #0x20              // =32
                	orr	x1, x1, x17
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	mov	x2, #0x0                // =0
-               	cbz	x2, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x17, #0x40              // =64
                	orr	x1, x1, x17
                	sxtw	x0, w1
@@ -108,7 +108,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	mov	x2, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	b	<addr>
                	b	<addr>
                	b	<addr>

@@ -34,26 +34,26 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	testq	%rdi, %rdi
                	je	<addr>
-               	movl	$0x1, %ecx
-               	imulq	$0xf4240, %rcx, %rax    # imm = 0xF4240
+               	movl	$0x1, %eax
+               	imulq	$0xf4240, %rax, %rax    # imm = 0xF4240
+               	movslq	%eax, %rcx
+               	leaq	-0x10(%rbp), %rax
+               	movq	0x8(%rax), %rax
+               	imulq	$0x2710, %rax, %rax     # imm = 0x2710
+               	addq	%rax, %rcx
+               	imulq	$0x3e8, %rdx, %rax      # imm = 0x3E8
                	movslq	%eax, %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movq	0x8(%rcx), %rcx
-               	imulq	$0x2710, %rcx, %rcx     # imm = 0x2710
-               	addq	%rcx, %rax
-               	imulq	$0x3e8, %rdx, %rcx      # imm = 0x3E8
-               	movslq	%ecx, %rcx
-               	addq	%rcx, %rax
-               	leaq	-0x20(%rbp), %rcx
-               	movq	0x8(%rcx), %rcx
-               	imulq	$0x64, %rcx, %rcx
-               	addq	%rcx, %rax
-               	leaq	-0x30(%rbp), %rcx
-               	movq	0x8(%rcx), %rcx
-               	imulq	$0xa, %rcx, %rcx
-               	addq	%rcx, %rax
-               	leaq	-0x40(%rbp), %rcx
-               	movq	0x8(%rcx), %rcx
+               	addq	%rax, %rcx
+               	leaq	-0x20(%rbp), %rax
+               	movq	0x8(%rax), %rax
+               	imulq	$0x64, %rax, %rax
+               	addq	%rax, %rcx
+               	leaq	-0x30(%rbp), %rax
+               	movq	0x8(%rax), %rax
+               	imulq	$0xa, %rax, %rax
+               	addq	%rax, %rcx
+               	leaq	-0x40(%rbp), %rax
+               	movq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	0x70(%rbp), %rcx
                	addq	%rcx, %rax
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	pushq	%r11
                	retq
-               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	jmp	<addr>
 
 <dp>:

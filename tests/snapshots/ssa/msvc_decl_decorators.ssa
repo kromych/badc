@@ -42,15 +42,15 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   TlsAddr(0)                                       -> x0
-    v2   Load { addr=v1, disp=0, kind=I32 }               -> x1
+    v1   TlsAddr(0)                                       -> x1
+    v2   Load { addr=v1, disp=0, kind=I32 }               -> x0
     v3   Extend { value=v2, kind=I32 }                    -> x2
     v4   Imm(0)                                           -> x2
-    v5   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
+    v5   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x0
     v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x2
     v7   Extend { value=v5, kind=I32 }                    -> x2
     v8   Imm(3)                                           -> x2
-    v9   BinopI { op=add, lhs=v5, rhs_imm=3 }             -> x1
+    v9   BinopI { op=add, lhs=v5, rhs_imm=3 }             -> x0
     v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x2
     v11  Extend { value=v9, kind=I32 }                    -> x2
     v12  Store { addr=v1, disp=0, value=v9, kind=I32 }    -> -

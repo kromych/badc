@@ -18,13 +18,13 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	andq	$0xff, %rax
                	movb	%al, 0xf(%rdi)
-               	movq	(%rdi), %rax
-               	movslq	0x8(%rdi), %rcx
-               	movswq	0xc(%rdi), %rsi
+               	movq	(%rdi), %rsi
+               	movslq	0x8(%rdi), %rax
+               	movswq	0xc(%rdi), %rcx
                	movsbq	%dl, %rdx
                	movzbq	0xf(%rdi), %rdi
-               	addq	%rcx, %rax
                	addq	%rsi, %rax
+               	addq	%rcx, %rax
                	addq	%rdx, %rax
                	movq	%rdi, %rcx
                	andq	$0xff, %rcx

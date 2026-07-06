@@ -10,23 +10,20 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x9, x1
-               	add	x1, x0, #0x0
-               	ldr	x2, [x1]
-               	ldr	x3, [x0, #0x8]
-               	ldr	x4, [x0, #0x10]
-               	ldr	x5, [x0, #0x18]
-               	ldr	x6, [x0, #0x20]
-               	ldr	x7, [x0, #0x28]
-               	ldr	x8, [x0, #0x30]
-               	ldr	x1, [x0, #0x38]
+               	mov	x7, x0
+               	mov	x8, x1
+               	add	x0, x7, #0x0
+               	ldr	x0, [x0]
+               	ldr	x1, [x7, #0x8]
+               	ldr	x2, [x7, #0x10]
+               	ldr	x3, [x7, #0x18]
+               	ldr	x4, [x7, #0x20]
+               	ldr	x5, [x7, #0x28]
+               	ldr	x6, [x7, #0x30]
+               	ldr	x7, [x7, #0x38]
                	b	<addr>
-               	lsl	x0, x1, #1
-               	add	x0, x8, x0
-               	lsl	x8, x8, #1
-               	add	x8, x7, x8
-               	lsl	x7, x7, #1
-               	add	x7, x6, x7
+               	lsl	x9, x7, #1
+               	add	x9, x6, x9
                	lsl	x6, x6, #1
                	add	x6, x5, x6
                	lsl	x5, x5, #1
@@ -36,20 +33,24 @@ Disassembly of section .text:
                	lsl	x3, x3, #1
                	add	x3, x2, x3
                	lsl	x2, x2, #1
-               	eor	x2, x1, x2
-               	mov	x1, x0
-               	sxtw	x0, w9
-               	sub	x9, x0, #0x1
-               	cmp	x0, #0x0
+               	add	x2, x1, x2
+               	lsl	x1, x1, #1
+               	add	x1, x0, x1
+               	lsl	x0, x0, #1
+               	eor	x0, x7, x0
+               	mov	x7, x9
+               	sxtw	x9, w8
+               	sub	x8, x9, #0x1
+               	cmp	x9, #0x0
                	b.gt	<addr>
-               	add	x0, x2, #0x0
+               	add	x0, x0, #0x0
+               	add	x0, x0, x1
+               	add	x0, x0, x2
                	add	x0, x0, x3
                	add	x0, x0, x4
                	add	x0, x0, x5
                	add	x0, x0, x6
                	add	x0, x0, x7
-               	add	x0, x0, x8
-               	add	x0, x0, x1
                	ret
 
 <main>:

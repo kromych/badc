@@ -25,17 +25,18 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	-<rip>, %rax       # <addr>
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdi
-               	movslq	%edi, %rcx
-               	movsbq	%cl, %rdx
-               	movswq	%cx, %rsi
-               	imulq	$0x186a0, %rdx, %rcx    # imm = 0x186A0
-               	imulq	$0xa, %rsi, %rdx
-               	addq	%rdx, %rcx
-               	addq	%rdi, %rcx
-               	movslq	%ecx, %rbx
+               	leaq	-<rip>, %rdx       # <addr>
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rdi
+               	movslq	%edi, %rax
+               	movsbq	%al, %rcx
+               	movswq	%ax, %rsi
+               	imulq	$0x186a0, %rcx, %rax    # imm = 0x186A0
+               	imulq	$0xa, %rsi, %rcx
+               	addq	%rcx, %rax
+               	addq	%rdi, %rax
+               	movslq	%eax, %rbx
+               	movq	%rdx, %rax
                	movq	%rdi, %rsi
                	movq	%rdi, %rdx
                	callq	*%rax
@@ -61,3 +62,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

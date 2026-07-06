@@ -29,15 +29,16 @@ Disassembly of section .text:
 
 <sum_sr>:
                	movslq	%esi, %rsi
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, %rdx
                	jmp	<addr>
-               	movq	(%rdi,%rdx,8), %r8
-               	addq	%r8, %rax
-               	leaq	0x1(%rdx), %rcx
-               	movslq	%ecx, %rdx
-               	cmpq	%rsi, %rdx
+               	movq	(%rdi,%rcx,8), %r8
+               	addq	%r8, %rdx
+               	leaq	0x1(%rcx), %rax
+               	movslq	%eax, %rcx
+               	cmpq	%rsi, %rcx
                	jl	<addr>
+               	movq	%rdx, %rax
                	retq
 
 <main>:
@@ -65,11 +66,10 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x5dc, %rax            # imm = 0x5DC
                	jne	<addr>
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	jmp	<addr>
                	addb	%al, 0x41(%rdx)

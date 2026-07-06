@@ -15,15 +15,15 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	stur	w0, [x29, #0x10]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
+               	sub	x1, x29, #0x10
+               	mov	x0, #0x0                // =0
                	adr	x2, <addr>
-               	str	x2, [x0]
-               	sub	x0, x29, #0x10
+               	str	x2, [x1]
+               	sub	x1, x29, #0x10
                	adr	x2, <addr>
-               	str	x2, [x0, #0x8]
-               	stur	w1, [x29, #-0x18]
-               	stur	w1, [x29, #-0x20]
+               	str	x2, [x1, #0x8]
+               	stur	w0, [x29, #-0x18]
+               	stur	w0, [x29, #-0x20]
                	b	<addr>
                	ldursw	x0, [x29, #-0x18]
                	add	x0, x0, #0x2

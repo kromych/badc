@@ -481,14 +481,14 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
-               	movl	$0x86, %r12d
-               	movl	%r12d, (%rax)
+               	movl	$0x86, %ebx
+               	movl	%ebx, (%rax)
                	movl	$0x2, %edi
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
                	movl	$0x80, %edx
-               	movq	%r12, %rcx
+               	movq	%rbx, %rcx
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -820,4 +820,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

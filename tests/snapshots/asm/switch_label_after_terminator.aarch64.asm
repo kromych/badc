@@ -22,17 +22,17 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ret
-               	mov	x1, #0x3                // =3
-               	add	x0, x1, #0x64
+               	mov	x0, #0x3                // =3
+               	add	x0, x0, #0x64
                	sxtw	x0, w0
                	ret
                	cmp	x0, #0x2
                	b.ne	<addr>
-               	mov	x1, #0x2                // =2
+               	mov	x0, #0x2                // =2
                	b	<addr>
                	cmp	x0, #0x1
                	b.ne	<addr>
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>
                	mov	x0, #0x0                // =0
                	ret

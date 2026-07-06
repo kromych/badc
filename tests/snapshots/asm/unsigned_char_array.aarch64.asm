@@ -90,11 +90,14 @@ Disassembly of section .text:
                	ldr	x1, [x1, #0x20]
                	cmp	x1, #0x1f4
                	b.eq	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x20]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x20]
+               	mov	x16, x1
+               	mov	x1, x0
+               	mov	x0, x16
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x1                // =1

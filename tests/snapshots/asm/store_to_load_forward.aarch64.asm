@@ -17,13 +17,13 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x1, x2, x17
                	strb	w1, [x0, #0xf]
-               	ldr	x1, [x0]
-               	ldrsw	x3, [x0, #0x8]
-               	ldrsh	x4, [x0, #0xc]
+               	ldr	x4, [x0]
+               	ldrsw	x1, [x0, #0x8]
+               	ldrsh	x3, [x0, #0xc]
                	sxtb	x2, w2
                	ldrb	w0, [x0, #0xf]
+               	add	x1, x4, x1
                	add	x1, x1, x3
-               	add	x1, x1, x4
                	add	x1, x1, x2
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17

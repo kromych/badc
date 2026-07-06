@@ -15,10 +15,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	ucomisd	%xmm1, %xmm0
-               	seta	%al
-               	movzbq	%al, %rax
-               	movl	$0x1, %edx
-               	testq	%rax, %rax
+               	seta	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %eax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	ucomisd	%xmm0, %xmm0
                	setne	%al
@@ -27,17 +27,17 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	ucomisd	%xmm1, %xmm1
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
+               	orq	%r10, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	subsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x18(%rbp,%riz)

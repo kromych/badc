@@ -18,11 +18,11 @@ Disassembly of section .text:
                	cmp	x0, #0x4
                	b.eq	<addr>
                	cmp	x0, #0x5
-               	cset	x2, ge
-               	cbz	x2, <addr>
+               	cset	x1, ge
+               	cbz	x1, <addr>
                	cmp	x0, #0x8
-               	cset	x2, le
-               	cbz	x2, <addr>
+               	cset	x1, le
+               	cbz	x1, <addr>
                	mov	x0, #0x1e               // =30
                	ret
                	mov	x0, #0x0                // =0

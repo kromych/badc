@@ -11,8 +11,8 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	mov	x0, #0x80000000         // =2147483648
-               	mov	x2, x0
-               	mov	w1, w2
+               	mov	x1, x0
+               	mov	w1, w1
                	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -25,6 +25,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x2, #0x3333             // =13107
-               	movk	x2, #0x3333, lsl #16
+               	mov	x1, #0x3333             // =13107
+               	movk	x1, #0x3333, lsl #16
                	b	<addr>

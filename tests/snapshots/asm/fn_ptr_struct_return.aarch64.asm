@@ -19,11 +19,12 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
-               	ldr	x1, [x20]
-               	mov	x9, x1
+               	ldr	x0, [x20]
+               	mov	x9, x0
+               	mov	x0, x1
                	blr	x9
                	cmp	x0, #0x0
                	b.ne	<addr>

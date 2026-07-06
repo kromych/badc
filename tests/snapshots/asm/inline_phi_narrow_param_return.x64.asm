@@ -17,18 +17,18 @@ Disassembly of section .text:
 
 <phi_accumulate>:
                	movslq	%edi, %rdi
-               	movl	$0x1, %edx
-               	xorq	%rcx, %rcx
+               	movl	$0x1, %ecx
+               	xorq	%rax, %rax
                	jmp	<addr>
-               	imulq	$0xf4243, %rdx, %rdx    # imm = 0xF4243
-               	addq	%rcx, %rdx
-               	movslq	%edx, %rdx
-               	incq	%rdx
-               	leaq	0x1(%rax), %rcx
-               	movslq	%ecx, %rax
-               	cmpq	%rdi, %rax
+               	imulq	$0xf4243, %rcx, %rcx    # imm = 0xF4243
+               	addq	%rax, %rcx
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	leaq	0x1(%rdx), %rax
+               	movslq	%eax, %rdx
+               	cmpq	%rdi, %rdx
                	jl	<addr>
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	retq
 
 <main>:
@@ -38,10 +38,9 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$-0x4728dfba, %rax      # imm = 0xB8D72046
                	jne	<addr>
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

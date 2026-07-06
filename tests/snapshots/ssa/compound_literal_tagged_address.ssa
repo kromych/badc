@@ -60,8 +60,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v42  Store { addr=v41, disp=0, value=v4, kind=I64 }   -> -
     v43  ImmData(16)                                      -> x1
     v44  Imm(8)                                           -> x2
-    v45  BinopI { op=add, lhs=v43, rhs_imm=8 }            -> x1
-    v46  LocalAddr(-8)                                    -> x2
+    v45  BinopI { op=add, lhs=v43, rhs_imm=8 }            -> x2
+    v46  LocalAddr(-8)                                    -> x1
     v47  BinopI { op=add, lhs=v46, rhs_imm=8 }            -> x6
     v48  Store { addr=v46, disp=8, value=v45, kind=I64 }  -> -
     v49  LocalAddr(-8)                                    -> x1

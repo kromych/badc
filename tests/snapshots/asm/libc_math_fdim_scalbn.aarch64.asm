@@ -14,17 +14,17 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	fcmp	d0, d1
-               	cset	x0, gt
-               	mov	x2, #0x1                // =1
-               	cbnz	x0, <addr>
+               	cset	x1, gt
+               	mov	x0, #0x1                // =1
+               	cbnz	x1, <addr>
                	fcmp	d0, d0
                	cset	x0, ne
                	cmp	x0, #0x0
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	fcmp	d1, d1
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	fsub	d0, d0, d1
                	sub	x17, x29, #0x18
                	str	d0, [x17]

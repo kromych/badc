@@ -22,12 +22,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rax        # <addr>
                	leaq	-0x18(%rbp), %rcx
                	movq	%rax, (%rcx)
-               	leaq	<rip>, %rax        # <addr>
-               	leaq	-0x18(%rbp), %rcx
-               	movq	%rax, 0x8(%rcx)
-               	leaq	<rip>, %rax        # <addr>
-               	leaq	-0x18(%rbp), %rcx
-               	movq	%rax, 0x10(%rcx)
+               	leaq	<rip>, %rcx        # <addr>
+               	leaq	-0x18(%rbp), %rax
+               	movq	%rcx, 0x8(%rax)
+               	leaq	<rip>, %rcx        # <addr>
+               	leaq	-0x18(%rbp), %rax
+               	movq	%rcx, 0x10(%rax)
                	xorq	%rax, %rax
                	movl	%eax, -0x20(%rbp)
                	leaq	-0x18(%rbp), %rax

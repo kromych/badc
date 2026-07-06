@@ -31,10 +31,10 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rax
                	incq	%rax
                	movl	%eax, -0x8(%rbp)
-               	leaq	<rip>, %rax
-               	movslq	-0x8(%rbp), %rcx
-               	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	-0x8(%rbp), %rax
+               	movl	%eax, (%rcx)
+               	movslq	%eax, %rax
                	subq	$0x2a, %rax
                	movslq	%eax, %rax
                	addq	$0x10, %rsp

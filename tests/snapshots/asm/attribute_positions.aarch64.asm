@@ -48,13 +48,13 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0]
                	cmp	x0, #0xb
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0x16
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

@@ -19,14 +19,14 @@ Disassembly of section .text:
 
 <driver>:
                	movslq	%edi, %rdi
-               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	cmpq	$0x2, %rdi
                	jl	<addr>
                	cmpq	$0x2, %rdi
                	je	<addr>
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
-               	movabsq	$-0x1, %rcx
+               	movabsq	$-0x1, %rax
                	jmp	<addr>
                	cmpq	$0x1, %rdi
                	je	<addr>
@@ -35,7 +35,7 @@ Disassembly of section .text:
                	movzbq	(%rax), %rcx
                	movzbq	0x1(%rax), %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
+               	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
 

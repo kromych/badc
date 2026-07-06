@@ -69,16 +69,16 @@ Disassembly of section .text:
                	retq
                	movq	0x30(%rax), %rcx
                	testq	%rcx, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movq	0x30(%rax), %rcx
                	movsbq	(%rcx), %rcx
                	cmpq	$0x2e, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx

@@ -88,19 +88,19 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v30  Store { addr=v27, disp=4, value=v29, kind=I32 }  -> -
     v31  LocalAddr(-1)                                    -> x0
     v32  Load { addr=v31, disp=0, kind=I32 }              -> x0
-    v33  BinopI { op=ne, lhs=v32, rhs_imm=11 }            -> x1
-    v34  Imm(0)                                           -> x0
+    v33  BinopI { op=ne, lhs=v32, rhs_imm=11 }            -> x0
+    v34  Imm(0)                                           -> x1
     terminator Bnz { cond=v33, target=b11, fall=b6 }   (exit_acc=v33)
   block 6  start_pc=0
     v35  LocalAddr(-1)                                    -> x0
     v36  BinopI { op=add, lhs=v35, rhs_imm=4 }            -> x1
     v37  Load { addr=v35, disp=4, kind=I32 }              -> x0
-    v38  BinopI { op=ne, lhs=v37, rhs_imm=22 }            -> x1
-    v39  Imm(0)                                           -> x0
+    v38  BinopI { op=ne, lhs=v37, rhs_imm=22 }            -> x0
+    v39  Imm(0)                                           -> x1
     terminator Jmp(b7)   (exit_acc=v38)
   block 7  start_pc=0
-    v40  Phi { incoming=[b11:v33, b6:v38], kind=I64 }     -> x1
-    v41  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v40  Phi { incoming=[b11:v33, b6:v38], kind=I64 }     -> x0
+    v41  LoadLocal { off=-3, kind=I64 }                   -> x1
     terminator Bz { cond=v40, target=b9, fall=b8 }   (exit_acc=v40)
   block 8  start_pc=0
     v42  Imm(5)                                           -> x0

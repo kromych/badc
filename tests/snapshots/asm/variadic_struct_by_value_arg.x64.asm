@@ -62,15 +62,15 @@ Disassembly of section .text:
                	movq	-0xf0(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx
                	movslq	(%rdx), %rdx
-               	addq	%rdx, %rcx
-               	leaq	-0x10(%rbp), %rdx
-               	movslq	0x4(%rdx), %rdx
-               	addq	%rdx, %rcx
-               	leaq	-0x10(%rbp), %rdx
-               	movslq	0x8(%rdx), %rdx
-               	addq	%rdx, %rcx
-               	leaq	-0x10(%rbp), %rdx
-               	movslq	0xc(%rdx), %rdx
+               	addq	%rcx, %rdx
+               	leaq	-0x10(%rbp), %rcx
+               	movslq	0x4(%rcx), %rcx
+               	addq	%rcx, %rdx
+               	leaq	-0x10(%rbp), %rcx
+               	movslq	0x8(%rcx), %rcx
+               	addq	%rcx, %rdx
+               	leaq	-0x10(%rbp), %rcx
+               	movslq	0xc(%rcx), %rcx
                	addq	%rdx, %rcx
                	movq	-0xe0(%rbp), %rdx
                	movsbq	(%rdx), %rdx

@@ -34,20 +34,21 @@ Disassembly of section .text:
                	ret
 
 <pc_advance>:
-               	ldrb	w2, [x0]
-               	lsl	x2, x2, #24
-               	mov	w2, w2
-               	ldrb	w3, [x0, #0x1]
-               	lsl	x3, x3, #16
-               	orr	x2, x2, x3
-               	ldrb	w3, [x0, #0x2]
-               	lsl	x3, x3, #8
-               	orr	x2, x2, x3
+               	mov	x2, x1
+               	ldrb	w1, [x0]
+               	lsl	x1, x1, #24
+               	mov	w3, w1
+               	ldrb	w1, [x0, #0x1]
+               	lsl	x1, x1, #16
+               	orr	x3, x3, x1
+               	ldrb	w1, [x0, #0x2]
+               	lsl	x1, x1, #8
+               	orr	x1, x3, x1
                	ldrb	w0, [x0, #0x3]
-               	orr	x0, x2, x0
+               	orr	x0, x1, x0
                	sxtw	x0, w0
-               	add	x0, x1, x0
-               	sub	x0, x0, x1
+               	add	x0, x2, x0
+               	sub	x0, x0, x2
                	ret
 
 <main>:
@@ -69,21 +70,21 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x8
                	sub	x1, x29, #0x18
-               	add	x1, x1, #0x8
-               	ldrb	w2, [x0]
-               	lsl	x2, x2, #24
-               	mov	w2, w2
-               	ldrb	w3, [x0, #0x1]
-               	lsl	x3, x3, #16
-               	orr	x2, x2, x3
-               	ldrb	w3, [x0, #0x2]
-               	lsl	x3, x3, #8
-               	orr	x2, x2, x3
+               	add	x2, x1, #0x8
+               	ldrb	w1, [x0]
+               	lsl	x1, x1, #24
+               	mov	w3, w1
+               	ldrb	w1, [x0, #0x1]
+               	lsl	x1, x1, #16
+               	orr	x3, x3, x1
+               	ldrb	w1, [x0, #0x2]
+               	lsl	x1, x1, #8
+               	orr	x1, x3, x1
                	ldrb	w0, [x0, #0x3]
-               	orr	x0, x2, x0
+               	orr	x0, x1, x0
                	sxtw	x0, w0
-               	add	x0, x1, x0
-               	sub	x0, x0, x1
+               	add	x0, x2, x0
+               	sub	x0, x0, x2
                	mov	x17, #0xfdc2            // =64962
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

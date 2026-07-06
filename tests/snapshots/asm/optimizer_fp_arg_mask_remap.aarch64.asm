@@ -39,16 +39,16 @@ Disassembly of section .text:
                	movk	x0, #0x3fde, lsl #48
                	fmov	d17, x0
                	fcmp	d8, d17
-               	cset	x1, mi
-               	cbnz	x1, <addr>
+               	cset	x0, mi
+               	cbnz	x0, <addr>
                	mov	x0, #0x1eb8             // =7864
                	movk	x0, #0xeb85, lsl #16
                	movk	x0, #0xb851, lsl #32
                	movk	x0, #0x3fde, lsl #48
                	fmov	d17, x0
                	fcmp	d8, d17
-               	cset	x1, gt
-               	cbz	x1, <addr>
+               	cset	x0, gt
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x19, [sp, #0x20]
@@ -61,16 +61,16 @@ Disassembly of section .text:
                	movk	x0, #0x3fec, lsl #48
                	fmov	d17, x0
                	fcmp	d9, d17
-               	cset	x1, mi
-               	cbnz	x1, <addr>
+               	cset	x0, mi
+               	cbnz	x0, <addr>
                	mov	x0, #0x6a7f             // =27263
                	movk	x0, #0x74bc, lsl #16
                	movk	x0, #0x1893, lsl #32
                	movk	x0, #0x3fec, lsl #48
                	fmov	d17, x0
                	fcmp	d9, d17
-               	cset	x1, gt
-               	cbz	x1, <addr>
+               	cset	x0, gt
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x19, [sp, #0x20]
@@ -94,16 +94,16 @@ Disassembly of section .text:
                	movk	x0, #0x3fef, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, mi
-               	cbnz	x1, <addr>
+               	cset	x0, mi
+               	cbnz	x0, <addr>
                	mov	x0, #0xbc6a             // =48234
                	movk	x0, #0x9374, lsl #16
                	movk	x0, #0x418, lsl #32
                	movk	x0, #0x3ff0, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, gt
-               	cbz	x1, <addr>
+               	cset	x0, gt
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x19, [sp, #0x20]

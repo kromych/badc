@@ -12,21 +12,18 @@ Disassembly of section .text:
 
 <pick>:
                	movslq	%edi, %rdi
-               	movapd	%xmm0, %xmm1
                	movq	%rdi, %rax
                	andq	$0x1, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movapd	%xmm1, %xmm0
                	retq
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	xorpd	%xmm15, %xmm0
                	jmp	<addr>
 
 <grad_dot>:
                	movslq	%edi, %rdi
-               	movapd	%xmm0, %xmm2
                	movq	%rdi, %rax
                	andq	$0x1, %rax
                	testq	%rax, %rax
@@ -35,7 +32,6 @@ Disassembly of section .text:
                	andq	$0x2, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movapd	%xmm2, %xmm0
                	addss	%xmm1, %xmm0
                	retq
                	movl	$0x80000000, %r10d      # imm = 0x80000000
@@ -44,7 +40,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm2
+               	xorpd	%xmm15, %xmm0
                	jmp	<addr>
 
 <main>:

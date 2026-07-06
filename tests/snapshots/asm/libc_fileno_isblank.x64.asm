@@ -56,18 +56,17 @@ Disassembly of section .text:
 <isblank>:
                	movslq	%edi, %rdi
                	cmpq	$0x20, %rdi
-               	sete	%al
-               	movzbq	%al, %rax
-               	movl	$0x1, %edx
-               	testq	%rax, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %eax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	cmpq	$0x9, %rdi
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rdx, %rax
+               	setne	%al
+               	movzbq	%al, %rax
                	retq
                	jmp	<addr>
 
@@ -127,4 +126,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

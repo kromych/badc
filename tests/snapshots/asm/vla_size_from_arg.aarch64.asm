@@ -35,13 +35,13 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x18]
                	b	<addr>
-               	ldur	x0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x18]
-               	add	x0, x0, x1
-               	add	x1, x1, #0x1
+               	ldur	x1, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x18]
+               	add	x1, x1, x0
+               	add	x0, x0, #0x1
                	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
-               	strb	w1, [x0]
+               	and	x0, x0, x17
+               	strb	w0, [x1]
                	ldursw	x0, [x29, #-0x18]
                	add	x0, x0, #0x1
                	stur	w0, [x29, #-0x18]

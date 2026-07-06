@@ -17,15 +17,14 @@ Disassembly of section .text:
                	retq
 
 <bit_count>:
-               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	jmp	<addr>
-               	movq	%rdi, %rax
-               	andq	$0x1, %rax
-               	addq	%rax, %rcx
+               	movq	%rdi, %rcx
+               	andq	$0x1, %rcx
+               	addq	%rcx, %rax
                	shrq	$0x1, %rdi
                	testq	%rdi, %rdi
                	jne	<addr>
-               	movq	%rcx, %rax
                	retq
 
 <main>:
@@ -54,4 +53,3 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

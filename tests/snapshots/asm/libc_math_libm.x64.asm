@@ -11,12 +11,10 @@ Disassembly of section .text:
                	ud2
 
 <approx>:
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm0, %xmm1
-               	subsd	%xmm15, %xmm1
+               	subsd	%xmm1, %xmm0
                	xorq	%rax, %rax
-               	cvtsi2sd	%rax, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	cvtsi2sd	%rax, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -26,10 +24,10 @@ Disassembly of section .text:
                	je	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	xorpd	%xmm15, %xmm0
                	movabsq	$0x3e112e0be826d695, %rax # imm = 0x3E112E0BE826D695
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	ucomisd	%xmm15, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -187,4 +185,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

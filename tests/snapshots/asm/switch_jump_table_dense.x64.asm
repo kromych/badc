@@ -273,9 +273,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
-               	leaq	0x7(%rbx), %rcx
-               	movslq	%ecx, %rcx
-               	cmpq	%rcx, %rax
+               	movq	%rax, %rcx
+               	leaq	0x7(%rbx), %rax
+               	movslq	%eax, %rax
+               	cmpq	%rax, %rcx
                	jne	<addr>
                	incq	%rbx
                	cmpq	$0x2, %rbx
@@ -327,11 +328,12 @@ Disassembly of section .text:
                	addq	%r11, %rax
                	movl	%eax, %edi
                	callq	<addr>
-               	movl	%ebx, %ecx
-               	incq	%rcx
-               	movl	%ecx, %ecx
-               	movslq	%ecx, %rcx
-               	cmpq	%rcx, %rax
+               	movq	%rax, %rcx
+               	movl	%ebx, %eax
+               	incq	%rax
+               	movl	%eax, %eax
+               	movslq	%eax, %rax
+               	cmpq	%rax, %rcx
                	jne	<addr>
                	movl	%ebx, %eax
                	leaq	0x1(%rax), %rbx
@@ -396,4 +398,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

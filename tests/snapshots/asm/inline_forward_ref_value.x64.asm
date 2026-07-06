@@ -16,9 +16,9 @@ Disassembly of section .text:
                	retq
 
 <combine>:
-               	leaq	<rip>, %rax
-               	leaq	0x1(%rdi), %rcx
-               	movl	%ecx, (%rax)
+               	leaq	<rip>, %rcx
+               	leaq	0x1(%rdi), %rax
+               	movl	%eax, (%rcx)
                	leaq	(%rdi,%rsi), %rax
                	retq
 
@@ -45,9 +45,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %rdx
-               	shlq	$0x1, %rdx
-               	movq	%rdx, %rdi
+               	shlq	$0x1, %rax
+               	movq	%rax, %rdi
                	movq	%rcx, %rsi
                	callq	<addr>
                	movslq	%ebx, %rcx
@@ -71,4 +70,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

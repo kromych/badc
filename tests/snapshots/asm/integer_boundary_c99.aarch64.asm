@@ -481,14 +481,14 @@ Disassembly of section .text:
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x21, #0x86              // =134
-               	str	w21, [x0]
+               	mov	x20, #0x86              // =134
+               	str	w20, [x0]
                	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x80               // =128
-               	mov	x3, x21
+               	mov	x3, x20
                	bl	<addr>
                	sxtw	x0, w0
                	b	<addr>

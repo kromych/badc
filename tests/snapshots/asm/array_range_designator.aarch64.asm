@@ -29,32 +29,32 @@ Disassembly of section .text:
                	ret
                	ldrsw	x1, [x0, #0x10]
                	cmp	x1, #0x7
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	cset	x1, ne
+               	cbnz	x1, <addr>
                	ldrsw	x1, [x0, #0x24]
                	cmp	x1, #0x7
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	ldrsw	x1, [x0, #0xc]
                	cmp	x1, #0x0
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	cset	x1, ne
+               	cbnz	x1, <addr>
                	ldrsw	x1, [x0, #0x28]
                	cmp	x1, #0x0
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ret
                	ldrsw	x1, [x0, #0x30]
                	cmp	x1, #0x9
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	cset	x1, ne
+               	cbnz	x1, <addr>
                	ldrsw	x0, [x0, #0x3c]
                	cmp	x0, #0x9
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	ret
                	mov	x0, #0x0                // =0

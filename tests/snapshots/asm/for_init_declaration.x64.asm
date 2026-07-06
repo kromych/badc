@@ -27,23 +27,23 @@ Disassembly of section .text:
                	retq
 
 <struct_ptr_init>:
-               	leaq	<rip>, %rax
-               	xorq	%rsi, %rsi
+               	leaq	<rip>, %rdx
+               	xorq	%rax, %rax
                	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, (%rdx)
                	movl	$0x4, %ecx
-               	movl	$0x2, %edx
-               	movl	%edx, 0x4(%rax)
-               	movl	%ecx, 0x8(%rax)
-               	movq	%rax, %rcx
+               	movl	$0x2, %esi
+               	movl	%esi, 0x4(%rdx)
+               	movl	%ecx, 0x8(%rdx)
+               	movq	%rdx, %rcx
                	jmp	<addr>
-               	movslq	(%rcx), %rdx
-               	addq	%rdx, %rsi
+               	movslq	(%rcx), %rsi
+               	addq	%rsi, %rax
                	addq	$0x4, %rcx
-               	leaq	0xc(%rax), %rdx
-               	cmpq	%rdx, %rcx
+               	leaq	0xc(%rdx), %rsi
+               	cmpq	%rsi, %rcx
                	jl	<addr>
-               	movslq	%esi, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:

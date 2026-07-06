@@ -14,43 +14,42 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x20, #0x0               // =0
+               	mov	x21, #0x0               // =0
                	mov	x0, #0x10               // =16
                	bl	<addr>
-               	mov	x21, x0
+               	mov	x20, x0
                	mov	x0, #0x0                // =0
-               	str	w0, [x21]
-               	str	x20, [x21, #0x8]
-               	mov	x0, #0x10               // =16
-               	bl	<addr>
-               	mov	x20, x0
-               	mov	x0, #0x1                // =1
                	str	w0, [x20]
                	str	x21, [x20, #0x8]
                	mov	x0, #0x10               // =16
                	bl	<addr>
                	mov	x21, x0
-               	mov	x0, #0x2                // =2
+               	mov	x0, #0x1                // =1
                	str	w0, [x21]
                	str	x20, [x21, #0x8]
                	mov	x0, #0x10               // =16
                	bl	<addr>
                	mov	x20, x0
-               	mov	x0, #0x3                // =3
+               	mov	x0, #0x2                // =2
                	str	w0, [x20]
                	str	x21, [x20, #0x8]
                	mov	x0, #0x10               // =16
                	bl	<addr>
-               	mov	x2, x0
-               	mov	x0, #0x4                // =4
-               	str	w0, [x2]
-               	str	x20, [x2, #0x8]
+               	mov	x21, x0
+               	mov	x0, #0x3                // =3
+               	str	w0, [x21]
+               	str	x20, [x21, #0x8]
+               	mov	x0, #0x10               // =16
+               	bl	<addr>
+               	mov	x1, #0x4                // =4
+               	str	w1, [x0]
+               	str	x21, [x0, #0x8]
                	mov	x1, #0x0                // =0
                	b	<addr>
-               	ldrsw	x0, [x2]
-               	add	x1, x1, x0
-               	ldr	x2, [x2, #0x8]
-               	cmp	x2, #0x0
+               	ldrsw	x2, [x0]
+               	add	x1, x1, x2
+               	ldr	x0, [x0, #0x8]
+               	cmp	x0, #0x0
                	b.ne	<addr>
                	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x20]

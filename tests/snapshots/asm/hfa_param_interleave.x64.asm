@@ -50,9 +50,9 @@ Disassembly of section .text:
                	movapd	%xmm1, %xmm0
                	addss	%xmm15, %xmm0
                	leaq	-0x28(%rbp), %rax
-               	movzbq	(%rax), %rax
-               	leaq	-0x28(%rbp), %rcx
-               	movzbq	0x1(%rcx), %rcx
+               	movzbq	(%rax), %rcx
+               	leaq	-0x28(%rbp), %rax
+               	movzbq	0x1(%rax), %rax
                	addq	%rcx, %rax
                	leaq	-0x28(%rbp), %rcx
                	movzbq	0x2(%rcx), %rcx

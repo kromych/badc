@@ -72,10 +72,10 @@ Disassembly of section .text:
                	strh	w1, [x0, #0x4]
                	sub	x20, x29, #0xd8
                	sub	x0, x29, #0xd8
-               	ldrsh	x0, [x0]
-               	sub	x1, x29, #0xd8
-               	ldrsh	x1, [x1, #0x2]
-               	add	x0, x0, x1
+               	ldrsh	x1, [x0]
+               	sub	x0, x29, #0xd8
+               	ldrsh	x0, [x0, #0x2]
+               	add	x0, x1, x0
                	sub	x1, x29, #0xd8
                	ldrsh	x1, [x1, #0x4]
                	add	x0, x0, x1
@@ -103,10 +103,10 @@ Disassembly of section .text:
                	mov	x1, #0xc0de             // =49374
                	strh	w1, [x0, #0x4]
                	sub	x0, x29, #0xe0
-               	ldrsh	x0, [x0]
-               	sub	x1, x29, #0xe0
-               	ldrsh	x1, [x1, #0x2]
-               	add	x0, x0, x1
+               	ldrsh	x1, [x0]
+               	sub	x0, x29, #0xe0
+               	ldrsh	x0, [x0, #0x2]
+               	add	x0, x1, x0
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>

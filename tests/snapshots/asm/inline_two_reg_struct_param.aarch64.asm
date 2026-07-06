@@ -50,10 +50,10 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	ldr	x0, [x0]
                	mov	x17, #0x3e8             // =1000
-               	mul	x0, x0, x17
-               	sub	x1, x29, #0x10
-               	ldr	x1, [x1, #0x8]
-               	add	x0, x0, x1
+               	mul	x1, x0, x17
+               	sub	x0, x29, #0x10
+               	ldr	x0, [x0, #0x8]
+               	add	x0, x1, x0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10

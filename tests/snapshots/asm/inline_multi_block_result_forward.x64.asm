@@ -26,13 +26,13 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movslq	%edi, %rax
                	shlq	$0x1, %rax
-               	movslq	%eax, %rcx
-               	leaq	(%rdi,%rdi), %rdx
+               	movslq	%eax, %rax
+               	leaq	(%rdi,%rdi), %rcx
                	cmpq	$0x3, %rdi
                	jle	<addr>
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
-               	leaq	(%rcx,%rdx), %rax
+               	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
 
@@ -42,4 +42,4 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	popq	%rbp
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

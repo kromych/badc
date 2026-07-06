@@ -26,24 +26,24 @@ Disassembly of section .text:
                	ret
 
 <struct_ptr_init>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x3, #0x0                // =0
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	mov	x0, #0x0                // =0
                	mov	x1, #0x1                // =1
-               	str	w1, [x0]
+               	str	w1, [x2]
                	mov	x1, #0x4                // =4
-               	mov	x2, #0x2                // =2
-               	str	w2, [x0, #0x4]
-               	str	w1, [x0, #0x8]
-               	mov	x1, x0
+               	mov	x3, #0x2                // =2
+               	str	w3, [x2, #0x4]
+               	str	w1, [x2, #0x8]
+               	mov	x1, x2
                	b	<addr>
-               	ldrsw	x2, [x1]
-               	add	x3, x3, x2
+               	ldrsw	x3, [x1]
+               	add	x0, x0, x3
                	add	x1, x1, #0x4
-               	add	x2, x0, #0xc
-               	cmp	x1, x2
+               	add	x3, x2, #0xc
+               	cmp	x1, x3
                	b.lt	<addr>
-               	sxtw	x0, w3
+               	sxtw	x0, w0
                	ret
 
 <main>:

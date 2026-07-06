@@ -13,31 +13,31 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rcx, %rcx
-               	leaq	0x1(%rcx), %rax
+               	xorq	%rax, %rax
+               	incq	%rax
                	addq	$0x2, %rax
-               	leaq	0x4(%rax), %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x7, %rax
+               	addq	$0x4, %rax
+               	movslq	%eax, %rcx
+               	cmpq	$0x7, %rcx
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%ecx, %rsi
+               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	movl	$0x1064, %ecx           # imm = 0x1064
-               	leaq	0x1(%rcx), %rax
+               	xorq	%rax, %rax
+               	movl	$0x1064, %eax           # imm = 0x1064
+               	incq	%rax
                	addq	$0x2, %rax
-               	leaq	0x4(%rax), %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x106b, %rax           # imm = 0x106B
+               	addq	$0x4, %rax
+               	movslq	%eax, %rcx
+               	cmpq	$0x106b, %rcx           # imm = 0x106B
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%ecx, %rsi
+               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -48,20 +48,20 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x4000, %ecx           # imm = 0x4000
+               	movl	$0x4000, %eax           # imm = 0x4000
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0x1064, %ecx           # imm = 0x1064
+               	movl	$0x1064, %eax           # imm = 0x1064
                	jmp	<addr>
-               	movl	$0x2064, %ecx           # imm = 0x2064
+               	movl	$0x2064, %eax           # imm = 0x2064
                	jmp	<addr>
-               	movl	$0x4000, %ecx           # imm = 0x4000
-               	jmp	<addr>
-               	jmp	<addr>
+               	movl	$0x4000, %eax           # imm = 0x4000
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0x2064, %ecx           # imm = 0x2064
+               	jmp	<addr>
+               	jmp	<addr>
+               	movl	$0x2064, %eax           # imm = 0x2064
                	jmp	<addr>
                	addb	%al, 0x41(%rdx)

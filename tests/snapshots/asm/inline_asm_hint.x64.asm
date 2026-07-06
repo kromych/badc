@@ -14,16 +14,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movslq	%edi, %rdi
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>
                	pause
-               	addq	%rcx, %rax
-               	leaq	0x1(%rdx), %rcx
-               	movslq	%ecx, %rdx
+               	addq	%rax, %rcx
+               	leaq	0x1(%rdx), %rax
+               	movslq	%eax, %rdx
                	cmpq	%rdi, %rdx
                	jl	<addr>
-               	movslq	%eax, %rax
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
 

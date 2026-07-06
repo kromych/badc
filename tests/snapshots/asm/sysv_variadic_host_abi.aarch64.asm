@@ -52,12 +52,12 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #0x10]
                	ldursw	x1, [x29, #0x18]
                	add	x0, x0, x1
-               	sxtw	x2, w0
+               	sxtw	x0, w0
                	mov	x1, #0x0                // =0
                	b	<addr>
-               	asr	x3, x0, #63
+               	asr	x3, x2, #63
                	lsr	x3, x3, #63
-               	add	x4, x0, x3
+               	add	x4, x2, x3
                	mov	x17, #0x1               // =1
                	and	x4, x4, x17
                	sub	x3, x4, x3
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x3, x16
                	ldr	x3, [x3]
-               	add	x2, x2, x3
+               	add	x0, x0, x3
                	b	<addr>
                	sub	x3, x29, #0x20
                	mov	x17, x3
@@ -106,14 +106,13 @@ Disassembly of section .text:
                	mov	x3, x16
                	ldr	d0, [x3]
                	fcvtzs	x3, d0
-               	add	x2, x2, x3
+               	add	x0, x0, x3
                	b	<addr>
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0xa
+               	add	x1, x2, #0x1
+               	sxtw	x2, w1
+               	cmp	x2, #0xa
                	b.lt	<addr>
-               	sub	x0, x29, #0x20
-               	mov	x0, x2
+               	sub	x1, x29, #0x20
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
                	add	sp, sp, #0xc0
@@ -159,8 +158,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
-               	mov	x1, #0x0                // =0
-               	scvtf	d0, x1
+               	mov	x0, #0x0                // =0
+               	scvtf	d0, x0
                	b	<addr>
                	sub	x2, x29, #0x20
                	mov	x17, x2
@@ -183,10 +182,10 @@ Disassembly of section .text:
                	mov	x2, x16
                	ldr	d1, [x2]
                	fadd	d0, d0, d1
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
                	ldursw	x2, [x29, #0x10]
-               	cmp	x0, x2
+               	cmp	x1, x2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	ldp	x29, x30, [sp, #0x40]

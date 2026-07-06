@@ -164,10 +164,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=13
     v105 Imm(12)                                          -> x0
     terminator Return(v105)   (exit_acc=v105)
   block 19  start_pc=0
-    v106 LocalAddr(-12)                                   -> x0
-    v107 Imm(0)                                           -> x1
+    v106 LocalAddr(-12)                                   -> x1
+    v107 Imm(0)                                           -> x0
     v108 Store { addr=v106, disp=0, value=v107, kind=I32 } -> -
-    v109 LocalAddr(-12)                                   -> x0
+    v109 LocalAddr(-12)                                   -> x1
     v110 BinopI { op=add, lhs=v109, rhs_imm=4 }           -> x2
     v111 Store { addr=v109, disp=4, value=v107, kind=I32 } -> -
     v112 LocalAddr(-12)                                   -> x0

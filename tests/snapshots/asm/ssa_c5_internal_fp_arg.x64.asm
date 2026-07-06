@@ -36,13 +36,13 @@ Disassembly of section .text:
                	leaq	0x64(%rdi), %rax
                	subq	%rdi, %rax
                	movslq	%eax, %rax
-               	movabsq	$0x4049400000000000, %rcx # imm = 0x4049400000000000
-               	movq	%rdi, %rdx
-               	subq	%rdi, %rdx
-               	movslq	%edx, %rdx
-               	cvtsi2sd	%rdx, %xmm0
+               	movabsq	$0x4049400000000000, %rdx # imm = 0x4049400000000000
+               	movq	%rdi, %rcx
+               	subq	%rdi, %rcx
+               	movslq	%ecx, %rcx
+               	cvtsi2sd	%rcx, %xmm0
                	movapd	%xmm0, %xmm15
-               	movq	%rcx, %xmm0
+               	movq	%rdx, %xmm0
                	addsd	%xmm15, %xmm0
                	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0

@@ -13,28 +13,28 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x70]!
                	stp	x29, x30, [sp, #0x60]
                	add	x29, sp, #0x60
-               	sub	x0, x29, #0x8
-               	mov	x1, #0xa                // =10
-               	strb	w1, [x0]
-               	sub	x0, x29, #0x8
+               	sub	x1, x29, #0x8
+               	mov	x0, #0xa                // =10
+               	strb	w0, [x1]
+               	sub	x1, x29, #0x8
                	mov	x2, #0x64               // =100
-               	strb	w2, [x0, #0x1]
-               	sub	x0, x29, #0x8
+               	strb	w2, [x1, #0x1]
+               	sub	x1, x29, #0x8
                	mov	x2, #0xc8               // =200
-               	strb	w2, [x0, #0x2]
-               	sub	x0, x29, #0x8
-               	ldrb	w0, [x0]
-               	scvtf	d0, x0
+               	strb	w2, [x1, #0x2]
+               	sub	x1, x29, #0x8
+               	ldrb	w1, [x1]
+               	scvtf	d0, x1
                	fcvt	s0, d0
-               	sub	x0, x29, #0x8
-               	ldrb	w0, [x0, #0x1]
-               	scvtf	d1, x0
+               	sub	x1, x29, #0x8
+               	ldrb	w1, [x1, #0x1]
+               	scvtf	d1, x1
+               	fcvt	s2, d1
+               	sub	x1, x29, #0x8
+               	ldrb	w1, [x1, #0x2]
+               	scvtf	d1, x1
                	fcvt	s1, d1
-               	sub	x0, x29, #0x8
-               	ldrb	w0, [x0, #0x2]
-               	scvtf	d2, x0
-               	fcvt	s2, d2
-               	scvtf	d3, x1
+               	scvtf	d3, x0
                	fcvt	s3, d3
                	fmul	s3, s0, s3
                	fcvt	d3, s3
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	scvtf	d3, x0
                	fcvt	s3, d3
-               	fmul	s3, s1, s3
+               	fmul	s3, s2, s3
                	fcvt	d3, s3
                	fcvtzs	x0, d3
                	cmp	x0, #0x3e8
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	scvtf	d3, x0
                	fcvt	s3, d3
-               	fmul	s3, s2, s3
+               	fmul	s3, s1, s3
                	fcvt	d3, s3
                	fcvtzs	x0, d3
                	cmp	x0, #0x7d0
@@ -91,13 +91,13 @@ Disassembly of section .text:
                	mov	x1, #0x45a2             // =17826
                	movk	x1, #0x3f16, lsl #16
                	fmov	s16, w1
-               	fmul	s1, s16, s1
+               	fmul	s2, s16, s2
                	fmov	s16, w0
-               	fmadd	s0, s16, s0, s1
+               	fmadd	s0, s16, s0, s2
                	mov	x0, #0x78d5             // =30933
                	movk	x0, #0x3de9, lsl #16
                	fmov	s16, w0
-               	fmadd	s0, s16, s2, s0
+               	fmadd	s0, s16, s1, s0
                	mov	x0, #0x43000000         // =1124073472
                	fmov	s17, w0
                	fsub	s0, s0, s17
@@ -105,14 +105,14 @@ Disassembly of section .text:
                	fmov	s16, w0
                	fneg	s1, s16
                	fcmp	s0, s1
-               	cset	x1, gt
-               	cbnz	x1, <addr>
+               	cset	x0, gt
+               	cbnz	x0, <addr>
                	mov	x0, #0x42300000         // =1110441984
                	fmov	s16, w0
                	fneg	s1, s16
                	fcmp	s0, s1
-               	cset	x1, mi
-               	cbz	x1, <addr>
+               	cset	x0, mi
+               	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x19, [sp], #0x70

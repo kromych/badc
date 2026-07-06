@@ -97,41 +97,41 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x8]
                	lsr	x0, x0, #0
-               	add	x0, x0, #0x0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x10]
-               	lsl	x1, x1, #1
-               	add	x0, x0, x1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x18]
+               	add	x1, x0, #0x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x10]
+               	lsl	x0, x0, #1
+               	add	x1, x1, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x18]
                	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
-               	add	x0, x0, x1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x20]
-               	lsl	x1, x1, #2
-               	add	x0, x0, x1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x28]
+               	mul	x0, x0, x17
+               	add	x1, x1, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x20]
+               	lsl	x0, x0, #2
+               	add	x1, x1, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x28]
                	mov	x17, #0x5               // =5
-               	mul	x1, x1, x17
-               	add	x0, x0, x1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x30]
+               	mul	x0, x0, x17
+               	add	x1, x1, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x30]
                	mov	x17, #0x6               // =6
-               	mul	x1, x1, x17
-               	add	x0, x0, x1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x38]
+               	mul	x0, x0, x17
+               	add	x1, x1, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x38]
                	mov	x17, #0x7               // =7
-               	mul	x1, x1, x17
-               	add	x0, x0, x1
+               	mul	x0, x0, x17
+               	add	x0, x1, x0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	add	x1, x1, #0x0

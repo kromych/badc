@@ -36,19 +36,19 @@ Disassembly of section .text:
                	movk	x0, #0x3333, lsl #32
                	movk	x0, #0x3fd3, lsl #48
                	fmov	d17, x0
-               	fsub	d1, d0, d17
+               	fsub	d0, d0, d17
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	fcmp	d1, d0
+               	scvtf	d1, x0
+               	fcmp	d0, d1
                	cset	x0, mi
                	cbz	x0, <addr>
-               	fneg	d1, d1
+               	fneg	d0, d0
                	mov	x0, #0x5616             // =22038
                	movk	x0, #0x9ee7, lsl #16
                	movk	x0, #0x3af, lsl #32
                	movk	x0, #0x3cd2, lsl #48
                	fmov	d17, x0
-               	fcmp	d1, d17
+               	fcmp	d0, d17
                	cset	x0, gt
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
@@ -77,19 +77,19 @@ Disassembly of section .text:
                	movk	x0, #0x9999, lsl #32
                	movk	x0, #0x3fb9, lsl #48
                	fmov	d17, x0
-               	fsub	d1, d0, d17
+               	fsub	d0, d0, d17
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	fcmp	d1, d0
+               	scvtf	d1, x0
+               	fcmp	d0, d1
                	cset	x0, mi
                	cbz	x0, <addr>
-               	fneg	d1, d1
+               	fneg	d0, d0
                	mov	x0, #0xd497             // =54423
                	movk	x0, #0x4646, lsl #16
                	movk	x0, #0xef5, lsl #32
                	movk	x0, #0x3c67, lsl #48
                	fmov	d17, x0
-               	fcmp	d1, d17
+               	fcmp	d0, d17
                	cset	x0, gt
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
@@ -115,48 +115,48 @@ Disassembly of section .text:
                	str	d16, [x17]
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
-               	fcvt	s0, d0
+               	fcvt	s1, d0
                	mov	x0, #0xd6ea             // =55018
                	movk	x0, #0x3dfc, lsl #16
                	fmov	s16, w0
                	sub	x17, x29, #0x18
                	str	s16, [x17]
                	sub	x16, x29, #0x18
-               	ldr	s1, [x16]
-               	fsub	s2, s0, s1
+               	ldr	s0, [x16]
+               	fsub	s0, s1, s0
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcvt	s1, d1
-               	fcmp	s2, s1
+               	scvtf	d2, x0
+               	fcvt	s2, d2
+               	fcmp	s0, s2
                	cset	x0, mi
                	cbz	x0, <addr>
-               	fneg	s2, s2
+               	fneg	s0, s0
                	mov	x0, #0xcc77             // =52343
                	movk	x0, #0x322b, lsl #16
                	fmov	s17, w0
-               	fcmp	s2, s17
+               	fcmp	s0, s17
                	cset	x0, gt
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fcvt	d0, s0
+               	fcvt	d0, s1
                	sub	x16, x29, #0x8
                	ldr	d1, [x16]
-               	fsub	d1, d0, d1
+               	fsub	d0, d0, d1
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	fcmp	d1, d0
+               	scvtf	d1, x0
+               	fcmp	d0, d1
                	cset	x0, mi
                	cbz	x0, <addr>
-               	fneg	d1, d1
+               	fneg	d0, d0
                	mov	x0, #0xd695             // =54933
                	movk	x0, #0xe826, lsl #16
                	movk	x0, #0x2e0b, lsl #32
                	movk	x0, #0x3e11, lsl #48
                	fmov	d17, x0
-               	fcmp	d1, d17
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
@@ -187,18 +187,18 @@ Disassembly of section .text:
                	str	s16, [x17]
                	sub	x16, x29, #0x18
                	ldr	s1, [x16]
-               	fsub	s1, s0, s1
+               	fsub	s0, s0, s1
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	fcvt	s0, d0
-               	fcmp	s1, s0
+               	scvtf	d1, x0
+               	fcvt	s1, d1
+               	fcmp	s0, s1
                	cset	x0, mi
                	cbz	x0, <addr>
-               	fneg	s1, s1
+               	fneg	s0, s0
                	mov	x0, #0xbf95             // =49045
                	movk	x0, #0x33d6, lsl #16
                	fmov	s17, w0
-               	fcmp	s1, s17
+               	fcmp	s0, s17
                	cset	x0, gt
                	cbz	x0, <addr>
                	mov	x0, #0x5                // =5

@@ -12,8 +12,8 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x80000000, %eax       # imm = 0x80000000
-               	movq	%rax, %rdx
-               	movl	%edx, %ecx
+               	movq	%rax, %rcx
+               	movl	%ecx, %ecx
                	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x4, %eax
@@ -26,6 +26,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x3, %eax
                	retq
-               	movl	$0x33333333, %edx       # imm = 0x33333333
+               	movl	$0x33333333, %ecx       # imm = 0x33333333
                	jmp	<addr>
                	addb	%al, (%rax)

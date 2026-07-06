@@ -29,14 +29,14 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	cmpq	$0x1000, %rax           # imm = 0x1000
-               	setl	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setl	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	cmpq	$0x100000, %rax         # imm = 0x100000
-               	setg	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setg	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

@@ -89,12 +89,12 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
-               	movl	$0x40c00000, %ecx       # imm = 0x40C00000
-               	movabsq	$0x4024000000000000, %rdx # imm = 0x4024000000000000
-               	movq	%rcx, %xmm14
+               	movl	$0x40c00000, %edx       # imm = 0x40C00000
+               	movabsq	$0x4024000000000000, %rcx # imm = 0x4024000000000000
+               	movq	%rdx, %xmm14
                	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm14
-               	movq	%rdx, %xmm15
+               	movq	%rcx, %xmm15
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movabsq	$0x404c000000000000, %rax # imm = 0x404C000000000000
                	movq	%rax, %xmm15

@@ -68,8 +68,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v40  Imm(6)                                           -> x0
     terminator Return(v40)   (exit_acc=v40)
   block 12  start_pc=0
-    v41  LocalAddr(-3)                                    -> x0
-    v42  Imm(0)                                           -> x1
+    v41  LocalAddr(-3)                                    -> x1
+    v42  Imm(0)                                           -> x0
     v43  Store { addr=v41, disp=0, value=v42, kind=I8 }   -> -
     v44  StoreLocal { off=-4, value=v42, kind=I32 }       -> -
     v45  LocalAddr(-4)                                    -> x0
@@ -115,17 +115,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v73  Imm(0)                                           -> x0
     v74  Imm(4294967295)                                  -> x0
     v75  Imm(0)                                           -> x0
-    v76  Imm(0)                                           -> x1
-    v77  Imm(0)                                           -> x0
+    v76  Imm(0)                                           -> x0
+    v77  Imm(0)                                           -> x1
     terminator Jmp(b19)   (exit_acc=v76)
   block 19  start_pc=0
     v78  LoadLocal { off=-7, kind=I16 }                   -> x0
-    v79  Imm(0)                                           -> x1
-    v80  Imm(0)                                           -> x0
+    v79  Imm(0)                                           -> x0
+    v80  Imm(0)                                           -> x1
     terminator Jmp(b20)   (exit_acc=v79)
   block 20  start_pc=0
-    v81  Phi { incoming=[b18:v76, b19:v79], kind=I64 }    -> x1
-    v82  LoadLocal { off=-9, kind=I64 }                   -> x0
+    v81  Phi { incoming=[b18:v76, b19:v79], kind=I64 }    -> x0
+    v82  LoadLocal { off=-9, kind=I64 }                   -> x1
     terminator Bz { cond=v81, target=b22, fall=b21 }   (exit_acc=v81)
   block 21  start_pc=0
     v83  Imm(10)                                          -> x0

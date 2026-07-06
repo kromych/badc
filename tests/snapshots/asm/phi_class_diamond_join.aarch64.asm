@@ -13,11 +13,11 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
+               	sxtw	x0, w0
                	ret
                	sub	x0, x2, #0x1
-               	sxtw	x1, w0
+               	sxtw	x0, w0
                	b	<addr>
 
 <main>:

@@ -14,21 +14,22 @@ Disassembly of section .text:
                	ret
 
 <phi_accumulate>:
-               	sxtw	x0, w0
-               	mov	x3, #0x1                // =1
-               	mov	x2, #0x0                // =0
+               	mov	x3, x0
+               	sxtw	x3, w3
+               	mov	x1, #0x1                // =1
+               	mov	x0, #0x0                // =0
                	b	<addr>
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
-               	mul	x3, x3, x17
-               	add	x3, x3, x2
-               	sxtw	x3, w3
-               	add	x3, x3, #0x1
-               	add	x2, x1, #0x1
-               	sxtw	x1, w2
-               	cmp	x1, x0
+               	mul	x1, x1, x17
+               	add	x1, x1, x0
+               	sxtw	x1, w1
+               	add	x1, x1, #0x1
+               	add	x0, x2, #0x1
+               	sxtw	x2, w0
+               	cmp	x2, x3
                	b.lt	<addr>
-               	mov	x0, x3
+               	mov	x0, x1
                	ret
 
 <main>:
@@ -42,9 +43,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>

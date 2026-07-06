@@ -83,22 +83,21 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	sxtw	x0, w0
                	cmp	x0, #0x0
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	cset	x0, eq
+               	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cmp	x0, #0x4
-               	cset	x1, ge
-               	cbz	x1, <addr>
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	cset	x0, ge
+               	cbz	x0, <addr>
+               	mov	x0, #0x0                // =0
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp]
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x3                // =3
+               	mov	x0, #0x3                // =3
                	b	<addr>
                	b	<addr>
                	mov	x0, #0x2                // =2

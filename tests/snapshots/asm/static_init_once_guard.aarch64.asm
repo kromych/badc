@@ -66,26 +66,28 @@ Disassembly of section .text:
                	br	x1
 
 <flag_table>:
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsb	x3, [x2, #0x10]
-               	cbz	x3, <addr>
-               	mov	x4, #0x0                // =0
+               	mov	x2, x0
+               	mov	x3, x1
+               	sxtw	x2, w2
+               	sxtw	x3, w3
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsb	x1, [x0, #0x10]
                	cbz	x1, <addr>
+               	mov	x1, #0x0                // =0
+               	cbz	x3, <addr>
                	mov	x1, #0x7                // =7
-               	str	w1, [x2, #0x4]
-               	ldrsw	x0, [x2, x0, lsl #2]
+               	str	w1, [x0, #0x4]
+               	ldrsw	x0, [x0, x2, lsl #2]
                	ret
-               	mov	x5, #0x0                // =0
-               	mov	x5, #0x1                // =1
-               	str	w5, [x2]
-               	mov	x3, #0x0                // =0
-               	str	w3, [x2, #0x4]
-               	mov	x4, #0x1                // =1
-               	str	w4, [x2, #0x8]
-               	strb	w4, [x2, #0x10]
+               	mov	x1, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	str	w1, [x0]
+               	mov	x1, #0x0                // =0
+               	str	w1, [x0, #0x4]
+               	mov	x1, #0x1                // =1
+               	str	w1, [x0, #0x8]
+               	strb	w1, [x0, #0x10]
                	b	<addr>
 
 <main>:

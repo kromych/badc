@@ -29,13 +29,13 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	%fs:0x0, %rax
-               	subq	$0x8, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	addq	$0x3, %rcx
-               	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	movq	%fs:0x0, %rcx
+               	subq	$0x8, %rcx
+               	movslq	(%rcx), %rax
+               	incq	%rax
+               	addq	$0x3, %rax
+               	movl	%eax, (%rcx)
+               	movslq	%eax, %rax
                	cmpq	$0xb, %rax
                	je	<addr>
                	jmp	<addr>

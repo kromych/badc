@@ -11,20 +11,19 @@ Disassembly of section .text:
                	ud2
 
 <sum_at_high>:
-               	movq	%rsi, %r8
-               	movslq	%r8d, %r8
-               	movslq	%edx, %rdx
-               	movslq	(%rdi,%rdx,4), %rax
-               	xorq	%rsi, %rsi
-               	jmp	<addr>
-               	movslq	(%rdi,%rcx,4), %r9
-               	addq	%r9, %rsi
                	movslq	%esi, %rsi
-               	leaq	0x1(%rcx), %r8
-               	movslq	%r8d, %rcx
+               	movslq	%edx, %rdx
+               	movslq	(%rdi,%rdx,4), %r9
+               	xorq	%rax, %rax
+               	jmp	<addr>
+               	movslq	(%rdi,%rcx,4), %r8
+               	addq	%r8, %rax
+               	movslq	%eax, %rax
+               	leaq	0x1(%rcx), %rsi
+               	movslq	%esi, %rcx
                	cmpq	%rdx, %rcx
                	jle	<addr>
-               	addq	%rsi, %rax
+               	addq	%r9, %rax
                	movslq	%eax, %rax
                	retq
 
@@ -54,4 +53,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

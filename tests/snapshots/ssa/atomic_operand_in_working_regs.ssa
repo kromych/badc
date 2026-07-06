@@ -98,18 +98,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v12  BinopI { op=eq, lhs=v9, rhs_imm=36 }             -> x1
     terminator Bz { cond=v12, target=b3, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
-    v13  Imm(0)                                           -> x1
-    v14  Imm(0)                                           -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v13)
   block 2  start_pc=0
-    v19  Phi { incoming=[b1:v13, b3:v17], kind=I64 }      -> x1
-    v20  LoadLocal { off=-10, kind=I64 }                  -> x0
+    v19  Phi { incoming=[b1:v13, b3:v17], kind=I64 }      -> x0
+    v20  LoadLocal { off=-10, kind=I64 }                  -> x1
     terminator Return(v19)   (exit_acc=v19)
   block 3  start_pc=0
     v15  LoadLocal { off=-1, kind=I64 }                   -> x1
     v16  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x1
-    v17  Extend { value=v9, kind=I32 }                    -> x1
-    v18  Imm(0)                                           -> x0
+    v17  Extend { value=v9, kind=I32 }                    -> x0
+    v18  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

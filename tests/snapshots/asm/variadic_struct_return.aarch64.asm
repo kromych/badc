@@ -117,14 +117,14 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
-               	sub	x0, x29, #0x30
-               	mov	x2, #0x0                // =0
-               	str	x2, [x0]
-               	sub	x0, x29, #0x30
-               	str	x2, [x0, #0x8]
-               	b	<addr>
                	sub	x1, x29, #0x30
-               	ldr	x3, [x1]
+               	mov	x0, #0x0                // =0
+               	str	x0, [x1]
+               	sub	x1, x29, #0x30
+               	str	x0, [x1, #0x8]
+               	b	<addr>
+               	sub	x2, x29, #0x30
+               	ldr	x3, [x2]
                	sub	x4, x29, #0x20
                	mov	x17, x4
                	str	x9, [sp, #-0x10]!
@@ -146,11 +146,11 @@ Disassembly of section .text:
                	mov	x4, x16
                	ldrsw	x4, [x4]
                	add	x3, x3, x4
-               	str	x3, [x1]
-               	add	x2, x0, #0x1
-               	sxtw	x0, w2
-               	ldursw	x1, [x29, #0x10]
-               	cmp	x0, x1
+               	str	x3, [x2]
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
+               	ldursw	x2, [x29, #0x10]
+               	cmp	x1, x2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sub	x0, x29, #0x30
@@ -212,13 +212,13 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	ldr	x0, [x0]
                	cmp	x0, #0xb
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x20
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x16
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
@@ -244,13 +244,13 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	ldr	x0, [x0]
                	cmp	x0, #0x64
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x40
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x4
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10

@@ -109,10 +109,9 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	cset	x0, eq
                	cbz	x0, <addr>
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>

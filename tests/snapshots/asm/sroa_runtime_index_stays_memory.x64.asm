@@ -60,13 +60,13 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rax
                	movq	%rsi, %rcx
                	andq	$0x7, %rcx
+               	movq	(%rax,%rcx,8), %rdx
+               	leaq	-0x40(%rbp), %rax
+               	leaq	0x5(%rsi), %rcx
+               	movslq	%ecx, %rcx
+               	andq	$0x7, %rcx
                	movq	(%rax,%rcx,8), %rax
-               	leaq	-0x40(%rbp), %rcx
-               	leaq	0x5(%rsi), %rdx
-               	movslq	%edx, %rdx
-               	andq	$0x7, %rdx
-               	movq	(%rcx,%rdx,8), %rcx
-               	addq	%rcx, %rax
+               	addq	%rdx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq

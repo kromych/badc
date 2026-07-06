@@ -73,30 +73,30 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	shlq	$0x0, %rax
-               	addq	$0x0, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x10(%rcx), %rcx
-               	shlq	$0x1, %rcx
-               	addq	%rcx, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x18(%rcx), %rcx
-               	leaq	(%rcx,%rcx,2), %rcx
-               	addq	%rcx, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x20(%rcx), %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x28(%rcx), %rcx
-               	leaq	(%rcx,%rcx,4), %rcx
-               	addq	%rcx, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x30(%rcx), %rcx
-               	imulq	$0x6, %rcx, %rcx
-               	addq	%rcx, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x38(%rcx), %rcx
-               	imulq	$0x7, %rcx, %rcx
+               	leaq	(%rax), %rcx
+               	leaq	<rip>, %rax
+               	movq	0x10(%rax), %rax
+               	shlq	$0x1, %rax
+               	addq	%rax, %rcx
+               	leaq	<rip>, %rax
+               	movq	0x18(%rax), %rax
+               	leaq	(%rax,%rax,2), %rax
+               	addq	%rax, %rcx
+               	leaq	<rip>, %rax
+               	movq	0x20(%rax), %rax
+               	shlq	$0x2, %rax
+               	addq	%rax, %rcx
+               	leaq	<rip>, %rax
+               	movq	0x28(%rax), %rax
+               	leaq	(%rax,%rax,4), %rax
+               	addq	%rax, %rcx
+               	leaq	<rip>, %rax
+               	movq	0x30(%rax), %rax
+               	imulq	$0x6, %rax, %rax
+               	addq	%rax, %rcx
+               	leaq	<rip>, %rax
+               	movq	0x38(%rax), %rax
+               	imulq	$0x7, %rax, %rax
                	addq	%rcx, %rax
                	leaq	<rip>, %rcx
                	addq	$0x0, %rcx

@@ -17,17 +17,17 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
-               	movapd	%xmm0, %xmm1
-               	divsd	%xmm0, %xmm1
+               	movsd	-0x8(%rbp,%riz), %xmm1
+               	movapd	%xmm1, %xmm0
+               	divsd	%xmm1, %xmm0
                	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x18(%rbp,%riz)
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movapd	%xmm0, %xmm15
-               	movq	%rax, %xmm0
-               	divsd	%xmm15, %xmm0
-               	ucomisd	%xmm1, %xmm1
+               	movapd	%xmm1, %xmm15
+               	movq	%rax, %xmm1
+               	divsd	%xmm15, %xmm1
+               	ucomisd	%xmm0, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	%xmm2, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm1, %xmm2
+               	ucomisd	%xmm0, %xmm2
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	ucomisd	%xmm1, %xmm1
+               	ucomisd	%xmm0, %xmm0
                	sete	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	%xmm2, %xmm0
                	sete	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm1, %xmm2
+               	ucomisd	%xmm0, %xmm2
                	sete	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -119,7 +119,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	ucomisd	%xmm15, %xmm0
                	sete	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -132,7 +132,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	%xmm2, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	%xmm2, %xmm0
                	seta	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -155,7 +155,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	%xmm2, %xmm0
                	setbe	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -168,7 +168,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	%xmm2, %xmm0
                	setae	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -178,7 +178,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm1, %xmm2
+               	ucomisd	%xmm0, %xmm2
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -191,7 +191,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm1, %xmm2
+               	ucomisd	%xmm0, %xmm2
                	seta	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -201,7 +201,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm1, %xmm2
+               	ucomisd	%xmm0, %xmm2
                	setbe	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -214,7 +214,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm2
-               	ucomisd	%xmm1, %xmm2
+               	ucomisd	%xmm0, %xmm2
                	setae	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -223,7 +223,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	ucomisd	%xmm1, %xmm1
+               	ucomisd	%xmm0, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -235,7 +235,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	ucomisd	%xmm1, %xmm1
+               	ucomisd	%xmm0, %xmm0
                	setbe	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -247,7 +247,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	ucomisd	%xmm1, %xmm1
+               	ucomisd	%xmm0, %xmm0
                	setae	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -256,10 +256,10 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x18(%rbp,%riz), %xmm1
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	ucomisd	%xmm15, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -271,10 +271,10 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x18(%rbp,%riz), %xmm1
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	ucomisd	%xmm15, %xmm0
                	sete	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -286,8 +286,8 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x18(%rbp,%riz), %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
+               	ucomisd	%xmm0, %xmm1
                	seta	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -298,7 +298,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x7e37e43c8800759c, %rax # imm = 0x7E37E43C8800759C
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm1
                	seta	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -307,7 +307,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	ucomisd	%xmm0, %xmm0
+               	ucomisd	%xmm1, %xmm1
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b

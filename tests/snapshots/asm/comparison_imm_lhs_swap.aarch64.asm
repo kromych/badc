@@ -38,13 +38,12 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	cmp	x0, #0x8
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
                	ret
-               	mov	x1, #0x3                // =3
+               	mov	x0, #0x3                // =3
                	b	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]

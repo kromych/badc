@@ -182,15 +182,15 @@ Disassembly of section .text:
                	mov	x17, #0x1ff             // =511
                	and	x0, x0, x17
                	cmp	x0, #0x1ff
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x18
                	ldrh	w0, [x0, #0x2]
                	mov	x17, #0x1ff             // =511
                	and	x0, x0, x17
                	cmp	x0, #0x123
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

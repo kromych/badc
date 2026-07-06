@@ -21,38 +21,40 @@ Disassembly of section .text:
                	ret
 
 <digest>:
-               	sxtw	x1, w1
-               	mov	x6, #0xe667             // =58983
-               	movk	x6, #0x6a09, lsl #16
-               	mov	x5, #0xae85             // =44677
-               	movk	x5, #0xbb67, lsl #16
+               	mov	x5, x0
+               	mov	x6, x1
+               	sxtw	x6, w6
+               	mov	x2, #0xe667             // =58983
+               	movk	x2, #0x6a09, lsl #16
+               	mov	x1, #0xae85             // =44677
+               	movk	x1, #0xbb67, lsl #16
                	mov	x4, #0xf372             // =62322
                	movk	x4, #0x3c6e, lsl #16
-               	mov	x3, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	b	<addr>
-               	mov	w7, w6
-               	mov	w8, w5
+               	mov	w7, w2
+               	mov	w8, w1
+               	mov	w9, w4
+               	mov	w4, w7
+               	mov	w7, w8
+               	and	x7, x4, x7
+               	mvn	x4, x4
                	mov	w4, w4
-               	mov	w7, w7
-               	mov	w8, w8
-               	and	x8, x7, x8
-               	mvn	x7, x7
-               	mov	w7, w7
-               	mov	w4, w4
-               	and	x4, x7, x4
-               	eor	x4, x8, x4
-               	ldr	w7, [x0, x2, lsl #2]
+               	mov	w8, w9
+               	and	x4, x4, x8
+               	eor	x4, x7, x4
+               	ldr	w7, [x5, x3, lsl #2]
                	add	x4, x4, x7
                	mov	w7, w4
-               	mov	w4, w5
-               	mov	w5, w6
-               	mov	w6, w7
-               	add	x3, x2, #0x1
-               	sxtw	x2, w3
-               	cmp	x2, x1
+               	mov	w4, w1
+               	mov	w1, w2
+               	mov	w2, w7
+               	add	x0, x3, #0x1
+               	sxtw	x3, w0
+               	cmp	x3, x6
                	b.lt	<addr>
-               	mov	w0, w6
-               	mov	w1, w5
+               	mov	w0, w2
+               	mov	w1, w1
                	eor	x0, x0, x1
                	mov	w1, w4
                	eor	x0, x0, x1
@@ -82,10 +84,9 @@ Disassembly of section .text:
                	movk	x17, #0xff6f, lsl #16
                	cmp	x0, x17
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>

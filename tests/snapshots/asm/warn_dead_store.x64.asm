@@ -20,11 +20,11 @@ Disassembly of section .text:
 
 <store_consumed_after_branch_is_silenced>:
                	movslq	%edi, %rdi
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	testq	%rdi, %rdi
                	je	<addr>
-               	movl	$0x2, %ecx
-               	movslq	%ecx, %rax
+               	movl	$0x2, %eax
+               	movslq	%eax, %rax
                	retq
                	jmp	<addr>
 

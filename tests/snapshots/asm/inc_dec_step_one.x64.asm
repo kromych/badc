@@ -30,16 +30,16 @@ Disassembly of section .text:
 
 <count_up>:
                	movslq	%edi, %rdi
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>
-               	incq	%rax
-               	movslq	%eax, %rax
-               	leaq	0x1(%rdx), %rcx
-               	movslq	%ecx, %rdx
+               	incq	%rcx
+               	movslq	%ecx, %rcx
+               	leaq	0x1(%rdx), %rax
+               	movslq	%eax, %rdx
                	cmpq	%rdi, %rdx
                	jl	<addr>
-               	movslq	%eax, %rax
+               	movslq	%ecx, %rax
                	retq
 
 <wrap>:

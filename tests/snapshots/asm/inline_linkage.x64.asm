@@ -26,17 +26,15 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rdx, %rdx
-               	movl	$0x1, %edx
-               	testq	%rdx, %rdx
+               	xorq	%rax, %rax
+               	movl	$0x1, %eax
+               	testq	%rax, %rax
                	je	<addr>
-               	movl	$0x1, %edx
-               	testq	%rdx, %rdx
+               	movl	$0x1, %eax
+               	testq	%rax, %rax
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	retq
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

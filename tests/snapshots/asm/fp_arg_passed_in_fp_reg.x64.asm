@@ -19,12 +19,13 @@ Disassembly of section .text:
 <g>:
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
-               	cvtsi2sd	%rdi, %xmm2
+               	movapd	%xmm1, %xmm2
+               	cvtsi2sd	%rdi, %xmm1
                	cvtsi2sd	%rsi, %xmm3
-               	mulsd	%xmm3, %xmm1
+               	mulsd	%xmm3, %xmm2
                	movapd	%xmm0, %xmm14
-               	movapd	%xmm2, %xmm15
-               	movapd	%xmm1, %xmm0
+               	movapd	%xmm1, %xmm15
+               	movapd	%xmm2, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	retq
 

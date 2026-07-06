@@ -11,39 +11,39 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rdx, %rdx
+               	movq	%rdx, %rcx
                	jmp	<addr>
-               	xorq	%rdi, %rdi
+               	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	(%rcx,%rdi), %r8
-               	movslq	%r8d, %r8
+               	leaq	(%rdx,%rax), %rdi
+               	movslq	%edi, %rdi
                	movl	$0x3, %r9d
                	pushq	%rax
                	pushq	%rdx
-               	movq	%r8, %rax
+               	movq	%rdi, %rax
                	cqto
                	idivq	%r9
-               	movq	%rdx, %r8
+               	movq	%rdx, %rdi
                	popq	%rdx
                	popq	%rax
-               	testq	%r8, %r8
+               	testq	%rdi, %rdi
                	jne	<addr>
                	jmp	<addr>
                	cmpq	$0x4, %rsi
                	jne	<addr>
                	jmp	<addr>
-               	addq	%rdi, %rax
-               	leaq	0x1(%rsi), %rdi
-               	movslq	%edi, %rsi
-               	cmpq	%rdx, %rsi
+               	addq	%rax, %rcx
+               	leaq	0x1(%rsi), %rax
+               	movslq	%eax, %rsi
+               	cmpq	%r8, %rsi
                	jl	<addr>
-               	addq	%rcx, %rax
-               	leaq	0x1(%rdx), %rcx
-               	movslq	%ecx, %rdx
-               	cmpq	$0x6, %rdx
+               	addq	%rdx, %rcx
+               	leaq	0x1(%r8), %rdx
+               	movslq	%edx, %r8
+               	cmpq	$0x6, %r8
                	jl	<addr>
-               	movslq	%eax, %rax
+               	movslq	%ecx, %rax
                	retq
                	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

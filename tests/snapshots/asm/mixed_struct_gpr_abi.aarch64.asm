@@ -22,12 +22,12 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	sub	x0, x29, #0x10
                	ldr	x0, [x0]
-               	scvtf	d0, x0
+               	scvtf	d1, x0
                	sub	x0, x29, #0x10
-               	ldr	d1, [x0, #0x8]
+               	ldr	d0, [x0, #0x8]
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
-               	fmadd	d0, d1, d17, d0
+               	fmadd	d0, d0, d17, d1
                	fcvtzs	x0, d0
                	add	x0, x0, x1
                	add	sp, sp, #0x10
@@ -52,11 +52,11 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	ldr	x1, [x1]
-               	add	x0, x0, x1
-               	sub	x1, x29, #0x10
-               	ldr	d0, [x1, #0x8]
-               	fcvtzs	x1, d0
-               	add	x0, x0, x1
+               	add	x1, x0, x1
+               	sub	x0, x29, #0x10
+               	ldr	d0, [x0, #0x8]
+               	fcvtzs	x0, d0
+               	add	x0, x1, x0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x70
@@ -77,11 +77,11 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x10
                	ldr	x1, [x0]
-               	scvtf	d0, x1
-               	ldr	d1, [x0, #0x8]
+               	scvtf	d1, x1
+               	ldr	d0, [x0, #0x8]
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
-               	fmadd	d0, d1, d17, d0
+               	fmadd	d0, d0, d17, d1
                	fcvtzs	x0, d0
                	add	x0, x0, #0x2
                	cmp	x0, #0xe

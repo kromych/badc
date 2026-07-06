@@ -15,18 +15,18 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movslq	%esi, %rsi
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %xmm14
+               	xorq	%rax, %rax
+               	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
                	jmp	<addr>
-               	movq	%rax, %rdx
+               	movq	%rcx, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdi, %rdx
                	movsd	(%rdx,%riz), %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
-               	leaq	0x1(%rax), %rcx
-               	movslq	%ecx, %rax
-               	cmpq	%rsi, %rax
+               	leaq	0x1(%rcx), %rax
+               	movslq	%eax, %rcx
+               	cmpq	%rsi, %rcx
                	jl	<addr>
                	movsd	-0x8(%rbp,%riz), %xmm0
                	addq	$0x10, %rsp
@@ -59,24 +59,24 @@ Disassembly of section .text:
 
 <sum_zero>:
                	movslq	%esi, %rsi
-               	movslq	%esi, %rax
-               	testq	%rax, %rax
-               	setg	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	leaq	-0x1(%rsi), %rcx
-               	movslq	%ecx, %rcx
-               	movq	(%rdi,%rcx,8), %rcx
+               	movslq	%esi, %rcx
                	testq	%rcx, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	leaq	-0x1(%rax), %rsi
-               	jmp	<addr>
-               	jmp	<addr>
+               	setg	%al
+               	movzbq	%al, %rax
                	testq	%rax, %rax
+               	je	<addr>
+               	leaq	-0x1(%rsi), %rax
+               	movslq	%eax, %rax
+               	movq	(%rdi,%rax,8), %rax
+               	testq	%rax, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	leaq	-0x1(%rcx), %rsi
+               	jmp	<addr>
+               	jmp	<addr>
+               	testq	%rcx, %rcx
                	jne	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %xmm14

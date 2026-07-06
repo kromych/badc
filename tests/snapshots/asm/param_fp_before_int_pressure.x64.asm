@@ -11,18 +11,26 @@ Disassembly of section .text:
                	ud2
 
 <draw>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	movq	%rcx, %rbx
                	imulq	$0x186a0, %rdi, %rax    # imm = 0x186A0
-               	imulq	$0x2710, %rsi, %rsi     # imm = 0x2710
-               	addq	%rsi, %rax
-               	imulq	$0x3e8, %rdx, %rdx      # imm = 0x3E8
-               	addq	%rdx, %rax
-               	movslq	(%rcx), %rcx
+               	imulq	$0x2710, %rsi, %rcx     # imm = 0x2710
+               	addq	%rcx, %rax
+               	imulq	$0x3e8, %rdx, %rcx      # imm = 0x3E8
+               	addq	%rcx, %rax
+               	movslq	(%rbx), %rcx
                	imulq	$0x64, %rcx, %rcx
                	addq	%rcx, %rax
                	imulq	$0xa, %r8, %rcx
                	addq	%rcx, %rax
                	addq	%r9, %rax
                	movslq	%eax, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
 
 <main>:
@@ -48,5 +56,4 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

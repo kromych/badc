@@ -68,9 +68,9 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
-               	ldrsw	x0, [x0]
-               	sub	x1, x29, #0x20
-               	mov	x17, x1
+               	ldrsw	x1, [x0]
+               	sub	x0, x29, #0x20
+               	mov	x17, x0
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
                	cmp	x16, #0x0
@@ -87,10 +87,10 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x1, x16
-               	ldrsw	x1, [x1]
-               	sub	x2, x29, #0x20
-               	mov	x17, x2
+               	mov	x0, x16
+               	ldrsw	x2, [x0]
+               	sub	x0, x29, #0x20
+               	mov	x17, x0
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
                	cmp	x16, #0x0
@@ -107,19 +107,19 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x2, x16
-               	ldrsw	x2, [x2]
-               	sub	x3, x29, #0x20
-               	ldursw	x3, [x29, #0x10]
+               	mov	x0, x16
+               	ldrsw	x3, [x0]
+               	sub	x0, x29, #0x20
+               	ldursw	x0, [x29, #0x10]
                	mov	x17, #0x3e8             // =1000
-               	mul	x3, x3, x17
-               	mov	x17, #0x64              // =100
                	mul	x0, x0, x17
-               	add	x0, x3, x0
-               	mov	x17, #0xa               // =10
+               	mov	x17, #0x64              // =100
                	mul	x1, x1, x17
                	add	x0, x0, x1
-               	add	x0, x0, x2
+               	mov	x17, #0xa               // =10
+               	mul	x1, x2, x17
+               	add	x0, x0, x1
+               	add	x0, x0, x3
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x19, [sp], #0x60

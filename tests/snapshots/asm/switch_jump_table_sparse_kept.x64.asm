@@ -85,9 +85,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	imulq	$0xa, %rbx, %rdi
                	callq	<addr>
-               	leaq	0x1(%rbx), %rcx
-               	movslq	%ecx, %rcx
-               	cmpq	%rcx, %rax
+               	movq	%rax, %rcx
+               	leaq	0x1(%rbx), %rax
+               	movslq	%eax, %rax
+               	cmpq	%rax, %rcx
                	jne	<addr>
                	movslq	%ebx, %rax
                	leaq	0x1(%rax), %rbx
@@ -132,5 +133,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

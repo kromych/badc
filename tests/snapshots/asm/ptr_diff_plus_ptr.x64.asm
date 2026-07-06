@@ -30,19 +30,19 @@ Disassembly of section .text:
                	movq	0x28(%rcx), %rdx
                	movq	%rdx, 0x28(%rax)
                	popq	%rdx
-               	leaq	-0x30(%rbp), %rax
                	leaq	-0x30(%rbp), %rcx
+               	leaq	-0x30(%rbp), %rax
                	leaq	-0x30(%rbp), %rdx
                	addq	$0x20, %rdx
                	movq	%rdx, %rsi
-               	subq	%rax, %rsi
+               	subq	%rcx, %rsi
                	movq	%rsi, %rdi
                	sarq	$0x3f, %rdi
                	shrq	$0x3c, %rdi
                	addq	%rdi, %rsi
                	sarq	$0x4, %rsi
                	shlq	$0x4, %rsi
-               	addq	%rcx, %rsi
+               	addq	%rax, %rsi
                	leaq	-0x30(%rbp), %rdi
                	addq	$0x20, %rdi
                	cmpq	%rdi, %rsi
@@ -51,26 +51,26 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %r10
-               	movq	%rdx, %rax
-               	subq	%r10, %rax
-               	movq	%rax, %rdx
+               	movq	%rcx, %r10
+               	movq	%rdx, %rcx
+               	subq	%r10, %rcx
+               	movq	%rcx, %rdx
                	sarq	$0x3f, %rdx
                	shrq	$0x3c, %rdx
-               	addq	%rdx, %rax
-               	sarq	$0x4, %rax
-               	shlq	$0x4, %rax
-               	leaq	0x10(%rcx), %rdx
-               	addq	%rdx, %rax
+               	addq	%rdx, %rcx
+               	sarq	$0x4, %rcx
+               	shlq	$0x4, %rcx
+               	leaq	0x10(%rax), %rdx
+               	addq	%rdx, %rcx
                	leaq	-0x30(%rbp), %rdx
                	addq	$0x30, %rdx
-               	cmpq	%rdx, %rax
+               	cmpq	%rdx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	leaq	0x20(%rcx), %rax
+               	addq	$0x20, %rax
                	leaq	-0x30(%rbp), %rcx
                	addq	$0x20, %rcx
                	cmpq	%rcx, %rax
@@ -83,3 +83,4 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

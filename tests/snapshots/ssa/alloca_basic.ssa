@@ -56,14 +56,14 @@ fn ent_pc=2 n_params=1 variadic=false locals=1028
     v11  StoreLocal { off=-2, value=v9, kind=I32 }        -> -
     terminator Jmp(b3)   (exit_acc=v11)
   block 1  start_pc=0
-    v18  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v19  LoadLocal { off=-2, kind=I32 }                   -> x1
-    v20  BinopI { op=shl, lhs=v19, rhs_imm=2 }            -> x2
-    v21  Binop { op=add, lhs=v18, rhs=v20 }               -> x2
-    v22  BinopI { op=mul, lhs=v19, rhs_imm=7 }            -> x2
+    v18  LoadLocal { off=-1, kind=I64 }                   -> x2
+    v19  LoadLocal { off=-2, kind=I32 }                   -> x0
+    v20  BinopI { op=shl, lhs=v19, rhs_imm=2 }            -> x1
+    v21  Binop { op=add, lhs=v18, rhs=v20 }               -> x1
+    v22  BinopI { op=mul, lhs=v19, rhs_imm=7 }            -> x1
     v23  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x6
     v24  Extend { value=v22, kind=I32 }                   -> x6
-    v25  BinopI { op=sub, lhs=v22, rhs_imm=3 }            -> x2
+    v25  BinopI { op=sub, lhs=v22, rhs_imm=3 }            -> x1
     v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x6
     v27  Extend { value=v25, kind=I32 }                   -> x6
     v28  StoreIndexed { base=v18, index=v19, scale=4, value=v25, kind=I32 } -> -
@@ -83,12 +83,12 @@ fn ent_pc=2 n_params=1 variadic=false locals=1028
     v30  StoreLocal { off=-2, value=v29, kind=I32 }       -> -
     terminator Jmp(b7)   (exit_acc=v30)
   block 5  start_pc=0
-    v37  LoadLocal { off=-3, kind=I32 }                   -> x0
-    v38  LoadLocal { off=-1, kind=I64 }                   -> x1
-    v39  LoadLocal { off=-2, kind=I32 }                   -> x2
+    v37  LoadLocal { off=-3, kind=I32 }                   -> x2
+    v38  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v39  LoadLocal { off=-2, kind=I32 }                   -> x1
     v40  BinopI { op=shl, lhs=v39, rhs_imm=2 }            -> x6
     v41  Binop { op=add, lhs=v38, rhs=v40 }               -> x6
-    v42  LoadIndexed { base=v38, index=v39, scale=4, kind=I32 } -> x1
+    v42  LoadIndexed { base=v38, index=v39, scale=4, kind=I32 } -> x0
     v43  Binop { op=add, lhs=v37, rhs=v42 }               -> x0
     v44  StoreLocal { off=-3, value=v43, kind=I32 }       -> -
     v45  LoadLocal { off=-3, kind=I32 }                   -> x0
@@ -195,9 +195,9 @@ fn ent_pc=4 n_params=1 variadic=false locals=1028
     v15  LoadLocal { off=-3, kind=I64 }                   -> x0
     v16  LoadLocal { off=-2, kind=I32 }                   -> x1
     v17  Store { addr=v15, disp=0, value=v16, kind=I64 }  -> -
-    v18  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v19  LoadLocal { off=-3, kind=I64 }                   -> x1
-    v20  Load { addr=v19, disp=0, kind=I64 }              -> x1
+    v18  LoadLocal { off=-1, kind=I32 }                   -> x1
+    v19  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v20  Load { addr=v19, disp=0, kind=I64 }              -> x0
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x2
     v22  Extend { value=v20, kind=I32 }                   -> x2
     v23  Binop { op=add, lhs=v18, rhs=v20 }               -> x0
@@ -241,10 +241,10 @@ fn ent_pc=5 n_params=1 variadic=false locals=1029
     v19  LoadLocal { off=-1, kind=I64 }                   -> x0
     v20  LoadLocal { off=-3, kind=I32 }                   -> x1
     v21  Binop { op=add, lhs=v19, rhs=v20 }               -> x0
-    v22  Load { addr=v21, disp=0, kind=I8 }               -> x0
-    v23  LoadLocal { off=2, kind=I32 }                    -> x1
+    v22  Load { addr=v21, disp=0, kind=I8 }               -> x1
+    v23  LoadLocal { off=2, kind=I32 }                    -> x0
     v24  BinopI { op=shl, lhs=v23, rhs_imm=56 }           -> x2
-    v25  Extend { value=v23, kind=I8 }                    -> x1
+    v25  Extend { value=v23, kind=I8 }                    -> x0
     v26  Binop { op=ne, lhs=v22, rhs=v25 }                -> x0
     terminator Bnz { cond=v26, target=b7, fall=b2 }   (exit_acc=v26)
   block 2  start_pc=0

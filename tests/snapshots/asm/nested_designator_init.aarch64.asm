@@ -55,15 +55,15 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x1, x29, #0x18
                	str	w0, [x1]
-               	mov	x0, #0x14               // =20
-               	sub	x1, x29, #0x18
-               	str	w0, [x1, #0x4]
-               	mov	x0, #0x1e               // =30
-               	sub	x1, x29, #0x18
-               	str	w0, [x1, #0x8]
-               	mov	x0, #0x28               // =40
-               	sub	x1, x29, #0x18
-               	str	w0, [x1, #0xc]
+               	mov	x1, #0x14               // =20
+               	sub	x0, x29, #0x18
+               	str	w1, [x0, #0x4]
+               	mov	x1, #0x1e               // =30
+               	sub	x0, x29, #0x18
+               	str	w1, [x0, #0x8]
+               	mov	x1, #0x28               // =40
+               	sub	x0, x29, #0x18
+               	str	w1, [x0, #0xc]
                	sub	x0, x29, #0x18
                	ldrsw	x0, [x0]
                	cmp	x0, #0xa

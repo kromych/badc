@@ -26,19 +26,19 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x20, #0xa               // =10
+               	mov	x21, #0xa               // =10
                	mov	x1, #0x14               // =20
                	mov	x9, x0
-               	mov	x0, x20
+               	mov	x0, x21
                	blr	x9
-               	mov	x21, x0
+               	mov	x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x5                // =5
                	mov	x9, x0
-               	mov	x0, x20
+               	mov	x0, x21
                	blr	x9
-               	mul	x0, x21, x0
+               	mul	x0, x20, x0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]

@@ -16,10 +16,11 @@ Disassembly of section .text:
                	retq
 
 <two>:
-               	leaq	<rip>, %rax
-               	movq	%rdi, %rcx
-               	shlq	$0x1, %rcx
-               	movl	%ecx, (%rax)
+               	leaq	<rip>, %rcx
+               	movq	%rdi, %rax
+               	shlq	$0x1, %rax
+               	movl	%eax, (%rcx)
+               	movq	%rcx, %rax
                	retq
 
 <main>:
@@ -27,16 +28,17 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x5, %edi
                	callq	<addr>
+               	movq	%rax, %rcx
+               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
                	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	jne	<addr>
-               	movslq	(%rax), %rax
+               	movslq	(%rcx), %rax
                	cmpq	$0xa, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
@@ -48,4 +50,5 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

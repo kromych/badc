@@ -18,19 +18,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
   block 1  start_pc=0
     v12  LocalAddr(-1)                                    -> x0
     v13  Load { addr=v12, disp=0, kind=I32 }              -> x0
-    v14  BinopI { op=ne, lhs=v13, rhs_imm=1 }             -> x1
-    v15  Imm(0)                                           -> x0
+    v14  BinopI { op=ne, lhs=v13, rhs_imm=1 }             -> x0
+    v15  Imm(0)                                           -> x1
     terminator Bnz { cond=v14, target=b7, fall=b2 }   (exit_acc=v14)
   block 2  start_pc=0
     v16  LocalAddr(-1)                                    -> x0
     v17  BinopI { op=add, lhs=v16, rhs_imm=4 }            -> x1
     v18  Load { addr=v16, disp=4, kind=I32 }              -> x0
-    v19  BinopI { op=ne, lhs=v18, rhs_imm=2 }             -> x1
-    v20  Imm(0)                                           -> x0
+    v19  BinopI { op=ne, lhs=v18, rhs_imm=2 }             -> x0
+    v20  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v19)
   block 3  start_pc=0
-    v21  Phi { incoming=[b7:v14, b2:v19], kind=I64 }      -> x1
-    v22  LoadLocal { off=-7, kind=I64 }                   -> x0
+    v21  Phi { incoming=[b7:v14, b2:v19], kind=I64 }      -> x0
+    v22  LoadLocal { off=-7, kind=I64 }                   -> x1
     terminator Bz { cond=v21, target=b5, fall=b4 }   (exit_acc=v21)
   block 4  start_pc=0
     v23  Imm(2)                                           -> x0

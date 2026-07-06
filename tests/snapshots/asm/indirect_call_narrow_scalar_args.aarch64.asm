@@ -27,25 +27,25 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
-               	sxtw	x2, w1
-               	sxtb	x3, w2
-               	sxth	x4, w2
+               	ldrsw	x0, [x0]
+               	sxtw	x1, w0
+               	sxtb	x2, w1
+               	sxth	x4, w1
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
-               	mul	x2, x3, x17
+               	mul	x1, x2, x17
                	mov	x17, #0xa               // =10
-               	mul	x3, x4, x17
-               	add	x2, x2, x3
-               	add	x2, x2, x1
-               	sxtw	x20, w2
-               	mov	x9, x0
-               	mov	x0, x1
-               	mov	x2, x1
+               	mul	x2, x4, x17
+               	add	x1, x1, x2
+               	add	x1, x1, x0
+               	sxtw	x20, w1
+               	mov	x9, x3
+               	mov	x1, x0
+               	mov	x2, x0
                	blr	x9
                	sxtw	x0, w0
                	sxtw	x1, w20

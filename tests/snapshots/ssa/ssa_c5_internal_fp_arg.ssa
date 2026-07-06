@@ -49,10 +49,10 @@ fn ent_pc=3 n_params=2 variadic=false locals=4
     v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x1
     v14  Extend { value=v12, kind=I32 }                   -> x0
     v15  Imm(0)                                           -> x1
-    v16  Imm(4632304060471443456)                         -> x1
-    v17  Binop { op=sub, lhs=v1, rhs=v1 }                 -> x2
+    v16  Imm(4632304060471443456)                         -> x2
+    v17  Binop { op=sub, lhs=v1, rhs=v1 }                 -> x1
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x6
-    v19  Extend { value=v17, kind=I32 }                   -> x2
+    v19  Extend { value=v17, kind=I32 }                   -> x1
     v20  FpCast { kind=IntToFp, value=v19 }               -> d0
     v21  Binop { op=fadd, lhs=v16, rhs=v20 }              -> d0
     v22  Imm(0)                                           -> x1

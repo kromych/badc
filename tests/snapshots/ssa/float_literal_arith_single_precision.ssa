@@ -46,10 +46,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
     v8   Imm(1077936128)                                  -> x0 [f32]
-    v9   Imm(1090519040)                                  -> x1 [f32]
-    v10  Imm(0)                                           -> x2
-    v11  Imm(0)                                           -> x2
-    v12  Imm(1056964608)                                  -> x2 [f32]
+    v9   Imm(1090519040)                                  -> x2 [f32]
+    v10  Imm(0)                                           -> x1
+    v11  Imm(0)                                           -> x1
+    v12  Imm(1056964608)                                  -> x1 [f32]
     v13  Binop { op=fmul, lhs=v8, rhs=v12 }               -> d0 [f32]
     v14  Imm(1048576000)                                  -> x6 [f32]
     v15  Binop { op=fmul, lhs=v9, rhs=v14 }               -> d0 [f32]

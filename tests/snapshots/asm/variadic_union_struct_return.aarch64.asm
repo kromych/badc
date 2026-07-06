@@ -93,8 +93,8 @@ Disassembly of section .text:
                	sub	x2, x29, #0x40
                	cmp	x0, #0x0
                	b.eq	<addr>
-               	ldrb	w3, [x0]
-               	add	x0, x3, x1
+               	ldrb	w0, [x0]
+               	add	x0, x0, x1
                	str	w0, [x2]
                	sub	x0, x29, #0x40
                	mov	x1, #0x7                // =7
@@ -107,7 +107,7 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x70
                	add	sp, sp, #0xc0
                	ret
-               	mov	x3, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	b	<addr>
 
 <main>:

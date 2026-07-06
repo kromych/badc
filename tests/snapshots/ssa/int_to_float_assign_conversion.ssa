@@ -4,37 +4,37 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    v2   Imm(0)                                           -> x1
-    v3   Imm(10)                                          -> x1
+    v1   LocalAddr(-1)                                    -> x1
+    v2   Imm(0)                                           -> x0
+    v3   Imm(10)                                          -> x0
     v4   Store { addr=v1, disp=0, value=v3, kind=I8 }     -> -
-    v5   LocalAddr(-1)                                    -> x0
+    v5   LocalAddr(-1)                                    -> x1
     v6   Imm(1)                                           -> x2
     v7   BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x2
     v8   Imm(100)                                         -> x2
     v9   Store { addr=v5, disp=1, value=v8, kind=I8 }     -> -
-    v10  LocalAddr(-1)                                    -> x0
+    v10  LocalAddr(-1)                                    -> x1
     v11  Imm(2)                                           -> x2
     v12  BinopI { op=add, lhs=v10, rhs_imm=2 }            -> x2
     v13  Imm(200)                                         -> x2
     v14  Store { addr=v10, disp=2, value=v13, kind=I8 }   -> -
-    v15  LocalAddr(-1)                                    -> x0
-    v16  Load { addr=v15, disp=0, kind=U8 }               -> x0
+    v15  LocalAddr(-1)                                    -> x1
+    v16  Load { addr=v15, disp=0, kind=U8 }               -> x1
     v17  FpCast { kind=IntToFp, value=v16 }               -> d0
     v18  FpCast { kind=F64ToF32, value=v17 }              -> d0 [f32]
-    v19  Imm(0)                                           -> x0
-    v20  LocalAddr(-1)                                    -> x0
+    v19  Imm(0)                                           -> x1
+    v20  LocalAddr(-1)                                    -> x1
     v21  BinopI { op=add, lhs=v20, rhs_imm=1 }            -> x2
-    v22  Load { addr=v20, disp=1, kind=U8 }               -> x0
+    v22  Load { addr=v20, disp=1, kind=U8 }               -> x1
     v23  FpCast { kind=IntToFp, value=v22 }               -> d1
-    v24  FpCast { kind=F64ToF32, value=v23 }              -> d1 [f32]
-    v25  Imm(0)                                           -> x0
-    v26  LocalAddr(-1)                                    -> x0
+    v24  FpCast { kind=F64ToF32, value=v23 }              -> d2 [f32]
+    v25  Imm(0)                                           -> x1
+    v26  LocalAddr(-1)                                    -> x1
     v27  BinopI { op=add, lhs=v26, rhs_imm=2 }            -> x2
-    v28  Load { addr=v26, disp=2, kind=U8 }               -> x0
-    v29  FpCast { kind=IntToFp, value=v28 }               -> d2
-    v30  FpCast { kind=F64ToF32, value=v29 }              -> d2 [f32]
-    v31  Imm(0)                                           -> x0
+    v28  Load { addr=v26, disp=2, kind=U8 }               -> x1
+    v29  FpCast { kind=IntToFp, value=v28 }               -> d1
+    v30  FpCast { kind=F64ToF32, value=v29 }              -> d1 [f32]
+    v31  Imm(0)                                           -> x1
     v32  LoadLocal { off=-2, kind=F32 }                   -> d3 [f32]
     v33  FpCast { kind=IntToFp, value=v3 }                -> d3
     v34  FpCast { kind=F64ToF32, value=v33 }              -> d3 [f32]
@@ -98,11 +98,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v76  Binop { op=fmul, lhs=v74, rhs=v18 }              -> d3 [f32]
     v77  Imm(1058424226)                                  -> x1 [f32]
     v78  LoadLocal { off=-3, kind=F32 }                   -> d3 [f32]
-    v79  Binop { op=fmul, lhs=v77, rhs=v24 }              -> d1 [f32]
+    v79  Binop { op=fmul, lhs=v77, rhs=v24 }              -> d2 [f32]
     v80  Fma { a=v74, b=v18, c=v79, neg_product=false, neg_addend=false } -> d0 [f32]
     v81  Imm(1038710997)                                  -> x0 [f32]
-    v82  LoadLocal { off=-4, kind=F32 }                   -> d1 [f32]
-    v83  Binop { op=fmul, lhs=v81, rhs=v30 }              -> d1 [f32]
+    v82  LoadLocal { off=-4, kind=F32 }                   -> d2 [f32]
+    v83  Binop { op=fmul, lhs=v81, rhs=v30 }              -> d2 [f32]
     v84  Fma { a=v81, b=v30, c=v80, neg_product=false, neg_addend=false } -> d0 [f32]
     v85  Imm(1124073472)                                  -> x0 [f32]
     v86  Binop { op=fsub, lhs=v84, rhs=v85 }              -> d0 [f32]
@@ -110,19 +110,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v88  LoadLocal { off=-6, kind=F32 }                   -> d1 [f32]
     v89  Imm(1110179840)                                  -> x0 [f32]
     v90  Fneg(v89)                                        -> d1 [f32]
-    v91  Binop { op=fgt, lhs=v86, rhs=v90 }               -> x1
-    v92  Imm(0)                                           -> x0
+    v91  Binop { op=fgt, lhs=v86, rhs=v90 }               -> x0
+    v92  Imm(0)                                           -> x1
     terminator Bnz { cond=v91, target=b15, fall=b9 }   (exit_acc=v91)
   block 9  start_pc=0
     v93  LoadLocal { off=-6, kind=F32 }                   -> d1 [f32]
     v94  Imm(1110441984)                                  -> x0 [f32]
     v95  Fneg(v94)                                        -> d1 [f32]
-    v96  Binop { op=flt, lhs=v86, rhs=v95 }               -> x1
-    v97  Imm(0)                                           -> x0
+    v96  Binop { op=flt, lhs=v86, rhs=v95 }               -> x0
+    v97  Imm(0)                                           -> x1
     terminator Jmp(b10)   (exit_acc=v96)
   block 10  start_pc=0
-    v98  Phi { incoming=[b15:v91, b9:v96], kind=I64 }     -> x1
-    v99  LoadLocal { off=-10, kind=I64 }                  -> x0
+    v98  Phi { incoming=[b15:v91, b9:v96], kind=I64 }     -> x0
+    v99  LoadLocal { off=-10, kind=I64 }                  -> x1
     terminator Bz { cond=v98, target=b12, fall=b11 }   (exit_acc=v98)
   block 11  start_pc=0
     v100 Imm(5)                                           -> x0

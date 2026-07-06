@@ -18,29 +18,29 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	add	x1, x0, #0x8
-               	sub	x2, x1, x0
-               	cmp	x2, #0x8
+               	add	x3, x0, #0x8
+               	sub	x1, x3, x0
+               	cmp	x1, #0x8
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	add	x2, x0, #0x10
-               	sub	x3, x2, x0
-               	cmp	x3, #0x10
+               	add	x1, x0, #0x10
+               	sub	x2, x1, x0
+               	cmp	x2, #0x10
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldrsw	x3, [x2]
-               	cmp	x3, #0x4
-               	cset	x4, ne
-               	cbnz	x4, <addr>
-               	ldrsw	x2, [x2, #0x4]
-               	cmp	x2, #0x5
-               	cset	x4, ne
-               	cbz	x4, <addr>
+               	ldrsw	x2, [x1]
+               	cmp	x2, #0x4
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	ldrsw	x1, [x1, #0x4]
+               	cmp	x1, #0x5
+               	cset	x2, ne
+               	cbz	x2, <addr>
                	mov	x0, #0x4                // =4
                	ret
-               	sub	x1, x1, x0
+               	sub	x1, x3, x0
                	asr	x2, x1, #63
                	lsr	x2, x2, #61
                	add	x1, x1, x2
@@ -51,13 +51,13 @@ Disassembly of section .text:
                	ret
                	add	x1, x0, #0x8
                	ldrsw	x2, [x0, #0x4]
-               	ldrsw	x1, [x1, #0x4]
+               	ldrsw	x3, [x1, #0x4]
                	cmp	x2, #0x1
-               	cset	x3, ne
-               	cbnz	x3, <addr>
-               	cmp	x1, #0x3
-               	cset	x3, ne
-               	cbz	x3, <addr>
+               	cset	x1, ne
+               	cbnz	x1, <addr>
+               	cmp	x3, #0x3
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	ret
                	add	x1, x0, #0x20

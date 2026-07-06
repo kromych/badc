@@ -8,9 +8,9 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I32)                            -> x6
     v4   Imm(0)                                           -> x0
-    v5   ImmData(536)                                     -> x0
-    v6   Load { addr=v5, disp=0, kind=I32, volatile }     -> x1
-    v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x1
+    v5   ImmData(536)                                     -> x1
+    v6   Load { addr=v5, disp=0, kind=I32, volatile }     -> x0
+    v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
     v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x2
     v9   Extend { value=v7, kind=I32 }                    -> x2
     v10  Store { addr=v5, disp=0, value=v7, kind=I32, volatile } -> -
@@ -39,10 +39,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(552)                                     -> x3
+    v1   ImmData(552)                                     -> x12
     v2   Imm(1)                                           -> x0
     v3   Store { addr=v1, disp=0, value=v2, kind=I32, volatile } -> -
-    v4   ImmData(24)                                      -> x12
+    v4   ImmData(24)                                      -> x3
     v5   CallExt { binding_idx=0, args=[v4], fp_arg_mask=0x0 } -> x0
     v6   BinopI { op=eq, lhs=v5, rhs_imm=0 }              -> x0
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)

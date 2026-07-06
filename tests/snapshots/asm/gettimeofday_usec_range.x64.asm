@@ -27,16 +27,16 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	testq	%rax, %rax
-               	setl	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setl	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	cmpq	$0xf4240, %rax          # imm = 0xF4240
-               	setge	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setge	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rax

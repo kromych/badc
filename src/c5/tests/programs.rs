@@ -2390,6 +2390,13 @@ fn quicksort() {
 }
 
 #[test]
+fn loop_iv_spill_priority() {
+    // Loop-depth-weighted spill ordering keeps the loop's induction
+    // variable and accumulator in registers; the result is unchanged.
+    assert_eq!(run_fixture("loop_iv_spill_priority.c"), 40);
+}
+
+#[test]
 fn linked_list() {
     assert_eq!(run_fixture("linked_list.c"), 10);
 }

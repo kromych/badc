@@ -80,21 +80,21 @@ Disassembly of section .text:
                	movsbq	0x10(%rax), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	xorq	%rdx, %rdx
+               	xorq	%rcx, %rcx
                	testq	%rsi, %rsi
                	je	<addr>
                	movl	$0x7, %ecx
                	movl	%ecx, 0x4(%rax)
                	movslq	(%rax,%rdi,4), %rax
                	retq
-               	xorq	%r8, %r8
-               	movl	$0x1, %r8d
-               	movl	%r8d, (%rax)
+               	xorq	%rcx, %rcx
+               	movl	$0x1, %ecx
+               	movl	%ecx, (%rax)
                	xorq	%rcx, %rcx
                	movl	%ecx, 0x4(%rax)
-               	movl	$0x1, %edx
-               	movl	%edx, 0x8(%rax)
-               	movb	%dl, 0x10(%rax)
+               	movl	$0x1, %ecx
+               	movl	%ecx, 0x8(%rax)
+               	movb	%cl, 0x10(%rax)
                	jmp	<addr>
 
 <main>:
@@ -141,3 +141,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

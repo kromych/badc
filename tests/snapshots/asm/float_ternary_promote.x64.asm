@@ -12,12 +12,10 @@ Disassembly of section .text:
 
 <sel>:
                	movslq	%edi, %rdi
-               	movapd	%xmm0, %xmm2
                	testq	%rdi, %rdi
                	je	<addr>
-               	movapd	%xmm2, %xmm0
                	retq
-               	movapd	%xmm1, %xmm2
+               	movapd	%xmm1, %xmm0
                	jmp	<addr>
 
 <main>:

@@ -24,15 +24,17 @@ Disassembly of section .text:
                	ret
 
 <sum_sr>:
-               	sxtw	x1, w1
-               	mov	x3, #0x0                // =0
-               	mov	x2, x3
+               	mov	x3, x0
+               	mov	x4, x1
+               	sxtw	x4, w4
+               	mov	x0, #0x0                // =0
+               	mov	x2, x0
                	b	<addr>
-               	ldr	x5, [x0, x4, lsl #3]
+               	ldr	x5, [x3, x1, lsl #3]
                	add	x2, x2, x5
-               	add	x3, x4, #0x1
-               	sxtw	x4, w3
-               	cmp	x4, x1
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
+               	cmp	x1, x4
                	b.lt	<addr>
                	mov	x0, x2
                	ret
@@ -62,10 +64,9 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x5dc
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>

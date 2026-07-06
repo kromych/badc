@@ -14,28 +14,28 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x100
                	str	x19, [sp]
-               	sub	x0, x29, #0x80
-               	mov	x2, #0x0                // =0
+               	sub	x2, x29, #0x80
+               	mov	x0, #0x0                // =0
                	b	<addr>
-               	add	x1, x0, x1
+               	add	x1, x2, x1
                	mov	x3, #0x0                // =0
                	strb	w3, [x1]
-               	add	x1, x2, #0x1
-               	sxtw	x2, w1
-               	sxtw	x1, w2
+               	add	x0, x0, #0x1
+               	sxtw	x0, w0
+               	sxtw	x1, w0
                	cmp	x1, #0x80
                	b.lt	<addr>
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	b	<addr>
                	sub	x2, x29, #0x80
-               	add	x0, x2, x0
-               	ldrb	w0, [x0]
-               	cmp	x0, #0x0
+               	add	x1, x2, x1
+               	ldrb	w1, [x1]
+               	cmp	x1, #0x0
                	b.ne	<addr>
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
+               	sxtw	x0, w0
                	sxtw	x1, w0
-               	sxtw	x0, w1
-               	cmp	x0, #0x80
+               	cmp	x1, #0x80
                	b.lt	<addr>
                	sub	x0, x29, #0x80
                	add	x0, x0, #0x0
@@ -221,15 +221,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x80
-               	mov	x2, #0x0                // =0
+               	sub	x2, x29, #0x80
+               	mov	x0, #0x0                // =0
                	b	<addr>
-               	add	x1, x0, x1
+               	add	x1, x2, x1
                	mov	x3, #0x0                // =0
                	strb	w3, [x1]
-               	add	x1, x2, #0x1
-               	sxtw	x2, w1
-               	sxtw	x1, w2
+               	add	x0, x0, #0x1
+               	sxtw	x0, w0
+               	sxtw	x1, w0
                	cmp	x1, #0x80
                	b.lt	<addr>
                	sub	x0, x29, #0x80

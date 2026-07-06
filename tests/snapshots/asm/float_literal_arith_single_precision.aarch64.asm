@@ -43,14 +43,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x40400000         // =1077936128
-               	mov	x1, #0x41000000         // =1090519040
-               	mov	x2, #0x3f000000         // =1056964608
+               	mov	x2, #0x41000000         // =1090519040
+               	mov	x1, #0x3f000000         // =1056964608
                	mov	x3, #0x3e800000         // =1048576000
-               	fmov	s16, w1
+               	fmov	s16, w2
                	fmov	s17, w3
                	fmul	s0, s16, s17
                	fmov	s16, w0
-               	fmov	s17, w2
+               	fmov	s17, w1
                	fmadd	s0, s16, s17, s0
                	mov	x0, #0x40600000         // =1080033280
                	fmov	s17, w0

@@ -13,20 +13,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x1, w1
-               	mov	x3, #0x0                // =0
-               	fmov	d16, x3
+               	mov	x2, x0
+               	mov	x3, x1
+               	sxtw	x3, w3
+               	mov	x0, #0x0                // =0
+               	fmov	d16, x0
                	sub	x17, x29, #0x8
                	str	d16, [x17]
                	b	<addr>
-               	lsl	x4, x2, #3
-               	add	x4, x0, x4
+               	lsl	x4, x1, #3
+               	add	x4, x2, x4
                	ldr	d0, [x4]
                	sub	x17, x29, #0x8
                	str	d0, [x17]
-               	add	x3, x2, #0x1
-               	sxtw	x2, w3
-               	cmp	x2, x1
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
+               	cmp	x1, x3
                	b.lt	<addr>
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
@@ -55,29 +57,29 @@ Disassembly of section .text:
                	ret
 
 <sum_zero>:
-               	mov	x2, x1
-               	sxtw	x2, w2
-               	sxtw	x1, w2
-               	cmp	x1, #0x0
-               	cset	x4, gt
-               	cbz	x4, <addr>
-               	sub	x3, x2, #0x1
-               	sxtw	x3, w3
-               	ldr	x3, [x0, x3, lsl #3]
+               	mov	x2, x0
+               	sxtw	x1, w1
+               	sxtw	x3, w1
                	cmp	x3, #0x0
-               	cset	x4, eq
-               	cbz	x4, <addr>
-               	sub	x2, x1, #0x1
+               	cset	x0, gt
+               	cbz	x0, <addr>
+               	sub	x0, x1, #0x1
+               	sxtw	x0, w0
+               	ldr	x0, [x2, x0, lsl #3]
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	cbz	x0, <addr>
+               	sub	x1, x3, #0x1
                	b	<addr>
                	b	<addr>
-               	cmp	x1, #0x0
+               	cmp	x3, #0x0
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d0, x0
                	ret
-               	sub	x1, x2, #0x1
-               	sxtw	x1, w1
-               	ldr	x0, [x0, x1, lsl #3]
+               	sub	x0, x1, #0x1
+               	sxtw	x0, w0
+               	ldr	x0, [x2, x0, lsl #3]
                	scvtf	d0, x0
                	ret
 

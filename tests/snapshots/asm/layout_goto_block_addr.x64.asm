@@ -19,15 +19,15 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movl	%edi, 0x10(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
+               	leaq	-0x10(%rbp), %rcx
+               	xorq	%rax, %rax
                	leaq	<rip>, %rdx        # <addr>
-               	movq	%rdx, (%rax)
-               	leaq	-0x10(%rbp), %rax
+               	movq	%rdx, (%rcx)
+               	leaq	-0x10(%rbp), %rcx
                	leaq	<rip>, %rdx        # <addr>
-               	movq	%rdx, 0x8(%rax)
-               	movl	%ecx, -0x18(%rbp)
-               	movl	%ecx, -0x20(%rbp)
+               	movq	%rdx, 0x8(%rcx)
+               	movl	%eax, -0x18(%rbp)
+               	movl	%eax, -0x20(%rbp)
                	jmp	<addr>
                	movslq	-0x18(%rbp), %rax
                	addq	$0x2, %rax

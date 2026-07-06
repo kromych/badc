@@ -10,33 +10,33 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x3, #0x0                // =0
-               	mov	x0, x3
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
                	b	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [x1, x0, lsl #3]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	x0, [x2, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	x0, #0x11
                	b.lt	<addr>
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, x1, lsl #3]
-               	add	x3, x3, x0
-               	add	x1, x1, #0x1
-               	cmp	x1, #0x11
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x2, [x2, x0, lsl #3]
+               	add	x1, x1, x2
+               	add	x0, x0, #0x1
+               	cmp	x0, #0x11
                	b.lt	<addr>
-               	cmp	x3, #0x88
-               	cset	x0, eq
-               	mov	x3, #0x0                // =0
-               	cbz	x0, <addr>
-               	cmp	x1, #0x11
+               	cmp	x1, #0x88
+               	cset	x2, eq
+               	mov	x1, #0x0                // =0
+               	cbz	x2, <addr>
+               	cmp	x0, #0x11
                	cset	x0, eq
                	cmp	x0, #0x0
-               	cset	x3, ne
-               	cmp	x3, #0x0
+               	cset	x1, ne
+               	cmp	x1, #0x0
                	cset	x0, eq
                	ret
                	b	<addr>

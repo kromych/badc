@@ -270,6 +270,33 @@ fn collect_loop_body(
     }
 }
 
+/// Per-block natural-loop nesting depth: the number of natural loops
+/// whose body contains the block. Nested loop bodies are subsets, so
+/// a block inside `k` enclosing loops is counted `k` times. Zero for
+/// every block when the CFG carries a computed goto or is irreducible
+/// (no rotation-safe loop structure); callers fall back to unweighted
+/// ordering there. Reuses `natural_loops` so there is one loop-detection
+/// path shared with the block-layout pass.
+pub(crate) fn loop_depths(func: &FunctionSsa) -> Vec<u32> {
+    let n = func.blocks.len();
+    let mut depth = alloc::vec![0u32; n];
+    if !func.computed_goto_targets.is_empty() || n < 2 {
+        return depth;
+    }
+    let rpo = rpo_numbers(func);
+    let idom = dominators(func);
+    if is_irreducible(func, &idom, &rpo) {
+        return depth;
+    }
+    let preds = predecessors(func);
+    for l in natural_loops(func, &idom, &preds, &rpo) {
+        for &b in &l.body {
+            depth[b as usize] = depth[b as usize].saturating_add(1);
+        }
+    }
+    depth
+}
+
 /// Loop nesting derived from body containment. Two distinct natural
 /// loops of a reducible CFG are disjoint or strictly nested (loops
 /// sharing a header were merged), so the smallest containing body is

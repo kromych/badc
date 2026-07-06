@@ -16,10 +16,11 @@ Disassembly of section .text:
 <g>:
                	sxtw	x0, w0
                	sxtw	x1, w1
-               	scvtf	d2, x0
+               	fmov	d2, d1
+               	scvtf	d1, x0
                	scvtf	d3, x1
-               	fmul	d1, d1, d3
-               	fmadd	d0, d0, d2, d1
+               	fmul	d2, d2, d3
+               	fmadd	d0, d0, d1, d2
                	ret
 
 <main>:

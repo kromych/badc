@@ -31,12 +31,12 @@ Disassembly of section .text:
                	ret
                	mov	x17, #0x1000            // =4096
                	cmp	x0, x17
-               	cset	x2, lt
-               	cbnz	x2, <addr>
+               	cset	x1, lt
+               	cbnz	x1, <addr>
                	mov	x17, #0x100000          // =1048576
                	cmp	x0, x17
-               	cset	x2, gt
-               	cbz	x2, <addr>
+               	cset	x1, gt
+               	cbz	x1, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20

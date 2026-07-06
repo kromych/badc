@@ -16,12 +16,12 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x0, #0x8                // =8
                	bl	<addr>
-               	mov	x20, x0
-               	mov	x21, #0x64              // =100
-               	mov	x0, x21
+               	mov	x21, x0
+               	mov	x20, #0x64              // =100
+               	mov	x0, x20
                	bl	<addr>
-               	mov	x1, x20
-               	mov	x2, x21
+               	mov	x1, x21
+               	mov	x2, x20
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]

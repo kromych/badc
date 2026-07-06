@@ -28,15 +28,16 @@ Disassembly of section .text:
                	ret
 
 <count_up>:
-               	sxtw	x0, w0
-               	mov	x2, #0x0                // =0
-               	mov	x1, x2
+               	mov	x3, x0
+               	sxtw	x3, w3
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	b	<addr>
                	add	x1, x1, #0x1
                	sxtw	x1, w1
-               	add	x2, x3, #0x1
-               	sxtw	x3, w2
-               	cmp	x3, x0
+               	add	x0, x2, #0x1
+               	sxtw	x2, w0
+               	cmp	x2, x3
                	b.lt	<addr>
                	sxtw	x0, w1
                	ret

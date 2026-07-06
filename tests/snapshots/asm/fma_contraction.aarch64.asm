@@ -116,27 +116,27 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
                	ret
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	mov	x1, #0x3fd0000000000000 // =4598175219545276416
+               	mov	x1, #0x3fe0000000000000 // =4602678819172646912
+               	mov	x0, #0x3fd0000000000000 // =4598175219545276416
                	mov	x2, #0x3fc0000000000000 // =4593671619917905920
-               	fmov	d16, x0
-               	fmov	d17, x1
+               	fmov	d16, x1
+               	fmov	d17, x0
                	fmov	d18, x2
                	fmadd	d0, d16, d17, d18
-               	fmov	d17, x1
+               	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
                	ret
-               	mov	x0, #0x3f000000         // =1056964608
-               	mov	x1, #0x3e800000         // =1048576000
+               	mov	x1, #0x3f000000         // =1056964608
+               	mov	x0, #0x3e800000         // =1048576000
                	mov	x2, #0x3e000000         // =1040187392
-               	fmov	s16, w0
-               	fmov	s17, w1
+               	fmov	s16, w1
+               	fmov	s17, w0
                	fmov	s18, w2
                	fmadd	s0, s16, s17, s18
-               	fmov	s17, w1
+               	fmov	s17, w0
                	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -156,14 +156,14 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
                	ret
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	mov	x1, #0x3fd0000000000000 // =4598175219545276416
+               	mov	x1, #0x3fe0000000000000 // =4602678819172646912
+               	mov	x0, #0x3fd0000000000000 // =4598175219545276416
                	mov	x2, #0x3fc0000000000000 // =4593671619917905920
-               	fmov	d16, x0
-               	fmov	d17, x1
+               	fmov	d16, x1
+               	fmov	d17, x0
                	fmov	d18, x2
                	fmadd	d0, d16, d17, d18
-               	fmov	d17, x1
+               	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, ne
                	cbz	x0, <addr>

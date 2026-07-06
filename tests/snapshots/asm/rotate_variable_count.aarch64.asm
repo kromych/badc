@@ -15,27 +15,29 @@ Disassembly of section .text:
                	ret
 
 <ref_ror>:
-               	mov	x3, #0x0                // =0
-               	mov	x2, x3
+               	mov	x4, x0
+               	mov	x5, x1
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	b	<addr>
-               	mov	x5, #0x1                // =1
-               	lsl	x5, x5, x4
-               	and	x5, x0, x5
-               	cbz	x5, <addr>
-               	sub	x5, x3, x1
+               	mov	x3, #0x1                // =1
+               	lsl	x3, x3, x2
+               	and	x3, x4, x3
+               	cbz	x3, <addr>
+               	sub	x3, x0, x5
                	mov	x17, #0x3f              // =63
-               	and	x5, x5, x17
+               	and	x3, x3, x17
                	mov	x6, #0x1                // =1
-               	sxtw	x5, w5
-               	lsl	x5, x6, x5
-               	orr	x2, x2, x5
+               	sxtw	x3, w3
+               	lsl	x3, x6, x3
+               	orr	x1, x1, x3
                	b	<addr>
                	b	<addr>
-               	add	x3, x4, #0x1
-               	sxtw	x4, w3
-               	cmp	x4, #0x40
+               	add	x0, x2, #0x1
+               	sxtw	x2, w0
+               	cmp	x2, #0x40
                	b.lt	<addr>
-               	mov	x0, x2
+               	mov	x0, x1
                	ret
 
 <main>:
@@ -66,9 +68,9 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x0, x29, #0x30
                	mov	w1, w20
-               	ldr	x0, [x0, x1, lsl #3]
-               	ldursw	x1, [x29, #-0x40]
-               	ror	x21, x0, x1
+               	ldr	x1, [x0, x1, lsl #3]
+               	ldursw	x0, [x29, #-0x40]
+               	ror	x21, x1, x0
                	sub	x0, x29, #0x30
                	mov	w1, w20
                	ldr	x0, [x0, x1, lsl #3]

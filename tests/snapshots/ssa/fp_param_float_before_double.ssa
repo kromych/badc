@@ -114,10 +114,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     terminator Return(v30)   (exit_acc=v30)
   block 6  start_pc=0
     v31  Imm(4617315517961601024)                         -> x0
-    v32  Imm(1086324736)                                  -> x1 [f32]
-    v33  Imm(0)                                           -> x2
-    v34  Imm(0)                                           -> x2
-    v35  Imm(4621819117588971520)                         -> x2
+    v32  Imm(1086324736)                                  -> x2 [f32]
+    v33  Imm(0)                                           -> x1
+    v34  Imm(0)                                           -> x1
+    v35  Imm(4621819117588971520)                         -> x1
     v36  Binop { op=fmul, lhs=v31, rhs=v35 }              -> d0
     v37  FpCast { kind=F32ToF64, value=v32 }              -> d0
     v38  Fma { a=v31, b=v35, c=v37, neg_product=false, neg_addend=false } -> d0

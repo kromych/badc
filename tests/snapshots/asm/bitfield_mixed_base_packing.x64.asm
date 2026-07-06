@@ -131,17 +131,17 @@ Disassembly of section .text:
                	movzwq	(%rax), %rax
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	cmpq	$0x1ff, %rax            # imm = 0x1FF
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x18(%rbp), %rax
                	movzwq	0x2(%rax), %rax
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	cmpq	$0x123, %rax            # imm = 0x123
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xa, %eax
                	addq	$0x20, %rsp

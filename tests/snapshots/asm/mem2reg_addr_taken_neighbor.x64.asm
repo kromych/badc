@@ -14,20 +14,20 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	xorq	%rax, %rax
-               	movl	%eax, -0x8(%rbp)
-               	movq	%rdi, %rcx
-               	shlq	$0x1, %rcx
-               	leaq	-0x8(%rbp), %rdx
-               	movslq	(%rdx), %rax
-               	addq	%rcx, %rax
-               	movl	%eax, (%rdx)
-               	movslq	%eax, %rax
-               	addq	%rcx, %rax
-               	movl	%eax, (%rdx)
-               	movslq	%eax, %rax
-               	addq	%rcx, %rax
-               	movl	%eax, (%rdx)
+               	xorq	%rdx, %rdx
+               	movl	%edx, -0x8(%rbp)
+               	movq	%rdi, %rax
+               	shlq	$0x1, %rax
+               	leaq	-0x8(%rbp), %rcx
+               	movslq	(%rcx), %rdx
+               	addq	%rax, %rdx
+               	movl	%edx, (%rcx)
+               	movslq	%edx, %rdx
+               	addq	%rax, %rdx
+               	movl	%edx, (%rcx)
+               	movslq	%edx, %rdx
+               	addq	%rdx, %rax
+               	movl	%eax, (%rcx)
                	movslq	-0x8(%rbp), %rax
                	addq	$0x20, %rsp
                	popq	%rbp

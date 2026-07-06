@@ -26,10 +26,10 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	str	w1, [x0, #0xc]
                	sub	x0, x29, #0x10
-               	ldrsw	x0, [x0]
-               	sub	x1, x29, #0x10
-               	ldrsw	x1, [x1, #0x4]
-               	add	x0, x0, x1
+               	ldrsw	x1, [x0]
+               	sub	x0, x29, #0x10
+               	ldrsw	x0, [x0, #0x4]
+               	add	x0, x1, x0
                	sub	x1, x29, #0x10
                	ldrsw	x1, [x1, #0x8]
                	add	x0, x0, x1

@@ -14,12 +14,12 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
                	cmp	x1, #0x3
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	cset	x1, ne
+               	cbnz	x1, <addr>
                	ldrsw	x1, [x0, #0x4]
                	cmp	x1, #0x4
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x1, <page>

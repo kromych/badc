@@ -13,15 +13,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x240
-               	sub	x0, x29, #0x80
-               	mov	x2, #0x0                // =0
+               	sub	x2, x29, #0x80
+               	mov	x0, #0x0                // =0
                	b	<addr>
-               	add	x1, x0, x1
+               	add	x1, x2, x1
                	mov	x3, #0x0                // =0
                	strb	w3, [x1]
-               	add	x1, x2, #0x1
-               	sxtw	x2, w1
-               	sxtw	x1, w2
+               	add	x0, x0, #0x1
+               	sxtw	x0, w0
+               	sxtw	x1, w0
                	cmp	x1, #0x80
                	b.lt	<addr>
                	sub	x0, x29, #0x80
@@ -41,15 +41,15 @@ Disassembly of section .text:
                	mov	x17, #0x8               // =8
                	and	x0, x0, x17
                	cmp	x0, #0x0
-               	cset	x1, eq
-               	cbnz	x1, <addr>
+               	cset	x0, eq
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x80
                	ldrb	w0, [x0, #0x5]
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
                	cmp	x0, #0x0
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	cset	x0, eq
+               	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x240
                	ldp	x29, x30, [sp], #0x10
@@ -95,16 +95,16 @@ Disassembly of section .text:
                	eor	x0, x0, x17
                	mov	w0, w0
                	cmp	x0, #0x0
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x230
                	ldrb	w0, [x0, #0x41]
                	mov	x17, #0x79              // =121
                	eor	x0, x0, x17
                	mov	w0, w0
                	cmp	x0, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x240
                	ldp	x29, x30, [sp], #0x10

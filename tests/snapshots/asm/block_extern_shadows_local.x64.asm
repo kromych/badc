@@ -25,12 +25,12 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	addq	$0x0, %rcx
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	addq	$0x0, %rax
                	movl	$0x7, %edx
-               	movl	%edx, (%rax)
-               	leaq	0x5(%rcx), %rax
+               	movl	%edx, (%rcx)
+               	addq	$0x5, %rax
                	movslq	%eax, %rax
                	cmpq	$0x69, %rax
                	je	<addr>
@@ -64,4 +64,4 @@ Disassembly of section .text:
                	retq
                	movl	$0x3, %eax
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

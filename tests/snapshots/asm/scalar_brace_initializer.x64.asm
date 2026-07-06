@@ -11,34 +11,34 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	leaq	<rip>, %rax
                	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rcx
-               	cmpq	$0x29, %rcx
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rax
+               	cmpq	$0x29, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movsbq	(%rax), %rcx
-               	cmpq	$0x78, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	movl	$0x1, %esi
-               	testq	%rcx, %rcx
+               	movsbq	(%rcx), %rax
+               	cmpq	$0x78, %rax
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	movl	$0x1, %eax
+               	testq	%rdx, %rdx
                	jne	<addr>
-               	movsbq	0x1(%rax), %rcx
-               	cmpq	$0x79, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	jne	<addr>
-               	movsbq	0x2(%rax), %rax
+               	movsbq	0x1(%rcx), %rax
+               	cmpq	$0x79, %rax
+               	setne	%al
+               	movzbq	%al, %rax
                	testq	%rax, %rax
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movsbq	0x2(%rcx), %rax
+               	testq	%rax, %rax
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	retq

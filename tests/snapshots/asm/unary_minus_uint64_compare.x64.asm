@@ -30,8 +30,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x2, %ecx
-               	movslq	%ecx, %rax
+               	movl	$0x2, %eax
+               	movslq	%eax, %rax
                	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0xd, %eax
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	jmp	<addr>
                	movl	$0xe, %eax
                	addq	$0x40, %rsp

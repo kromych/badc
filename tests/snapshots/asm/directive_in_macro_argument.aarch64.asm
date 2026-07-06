@@ -13,16 +13,19 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mov	x1, #0x0                // =0
-               	add	x1, x1, #0x1
-               	add	x1, x1, #0x2
-               	add	x1, x1, #0x4
-               	sxtw	x0, w1
-               	cmp	x0, #0x7
+               	mov	x0, #0x0                // =0
+               	add	x0, x0, #0x1
+               	add	x0, x0, #0x2
+               	add	x0, x0, #0x4
+               	sxtw	x1, w0
+               	cmp	x1, #0x7
                	b.eq	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	sxtw	x1, w1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	sxtw	x0, w0
+               	mov	x16, x1
+               	mov	x1, x0
+               	mov	x0, x16
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x1                // =1

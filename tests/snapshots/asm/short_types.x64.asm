@@ -65,9 +65,9 @@ Disassembly of section .text:
                	movw	%cx, 0x4(%rax)
                	leaq	-0xd8(%rbp), %rbx
                	leaq	-0xd8(%rbp), %rax
-               	movswq	(%rax), %rax
-               	leaq	-0xd8(%rbp), %rcx
-               	movswq	0x2(%rcx), %rcx
+               	movswq	(%rax), %rcx
+               	leaq	-0xd8(%rbp), %rax
+               	movswq	0x2(%rax), %rax
                	addq	%rcx, %rax
                	leaq	-0xd8(%rbp), %rcx
                	movswq	0x4(%rcx), %rcx
@@ -93,9 +93,9 @@ Disassembly of section .text:
                	movl	$0xc0de, %ecx           # imm = 0xC0DE
                	movw	%cx, 0x4(%rax)
                	leaq	-0xe0(%rbp), %rax
-               	movswq	(%rax), %rax
-               	leaq	-0xe0(%rbp), %rcx
-               	movswq	0x2(%rcx), %rcx
+               	movswq	(%rax), %rcx
+               	leaq	-0xe0(%rbp), %rax
+               	movswq	0x2(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax

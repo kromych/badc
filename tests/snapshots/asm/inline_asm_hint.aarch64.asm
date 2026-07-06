@@ -13,15 +13,16 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	sxtw	x0, w0
-               	mov	x2, #0x0                // =0
-               	mov	x1, x2
+               	mov	x3, x0
+               	sxtw	x3, w3
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	b	<addr>
                	yield
-               	add	x1, x1, x2
-               	add	x2, x3, #0x1
-               	sxtw	x3, w2
-               	cmp	x3, x0
+               	add	x1, x1, x0
+               	add	x0, x2, #0x1
+               	sxtw	x2, w0
+               	cmp	x2, x3
                	b.lt	<addr>
                	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x10]

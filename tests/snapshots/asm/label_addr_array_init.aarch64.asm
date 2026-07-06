@@ -18,12 +18,12 @@ Disassembly of section .text:
                	adr	x1, <addr>
                	sub	x2, x29, #0x18
                	str	x1, [x2]
-               	adr	x1, <addr>
-               	sub	x2, x29, #0x18
-               	str	x1, [x2, #0x8]
-               	adr	x1, <addr>
-               	sub	x2, x29, #0x18
-               	str	x1, [x2, #0x10]
+               	adr	x2, <addr>
+               	sub	x1, x29, #0x18
+               	str	x2, [x1, #0x8]
+               	adr	x2, <addr>
+               	sub	x1, x29, #0x18
+               	str	x2, [x1, #0x10]
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x20]
                	sub	x1, x29, #0x18

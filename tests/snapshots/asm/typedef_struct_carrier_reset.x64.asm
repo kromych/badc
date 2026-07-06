@@ -30,9 +30,9 @@ Disassembly of section .text:
                	leaq	0x28(%rdi), %rcx
                	movl	$0x2, %edx
                	movl	%edx, 0x4(%rcx)
-               	movslq	0x4(%rdi), %rcx
-               	leaq	0x28(%rdi), %rdx
-               	movslq	0x4(%rdx), %rdx
+               	movslq	0x4(%rdi), %rdx
+               	leaq	0x28(%rdi), %rcx
+               	movslq	0x4(%rcx), %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	$0x2, %ecx
@@ -40,9 +40,9 @@ Disassembly of section .text:
                	leaq	0x28(%rdi), %rcx
                	movl	$0x3, %edx
                	movl	%edx, 0x8(%rcx)
-               	movslq	0x8(%rdi), %rcx
-               	leaq	0x28(%rdi), %rdx
-               	movslq	0x8(%rdx), %rdx
+               	movslq	0x8(%rdi), %rdx
+               	leaq	0x28(%rdi), %rcx
+               	movslq	0x8(%rcx), %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	$0x3, %ecx
@@ -50,9 +50,9 @@ Disassembly of section .text:
                	leaq	0x28(%rdi), %rcx
                	movl	$0x4, %edx
                	movl	%edx, 0xc(%rcx)
-               	movslq	0xc(%rdi), %rcx
-               	leaq	0x28(%rdi), %rdx
-               	movslq	0xc(%rdx), %rdx
+               	movslq	0xc(%rdi), %rdx
+               	leaq	0x28(%rdi), %rcx
+               	movslq	0xc(%rcx), %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	$0x4, %ecx
@@ -60,9 +60,9 @@ Disassembly of section .text:
                	leaq	0x28(%rdi), %rcx
                	movl	$0x5, %edx
                	movl	%edx, 0x10(%rcx)
-               	movslq	0x10(%rdi), %rcx
-               	leaq	0x28(%rdi), %rdx
-               	movslq	0x10(%rdx), %rdx
+               	movslq	0x10(%rdi), %rdx
+               	leaq	0x28(%rdi), %rcx
+               	movslq	0x10(%rcx), %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	$0x5, %ecx
@@ -70,9 +70,9 @@ Disassembly of section .text:
                	leaq	0x28(%rdi), %rcx
                	movl	$0x6, %edx
                	movl	%edx, 0x14(%rcx)
-               	movslq	0x14(%rdi), %rcx
-               	leaq	0x28(%rdi), %rdx
-               	movslq	0x14(%rdx), %rdx
+               	movslq	0x14(%rdi), %rdx
+               	leaq	0x28(%rdi), %rcx
+               	movslq	0x14(%rcx), %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	$0x6, %ecx
@@ -80,9 +80,9 @@ Disassembly of section .text:
                	leaq	0x28(%rdi), %rcx
                	movl	$0x7, %edx
                	movl	%edx, 0x18(%rcx)
-               	movslq	0x18(%rdi), %rcx
-               	leaq	0x28(%rdi), %rdx
-               	movslq	0x18(%rdx), %rdx
+               	movslq	0x18(%rdi), %rdx
+               	leaq	0x28(%rdi), %rcx
+               	movslq	0x18(%rcx), %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	$0x7, %ecx
@@ -90,9 +90,9 @@ Disassembly of section .text:
                	leaq	0x28(%rdi), %rcx
                	movl	$0x8, %edx
                	movl	%edx, 0x1c(%rcx)
-               	movslq	0x1c(%rdi), %rcx
-               	leaq	0x28(%rdi), %rdx
-               	movslq	0x1c(%rdx), %rdx
+               	movslq	0x1c(%rdi), %rdx
+               	leaq	0x28(%rdi), %rcx
+               	movslq	0x1c(%rcx), %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	$0x8, %ecx
@@ -100,9 +100,9 @@ Disassembly of section .text:
                	leaq	0x28(%rdi), %rcx
                	movl	$0x9, %edx
                	movl	%edx, 0x20(%rcx)
-               	movslq	0x20(%rdi), %rcx
-               	leaq	0x28(%rdi), %rdx
-               	movslq	0x20(%rdx), %rdx
+               	movslq	0x20(%rdi), %rdx
+               	leaq	0x28(%rdi), %rcx
+               	movslq	0x20(%rcx), %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	$0x9, %ecx
@@ -110,9 +110,9 @@ Disassembly of section .text:
                	leaq	0x28(%rdi), %rcx
                	movl	$0xa, %edx
                	movl	%edx, 0x24(%rcx)
-               	movslq	0x24(%rdi), %rcx
-               	leaq	0x28(%rdi), %rdx
-               	movslq	0x24(%rdx), %rdx
+               	movslq	0x24(%rdi), %rdx
+               	leaq	0x28(%rdi), %rcx
+               	movslq	0x24(%rcx), %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	%eax, 0xa0(%rdi)

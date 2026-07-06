@@ -56,10 +56,10 @@ Disassembly of section .text:
                	fadd	s1, s1, s2
                	fadd	s0, s1, s0
                	sub	x0, x29, #0x28
-               	ldrb	w0, [x0]
-               	sub	x1, x29, #0x28
-               	ldrb	w1, [x1, #0x1]
-               	add	x0, x0, x1
+               	ldrb	w1, [x0]
+               	sub	x0, x29, #0x28
+               	ldrb	w0, [x0, #0x1]
+               	add	x0, x1, x0
                	sub	x1, x29, #0x28
                	ldrb	w1, [x1, #0x2]
                	add	x0, x0, x1

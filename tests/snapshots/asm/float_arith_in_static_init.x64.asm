@@ -59,21 +59,21 @@ Disassembly of section .text:
                	movabsq	$0x400f5c28f5c28f5c, %rax # imm = 0x400F5C28F5C28F5C
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setb	%cl
-               	movzbq	%cl, %rcx
+               	setb	%al
+               	movzbq	%al, %rax
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	andq	%r10, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsd	(%rax,%riz), %xmm0
                	movabsq	$0x400f70a3d70a3d71, %rax # imm = 0x400F70A3D70A3D71
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	seta	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	seta	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	retq

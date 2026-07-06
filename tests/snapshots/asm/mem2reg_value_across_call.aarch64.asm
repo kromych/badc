@@ -24,21 +24,21 @@ Disassembly of section .text:
                	str	x19, [sp, #0x20]
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
-               	mov	x20, x0
+               	mov	x22, x0
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
-               	mov	x22, #0x0               // =0
-               	mov	x0, x22
+               	mov	x20, #0x0               // =0
+               	mov	x0, x20
                	b	<addr>
-               	lsl	x1, x22, #1
+               	lsl	x1, x20, #1
                	add	x1, x1, #0x1
                	add	x23, x0, x1
                	mov	x9, x21
-               	mov	x0, x22
+               	mov	x0, x20
                	blr	x9
                	add	x0, x23, x0
-               	add	x22, x22, #0x1
-               	cmp	x22, x20
+               	add	x20, x20, #0x1
+               	cmp	x20, x22
                	b.lt	<addr>
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x20]

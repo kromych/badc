@@ -35,29 +35,29 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v8   Mcpy { dst=v7, src=v6, size=8 }                  -> x0
     v9   LocalAddr(-2)                                    -> x0
     v10  Load { addr=v9, disp=0, kind=I64 }               -> x0
-    v11  BinopI { op=eq, lhs=v10, rhs_imm=42 }            -> x1
-    v12  Imm(0)                                           -> x0
+    v11  BinopI { op=eq, lhs=v10, rhs_imm=42 }            -> x0
+    v12  Imm(0)                                           -> x1
     terminator Bz { cond=v11, target=b6, fall=b1 }   (exit_acc=v11)
   block 1  start_pc=0
     v13  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v14  BinopI { op=eq, lhs=v13, rhs_imm=42 }            -> x1
-    v15  Imm(0)                                           -> x0
+    v14  BinopI { op=eq, lhs=v13, rhs_imm=42 }            -> x0
+    v15  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v14)
   block 2  start_pc=0
-    v16  Phi { incoming=[b6:v11, b1:v14], kind=I64 }      -> x1
-    v17  LoadLocal { off=-7, kind=I64 }                   -> x0
+    v16  Phi { incoming=[b6:v11, b1:v14], kind=I64 }      -> x0
+    v17  LoadLocal { off=-7, kind=I64 }                   -> x1
     terminator Bz { cond=v16, target=b5, fall=b3 }   (exit_acc=v16)
   block 3  start_pc=0
-    v18  Imm(0)                                           -> x1
-    v19  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v18)
   block 4  start_pc=0
-    v22  Phi { incoming=[b3:v18, b5:v20], kind=I64 }      -> x1
-    v23  LoadLocal { off=-8, kind=I64 }                   -> x0
+    v22  Phi { incoming=[b3:v18, b5:v20], kind=I64 }      -> x0
+    v23  LoadLocal { off=-8, kind=I64 }                   -> x1
     terminator Return(v22)   (exit_acc=v22)
   block 5  start_pc=0
-    v20  Imm(1)                                           -> x1
-    v21  Imm(0)                                           -> x0
+    v20  Imm(1)                                           -> x0
+    v21  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v20)
   block 6  start_pc=0
     terminator Jmp(b2)

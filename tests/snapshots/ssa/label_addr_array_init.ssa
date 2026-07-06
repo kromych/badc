@@ -20,7 +20,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v14  Imm(0)                                           -> x0
     v15  StoreLocal { off=-4, value=v14, kind=I32 }       -> -
     v16  LocalAddr(-3)                                    -> x0
-    v17  LoadLocal { off=2, kind=I32 }                    -> x1
+    v17  Extend { value=v1, kind=I32 }                    -> x1
     v18  BinopI { op=shl, lhs=v17, rhs_imm=3 }            -> x2
     v19  Binop { op=add, lhs=v16, rhs=v18 }               -> x2
     v20  LoadIndexed { base=v16, index=v17, scale=8, kind=I64 } -> x0
@@ -61,7 +61,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v13  BlockAddr(block=3)                               -> x2
     v14  Store { addr=v3, disp=16, value=v13, kind=I64 }  -> -
     v15  StoreLocal { off=-1, value=v4, kind=I32 }        -> -
-    v16  LoadLocal { off=2, kind=I32 }                    -> x1
+    v16  Extend { value=v1, kind=I32 }                    -> x1
     v17  BinopI { op=shl, lhs=v16, rhs_imm=3 }            -> x2
     v18  Binop { op=add, lhs=v3, rhs=v17 }                -> x2
     v19  LoadIndexed { base=v3, index=v16, scale=8, kind=I64 } -> x0
@@ -102,7 +102,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v13  BlockAddr(block=3)                               -> x2
     v14  Store { addr=v3, disp=16, value=v13, kind=I64 }  -> -
     v15  StoreLocal { off=-1, value=v4, kind=I32 }        -> -
-    v16  LoadLocal { off=2, kind=I32 }                    -> x1
+    v16  Extend { value=v1, kind=I32 }                    -> x1
     v17  BinopI { op=shl, lhs=v16, rhs_imm=3 }            -> x2
     v18  Binop { op=add, lhs=v3, rhs=v17 }                -> x2
     v19  LoadIndexed { base=v3, index=v16, scale=8, kind=I64 } -> x0

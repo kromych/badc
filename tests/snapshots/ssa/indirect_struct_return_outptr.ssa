@@ -10,15 +10,15 @@ fn ent_pc=0 n_params=2 variadic=false locals=5
     v4   LoadLocal { off=3, kind=I32 }                    -> x0
     v5   LocalAddr(-5)                                    -> x1
     v6   Store { addr=v5, disp=0, value=v4, kind=I64 }    -> -
-    v7   LoadLocal { off=3, kind=I32 }                    -> x0
-    v8   BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x0
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
-    v10  Extend { value=v8, kind=I32 }                    -> x0
-    v11  LocalAddr(-5)                                    -> x1
-    v12  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x2
+    v7   LoadLocal { off=3, kind=I32 }                    -> x1
+    v8   BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x1
+    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x2
+    v10  Extend { value=v8, kind=I32 }                    -> x1
+    v11  LocalAddr(-5)                                    -> x2
+    v12  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x6
     v13  Store { addr=v11, disp=8, value=v10, kind=I64 }  -> -
-    v14  LoadLocal { off=3, kind=I32 }                    -> x0
-    v15  BinopI { op=add, lhs=v14, rhs_imm=2 }            -> x0
+    v14  LoadLocal { off=3, kind=I32 }                    -> x1
+    v15  BinopI { op=add, lhs=v4, rhs_imm=2 }             -> x0
     v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
     v17  Extend { value=v15, kind=I32 }                   -> x0
     v18  LocalAddr(-5)                                    -> x1

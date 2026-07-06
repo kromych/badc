@@ -58,6 +58,8 @@
 #pragma binding(libc::pthread_cond_broadcast,   "_pthread_cond_broadcast")
 #pragma binding(libc::pthread_attr_init,        "_pthread_attr_init")
 #pragma binding(libc::pthread_attr_destroy,     "_pthread_attr_destroy")
+#pragma binding(libc::pthread_attr_getguardsize, "_pthread_attr_getguardsize")
+#pragma binding(libc::pthread_attr_getstack,    "_pthread_attr_getstack")
 #pragma binding(libc::pthread_attr_setdetachstate, "_pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "_pthread_attr_setstacksize")
 #pragma binding(libc::pthread_attr_setscope,    "_pthread_attr_setscope")
@@ -128,6 +130,9 @@
 #pragma binding(libc::pthread_attr_setschedparam, "pthread_attr_setschedparam")
 #pragma binding(libc::pthread_attr_getschedparam, "pthread_attr_getschedparam")
 #pragma binding(libc::pthread_attr_setinheritsched, "pthread_attr_setinheritsched")
+#pragma binding(libc::pthread_attr_getguardsize, "pthread_attr_getguardsize")
+#pragma binding(libc::pthread_attr_getstack,    "pthread_attr_getstack")
+#pragma binding(libc::pthread_getattr_np,       "pthread_getattr_np")
 // The Linux C library's pthread_atfork lives in libc_nonshared.a (a static stub),
 // not as a dynamic export of libc.so.6 -- x86_64 keeps a weak legacy
 // alias but aarch64 does not, so a dynamic import resolves on one and
@@ -314,6 +319,13 @@ int pthread_attr_setscope(char *attr, int scope);
 int pthread_attr_setschedpolicy(char *attr, int policy);
 int pthread_attr_setschedparam(char *attr, const struct sched_param *param);
 int pthread_attr_getschedparam(const char *attr, struct sched_param *param);
+int pthread_attr_getguardsize(const char *attr, unsigned long *guardsize);
+int pthread_attr_getstack(const char *attr, void **stackaddr, unsigned long *stacksize);
+#if defined(__linux__)
+// GNU extension: the running thread's attributes, including the real
+// stack bounds (the portable route is pthread_attr_getstack on these).
+int pthread_getattr_np(unsigned long thread, char *attr);
+#endif
 int pthread_attr_setinheritsched(char *attr, int inheritsched);
 #ifdef __linux__
 // Linux names the calling-convention pair (pthread_t, name).

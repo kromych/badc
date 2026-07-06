@@ -175,6 +175,7 @@ impl SsaBuilder {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             has_returns_twice_call: false,
+            did_unroll: false,
         };
         let mut b = Self {
             func,

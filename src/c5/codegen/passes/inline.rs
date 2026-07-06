@@ -1023,6 +1023,7 @@ fn splice_multi_block(
         // The candidate filter rejects returns-twice callees, so only
         // the caller's own flag can be set here.
         has_returns_twice_call: original.has_returns_twice_call,
+        did_unroll: original.did_unroll,
     };
 }
 
@@ -1515,6 +1516,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             inline_caller(caller, &local);
             if caller.insts.len() != before {
                 changed = true;
+                // A spliced callee whose loops were unrolled carries
+                // constant-offset array accesses into the caller; mark
+                // the caller so the post-inline scalar promotion scans it.
+                if local.values().any(|c| c.did_unroll) {
+                    caller.did_unroll = true;
+                }
             }
         }
         if !changed {

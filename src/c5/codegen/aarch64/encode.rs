@@ -1602,6 +1602,24 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::constfold::run (aarch64)", || {
             crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
         });
+        // Split constant-index local arrays that unrolling exposed into
+        // per-element slots and re-run mem2reg to promote them to SSA
+        // values. Gated to functions the unroll pass expanded so the
+        // mem2reg rebuild is confined; see x86_64.rs's matching block.
+        super::ssa::emit_common::time_pass("passes::sroa::run (aarch64)", || {
+            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
+            for f in &mut ssa_funcs {
+                if f.did_unroll {
+                    let promoted = crate::c5::codegen::passes::sroa::run(f, usable_gpr);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
+        });
         super::ssa::emit_common::time_pass("passes::rotate::run (aarch64)", || {
             crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
         });

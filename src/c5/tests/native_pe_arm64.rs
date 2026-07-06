@@ -640,6 +640,8 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("unroll_const_trip_copy.c", 0),
     ("unroll_trip_17_stays_rolled.c", 0),
     ("unroll_volatile_stays_rolled.c", 0),
+    ("sroa_const_index_local_array.c", 0),
+    ("sroa_runtime_index_stays_memory.c", 0),
     ("goto.c", 5),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),

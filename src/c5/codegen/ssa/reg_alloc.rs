@@ -261,6 +261,19 @@ impl RegBanks {
     }
 }
 
+/// General-purpose registers the allocator may use for `target`, after
+/// the codegen-test bank caps (`BADC_MAX_GPR` / the per-thread override).
+/// The scalar-promotion pass (`passes::sroa`) uses this as the ceiling on
+/// how many array element slots it lifts to registers: promoting more
+/// loop-carried values than the file holds spills them back to the frame
+/// at a net loss, so an array whose element count would overflow the file
+/// stays memory-resident.
+pub(crate) fn usable_gpr_count(target: Target) -> usize {
+    let banks = RegBanks::for_target(target);
+    let (max_gpr, _) = pool_size_limits();
+    (banks.caller_gprs.len() + banks.callee_gprs.len()).min(max_gpr)
+}
+
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
 /// Callee-saved registers the emit pass reserves as fixed scratch and
@@ -2892,6 +2905,7 @@ int main(void) { return 0; }
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             has_returns_twice_call: false,
+            did_unroll: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

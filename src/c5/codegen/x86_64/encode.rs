@@ -1999,6 +1999,25 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::constfold::run (x86_64)", || {
             crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
         });
+        // Split constant-index local arrays that unrolling exposed into
+        // per-element slots and re-run mem2reg to promote them to SSA
+        // values. Gated to functions the unroll pass expanded so the
+        // mem2reg rebuild is confined; the promoted element slots feed
+        // the same debug-info location drop as the initial mem2reg.
+        super::ssa::emit_common::time_pass("passes::sroa::run (x86_64)", || {
+            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
+            for f in &mut ssa_funcs {
+                if f.did_unroll {
+                    let promoted = crate::c5::codegen::passes::sroa::run(f, usable_gpr);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
+        });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
         // so post-inline parameter substitutions expose the constant

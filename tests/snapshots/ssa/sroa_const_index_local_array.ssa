@@ -1,0 +1,620 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=rounds
+fn ent_pc=0 n_params=2 variadic=false locals=13
+  spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I32)                            -> x13
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
+    v6   Imm(0)                                           -> x1
+    terminator Jmp(b1)   (exit_acc=v5)
+  block 1  start_pc=0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(1)                                           -> x0
+    v9   Imm(0)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    v11  Imm(0)                                           -> x0
+    v12  Imm(0)                                           -> x0
+    v13  LoadLocal { off=2, kind=I64 }                    -> x0
+    v14  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> x0
+    v15  Load { addr=v14, disp=0, kind=I64 }              -> x1
+    v16  Imm(0)                                           -> x0
+    v17  Imm(0)                                           -> x0
+    v18  Imm(1)                                           -> x0
+    v19  Imm(0)                                           -> x0
+    v20  Imm(1)                                           -> x0
+    v21  Imm(1)                                           -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(1)                                           -> x0
+    v24  Imm(8)                                           -> x0
+    v25  Imm(0)                                           -> x0
+    v26  LoadLocal { off=2, kind=I64 }                    -> x0
+    v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
+    v28  Load { addr=v1, disp=8, kind=I64 }               -> x2
+    v29  Imm(0)                                           -> x0
+    v30  Imm(1)                                           -> x0
+    v31  Imm(2)                                           -> x0
+    v32  Imm(0)                                           -> x0
+    v33  Imm(2)                                           -> x0
+    v34  Imm(1)                                           -> x0
+    v35  Imm(0)                                           -> x0
+    v36  Imm(2)                                           -> x0
+    v37  Imm(16)                                          -> x0
+    v38  Imm(0)                                           -> x0
+    v39  LoadLocal { off=2, kind=I64 }                    -> x0
+    v40  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
+    v41  Load { addr=v1, disp=16, kind=I64 }              -> x6
+    v42  Imm(0)                                           -> x0
+    v43  Imm(2)                                           -> x0
+    v44  Imm(3)                                           -> x0
+    v45  Imm(0)                                           -> x0
+    v46  Imm(3)                                           -> x0
+    v47  Imm(1)                                           -> x0
+    v48  Imm(0)                                           -> x0
+    v49  Imm(3)                                           -> x0
+    v50  Imm(24)                                          -> x0
+    v51  Imm(0)                                           -> x0
+    v52  LoadLocal { off=2, kind=I64 }                    -> x0
+    v53  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x0
+    v54  Load { addr=v1, disp=24, kind=I64 }              -> x8
+    v55  Imm(0)                                           -> x0
+    v56  Imm(3)                                           -> x0
+    v57  Imm(4)                                           -> x0
+    v58  Imm(0)                                           -> x0
+    v59  Imm(4)                                           -> x0
+    v60  Imm(1)                                           -> x0
+    v61  Imm(0)                                           -> x0
+    v62  Imm(4)                                           -> x0
+    v63  Imm(32)                                          -> x0
+    v64  Imm(0)                                           -> x0
+    v65  LoadLocal { off=2, kind=I64 }                    -> x0
+    v66  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x0
+    v67  Load { addr=v1, disp=32, kind=I64 }              -> x9
+    v68  Imm(0)                                           -> x0
+    v69  Imm(4)                                           -> x0
+    v70  Imm(5)                                           -> x0
+    v71  Imm(0)                                           -> x0
+    v72  Imm(5)                                           -> x0
+    v73  Imm(1)                                           -> x0
+    v74  Imm(0)                                           -> x0
+    v75  Imm(5)                                           -> x0
+    v76  Imm(40)                                          -> x0
+    v77  Imm(0)                                           -> x0
+    v78  LoadLocal { off=2, kind=I64 }                    -> x0
+    v79  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> x0
+    v80  Load { addr=v1, disp=40, kind=I64 }              -> x3
+    v81  Imm(0)                                           -> x0
+    v82  Imm(5)                                           -> x0
+    v83  Imm(6)                                           -> x0
+    v84  Imm(0)                                           -> x0
+    v85  Imm(6)                                           -> x0
+    v86  Imm(1)                                           -> x0
+    v87  Imm(0)                                           -> x0
+    v88  Imm(6)                                           -> x0
+    v89  Imm(48)                                          -> x0
+    v90  Imm(0)                                           -> x0
+    v91  LoadLocal { off=2, kind=I64 }                    -> x0
+    v92  BinopI { op=add, lhs=v1, rhs_imm=48 }            -> x0
+    v93  Load { addr=v1, disp=48, kind=I64 }              -> x12
+    v94  Imm(0)                                           -> x0
+    v95  Imm(6)                                           -> x0
+    v96  Imm(7)                                           -> x0
+    v97  Imm(0)                                           -> x0
+    v98  Imm(7)                                           -> x0
+    v99  Imm(1)                                           -> x0
+    v100 Imm(0)                                           -> x0
+    v101 Imm(7)                                           -> x0
+    v102 Imm(56)                                          -> x0
+    v103 Imm(0)                                           -> x0
+    v104 LoadLocal { off=2, kind=I64 }                    -> x0
+    v105 BinopI { op=add, lhs=v1, rhs_imm=56 }            -> x0
+    v106 Load { addr=v1, disp=56, kind=I64 }              -> x7
+    v107 Imm(0)                                           -> x0
+    v108 Imm(7)                                           -> x0
+    v109 Imm(8)                                           -> x0
+    v110 Imm(0)                                           -> x0
+    v111 Imm(8)                                           -> x0
+    v112 Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v112)
+  block 2  start_pc=0
+    terminator Jmp(b6)
+  block 3  start_pc=0
+    v126 Imm(0)                                           -> x0
+    v127 Imm(56)                                          -> x0
+    v128 Imm(0)                                           -> x0
+    v129 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v130 Imm(0)                                           -> x0
+    v131 Imm(7)                                           -> x0
+    v132 Imm(0)                                           -> x14
+    terminator Jmp(b4)   (exit_acc=v131)
+  block 4  start_pc=0
+    v136 Imm(7)                                           -> x0
+    v137 Imm(1)                                           -> x0
+    v138 Imm(0)                                           -> x0
+    v139 Imm(7)                                           -> x0
+    v140 Imm(56)                                          -> x0
+    v141 Imm(0)                                           -> x0
+    v142 Imm(0)                                           -> x0
+    v143 Imm(7)                                           -> x0
+    v144 Imm(6)                                           -> x0
+    v145 Imm(25769803776)                                 -> x0
+    v146 Imm(6)                                           -> x0
+    v147 Imm(48)                                          -> x0
+    v148 Imm(0)                                           -> x0
+    v149 LoadLocal { off=-2, kind=I64 }                   -> x0
+    v150 Imm(0)                                           -> x0
+    v151 Imm(7)                                           -> x0
+    v152 Imm(56)                                          -> x0
+    v153 Imm(0)                                           -> x0
+    v154 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v155 BinopI { op=shl, lhs=v120, rhs_imm=1 }           -> x0
+    v156 Binop { op=add, lhs=v119, rhs=v155 }             -> x0
+    v157 Imm(0)                                           -> x14
+    v158 Imm(7)                                           -> x14
+    v159 Imm(6)                                           -> x14
+    v160 Imm(0)                                           -> x14
+    v161 Imm(6)                                           -> x14
+    v162 Imm(1)                                           -> x14
+    v163 Imm(0)                                           -> x14
+    v164 Imm(6)                                           -> x14
+    v165 Imm(48)                                          -> x14
+    v166 Imm(0)                                           -> x14
+    v167 Imm(0)                                           -> x14
+    v168 Imm(6)                                           -> x14
+    v169 Imm(5)                                           -> x14
+    v170 Imm(21474836480)                                 -> x14
+    v171 Imm(5)                                           -> x14
+    v172 Imm(40)                                          -> x14
+    v173 Imm(0)                                           -> x14
+    v174 LoadLocal { off=-3, kind=I64 }                   -> x14
+    v175 Imm(0)                                           -> x14
+    v176 Imm(6)                                           -> x14
+    v177 Imm(48)                                          -> x14
+    v178 Imm(0)                                           -> x14
+    v179 LoadLocal { off=-2, kind=I64 }                   -> x14
+    v180 BinopI { op=shl, lhs=v119, rhs_imm=1 }           -> x12
+    v181 Binop { op=add, lhs=v118, rhs=v180 }             -> x12
+    v182 Imm(0)                                           -> x14
+    v183 Imm(6)                                           -> x14
+    v184 Imm(5)                                           -> x14
+    v185 Imm(0)                                           -> x14
+    v186 Imm(5)                                           -> x14
+    v187 Imm(1)                                           -> x14
+    v188 Imm(0)                                           -> x14
+    v189 Imm(5)                                           -> x14
+    v190 Imm(40)                                          -> x14
+    v191 Imm(0)                                           -> x14
+    v192 Imm(0)                                           -> x14
+    v193 Imm(5)                                           -> x14
+    v194 Imm(4)                                           -> x14
+    v195 Imm(17179869184)                                 -> x14
+    v196 Imm(4)                                           -> x14
+    v197 Imm(32)                                          -> x14
+    v198 Imm(0)                                           -> x14
+    v199 LoadLocal { off=-4, kind=I64 }                   -> x14
+    v200 Imm(0)                                           -> x14
+    v201 Imm(5)                                           -> x14
+    v202 Imm(40)                                          -> x14
+    v203 Imm(0)                                           -> x14
+    v204 LoadLocal { off=-3, kind=I64 }                   -> x14
+    v205 BinopI { op=shl, lhs=v118, rhs_imm=1 }           -> x3
+    v206 Binop { op=add, lhs=v117, rhs=v205 }             -> x3
+    v207 Imm(0)                                           -> x14
+    v208 Imm(5)                                           -> x14
+    v209 Imm(4)                                           -> x14
+    v210 Imm(0)                                           -> x14
+    v211 Imm(4)                                           -> x14
+    v212 Imm(1)                                           -> x14
+    v213 Imm(0)                                           -> x14
+    v214 Imm(4)                                           -> x14
+    v215 Imm(32)                                          -> x14
+    v216 Imm(0)                                           -> x14
+    v217 Imm(0)                                           -> x14
+    v218 Imm(4)                                           -> x14
+    v219 Imm(3)                                           -> x14
+    v220 Imm(12884901888)                                 -> x14
+    v221 Imm(3)                                           -> x14
+    v222 Imm(24)                                          -> x14
+    v223 Imm(0)                                           -> x14
+    v224 LoadLocal { off=-5, kind=I64 }                   -> x14
+    v225 Imm(0)                                           -> x14
+    v226 Imm(4)                                           -> x14
+    v227 Imm(32)                                          -> x14
+    v228 Imm(0)                                           -> x14
+    v229 LoadLocal { off=-4, kind=I64 }                   -> x14
+    v230 BinopI { op=shl, lhs=v117, rhs_imm=1 }           -> x9
+    v231 Binop { op=add, lhs=v116, rhs=v230 }             -> x9
+    v232 Imm(0)                                           -> x14
+    v233 Imm(4)                                           -> x14
+    v234 Imm(3)                                           -> x14
+    v235 Imm(0)                                           -> x14
+    v236 Imm(3)                                           -> x14
+    v237 Imm(1)                                           -> x14
+    v238 Imm(0)                                           -> x14
+    v239 Imm(3)                                           -> x14
+    v240 Imm(24)                                          -> x14
+    v241 Imm(0)                                           -> x14
+    v242 Imm(0)                                           -> x14
+    v243 Imm(3)                                           -> x14
+    v244 Imm(2)                                           -> x14
+    v245 Imm(8589934592)                                  -> x14
+    v246 Imm(2)                                           -> x14
+    v247 Imm(16)                                          -> x14
+    v248 Imm(0)                                           -> x14
+    v249 LoadLocal { off=-6, kind=I64 }                   -> x14
+    v250 Imm(0)                                           -> x14
+    v251 Imm(3)                                           -> x14
+    v252 Imm(24)                                          -> x14
+    v253 Imm(0)                                           -> x14
+    v254 LoadLocal { off=-5, kind=I64 }                   -> x14
+    v255 BinopI { op=shl, lhs=v116, rhs_imm=1 }           -> x8
+    v256 Binop { op=add, lhs=v115, rhs=v255 }             -> x8
+    v257 Imm(0)                                           -> x14
+    v258 Imm(3)                                           -> x14
+    v259 Imm(2)                                           -> x14
+    v260 Imm(0)                                           -> x14
+    v261 Imm(2)                                           -> x14
+    v262 Imm(1)                                           -> x14
+    v263 Imm(0)                                           -> x14
+    v264 Imm(2)                                           -> x14
+    v265 Imm(16)                                          -> x14
+    v266 Imm(0)                                           -> x14
+    v267 Imm(0)                                           -> x14
+    v268 Imm(2)                                           -> x14
+    v269 Imm(1)                                           -> x14
+    v270 Imm(4294967296)                                  -> x14
+    v271 Imm(1)                                           -> x14
+    v272 Imm(8)                                           -> x14
+    v273 Imm(0)                                           -> x14
+    v274 LoadLocal { off=-7, kind=I64 }                   -> x14
+    v275 Imm(0)                                           -> x14
+    v276 Imm(2)                                           -> x14
+    v277 Imm(16)                                          -> x14
+    v278 Imm(0)                                           -> x14
+    v279 LoadLocal { off=-6, kind=I64 }                   -> x14
+    v280 BinopI { op=shl, lhs=v115, rhs_imm=1 }           -> x6
+    v281 Binop { op=add, lhs=v114, rhs=v280 }             -> x6
+    v282 Imm(0)                                           -> x14
+    v283 Imm(2)                                           -> x14
+    v284 Imm(1)                                           -> x14
+    v285 Imm(0)                                           -> x14
+    v286 Imm(1)                                           -> x14
+    v287 Imm(1)                                           -> x14
+    v288 Imm(0)                                           -> x14
+    v289 Imm(1)                                           -> x14
+    v290 Imm(8)                                           -> x14
+    v291 Imm(0)                                           -> x14
+    v292 Imm(0)                                           -> x14
+    v293 Imm(1)                                           -> x14
+    v294 Imm(0)                                           -> x14
+    v295 Imm(0)                                           -> x14
+    v296 Imm(0)                                           -> x14
+    v297 Imm(0)                                           -> x14
+    v298 Imm(0)                                           -> x14
+    v299 LoadLocal { off=-8, kind=I64 }                   -> x14
+    v300 Imm(0)                                           -> x14
+    v301 Imm(1)                                           -> x14
+    v302 Imm(8)                                           -> x14
+    v303 Imm(0)                                           -> x14
+    v304 LoadLocal { off=-7, kind=I64 }                   -> x14
+    v305 BinopI { op=shl, lhs=v114, rhs_imm=1 }           -> x2
+    v306 Binop { op=add, lhs=v113, rhs=v305 }             -> x2
+    v307 Imm(0)                                           -> x14
+    v308 Imm(1)                                           -> x14
+    v309 Imm(0)                                           -> x14
+    v310 Imm(0)                                           -> x14
+    v311 Imm(0)                                           -> x14
+    v312 Imm(0)                                           -> x14
+    terminator Jmp(b5)   (exit_acc=v312)
+  block 5  start_pc=0
+    v313 Imm(0)                                           -> x14
+    v314 Imm(0)                                           -> x14
+    v315 LoadLocal { off=-10, kind=I64 }                  -> x14
+    v316 Imm(0)                                           -> x14
+    v317 LoadLocal { off=-8, kind=I64 }                   -> x14
+    v318 BinopI { op=shl, lhs=v113, rhs_imm=1 }           -> x1
+    v319 Binop { op=xor, lhs=v120, rhs=v318 }             -> x1
+    v320 Imm(0)                                           -> x7
+    terminator Jmp(b6)   (exit_acc=v319)
+  block 6  start_pc=0
+    v113 Phi { incoming=[b2:v15, b5:v319], kind=I64 }     -> x1
+    v114 Phi { incoming=[b2:v28, b5:v306], kind=I64 }     -> x2
+    v115 Phi { incoming=[b2:v41, b5:v281], kind=I64 }     -> x6
+    v116 Phi { incoming=[b2:v54, b5:v256], kind=I64 }     -> x8
+    v117 Phi { incoming=[b2:v67, b5:v231], kind=I64 }     -> x9
+    v118 Phi { incoming=[b2:v80, b5:v206], kind=I64 }     -> x3
+    v119 Phi { incoming=[b2:v93, b5:v181], kind=I64 }     -> x12
+    v120 Phi { incoming=[b2:v106, b5:v156], kind=I64 }    -> x7
+    v121 Phi { incoming=[b2:v3, b5:v123], kind=I64 }      -> x13
+    v122 Extend { value=v121, kind=I32 }                  -> x0
+    v123 BinopI { op=add, lhs=v122, rhs_imm=-1 }          -> x13
+    v124 Imm(0)                                           -> x14
+    v125 BinopI { op=gt, lhs=v122, rhs_imm=0 }            -> x0
+    terminator Bnz { cond=v125, target=b3, fall=b7 }   (exit_acc=v125)
+  block 7  start_pc=0
+    v133 Imm(0)                                           -> x0
+    v134 Imm(0)                                           -> x13
+    v135 Imm(0)                                           -> x13
+    terminator Jmp(b8)   (exit_acc=v133)
+  block 8  start_pc=0
+    v321 Imm(0)                                           -> x0
+    v322 Imm(1)                                           -> x0
+    v323 LoadLocal { off=-12, kind=I64 }                  -> x0
+    v324 Imm(0)                                           -> x0
+    v325 Imm(0)                                           -> x0
+    v326 Imm(0)                                           -> x0
+    v327 Imm(0)                                           -> x0
+    v328 LoadLocal { off=-8, kind=I64 }                   -> x0
+    v329 BinopI { op=add, lhs=v113, rhs_imm=0 }           -> x0
+    v330 Imm(0)                                           -> x1
+    v331 Imm(0)                                           -> x1
+    v332 Imm(1)                                           -> x1
+    v333 Imm(0)                                           -> x1
+    v334 Imm(1)                                           -> x1
+    v335 Imm(1)                                           -> x1
+    v336 LoadLocal { off=-12, kind=I64 }                  -> x1
+    v337 Imm(0)                                           -> x1
+    v338 Imm(1)                                           -> x1
+    v339 Imm(8)                                           -> x1
+    v340 Imm(0)                                           -> x1
+    v341 LoadLocal { off=-7, kind=I64 }                   -> x1
+    v342 Binop { op=add, lhs=v329, rhs=v114 }             -> x0
+    v343 Imm(0)                                           -> x1
+    v344 Imm(1)                                           -> x1
+    v345 Imm(2)                                           -> x1
+    v346 Imm(0)                                           -> x1
+    v347 Imm(2)                                           -> x1
+    v348 Imm(1)                                           -> x1
+    v349 LoadLocal { off=-12, kind=I64 }                  -> x1
+    v350 Imm(0)                                           -> x1
+    v351 Imm(2)                                           -> x1
+    v352 Imm(16)                                          -> x1
+    v353 Imm(0)                                           -> x1
+    v354 LoadLocal { off=-6, kind=I64 }                   -> x1
+    v355 Binop { op=add, lhs=v342, rhs=v115 }             -> x0
+    v356 Imm(0)                                           -> x1
+    v357 Imm(2)                                           -> x1
+    v358 Imm(3)                                           -> x1
+    v359 Imm(0)                                           -> x1
+    v360 Imm(3)                                           -> x1
+    v361 Imm(1)                                           -> x1
+    v362 LoadLocal { off=-12, kind=I64 }                  -> x1
+    v363 Imm(0)                                           -> x1
+    v364 Imm(3)                                           -> x1
+    v365 Imm(24)                                          -> x1
+    v366 Imm(0)                                           -> x1
+    v367 LoadLocal { off=-5, kind=I64 }                   -> x1
+    v368 Binop { op=add, lhs=v355, rhs=v116 }             -> x0
+    v369 Imm(0)                                           -> x1
+    v370 Imm(3)                                           -> x1
+    v371 Imm(4)                                           -> x1
+    v372 Imm(0)                                           -> x1
+    v373 Imm(4)                                           -> x1
+    v374 Imm(1)                                           -> x1
+    v375 LoadLocal { off=-12, kind=I64 }                  -> x1
+    v376 Imm(0)                                           -> x1
+    v377 Imm(4)                                           -> x1
+    v378 Imm(32)                                          -> x1
+    v379 Imm(0)                                           -> x1
+    v380 LoadLocal { off=-4, kind=I64 }                   -> x1
+    v381 Binop { op=add, lhs=v368, rhs=v117 }             -> x0
+    v382 Imm(0)                                           -> x1
+    v383 Imm(4)                                           -> x1
+    v384 Imm(5)                                           -> x1
+    v385 Imm(0)                                           -> x1
+    v386 Imm(5)                                           -> x1
+    v387 Imm(1)                                           -> x1
+    v388 LoadLocal { off=-12, kind=I64 }                  -> x1
+    v389 Imm(0)                                           -> x1
+    v390 Imm(5)                                           -> x1
+    v391 Imm(40)                                          -> x1
+    v392 Imm(0)                                           -> x1
+    v393 LoadLocal { off=-3, kind=I64 }                   -> x1
+    v394 Binop { op=add, lhs=v381, rhs=v118 }             -> x0
+    v395 Imm(0)                                           -> x1
+    v396 Imm(5)                                           -> x1
+    v397 Imm(6)                                           -> x1
+    v398 Imm(0)                                           -> x1
+    v399 Imm(6)                                           -> x1
+    v400 Imm(1)                                           -> x1
+    v401 LoadLocal { off=-12, kind=I64 }                  -> x1
+    v402 Imm(0)                                           -> x1
+    v403 Imm(6)                                           -> x1
+    v404 Imm(48)                                          -> x1
+    v405 Imm(0)                                           -> x1
+    v406 LoadLocal { off=-2, kind=I64 }                   -> x1
+    v407 Binop { op=add, lhs=v394, rhs=v119 }             -> x0
+    v408 Imm(0)                                           -> x1
+    v409 Imm(6)                                           -> x1
+    v410 Imm(7)                                           -> x1
+    v411 Imm(0)                                           -> x1
+    v412 Imm(7)                                           -> x1
+    v413 Imm(1)                                           -> x1
+    v414 LoadLocal { off=-12, kind=I64 }                  -> x1
+    v415 Imm(0)                                           -> x1
+    v416 Imm(7)                                           -> x1
+    v417 Imm(56)                                          -> x1
+    v418 Imm(0)                                           -> x1
+    v419 LoadLocal { off=-1, kind=I64 }                   -> x1
+    v420 Binop { op=add, lhs=v407, rhs=v120 }             -> x0
+    v421 Imm(0)                                           -> x1
+    v422 Imm(7)                                           -> x1
+    v423 Imm(8)                                           -> x1
+    v424 Imm(0)                                           -> x1
+    v425 Imm(8)                                           -> x1
+    v426 Imm(0)                                           -> x1
+    terminator Jmp(b9)   (exit_acc=v426)
+  block 9  start_pc=0
+    v427 LoadLocal { off=-12, kind=I64 }                  -> x1
+    terminator Return(v420)   (exit_acc=v420)
+; --- SSA dump (ok=true) ent_pc=1 ---
+; name=main
+fn ent_pc=1 n_params=0 variadic=false locals=11
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> x1
+    terminator Jmp(b1)   (exit_acc=v1)
+  block 1  start_pc=0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(1)                                           -> x0
+    v5   LocalAddr(-8)                                    -> x0
+    v6   Imm(0)                                           -> x1
+    v7   Imm(0)                                           -> x1
+    v8   BinopI { op=add, lhs=v5, rhs_imm=0 }             -> x0
+    v9   Imm(0)                                           -> x1
+    v10  Imm(7)                                           -> x1
+    v11  Store { addr=v8, disp=0, value=v10, kind=I64 }   -> -
+    v12  Imm(0)                                           -> x0
+    v13  Imm(1)                                           -> x0
+    v14  Imm(0)                                           -> x0
+    v15  Imm(1)                                           -> x0
+    v16  Imm(1)                                           -> x0
+    v17  LocalAddr(-8)                                    -> x0
+    v18  Imm(1)                                           -> x1
+    v19  Imm(8)                                           -> x1
+    v20  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x1
+    v21  Imm(4369)                                        -> x1
+    v22  Imm(4376)                                        -> x1
+    v23  Store { addr=v17, disp=8, value=v22, kind=I64 }  -> -
+    v24  Imm(1)                                           -> x0
+    v25  Imm(2)                                           -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(2)                                           -> x0
+    v28  Imm(1)                                           -> x0
+    v29  LocalAddr(-8)                                    -> x0
+    v30  Imm(2)                                           -> x1
+    v31  Imm(16)                                          -> x1
+    v32  BinopI { op=add, lhs=v29, rhs_imm=16 }           -> x1
+    v33  Imm(8738)                                        -> x1
+    v34  Imm(8745)                                        -> x1
+    v35  Store { addr=v29, disp=16, value=v34, kind=I64 } -> -
+    v36  Imm(2)                                           -> x0
+    v37  Imm(3)                                           -> x0
+    v38  Imm(0)                                           -> x0
+    v39  Imm(3)                                           -> x0
+    v40  Imm(1)                                           -> x0
+    v41  LocalAddr(-8)                                    -> x0
+    v42  Imm(3)                                           -> x1
+    v43  Imm(24)                                          -> x1
+    v44  BinopI { op=add, lhs=v41, rhs_imm=24 }           -> x1
+    v45  Imm(13107)                                       -> x1
+    v46  Imm(13114)                                       -> x1
+    v47  Store { addr=v41, disp=24, value=v46, kind=I64 } -> -
+    v48  Imm(3)                                           -> x0
+    v49  Imm(4)                                           -> x0
+    v50  Imm(0)                                           -> x0
+    v51  Imm(4)                                           -> x0
+    v52  Imm(1)                                           -> x0
+    v53  LocalAddr(-8)                                    -> x0
+    v54  Imm(4)                                           -> x1
+    v55  Imm(32)                                          -> x1
+    v56  BinopI { op=add, lhs=v53, rhs_imm=32 }           -> x1
+    v57  Imm(17476)                                       -> x1
+    v58  Imm(17483)                                       -> x1
+    v59  Store { addr=v53, disp=32, value=v58, kind=I64 } -> -
+    v60  Imm(4)                                           -> x0
+    v61  Imm(5)                                           -> x0
+    v62  Imm(0)                                           -> x0
+    v63  Imm(5)                                           -> x0
+    v64  Imm(1)                                           -> x0
+    v65  LocalAddr(-8)                                    -> x0
+    v66  Imm(5)                                           -> x1
+    v67  Imm(40)                                          -> x1
+    v68  BinopI { op=add, lhs=v65, rhs_imm=40 }           -> x1
+    v69  Imm(21845)                                       -> x1
+    v70  Imm(21852)                                       -> x1
+    v71  Store { addr=v65, disp=40, value=v70, kind=I64 } -> -
+    v72  Imm(5)                                           -> x0
+    v73  Imm(6)                                           -> x0
+    v74  Imm(0)                                           -> x0
+    v75  Imm(6)                                           -> x0
+    v76  Imm(1)                                           -> x0
+    v77  LocalAddr(-8)                                    -> x0
+    v78  Imm(6)                                           -> x1
+    v79  Imm(48)                                          -> x1
+    v80  BinopI { op=add, lhs=v77, rhs_imm=48 }           -> x1
+    v81  Imm(26214)                                       -> x1
+    v82  Imm(26221)                                       -> x1
+    v83  Store { addr=v77, disp=48, value=v82, kind=I64 } -> -
+    v84  Imm(6)                                           -> x0
+    v85  Imm(7)                                           -> x0
+    v86  Imm(0)                                           -> x0
+    v87  Imm(7)                                           -> x0
+    v88  Imm(1)                                           -> x0
+    v89  LocalAddr(-8)                                    -> x0
+    v90  Imm(7)                                           -> x1
+    v91  Imm(56)                                          -> x1
+    v92  BinopI { op=add, lhs=v89, rhs_imm=56 }           -> x1
+    v93  Imm(30583)                                       -> x1
+    v94  Imm(30590)                                       -> x1
+    v95  Store { addr=v89, disp=56, value=v94, kind=I64 } -> -
+    v96  Imm(7)                                           -> x0
+    v97  Imm(8)                                           -> x0
+    v98  Imm(0)                                           -> x0
+    v99  Imm(8)                                           -> x0
+    v100 Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v100)
+  block 2  start_pc=0
+    v101 LocalAddr(-8)                                    -> x7
+    v102 Imm(5)                                           -> x6
+    v103 Call { target_pc=0, args=[v101, v102], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v104 BinopI { op=ne, lhs=v103, rhs_imm=21938052 }     -> x0
+    terminator Bz { cond=v104, target=b4, fall=b3 }   (exit_acc=v104)
+  block 3  start_pc=0
+    v105 Imm(1)                                           -> x0
+    terminator Return(v105)   (exit_acc=v105)
+  block 4  start_pc=0
+    v106 Imm(0)                                           -> x0
+    terminator Return(v106)   (exit_acc=v106)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=1
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)
+; --- SSA dump (ok=true) ent_pc=1 ---
+; name=__c5_entry
+fn ent_pc=1 n_params=2 variadic=false locals=6
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I64)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   LoadLocal { off=3, kind=I64 }                    -> x0
+    v6   BinopI { op=and, lhs=v3, rhs_imm=255 }           -> x0
+    v7   LoadLocal { off=2, kind=I64 }                    -> x0
+    v8   Imm(0)                                           -> x0
+    v9   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v10  Imm(0)                                           -> x3
+    v11  Load { addr=v1, disp=0, kind=I64 }               -> x0
+    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
+    v13  Extend { value=v11, kind=I32 }                   -> x0
+    v14  Imm(0)                                           -> x1
+    v15  Imm(8)                                           -> x1
+    v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
+    v17  Imm(0)                                           -> x1
+    v18  ImmData(24)                                      -> x1
+    v19  LoadLocal { off=-3, kind=I64 }                   -> x2
+    v20  LoadLocal { off=-2, kind=I32 }                   -> x2
+    v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x2
+    v22  Binop { op=add, lhs=v16, rhs=v21 }               -> x2
+    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x2
+    v24  Store { addr=v18, disp=0, value=v23, kind=I64 }  -> -
+    v25  LoadLocal { off=-2, kind=I32 }                   -> x1
+    v26  LoadLocal { off=-3, kind=I64 }                   -> x1
+    v27  Call { target_pc=3, args=[v13, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
+    v28  Call { target_pc=0, args=[v27], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Return(v10)   (exit_acc=v10)

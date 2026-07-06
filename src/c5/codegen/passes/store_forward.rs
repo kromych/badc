@@ -589,6 +589,7 @@ mod tests {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             has_returns_twice_call: false,
+            did_unroll: false,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,

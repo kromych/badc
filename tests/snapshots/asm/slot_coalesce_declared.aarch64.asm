@@ -321,44 +321,18 @@ Disassembly of section .text:
                	cset	x0, eq
                	cmp	x0, #0x0
                	cset	x2, ne
-               	sub	x0, x29, #0x50
-               	add	x0, x0, #0x0
-               	mov	x1, #0x3e8              // =1000
-               	str	x1, [x0]
-               	sub	x0, x29, #0x50
+               	mov	x0, #0x3e8              // =1000
                	mov	x1, #0x3e9              // =1001
-               	str	x1, [x0, #0x8]
-               	sub	x0, x29, #0x50
-               	mov	x1, #0x3ea              // =1002
-               	str	x1, [x0, #0x10]
-               	sub	x0, x29, #0x50
-               	mov	x1, #0x3eb              // =1003
-               	str	x1, [x0, #0x18]
-               	sub	x0, x29, #0x50
-               	mov	x1, #0x3ec              // =1004
-               	str	x1, [x0, #0x20]
-               	sub	x0, x29, #0x50
-               	mov	x1, #0x3ed              // =1005
-               	str	x1, [x0, #0x28]
-               	sub	x0, x29, #0x50
+               	mov	x3, #0x3ea              // =1002
+               	mov	x4, #0x3eb              // =1003
+               	mov	x5, #0x3ec              // =1004
+               	mov	x6, #0x3ed              // =1005
                	add	x0, x0, #0x0
-               	ldr	x0, [x0]
-               	add	x0, x0, #0x0
-               	sub	x1, x29, #0x50
-               	ldr	x1, [x1, #0x8]
                	add	x0, x0, x1
-               	sub	x1, x29, #0x50
-               	ldr	x1, [x1, #0x10]
-               	add	x0, x0, x1
-               	sub	x1, x29, #0x50
-               	ldr	x1, [x1, #0x18]
-               	add	x0, x0, x1
-               	sub	x1, x29, #0x50
-               	ldr	x1, [x1, #0x20]
-               	add	x0, x0, x1
-               	sub	x1, x29, #0x50
-               	ldr	x1, [x1, #0x28]
-               	add	x0, x0, x1
+               	add	x0, x0, x3
+               	add	x0, x0, x4
+               	add	x0, x0, x5
+               	add	x0, x0, x6
                	sxtw	x1, w2
                	mov	x20, #0x0               // =0
                	cbz	x1, <addr>

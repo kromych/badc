@@ -103,6 +103,10 @@ fn run_one(func: &mut FunctionSsa) {
             );
         }
         expand(func, &shape);
+        // Record that a loop was expanded: the post-inline scalar
+        // promotion re-runs mem2reg only on functions where unrolling
+        // turned an array subscript into a constant offset.
+        func.did_unroll = true;
     }
 }
 

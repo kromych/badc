@@ -79,9 +79,6 @@ Disassembly of section .text:
                	ret
 
 <simple>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x2, #0x0                // =0
                	mov	x1, x2
                	cmp	x2, x0
@@ -95,14 +92,9 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	b	<addr>
                	mov	x0, x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <heavy>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
                	mov	x2, #0x0                // =0
                	mov	x1, x2
                	cmp	x2, x0
@@ -125,8 +117,6 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	b	<addr>
                	mov	x0, x1
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <sum8>:

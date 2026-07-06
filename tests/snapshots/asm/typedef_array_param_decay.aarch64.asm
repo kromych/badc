@@ -29,9 +29,6 @@ Disassembly of section .text:
                	ret
 
 <sum>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x2, #0x0                // =0
                	mov	x1, x2
                	sxtw	x3, w1
@@ -46,8 +43,6 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	b	<addr>
                	mov	x0, x2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

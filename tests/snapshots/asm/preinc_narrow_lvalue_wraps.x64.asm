@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <preinc_u8_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movl	$0xff, %eax
                	xorq	%rdx, %rdx
                	incq	%rax
@@ -38,16 +35,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u16_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movl	$0xffff, %eax           # imm = 0xFFFF
                	xorq	%rdx, %rdx
                	incq	%rax
@@ -72,16 +64,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u32_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	xorq	%rdx, %rdx
                	incq	%rax
@@ -105,16 +92,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>
 
 <compound_u8_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movl	$0xf0, %eax
                	xorq	%rdx, %rdx
                	addq	$0x10, %rax
@@ -139,16 +121,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>
 
 <compound_u16_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movl	$0xfff0, %eax           # imm = 0xFFF0
                	xorq	%rdx, %rdx
                	addq	$0x10, %rax
@@ -173,8 +150,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>
@@ -219,7 +194,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rbx, %rbx
                	callq	<addr>
@@ -241,6 +216,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movslq	%ebx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x30, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

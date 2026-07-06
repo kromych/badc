@@ -534,7 +534,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x80
+               	sub	sp, sp, #0x10
                	str	x20, [sp]
                	mov	x20, #0x0               // =0
                	mov	x0, #0x5                // =5
@@ -675,7 +675,7 @@ Disassembly of section .text:
                	orr	x20, x20, x17
                	sxtw	x0, w20
                	ldr	x20, [sp]
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

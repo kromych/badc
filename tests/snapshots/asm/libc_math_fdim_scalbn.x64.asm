@@ -55,12 +55,10 @@ Disassembly of section .text:
 <fdimf>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	cvtss2sd	%xmm0, %xmm0
                	cvtss2sd	%xmm1, %xmm1
                	callq	<addr>
                	cvtsd2ss	%xmm0, %xmm0
-               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
 
@@ -85,13 +83,11 @@ Disassembly of section .text:
 <scalbnf>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movslq	%edi, %rdi
                	cvtss2sd	%xmm0, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	cvtsd2ss	%xmm0, %xmm0
-               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
 

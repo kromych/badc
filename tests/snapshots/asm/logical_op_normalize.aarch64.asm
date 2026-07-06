@@ -10,9 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x1, w1
                	mov	x3, #0x1                // =1
                	cbnz	x0, <addr>
@@ -21,15 +18,10 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x3, ne
                	mov	x0, x3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
 
 <or_rr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, gt
@@ -38,15 +30,10 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	cset	x3, ne
                	mov	x0, x3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
 
 <and_ll>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x1, w1
                	mov	x3, #0x0                // =0
                	cbz	x0, <addr>
@@ -55,15 +42,10 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x3, ne
                	mov	x0, x3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
 
 <and_rr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	sxtw	x1, w1
                	mov	x3, #0x0                // =0
@@ -71,8 +53,6 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	cset	x3, ne
                	mov	x0, x3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
 

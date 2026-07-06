@@ -11,20 +11,12 @@ Disassembly of section .text:
                	ud2
 
 <step>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movq	%rax, %xmm15
                	subss	%xmm15, %xmm0
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <blend>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x3f000000, %eax       # imm = 0x3F000000
                	movl	$0x3e800000, %ecx       # imm = 0x3E800000
                	movq	%rcx, %xmm15
@@ -33,8 +25,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	movapd	%xmm1, %xmm0
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -135,5 +125,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

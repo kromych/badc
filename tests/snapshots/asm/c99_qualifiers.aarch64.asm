@@ -17,9 +17,6 @@ Disassembly of section .text:
                	ret
 
 <read_one>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x3, #0x0                // =0
                	mov	x2, x3
                	cmp	x3, x1
@@ -29,8 +26,6 @@ Disassembly of section .text:
                	add	x3, x3, #0x1
                	b	<addr>
                	sxtw	x0, w2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

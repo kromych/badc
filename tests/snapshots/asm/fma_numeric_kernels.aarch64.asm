@@ -10,9 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	fsub	d1, d0, d1
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
@@ -27,15 +24,10 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d1, d17
                	cset	x0, mi
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
 
 <horner>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sub	x2, x1, #0x1
                	sxtw	x2, w2
                	lsl	x2, x2, #3
@@ -57,8 +49,6 @@ Disassembly of section .text:
                	fmadd	d1, d1, d0, d2
                	b	<addr>
                	fmov	d0, d1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <dot3>:
@@ -104,9 +94,6 @@ Disassembly of section .text:
                	ret
 
 <rk4_step>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fmul	d2, d1, d17
@@ -123,8 +110,6 @@ Disassembly of section .text:
                	fmadd	d2, d16, d2, d3
                	fadd	d2, d2, d4
                	fmadd	d0, d1, d2, d0
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

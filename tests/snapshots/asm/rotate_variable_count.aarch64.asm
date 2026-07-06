@@ -15,9 +15,6 @@ Disassembly of section .text:
                	ret
 
 <ref_ror>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x3, #0x0                // =0
                	mov	x2, x3
                	sxtw	x4, w3
@@ -34,8 +31,6 @@ Disassembly of section .text:
                	cbz	x4, <addr>
                	b	<addr>
                	mov	x0, x2
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x4, x3, x1
                	mov	x17, #0x3f              // =63

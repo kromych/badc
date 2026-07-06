@@ -44,12 +44,10 @@ Disassembly of section .text:
 <fdimf>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
                	fcvt	d0, s0
                	fcvt	d1, s1
                	bl	<addr>
                	fcvt	s0, d0
-               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -80,14 +78,14 @@ Disassembly of section .text:
 <scalbnf>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
+               	sub	sp, sp, #0x10
                	str	x19, [sp]
                	sxtw	x0, w0
                	fcvt	d0, s0
                	bl	<addr>
                	fcvt	s0, d0
                	ldr	x19, [sp]
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

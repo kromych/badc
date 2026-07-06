@@ -14,14 +14,9 @@ Disassembly of section .text:
                	ret
 
 <self_referencing_rhs>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x5                // =5
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <store_consumed_after_branch_is_silenced>:

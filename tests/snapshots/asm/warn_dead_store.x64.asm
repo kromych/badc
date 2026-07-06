@@ -15,14 +15,9 @@ Disassembly of section .text:
                	retq
 
 <self_referencing_rhs>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x5, %eax
                	incq	%rax
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <store_consumed_after_branch_is_silenced>:
@@ -67,4 +62,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

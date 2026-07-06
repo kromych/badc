@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <widen>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
                	leaq	0x1(%rdi), %rax
                	addq	$0x2, %rax
                	addq	$0x3, %rax
@@ -30,14 +27,9 @@ Disassembly of section .text:
                	addq	$0xe, %rax
                	addq	$0xf, %rax
                	addq	$0x10, %rax
-               	addq	$0x80, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	xorq	%rax, %rax
                	incq	%rax
                	addq	$0x2, %rax
@@ -79,7 +71,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
-               	addb	%al, (%rax)

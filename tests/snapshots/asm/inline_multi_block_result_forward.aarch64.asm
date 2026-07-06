@@ -15,14 +15,9 @@ Disassembly of section .text:
                	ret
 
 <helper_two>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	lsl	x0, x0, #1
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <test>:

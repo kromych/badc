@@ -11,17 +11,12 @@ Disassembly of section .text:
                	ud2
 
 <classify>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movslq	%edi, %rdi
                	xorq	%rax, %rax
                	cmpq	$0x2, %rdi
                	jl	<addr>
                	jmp	<addr>
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
                	movl	$0xa, %ecx
                	addq	%rcx, %rax
@@ -68,4 +63,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

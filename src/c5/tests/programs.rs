@@ -2075,6 +2075,14 @@ fn init_brace_intermediate_cast() {
 }
 
 #[test]
+fn dead_local_load_frame_elide() {
+    // C99 6.2.4p2: a local that is never observed needs no storage. A
+    // promotion-orphaned slot load with no consumers emits no code and
+    // must not force a frame; a volatile access (5.1.2.3p2) keeps it.
+    assert_eq!(run_fixture("dead_local_load_frame_elide.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec

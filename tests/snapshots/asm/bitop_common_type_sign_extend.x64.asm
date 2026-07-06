@@ -35,9 +35,6 @@ Disassembly of section .text:
                	retq
 
 <pc_advance>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movzbq	(%rdi), %rax
                	shlq	$0x18, %rax
                	movl	%eax, %eax
@@ -52,8 +49,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	addq	%rsi, %rax
                	subq	%rsi, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -144,4 +139,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

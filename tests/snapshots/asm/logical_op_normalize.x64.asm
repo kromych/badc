@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <or_ll>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%esi, %rsi
                	movl	$0x1, %ecx
                	testq	%rdi, %rdi
@@ -25,15 +22,10 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
 
 <or_rr>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	testq	%rdi, %rdi
                	setg	%al
@@ -45,15 +37,10 @@ Disassembly of section .text:
                	setne	%dl
                	movzbq	%dl, %rdx
                	movq	%rdx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
 
 <and_ll>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
                	testq	%rdi, %rdi
@@ -65,15 +52,10 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
 
 <and_rr>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
@@ -83,8 +65,6 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
 

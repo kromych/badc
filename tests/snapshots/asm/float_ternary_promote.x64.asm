@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <sel>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movslq	%edi, %rdi
                	movapd	%xmm0, %xmm2
                	testq	%rdi, %rdi
@@ -21,8 +18,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movapd	%xmm1, %xmm2
                	movapd	%xmm2, %xmm0
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -171,4 +166,4 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

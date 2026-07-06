@@ -18,38 +18,23 @@ Disassembly of section .text:
                	retq
 
 <widen>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	leaq	(%rdi,%rsi), %rax
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <sgn>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movq	%rdi, %rax
                	imulq	%rsi, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	setl	%al
                	movzbq	%al, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <pick>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	leaq	(%rsi,%rdx), %rax
                	movslq	%eax, %rax
                	movslq	(%rdi,%rax,4), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <uwrap>:
@@ -164,5 +149,3 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

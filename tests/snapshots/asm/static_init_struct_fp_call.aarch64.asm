@@ -30,13 +30,10 @@ Disassembly of section .text:
                	ldr	x0, [x20]
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
+               	mov	x0, x1
+               	mov	x1, x2
                	blr	x9
-               	add	sp, sp, #0x20
                	sxtw	x0, w0
                	cmp	x0, #0x5
                	b.eq	<addr>
@@ -49,13 +46,10 @@ Disassembly of section .text:
                	ldr	x0, [x20, #0x8]
                	mov	x1, #0xa                // =10
                	mov	x2, #0x4                // =4
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
+               	mov	x0, x1
+               	mov	x1, x2
                	blr	x9
-               	add	sp, sp, #0x20
                	sxtw	x0, w0
                	cmp	x0, #0x6
                	b.eq	<addr>

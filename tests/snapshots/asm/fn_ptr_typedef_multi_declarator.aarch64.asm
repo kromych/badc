@@ -62,11 +62,8 @@ Disassembly of section .text:
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
                	sub	x0, x29, #0x28
-               	str	x0, [sp, #-0x10]!
                	mov	x9, x21
-               	ldr	x0, [sp]
                	blr	x9
-               	add	sp, sp, #0x10
                	sub	x1, x29, #0x28
                	cmp	x0, x1
                	b.eq	<addr>
@@ -78,11 +75,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x28
-               	str	x0, [sp, #-0x10]!
                	mov	x9, x21
-               	ldr	x0, [sp]
                	blr	x9
-               	add	sp, sp, #0x10
                	sub	x1, x29, #0x28
                	cmp	x0, x1
                	b.eq	<addr>

@@ -30,15 +30,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x2, #0x42               // =66
                	mov	x3, #0x1a4              // =420
-               	str	x3, [sp, #-0x10]!
-               	str	x2, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
                	mov	x9, x1
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
-               	ldr	x2, [sp, #0x20]
+               	mov	x1, x2
+               	mov	x2, x3
                	blr	x9
-               	add	sp, sp, #0x30
                	sxtw	x24, w0
                	cmp	x24, #0x0
                	b.ge	<addr>
@@ -53,13 +48,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x400              // =1024
-               	str	x1, [sp, #-0x10]!
-               	str	x24, [sp, #-0x10]!
                	mov	x9, x23
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
+               	mov	x0, x24
                	blr	x9
-               	add	sp, sp, #0x20
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
@@ -74,13 +65,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x29, #0xb8
-               	str	x1, [sp, #-0x10]!
-               	str	x24, [sp, #-0x10]!
                	mov	x9, x22
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
+               	mov	x0, x24
                	blr	x9
-               	add	sp, sp, #0x20
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
@@ -112,11 +99,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	str	x24, [sp, #-0x10]!
                	mov	x9, x20
-               	ldr	x0, [sp]
+               	mov	x0, x24
                	blr	x9
-               	add	sp, sp, #0x10
                	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

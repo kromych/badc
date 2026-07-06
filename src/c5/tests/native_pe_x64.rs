@@ -784,6 +784,8 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("aggregate_init_struct_member_copy.c", 0),
     ("computed_goto.c", 0),
     ("label_addr_array_init.c", 0),
+    ("static_init_once_guard.c", 0),
+    ("computed_goto_static_table.c", 0),
     ("sieve_of_eratosthenes.c", 0),
     ("static_neg_infinity_init.c", 0),
     ("sub_word_return_narrow.c", 0),

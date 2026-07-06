@@ -21,8 +21,7 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	testq	%rdi, %rdi
                	jle	<addr>
-               	leaq	-0x1(%rdi), %rax
-               	movslq	%eax, %rdi
+               	decq	%rdi
                	callq	<addr>
                	xorq	%rax, %rax
                	popq	%rbp

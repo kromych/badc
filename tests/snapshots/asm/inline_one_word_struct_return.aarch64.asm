@@ -47,13 +47,12 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	b	<addr>
-               	add	x2, x1, #0x1
-               	sxtw	x2, w2
+               	add	x3, x1, #0x1
+               	sxtw	x3, w3
                	mov	x17, #0xa               // =10
-               	mul	x2, x2, x17
-               	add	x0, x0, x2
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
+               	mul	x3, x3, x17
+               	add	x0, x0, x3
+               	add	x1, x2, #0x1
                	sxtw	x2, w1
                	cmp	x2, #0x5
                	b.lt	<addr>

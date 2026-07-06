@@ -13,202 +13,169 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	mov	x1, x2
                	b	<addr>
-               	sxtw	x3, w1
                	lsl	x4, x3, #7
                	add	x4, x0, x4
                	add	x4, x4, #0x0
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x0
-               	sxtw	x3, w3
-               	str	x3, [x4]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	add	x3, x3, #0x0
-               	ldr	x3, [x3]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x0
+               	sxtw	x5, w5
+               	str	x5, [x4]
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x1
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x8]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x8]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	add	x4, x4, #0x0
+               	ldr	x4, [x4]
+               	add	x2, x2, x4
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x2
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x10]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x10]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x1
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x8]
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x3
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x18]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x18]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	ldr	x4, [x4, #0x8]
+               	add	x2, x2, x4
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x4
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x20]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x20]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x2
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x10]
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x5
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x28]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x28]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	ldr	x4, [x4, #0x10]
+               	add	x2, x2, x4
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x6
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x30]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x30]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x3
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x18]
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x7
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x38]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x38]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	ldr	x4, [x4, #0x18]
+               	add	x2, x2, x4
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x8
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x40]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x40]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x4
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x20]
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0x9
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x48]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x48]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	ldr	x4, [x4, #0x20]
+               	add	x2, x2, x4
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0xa
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x50]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x50]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x5
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x28]
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0xb
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x58]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x58]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	ldr	x4, [x4, #0x28]
+               	add	x2, x2, x4
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0xc
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x60]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x60]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x6
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x30]
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0xd
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x68]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x68]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	ldr	x4, [x4, #0x30]
+               	add	x2, x2, x4
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0xe
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x70]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x70]
-               	add	x2, x2, x3
-               	sxtw	x3, w1
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x7
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x38]
                	lsl	x4, x3, #7
                	add	x4, x0, x4
-               	lsl	x3, x3, #4
-               	add	x3, x3, #0xf
-               	sxtw	x3, w3
-               	str	x3, [x4, #0x78]
-               	sxtw	x3, w1
-               	lsl	x3, x3, #7
-               	add	x3, x0, x3
-               	ldr	x3, [x3, #0x78]
-               	add	x2, x2, x3
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
+               	ldr	x4, [x4, #0x38]
+               	add	x2, x2, x4
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x8
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x40]
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	ldr	x4, [x4, #0x40]
+               	add	x2, x2, x4
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0x9
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x48]
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	ldr	x4, [x4, #0x48]
+               	add	x2, x2, x4
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0xa
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x50]
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	ldr	x4, [x4, #0x50]
+               	add	x2, x2, x4
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0xb
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x58]
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	ldr	x4, [x4, #0x58]
+               	add	x2, x2, x4
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0xc
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x60]
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	ldr	x4, [x4, #0x60]
+               	add	x2, x2, x4
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0xd
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x68]
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	ldr	x4, [x4, #0x68]
+               	add	x2, x2, x4
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0xe
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x70]
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	ldr	x4, [x4, #0x70]
+               	add	x2, x2, x4
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	lsl	x5, x3, #4
+               	add	x5, x5, #0xf
+               	sxtw	x5, w5
+               	str	x5, [x4, #0x78]
+               	lsl	x4, x3, #7
+               	add	x4, x0, x4
+               	ldr	x4, [x4, #0x78]
+               	add	x2, x2, x4
+               	add	x1, x3, #0x1
                	sxtw	x3, w1
                	cmp	x3, #0x4
                	b.lt	<addr>
@@ -224,9 +191,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x20, x1
                	b	<addr>
-               	sxtw	x0, w1
                	add	x20, x20, x0
-               	sxtw	x0, w1
                	add	x1, x0, #0x1
                	sxtw	x0, w1
                	cmp	x0, #0x40

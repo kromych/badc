@@ -83,19 +83,19 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rdx, %rdx
                	imulq	$0x21, %rcx, %r13
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
                	addq	%r13, %rax
                	movl	$0x1, %edx
                	imulq	$0x21, %rax, %r13
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
                	addq	%r13, %rax
                	movl	$0x2, %edx
                	imulq	$0x21, %rax, %r13
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
                	leaq	(%r13,%rax), %rcx

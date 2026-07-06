@@ -34,17 +34,15 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x0                // =0
                	b	<addr>
-               	sub	x0, x29, #0x508
-               	sxtw	x2, w1
-               	lsl	x3, x2, #2
-               	add	x0, x0, x3
-               	scvtf	d0, x2
+               	sub	x2, x29, #0x508
+               	lsl	x3, x0, #2
+               	add	x2, x2, x3
+               	scvtf	d0, x0
                	fcvt	s0, d0
-               	mov	x2, #0x3e800000         // =1048576000
-               	fmov	s17, w2
+               	mov	x3, #0x3e800000         // =1048576000
+               	fmov	s17, w3
                	fmul	s0, s0, s17
-               	str	s0, [x0]
-               	sxtw	x0, w1
+               	str	s0, [x2]
                	add	x1, x0, #0x1
                	sxtw	x0, w1
                	cmp	x0, #0x40

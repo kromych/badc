@@ -184,7 +184,7 @@ Disassembly of section .text:
                	b.ge	<addr>
                	sub	x0, x20, #0x2
                	sxtw	x21, w0
-               	sxtw	x0, w20
+               	mov	x0, x20
                	bl	<addr>
                	sxtw	x1, w21
                	cmp	x0, x1

@@ -45,8 +45,7 @@ Disassembly of section .text:
                	addq	$0x230, %rsp            # imm = 0x230
                	popq	%rbp
                	retq
-               	movslq	%eax, %rax
-               	cmpq	$0x7, %rax
+               	cmpq	$0x7, %rcx
                	je	<addr>
                	movl	$0xd, %eax
                	addq	$0x230, %rsp            # imm = 0x230
@@ -75,3 +74,5 @@ Disassembly of section .text:
                	addq	$0x230, %rsp            # imm = 0x230
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

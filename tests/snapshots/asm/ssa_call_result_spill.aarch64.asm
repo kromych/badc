@@ -40,25 +40,24 @@ Disassembly of section .text:
                	mov	x2, #0x8000             // =32768
                	mov	x1, #0x0                // =0
                	b	<addr>
-               	ror	x0, x5, #0xe
-               	ror	x10, x5, #0x12
-               	eor	x0, x0, x10
-               	ror	x10, x5, #0x29
-               	eor	x0, x0, x10
-               	and	x10, x5, x4
-               	mvn	x11, x5
-               	and	x11, x11, x3
+               	ror	x10, x5, #0xe
+               	ror	x11, x5, #0x12
                	eor	x10, x10, x11
-               	add	x0, x0, x10
-               	add	x0, x0, x2
-               	ror	x2, x9, #0xe
-               	ror	x10, x9, #0x12
-               	eor	x2, x2, x10
-               	ror	x10, x9, #0x29
-               	eor	x2, x2, x10
-               	add	x6, x6, x0
-               	add	x2, x0, x2
-               	sxtw	x0, w1
+               	ror	x11, x5, #0x29
+               	eor	x10, x10, x11
+               	and	x11, x5, x4
+               	mvn	x12, x5
+               	and	x12, x12, x3
+               	eor	x11, x11, x12
+               	add	x10, x10, x11
+               	add	x2, x10, x2
+               	ror	x10, x9, #0xe
+               	ror	x11, x9, #0x12
+               	eor	x10, x10, x11
+               	ror	x11, x9, #0x29
+               	eor	x10, x10, x11
+               	add	x6, x6, x2
+               	add	x2, x2, x10
                	add	x1, x0, #0x1
                	mov	x16, x3
                	mov	x3, x4

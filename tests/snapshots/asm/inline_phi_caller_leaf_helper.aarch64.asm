@@ -30,25 +30,23 @@ Disassembly of section .text:
                	movk	x4, #0x3c6e, lsl #16
                	mov	x3, #0x0                // =0
                	b	<addr>
-               	mov	w2, w6
-               	mov	w7, w5
+               	mov	w7, w6
+               	mov	w8, w5
                	mov	w4, w4
-               	mov	w2, w2
                	mov	w7, w7
-               	and	x7, x2, x7
-               	mvn	x2, x2
-               	mov	w2, w2
+               	mov	w8, w8
+               	and	x8, x7, x8
+               	mvn	x7, x7
+               	mov	w7, w7
                	mov	w4, w4
-               	and	x2, x2, x4
-               	eor	x2, x7, x2
-               	sxtw	x4, w3
-               	ldr	w4, [x0, x4, lsl #2]
-               	add	x2, x2, x4
-               	mov	w2, w2
+               	and	x4, x7, x4
+               	eor	x4, x8, x4
+               	ldr	w7, [x0, x2, lsl #2]
+               	add	x4, x4, x7
+               	mov	w7, w4
                	mov	w4, w5
                	mov	w5, w6
-               	mov	w6, w2
-               	sxtw	x2, w3
+               	mov	w6, w7
                	add	x3, x2, #0x1
                	sxtw	x2, w3
                	cmp	x2, x1

@@ -23,7 +23,6 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.le	<addr>
                	sub	x0, x0, #0x1
-               	sxtw	x0, w0
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]

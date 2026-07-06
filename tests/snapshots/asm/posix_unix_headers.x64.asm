@@ -17,7 +17,6 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rax
                	xorq	%rdx, %rdx
                	jmp	<addr>
-               	movslq	%edx, %rcx
                	addq	%rax, %rcx
                	xorq	%rsi, %rsi
                	movb	%sil, (%rcx)
@@ -133,4 +132,4 @@ Disassembly of section .text:
                	addq	$0x240, %rsp            # imm = 0x240
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

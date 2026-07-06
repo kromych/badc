@@ -14,55 +14,54 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	movl	$0x1, %ecx
                	jmp	<addr>
-               	imulq	$0x64, %rcx, %rax
-               	addq	$0x0, %rax
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	incq	%rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0x2, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0x3, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0x4, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0x5, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0x6, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0x7, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0x8, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0x9, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0xa, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0xb, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0xc, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0xd, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0xe, %rdx
-               	addq	%rdx, %rax
-               	imulq	$0x64, %rcx, %rdx
-               	addq	$0xf, %rdx
-               	addq	%rax, %rdx
-               	movslq	%ecx, %rax
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0x0, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	incq	%rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0x2, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0x3, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0x4, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0x5, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0x6, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0x7, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0x8, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0x9, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0xa, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0xb, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0xc, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0xd, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0xe, %rsi
+               	addq	%rsi, %rdx
+               	imulq	$0x64, %rcx, %rsi
+               	addq	$0xf, %rsi
+               	addq	%rsi, %rdx
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
                	cmpq	$0x5, %rax
@@ -83,3 +82,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

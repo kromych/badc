@@ -47,15 +47,14 @@ Disassembly of section .text:
                	leaq	-0x2(%rsi), %rax
                	movslq	%eax, %rcx
                	jmp	<addr>
-               	movslq	%ecx, %rax
-               	shlq	$0x3, %rax
-               	addq	%rdi, %rax
-               	movsd	(%rax,%riz), %xmm2
+               	movq	%rax, %rdx
+               	shlq	$0x3, %rdx
+               	addq	%rdi, %rdx
+               	movsd	(%rdx,%riz), %xmm2
                	movapd	%xmm1, %xmm14
                	movapd	%xmm0, %xmm15
                	movapd	%xmm2, %xmm1
                	vfmadd231sd	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm14 * xmm15) + xmm1
-               	movslq	%ecx, %rax
                	leaq	-0x1(%rax), %rcx
                	movslq	%ecx, %rax
                	testq	%rax, %rax
@@ -210,48 +209,42 @@ Disassembly of section .text:
                	retq
                	xorq	%rcx, %rcx
                	jmp	<addr>
-               	xorq	%rdx, %rdx
+               	xorq	%rsi, %rsi
                	jmp	<addr>
-               	leaq	-0x70(%rbp), %rax
-               	movslq	%ecx, %rsi
-               	imulq	$0x18, %rsi, %rdi
-               	addq	%rdi, %rax
-               	movslq	%edx, %rdi
-               	movq	%rdi, %r8
+               	leaq	-0x70(%rbp), %rdi
+               	imulq	$0x18, %rax, %r8
+               	addq	%r8, %rdi
+               	movq	%rdx, %r8
                	shlq	$0x3, %r8
-               	addq	%r8, %rax
-               	leaq	(%rsi,%rsi,2), %rsi
-               	addq	%rdi, %rsi
-               	incq	%rsi
-               	movslq	%esi, %rsi
-               	cvtsi2sd	%rsi, %xmm0
-               	movsd	%xmm0, (%rax,%riz)
-               	leaq	-0xb8(%rbp), %rax
-               	movslq	%ecx, %rsi
-               	imulq	$0x18, %rsi, %rdi
-               	addq	%rdi, %rax
-               	movslq	%edx, %rdi
-               	movq	%rdi, %r8
+               	addq	%r8, %rdi
+               	leaq	(%rax,%rax,2), %r8
+               	addq	%rdx, %r8
+               	incq	%r8
+               	movslq	%r8d, %r8
+               	cvtsi2sd	%r8, %xmm0
+               	movsd	%xmm0, (%rdi,%riz)
+               	leaq	-0xb8(%rbp), %rdi
+               	imulq	$0x18, %rax, %r8
+               	addq	%r8, %rdi
+               	movq	%rdx, %r8
                	shlq	$0x3, %r8
-               	addq	%r8, %rax
-               	cmpq	%rdi, %rsi
+               	addq	%r8, %rdi
+               	cmpq	%rdx, %rax
                	jne	<addr>
-               	movabsq	$0x3ff0000000000000, %rsi # imm = 0x3FF0000000000000
-               	movq	%rsi, %xmm14
+               	movabsq	$0x3ff0000000000000, %r8 # imm = 0x3FF0000000000000
+               	movq	%r8, %xmm14
                	movsd	%xmm14, -0xf8(%rbp,%riz)
                	movsd	-0xf8(%rbp,%riz), %xmm0
-               	movsd	%xmm0, (%rax,%riz)
+               	movsd	%xmm0, (%rdi,%riz)
                	jmp	<addr>
-               	xorq	%rsi, %rsi
-               	movq	%rsi, %xmm14
+               	xorq	%r8, %r8
+               	movq	%r8, %xmm14
                	movsd	%xmm14, -0xf8(%rbp,%riz)
                	jmp	<addr>
-               	movslq	%edx, %rax
-               	leaq	0x1(%rax), %rdx
-               	movslq	%edx, %rax
-               	cmpq	$0x3, %rax
+               	leaq	0x1(%rdx), %rsi
+               	movslq	%esi, %rdx
+               	cmpq	$0x3, %rdx
                	jl	<addr>
-               	movslq	%ecx, %rax
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
                	cmpq	$0x3, %rax
@@ -262,8 +255,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x70(%rbp), %rdi
                	leaq	-0xb8(%rbp), %rsi
-               	movslq	%ebx, %rdx
-               	movslq	%r12d, %rcx
+               	movq	%rbx, %rdx
+               	movq	%r12, %rcx
                	callq	<addr>
                	leaq	-0x70(%rbp), %rax
                	movslq	%ebx, %rcx
@@ -919,5 +912,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

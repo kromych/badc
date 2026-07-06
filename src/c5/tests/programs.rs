@@ -2160,6 +2160,20 @@ fn narrow_param_entry_extend() {
 }
 
 #[test]
+fn qsort_scan_extend_dedup() {
+    // One sign-extension result per (value, kind): re-extensions at
+    // dominated positions redirect to the dominating one.
+    assert_eq!(run_fixture("qsort_scan_extend_dedup.c"), 0);
+}
+
+#[test]
+fn call_arg_extend_drop() {
+    // The caller-side re-extension of a direct-call argument drops
+    // only when the callee re-derives the parameter from the low bits.
+    assert_eq!(run_fixture("call_arg_extend_drop.c"), 0);
+}
+
+#[test]
 fn indirect_call_narrow_scalar_args() {
     // C99 6.5.2.2p7: a non-variadic indirect call converts each
     // argument to the pointee prototype's parameter type; narrow

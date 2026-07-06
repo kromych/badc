@@ -93,12 +93,10 @@ Disassembly of section .text:
                	str	x19, [sp, #0x50]
                	mov	x1, #0x0                // =0
                	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	sxtw	x2, w1
-               	add	x3, x2, #0x1
-               	str	w3, [x0, x2, lsl #2]
-               	sxtw	x0, w1
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	add	x3, x0, #0x1
+               	str	w3, [x2, x0, lsl #2]
                	add	x1, x0, #0x1
                	sxtw	x0, w1
                	cmp	x0, #0x40
@@ -187,7 +185,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x250
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x1, w0
                	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x16, #0x0               // =0
@@ -407,42 +404,34 @@ Disassembly of section .text:
                	mov	x17, #0x5               // =5
                	mul	x1, x1, x17
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	ldrsw	x2, [x0, #0x44]
                	mov	x17, #0x5               // =5
                	mul	x2, x2, x17
                	add	x2, x2, #0x2
-               	sxtw	x2, w2
                	ldrsw	x3, [x0, #0x48]
                	mov	x17, #0x5               // =5
                	mul	x3, x3, x17
                	add	x3, x3, #0x3
-               	sxtw	x3, w3
                	ldrsw	x4, [x0, #0x4c]
                	mov	x17, #0x5               // =5
                	mul	x4, x4, x17
                	add	x4, x4, #0x4
-               	sxtw	x4, w4
                	ldrsw	x5, [x0, #0x50]
                	mov	x17, #0x5               // =5
                	mul	x5, x5, x17
                	add	x5, x5, #0x5
-               	sxtw	x5, w5
                	ldrsw	x6, [x0, #0x54]
                	mov	x17, #0x5               // =5
                	mul	x6, x6, x17
                	add	x6, x6, #0x6
-               	sxtw	x6, w6
                	ldrsw	x7, [x0, #0x58]
                	mov	x17, #0x5               // =5
                	mul	x7, x7, x17
                	add	x7, x7, #0x7
-               	sxtw	x7, w7
                	ldrsw	x8, [x0, #0x5c]
                	mov	x17, #0x5               // =5
                	mul	x8, x8, x17
                	add	x8, x8, #0x8
-               	sxtw	x8, w8
                	ldrsw	x9, [x0, #0x60]
                	mov	x17, #0x5               // =5
                	mul	x9, x9, x17

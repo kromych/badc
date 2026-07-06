@@ -23,8 +23,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-               	leaq	-0x1(%rdx), %rax
-               	movslq	%eax, %rdx
+               	decq	%rdx
                	xchgq	%rsi, %rdi
                	popq	%rbp
                	jmp	<addr>

@@ -31,12 +31,10 @@ Disassembly of section .text:
                	ret
                	mov	x2, #0x8                // =8
                	b	<addr>
-               	sxtw	x1, w2
-               	add	x1, x0, x1
-               	ldrb	w1, [x1]
-               	cmp	x1, #0x0
+               	add	x3, x0, x1
+               	ldrb	w3, [x3]
+               	cmp	x3, #0x0
                	b.ne	<addr>
-               	sxtw	x1, w2
                	add	x2, x1, #0x1
                	sxtw	x1, w2
                	cmp	x1, #0x10

@@ -52,13 +52,13 @@ fn ent_pc=2 n_params=2 variadic=false locals=8
     v13  BinopI { op=add, lhs=v1, rhs_imm=20 }            -> x6
     v14  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
     v15  Load { addr=v1, disp=16, kind=I32 }              -> x0
-    v16  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x0
-    v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x1
-    v18  Extend { value=v16, kind=I32 }                   -> x2
+    v16  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x2
+    v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x0
+    v18  Extend { value=v16, kind=I32 }                   -> x0
     v19  Imm(16)                                          -> x15
     v20  Imm(32767)                                       -> [spill 0]
     v21  LoadLocal { off=3, kind=I64 }                    -> x0
-    v22  Call { target_pc=1, args=[v7, v13, v18, v19, v20, v3], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v22  Call { target_pc=1, args=[v7, v13, v16, v19, v20, v3], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v23  Store { addr=v1, disp=8, value=v22, kind=I64 }   -> -
     v24  LoadLocal { off=2, kind=I64 }                    -> x0
     v25  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x0
@@ -66,11 +66,11 @@ fn ent_pc=2 n_params=2 variadic=false locals=8
     v27  BinopI { op=add, lhs=v1, rhs_imm=36 }            -> x6
     v28  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x0
     v29  Load { addr=v1, disp=32, kind=I32 }              -> x0
-    v30  BinopI { op=add, lhs=v29, rhs_imm=1 }            -> x0
-    v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x1
-    v32  Extend { value=v30, kind=I32 }                   -> x2
+    v30  BinopI { op=add, lhs=v29, rhs_imm=1 }            -> x2
+    v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x0
+    v32  Extend { value=v30, kind=I32 }                   -> x0
     v33  LoadLocal { off=3, kind=I64 }                    -> x0
-    v34  Call { target_pc=1, args=[v26, v27, v32, v19, v20, v3], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v34  Call { target_pc=1, args=[v26, v27, v30, v19, v20, v3], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v35  Store { addr=v1, disp=24, value=v34, kind=I64 }  -> -
     v36  LoadLocal { off=-1, kind=I64 }                   -> x0
     v37  LoadLocal { off=2, kind=I64 }                    -> x0

@@ -20,11 +20,10 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
-               	mul	x1, x3, x17
-               	add	x1, x1, x2
-               	sxtw	x1, w1
-               	add	x3, x1, #0x1
-               	sxtw	x1, w2
+               	mul	x3, x3, x17
+               	add	x3, x3, x2
+               	sxtw	x3, w3
+               	add	x3, x3, #0x1
                	add	x2, x1, #0x1
                	sxtw	x1, w2
                	cmp	x1, x0

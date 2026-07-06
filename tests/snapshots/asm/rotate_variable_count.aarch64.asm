@@ -18,22 +18,20 @@ Disassembly of section .text:
                	mov	x3, #0x0                // =0
                	mov	x2, x3
                	b	<addr>
-               	mov	x4, #0x1                // =1
-               	sxtw	x5, w3
-               	lsl	x4, x4, x5
-               	and	x4, x0, x4
-               	cbz	x4, <addr>
-               	sub	x4, x3, x1
-               	mov	x17, #0x3f              // =63
-               	and	x4, x4, x17
                	mov	x5, #0x1                // =1
-               	sxtw	x4, w4
-               	lsl	x4, x5, x4
-               	orr	x2, x2, x4
+               	lsl	x5, x5, x4
+               	and	x5, x0, x5
+               	cbz	x5, <addr>
+               	sub	x5, x3, x1
+               	mov	x17, #0x3f              // =63
+               	and	x5, x5, x17
+               	mov	x6, #0x1                // =1
+               	sxtw	x5, w5
+               	lsl	x5, x6, x5
+               	orr	x2, x2, x5
                	b	<addr>
                	b	<addr>
-               	sxtw	x3, w3
-               	add	x3, x3, #0x1
+               	add	x3, x4, #0x1
                	sxtw	x4, w3
                	cmp	x4, #0x40
                	b.lt	<addr>

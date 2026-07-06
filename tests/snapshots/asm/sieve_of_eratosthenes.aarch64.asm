@@ -12,51 +12,46 @@ Disassembly of section .text:
                	brk	#<addr>:
                	mov	x1, #0x2                // =2
                	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	sxtw	x2, w1
-               	add	x0, x0, x2
-               	ldrb	w0, [x0]
-               	cmp	x0, #0x0
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	add	x2, x2, x0
+               	ldrb	w2, [x2]
+               	cmp	x2, #0x0
                	b.ne	<addr>
-               	mul	x0, x1, x1
-               	sxtw	x2, w0
-               	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	mul	x2, x1, x1
                	sxtw	x3, w2
-               	add	x0, x0, x3
-               	mov	x3, #0x1                // =1
-               	strb	w3, [x0]
-               	add	x2, x2, x1
-               	sxtw	x0, w2
+               	b	<addr>
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	add	x2, x4, x2
+               	mov	x4, #0x1                // =1
+               	strb	w4, [x2]
+               	add	x3, x3, x1
+               	sxtw	x2, w3
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
-               	cmp	x0, x17
+               	cmp	x2, x17
                	b.lt	<addr>
-               	sxtw	x0, w1
                	add	x1, x0, #0x1
                	sxtw	x0, w1
-               	mul	x0, x0, x0
+               	mul	x2, x0, x0
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
-               	cmp	x0, x17
+               	cmp	x2, x17
                	b.lt	<addr>
                	mov	x2, #0x0                // =0
                	mov	x1, #0x2                // =2
                	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	sxtw	x3, w1
-               	add	x0, x0, x3
-               	ldrb	w0, [x0]
-               	cmp	x0, #0x0
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	add	x3, x3, x0
+               	ldrb	w3, [x3]
+               	cmp	x3, #0x0
                	b.ne	<addr>
-               	sxtw	x0, w2
-               	add	x2, x0, #0x1
+               	sxtw	x2, w2
+               	add	x2, x2, #0x1
                	b	<addr>
                	b	<addr>
-               	sxtw	x0, w1
                	add	x1, x0, #0x1
                	sxtw	x0, w1
                	mov	x17, #0x86a0            // =34464

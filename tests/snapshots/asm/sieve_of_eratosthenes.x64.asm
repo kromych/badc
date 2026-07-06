@@ -13,45 +13,41 @@ Disassembly of section .text:
 <main>:
                	movl	$0x2, %ecx
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movslq	%ecx, %rdx
-               	addq	%rdx, %rax
-               	movsbq	(%rax), %rax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rdx
+               	addq	%rax, %rdx
+               	movsbq	(%rdx), %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
-               	movq	%rcx, %rax
-               	imulq	%rcx, %rax
-               	movslq	%eax, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rax
+               	movq	%rcx, %rdx
+               	imulq	%rcx, %rdx
                	movslq	%edx, %rsi
-               	addq	%rsi, %rax
-               	movl	$0x1, %esi
-               	movb	%sil, (%rax)
-               	addq	%rcx, %rdx
-               	movslq	%edx, %rax
-               	cmpq	$0x186a0, %rax          # imm = 0x186A0
+               	jmp	<addr>
+               	leaq	<rip>, %rdi
+               	addq	%rdi, %rdx
+               	movl	$0x1, %edi
+               	movb	%dil, (%rdx)
+               	addq	%rcx, %rsi
+               	movslq	%esi, %rdx
+               	cmpq	$0x186a0, %rdx          # imm = 0x186A0
                	jl	<addr>
-               	movslq	%ecx, %rax
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
-               	imulq	%rax, %rax
-               	cmpq	$0x186a0, %rax          # imm = 0x186A0
+               	movq	%rax, %rdx
+               	imulq	%rax, %rdx
+               	cmpq	$0x186a0, %rdx          # imm = 0x186A0
                	jl	<addr>
                	xorq	%rdx, %rdx
                	movl	$0x2, %ecx
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movslq	%ecx, %rsi
-               	addq	%rsi, %rax
-               	movsbq	(%rax), %rax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rsi
+               	addq	%rax, %rsi
+               	movsbq	(%rsi), %rsi
+               	testq	%rsi, %rsi
                	jne	<addr>
-               	movslq	%edx, %rax
-               	leaq	0x1(%rax), %rdx
+               	movslq	%edx, %rdx
+               	incq	%rdx
                	jmp	<addr>
                	jmp	<addr>
-               	movslq	%ecx, %rax
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
                	cmpq	$0x186a0, %rax          # imm = 0x186A0
@@ -66,3 +62,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

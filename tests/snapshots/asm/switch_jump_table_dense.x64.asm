@@ -195,7 +195,7 @@ Disassembly of section .text:
                	jge	<addr>
                	leaq	-0x2(%rbx), %rax
                	movslq	%eax, %r12
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	callq	<addr>
                	movslq	%r12d, %rcx
                	cmpq	%rcx, %rax

@@ -28,11 +28,9 @@ Disassembly of section .text:
                	mov	x3, #0x0                // =0
                	mov	x2, x3
                	b	<addr>
-               	sxtw	x4, w3
-               	ldr	x4, [x0, x4, lsl #3]
-               	add	x2, x2, x4
-               	sxtw	x3, w3
-               	add	x3, x3, #0x1
+               	ldr	x5, [x0, x4, lsl #3]
+               	add	x2, x2, x5
+               	add	x3, x4, #0x1
                	sxtw	x4, w3
                	cmp	x4, x1
                	b.lt	<addr>

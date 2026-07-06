@@ -75,27 +75,25 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	add	x0, x0, #0x0
                	b	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	sxtw	x3, w2
-               	lsl	x4, x3, #4
-               	add	x1, x1, x4
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	lsl	x4, x1, #4
+               	add	x3, x3, x4
                	mov	x17, #0xa               // =10
-               	mul	x3, x3, x17
-               	sxtw	x3, w3
+               	mul	x4, x1, x17
+               	sxtw	x4, w4
+               	sub	x5, x29, #0x70
+               	str	x4, [x5]
                	sub	x4, x29, #0x70
-               	str	x3, [x4]
-               	sub	x3, x29, #0x70
-               	mov	x4, #0x1                // =1
-               	str	x4, [x3, #0x8]
-               	sub	x3, x29, #0x70
+               	mov	x5, #0x1                // =1
+               	str	x5, [x4, #0x8]
+               	sub	x4, x29, #0x70
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x3]
-               	str	x10, [x1]
-               	ldr	x10, [x3, #0x8]
-               	str	x10, [x1, #0x8]
+               	ldr	x10, [x4]
+               	str	x10, [x3]
+               	ldr	x10, [x4, #0x8]
+               	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
-               	sxtw	x1, w2
                	add	x2, x1, #0x1
                	sxtw	x1, w2
                	cmp	x1, #0x4

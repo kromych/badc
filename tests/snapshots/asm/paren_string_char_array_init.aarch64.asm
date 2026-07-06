@@ -46,19 +46,17 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	b	<addr>
                	add	x1, x0, #0x8
-               	sxtw	x3, w2
                	add	x1, x1, x3
                	ldrb	w1, [x1]
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	add	x3, x4, x3
-               	ldrsb	x3, [x3]
+               	add	x4, x4, x3
+               	ldrsb	x4, [x4]
                	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
-               	cmp	x1, x3
+               	and	x4, x4, x17
+               	cmp	x1, x4
                	b.ne	<addr>
-               	sxtw	x1, w2
-               	add	x2, x1, #0x1
+               	add	x2, x3, #0x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sxtw	x3, w2

@@ -26,12 +26,10 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x1(%rbx), %rax
-               	movslq	%eax, %rdi
+               	leaq	-0x1(%rbx), %rdi
                	callq	<addr>
                	movq	%rax, %r12
-               	leaq	-0x2(%rbx), %rax
-               	movslq	%eax, %rdi
+               	leaq	-0x2(%rbx), %rdi
                	callq	<addr>
                	addq	%r12, %rax
                	movq	(%rsp), %rbx
@@ -81,5 +79,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

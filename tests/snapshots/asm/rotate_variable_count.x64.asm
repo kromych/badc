@@ -23,31 +23,29 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movl	$0x1, %edx
-               	movslq	%ecx, %r8
-               	pushq	%rcx
-               	movq	%r8, %rcx
-               	shlq	%cl, %rdx
-               	popq	%rcx
-               	andq	%rdi, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movq	%rcx, %rdx
-               	subq	%rsi, %rdx
-               	andq	$0x3f, %rdx
                	movl	$0x1, %r8d
-               	movslq	%edx, %rdx
-               	movq	%rdx, %r10
-               	movq	%r8, %rdx
+               	pushq	%rcx
+               	movq	%rdx, %rcx
+               	shlq	%cl, %r8
+               	popq	%rcx
+               	andq	%rdi, %r8
+               	testq	%r8, %r8
+               	je	<addr>
+               	movq	%rcx, %r8
+               	subq	%rsi, %r8
+               	andq	$0x3f, %r8
+               	movl	$0x1, %r9d
+               	movslq	%r8d, %r8
+               	movq	%r8, %r10
+               	movq	%r9, %r8
                	pushq	%rcx
                	movq	%r10, %rcx
-               	shlq	%cl, %rdx
+               	shlq	%cl, %r8
                	popq	%rcx
-               	orq	%rdx, %rax
+               	orq	%r8, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rdx), %rcx
                	movslq	%ecx, %rdx
                	cmpq	$0x40, %rdx
                	jl	<addr>

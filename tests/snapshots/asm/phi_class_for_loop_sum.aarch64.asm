@@ -16,8 +16,7 @@ Disassembly of section .text:
                	b	<addr>
                	add	x2, x2, x1
                	sxtw	x2, w2
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
+               	add	x1, x3, #0x1
                	sxtw	x3, w1
                	cmp	x3, x0
                	b.lt	<addr>

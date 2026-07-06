@@ -90,21 +90,21 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	mov	x17, #0x21              // =33
                	mul	x22, x1, x17
-               	sxtw	x0, w20
+               	mov	x0, x20
                	mov	x1, x21
                	bl	<addr>
                	add	x0, x22, x0
                	mov	x2, #0x1                // =1
                	mov	x17, #0x21              // =33
                	mul	x22, x0, x17
-               	sxtw	x0, w20
+               	mov	x0, x20
                	mov	x1, x21
                	bl	<addr>
                	add	x0, x22, x0
                	mov	x2, #0x2                // =2
                	mov	x17, #0x21              // =33
                	mul	x22, x0, x17
-               	sxtw	x0, w20
+               	mov	x0, x20
                	mov	x1, x21
                	bl	<addr>
                	add	x1, x22, x0

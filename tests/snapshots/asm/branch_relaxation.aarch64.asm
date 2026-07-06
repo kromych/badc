@@ -14,26 +14,23 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	mov	x1, x2
                	b	<addr>
-               	sxtw	x3, w2
                	mov	x4, #0x3                // =3
                	sdiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
-               	cmp	x3, #0x0
+               	msub	x4, x17, x4, x3
+               	cmp	x4, #0x0
                	b.ne	<addr>
                	add	x1, x1, x2
                	b	<addr>
-               	sxtw	x3, w2
                	mov	x4, #0x3                // =3
                	sdiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
-               	cmp	x3, #0x1
+               	msub	x4, x17, x4, x3
+               	cmp	x4, #0x1
                	b.ne	<addr>
                	sub	x1, x1, #0x1
                	b	<addr>
                	add	x1, x1, #0x2
                	b	<addr>
-               	sxtw	x2, w2
-               	add	x2, x2, #0x1
+               	add	x2, x3, #0x1
                	sxtw	x3, w2
                	cmp	x3, x0
                	b.lt	<addr>

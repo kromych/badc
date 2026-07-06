@@ -82,13 +82,11 @@ Disassembly of section .text:
                	mov	x1, x21
                	bl	<addr>
                	mov	x23, x0
-               	sub	x0, x23, #0x1
-               	sxtw	x2, w0
+               	sub	x2, x23, #0x1
                	mov	x0, x20
                	mov	x1, x21
                	bl	<addr>
-               	add	x0, x23, #0x1
-               	sxtw	x1, w0
+               	add	x1, x23, #0x1
                	mov	x0, x20
                	mov	x2, x22
                	bl	<addr>

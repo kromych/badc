@@ -77,10 +77,9 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x28(%rbp)
                	jmp	<addr>
-               	movslq	-0x28(%rbp), %rax
-               	incq	%rax
-               	movl	%eax, -0x28(%rbp)
-               	movslq	%ecx, %rax
+               	movslq	-0x28(%rbp), %rdx
+               	incq	%rdx
+               	movl	%edx, -0x28(%rbp)
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
                	cmpq	$0xf4240, %rax          # imm = 0xF4240
@@ -135,4 +134,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

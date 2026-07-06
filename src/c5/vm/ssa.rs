@@ -1163,7 +1163,17 @@ fn run_inst<H: Host>(
             } else {
                 LoadKind::I64
             };
-            frame.regs[v as usize] = load_from_memory(mem, addr, read_kind)?;
+            let raw = load_from_memory(mem, addr, read_kind)?;
+            // Mirror the native entry lowering: a narrow signed kind
+            // sign-extends from its width (C99 6.5.2.2p4 / 6.3.1.3), so
+            // a caller that passed the value unextended still yields
+            // the canonical parameter value.
+            frame.regs[v as usize] = match kind {
+                LoadKind::I8 => raw as i8 as i64,
+                LoadKind::I16 => raw as i16 as i64,
+                LoadKind::I32 => raw as i32 as i64,
+                _ => raw,
+            };
             return Ok(());
         }
         Inst::Phi { .. } => "Phi",

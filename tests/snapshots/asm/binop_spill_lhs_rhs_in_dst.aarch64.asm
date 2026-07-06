@@ -16,11 +16,9 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, x2, lsl #2]
                	mov	x4, #0x0                // =0
                	b	<addr>
-               	sxtw	x3, w5
-               	ldrsw	x3, [x0, x3, lsl #2]
-               	add	x3, x4, x3
-               	sxtw	x4, w3
-               	sxtw	x3, w5
+               	ldrsw	x6, [x0, x3, lsl #2]
+               	add	x4, x4, x6
+               	sxtw	x4, w4
                	add	x5, x3, #0x1
                	sxtw	x3, w5
                	cmp	x3, x2

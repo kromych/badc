@@ -15,13 +15,12 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
+               	add	x1, x3, #0x1
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	sxtw	x3, w1
-               	lsl	x3, x3, #4
-               	add	x2, x2, x3
+               	lsl	x4, x3, #4
+               	add	x2, x2, x4
                	ldr	x2, [x2]
                	cmp	x2, #0x0
                	b.ne	<addr>

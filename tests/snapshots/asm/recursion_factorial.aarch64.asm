@@ -22,7 +22,6 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x20
                	ret
                	sub	x0, x20, #0x1
-               	sxtw	x0, w0
                	bl	<addr>
                	mul	x0, x20, x0
                	sxtw	x0, w0

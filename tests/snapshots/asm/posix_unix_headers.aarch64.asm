@@ -16,7 +16,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x80
                	mov	x2, #0x0                // =0
                	b	<addr>
-               	sxtw	x1, w2
                	add	x1, x0, x1
                	mov	x3, #0x0                // =0
                	strb	w3, [x1]

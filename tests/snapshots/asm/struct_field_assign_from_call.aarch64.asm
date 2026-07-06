@@ -28,8 +28,7 @@ Disassembly of section .text:
                	ldr	x23, [x20, #0x18]
                	add	x1, x20, #0x14
                	ldrsw	x0, [x20, #0x10]
-               	add	x0, x0, #0x1
-               	sxtw	x2, w0
+               	add	x2, x0, #0x1
                	mov	x24, #0x10              // =16
                	mov	x25, #0x7fff            // =32767
                	mov	x0, x22
@@ -42,7 +41,6 @@ Disassembly of section .text:
                	add	x1, x20, #0x24
                	ldrsw	x2, [x20, #0x20]
                	add	x2, x2, #0x1
-               	sxtw	x2, w2
                	mov	x3, x24
                	mov	x5, x21
                	mov	x4, x25

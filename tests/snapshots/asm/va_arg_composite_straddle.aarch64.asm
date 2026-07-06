@@ -51,8 +51,8 @@ Disassembly of section .text:
                	str	w17, [x16, #0x1c]
                	mov	x1, #0x0                // =0
                	b	<addr>
-               	sub	x0, x29, #0x20
-               	mov	x17, x0
+               	sub	x2, x29, #0x20
+               	mov	x17, x2
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
                	cmp	x16, #0x0
@@ -69,8 +69,7 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x0, x16
-               	sxtw	x0, w1
+               	mov	x2, x16
                	add	x1, x0, #0x1
                	sxtw	x0, w1
                	cmp	x0, #0x6

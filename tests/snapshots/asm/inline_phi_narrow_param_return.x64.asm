@@ -20,11 +20,10 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	xorq	%rcx, %rcx
                	jmp	<addr>
-               	imulq	$0xf4243, %rdx, %rax    # imm = 0xF4243
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	leaq	0x1(%rax), %rdx
-               	movslq	%ecx, %rax
+               	imulq	$0xf4243, %rdx, %rdx    # imm = 0xF4243
+               	addq	%rcx, %rdx
+               	movslq	%edx, %rdx
+               	incq	%rdx
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
                	cmpq	%rdi, %rax

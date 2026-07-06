@@ -15,25 +15,26 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
+               	movq	%r12, 0x8(%rsp)
                	movslq	%edi, %rdi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movslq	%ecx, %r8
-               	shlq	$0x2, %r8
-               	leaq	(%rsi,%r8), %r9
+               	movq	%r8, %r9
+               	shlq	$0x2, %r9
+               	leaq	(%rsi,%r9), %rbx
+               	movslq	(%rbx), %rbx
+               	addq	%rdx, %r9
                	movslq	(%r9), %r9
-               	addq	%rdx, %r8
-               	movslq	(%r8), %r8
-               	imulq	%r9, %r8
-               	addq	%r8, %rax
-               	movslq	%ecx, %rcx
-               	incq	%rcx
+               	imulq	%rbx, %r9
+               	addq	%r9, %rax
+               	leaq	0x1(%r8), %rcx
                	movslq	%ecx, %r8
                	cmpq	%rdi, %r8
                	jl	<addr>
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

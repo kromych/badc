@@ -21,11 +21,9 @@ Disassembly of section .text:
                	movq	%r15, 0x20(%rsp)
                	xorq	%rcx, %rcx
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movslq	%ecx, %rdx
-               	leaq	0x1(%rdx), %rsi
-               	movl	%esi, (%rax,%rdx,4)
-               	movslq	%ecx, %rax
+               	leaq	<rip>, %rdx
+               	leaq	0x1(%rax), %rsi
+               	movl	%esi, (%rdx,%rax,4)
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
                	cmpq	$0x40, %rax
@@ -319,4 +317,5 @@ Disassembly of section .text:
                	addq	$0x340, %rsp            # imm = 0x340
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

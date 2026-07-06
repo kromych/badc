@@ -80,10 +80,9 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x28]
                	b	<addr>
-               	ldursw	x0, [x29, #-0x28]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x28]
-               	sxtw	x0, w1
+               	ldursw	x2, [x29, #-0x28]
+               	add	x2, x2, #0x1
+               	stur	w2, [x29, #-0x28]
                	add	x1, x0, #0x1
                	sxtw	x0, w1
                	mov	x17, #0x4240            // =16960

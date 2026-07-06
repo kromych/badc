@@ -178,7 +178,7 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	xorq	%rbx, %rbx
                	jmp	<addr>
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>

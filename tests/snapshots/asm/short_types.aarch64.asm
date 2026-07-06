@@ -79,7 +79,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0xd8
                	ldrsh	x1, [x1, #0x4]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	bl	<addr>
                	strh	w0, [x20, #0x6]
                	sub	x0, x29, #0xd8

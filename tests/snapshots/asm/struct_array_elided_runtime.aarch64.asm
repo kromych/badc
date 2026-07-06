@@ -158,7 +158,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	mov	x20, #0x0               // =0
                	b	<addr>
-               	sxtw	x0, w20
+               	mov	x0, x20
                	bl	<addr>
                	cbnz	x0, <addr>
                	sxtw	x0, w20

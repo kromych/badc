@@ -13,17 +13,17 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v7   Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v5)
   block 1  start_pc=0
-    v13  Extend { value=v9, kind=I32 }                    -> x2
-    v14  LoadLocal { off=2, kind=I64 }                    -> x2
+    v13  Extend { value=v9, kind=I32 }                    -> x8
+    v14  LoadLocal { off=2, kind=I64 }                    -> x8
     v15  Extend { value=v8, kind=I32 }                    -> x1
-    v16  BinopI { op=shl, lhs=v15, rhs_imm=2 }            -> x2
-    v17  Binop { op=add, lhs=v1, rhs=v16 }                -> x2
-    v18  LoadIndexed { base=v1, index=v15, scale=4, kind=I32 } -> x2
+    v16  BinopI { op=shl, lhs=v10, rhs_imm=2 }            -> x1
+    v17  Binop { op=add, lhs=v1, rhs=v16 }                -> x1
+    v18  LoadIndexed { base=v1, index=v10, scale=4, kind=I32 } -> x1
     v19  Binop { op=add, lhs=v9, rhs=v18 }                -> x0
-    v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x2
-    v21  Extend { value=v19, kind=I32 }                   -> x2
-    v22  Imm(0)                                           -> x2
-    v23  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x1
+    v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x1
+    v21  Extend { value=v19, kind=I32 }                   -> x1
+    v22  Imm(0)                                           -> x1
+    v23  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x1
     v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x2
     v25  Extend { value=v23, kind=I32 }                   -> x1
     v26  Imm(0)                                           -> x2
@@ -33,7 +33,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v9   Phi { incoming=[b0:v5, b1:v19], kind=I64 }       -> x0
     v10  Extend { value=v8, kind=I32 }                    -> x2
     v11  LoadLocal { off=3, kind=I32 }                    -> x8
-    v12  Binop { op=lt, lhs=v10, rhs=v3 }                 -> x2
+    v12  Binop { op=lt, lhs=v10, rhs=v3 }                 -> x8
     terminator Bnz { cond=v12, target=b1, fall=b3 }   (exit_acc=v12)
   block 3  start_pc=0
     v27  Extend { value=v9, kind=I32 }                    -> x0

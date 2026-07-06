@@ -86,7 +86,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x17, #0xa               // =10
                	mul	x0, x20, x17
-               	sxtw	x0, w0
                	bl	<addr>
                	add	x1, x20, #0x1
                	sxtw	x1, w1

@@ -477,6 +477,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("const_expr_conditional.c", 27),
     ("comma_operator_in_loops.c", 3),
     ("size_t_via_stdio.c", 3),
+    ("ndebug_optimize_predefine.c", 100),
     ("leading_dot_float_literal.c", 7),
     ("libc_fp_return_value.c", 11),
     ("libc_fp_classify.c", 0),

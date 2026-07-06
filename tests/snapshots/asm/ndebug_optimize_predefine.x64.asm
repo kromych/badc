@@ -1,5 +1,5 @@
 
-object_macro_to_fn_macro_rescan.x64:	file format elf64-x86-64
+ndebug_optimize_predefine.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
@@ -11,5 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	xorq	%rax, %rax
+               	movl	$0x1, %eax
                	retq
+               	addb	%al, (%rax)

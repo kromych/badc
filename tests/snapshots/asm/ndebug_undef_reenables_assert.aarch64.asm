@@ -1,5 +1,5 @@
 
-object_macro_to_fn_macro_rescan.aarch64:	file format elf64-littleaarch64
+ndebug_undef_reenables_assert.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 

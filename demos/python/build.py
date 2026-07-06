@@ -446,7 +446,7 @@ def build(target: str, do_link: bool, log) -> Path | None:
     out = PY_DIR / ".cache" / f"obj-{target}"
     out.mkdir(parents=True, exist_ok=True)
     dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
-    opt = ["-O"] if os.environ.get("BADC_PY_O") else []
+    opt = ["-O"]
 
     entries = _entries(target)
     jobs = [(badc, target, src, defs, incs, dbg, opt, str(out), str(SRC)) for src, defs, incs in entries]
@@ -473,7 +473,7 @@ def build(target: str, do_link: bool, log) -> Path | None:
         # the core defines (no CPython includes needed).
         for helper in _WIN_HELPERS:
             hobj = out / (helper[:-2] + ".o")
-            hcmd = [badc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T", *dbg,
+            hcmd = [badc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T", *dbg, *opt,
                     *[f"-D{d}" for d in _WIN_DEFINES], str(PY_DIR / helper), "-o", str(hobj)]
             r = run(hcmd, timeout=120)
             if r.returncode != 0:

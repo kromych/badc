@@ -73,6 +73,7 @@ def compile_one(badc: Path, src: Path, out: Path) -> tuple[bool, str]:
     proc = subprocess.run(
         [
             str(badc),
+            "-O",
             "-I",
             str(CHIBICC_DIR),
             "-c",
@@ -160,7 +161,7 @@ def main() -> int:
         src_files = [str(CHIBICC_DIR / name) for name in TU_STATE]
         out_path = work / ("chibicc.exe" if WIN else "chibicc")
         proc = subprocess.run(
-            [str(badc), "-I", str(CHIBICC_DIR), "-o", str(out_path), *src_files],
+            [str(badc), "-O", "-I", str(CHIBICC_DIR), "-o", str(out_path), *src_files],
             capture_output=True,
             text=True,
             check=False,

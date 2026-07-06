@@ -183,13 +183,10 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
         src, flags = compiles[obj]
         dst = out / (obj.replace("/", "_"))
         dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
-        # BADC_PY_O builds each TU with the optimizer, for a benchmarkable
-        # interpreter and to exercise the optimization passes across the
-        # whole source. The host build trace's own -O flags are dropped by
+        # Each TU builds with the optimizer (badc -O also implies NDEBUG).
+        # The host build trace's own -O flags are dropped by
         # parse_commands, so this is the only optimization control.
-        do_opt = bool(os.environ.get("BADC_PY_O"))
-        if do_opt and opt_only is not None:
-            do_opt = os.path.basename(src) in opt_only
+        do_opt = opt_only is None or os.path.basename(src) in opt_only
         opt = ["-O"] if do_opt else []
         # `--gnu` mirrors the reference clang build: __GNUC__ makes the
         # struct layouts (packed tracemalloc) match the clang-built

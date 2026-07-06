@@ -1,14 +1,11 @@
-object_macro_to_fn_macro_rescan.c:18: warning: unused variable `x`
-; --- SSA dump (ok=true) ent_pc=2 ---
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=1
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(7)                                           -> x0
-    v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x0
-    terminator Return(v3)   (exit_acc=v3)
+    v1   Imm(1)                                           -> x0
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

@@ -2075,6 +2075,14 @@ fn init_brace_intermediate_cast() {
 }
 
 #[test]
+fn narrow_param_entry_extend() {
+    // C99 6.5.2.2p4 / 6.3.1.3: a register-passed narrow parameter is
+    // converted on entry; an I8/I16 conversion rewrites bits 8..31,
+    // so it cannot be skipped on a bits-32..63-only liveness proof.
+    assert_eq!(run_fixture("narrow_param_entry_extend.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec

@@ -473,6 +473,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("init_float_to_int.c", 0),
     ("global_init_midexpr_cast_narrow.c", 0),
     ("init_brace_intermediate_cast.c", 0),
+    ("narrow_param_entry_extend.c", 0),
     ("ternary_arith_conversion.c", 0),
     ("struct_layout.c", 0),
     ("const_expr_conditional.c", 27),

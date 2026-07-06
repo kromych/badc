@@ -667,11 +667,15 @@ pub(crate) fn emit_function(
             moves.push((Place::IntReg(src), dst));
             vids.push(vid);
             homes.push(dst);
-            // Sign-extend on entry only when a consumer reads the
-            // parameter's upper bits; otherwise the low word already
-            // holds the C99 6.5.2.2p4-converted value.
-            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32)
-                && alloc.high_observed.get(vid).copied().unwrap_or(true)
+            // The caller passes the raw 64-bit value; the callee
+            // performs the C99 6.5.2.2p4 conversion. An I8/I16 extend
+            // rewrites bits 8..63 / 16..63 and is always required; an
+            // I32 extend touches only bits 32..63 and is skipped when
+            // no consumer reads them (`high_observed` tracks exactly
+            // that range).
+            if matches!(kind, LoadKind::I8 | LoadKind::I16)
+                || (matches!(kind, LoadKind::I32)
+                    && alloc.high_observed.get(vid).copied().unwrap_or(true))
             {
                 exts.push((dst, *kind));
             }
@@ -1912,16 +1916,16 @@ fn emit_inst(
             };
             // The encoding to write `dst <- sign-extend(arg_reg)`.
             // For full-width kinds (I64), it is a plain mov. The
-            // sign-extension is skipped when no consumer reads the
-            // parameter's upper bits.
+            // caller passes the raw 64-bit value, so an I8/I16
+            // conversion always runs; an I32 extend touches only
+            // bits 32..63 and is skipped when no consumer reads them.
             let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
             let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
                 let rn = Reg(arg_reg);
                 match kind {
-                    _ if high_dead => emit_mov_reg(code, rd, rn),
                     LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
                     LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
-                    LoadKind::I32 => emit(code, super::encode::enc_sxtw(rd, rn)),
+                    LoadKind::I32 if !high_dead => emit(code, super::encode::enc_sxtw(rd, rn)),
                     _ => emit_mov_reg(code, rd, rn),
                 }
             };

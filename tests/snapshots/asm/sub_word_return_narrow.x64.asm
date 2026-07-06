@@ -30,6 +30,7 @@ Disassembly of section .text:
                	retq
 
 <s16_shift>:
+               	movswq	%di, %rdi
                	movq	%rdi, %rax
                	shlq	$0x8, %rax
                	movslq	%eax, %rcx
@@ -37,6 +38,7 @@ Disassembly of section .text:
                	retq
 
 <s8_wrap>:
+               	movsbq	%dil, %rdi
                	leaq	0x64(%rdi), %rax
                	movslq	%eax, %rcx
                	movsbq	%cl, %rax

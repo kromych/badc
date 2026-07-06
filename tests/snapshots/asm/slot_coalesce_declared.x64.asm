@@ -88,9 +88,6 @@ Disassembly of section .text:
                	retq
 
 <simple>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	cmpq	%rdi, %rcx
@@ -102,14 +99,9 @@ Disassembly of section .text:
                	addq	$0x7, %rdx
                	addq	%rdx, %rax
                	jmp	<addr>
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <heavy>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	cmpq	%rdi, %rcx
@@ -132,8 +124,6 @@ Disassembly of section .text:
                	subq	%r10, %rdx
                	addq	%rdx, %rax
                	jmp	<addr>
-               	addq	$0x60, %rsp
-               	popq	%rbp
                	retq
 
 <sum8>:
@@ -552,4 +542,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

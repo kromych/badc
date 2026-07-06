@@ -16,9 +16,6 @@ Disassembly of section .text:
                	retq
 
 <phi_accumulate>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movslq	%edi, %rdi
                	movl	$0x1, %edx
                	xorq	%rcx, %rcx
@@ -35,14 +32,11 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rdx
                	jmp	<addr>
                	movq	%rdx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x32, %edi
                	callq	<addr>
                	cmpq	$-0x4728dfba, %rax      # imm = 0xB8D72046
@@ -51,7 +45,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

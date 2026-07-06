@@ -18,9 +18,6 @@ Disassembly of section .text:
                	retq
 
 <read_one>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	cmpq	%rsi, %rcx
@@ -30,8 +27,6 @@ Disassembly of section .text:
                	incq	%rcx
                	jmp	<addr>
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -101,4 +96,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -10,9 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x0, #0xff               // =255
                	mov	x2, #0x0                // =0
                	add	x0, x0, #0x1
@@ -34,16 +31,11 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
 
 <preinc_u16_wrap>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x0, #0xffff             // =65535
                	mov	x2, #0x0                // =0
                	add	x0, x0, #0x1
@@ -65,16 +57,11 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
 
 <preinc_u32_wrap>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	mov	x2, #0x0                // =0
@@ -95,16 +82,11 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
 
 <compound_u8_wrap>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x0, #0xf0               // =240
                	mov	x2, #0x0                // =0
                	add	x0, x0, #0x10
@@ -126,16 +108,11 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
 
 <compound_u16_wrap>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x0, #0xfff0             // =65520
                	mov	x2, #0x0                // =0
                	add	x0, x0, #0x10
@@ -157,8 +134,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
@@ -199,7 +174,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x40
+               	sub	sp, sp, #0x20
                	str	x20, [sp]
                	str	x19, [sp, #0x10]
                	mov	x20, #0x0               // =0
@@ -223,6 +198,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

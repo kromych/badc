@@ -44,9 +44,6 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x40
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	sxtw	x2, w1
@@ -68,6 +65,4 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
                	ret

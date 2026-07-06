@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <harness>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	andq	$0xff, %rax
@@ -23,8 +20,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -70,4 +65,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

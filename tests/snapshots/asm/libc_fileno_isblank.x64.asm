@@ -54,9 +54,6 @@ Disassembly of section .text:
                	retq
 
 <isblank>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	cmpq	$0x20, %rdi
                	sete	%al
@@ -71,8 +68,6 @@ Disassembly of section .text:
                	setne	%dl
                	movzbq	%dl, %rdx
                	movq	%rdx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
 
@@ -132,4 +127,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

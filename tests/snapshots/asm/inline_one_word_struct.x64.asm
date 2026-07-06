@@ -28,9 +28,6 @@ Disassembly of section .text:
                	retq
 
 <sum_sr>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
@@ -45,8 +42,6 @@ Disassembly of section .text:
                	movq	(%rdi,%rdx,8), %rdx
                	addq	%rdx, %rax
                	jmp	<addr>
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -81,4 +76,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -14,9 +14,6 @@ Disassembly of section .text:
                	ret
 
 <phi_accumulate>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	sxtw	x0, w0
                	mov	x3, #0x1                // =1
                	mov	x2, #0x0                // =0
@@ -35,14 +32,11 @@ Disassembly of section .text:
                	add	x3, x1, #0x1
                	b	<addr>
                	mov	x0, x3
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x32               // =50
                	bl	<addr>
                	mov	x17, #0x2046            // =8262
@@ -55,6 +49,5 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

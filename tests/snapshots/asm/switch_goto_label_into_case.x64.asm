@@ -11,28 +11,17 @@ Disassembly of section .text:
                	ud2
 
 <classify>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	cmpq	$0x3, %rdi
                	jl	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movl	$0xa, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x14, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x1e, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	cmpq	$0x5, %rdi
                	setge	%cl
@@ -67,8 +56,6 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
 
@@ -141,4 +128,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

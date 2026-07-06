@@ -13,7 +13,7 @@ Disassembly of section .text:
 <fill_and_sum>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
@@ -28,7 +28,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
-               	addq	$0x30, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movslq	%esi, %rdx

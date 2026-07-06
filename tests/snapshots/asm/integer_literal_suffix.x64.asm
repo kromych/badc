@@ -11,16 +11,11 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
                	movabsq	$0xfffffffff, %rax      # imm = 0xFFFFFFFFF
                	movabsq	$0xfffffffff, %r11      # imm = 0xFFFFFFFFF
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0xb, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x24, %eax
                	movl	$0x1, %ecx
@@ -35,8 +30,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0xc, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	movabsq	$0x123456789, %rax      # imm = 0x123456789
                	incq	%rax
@@ -44,8 +37,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0xd, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	movabsq	$-0x1, %rax
                	cmpq	$-0x1, %rax
@@ -61,26 +52,18 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0xe, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	cmpq	$-0x1, %rax
                	je	<addr>
                	movl	$0xf, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	movabsq	$-0x1, %rax
                	incq	%rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x10, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

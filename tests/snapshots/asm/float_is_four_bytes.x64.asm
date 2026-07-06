@@ -11,21 +11,11 @@ Disassembly of section .text:
                	ud2
 
 <passthrough>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <add3>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	addss	%xmm1, %xmm0
                	addss	%xmm2, %xmm0
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -330,5 +320,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <use_struct>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
                	movq	%rsi, (%rdi)
                	movl	%edx, 0x8(%rdi)
                	movw	%dx, 0xc(%rdi)
@@ -32,8 +29,6 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	andq	$0xff, %rcx
                	addq	%rcx, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
 
 <deref_twice>:
@@ -44,7 +39,7 @@ Disassembly of section .text:
 <no_forward_across_call>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%rdi, %rbx
@@ -57,7 +52,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x30, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 
@@ -101,4 +96,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

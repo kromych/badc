@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorq	%rcx, %rcx
                	incq	%rcx
                	movslq	%ecx, %rax
@@ -22,7 +19,4 @@ Disassembly of section .text:
                	cmpq	$0x2, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

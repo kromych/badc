@@ -17,36 +17,21 @@ Disassembly of section .text:
                	ret
 
 <widen>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	add	x0, x0, x1
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <sgn>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mul	x0, x0, x1
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, lt
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <pick>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	add	x1, x1, x2
                	sxtw	x1, w1
                	ldrsw	x0, [x0, x1, lsl #2]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <uwrap>:

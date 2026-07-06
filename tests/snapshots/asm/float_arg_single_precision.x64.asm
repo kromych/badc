@@ -11,28 +11,15 @@ Disassembly of section .text:
                	ud2
 
 <scale>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	mulss	%xmm1, %xmm0
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <add3>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	addss	%xmm1, %xmm0
                	addss	%xmm2, %xmm0
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
                	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
                	movl	$0x3e800000, %ecx       # imm = 0x3E800000
                	movq	%rcx, %xmm15
@@ -49,8 +36,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x40200000, %eax       # imm = 0x40200000
                	movq	%rax, %xmm0
@@ -74,8 +59,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x3f000000, %eax       # imm = 0x3F000000
                	movl	$0x3e800000, %ecx       # imm = 0x3E800000
@@ -96,8 +79,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movl	$0x41000000, %ecx       # imm = 0x41000000
@@ -118,10 +99,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

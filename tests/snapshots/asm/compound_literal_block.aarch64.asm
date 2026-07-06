@@ -17,9 +17,6 @@ Disassembly of section .text:
                	ret
 
 <first4>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x3, #0x0                // =0
                	ldrsw	x1, [x0]
                	cmp	x1, #0x1
@@ -45,17 +42,12 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x3, ne
                	mov	x0, x3
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
                	b	<addr>
 
 <two_strings>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x3, #0x0                // =0
                	ldr	x1, [x0]
                	ldrb	w1, [x1]
@@ -94,8 +86,6 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x3, ne
                	mov	x0, x3
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>

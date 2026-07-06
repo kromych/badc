@@ -12,12 +12,12 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	str	x19, [sp]
                	mov	x0, #0x8                // =8
                	bl	<addr>
                	ldrsw	x0, [x0, #0x190]
                	ldr	x19, [sp]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

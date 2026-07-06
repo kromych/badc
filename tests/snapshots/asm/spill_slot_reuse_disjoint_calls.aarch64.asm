@@ -24,7 +24,7 @@ Disassembly of section .text:
 <twogroups>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0xe0
+               	sub	sp, sp, #0x40
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
                	str	x22, [sp, #0x10]
@@ -75,7 +75,7 @@ Disassembly of section .text:
                	ldr	x25, [sp, #0x28]
                	ldr	x26, [sp, #0x30]
                	ldr	x27, [sp, #0x38]
-               	add	sp, sp, #0xe0
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
 

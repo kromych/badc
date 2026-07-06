@@ -34,9 +34,6 @@ Disassembly of section .text:
                	ret
 
 <pc_advance>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldrb	w2, [x0]
                	lsl	x2, x2, #24
                	mov	w2, w2
@@ -51,8 +48,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	add	x0, x1, x0
                	sub	x0, x0, x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

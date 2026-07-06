@@ -26,9 +26,6 @@ Disassembly of section .text:
                	retq
 
 <clobber>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movl	$0xdead, %eax           # imm = 0xDEAD
                	movl	$0xbeef, %ecx           # imm = 0xBEEF
                	movl	$0xcafe, %edx           # imm = 0xCAFE
@@ -38,8 +35,6 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	addq	%rdi, %rax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
 
 <sum_pair_pair>:
@@ -258,4 +253,3 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

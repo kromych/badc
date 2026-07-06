@@ -44,9 +44,6 @@ Disassembly of section .text:
                	ret
 
 <shadowing>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x2a               // =42
                	mov	x2, #0x0                // =0
                	sxtw	x1, w2
@@ -57,8 +54,6 @@ Disassembly of section .text:
                	add	x2, x1, #0x1
                	b	<addr>
                	b	<addr>
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <adjacent_fors>:
@@ -87,9 +82,6 @@ Disassembly of section .text:
                	ret
 
 <struct_ptr_init>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x3, #0x0                // =0
@@ -110,8 +102,6 @@ Disassembly of section .text:
                	add	x3, x3, x2
                	b	<addr>
                	sxtw	x0, w3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

@@ -102,12 +102,10 @@ Disassembly of section .text:
 <copysignf>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
                	fcvt	d0, s0
                	fcvt	d1, s1
                	bl	<addr>
                	fcvt	s0, d0
-               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 

@@ -60,9 +60,6 @@ Disassembly of section .text:
                	ret
 
 <isblank>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	cmp	x0, #0x20
                	cset	x1, eq
@@ -73,8 +70,6 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x3, ne
                	mov	x0, x3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
 

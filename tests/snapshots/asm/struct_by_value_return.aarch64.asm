@@ -25,9 +25,6 @@ Disassembly of section .text:
                	ret
 
 <clobber>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x1, #0xdead             // =57005
                	mov	x2, #0xbeef             // =48879
                	mov	x3, #0xcafe             // =51966
@@ -38,8 +35,6 @@ Disassembly of section .text:
                	add	x1, x1, x4
                	add	x0, x1, x0
                	sxtw	x0, w0
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <sum_pair_pair>:

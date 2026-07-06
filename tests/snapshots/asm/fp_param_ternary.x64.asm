@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <pick>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	movapd	%xmm0, %xmm1
                	movq	%rdi, %rax
@@ -25,14 +22,9 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
                	movapd	%xmm1, %xmm0
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <grad_dot>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
                	movslq	%edi, %rdi
                	movapd	%xmm0, %xmm2
                	movq	%rdi, %rax
@@ -53,8 +45,6 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm1
                	movapd	%xmm2, %xmm0
                	addss	%xmm1, %xmm0
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -227,4 +217,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <sum_lens>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
@@ -30,8 +27,6 @@ Disassembly of section .text:
                	movq	0x8(%rdx), %rdx
                	addq	%rdx, %rax
                	jmp	<addr>
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -161,3 +156,5 @@ Disassembly of section .text:
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

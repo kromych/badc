@@ -11,42 +11,27 @@ Disassembly of section .text:
                	ud2
 
 <labs>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	testq	%rdi, %rdi
                	jge	<addr>
                	imulq	$-0x1, %rdi, %rdi
                	jmp	<addr>
                	movq	%rdi, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <llabs>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	testq	%rdi, %rdi
                	jge	<addr>
                	imulq	$-0x1, %rdi, %rdi
                	jmp	<addr>
                	movq	%rdi, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <imaxabs>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	testq	%rdi, %rdi
                	jge	<addr>
                	imulq	$-0x1, %rdi, %rdi
                	jmp	<addr>
                	movq	%rdi, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <imaxdiv>:
@@ -228,4 +213,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

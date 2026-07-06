@@ -45,9 +45,6 @@ Disassembly of section .text:
                	retq
 
 <shadowing>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x2a, %eax
                	xorq	%rdx, %rdx
                	movslq	%edx, %rcx
@@ -58,8 +55,6 @@ Disassembly of section .text:
                	leaq	0x1(%rcx), %rdx
                	jmp	<addr>
                	jmp	<addr>
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <adjacent_fors>:
@@ -88,9 +83,6 @@ Disassembly of section .text:
                	retq
 
 <struct_ptr_init>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	leaq	<rip>, %rax
                	xorq	%rsi, %rsi
                	movl	$0x1, %ecx
@@ -110,8 +102,6 @@ Disassembly of section .text:
                	addq	%rdx, %rsi
                	jmp	<addr>
                	movslq	%esi, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -199,4 +189,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

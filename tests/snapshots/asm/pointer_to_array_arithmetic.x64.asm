@@ -11,17 +11,12 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
                	leaq	<rip>, %rax
                	leaq	0x10(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x10, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	leaq	0x8(%rax), %rcx
                	movq	%rcx, %rdx
@@ -29,8 +24,6 @@ Disassembly of section .text:
                	cmpq	$0x8, %rdx
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	leaq	0x10(%rax), %rdx
                	movq	%rdx, %rsi
@@ -38,8 +31,6 @@ Disassembly of section .text:
                	cmpq	$0x10, %rsi
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	movslq	(%rdx), %rsi
                	cmpq	$0x4, %rsi
@@ -54,8 +45,6 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	subq	%rax, %rcx
                	movq	%rcx, %rdx
@@ -66,8 +55,6 @@ Disassembly of section .text:
                	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	leaq	0x8(%rax), %rcx
                	movslq	0x4(%rax), %rdx
@@ -83,8 +70,6 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	movl	$0x6, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	leaq	0x20(%rax), %rcx
                	addq	$-0x8, %rcx
@@ -94,13 +79,8 @@ Disassembly of section .text:
                	cmpq	$0x18, %rax
                	je	<addr>
                	movl	$0x7, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

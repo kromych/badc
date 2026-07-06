@@ -439,6 +439,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         &banks,
         max_gpr,
         max_fpr,
+        func.has_returns_twice_call,
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
@@ -1014,6 +1015,7 @@ pub(crate) fn color_graph(
     banks: &RegBanks,
     max_gpr: usize,
     max_fpr: usize,
+    no_slot_share: bool,
 ) -> Coloring {
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
@@ -1094,13 +1096,24 @@ pub(crate) fn color_graph(
                 // later-coloured value that interferes excludes this
                 // slot, preserving distinct storage for live ranges that
                 // overlap.
-                let slot = (0..spill_count)
-                    .find(|&s| slot_used[s as usize] != stamp)
-                    .unwrap_or_else(|| {
-                        let s = spill_count;
-                        spill_count += 1;
-                        s
-                    });
+                //
+                // `no_slot_share` (the caller invokes a returns-twice
+                // function): liveness no longer bounds slot lifetime. A
+                // value dead on the first-return path is still read
+                // after the second return -- C99 7.13.2.1p3 for setjmp,
+                // and under vfork the child's writes land on the
+                // parent's shared stack -- so every value gets a
+                // dedicated slot.
+                let slot = if no_slot_share {
+                    None
+                } else {
+                    (0..spill_count).find(|&s| slot_used[s as usize] != stamp)
+                }
+                .unwrap_or_else(|| {
+                    let s = spill_count;
+                    spill_count += 1;
+                    s
+                });
                 Place::Spill(slot)
             }
         };
@@ -2271,7 +2284,15 @@ int main(void) { return 0; }
             int_node(false, None),
             int_node(false, None),
         ];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+        );
         assert_eq!(r.spill_count, 0);
         let regs: Vec<Place> = r.places.clone();
         assert_ne!(regs[0], regs[1]);
@@ -2288,7 +2309,15 @@ int main(void) { return 0; }
         let g = Interference::from_edges(5, &edges);
         let node_of = [0u32, 1, 2, 3, 4];
         let cons: Vec<Option<NodeConstraints>> = (0..5).map(|_| int_node(false, None)).collect();
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+        );
         assert_eq!(
             r.spill_count, 1,
             "four registers, five live values -> one spill"
@@ -2302,13 +2331,62 @@ int main(void) { return 0; }
     }
 
     #[test]
+    fn returns_twice_caller_never_shares_spill_slots() {
+        // Nodes 0-3 fill the four registers; 4 and 5 both spill and do
+        // not interfere with each other, so slot sharing would give
+        // them one slot. A returns-twice caller (setjmp / vfork) must
+        // keep the slots distinct: the value dead on the first-return
+        // path is still read after the second return (C99 7.13.2.1p3).
+        let mut edges: Vec<(u32, u32)> = (0..4u32)
+            .flat_map(|a| (a + 1..4u32).map(move |b| (a, b)))
+            .collect();
+        for spilled in [4u32, 5] {
+            edges.extend((0..4u32).map(|r| (r, spilled)));
+        }
+        let g = Interference::from_edges(6, &edges);
+        let node_of = [0u32, 1, 2, 3, 4, 5];
+        let cons: Vec<Option<NodeConstraints>> = (0..6).map(|_| int_node(false, None)).collect();
+        let shared = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+        );
+        assert_eq!(shared.spill_count, 1, "non-interfering spills share");
+        assert_eq!(shared.places[4], shared.places[5]);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            true,
+        );
+        assert_eq!(r.spill_count, 2, "returns-twice: one slot per value");
+        assert_eq!(r.places[4], Place::Spill(0));
+        assert_eq!(r.places[5], Place::Spill(1));
+    }
+
+    #[test]
     fn must_callee_node_avoids_caller_saved() {
         // A single call-crossing node must land in a callee-saved
         // register even though caller-saved are free and preferred.
         let g = Interference::from_edges(1, &[]);
         let node_of = [0u32];
         let cons = [int_node(true, None)];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+        );
         assert!(
             matches!(r.places[0], Place::IntReg(20) | Place::IntReg(21)),
             "call-crossing value must take a callee-saved register, got {:?}",
@@ -2323,7 +2401,15 @@ int main(void) { return 0; }
         let g = Interference::from_edges(1, &[]);
         let node_of = [0u32];
         let cons = [int_node(false, None)];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+        );
         assert!(
             matches!(r.places[0], Place::IntReg(0) | Place::IntReg(1)),
             "non-crossing value should prefer caller-saved, got {:?}",
@@ -2336,7 +2422,15 @@ int main(void) { return 0; }
         let g = Interference::from_edges(2, &[(0, 1)]);
         let node_of = [0u32, 1];
         let cons = [int_node(false, Some(21)), int_node(false, None)];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+        );
         assert_eq!(
             r.places[0],
             Place::IntReg(21),
@@ -2352,7 +2446,15 @@ int main(void) { return 0; }
         let g = Interference::from_edges(3, &[(0, 2)]);
         let node_of = [0u32, 0, 2];
         let cons = [int_node(false, None), None, int_node(false, None)];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+        );
         assert_eq!(r.places[0], r.places[1], "class members share a register");
         assert_ne!(r.places[0], r.places[2]);
     }
@@ -2773,6 +2875,7 @@ int main(void) { return 0; }
             computed_goto_targets: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            has_returns_twice_call: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

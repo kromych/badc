@@ -56,8 +56,7 @@ Disassembly of section .text:
                	movq	%rdx, (%rcx)
                	movq	0x8(%rax), %rcx
                	movq	%rcx, (%rax)
-               	movq	0x8(%rax), %rax
-               	jmpq	*%rax
+               	jmpq	*%rcx
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rdx
                	cmpq	%rdx, %rcx
@@ -72,13 +71,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	movq	%rcx, (%rax)
-               	movq	(%rax), %rax
-               	jmpq	*%rax
+               	jmpq	*%rcx
 
 <flag_table>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	leaq	<rip>, %rax
@@ -103,8 +98,6 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	movl	%ecx, 0x4(%rax)
                	movslq	(%rax,%rdi,4), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -151,3 +144,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

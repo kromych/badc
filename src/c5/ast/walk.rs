@@ -2390,6 +2390,12 @@ impl<'a> Walker<'a> {
                         return Ok(call);
                     }
                     if *class == Token::Sys as i64 {
+                        // A returns-twice callee (setjmp family /
+                        // vfork) disables spill-slot sharing in this
+                        // function; see FunctionSsa::has_returns_twice_call.
+                        if crate::c5::ir::returns_twice_fn_name(&self.symbols[*sym as usize].name) {
+                            b.mark_returns_twice();
+                        }
                         // The Ident's `val` is the binding's
                         // flat index across all `#pragma
                         // binding(...)` directives -- exactly

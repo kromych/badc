@@ -173,6 +173,7 @@ impl SsaBuilder {
             computed_goto_targets: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            has_returns_twice_call: false,
         };
         let mut b = Self {
             func,
@@ -1147,7 +1148,18 @@ impl SsaBuilder {
     /// block, va_start / va_arg may write through caller buffers.
     pub(crate) fn intrinsic(&mut self, kind: i64, args: Vec<ValueId>) -> ValueId {
         self.local_cache.clear();
-        self.push(Inst::Intrinsic { kind, args })
+        let id = self.push(Inst::Intrinsic { kind, args });
+        if super::reg_alloc::is_setjmp_barrier(&self.func.insts[id as usize]) {
+            self.func.has_returns_twice_call = true;
+        }
+        id
+    }
+
+    /// Record that the function calls a returns-twice function (the
+    /// setjmp family / vfork). See
+    /// [`FunctionSsa::has_returns_twice_call`].
+    pub(crate) fn mark_returns_twice(&mut self) {
+        self.func.has_returns_twice_call = true;
     }
 
     /// Reserve a fresh per-function 8-byte stack slot for the

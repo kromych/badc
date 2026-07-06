@@ -29,7 +29,7 @@ Disassembly of section .text:
 <compute>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x40
+               	sub	sp, sp, #0x10
                	str	x20, [sp]
                	add	x1, x0, #0x1
                	sxtw	x20, w1
@@ -45,7 +45,7 @@ Disassembly of section .text:
                	sxtw	x1, w20
                	add	x0, x0, x1
                	ldr	x20, [sp]
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xfffe             // =65534
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ldr	x20, [sp]
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xffff             // =65535
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ldr	x20, [sp]
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	lsl	x2, x1, #1

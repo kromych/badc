@@ -261,6 +261,9 @@ impl Compiler {
             // FunctionSsa with a deterministic name so the symbol
             // table and DWARF subprogram DIEs identify it.
             sb.set_name(alloc::format!("__c5_sys_{}", self.symbols[sys_idx].name));
+            if crate::c5::ir::returns_twice_fn_name(&self.symbols[sys_idx].name) {
+                sb.mark_returns_twice();
+            }
             let _alloca = sb.alloca_init(0);
             // Zero-arg and arg-forwarding shapes both flow through
             // the standard `call_ext + return` pair so the codegen

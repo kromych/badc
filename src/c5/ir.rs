@@ -739,4 +739,26 @@ pub(crate) struct FunctionSsa {
     /// an interior cell, which is referenced by no instruction. Empty for SSA
     /// built outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
+    /// True when the body calls a function that may return twice into
+    /// this frame: the setjmp family (C99 7.13) or vfork(2). Ordinary
+    /// liveness under-approximates storage lifetime here -- a value
+    /// dead on the first-return path is still read after the second
+    /// return (C99 7.13.2.1p3), and under vfork the child's writes
+    /// land on the parent's stack. Spill-slot sharing and frame-slot
+    /// coalescing are disabled when set, and the inliner keeps such a
+    /// body out of line.
+    pub has_returns_twice_call: bool,
+}
+
+/// External functions that may return twice into the caller's frame:
+/// the setjmp family (C99 7.13.1.1) plus vfork(2). Matched on the
+/// c5-side symbol name; `__c5_msvcrt_setjmp` is the target of the
+/// Windows x86_64 `setjmp` macro (headers/include/setjmp.h). The
+/// AArch64 inline setjmp is an intrinsic, recognised structurally by
+/// `codegen::ssa::reg_alloc::is_setjmp_barrier`.
+pub(crate) fn returns_twice_fn_name(name: &str) -> bool {
+    matches!(
+        name,
+        "setjmp" | "_setjmp" | "sigsetjmp" | "__sigsetjmp" | "__c5_msvcrt_setjmp" | "vfork"
+    )
 }

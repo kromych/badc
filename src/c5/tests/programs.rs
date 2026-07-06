@@ -379,6 +379,14 @@ fn float_increment_decrement() {
 }
 
 #[test]
+fn compound_assign_float_register_resident() {
+    // A float lvalue updated via `op=` / `++` / `--` (C99 6.5.16.2,
+    // 6.5.2.4, 6.5.3.1) stays promotable to an FP register, matching
+    // the `x = x op k` form.
+    assert_eq!(run_fixture("compound_assign_float_register_resident.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.

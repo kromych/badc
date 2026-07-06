@@ -590,6 +590,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("global_init_paren_operand.c", 0),
     ("function_type_typedef_declaration.c", 0),
     ("float_increment_decrement.c", 0),
+    ("compound_assign_float_register_resident.c", 0),
     ("addr_of_libm_import.c", 0),
     ("addr_of_libc_strcmp.c", 0),
     ("fts_and_fd_set_headers.c", 0),

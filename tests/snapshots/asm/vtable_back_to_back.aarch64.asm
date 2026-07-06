@@ -47,32 +47,23 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x3, #0x2a               // =42
                	mov	x4, #0x8                // =8
-               	str	x4, [sp, #-0x10]!
-               	str	x3, [sp, #-0x10]!
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
-               	ldr	x2, [sp, #0x20]
-               	ldr	x3, [sp, #0x30]
+               	mov	x0, x1
+               	mov	x1, x2
+               	mov	x2, x3
+               	mov	x3, x4
                	blr	x9
-               	add	sp, sp, #0x40
                	sub	x0, x29, #0x10
                	ldr	x0, [x0]
                	ldr	x0, [x0, #0x8]
                	sub	x1, x29, #0x10
                	sub	x2, x29, #0x40
                	mov	x3, #0x1                // =1
-               	str	x3, [sp, #-0x10]!
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
-               	ldr	x2, [sp, #0x20]
+               	mov	x0, x1
+               	mov	x1, x2
+               	mov	x2, x3
                	blr	x9
-               	add	sp, sp, #0x30
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldursw	x1, [x29, #-0x40]

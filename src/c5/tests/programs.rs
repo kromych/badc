@@ -2098,6 +2098,45 @@ fn dead_local_load_frame_elide() {
 }
 
 #[test]
+fn narrow_param_entry_extend() {
+    // C99 6.5.2.2p4 / 6.3.1.3: a register-passed narrow parameter is
+    // converted on entry; an I8/I16 conversion rewrites bits 8..31,
+    // so it cannot be skipped on a bits-32..63-only liveness proof.
+    assert_eq!(run_fixture("narrow_param_entry_extend.c"), 0);
+}
+
+#[test]
+fn indirect_call_narrow_scalar_args() {
+    // C99 6.5.2.2p7: a non-variadic indirect call converts each
+    // argument to the pointee prototype's parameter type; narrow
+    // (char/short) parameters read the same values as a direct call.
+    assert_eq!(run_fixture("indirect_call_narrow_scalar_args.c"), 0);
+}
+
+#[test]
+fn indirect_call_ten_scalar_args() {
+    // Ten integer arguments through a function pointer: args 9 and 10
+    // ride the host stack overflow slots; positional weights catch a
+    // slot permutation or a missed overflow store.
+    assert_eq!(run_fixture("indirect_call_ten_scalar_args.c"), 0);
+}
+
+#[test]
+fn indirect_call_mixed_fp_int_args() {
+    // Interleaved int/FP scalars through a non-variadic function
+    // pointer: the banks advance independently per the arg-type mask.
+    assert_eq!(run_fixture("indirect_call_mixed_fp_int_args.c"), 0);
+}
+
+#[test]
+fn indirect_call_variadic_fp_control() {
+    // A variadic callee through a function pointer keeps the host
+    // variadic placement; mixed int/double varargs cover both banks
+    // and the stack tail.
+    assert_eq!(run_fixture("indirect_call_variadic_fp_control.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec

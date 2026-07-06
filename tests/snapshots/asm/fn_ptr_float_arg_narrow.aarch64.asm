@@ -41,11 +41,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	ldr	x0, [x0]
                	mov	x1, #0x40400000         // =1077936128
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	d0, [sp]
+               	fmov	d0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	mov	x0, #0x40c00000         // =1086324736
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -60,11 +58,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	ldr	x0, [x0, #0x8]
                	mov	x20, #0x40400000        // =1077936128
-               	str	x20, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	d0, [sp]
+               	fmov	d0, x20
                	blr	x9
-               	add	sp, sp, #0x10
                	fmov	s16, w20
                	fneg	s1, s16
                	fcmp	s0, s1
@@ -80,11 +76,9 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldr	x0, [x1, x0, lsl #3]
                	mov	x1, #0x40800000         // =1082130432
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	d0, [sp]
+               	fmov	d0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	mov	x0, #0x41000000         // =1090519040
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -107,13 +101,10 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	mov	x1, #0x3fc00000         // =1069547520
                	mov	x2, #0x40000000         // =1073741824
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x10]
+               	fmov	d0, x1
+               	fmov	d1, x2
                	blr	x9
-               	add	sp, sp, #0x20
                	mov	x0, #0x40600000         // =1080033280
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -128,11 +119,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x40a00000         // =1084227584
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	d0, [sp]
+               	fmov	d0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	mov	x0, #0x41200000         // =1092616192
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -152,12 +141,8 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	sub	x16, x29, #0x88
                	ldr	s0, [x16]
-               	fmov	x16, d0
-               	str	x16, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	d0, [sp]
                	blr	x9
-               	add	sp, sp, #0x10
                	mov	x0, #0x41600000         // =1096810496
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -182,11 +167,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0xa8
                	ldr	x0, [x0]
                	mov	x1, #0x40400000         // =1077936128
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	d0, [sp]
+               	fmov	d0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	mov	x0, #0x40c00000         // =1086324736
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -200,11 +183,9 @@ Disassembly of section .text:
                	ret
                	ldr	x0, [x20]
                	mov	x1, #0x40400000         // =1077936128
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	d0, [sp]
+               	fmov	d0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	mov	x0, #0x40c00000         // =1086324736
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -219,13 +200,10 @@ Disassembly of section .text:
                	ldr	x0, [x20, #0x8]
                	mov	x1, #0x3fc00000         // =1069547520
                	mov	x2, #0x40000000         // =1073741824
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x10]
+               	fmov	d0, x1
+               	fmov	d1, x2
                	blr	x9
-               	add	sp, sp, #0x20
                	mov	x0, #0x40600000         // =1080033280
                	fmov	s17, w0
                	fcmp	s0, s17

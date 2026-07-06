@@ -34,19 +34,15 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	str	w1, [x20, #0x8]
                	mov	x1, #0xa                // =10
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
+               	mov	x0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	sxtw	x21, w0
                	ldr	x0, [x20]
                	mov	x1, #0x14               // =20
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
+               	mov	x0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	sxtw	x0, w0
                	cmp	x21, #0xd
                	b.eq	<addr>
@@ -70,19 +66,15 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	str	x0, [x20]
                	mov	x1, #0x64               // =100
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
+               	mov	x0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	sxtw	x21, w0
                	ldr	x0, [x20]
                	mov	x1, #0xc8               // =200
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
+               	mov	x0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	sxtw	x0, w0
                	cmp	x21, #0x6b
                	b.eq	<addr>

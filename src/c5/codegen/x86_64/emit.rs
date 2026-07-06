@@ -1536,11 +1536,15 @@ pub(crate) fn emit_function(
             moves.push((Place::IntReg(src), dst));
             vids.push(vid);
             homes.push(dst);
-            // Sign-extend on entry only when a consumer reads the
-            // parameter's upper bits; otherwise the low word already
-            // holds the C99 6.5.2.2p4-converted value.
-            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32)
-                && alloc.high_observed.get(vid).copied().unwrap_or(true)
+            // The caller passes the raw 64-bit value; the callee
+            // performs the C99 6.5.2.2p4 conversion. An I8/I16 extend
+            // rewrites bits 8..63 / 16..63 and is always required; an
+            // I32 extend touches only bits 32..63 and is skipped when
+            // no consumer reads them (`high_observed` tracks exactly
+            // that range).
+            if matches!(kind, LoadKind::I8 | LoadKind::I16)
+                || (matches!(kind, LoadKind::I32)
+                    && alloc.high_observed.get(vid).copied().unwrap_or(true))
             {
                 exts.push((dst, *kind));
             }
@@ -2796,30 +2800,31 @@ fn emit_inst(
                     return false;
                 }
             };
-            // Skip the entry sign-extension when no consumer reads the
-            // parameter's upper bits; the low word already holds it.
+            // The caller passes the raw 64-bit value, so an I8/I16
+            // conversion always runs; an I32 extend touches only
+            // bits 32..63 and is skipped when no consumer reads them.
             let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
             let materialize = |code: &mut Vec<u8>, rd: Reg| {
                 if from_home {
                     match kind {
-                        _ if high_dead => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
                         LoadKind::I8 => {
                             super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
                         }
                         LoadKind::I16 => {
                             super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
                         }
-                        LoadKind::I32 => {
+                        LoadKind::I32 if !high_dead => {
                             super::encode::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
                         }
                         _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
                     }
                 } else {
                     match kind {
-                        _ if high_dead => emit_mov_rr(code, rd, arg_reg),
                         LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, arg_reg),
                         LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, arg_reg),
-                        LoadKind::I32 => super::encode::emit_movsxd_r_r(code, rd, arg_reg),
+                        LoadKind::I32 if !high_dead => {
+                            super::encode::emit_movsxd_r_r(code, rd, arg_reg)
+                        }
                         _ => emit_mov_rr(code, rd, arg_reg),
                     }
                 }

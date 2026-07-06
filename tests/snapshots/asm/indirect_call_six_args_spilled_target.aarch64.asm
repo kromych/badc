@@ -34,21 +34,13 @@ Disassembly of section .text:
                	sub	x6, x29, #0x8
                	add	x1, x1, #0x10
                	add	x3, x3, #0x10
-               	str	x4, [sp, #-0x10]!
-               	str	x3, [sp, #-0x10]!
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	str	x6, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
                	mov	x9, x5
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
-               	ldr	x2, [sp, #0x20]
-               	ldr	x3, [sp, #0x30]
-               	ldr	x4, [sp, #0x40]
-               	ldr	x5, [sp, #0x50]
+               	mov	x5, x4
+               	mov	x4, x3
+               	mov	x3, x2
+               	mov	x2, x1
+               	mov	x1, x6
                	blr	x9
-               	add	sp, sp, #0x60
                	ldursw	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	ldr	x19, [sp]

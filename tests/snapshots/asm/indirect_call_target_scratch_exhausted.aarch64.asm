@@ -301,54 +301,29 @@ Disassembly of section .text:
                	mov	x15, #0xf               // =15
                	mov	x21, #0x10              // =16
                	mov	x22, #0x11              // =17
-               	str	x22, [sp, #-0x10]!
-               	str	x21, [sp, #-0x10]!
-               	str	x15, [sp, #-0x10]!
-               	str	x14, [sp, #-0x10]!
-               	str	x13, [sp, #-0x10]!
-               	str	x12, [sp, #-0x10]!
-               	str	x11, [sp, #-0x10]!
-               	str	x10, [sp, #-0x10]!
-               	str	x9, [sp, #-0x10]!
-               	str	x8, [sp, #-0x10]!
-               	str	x7, [sp, #-0x10]!
-               	str	x6, [sp, #-0x10]!
-               	str	x5, [sp, #-0x10]!
-               	str	x4, [sp, #-0x10]!
-               	str	x3, [sp, #-0x10]!
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	mov	x9, x0
-               	sub	sp, sp, #0x50
-               	ldr	x0, [sp, #0x50]
-               	ldr	x1, [sp, #0x60]
-               	ldr	x2, [sp, #0x70]
-               	ldr	x3, [sp, #0x80]
-               	ldr	x4, [sp, #0x90]
-               	ldr	x5, [sp, #0xa0]
-               	ldr	x6, [sp, #0xb0]
-               	ldr	x7, [sp, #0xc0]
-               	ldr	x16, [sp, #0xd0]
-               	str	x16, [sp]
-               	ldr	x16, [sp, #0xe0]
-               	str	x16, [sp, #0x8]
-               	ldr	x16, [sp, #0xf0]
-               	str	x16, [sp, #0x10]
-               	ldr	x16, [sp, #0x100]
-               	str	x16, [sp, #0x18]
-               	ldr	x16, [sp, #0x110]
-               	str	x16, [sp, #0x20]
-               	ldr	x16, [sp, #0x120]
-               	str	x16, [sp, #0x28]
-               	ldr	x16, [sp, #0x130]
-               	str	x16, [sp, #0x30]
-               	ldr	x16, [sp, #0x140]
-               	str	x16, [sp, #0x38]
-               	ldr	x16, [sp, #0x150]
-               	str	x16, [sp, #0x40]
+               	mov	x16, x0
+               	sub	sp, sp, #0x60
+               	str	x16, [sp, #0x50]
+               	str	x9, [sp]
+               	str	x10, [sp, #0x8]
+               	str	x11, [sp, #0x10]
+               	str	x12, [sp, #0x18]
+               	str	x13, [sp, #0x20]
+               	str	x14, [sp, #0x28]
+               	str	x15, [sp, #0x30]
+               	str	x21, [sp, #0x38]
+               	str	x22, [sp, #0x40]
+               	mov	x0, x1
+               	mov	x1, x2
+               	mov	x2, x3
+               	mov	x3, x4
+               	mov	x4, x5
+               	mov	x5, x6
+               	mov	x6, x7
+               	mov	x7, x8
+               	ldr	x9, [sp, #0x50]
                	blr	x9
-               	add	sp, sp, #0x50
-               	add	sp, sp, #0x110
+               	add	sp, sp, #0x60
                	cmp	x0, #0x99
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

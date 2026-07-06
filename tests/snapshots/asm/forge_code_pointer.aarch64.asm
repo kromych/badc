@@ -16,11 +16,9 @@ Disassembly of section .text:
                	str	x19, [sp]
                	mov	x0, #0x2a               // =42
                	mov	x1, #0x0                // =0
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
+               	mov	x0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	sxtw	x0, w0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10

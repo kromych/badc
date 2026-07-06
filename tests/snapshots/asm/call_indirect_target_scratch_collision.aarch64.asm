@@ -25,19 +25,8 @@ Disassembly of section .text:
                	ldr	x5, [x0]
                	mov	x17, #0xffff            // =65535
                	and	x3, x3, x17
-               	str	x4, [sp, #-0x10]!
-               	str	x3, [sp, #-0x10]!
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
                	mov	x9, x5
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
-               	ldr	x2, [sp, #0x20]
-               	ldr	x3, [sp, #0x30]
-               	ldr	x4, [sp, #0x40]
                	blr	x9
-               	add	sp, sp, #0x50
                	sxtw	x0, w0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10

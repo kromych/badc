@@ -667,11 +667,15 @@ pub(crate) fn emit_function(
             moves.push((Place::IntReg(src), dst));
             vids.push(vid);
             homes.push(dst);
-            // Sign-extend on entry only when a consumer reads the
-            // parameter's upper bits; otherwise the low word already
-            // holds the C99 6.5.2.2p4-converted value.
-            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32)
-                && alloc.high_observed.get(vid).copied().unwrap_or(true)
+            // The caller passes the raw 64-bit value; the callee
+            // performs the C99 6.5.2.2p4 conversion. An I8/I16 extend
+            // rewrites bits 8..63 / 16..63 and is always required; an
+            // I32 extend touches only bits 32..63 and is skipped when
+            // no consumer reads them (`high_observed` tracks exactly
+            // that range).
+            if matches!(kind, LoadKind::I8 | LoadKind::I16)
+                || (matches!(kind, LoadKind::I32)
+                    && alloc.high_observed.get(vid).copied().unwrap_or(true))
             {
                 exts.push((dst, *kind));
             }
@@ -1912,16 +1916,16 @@ fn emit_inst(
             };
             // The encoding to write `dst <- sign-extend(arg_reg)`.
             // For full-width kinds (I64), it is a plain mov. The
-            // sign-extension is skipped when no consumer reads the
-            // parameter's upper bits.
+            // caller passes the raw 64-bit value, so an I8/I16
+            // conversion always runs; an I32 extend touches only
+            // bits 32..63 and is skipped when no consumer reads them.
             let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
             let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
                 let rn = Reg(arg_reg);
                 match kind {
-                    _ if high_dead => emit_mov_reg(code, rd, rn),
                     LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
                     LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
-                    LoadKind::I32 => emit(code, super::encode::enc_sxtw(rd, rn)),
+                    LoadKind::I32 if !high_dead => emit(code, super::encode::enc_sxtw(rd, rn)),
                     _ => emit_mov_reg(code, rd, rn),
                 }
             };
@@ -3864,13 +3868,10 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
     }
 }
 
-/// Indirect call through a function-pointer value. Mirrors the
-/// pool path's indirect-call lowering: marshal args per the host
-/// ABI, capture the target into a callee-overwritable scratch
-/// register that arg marshalling won't clobber, `blr`, recover
-/// the return value.
-/// FP args and variadic indirect callees aren't part of the thin
-/// slice; either case returns false.
+/// Indirect call through a function-pointer value: marshal args per
+/// the host ABI, capture the target into a callee-overwritable
+/// scratch register that arg marshalling won't clobber, `blr`,
+/// recover the return value.
 #[allow(clippy::too_many_arguments)]
 fn emit_call_indirect(
     code: &mut Vec<u8>,
@@ -3922,173 +3923,84 @@ fn emit_call_indirect(
         .copied()
         .find(|r| !arg_source_regs.contains(r))
         .map(Reg);
-    if (callee_variadic
-        && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()))
-        || !aggs.is_empty()
-        || ret_agg.is_some()
-    {
-        // Host ABI through a function pointer, taken for a host
-        // variadic callee or any call passing an aggregate by value
-        // (aggregates are placed by `marshal_args`, which the
-        // c5-stack push path below does not handle): the named
-        // arguments follow AAPCS64 (int / FP bank) and the variadic tail
-        // rides the host stack at 8-byte stride (macOS,
-        // `variadic_on_stack`), the integer register bank then the
-        // stack (Windows arm64, `variadic_int_only`), or both banks then
-        // the stack (Linux aarch64, `aarch64_host_variadic`) -- the same
-        // placement `emit_call` uses for a direct variadic call. The
-        // target pointer rides a non-arg-passing scratch that
-        // `marshal_args` will not clobber, or a reserved stack cell
-        // above the argument slots when no such scratch is free.
-        let mut plan =
-            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
-        let staged_off = match free_target_reg {
-            Some(_) => None,
-            None => {
-                // One 16-byte cell keeps SP 16-aligned; the argument
-                // slots stay below the original scratch_bytes.
-                plan.scratch_bytes += 16;
-                Some(plan.scratch_bytes - 16)
-            }
-        };
-        let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
-            Some(r) => r,
-            None => return false,
-        };
-        let target_reg = match free_target_reg {
-            Some(r) => {
-                if target_r.0 != r.0 {
-                    emit_mov_reg(code, r, target_r);
-                }
-                r
-            }
-            None => {
-                if target_r.0 != scratch.primary.0 {
-                    emit_mov_reg(code, scratch.primary, target_r);
-                }
-                scratch.primary
-            }
-        };
-        emit_sub_sp_imm(code, plan.scratch_bytes);
-        if let Some(off) = staged_off {
-            emit_sp_str_x_auto(code, target_reg, off);
+    // Host ABI through a function pointer, for variadic and
+    // non-variadic callees alike: `marshal_args` places the named
+    // arguments per AAPCS64 (int / FP bank, overflow on the host
+    // stack) and a variadic tail per the target's host variadic
+    // placement (`variadic_on_stack` on macOS, `variadic_int_only`
+    // on Windows arm64, both banks then the stack on Linux
+    // aarch64) -- the same placement `emit_call` uses for a direct
+    // call. A non-variadic call plans every argument as fixed,
+    // mirroring the direct path; the walker lowers an unrecoverable
+    // prototype as all-fixed non-variadic, which this placement
+    // serves. The target pointer rides a non-arg-passing scratch
+    // that `marshal_args` will not clobber, or a reserved stack
+    // cell above the argument slots when no such scratch is free.
+    let plan_fixed = if callee_variadic {
+        fixed_args
+    } else {
+        args.len()
+    };
+    let mut plan =
+        super::plan_call_args_aggs(args.len(), plan_fixed, fp_arg_mask, abi, &aggs, false);
+    let staged_off = match free_target_reg {
+        Some(_) => None,
+        None => {
+            // One 16-byte cell keeps SP 16-aligned; the argument
+            // slots stay below the original scratch_bytes.
+            plan.scratch_bytes += 16;
+            Some(plan.scratch_bytes - 16)
         }
-        if !marshal_args(
-            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
-        ) {
-            return false;
-        }
-        setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
-        // The marshal consumed every argument source, so x9 is free
-        // to carry the staged pointer to the blr.
-        let call_reg = match staged_off {
-            Some(off) => {
-                emit_sp_ldr_x(code, Reg(9), off);
-                Reg(9)
+    };
+    let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    let target_reg = match free_target_reg {
+        Some(r) => {
+            if target_r.0 != r.0 {
+                emit_mov_reg(code, r, target_r);
             }
-            None => target_reg,
-        };
-        emit(code, enc_blr(call_reg));
-        emit_add_sp_imm(code, plan.scratch_bytes);
-        finish_call_result(
-            code,
-            ret_agg,
-            ret_slot_off,
-            agg_descs,
-            dst,
-            frame,
-            scratch,
-            fp_return,
-        );
-        return true;
-    }
-    // Indirect calls keep the c5-stack push shape regardless of
-    // whether the callee is variadic. Variadic c5 callees read
-    // their args off the 16-byte-stride stack (their prologue
-    // skips the host-arg-reg spill); non-variadic callees pull
-    // their args from x0..x7 + host stack overflow, ignoring the
-    // c5 stack pushes. Mirroring the pool path's indirect-call
-    // shape -- push every arg first, then load the prefix into
-    // host arg regs, then blr -- handles both at the indirect
-    // call site without needing the callee's variadic flag.
-    // `fp_arg_mask` is supplied by the caller from the argument types;
-    // the reload loop below routes each masked argument into its
-    // d-register per the plan.
-    for (i, &arg_id) in args.iter().rev().enumerate() {
-        let arg_place = alloc
-            .places
-            .get(arg_id as usize)
-            .copied()
-            .unwrap_or(Place::None);
-        let sp_shift = (i as u32) * 16;
-        let src = if let Place::FpReg(_) = arg_place {
-            // FP value: load into d-reg, then move bit pattern
-            // into x16 for the 16-byte stride push.
-            let dn = match materialize_fp_shifted(code, arg_place, 0, frame, sp_shift) {
-                Some(r) => r,
-                None => return false,
-            };
-            emit(code, enc_fmov_d_to_x(scratch.primary, dn));
+            r
+        }
+        None => {
+            if target_r.0 != scratch.primary.0 {
+                emit_mov_reg(code, scratch.primary, target_r);
+            }
             scratch.primary
-        } else {
-            match materialize_int_shifted(code, arg_place, scratch.primary, frame, sp_shift) {
-                Some(r) => r,
-                None => return false,
-            }
-        };
-        emit(code, enc_str_pre(src, Reg(31), -16));
-    }
-    let pushed_bytes = (args.len() as u32) * 16;
-    // The pushes consumed every argument source, so x9 holds no live
-    // value; capture the pointer here, with SP shifted by the pushes.
-    let target_reg = Reg(9);
-    let target_r =
-        match materialize_int_shifted(code, target_place, target_reg, frame, pushed_bytes) {
-            Some(r) => r,
-            None => return false,
-        };
-    if target_r.0 != target_reg.0 {
-        emit_mov_reg(code, target_reg, target_r);
-    }
-    // Load the prefix into host arg regs from the c5-stride
-    // stack we just laid down. Non-variadic callees expect this
-    // shape; variadic callees ignore the host arg regs but read
-    // the same slots through the address-of-local path. Stack
-    // overflow (args
-    // past 8) stays on the c5 stack at `[sp + i*16]`, which the
-    // callee prologue's overflow restripe loop also reads from.
-    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
-    emit_sub_sp_imm(code, plan.scratch_bytes);
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        match placement {
-            super::ArgPlacement::IntReg(r) => {
-                let src_off = plan.scratch_bytes + (i as u32) * 16;
-                emit(code, enc_ldr_imm(Reg(r), Reg(31), src_off));
-            }
-            super::ArgPlacement::FpReg(r) => {
-                let src_off = plan.scratch_bytes + (i as u32) * 16;
-                emit(code, enc_ldr_d_imm(r, Reg(31), src_off));
-            }
-            super::ArgPlacement::Stack(off) => {
-                let src_off = plan.scratch_bytes + (i as u32) * 16;
-                emit(code, enc_ldr_imm(scratch.primary, Reg(31), src_off));
-                emit(code, enc_str_imm(scratch.primary, Reg(31), off));
-            }
-            // This path plans with the scalar `plan_call_args`, so
-            // aggregate placements never occur here.
-            super::ArgPlacement::StructRegs { .. }
-            | super::ArgPlacement::StructByRefReg(_)
-            | super::ArgPlacement::StructByRefStack(_)
-            | super::ArgPlacement::StructStack { .. } => {
-                unreachable!("aggregate arg placement on the scalar indirect path")
-            }
         }
+    };
+    emit_sub_sp_imm(code, plan.scratch_bytes);
+    if let Some(off) = staged_off {
+        emit_sp_str_x_auto(code, target_reg, off);
     }
-    emit(code, enc_blr(target_reg));
+    if !marshal_args(
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+    ) {
+        return false;
+    }
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
+    // The marshal consumed every argument source, so x9 is free
+    // to carry the staged pointer to the blr.
+    let call_reg = match staged_off {
+        Some(off) => {
+            emit_sp_ldr_x(code, Reg(9), off);
+            Reg(9)
+        }
+        None => target_reg,
+    };
+    emit(code, enc_blr(call_reg));
     emit_add_sp_imm(code, plan.scratch_bytes);
-    // Drop the 16-byte-stride argument pushes.
-    emit_add_sp_imm(code, pushed_bytes);
-    move_call_result(code, dst, frame, fp_return);
+    finish_call_result(
+        code,
+        ret_agg,
+        ret_slot_off,
+        agg_descs,
+        dst,
+        frame,
+        scratch,
+        fp_return,
+    );
     true
 }
 

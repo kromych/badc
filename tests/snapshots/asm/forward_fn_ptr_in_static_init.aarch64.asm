@@ -35,11 +35,9 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x0, [x2, x0, lsl #3]
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
+               	mov	x0, x1
                	blr	x9
-               	add	sp, sp, #0x10
                	sxtw	x0, w0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10

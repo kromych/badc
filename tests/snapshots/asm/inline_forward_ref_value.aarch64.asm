@@ -29,27 +29,23 @@ Disassembly of section .text:
 <compute>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x40
                	str	x20, [sp]
-               	str	x21, [sp, #0x8]
-               	str	x22, [sp, #0x10]
                	add	x1, x0, #0x1
                	sxtw	x20, w1
                	cbz	x0, <addr>
-               	add	x21, x0, #0x64
-               	add	x22, x0, #0x1
-               	cmp	x21, #0x0
+               	add	x1, x0, #0x64
+               	add	x0, x0, #0x1
+               	cmp	x1, #0x0
                	b.ne	<addr>
                	b	<addr>
-               	mov	x0, x1
-               	mov	x1, x22
+               	mov	x1, x0
+               	mov	x0, x2
                	bl	<addr>
                	sxtw	x1, w20
                	add	x0, x0, x1
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xfffe             // =65534
@@ -57,9 +53,7 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xffff             // =65535
@@ -67,12 +61,10 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	lsl	x1, x21, #1
+               	lsl	x2, x1, #1
                	b	<addr>
 
 <main>:

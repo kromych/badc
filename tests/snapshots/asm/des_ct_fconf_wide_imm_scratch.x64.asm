@@ -715,26 +715,26 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	xorq	%rbx, %rbx
                	movl	$0xa5a5a5a5, %r12d      # imm = 0xA5A5A5A5
-               	movq	%rbx, %r13
-               	movslq	%ebx, %rax
-               	cmpq	$0x10, %rax
+               	movq	%rbx, %rax
+               	movslq	%ebx, %rcx
+               	cmpq	$0x10, %rcx
                	jge	<addr>
                	jmp	<addr>
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
+               	movslq	%ebx, %rcx
+               	leaq	0x1(%rcx), %rbx
                	jmp	<addr>
-               	movl	%r13d, %r13d
+               	movl	%eax, %r13d
                	movl	%r12d, %edi
                	leaq	<rip>, %rsi
                	callq	<addr>
-               	xorq	%rax, %r13
-               	movl	%r12d, %eax
-               	imulq	$0x19660d, %rax, %rax   # imm = 0x19660D
-               	movl	%eax, %eax
-               	addq	$0x3c6ef35f, %rax       # imm = 0x3C6EF35F
-               	movl	%eax, %r12d
+               	xorq	%r13, %rax
+               	movl	%r12d, %ecx
+               	imulq	$0x19660d, %rcx, %rcx   # imm = 0x19660D
+               	movl	%ecx, %ecx
+               	addq	$0x3c6ef35f, %rcx       # imm = 0x3C6EF35F
+               	movl	%ecx, %r12d
                	jmp	<addr>
-               	movl	%r13d, %eax
+               	movl	%eax, %eax
                	movq	%rax, %rcx
                	shrq	$0x8, %rcx
                	xorq	%rax, %rcx
@@ -751,5 +751,3 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

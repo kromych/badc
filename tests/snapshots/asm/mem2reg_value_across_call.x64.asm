@@ -31,20 +31,19 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	leaq	-<rip>, %r12       # <addr>
                	xorq	%r13, %r13
-               	movq	%r13, %r14
+               	movq	%r13, %rax
                	cmpq	%rbx, %r13
                	jge	<addr>
-               	movq	%r13, %rax
-               	shlq	$0x1, %rax
-               	incq	%rax
-               	addq	%rax, %r14
+               	movq	%r13, %rcx
+               	shlq	$0x1, %rcx
+               	incq	%rcx
+               	leaq	(%rax,%rcx), %r14
                	movq	%r12, %rax
                	movq	%r13, %rdi
                	callq	*%rax
-               	addq	%rax, %r14
+               	addq	%r14, %rax
                	incq	%r13
                	jmp	<addr>
-               	movq	%r14, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -62,5 +61,4 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

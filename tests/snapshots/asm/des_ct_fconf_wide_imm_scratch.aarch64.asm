@@ -616,31 +616,31 @@ Disassembly of section .text:
                	mov	x20, #0x0               // =0
                	mov	x21, #0xa5a5            // =42405
                	movk	x21, #0xa5a5, lsl #16
-               	mov	x22, x20
-               	sxtw	x0, w20
-               	cmp	x0, #0x10
+               	mov	x0, x20
+               	sxtw	x1, w20
+               	cmp	x1, #0x10
                	b.ge	<addr>
                	b	<addr>
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
+               	sxtw	x1, w20
+               	add	x20, x1, #0x1
                	b	<addr>
-               	mov	w22, w22
+               	mov	w22, w0
                	mov	w0, w21
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
-               	eor	x22, x22, x0
-               	mov	w0, w21
+               	eor	x0, x22, x0
+               	mov	w1, w21
                	mov	x17, #0x660d            // =26125
                	movk	x17, #0x19, lsl #16
-               	mul	x0, x0, x17
-               	mov	w0, w0
+               	mul	x1, x1, x17
+               	mov	w1, w1
                	mov	x17, #0xf35f            // =62303
                	movk	x17, #0x3c6e, lsl #16
-               	add	x0, x0, x17
-               	mov	w21, w0
+               	add	x1, x1, x17
+               	mov	w21, w1
                	b	<addr>
-               	mov	w0, w22
+               	mov	w0, w0
                	lsr	x1, x0, #8
                	eor	x1, x0, x1
                	lsr	x2, x0, #16

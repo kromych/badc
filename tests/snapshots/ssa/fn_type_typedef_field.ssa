@@ -41,18 +41,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=18
     v12  Mcpy { dst=v6, src=v11, size=16 }                -> x0
     v13  LocalAddr(-4)                                    -> x0
     v14  Load { addr=v13, disp=0, kind=I64 }              -> x0
-    v15  BinopI { op=ne, lhs=v14, rhs_imm=7 }             -> x12
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=7 }             -> x1
     v16  Imm(0)                                           -> x0
     terminator Bnz { cond=v15, target=b9, fall=b1 }   (exit_acc=v15)
   block 1  start_pc=0
     v17  LocalAddr(-4)                                    -> x0
     v18  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x1
     v19  Load { addr=v17, disp=8, kind=I64 }              -> x0
-    v20  BinopI { op=ne, lhs=v19, rhs_imm=14 }            -> x12
+    v20  BinopI { op=ne, lhs=v19, rhs_imm=14 }            -> x1
     v21  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v20)
   block 2  start_pc=0
-    v22  Phi { incoming=[b9:v15, b1:v20], kind=I64 }      -> x12
+    v22  Phi { incoming=[b9:v15, b1:v20], kind=I64 }      -> x1
     v23  LoadLocal { off=-13, kind=I64 }                  -> x0
     terminator Bz { cond=v22, target=b4, fall=b3 }   (exit_acc=v22)
   block 3  start_pc=0

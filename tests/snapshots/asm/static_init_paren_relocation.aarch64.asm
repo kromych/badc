@@ -50,15 +50,15 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	cmp	x0, x1
-               	cset	x20, ne
-               	cbnz	x20, <addr>
+               	cset	x1, ne
+               	cbnz	x1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	ldrsw	x0, [x0]
                	cmp	x0, #0x63
-               	cset	x20, ne
-               	cbz	x20, <addr>
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x3                // =3
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]

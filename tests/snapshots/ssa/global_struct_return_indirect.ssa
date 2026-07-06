@@ -26,7 +26,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=27
     v10  BinopI { op=xor, lhs=v9, rhs_imm=1 }             -> x0
     v11  BinopI { op=and, lhs=v10, rhs_imm=4294967295 }   -> x0
     v12  BinopI { op=ne, lhs=v11, rhs_imm=0 }             -> x0
-    v13  Imm(1)                                           -> x3
+    v13  Imm(1)                                           -> x2
     v14  Imm(0)                                           -> x1
     terminator Bnz { cond=v12, target=b9, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
@@ -34,11 +34,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=27
     v16  BinopI { op=add, lhs=v15, rhs_imm=4 }            -> x1
     v17  Load { addr=v15, disp=4, kind=I32 }              -> x0
     v18  BinopI { op=ne, lhs=v17, rhs_imm=2 }             -> x0
-    v19  BinopI { op=ne, lhs=v18, rhs_imm=0 }             -> x3
+    v19  BinopI { op=ne, lhs=v18, rhs_imm=0 }             -> x2
     v20  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v19)
   block 2  start_pc=0
-    v21  Phi { incoming=[b9:v13, b1:v19], kind=I64 }      -> x3
+    v21  Phi { incoming=[b9:v13, b1:v19], kind=I64 }      -> x2
     v22  LoadLocal { off=-19, kind=I64 }                  -> x0
     v23  Imm(0)                                           -> x0
     terminator Bnz { cond=v21, target=b10, fall=b3 }   (exit_acc=v21)
@@ -46,11 +46,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=27
     v24  LocalAddr(-3)                                    -> x0
     v25  BinopI { op=add, lhs=v24, rhs_imm=16 }           -> x1
     v26  Load { addr=v24, disp=16, kind=I32 }             -> x0
-    v27  BinopI { op=ne, lhs=v26, rhs_imm=5 }             -> x3
+    v27  BinopI { op=ne, lhs=v26, rhs_imm=5 }             -> x2
     v28  Imm(0)                                           -> x0
     terminator Jmp(b4)   (exit_acc=v27)
   block 4  start_pc=0
-    v29  Phi { incoming=[b10:v21, b3:v27], kind=I64 }     -> x3
+    v29  Phi { incoming=[b10:v21, b3:v27], kind=I64 }     -> x2
     v30  LoadLocal { off=-18, kind=I64 }                  -> x0
     terminator Bz { cond=v29, target=b6, fall=b5 }   (exit_acc=v29)
   block 5  start_pc=0

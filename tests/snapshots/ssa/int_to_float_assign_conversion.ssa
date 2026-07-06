@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=10
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
@@ -110,18 +110,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v88  LoadLocal { off=-6, kind=F32 }                   -> d1 [f32]
     v89  Imm(1110179840)                                  -> x0 [f32]
     v90  Fneg(v89)                                        -> d1 [f32]
-    v91  Binop { op=fgt, lhs=v86, rhs=v90 }               -> x3
+    v91  Binop { op=fgt, lhs=v86, rhs=v90 }               -> x1
     v92  Imm(0)                                           -> x0
     terminator Bnz { cond=v91, target=b15, fall=b9 }   (exit_acc=v91)
   block 9  start_pc=0
     v93  LoadLocal { off=-6, kind=F32 }                   -> d1 [f32]
     v94  Imm(1110441984)                                  -> x0 [f32]
     v95  Fneg(v94)                                        -> d1 [f32]
-    v96  Binop { op=flt, lhs=v86, rhs=v95 }               -> x3
+    v96  Binop { op=flt, lhs=v86, rhs=v95 }               -> x1
     v97  Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v96)
   block 10  start_pc=0
-    v98  Phi { incoming=[b15:v91, b9:v96], kind=I64 }     -> x3
+    v98  Phi { incoming=[b15:v91, b9:v96], kind=I64 }     -> x1
     v99  LoadLocal { off=-10, kind=I64 }                  -> x0
     terminator Bz { cond=v98, target=b12, fall=b11 }   (exit_acc=v98)
   block 11  start_pc=0

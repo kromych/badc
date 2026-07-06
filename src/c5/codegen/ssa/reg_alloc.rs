@@ -107,10 +107,8 @@ pub(crate) struct Allocation {
     /// Highest PC index that names each value as an operand, raised
     /// across back edges by `extend_last_use_across_blocks`. A value
     /// defined at PC `i` is live throughout `[i, last_use[i]]`. The
-    /// allocator's interval tests read it: `class_last_use` feeds
-    /// `promote_calls_after_def_to_classes` so a value whose range
-    /// spans a call takes a callee-saved home, and the coalescing
-    /// hints avoid a caller-saved register such a call would clobber.
+    /// coalescing hints read it to avoid sending a value that outlives
+    /// a call into a caller-saved register the call would clobber.
     pub last_use: Vec<u32>,
     /// For `BinopI(Shr, X, K)` insts the allocator recognised as
     /// the upper half of a sign-narrow `Shl K; Shr K` pair (K in
@@ -386,29 +384,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // until every member of its class is dead.
     let liveness = super::liveness::Liveness::compute(func);
     let mut classes = super::phi_class::PhiClasses::build(func, &liveness);
-    let class_last_use: Vec<u32> = {
-        let n = func.insts.len();
-        let mut cl = alloc::vec![0u32; n];
-        for (v, &lu) in last_use.iter().enumerate().take(n) {
-            let c = classes.find(v as ValueId) as usize;
-            if lu > cl[c] {
-                cl[c] = lu;
-            }
-        }
-        cl
-    };
     let mut calls_after_def = compute_calls_after_def(func, &liveness, target);
-    // Promote per-value `calls_after_def` to the class's combined
-    // live range. Without this, a class member whose own last use
-    // does not cross a call but whose class root lives past one
-    // would be placed in a caller-saved register and clobbered.
-    promote_calls_after_def_to_classes(
-        &mut classes,
-        func,
-        &class_last_use,
-        target,
-        &mut calls_after_def,
-    );
+    // Promote per-value `calls_after_def` to the class: members share
+    // one register, so a member whose own range does not cross a call
+    // still needs a callee-saved home when another member's does.
+    promote_calls_after_def_to_classes(&mut classes, &mut calls_after_def);
     // Call-argument coalescing hints. Run after `last_use` and
     // `calls_after_def` so the per-value safety guards can read them.
     // The prior unconditional ABI-hint pass was reverted in commit
@@ -427,7 +407,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // in its bank spills. Unlike a pc-interval linear scan this models
     // a value live across a back-edge passthrough block, whose live
     // range wraps the pc axis.
-    let _ = &class_last_use;
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
@@ -1934,10 +1913,9 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
     // such carrier to `end_pc` so a value defined inside the block
     // but read only by the terminator (the common Return-value case)
     // has its interval cover any intervening call. Without this the
-    // forward scan leaves `last_use[v]` at v's own def PC, the
-    // `compute_calls_after_def` interval test then misses the
-    // intervening call, and a downstream coalescing hint can place
-    // `v` in a caller-saved register that the call clobbers.
+    // forward scan leaves `last_use[v]` at v's own def PC and a
+    // downstream coalescing hint, which guards on `last_use`, can
+    // place `v` in a caller-saved register that the call clobbers.
     for b in &func.blocks {
         let end_pc = b.inst_range.end;
         let mut bump = |v: ValueId| {
@@ -2099,53 +2077,24 @@ fn compute_calls_after_def(
 }
 
 /// Promote each phi class's `calls_after_def` flag so every member
-/// inherits the class's combined call-crossing status. Without this,
-/// `compute_calls_after_def` reads per-value `last_use[v]` -- a class
-/// member whose own last use does not cross any call but whose
-/// *class root* lives past a call would be placed in a caller-saved
-/// register and clobbered by that call.
+/// inherits the class's combined call-crossing status: the class flag
+/// is the OR of the members' CFG-precise per-value flags. Class
+/// members share one register, so if any member is live across a call
+/// the shared register must be callee-saved. Where no member is live
+/// the shared register holds nothing a call could clobber, so the
+/// class stays eligible for a caller-saved home.
 fn promote_calls_after_def_to_classes(
     classes: &mut super::phi_class::PhiClasses,
-    func: &FunctionSsa,
-    class_last_use: &[u32],
-    target: Target,
     calls_after_def: &mut [bool],
 ) {
-    let tls_addr_is_call = matches!(target, Target::MacOSAarch64);
-    let n = func.insts.len();
-    let mut call_pcs: Vec<u32> = Vec::new();
-    for (idx, inst) in func.insts.iter().enumerate() {
-        let is_call = matches!(
-            inst,
-            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
-            || is_setjmp_barrier(inst);
-        if is_call {
-            call_pcs.push(idx as u32);
-        }
-    }
-    call_pcs.sort_unstable();
-    // For every value, check whether any call sits between the
-    // class's first definition (= class root's PC) and the class's
-    // combined last use. If so, every member of the class needs a
-    // callee-saved placement.
     let mut class_must_callee: alloc::collections::BTreeMap<ValueId, bool> =
         alloc::collections::BTreeMap::new();
-    for v in 0..n {
+    for (v, &crosses) in calls_after_def.iter().enumerate() {
         let root = classes.find(v as ValueId);
-        if class_must_callee.contains_key(&root) {
-            continue;
-        }
-        let lo = call_pcs.binary_search(&(root + 1)).unwrap_or_else(|i| i);
-        let crosses_call = call_pcs
-            .get(lo)
-            .map(|&first| first < class_last_use[root as usize])
-            .unwrap_or(false);
-        class_must_callee.insert(root, crosses_call);
+        *class_must_callee.entry(root).or_insert(false) |= crosses;
     }
-    for (v, entry) in calls_after_def.iter_mut().enumerate().take(n) {
-        let root = classes.find(v as ValueId);
-        if class_must_callee[&root] {
+    for (v, entry) in calls_after_def.iter_mut().enumerate() {
+        if class_must_callee[&classes.find(v as ValueId)] {
             *entry = true;
         }
     }

@@ -31,21 +31,20 @@ Disassembly of section .text:
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
                	mov	x22, #0x0               // =0
-               	mov	x23, x22
+               	mov	x0, x22
                	cmp	x22, x20
                	b.ge	<addr>
-               	lsl	x0, x22, #1
-               	add	x0, x0, #0x1
-               	add	x23, x23, x0
+               	lsl	x1, x22, #1
+               	add	x1, x1, #0x1
+               	add	x23, x0, x1
                	str	x22, [sp, #-0x10]!
                	mov	x9, x21
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
-               	add	x23, x23, x0
+               	add	x0, x23, x0
                	add	x22, x22, #0x1
                	b	<addr>
-               	mov	x0, x23
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

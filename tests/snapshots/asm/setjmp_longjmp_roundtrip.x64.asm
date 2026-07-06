@@ -13,11 +13,8 @@ Disassembly of section .text:
 <deep>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%rsi, %rbx
                	movslq	%edi, %rdi
-               	movslq	%ebx, %rbx
+               	movslq	%esi, %rsi
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
@@ -26,15 +23,11 @@ Disassembly of section .text:
                	jle	<addr>
                	leaq	-0x1(%rdi), %rax
                	movslq	%eax, %rdi
-               	movq	%rbx, %rsi
                	callq	<addr>
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
-               	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movzbq	%al, %rax
@@ -176,4 +169,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

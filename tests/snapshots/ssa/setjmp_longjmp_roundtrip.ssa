@@ -1,12 +1,12 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=deep
 fn ent_pc=0 n_params=2 variadic=false locals=2
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=I32)                            -> x3
+    v3   ParamRef(1, kind=I32)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   ImmData(536)                                     -> x0
     v6   Load { addr=v5, disp=0, kind=I32, volatile }     -> x1

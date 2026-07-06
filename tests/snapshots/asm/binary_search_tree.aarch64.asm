@@ -55,45 +55,26 @@ Disassembly of section .text:
 <search>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x20, [sp]
-               	str	x21, [sp, #0x8]
-               	mov	x20, x0
-               	mov	x21, x1
-               	cmp	x20, #0x0
+               	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x20]
-               	cmp	x0, x21
+               	ldr	x2, [x0]
+               	cmp	x2, x1
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x20]
-               	cmp	x21, x0
+               	ldr	x2, [x0]
+               	cmp	x1, x2
                	b.ge	<addr>
-               	ldr	x0, [x20, #0x8]
-               	mov	x1, x21
+               	ldr	x0, [x0, #0x8]
                	bl	<addr>
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x20, #0x10]
-               	mov	x1, x21
+               	ldr	x0, [x0, #0x10]
                	bl	<addr>
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

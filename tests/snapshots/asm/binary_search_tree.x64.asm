@@ -54,43 +54,24 @@ Disassembly of section .text:
 <search>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%rdi, %rbx
-               	movq	%rsi, %r12
-               	testq	%rbx, %rbx
+               	testq	%rdi, %rdi
                	jne	<addr>
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	(%rbx), %rax
-               	cmpq	%r12, %rax
+               	movq	(%rdi), %rax
+               	cmpq	%rsi, %rax
                	jne	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	(%rbx), %rax
-               	cmpq	%rax, %r12
+               	movq	(%rdi), %rax
+               	cmpq	%rax, %rsi
                	jge	<addr>
-               	movq	0x8(%rbx), %rdi
-               	movq	%r12, %rsi
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
+               	movq	0x8(%rdi), %rdi
                	popq	%rbp
                	jmp	<addr>
-               	movq	0x10(%rbx), %rdi
-               	movq	%r12, %rsi
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
+               	movq	0x10(%rdi), %rdi
                	popq	%rbp
                	jmp	<addr>
 

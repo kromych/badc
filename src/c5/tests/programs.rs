@@ -790,6 +790,19 @@ fn inline_phi_narrow_param_return() {
 }
 
 #[test]
+fn reg_alloc_callee_bank_call_block_before_loop() {
+    // A recursive function whose call block is laid out at a lower pc
+    // than its hot loop: only the values whose CFG live range spans
+    // the calls need callee-saved homes. A pc-interval class test also
+    // flagged the loop-local values, overfilled the callee bank, and
+    // spilled the loop induction variable.
+    assert_eq!(
+        run_fixture("reg_alloc_callee_bank_call_block_before_loop.c"),
+        0
+    );
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

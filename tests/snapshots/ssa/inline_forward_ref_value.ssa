@@ -49,7 +49,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=compute
 fn ent_pc=3 n_params=1 variadic=false locals=6
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -67,12 +67,12 @@ fn ent_pc=3 n_params=1 variadic=false locals=6
     terminator Bz { cond=v1, target=b3, fall=b1 }   (exit_acc=v1)
   block 1  start_pc=0
     v13  LoadLocal { off=2, kind=I64 }                    -> x0
-    v14  BinopI { op=add, lhs=v1, rhs_imm=100 }           -> x12
-    v15  Imm(0)                                           -> x0
-    v16  BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x13
-    v17  Imm(0)                                           -> x0
-    v18  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v19  BinopI { op=eq, lhs=v14, rhs_imm=0 }             -> x0
+    v14  BinopI { op=add, lhs=v1, rhs_imm=100 }           -> x0
+    v15  Imm(0)                                           -> x1
+    v16  BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x1
+    v17  Imm(0)                                           -> x2
+    v18  LoadLocal { off=-3, kind=I64 }                   -> x2
+    v19  BinopI { op=eq, lhs=v14, rhs_imm=0 }             -> x2
     terminator Bz { cond=v19, target=b5, fall=b4 }   (exit_acc=v19)
   block 2  start_pc=0
     v20  LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -88,9 +88,9 @@ fn ent_pc=3 n_params=1 variadic=false locals=6
     v26  Imm(-1)                                          -> x0
     terminator Return(v26)   (exit_acc=v26)
   block 5  start_pc=0
-    v27  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v28  Imm(0)                                           -> x0
-    v29  BinopI { op=shl, lhs=v14, rhs_imm=1 }            -> x1
+    v27  LoadLocal { off=-3, kind=I64 }                   -> x2
+    v28  Imm(0)                                           -> x2
+    v29  BinopI { op=shl, lhs=v14, rhs_imm=1 }            -> x2
     v30  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v29)
 ; --- SSA dump (ok=true) ent_pc=4 ---

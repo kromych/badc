@@ -56,13 +56,13 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	ldrsw	x0, [x0]
                	cmp	x0, #0x7
-               	cset	x21, ne
-               	cbnz	x21, <addr>
+               	cset	x1, ne
+               	cbnz	x1, <addr>
                	sub	x0, x29, #0x10
                	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0xe
-               	cset	x21, ne
-               	cbz	x21, <addr>
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -90,13 +90,13 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	ldrsw	x0, [x0]
                	cmp	x0, #0xa
-               	cset	x21, ne
-               	cbnz	x21, <addr>
+               	cset	x1, ne
+               	cbnz	x1, <addr>
                	sub	x0, x29, #0x20
                	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0x14
-               	cset	x21, ne
-               	cbz	x21, <addr>
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

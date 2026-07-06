@@ -79,10 +79,9 @@ Disassembly of section .text:
                	ret
                	ucvtf	d0, x0
                	fcvt	s0, d0
-               	mov	x0, #0x43e0000000000000 // =4890909195324358656
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x5f000000         // =1593835520
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x6                // =6

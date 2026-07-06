@@ -1296,6 +1296,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // VM and both codegens implement.
     ("float_arithmetic.c", 0),
     ("float_single_precision.c", 0),
+    ("float_literal_f_suffix.c", 0),
+    ("float_literal_arith_single_precision.c", 0),
+    ("float_literal_variadic_printf.c", 0),
     ("fp_arg_passed_in_fp_reg.c", 0),
     ("fp_param_float_before_double.c", 0),
     ("float_arg_single_precision.c", 0),

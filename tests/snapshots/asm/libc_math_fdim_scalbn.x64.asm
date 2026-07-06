@@ -205,15 +205,14 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
-               	movl	$0x2, %edi
+               	movl	$0x3f800000, %edi       # imm = 0x3F800000
+               	movl	$0x2, %esi
+               	movq	%rdi, %xmm0
+               	movq	%rsi, %rdi
                	callq	<addr>
-               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x40800000, %eax       # imm = 0x40800000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -224,17 +223,14 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
-               	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm1
+               	movl	$0x40a00000, %edi       # imm = 0x40A00000
+               	movl	$0x40400000, %esi       # imm = 0x40400000
+               	movq	%rdi, %xmm0
+               	movq	%rsi, %xmm1
                	callq	<addr>
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -248,3 +244,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

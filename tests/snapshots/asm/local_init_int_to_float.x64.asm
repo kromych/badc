@@ -32,11 +32,10 @@ Disassembly of section .text:
                	cvtsi2sd	%rax, %xmm0
                	cvtsd2ss	%xmm0, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
-               	movabsq	$0x4044f33333333333, %rax # imm = 0x4044F33333333333
+               	movl	$0x4227999a, %eax       # imm = 0x4227999A
                	movsd	0x18(%rsp), %xmm14
-               	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm14
                	setb	%bl
                	movzbq	%bl, %rbx
                	setnp	%r10b
@@ -44,11 +43,10 @@ Disassembly of section .text:
                	andq	%r10, %rbx
                	testq	%rbx, %rbx
                	jne	<addr>
-               	movabsq	$0x40450ccccccccccd, %rax # imm = 0x40450CCCCCCCCCCD
+               	movl	$0x42286666, %eax       # imm = 0x42286666
                	movsd	0x18(%rsp), %xmm14
-               	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm14
                	seta	%bl
                	movzbq	%bl, %rbx
                	testq	%rbx, %rbx
@@ -68,11 +66,10 @@ Disassembly of section .text:
                	cvtsi2sd	%rax, %xmm0
                	cvtsd2ss	%xmm0, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
-               	movabsq	$0x40c81c4000000000, %rax # imm = 0x40C81C4000000000
+               	movl	$0x4640e200, %eax       # imm = 0x4640E200
                	movsd	0x18(%rsp), %xmm14
-               	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm14
                	setb	%bl
                	movzbq	%bl, %rbx
                	setnp	%r10b
@@ -80,11 +77,10 @@ Disassembly of section .text:
                	andq	%r10, %rbx
                	testq	%rbx, %rbx
                	jne	<addr>
-               	movabsq	$0x40c81cc000000000, %rax # imm = 0x40C81CC000000000
+               	movl	$0x4640e600, %eax       # imm = 0x4640E600
                	movsd	0x18(%rsp), %xmm14
-               	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm14
                	seta	%bl
                	movzbq	%bl, %rbx
                	testq	%rbx, %rbx
@@ -142,11 +138,10 @@ Disassembly of section .text:
                	cvtsi2sd	%rax, %xmm0
                	cvtsd2ss	%xmm0, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
-               	movabsq	$0x41eff68690000000, %rax # imm = 0x41EFF68690000000
+               	movl	$0x4f7fb434, %eax       # imm = 0x4F7FB434
                	movsd	0x18(%rsp), %xmm14
-               	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm14
                	setb	%bl
                	movzbq	%bl, %rbx
                	setnp	%r10b
@@ -154,11 +149,10 @@ Disassembly of section .text:
                	andq	%r10, %rbx
                	testq	%rbx, %rbx
                	jne	<addr>
-               	movabsq	$0x41f004ccb0000000, %rax # imm = 0x41F004CCB0000000
+               	movl	$0x4f802666, %eax       # imm = 0x4F802666
                	movsd	0x18(%rsp), %xmm14
-               	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm14
                	seta	%bl
                	movzbq	%bl, %rbx
                	testq	%rbx, %rbx
@@ -174,9 +168,10 @@ Disassembly of section .text:
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x400d99999999999a, %rax # imm = 0x400D99999999999A
+               	movl	$0x406ccccd, %eax       # imm = 0x406CCCCD
                	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
+               	movss	%xmm14, -0x48(%rbp,%riz)
+               	movss	-0x48(%rbp,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	cvttsd2si	%xmm0, %rax
                	movslq	%eax, %rcx
@@ -221,3 +216,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

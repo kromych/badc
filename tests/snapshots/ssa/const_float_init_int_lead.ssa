@@ -26,17 +26,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v13  ImmData(24)                                      -> x0
     v14  Load { addr=v13, disp=0, kind=F32 }              -> d0 [f32]
-    v15  Imm(4609434218613702656)                         -> x0
-    v16  FpCast { kind=F32ToF64, value=v14 }              -> d0
-    v17  Binop { op=feq, lhs=v16, rhs=v15 }               -> x0
-    v18  BinopI { op=eq, lhs=v17, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v18, target=b6, fall=b5 }   (exit_acc=v18)
+    v15  Imm(1069547520)                                  -> x0 [f32]
+    v16  Binop { op=feq, lhs=v14, rhs=v15 }               -> x0
+    v17  BinopI { op=eq, lhs=v16, rhs_imm=0 }             -> x0
+    terminator Bz { cond=v17, target=b6, fall=b5 }   (exit_acc=v17)
   block 5  start_pc=0
-    v19  Imm(3)                                           -> x0
-    terminator Return(v19)   (exit_acc=v19)
+    v18  Imm(3)                                           -> x0
+    terminator Return(v18)   (exit_acc=v18)
   block 6  start_pc=0
-    v20  Imm(0)                                           -> x0
-    terminator Return(v20)   (exit_acc=v20)
+    v19  Imm(0)                                           -> x0
+    terminator Return(v19)   (exit_acc=v19)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

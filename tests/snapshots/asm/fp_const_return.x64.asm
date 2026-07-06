@@ -55,9 +55,9 @@ Disassembly of section .text:
                	retq
 
 <ret_quarter_f>:
-               	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
+               	movl	$0x3e800000, %eax       # imm = 0x3E800000
                	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
+               	movapd	%xmm14, %xmm0
                	retq
 
 <sum_zero>:
@@ -195,10 +195,9 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	movl	$0x2, %esi
                	callq	<addr>
-               	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
+               	movl	$0x3e800000, %eax       # imm = 0x3E800000
                	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
-               	cvtss2sd	%xmm0, %xmm0
+               	cvtss2sd	%xmm14, %xmm0
                	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -237,4 +236,5 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

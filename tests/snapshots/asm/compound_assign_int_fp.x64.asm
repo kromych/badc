@@ -64,9 +64,10 @@ Disassembly of section .text:
                	retq
                	movl	$0x7, %eax
                	cvtsi2sd	%rax, %xmm0
-               	movabsq	$0x4007333333333333, %rax # imm = 0x4007333333333333
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm0
+               	movl	$0x4039999a, %eax       # imm = 0x4039999A
+               	movq	%rax, %xmm14
+               	cvtss2sd	%xmm14, %xmm1
+               	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rax
                	movslq	%eax, %rax
                	cmpq	$0x9, %rax
@@ -161,5 +162,3 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

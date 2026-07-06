@@ -54,9 +54,8 @@ Disassembly of section .text:
                	ret
 
 <ret_quarter_f>:
-               	mov	x0, #0x3fd0000000000000 // =4598175219545276416
-               	fmov	d16, x0
-               	fcvt	s0, d16
+               	mov	x0, #0x3e800000         // =1048576000
+               	fmov	d0, x0
                	ret
 
 <sum_zero>:
@@ -177,10 +176,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	mov	x1, #0x2                // =2
                	bl	<addr>
-               	mov	x0, #0x3fd0000000000000 // =4598175219545276416
-               	fmov	d16, x0
-               	fcvt	s0, d16
-               	fcvt	d0, s0
+               	mov	x0, #0x3e800000         // =1048576000
+               	fmov	s16, w0
+               	fcvt	d0, s16
                	mov	x0, #0x3fd0000000000000 // =4598175219545276416
                	fmov	d17, x0
                	fcmp	d0, d17

@@ -1447,9 +1447,7 @@ impl<'a> Walker<'a> {
                 // f64 bits untagged.
                 if is_float_ty(*ty) {
                     let f32_bits = f64::from_bits(*bits) as f32;
-                    let imm = f32_bits.to_bits() as i64;
-                    let v = b.imm(imm);
-                    return Ok(b.mark_f32(v));
+                    return Ok(b.imm_f32(f32_bits.to_bits()));
                 }
                 Ok(b.imm(*bits as i64))
             }

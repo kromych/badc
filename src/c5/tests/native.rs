@@ -423,6 +423,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("struct_param_stack_spill.c", 0),
     ("struct_stack_arg_then_scalar.c", 0),
     ("call_sp_adjust_imm12_overflow.c", 0),
+    ("callee_save_pair_fold.c", 17),
+    ("callee_save_pair_large_frame.c", 18),
     ("indirect_call_target_scratch_exhausted.c", 0),
     ("fp_load_folded_disp.c", 0),
     ("mixed_struct_gpr_abi.c", 0),

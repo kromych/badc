@@ -27,7 +27,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	callq	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm15
@@ -116,7 +115,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x1, %eax
-               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
@@ -124,7 +122,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

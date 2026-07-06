@@ -76,9 +76,6 @@ Disassembly of section .text:
                	jmpq	*%rax
 
 <flag_table>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	leaq	<rip>, %rax
@@ -103,8 +100,6 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	movl	%ecx, 0x4(%rax)
                	movslq	(%rax,%rdi,4), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -151,3 +146,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

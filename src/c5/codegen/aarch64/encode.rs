@@ -204,6 +204,66 @@ pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
         | (rt.0 as u32)
 }
 
+/// Shared field packer for the LDP / STP (SIMD&FP, 64-bit) forms below.
+/// `imm` scales by 8 into the imm7 field, same as the X-register forms.
+fn enc_ldst_pair_d(base: u32, dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(dt < 32 && dt2 < 32);
+    debug_assert!(imm % 8 == 0, "ldp/stp d: imm must be 8-byte aligned");
+    let imm7 = imm / 8;
+    debug_assert!(
+        (-64..64).contains(&imm7),
+        "ldp/stp d: offset {imm} (scaled {imm7}) out of range"
+    );
+    base | (((imm7 as u32) & 0x7F) << 15)
+        | ((dt2 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (dt as u32)
+}
+
+/// `STP <Dt1>, <Dt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset.
+pub(crate) fn enc_stp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    enc_ldst_pair_d(0x6D00_0000, dt, dt2, rn, imm)
+}
+
+/// `LDP <Dt1>, <Dt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset.
+pub(crate) fn enc_ldp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    enc_ldst_pair_d(0x6D40_0000, dt, dt2, rn, imm)
+}
+
+/// `STP <Dt1>, <Dt2>, [<Xn|SP>, #imm]!` -- store-pair, pre-indexed.
+pub(crate) fn enc_stp_d_pre(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    enc_ldst_pair_d(0x6D80_0000, dt, dt2, rn, imm)
+}
+
+/// `LDP <Dt1>, <Dt2>, [<Xn|SP>], #imm` -- load-pair, post-indexed.
+pub(crate) fn enc_ldp_d_post(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    enc_ldst_pair_d(0x6CC0_0000, dt, dt2, rn, imm)
+}
+
+/// `STR <Dt>, [<Xn|SP>, #imm]!` -- pre-indexed store with writeback
+/// (unscaled imm9). D-register mirror of [`enc_str_pre`].
+pub(crate) fn enc_str_d_pre(dt: u8, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(dt < 32);
+    debug_assert!(
+        (-256..256).contains(&imm),
+        "str-d-pre imm: {imm} out of range"
+    );
+    let imm9 = (imm as u32) & 0x1FF;
+    0xFC00_0C00 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32)
+}
+
+/// `LDR <Dt>, [<Xn|SP>], #imm` -- post-indexed load with writeback
+/// (unscaled imm9). D-register mirror of [`enc_ldr_post`].
+pub(crate) fn enc_ldr_d_post(dt: u8, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(dt < 32);
+    debug_assert!(
+        (-256..256).contains(&imm),
+        "ldr-d-post imm: {imm} out of range"
+    );
+    let imm9 = (imm as u32) & 0x1FF;
+    0xFC40_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32)
+}
+
 /// `MOV <Xd>, <Xn>` -- alias for `ORR <Xd>, XZR, <Xn>`. Note that ARM
 /// uses two distinct mov forms: this one (register-to-register, where
 /// `Rn` field 31 means XZR) and `add xd, sp, #0` (which is what you

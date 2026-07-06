@@ -68,9 +68,6 @@ Disassembly of section .text:
                	br	x0
 
 <flag_table>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	sxtw	x1, w1
                	adrp	x2, <page>
@@ -94,8 +91,6 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	str	w1, [x2, #0x4]
                	ldrsw	x0, [x2, x0, lsl #2]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

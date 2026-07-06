@@ -156,13 +156,10 @@ Disassembly of section .text:
                	ret
 
 <stream_xor>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0xa0
-               	str	x20, [sp]
-               	str	x21, [sp, #0x8]
-               	str	x22, [sp, #0x10]
-               	str	x23, [sp, #0x18]
+               	stp	x20, x21, [sp, #-0xb0]!
+               	stp	x22, x23, [sp, #0x10]
+               	stp	x29, x30, [sp, #0xa0]
+               	add	x29, sp, #0xa0
                	mov	x21, x0
                	mov	x20, x4
                	mov	x23, x2
@@ -170,12 +167,9 @@ Disassembly of section .text:
                	cmp	x23, #0x0
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	add	sp, sp, #0xa0
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0xa0]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0xb0
                	ret
                	mov	x1, #0x0                // =0
                	mov	w0, w1
@@ -217,12 +211,9 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x0, #0x0                // =0
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	add	sp, sp, #0xa0
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0xa0]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0xb0
                	ret
                	mov	w0, w1
                	cmp	x0, #0x40

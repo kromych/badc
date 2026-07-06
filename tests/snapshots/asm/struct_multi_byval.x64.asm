@@ -147,11 +147,9 @@ Disassembly of section .text:
                	movslq	0x20(%rbp), %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	movslq	0x20(%rbp), %rcx
-               	incq	%rcx
-               	movl	%ecx, 0x4(%rax)
+               	leaq	0x1(%rcx), %rdx
+               	movl	%edx, 0x4(%rax)
                	leaq	-0x18(%rbp), %rax
-               	movslq	0x20(%rbp), %rcx
                	addq	$0x2, %rcx
                	movl	%ecx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
@@ -499,4 +497,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

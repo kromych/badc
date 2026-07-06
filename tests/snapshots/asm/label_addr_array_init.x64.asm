@@ -31,7 +31,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movl	%eax, -0x20(%rbp)
                	leaq	-0x18(%rbp), %rax
-               	movslq	0x10(%rbp), %rcx
+               	movslq	%edi, %rcx
                	movq	(%rax,%rcx,8), %rax
                	jmpq	*%rax
                	movl	$0xa, %eax
@@ -77,7 +77,7 @@ Disassembly of section .text:
                	movq	%rcx, -0x10(%rbp)
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x8(%rbp)
-               	movslq	0x10(%rbp), %rcx
+               	movslq	%edi, %rcx
                	movq	(%rax,%rcx,8), %rax
                	jmpq	*%rax
                	movl	$0x1, %eax
@@ -123,7 +123,7 @@ Disassembly of section .text:
                	movq	%rcx, -0x10(%rbp)
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x8(%rbp)
-               	movslq	0x10(%rbp), %rcx
+               	movslq	%edi, %rcx
                	movq	(%rax,%rcx,8), %rax
                	jmpq	*%rax
                	movl	$0x64, %eax
@@ -218,3 +218,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -742,6 +742,14 @@ fn inline_two_word_struct_return() {
 }
 
 #[test]
+fn store_forward_local_slot() {
+    // A frame-slot store immediately reloaded in one block forwards to
+    // the stored value; volatile, address-taken, and cross-block pairs
+    // reload from memory.
+    assert_eq!(run_fixture("store_forward_local_slot.c"), 0);
+}
+
+#[test]
 fn struct_return_reg_computed_goto() {
     // A one-word-struct return that carries a label address is promoted out
     // of its frame slot; the computed-goto terminator reading the field must

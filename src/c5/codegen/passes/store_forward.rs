@@ -38,8 +38,21 @@
 //!     would be unsound.
 //! A load forwards from an earlier load only when the load kinds match
 //! exactly, so the extension already applied is the one wanted.
+//!
+//! Frame slots (`StoreLocal` / `LoadLocal`) are tracked in a second
+//! table keyed by slot index, with the same width, volatile, and
+//! distance discipline. A slot participates only when nothing but
+//! `LoadLocal` / `StoreLocal` can reach it: no `LocalAddr`, no volatile
+//! access (`mem2reg::promotable_slots`), and no write through a
+//! `FunctionSsa` field or call result slot. Such a slot's address is
+//! never a value, so no `Store`, `Mcpy`, or atomic can write it; its
+//! entries survive those instructions and die at another `StoreLocal`
+//! to the same slot, at a call (a reload after the call is cheaper
+//! than keeping the value live across it), or at the block boundary.
 
+use crate::c5::codegen::ssa::mem2reg::promotable_slots;
 use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
 /// Access width in bytes for a load kind.
@@ -100,6 +113,55 @@ struct Entry {
     load_kind: Option<LoadKind>,
 }
 
+/// A known-available frame-slot value within the current block. Slots
+/// are 8-byte cells and every `LoadLocal` / `StoreLocal` accesses a
+/// slot from its base, so entries for distinct slots are disjoint and
+/// any two accesses of one slot overlap.
+#[derive(Clone, Copy)]
+struct SlotEntry {
+    off: i64,
+    width: u8,
+    value: ValueId,
+    src_idx: u32,
+    /// As [`Entry::load_kind`].
+    load_kind: Option<LoadKind>,
+}
+
+/// Slots whose store -> load pairs may forward: reachable only through
+/// `LoadLocal` / `StoreLocal`, so every write is visible in the SSA.
+/// Starts from `mem2reg::promotable_slots` (no `LocalAddr`, no volatile
+/// access, no alloca-arena slot) and removes the slots the emit writes
+/// through `FunctionSsa` fields or call metadata rather than an
+/// instruction. A function with a runtime-growing frame is skipped
+/// entirely, as in mem2reg.
+fn forwardable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
+    if func
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::AllocaInit(s) if *s != 0))
+    {
+        return BTreeSet::new();
+    }
+    let mut slots = promotable_slots(func);
+    slots.remove(&func.indirect_result_slot);
+    for s in &func.param_local_slots {
+        slots.remove(s);
+    }
+    for inst in &func.insts {
+        match inst {
+            Inst::Call { ret_slot_local, .. }
+            | Inst::CallIndirect { ret_slot_local, .. }
+            | Inst::CallExt { ret_slot_local, .. }
+                if *ret_slot_local != 0 =>
+            {
+                slots.remove(ret_slot_local);
+            }
+            _ => {}
+        }
+    }
+    slots
+}
+
 /// Byte ranges `[a, a+aw)` and `[b, b+bw)` overlap.
 fn overlaps(a: i32, aw: u8, b: i32, bw: u8) -> bool {
     let a_end = a as i64 + aw as i64;
@@ -124,9 +186,11 @@ fn run_one(func: &mut FunctionSsa) {
     // Loads replaced in place by an `Extend` of the stored value.
     let mut rewrites: Vec<(usize, Inst)> = Vec::new();
     let mut any = false;
+    let slots = forwardable_slots(func);
 
     for block in &func.blocks {
         let mut table: Vec<Entry> = Vec::new();
+        let mut slot_table: Vec<SlotEntry> = Vec::new();
         for idx in block.inst_range.clone() {
             let i = idx as usize;
             if i >= func.insts.len() {
@@ -237,10 +301,92 @@ fn run_one(func: &mut FunctionSsa) {
                         });
                     }
                 }
+                // A volatile slot access is never tracked; its slot is
+                // outside `forwardable_slots`. A volatile load reads
+                // only, so existing entries stay valid.
+                Inst::LoadLocal { volatile: true, .. } => {}
+                Inst::LoadLocal {
+                    off,
+                    kind,
+                    volatile: false,
+                } => {
+                    let off = *off;
+                    let kind = *kind;
+                    if !slots.contains(&off) {
+                        continue;
+                    }
+                    let w = load_width(kind);
+                    let hit = slot_table
+                        .iter()
+                        .find(|e| e.off == off && e.width == w)
+                        .copied()
+                        .filter(|e| (i as u32).saturating_sub(e.src_idx) <= MAX_FORWARD_DISTANCE);
+                    if let Some(e) = hit {
+                        match e.load_kind {
+                            None => match kind {
+                                LoadKind::I64 => {
+                                    redirect[i] = Some(e.value);
+                                    any = true;
+                                }
+                                LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => {
+                                    rewrites.push((
+                                        i,
+                                        Inst::Extend {
+                                            value: e.value,
+                                            kind,
+                                        },
+                                    ));
+                                }
+                                // Unsigned sub-width and floating: not
+                                // forwarded (see the module note).
+                                _ => {}
+                            },
+                            Some(k) if k == kind => {
+                                redirect[i] = Some(e.value);
+                                any = true;
+                            }
+                            Some(_) => {}
+                        }
+                    }
+                    if !slot_table.iter().any(|e| e.off == off && e.width == w) {
+                        let value = redirect[i].unwrap_or(i as ValueId);
+                        slot_table.push(SlotEntry {
+                            off,
+                            width: w,
+                            value,
+                            src_idx: idx,
+                            load_kind: Some(kind),
+                        });
+                    }
+                }
+                Inst::StoreLocal {
+                    off,
+                    value,
+                    kind,
+                    volatile,
+                } => {
+                    let off = *off;
+                    let value = *value;
+                    let kind = *kind;
+                    let volatile = *volatile;
+                    // A frame write can alias a tracked pointer entry
+                    // (the pointer can be a `LocalAddr` of this slot),
+                    // so the pointer table clears as before.
+                    table.clear();
+                    slot_table.retain(|e| e.off != off);
+                    if slots.contains(&off) && is_int_store(kind) && !volatile {
+                        slot_table.push(SlotEntry {
+                            off,
+                            width: store_width(kind),
+                            value,
+                            src_idx: idx,
+                            load_kind: None,
+                        });
+                    }
+                }
                 // Reads and pure computes the pass does not model: no
                 // clobber, no entry.
-                Inst::LoadLocal { .. }
-                | Inst::LoadIndexed { .. }
+                Inst::LoadIndexed { .. }
                 | Inst::Imm(_)
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
@@ -256,20 +402,29 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
                 | Inst::Phi { .. } => {}
-                // Anything that can write through a pointer the pass does
-                // not track clears the whole table.
-                Inst::StoreLocal { .. }
-                | Inst::StoreIndexed { .. }
+                // Anything that can write through a pointer the pass
+                // does not track clears the pointer table. Slot entries
+                // survive: a forwardable slot's address is never a
+                // value, so none of these can write it.
+                Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
-                | Inst::AllocaInit(_)
-                | Inst::Call { .. }
+                | Inst::AllocaInit(_) => {
+                    table.clear();
+                }
+                // A call cannot write a forwardable slot either, but
+                // forwarding across one would hold the value in a
+                // register (or a spill slot) over the call, which costs
+                // more than the frame reload it removes. Both tables
+                // clear.
+                Inst::Call { .. }
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
                 | Inst::TailExt(_) => {
                     table.clear();
+                    slot_table.clear();
                 }
             }
         }
@@ -309,6 +464,9 @@ fn run_one(func: &mut FunctionSsa) {
         match &mut block.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
                 *cond = resolve(&redirect, *cond);
+            }
+            Terminator::GotoIndirect { target } => {
+                *target = resolve(&redirect, *target);
             }
             Terminator::Return(v) if *v != NO_VALUE => {
                 *v = resolve(&redirect, *v);
@@ -700,6 +858,276 @@ mod tests {
         assert!(
             matches!(f.insts[5], Inst::Binop { lhs: 3, rhs: 4, .. }),
             "volatile loads must not forward from the store or each other",
+        );
+    }
+
+    /// `slot = s; return slot;` forwards the I64 slot reload to the
+    /// stored value.
+    #[test]
+    fn store_local_then_load_local_redirects() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    off: -1,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::LoadLocal {
+                    off: -1,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(2),
+            2,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(0)),
+            "the slot reload should redirect to the stored value v0",
+        );
+    }
+
+    /// A call between the slot store and the reload blocks the forward:
+    /// not for aliasing (the callee cannot reach the slot) but because
+    /// forwarding would keep the value live across the call.
+    #[test]
+    fn store_local_does_not_forward_across_call() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    off: -1,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::Call {
+                    target_pc: 0,
+                    args: Vec::new(),
+                    fixed_args: 0,
+                    fp_return: false,
+                    fp_arg_mask: 0,
+                    arg_aggs: Vec::new(),
+                    ret_agg: None,
+                    ret_slot_local: 0,
+                },
+                Inst::LoadLocal {
+                    off: -1,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(3),
+            3,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(3)),
+            "a reload after a call must stay a reload",
+        );
+    }
+
+    /// A slot whose address is taken anywhere in the function never
+    /// forwards: a store through the pointer could sit between the
+    /// slot store and the reload.
+    #[test]
+    fn address_taken_slot_does_not_forward() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::LocalAddr(-1),
+                Inst::StoreLocal {
+                    off: -1,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::Store {
+                    addr: 1,
+                    disp: 0,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::LoadLocal {
+                    off: -1,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(4),
+            4,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(4)),
+            "an address-taken slot must not forward",
+        );
+    }
+
+    /// A volatile slot store pins the slot: neither it nor any access
+    /// of the slot forwards (C99 6.7.3p6).
+    #[test]
+    fn volatile_store_local_does_not_forward() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    off: -1,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: true,
+                },
+                Inst::LoadLocal {
+                    off: -1,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(2),
+            2,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            "a volatile-stored slot must not forward",
+        );
+    }
+
+    /// A second store to the slot replaces the tracked value: the
+    /// reload forwards to the newer store, not the older one.
+    #[test]
+    fn second_store_local_replaces_entry() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    off: -1,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::StoreLocal {
+                    off: -1,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::LoadLocal {
+                    off: -1,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(4),
+            4,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(1)),
+            "the reload should forward to the second store's value",
+        );
+    }
+
+    /// A signed sub-width slot reload becomes an `Extend` of the
+    /// stored value, as for the pointer path.
+    #[test]
+    fn signed_subwidth_slot_reload_becomes_extend() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    off: -1,
+                    value: 0,
+                    kind: StoreKind::I32,
+                    volatile: false,
+                },
+                Inst::LoadLocal {
+                    off: -1,
+                    kind: LoadKind::I32,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(2),
+            2,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(
+                f.insts[2],
+                Inst::Extend {
+                    value: 0,
+                    kind: LoadKind::I32
+                }
+            ),
+            "an I32 slot reload of an I32 store should become Extend(stored, I32)",
+        );
+    }
+
+    /// A call's aggregate-return slot is written by the call itself, so
+    /// it never forwards even without a `LocalAddr`.
+    #[test]
+    fn call_ret_slot_does_not_forward() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    off: -2,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::Call {
+                    target_pc: 0,
+                    args: Vec::new(),
+                    fixed_args: 0,
+                    fp_return: false,
+                    fp_arg_mask: 0,
+                    arg_aggs: Vec::new(),
+                    ret_agg: Some(0),
+                    ret_slot_local: -2,
+                },
+                Inst::LoadLocal {
+                    off: -2,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(3),
+            3,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(3)),
+            "a call result slot must not forward across the call",
         );
     }
 

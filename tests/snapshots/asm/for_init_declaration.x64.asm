@@ -11,66 +11,19 @@ Disassembly of section .text:
                	ud2
 
 <simple_sum>:
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	jmp	<addr>
-               	addq	%rcx, %rax
-               	movslq	%ecx, %rcx
-               	incq	%rcx
-               	movslq	%ecx, %rdx
-               	cmpq	$0xa, %rdx
-               	jl	<addr>
-               	movslq	%eax, %rax
+               	movl	$0x2d, %eax
                	retq
 
 <multi_decl>:
-               	xorq	%rdx, %rdx
-               	movl	$0xa, %ecx
-               	movq	%rdx, %rax
-               	jmp	<addr>
-               	leaq	(%rdx,%rcx), %rsi
-               	addq	%rsi, %rax
-               	incq	%rdx
-               	movslq	%ecx, %rcx
-               	decq	%rcx
-               	movslq	%edx, %rsi
-               	movslq	%ecx, %rdi
-               	cmpq	%rdi, %rsi
-               	jl	<addr>
-               	movslq	%eax, %rax
+               	movl	$0x32, %eax
                	retq
 
 <shadowing>:
                	movl	$0x2a, %eax
-               	xorq	%rdx, %rdx
-               	jmp	<addr>
-               	movslq	%edx, %rcx
-               	leaq	0x1(%rcx), %rdx
-               	movslq	%edx, %rcx
-               	cmpq	$0x3, %rcx
-               	jl	<addr>
                	retq
-               	jmp	<addr>
 
 <adjacent_fors>:
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	jmp	<addr>
-               	addq	%rcx, %rax
-               	movslq	%ecx, %rcx
-               	incq	%rcx
-               	movslq	%ecx, %rdx
-               	cmpq	$0x5, %rdx
-               	jl	<addr>
-               	movl	$0xa, %edx
-               	jmp	<addr>
-               	addq	%rdx, %rax
-               	movslq	%edx, %rcx
-               	leaq	0x1(%rcx), %rdx
-               	movslq	%edx, %rcx
-               	cmpq	$0xd, %rcx
-               	jl	<addr>
-               	movslq	%eax, %rax
+               	movl	$0x2b, %eax
                	retq
 
 <struct_ptr_init>:
@@ -178,4 +131,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

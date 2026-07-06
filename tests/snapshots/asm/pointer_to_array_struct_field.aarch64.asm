@@ -29,24 +29,87 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x0                // =0
                	b	<addr>
-               	mov	x2, #0x0                // =0
-               	b	<addr>
                	sub	x0, x29, #0x8
                	ldr	x0, [x0]
-               	sxtw	x3, w1
-               	lsl	x4, x3, #4
-               	add	x0, x0, x4
-               	sxtw	x4, w2
+               	sxtw	x2, w1
+               	lsl	x3, x2, #4
+               	add	x0, x0, x3
+               	add	x0, x0, #0x0
                	mov	x17, #0x64              // =100
-               	mul	x3, x3, x17
-               	add	x3, x3, x4
-               	sxtw	x5, w3
-               	strh	w5, [x0, x4, lsl #1]
-               	sxtw	x0, w2
-               	add	x2, x0, #0x1
-               	sxtw	x0, w2
-               	cmp	x0, #0x8
-               	b.lt	<addr>
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x0
+               	sxtw	x3, w2
+               	strh	w3, [x0]
+               	sub	x0, x29, #0x8
+               	ldr	x0, [x0]
+               	sxtw	x2, w1
+               	lsl	x3, x2, #4
+               	add	x0, x0, x3
+               	mov	x17, #0x64              // =100
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x1
+               	sxtw	x3, w2
+               	strh	w3, [x0, #0x2]
+               	sub	x0, x29, #0x8
+               	ldr	x0, [x0]
+               	sxtw	x2, w1
+               	lsl	x3, x2, #4
+               	add	x0, x0, x3
+               	mov	x17, #0x64              // =100
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x2
+               	sxtw	x3, w2
+               	strh	w3, [x0, #0x4]
+               	sub	x0, x29, #0x8
+               	ldr	x0, [x0]
+               	sxtw	x2, w1
+               	lsl	x3, x2, #4
+               	add	x0, x0, x3
+               	mov	x17, #0x64              // =100
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x3
+               	sxtw	x3, w2
+               	strh	w3, [x0, #0x6]
+               	sub	x0, x29, #0x8
+               	ldr	x0, [x0]
+               	sxtw	x2, w1
+               	lsl	x3, x2, #4
+               	add	x0, x0, x3
+               	mov	x17, #0x64              // =100
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x4
+               	sxtw	x3, w2
+               	strh	w3, [x0, #0x8]
+               	sub	x0, x29, #0x8
+               	ldr	x0, [x0]
+               	sxtw	x2, w1
+               	lsl	x3, x2, #4
+               	add	x0, x0, x3
+               	mov	x17, #0x64              // =100
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x5
+               	sxtw	x3, w2
+               	strh	w3, [x0, #0xa]
+               	sub	x0, x29, #0x8
+               	ldr	x0, [x0]
+               	sxtw	x2, w1
+               	lsl	x3, x2, #4
+               	add	x0, x0, x3
+               	mov	x17, #0x64              // =100
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x6
+               	sxtw	x3, w2
+               	strh	w3, [x0, #0xc]
+               	sub	x0, x29, #0x8
+               	ldr	x0, [x0]
+               	sxtw	x2, w1
+               	lsl	x3, x2, #4
+               	add	x0, x0, x3
+               	mov	x17, #0x64              // =100
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x7
+               	sxtw	x3, w2
+               	strh	w3, [x0, #0xe]
                	sxtw	x0, w1
                	add	x1, x0, #0x1
                	sxtw	x0, w1

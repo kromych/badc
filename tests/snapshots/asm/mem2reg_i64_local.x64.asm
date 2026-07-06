@@ -12,14 +12,10 @@ Disassembly of section .text:
 
 <f>:
                	leaq	(%rdi,%rdi,2), %rax
-               	xorq	%rdx, %rdx
-               	movq	%rdx, %rcx
-               	jmp	<addr>
+               	leaq	(%rax), %rcx
                	addq	%rax, %rcx
-               	incq	%rdx
-               	cmpq	$0x4, %rdx
-               	jl	<addr>
-               	movq	%rcx, %rax
+               	addq	%rax, %rcx
+               	addq	%rcx, %rax
                	retq
 
 <main>:
@@ -30,4 +26,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

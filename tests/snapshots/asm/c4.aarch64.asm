@@ -3361,18 +3361,54 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	str	x1, [x0]
                	mov	x25, #0x86              // =134
-               	b	<addr>
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	add	x1, x25, #0x1
+               	mov	x26, #0x87              // =135
                	str	x25, [x0]
-               	mov	x25, x1
-               	cmp	x25, #0x8d
-               	b.le	<addr>
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	mov	x25, #0x88              // =136
+               	str	x26, [x0]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	mov	x26, #0x89              // =137
+               	str	x25, [x0]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	mov	x25, #0x8a              // =138
+               	str	x26, [x0]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	mov	x26, #0x8b              // =139
+               	str	x25, [x0]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	mov	x25, #0x8c              // =140
+               	str	x26, [x0]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	mov	x26, #0x8d              // =141
+               	str	x25, [x0]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	str	x26, [x0]
                	mov	x25, #0x1e              // =30
-               	b	<addr>
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -3383,11 +3419,103 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	str	x2, [x1, #0x20]
                	ldr	x0, [x0]
-               	add	x1, x25, #0x1
+               	mov	x26, #0x1f              // =31
                	str	x25, [x0, #0x28]
-               	mov	x25, x1
-               	cmp	x25, #0x26
-               	b.le	<addr>
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x2, #0x82               // =130
+               	str	x2, [x1, #0x18]
+               	ldr	x1, [x0]
+               	mov	x2, #0x1                // =1
+               	str	x2, [x1, #0x20]
+               	ldr	x0, [x0]
+               	mov	x25, #0x20              // =32
+               	str	x26, [x0, #0x28]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x2, #0x82               // =130
+               	str	x2, [x1, #0x18]
+               	ldr	x1, [x0]
+               	mov	x2, #0x1                // =1
+               	str	x2, [x1, #0x20]
+               	ldr	x0, [x0]
+               	mov	x26, #0x21              // =33
+               	str	x25, [x0, #0x28]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x2, #0x82               // =130
+               	str	x2, [x1, #0x18]
+               	ldr	x1, [x0]
+               	mov	x2, #0x1                // =1
+               	str	x2, [x1, #0x20]
+               	ldr	x0, [x0]
+               	mov	x25, #0x22              // =34
+               	str	x26, [x0, #0x28]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x2, #0x82               // =130
+               	str	x2, [x1, #0x18]
+               	ldr	x1, [x0]
+               	mov	x2, #0x1                // =1
+               	str	x2, [x1, #0x20]
+               	ldr	x0, [x0]
+               	mov	x26, #0x23              // =35
+               	str	x25, [x0, #0x28]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x2, #0x82               // =130
+               	str	x2, [x1, #0x18]
+               	ldr	x1, [x0]
+               	mov	x2, #0x1                // =1
+               	str	x2, [x1, #0x20]
+               	ldr	x0, [x0]
+               	mov	x25, #0x24              // =36
+               	str	x26, [x0, #0x28]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x2, #0x82               // =130
+               	str	x2, [x1, #0x18]
+               	ldr	x1, [x0]
+               	mov	x2, #0x1                // =1
+               	str	x2, [x1, #0x20]
+               	ldr	x0, [x0]
+               	mov	x26, #0x25              // =37
+               	str	x25, [x0, #0x28]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x2, #0x82               // =130
+               	str	x2, [x1, #0x18]
+               	ldr	x1, [x0]
+               	mov	x2, #0x1                // =1
+               	str	x2, [x1, #0x20]
+               	ldr	x0, [x0]
+               	mov	x25, #0x26              // =38
+               	str	x26, [x0, #0x28]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x2, #0x82               // =130
+               	str	x2, [x1, #0x18]
+               	ldr	x1, [x0]
+               	mov	x2, #0x1                // =1
+               	str	x2, [x1, #0x20]
+               	ldr	x0, [x0]
+               	str	x25, [x0, #0x28]
                	bl	<addr>
                	adrp	x25, <page>
                	add	x25, x25, <lo12>

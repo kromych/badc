@@ -1174,6 +1174,21 @@ fn layout_goto_block_addr() {
 }
 
 #[test]
+fn unroll_const_trip_copy() {
+    assert_eq!(run_fixture("unroll_const_trip_copy.c"), 0);
+}
+
+#[test]
+fn unroll_trip_17_stays_rolled() {
+    assert_eq!(run_fixture("unroll_trip_17_stays_rolled.c"), 0);
+}
+
+#[test]
+fn unroll_volatile_stays_rolled() {
+    assert_eq!(run_fixture("unroll_volatile_stays_rolled.c"), 0);
+}
+
+#[test]
 fn recursion_factorial() {
     assert_eq!(run_fixture("recursion_factorial.c"), 120);
 }

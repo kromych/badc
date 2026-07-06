@@ -433,7 +433,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
 
 /// Map a single operand `v` through `remap`. `NO_VALUE` stays.
 #[inline]
-fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
+pub(super) fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
     if v == NO_VALUE || (v as usize) >= remap.len() {
         v
     } else {
@@ -443,7 +443,7 @@ fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
 
 /// Apply the caller's value remap to every operand in `inst`. The
 /// caller hands us a fresh clone; we mutate in place.
-fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
+pub(super) fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
     match inst {
         Inst::Imm(_)
         | Inst::ImmData(_)
@@ -593,7 +593,7 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
 }
 
 /// Rewrite block terminators through the caller's value remap.
-fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
+pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
     match term {
         Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
         Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {

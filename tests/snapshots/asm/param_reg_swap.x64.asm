@@ -165,18 +165,55 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
                	leaq	-0x18(%rbp), %rax
-               	movslq	%ecx, %rdx
-               	addq	%rdx, %rax
-               	andq	$0xff, %rdx
-               	movb	%dl, (%rax)
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x10, %rax
-               	jl	<addr>
+               	addq	$0x0, %rax
+               	xorq	%rcx, %rcx
+               	movb	%cl, (%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0x1, %ecx
+               	movb	%cl, 0x1(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0x2, %ecx
+               	movb	%cl, 0x2(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0x3, %ecx
+               	movb	%cl, 0x3(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0x4, %ecx
+               	movb	%cl, 0x4(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0x5, %ecx
+               	movb	%cl, 0x5(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0x6, %ecx
+               	movb	%cl, 0x6(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0x7, %ecx
+               	movb	%cl, 0x7(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0x8, %ecx
+               	movb	%cl, 0x8(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0x9, %ecx
+               	movb	%cl, 0x9(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0xa, %ecx
+               	movb	%cl, 0xa(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0xb, %ecx
+               	movb	%cl, 0xb(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0xc, %ecx
+               	movb	%cl, 0xc(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0xd, %ecx
+               	movb	%cl, 0xd(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0xe, %ecx
+               	movb	%cl, 0xe(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	movl	$0xf, %ecx
+               	movb	%cl, 0xf(%rax)
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	leaq	-0x38(%rbp), %rax

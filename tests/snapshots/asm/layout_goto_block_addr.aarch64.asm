@@ -55,20 +55,25 @@ Disassembly of section .text:
                	br	x0
 
 <main>:
-               	stp	x20, x21, [sp, #-0x20]!
+               	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mov	x20, #0x0               // =0
-               	mov	x21, x20
-               	b	<addr>
-               	sxtw	x0, w20
+               	mov	x0, #0x0                // =0
                	bl	<addr>
-               	add	x21, x21, x0
-               	add	x20, x20, #0x1
-               	sxtw	x0, w20
-               	cmp	x0, #0x5
-               	b.lt	<addr>
-               	sxtw	x0, w21
+               	add	x20, x0, #0x0
+               	mov	x0, #0x1                // =1
+               	bl	<addr>
+               	add	x20, x20, x0
+               	mov	x0, #0x2                // =2
+               	bl	<addr>
+               	add	x20, x20, x0
+               	mov	x0, #0x3                // =3
+               	bl	<addr>
+               	add	x20, x20, x0
+               	mov	x0, #0x4                // =4
+               	bl	<addr>
+               	add	x0, x20, x0
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
+               	ldr	x20, [sp], #0x20
                	ret

@@ -73,49 +73,61 @@ Disassembly of section .text:
                	ldr	x0, [x20]
                	ldr	x1, [x20, #0x8]
                	add	x0, x0, x1
-               	add	x21, x0, #0x0
+               	add	x0, x0, #0x0
                	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	sxtw	x1, w2
-               	lsl	x3, x1, #4
-               	add	x0, x0, x3
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	sxtw	x3, w2
+               	lsl	x4, x3, #4
+               	add	x1, x1, x4
                	mov	x17, #0xa               // =10
-               	mul	x1, x1, x17
-               	sxtw	x1, w1
+               	mul	x3, x3, x17
+               	sxtw	x3, w3
+               	sub	x4, x29, #0x70
+               	str	x3, [x4]
                	sub	x3, x29, #0x70
-               	str	x1, [x3]
-               	sub	x1, x29, #0x70
-               	mov	x3, #0x1                // =1
-               	str	x3, [x1, #0x8]
-               	sub	x1, x29, #0x70
+               	mov	x4, #0x1                // =1
+               	str	x4, [x3, #0x8]
+               	sub	x3, x29, #0x70
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
+               	ldr	x10, [x3]
+               	str	x10, [x1]
+               	ldr	x10, [x3, #0x8]
+               	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	sxtw	x0, w2
-               	add	x2, x0, #0x1
-               	sxtw	x0, w2
-               	cmp	x0, #0x4
+               	sxtw	x1, w2
+               	add	x2, x1, #0x1
+               	sxtw	x1, w2
+               	cmp	x1, #0x4
                	b.lt	<addr>
-               	mov	x1, #0x0                // =0
-               	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	sxtw	x2, w1
-               	lsl	x2, x2, #4
-               	add	x0, x0, x2
-               	ldr	x2, [x0]
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x2, x0
-               	add	x21, x21, x0
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0x4
-               	b.lt	<addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	add	x1, x1, #0x0
+               	ldr	x2, [x1]
+               	ldr	x1, [x1, #0x8]
+               	add	x1, x2, x1
+               	add	x0, x0, x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	add	x1, x1, #0x10
+               	ldr	x2, [x1]
+               	ldr	x1, [x1, #0x8]
+               	add	x1, x2, x1
+               	add	x0, x0, x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	add	x1, x1, #0x20
+               	ldr	x2, [x1]
+               	ldr	x1, [x1, #0x8]
+               	add	x1, x2, x1
+               	add	x0, x0, x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	add	x1, x1, #0x30
+               	ldr	x2, [x1]
+               	ldr	x1, [x1, #0x8]
+               	add	x1, x2, x1
+               	add	x21, x0, x1
                	sub	x0, x29, #0x48
                	mov	x1, #0x3                // =3
                	str	x1, [x0]

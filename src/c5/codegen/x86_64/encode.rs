@@ -1965,6 +1965,15 @@ pub(crate) fn lower(
                 }
             }
         });
+        // Unroll constant-trip loops after mem2reg (the loop-carried
+        // values are phis by then) and before the inliner, so a helper
+        // whose body was a short loop becomes a single-block inline
+        // candidate and the cloned call sites join the inliner's
+        // worklist. The post-inline constant folder then collapses the
+        // per-copy `Extend(Imm)` / `BinopI(Imm, k)` index chains.
+        super::ssa::emit_common::time_pass("passes::unroll::run (x86_64)", || {
+            crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
+        });
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.

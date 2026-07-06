@@ -573,35 +573,121 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x20, x21, [sp, #-0x30]!
-               	str	x22, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	mov	x20, #0x0               // =0
-               	mov	x21, #0xa5a5            // =42405
-               	movk	x21, #0xa5a5, lsl #16
-               	mov	x0, x20
-               	b	<addr>
-               	mov	w22, w0
-               	mov	w0, w21
+               	str	x20, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
+               	mov	x0, #0xa5a5             // =42405
+               	movk	x0, #0xa5a5, lsl #16
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
-               	eor	x0, x22, x0
-               	mov	w1, w21
-               	mov	x17, #0x660d            // =26125
-               	movk	x17, #0x19, lsl #16
-               	mul	x1, x1, x17
-               	mov	w1, w1
-               	mov	x17, #0xf35f            // =62303
-               	movk	x17, #0x3c6e, lsl #16
-               	add	x1, x1, x17
-               	mov	w21, w1
-               	sxtw	x1, w20
-               	add	x20, x1, #0x1
-               	sxtw	x1, w20
-               	cmp	x1, #0x10
-               	b.lt	<addr>
+               	mov	x17, #0x0               // =0
+               	eor	x0, x0, x17
+               	mov	w20, w0
+               	mov	x0, #0x1ac0             // =6848
+               	movk	x0, #0xd2f5, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0xcf1f             // =53023
+               	movk	x0, #0x3849, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0xd1f2             // =53746
+               	movk	x0, #0xbabb, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0x8a9              // =2217
+               	movk	x0, #0xe41, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0xb9f4             // =47604
+               	movk	x0, #0xb7b0, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0x9cc3             // =40131
+               	movk	x0, #0x2353, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0x9b46             // =39750
+               	movk	x0, #0xa72e, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0xb9ed             // =47597
+               	movk	x0, #0x7580, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0xd268             // =53864
+               	movk	x0, #0xa631, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0x12a7             // =4775
+               	movk	x0, #0x12f4, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0x6fda             // =28634
+               	movk	x0, #0x4491, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0x7d71             // =32113
+               	movk	x0, #0x96ac, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0x581c             // =22556
+               	movk	x0, #0xdd35, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0x94cb             // =38091
+               	movk	x0, #0x53fb, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
+               	mov	w20, w0
+               	mov	x0, #0x63ae             // =25518
+               	movk	x0, #0x4551, lsl #16
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	bl	<addr>
+               	eor	x0, x20, x0
                	mov	w0, w0
                	lsr	x1, x0, #8
                	eor	x1, x0, x1
@@ -612,7 +698,6 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x20, [sp], #0x20
                	ret

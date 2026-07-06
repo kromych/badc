@@ -1577,6 +1577,12 @@ pub(crate) fn lower(
                 }
             }
         });
+        // Unroll constant-trip loops before the inliner so a helper
+        // whose body was a short loop becomes a single-block inline
+        // candidate; see x86_64.rs's matching block for the rationale.
+        super::ssa::emit_common::time_pass("passes::unroll::run (aarch64)", || {
+            crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
+        });
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
         super::ssa::emit_common::time_pass("passes::inline::run (aarch64)", || {

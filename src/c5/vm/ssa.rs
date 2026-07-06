@@ -746,6 +746,13 @@ fn finish_agg_return(
 /// advances by the aggregate's span, reads them contiguously. A fixed
 /// struct parameter stays its source address; `run_func`'s
 /// `param_aggs` scatter copies it into the body local.
+///
+/// A `float`-typed argument's cell carries the f32 bit pattern: the
+/// callee reads it back with `ParamRef { F32 }` / `LoadLocal { F32 }`
+/// (native callers store the s-register view the same way). The
+/// interpreter's register convention holds every f32 value as the f64
+/// pattern of its single-precision value, so narrow at the cell
+/// boundary.
 fn collect_call_args(
     frame: &Frame<'_>,
     mem: &Memory,
@@ -765,6 +772,10 @@ fn collect_call_args(
                 out.push(load_from_memory(mem, (val as usize) + off, LoadKind::I64)?);
                 off += 8;
             }
+            continue;
+        }
+        if matches!(frame.func.f32_values.get(a as usize), Some(true)) {
+            out.push((f64::from_bits(val as u64) as f32).to_bits() as i64);
             continue;
         }
         out.push(val);
@@ -1118,17 +1129,25 @@ fn run_inst<H: Host>(
             // arena get the "not implemented" path below.
             return Ok(());
         }
-        Inst::ParamRef { idx, .. } => {
+        Inst::ParamRef { idx, kind } => {
             // The i-th declared parameter sits at c5 cdecl slot
             // i+2 (run_func wrote each `args[i]` to
             // `stack_base + (locals + i) * 8`). Read the 8-byte
             // value back so the SSA-VM sees the same i64 the
-            // call site passed.
+            // call site passed. A `float` parameter's cell holds
+            // the f32 bit pattern (see `collect_call_args`); the
+            // F32 read widens it back to the f64-pattern register
+            // convention.
             let off = (*idx as i64) + 2;
             let addr = frame.slot_addr(off).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: ParamRef({idx}): slot {off} out of range"))
             })?;
-            frame.regs[v as usize] = load_from_memory(mem, addr, LoadKind::I64)?;
+            let read_kind = if matches!(kind, LoadKind::F32) {
+                LoadKind::F32
+            } else {
+                LoadKind::I64
+            };
+            frame.regs[v as usize] = load_from_memory(mem, addr, read_kind)?;
             return Ok(());
         }
         Inst::Phi { .. } => "Phi",

@@ -408,6 +408,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("indirect_call_narrow_scalar_args.c", 0),
     ("indirect_call_ten_scalar_args.c", 0),
     ("indirect_call_mixed_fp_int_args.c", 0),
+    ("float_param_stack_overflow.c", 0),
     ("indirect_call_variadic_fp_control.c", 0),
     ("ternary_arith_conversion.c", 0),
     ("struct_layout.c", 0),

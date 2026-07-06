@@ -2142,14 +2142,19 @@ fn indirect_call_ten_scalar_args() {
     assert_eq!(run_fixture("indirect_call_ten_scalar_args.c"), 0);
 }
 
-// TODO(#375): Win64 positional int/fp argument slots diverge on this
-// shape; re-enable the host lane when the indirect marshal is fixed.
-#[cfg(not(windows))]
 #[test]
 fn indirect_call_mixed_fp_int_args() {
     // Interleaved int/FP scalars through a non-variadic function
     // pointer: the banks advance independently per the arg-type mask.
     assert_eq!(run_fixture("indirect_call_mixed_fp_int_args.c"), 0);
+}
+
+#[test]
+fn float_param_stack_overflow() {
+    // `float` parameters past the FP argument registers ride the host
+    // stack at single precision; the argument cell carries the f32 bit
+    // pattern on both the native and the interpreter paths.
+    assert_eq!(run_fixture("float_param_stack_overflow.c"), 0);
 }
 
 #[test]

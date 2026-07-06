@@ -2066,6 +2066,15 @@ fn global_init_midexpr_cast_narrow() {
 }
 
 #[test]
+fn init_brace_intermediate_cast() {
+    // C99 6.5.4 + 6.7.8p11: a brace-enclosed initializer element applies
+    // every cast in its chain -- `(long)(int)0x92492493` sign-extends
+    // through `int` -- in static and automatic storage, for array
+    // elements and struct members alike.
+    assert_eq!(run_fixture("init_brace_intermediate_cast.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec

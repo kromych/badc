@@ -11,10 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movabsq	$-0x80000001, %rax      # imm = 0xFFFFFFFF7FFFFFFF
-               	movabsq	$-0x80000001, %r11      # imm = 0xFFFFFFFF7FFFFFFF
-               	cmpq	%r11, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %eax
                	retq
                	xorq	%rcx, %rcx
@@ -24,10 +21,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	$0x80000000, %eax       # imm = 0x80000000
-               	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
-               	cmpq	%rax, %rcx
-               	jae	<addr>
+               	jmp	<addr>
                	movl	$0x3, %eax
                	retq
                	jmp	<addr>
@@ -48,14 +42,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	movl	$0x8, %eax
-               	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
-               	cmpq	%rax, %rcx
-               	jae	<addr>
+               	jmp	<addr>
                	movl	$0x8, %eax
                	retq
                	xorq	%rax, %rax
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

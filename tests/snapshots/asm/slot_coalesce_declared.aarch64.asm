@@ -104,8 +104,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x17, #0x3               // =3
                	mul	x3, x2, x17
-               	mov	x4, #0x7                // =7
-               	add	x4, x3, x4
+               	add	x4, x3, #0x7
                	add	x1, x1, x4
                	add	x4, x2, x2
                	add	x4, x4, x2
@@ -312,54 +311,54 @@ Disassembly of section .text:
                	mov	x1, #0xabcd             // =43981
                	movk	x1, #0x1234, lsl #16
                	stur	x1, [x29, #-0x10]
-               	sub	x2, x29, #0x10
-               	ldr	x3, [x2]
+               	sub	x1, x29, #0x10
+               	ldr	x2, [x1]
                	mov	x17, #0xfeed            // =65261
-               	eor	x3, x3, x17
-               	str	x3, [x2]
-               	mov	x17, #0xfeed            // =65261
-               	eor	x1, x1, x17
+               	eor	x2, x2, x17
+               	str	x2, [x1]
                	sxtw	x0, w0
-               	mov	x3, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	cbz	x0, <addr>
                	ldur	x0, [x29, #-0x10]
-               	cmp	x0, x1
+               	mov	x17, #0x5520            // =21792
+               	movk	x17, #0x1234, lsl #16
+               	cmp	x0, x17
                	cset	x0, eq
                	cmp	x0, #0x0
-               	cset	x3, ne
+               	cset	x2, ne
                	mov	x7, #0x0                // =0
                	mov	x0, x7
                	mov	x1, x7
-               	sxtw	x2, w0
-               	cmp	x2, #0x6
+               	sxtw	x3, w0
+               	cmp	x3, #0x6
                	b.ge	<addr>
                	b	<addr>
                	sxtw	x0, w0
                	add	x0, x0, #0x1
                	b	<addr>
-               	sub	x2, x29, #0x50
+               	sub	x3, x29, #0x50
                	sxtw	x4, w0
                	add	x5, x4, #0x3e8
                	sxtw	x5, w5
-               	str	x5, [x2, x4, lsl #3]
-               	add	x2, x0, #0x3e8
-               	sxtw	x2, w2
-               	add	x1, x1, x2
+               	str	x5, [x3, x4, lsl #3]
+               	add	x3, x0, #0x3e8
+               	sxtw	x3, w3
+               	add	x1, x1, x3
                	b	<addr>
-               	mov	x2, #0x0                // =0
-               	sxtw	x0, w2
+               	mov	x3, #0x0                // =0
+               	sxtw	x0, w3
                	cmp	x0, #0x6
                	b.ge	<addr>
                	b	<addr>
-               	sxtw	x0, w2
-               	add	x2, x0, #0x1
+               	sxtw	x0, w3
+               	add	x3, x0, #0x1
                	b	<addr>
                	sub	x0, x29, #0x50
-               	sxtw	x4, w2
+               	sxtw	x4, w3
                	ldr	x0, [x0, x4, lsl #3]
                	add	x7, x7, x0
                	b	<addr>
-               	sxtw	x0, w3
+               	sxtw	x0, w2
                	mov	x20, #0x0               // =0
                	cbz	x0, <addr>
                	cmp	x7, x1
@@ -382,13 +381,13 @@ Disassembly of section .text:
                	str	x10, [x1, #0x18]
                	ldr	x10, [sp], #0x10
                	mov	x0, x1
-               	mov	x21, #0x579e            // =22430
                	sxtw	x0, w20
                	mov	x2, #0x0                // =0
                	cbz	x0, <addr>
                	sub	x0, x29, #0x90
                	bl	<addr>
-               	cmp	x0, x21
+               	mov	x17, #0x579e            // =22430
+               	cmp	x0, x17
                	cset	x0, eq
                	cmp	x0, #0x0
                	cset	x2, ne

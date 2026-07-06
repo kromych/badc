@@ -101,16 +101,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2                // =2
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	s16, w0
                	sub	x17, x29, #0x38
                	str	s16, [x17]
                	b	<addr>
-               	cmp	x0, #0x1
-               	b.ne	<addr>
                	b	<addr>
                	sub	x16, x29, #0x38
                	ldr	s0, [x16]

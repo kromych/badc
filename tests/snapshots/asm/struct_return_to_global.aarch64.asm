@@ -75,7 +75,7 @@ Disassembly of section .text:
                	ldr	x0, [x20]
                	ldr	x1, [x20, #0x8]
                	add	x0, x0, x1
-               	add	x21, x2, x0
+               	add	x21, x0, #0x0
                	sxtw	x0, w2
                	cmp	x0, #0x4
                	b.ge	<addr>

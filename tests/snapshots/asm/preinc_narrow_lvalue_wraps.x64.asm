@@ -11,147 +11,98 @@ Disassembly of section .text:
                	ud2
 
 <preinc_u8_wrap>:
-               	movl	$0xff, %eax
-               	xorq	%rdx, %rdx
-               	incq	%rax
-               	movq	%rax, %rcx
-               	andq	$0xff, %rcx
+               	xorq	%rcx, %rcx
+               	movl	$0x1, %ecx
+               	movslq	%ecx, %rax
+               	cmpq	$0x1, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	andq	$0xff, %rax
-               	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	movl	$0x1, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
-               	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u16_wrap>:
-               	movl	$0xffff, %eax           # imm = 0xFFFF
-               	xorq	%rdx, %rdx
-               	incq	%rax
-               	movq	%rax, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	xorq	%rcx, %rcx
+               	movl	$0x1, %ecx
+               	movslq	%ecx, %rax
+               	cmpq	$0x1, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	movl	$0x1, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
-               	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u32_wrap>:
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	xorq	%rdx, %rdx
-               	incq	%rax
-               	movl	%eax, %ecx
+               	xorq	%rcx, %rcx
+               	movl	$0x1, %ecx
+               	movslq	%ecx, %rax
+               	cmpq	$0x1, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	movl	$0x1, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
-               	jmp	<addr>
                	jmp	<addr>
 
 <compound_u8_wrap>:
-               	movl	$0xf0, %eax
-               	xorq	%rdx, %rdx
-               	addq	$0x10, %rax
-               	movq	%rax, %rcx
-               	andq	$0xff, %rcx
+               	xorq	%rcx, %rcx
+               	movl	$0x1, %ecx
+               	movslq	%ecx, %rax
+               	cmpq	$0x1, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	andq	$0xff, %rax
-               	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	movl	$0x1, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
-               	jmp	<addr>
                	jmp	<addr>
 
 <compound_u16_wrap>:
-               	movl	$0xfff0, %eax           # imm = 0xFFF0
-               	xorq	%rdx, %rdx
-               	addq	$0x10, %rax
-               	movq	%rax, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	xorq	%rcx, %rcx
+               	movl	$0x1, %ecx
+               	movslq	%ecx, %rax
+               	cmpq	$0x1, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	movl	$0x1, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
-               	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u8_through_pointer>:
@@ -196,9 +147,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	xorq	%rbx, %rbx
                	callq	<addr>
-               	orq	%rax, %rbx
+               	movq	%rax, %rbx
+               	orq	$0x0, %rbx
                	callq	<addr>
                	orq	%rax, %rbx
                	callq	<addr>
@@ -219,5 +170,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -287,14 +287,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x20
-               	mov	x1, #0xf                // =15
-               	ldr	w2, [x0]
+               	ldr	w1, [x0]
                	mov	x17, #0xfff0            // =65520
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x2, x2, x17
-               	orr	x1, x2, x1
+               	and	x1, x1, x17
+               	mov	x17, #0xf               // =15
+               	orr	x1, x1, x17
                	str	w1, [x0]
                	sub	x0, x29, #0x20
                	ldr	w1, [x0]

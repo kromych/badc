@@ -11,14 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movl	$0xf, %eax
-               	movl	$0x10, %ecx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x1, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %eax
                	retq
                	jmp	<addr>
@@ -64,5 +57,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

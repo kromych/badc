@@ -71,7 +71,6 @@ Disassembly of section .text:
                	add	x2, x20, #0x2
                	mov	x4, #0x3fd0000000000000 // =4598175219545276416
                	mov	x5, #0x3fc00000         // =1069547520
-               	mov	x6, #0x7                // =7
                	mov	x1, #0x4024000000000000 // =4621819117588971520
                	fmov	d17, x1
                	fmul	d0, d8, d17
@@ -91,7 +90,7 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	fcvtzs	x2, d0
                	add	x1, x1, x2
-               	add	x1, x1, x6
+               	add	x1, x1, #0x7
                	sxtw	x1, w1
                	cmp	x0, x1
                	b.eq	<addr>

@@ -76,40 +76,26 @@ Disassembly of section .text:
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x10
-               	mov	x1, #0x2                // =2
-               	sxtw	x1, w1
-               	ldr	x2, [x0]
-               	scvtf	d0, x2
+               	ldr	x1, [x0]
+               	scvtf	d0, x1
                	ldr	d1, [x0, #0x8]
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fmadd	d0, d1, d17, d0
                	fcvtzs	x0, d0
-               	add	x0, x0, x1
+               	add	x0, x0, #0x2
                	cmp	x0, #0xe
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	sub	x6, x29, #0x10
-               	add	x0, x0, x1
-               	add	x0, x0, x2
-               	add	x0, x0, x3
-               	add	x0, x0, x4
-               	add	x0, x0, x5
-               	sxtw	x0, w0
-               	ldr	x1, [x6]
-               	add	x0, x0, x1
-               	ldr	d0, [x6, #0x8]
-               	fcvtzs	x1, d0
-               	add	x0, x0, x1
+               	sub	x0, x29, #0x10
+               	ldr	x1, [x0]
+               	add	x1, x1, #0x15
+               	ldr	d0, [x0, #0x8]
+               	fcvtzs	x0, d0
+               	add	x0, x1, x0
                	cmp	x0, #0x1c
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

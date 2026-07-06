@@ -52,18 +52,16 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x3, %eax
-               	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
-               	movl	$0x4, %edx
-               	movabsq	$0x4004000000000000, %rsi # imm = 0x4004000000000000
-               	movslq	%eax, %rax
-               	movslq	%edx, %rdx
-               	cvtsi2sd	%rax, %xmm0
-               	cvtsi2sd	%rdx, %xmm1
+               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
+               	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
+               	movl	$0x3, %edx
+               	movl	$0x4, %esi
+               	cvtsi2sd	%rdx, %xmm0
+               	cvtsi2sd	%rsi, %xmm1
                	movapd	%xmm1, %xmm15
-               	movq	%rsi, %xmm1
+               	movq	%rcx, %xmm1
                	mulsd	%xmm15, %xmm1
-               	movq	%rcx, %xmm14
+               	movq	%rax, %xmm14
                	movapd	%xmm0, %xmm15
                	movapd	%xmm1, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
@@ -107,3 +105,4 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

@@ -50,13 +50,8 @@ Disassembly of section .text:
                	mov	x0, x1
                	mov	x1, x2
                	blr	x9
-               	mov	x1, #0x1                // =1
-               	add	x1, x1, x1
-               	add	x0, x0, x1
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x4                // =4
-               	add	x1, x1, x2
-               	add	x0, x0, x1
+               	add	x0, x0, #0x2
+               	add	x0, x0, #0x7
                	sxtw	x21, w0
                	mov	x9, x20
                	mov	x0, x21

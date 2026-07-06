@@ -32,16 +32,16 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2)                                           -> x0
-    v2   Imm(3)                                           -> x1
-    v3   Extend { value=v1, kind=I32 }                    -> x2
-    v4   Imm(0)                                           -> x2
-    v5   Extend { value=v2, kind=I32 }                    -> x2
-    v6   Imm(0)                                           -> x2
-    v7   Binop { op=add, lhs=v1, rhs=v2 }                 -> x0
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
-    v9   Extend { value=v7, kind=I32 }                    -> x0
-    v10  BinopI { op=ne, lhs=v9, rhs_imm=5 }              -> x0
-    terminator Bz { cond=v10, target=b2, fall=b1 }   (exit_acc=v10)
+    v2   Imm(3)                                           -> x0
+    v3   Imm(2)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   Imm(3)                                           -> x0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(5)                                           -> x0
+    v8   Imm(21474836480)                                 -> x0
+    v9   Imm(5)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v10)
   block 1  start_pc=0
     v11  Imm(11)                                          -> x0
     terminator Return(v11)   (exit_acc=v11)

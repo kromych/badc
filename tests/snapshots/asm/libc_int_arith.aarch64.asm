@@ -139,18 +139,18 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xffef             // =65519
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	mov	x1, #0x5                // =5
-               	sub	x2, x29, #0x48
-               	sdiv	x3, x0, x1
-               	str	x3, [x2]
-               	sub	x2, x29, #0x48
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
-               	str	x0, [x2, #0x8]
+               	sub	x0, x29, #0x48
+               	mov	x1, #0xfffd             // =65533
+               	movk	x1, #0xffff, lsl #16
+               	movk	x1, #0xffff, lsl #32
+               	movk	x1, #0xffff, lsl #48
+               	str	x1, [x0]
+               	sub	x0, x29, #0x48
+               	mov	x1, #0xfffe             // =65534
+               	movk	x1, #0xffff, lsl #16
+               	movk	x1, #0xffff, lsl #32
+               	movk	x1, #0xffff, lsl #48
+               	str	x1, [x0, #0x8]
                	sub	x0, x29, #0x48
                	sub	x1, x29, #0x10
                	str	x10, [sp, #-0x10]!

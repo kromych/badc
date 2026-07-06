@@ -11,40 +11,32 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x1, %edx
+               	movl	$0x1, %ecx
                	jmp	<addr>
-               	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
-               	cmpq	$0x1, %rdx
+               	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1, %edx
                	jmp	<addr>
-               	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
+               	movl	$0x1, %ecx
+               	jmp	<addr>
+               	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rdx, %rcx
-               	cmpq	%r11, %rdx
+               	movq	%rcx, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
                	jmp	<addr>
-               	movl	$0x1, %edx
+               	movl	$0x1, %ecx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rdx, %rcx
-               	cmpq	%r11, %rdx
+               	movq	%rcx, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	testq	%rax, %rax
-               	jne	<addr>
                	movabsq	$-0x1, %rcx
                	jmp	<addr>
                	xorq	%rcx, %rcx
@@ -54,3 +46,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, 0x41(%rdx)

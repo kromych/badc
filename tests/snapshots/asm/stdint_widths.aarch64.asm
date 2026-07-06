@@ -86,31 +86,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x7788             // =30600
-               	movk	x0, #0x5566, lsl #16
-               	movk	x0, #0x3344, lsl #32
-               	movk	x0, #0x1122, lsl #48
-               	mov	x17, #0x7788            // =30600
-               	movk	x17, #0x5566, lsl #16
-               	movk	x17, #0x3344, lsl #32
-               	movk	x17, #0x1122, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x15               // =21
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3210             // =12816
-               	movk	x0, #0x7654, lsl #16
-               	movk	x0, #0xba98, lsl #32
-               	movk	x0, #0xfedc, lsl #48
-               	mov	x17, #0x3210            // =12816
-               	movk	x17, #0x7654, lsl #16
-               	movk	x17, #0xba98, lsl #32
-               	movk	x17, #0xfedc, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x16               // =22
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
@@ -127,17 +109,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	sxtw	x0, w0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x18               // =24
                	ldr	x19, [sp]
                	add	sp, sp, #0x60

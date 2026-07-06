@@ -2,6 +2,7 @@
 //! `FunctionSsa` in place and is target-neutral; the per-target lowering
 //! drivers run a selection of them before instruction selection.
 
+pub(crate) mod constfold;
 pub(crate) mod constfold_branch;
 pub(crate) mod dedup_imm;
 pub(crate) mod drop_redundant_extend;

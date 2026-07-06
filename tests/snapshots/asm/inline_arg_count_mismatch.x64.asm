@@ -18,23 +18,13 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movl	$0x2, %eax
-               	movl	$0x3, %ecx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rbx
                	movl	$0x7, %edi
                	callq	<addr>
-               	movslq	%ebx, %rax
-               	cmpq	$0x5, %rax
-               	jne	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movl	$0x1, %ecx
-               	movq	(%rsp), %rbx
                	movq	%rcx, %rax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -24,8 +24,7 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	cset	x0, ne
                	cbz	x0, <addr>
-               	mov	x17, #0x1               // =1
-               	orr	x1, x1, x17
+               	mov	x1, #0x1                // =1
                	sub	x16, x29, #0x10
                	ldr	d1, [x16]
                	fcmp	d1, d0

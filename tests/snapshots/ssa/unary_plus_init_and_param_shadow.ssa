@@ -150,19 +150,19 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     terminator Return(v69)   (exit_acc=v69)
   block 16  start_pc=0
     v70  Imm(0)                                           -> x0
-    v71  Extend { value=v70, kind=I32 }                   -> x0
-    v72  Imm(0)                                           -> x1
-    v73  BinopI { op=ne, lhs=v71, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v73, target=b18, fall=b17 }   (exit_acc=v73)
+    v71  Imm(0)                                           -> x0
+    v72  Imm(0)                                           -> x0
+    v73  Imm(0)                                           -> x0
+    terminator Jmp(b18)   (exit_acc=v73)
   block 17  start_pc=0
     v74  Imm(6)                                           -> x0
     terminator Return(v74)   (exit_acc=v74)
   block 18  start_pc=0
     v75  Imm(42)                                          -> x0
-    v76  Extend { value=v75, kind=I32 }                   -> x0
-    v77  Imm(0)                                           -> x1
-    v78  BinopI { op=ne, lhs=v76, rhs_imm=42 }            -> x0
-    terminator Bz { cond=v78, target=b20, fall=b19 }   (exit_acc=v78)
+    v76  Imm(42)                                          -> x0
+    v77  Imm(0)                                           -> x0
+    v78  Imm(0)                                           -> x0
+    terminator Jmp(b20)   (exit_acc=v78)
   block 19  start_pc=0
     v79  Imm(7)                                           -> x0
     terminator Return(v79)   (exit_acc=v79)

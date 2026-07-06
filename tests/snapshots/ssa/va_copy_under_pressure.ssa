@@ -122,11 +122,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v30  Imm(332)                                         -> x1
     v31  Imm(1425929142272)                               -> x1
     v32  Imm(352)                                         -> x1
-    v33  Imm(1511828488192)                               -> x2
-    v34  Imm(0)                                           -> x2
-    v35  LoadLocal { off=-1, kind=I64 }                   -> x2
-    v36  LoadLocal { off=-2, kind=I64 }                   -> x2
-    v37  Binop { op=eq, lhs=v4, rhs=v32 }                 -> x0
+    v33  Imm(1511828488192)                               -> x1
+    v34  Imm(0)                                           -> x1
+    v35  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v36  LoadLocal { off=-2, kind=I64 }                   -> x1
+    v37  BinopI { op=eq, lhs=v4, rhs_imm=352 }            -> x0
     terminator Bz { cond=v37, target=b2, fall=b1 }   (exit_acc=v37)
   block 1  start_pc=0
     v38  Imm(0)                                           -> x1

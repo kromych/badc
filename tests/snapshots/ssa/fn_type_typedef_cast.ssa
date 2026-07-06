@@ -18,7 +18,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x1
-    v3   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
+    v3   Imm(0)                                           -> x1
     v4   Imm(0)                                           -> x1
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=2 ---
@@ -47,8 +47,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
-    v2   Imm(0)                                           -> x1
-    v3   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
+    v2   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(5)                                           -> x6
     v6   StoreLocal { off=-1, value=v5, kind=I32 }        -> -

@@ -10,14 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x0, #0x80000000         // =2147483648
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	mov	x17, #0x80000000        // =2147483648
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
                	b	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x1
@@ -30,12 +22,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0xfffe             // =65534
-               	movk	x0, #0xffff, lsl #16
-               	mov	x17, #0xfffe            // =65534
-               	movk	x17, #0xffff, lsl #16
-               	cmp	x0, x17
-               	b.eq	<addr>
                	b	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x3
@@ -48,11 +34,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x0, #0xffff00000000     // =281470681743360
-               	movk	x0, #0xffff, lsl #48
-               	mov	x17, #0x80000000        // =2147483648
-               	cmp	x0, x17
-               	b.lt	<addr>
                	b	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x5
@@ -64,14 +45,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x7                // =7
                	b	<addr>
-               	mov	x17, #0xffff00000000    // =281470681743360
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
                	b	<addr>
-               	mov	x17, #0x80000000        // =2147483648
-               	cmp	x0, x17
-               	b.eq	<addr>
                	b	<addr>
                	b	<addr>
                	mov	x0, #0x3                // =3

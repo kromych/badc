@@ -34,8 +34,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x10
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
-               	mov	x2, #0x3                // =3
-               	add	x1, x1, x2
+               	add	x1, x1, #0x3
                	str	w1, [x0]
                	sxtw	x0, w1
                	cmp	x0, #0xb

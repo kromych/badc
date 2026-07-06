@@ -404,7 +404,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=2
     terminator Return(v132)   (exit_acc=v132)
   block 40  start_pc=0
     v133 Imm(42)                                          -> x0
-    v134 Extend { value=v133, kind=I32 }                  -> x0
+    v134 Imm(42)                                          -> x0
     v135 Imm(0)                                           -> x1
     v136 FpCast { kind=IntToFp, value=v134 }              -> d0
     v137 Imm(4631107791820423168)                         -> x0
@@ -415,7 +415,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=2
     terminator Return(v139)   (exit_acc=v139)
   block 42  start_pc=0
     v140 Imm(-3)                                          -> x0
-    v141 Extend { value=v140, kind=I32 }                  -> x0
+    v141 Imm(-3)                                          -> x0
     v142 Imm(0)                                           -> x1
     v143 FpCast { kind=IntToFp, value=v141 }              -> d0
     v144 Imm(4613937818241073152)                         -> x0

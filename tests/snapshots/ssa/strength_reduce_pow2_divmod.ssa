@@ -203,17 +203,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=19
   block 28  start_pc=0
     v142 Imm(-1234567)                                    -> x0
     v143 StoreLocal { off=-7, value=v142, kind=I64, volatile } -> -
-    v144 LoadLocal { off=-7, kind=I64, volatile }         -> x1
-    v145 Imm(1024)                                        -> x2
-    v146 BinopI { op=shr, lhs=v144, rhs_imm=63 }          -> x2
-    v147 BinopI { op=shru, lhs=v146, rhs_imm=54 }         -> x2
-    v148 Binop { op=add, lhs=v144, rhs=v147 }             -> x1
-    v149 BinopI { op=shr, lhs=v148, rhs_imm=10 }          -> x1
-    v150 Imm(-1)                                          -> x2
-    v151 Imm(1023)                                        -> x2
-    v152 Binop { op=add, lhs=v142, rhs=v151 }             -> x0
-    v153 BinopI { op=shr, lhs=v152, rhs_imm=10 }          -> x0
-    v154 Binop { op=ne, lhs=v149, rhs=v153 }              -> x1
+    v144 LoadLocal { off=-7, kind=I64, volatile }         -> x0
+    v145 Imm(1024)                                        -> x1
+    v146 BinopI { op=shr, lhs=v144, rhs_imm=63 }          -> x1
+    v147 BinopI { op=shru, lhs=v146, rhs_imm=54 }         -> x1
+    v148 Binop { op=add, lhs=v144, rhs=v147 }             -> x0
+    v149 BinopI { op=shr, lhs=v148, rhs_imm=10 }          -> x0
+    v150 Imm(-1)                                          -> x1
+    v151 Imm(1023)                                        -> x1
+    v152 Imm(-1233544)                                    -> x1
+    v153 Imm(-1205)                                       -> x1
+    v154 BinopI { op=ne, lhs=v149, rhs_imm=-1205 }        -> x1
     v155 Imm(0)                                           -> x0
     terminator Bnz { cond=v154, target=b52, fall=b29 }   (exit_acc=v154)
   block 29  start_pc=0
@@ -225,12 +225,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=19
     v161 BinopI { op=and, lhs=v160, rhs_imm=1023 }        -> x0
     v162 Binop { op=sub, lhs=v161, rhs=v159 }             -> x0
     v163 Imm(-1234567)                                    -> x1
-    v164 Imm(-1)                                          -> x2
-    v165 Imm(1023)                                        -> x2
-    v166 Binop { op=add, lhs=v163, rhs=v165 }             -> x1
-    v167 BinopI { op=and, lhs=v166, rhs_imm=1023 }        -> x1
-    v168 Binop { op=sub, lhs=v167, rhs=v165 }             -> x1
-    v169 Binop { op=ne, lhs=v162, rhs=v168 }              -> x1
+    v164 Imm(-1)                                          -> x1
+    v165 Imm(1023)                                        -> x1
+    v166 Imm(-1233544)                                    -> x1
+    v167 Imm(376)                                         -> x1
+    v168 Imm(-647)                                        -> x1
+    v169 BinopI { op=ne, lhs=v162, rhs_imm=-647 }         -> x1
     v170 Imm(0)                                           -> x0
     terminator Jmp(b30)   (exit_acc=v169)
   block 30  start_pc=0

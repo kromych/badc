@@ -177,9 +177,9 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leaq	-0x90(%rbp), %rcx
                	movl	%eax, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
-               	incq	%rax
-               	movl	%eax, 0x4(%rcx)
+               	leaq	-0x90(%rbp), %rax
+               	movl	$0x8, %ecx
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x90(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
                	pushq	%rdx
@@ -251,9 +251,9 @@ Disassembly of section .text:
                	movl	$0x14, %eax
                	leaq	-0xd0(%rbp), %rcx
                	movl	%eax, (%rcx)
-               	leaq	-0xd0(%rbp), %rcx
-               	incq	%rax
-               	movl	%eax, 0x4(%rcx)
+               	leaq	-0xd0(%rbp), %rax
+               	movl	$0x15, %ecx
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0xd0(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpq	$0x14, %rax
@@ -277,9 +277,9 @@ Disassembly of section .text:
                	movl	$0x28, %ecx
                	leaq	-0xf8(%rbp), %rdx
                	movl	%ecx, (%rdx)
-               	leaq	-0xf8(%rbp), %rdx
-               	incq	%rcx
-               	movl	%ecx, 0x4(%rdx)
+               	leaq	-0xf8(%rbp), %rcx
+               	movl	$0x29, %edx
+               	movl	%edx, 0x4(%rcx)
                	leaq	-0xf8(%rbp), %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
@@ -357,4 +357,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

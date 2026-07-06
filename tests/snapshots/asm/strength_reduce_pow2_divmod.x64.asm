@@ -201,16 +201,13 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x12d687, %rax        # imm = 0xFFED2979
                	movq	%rax, -0x38(%rbp)
-               	movq	-0x38(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	sarq	$0x3f, %rdx
-               	shrq	$0x36, %rdx
-               	addq	%rdx, %rcx
-               	sarq	$0xa, %rcx
-               	movl	$0x3ff, %edx            # imm = 0x3FF
-               	addq	%rdx, %rax
+               	movq	-0x38(%rbp), %rax
+               	movq	%rax, %rcx
+               	sarq	$0x3f, %rcx
+               	shrq	$0x36, %rcx
+               	addq	%rcx, %rax
                	sarq	$0xa, %rax
-               	cmpq	%rax, %rcx
+               	cmpq	$-0x4b5, %rax           # imm = 0xFB4B
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -222,12 +219,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x3ff, %rax            # imm = 0x3FF
                	subq	%rcx, %rax
-               	movabsq	$-0x12d687, %rcx        # imm = 0xFFED2979
-               	movl	$0x3ff, %edx            # imm = 0x3FF
-               	addq	%rdx, %rcx
-               	andq	$0x3ff, %rcx            # imm = 0x3FF
-               	subq	%rdx, %rcx
-               	cmpq	%rcx, %rax
+               	cmpq	$-0x287, %rax           # imm = 0xFD79
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

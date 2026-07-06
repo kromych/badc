@@ -233,10 +233,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x20(%rbp), %rax
-               	movl	$0xf, %ecx
-               	movl	(%rax), %edx
-               	andq	$-0x10, %rdx
-               	orq	%rdx, %rcx
+               	movl	(%rax), %ecx
+               	andq	$-0x10, %rcx
+               	orq	$0xf, %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x20(%rbp), %rax
                	movl	(%rax), %ecx
@@ -288,3 +287,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

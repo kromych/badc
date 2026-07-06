@@ -253,16 +253,16 @@ fn ent_pc=4 n_params=0 variadic=false locals=42
     terminator Return(v28)   (exit_acc=v28)
   block 2  start_pc=0
     v29  Imm(50)                                          -> x0
-    v30  Extend { value=v29, kind=I32 }                   -> x1
+    v30  Imm(50)                                          -> x0
     v31  Imm(0)                                           -> x1
     v32  LocalAddr(-25)                                   -> x1
-    v33  Store { addr=v32, disp=0, value=v29, kind=I32 }  -> -
-    v34  LocalAddr(-25)                                   -> x1
-    v35  BinopI { op=add, lhs=v34, rhs_imm=4 }            -> x2
-    v36  BinopI { op=add, lhs=v29, rhs_imm=1 }            -> x0
-    v37  BinopI { op=shl, lhs=v36, rhs_imm=32 }           -> x2
-    v38  Extend { value=v36, kind=I32 }                   -> x2
-    v39  Store { addr=v34, disp=4, value=v36, kind=I32 }  -> -
+    v33  Store { addr=v32, disp=0, value=v30, kind=I32 }  -> -
+    v34  LocalAddr(-25)                                   -> x0
+    v35  BinopI { op=add, lhs=v34, rhs_imm=4 }            -> x1
+    v36  Imm(51)                                          -> x1
+    v37  Imm(219043332096)                                -> x1
+    v38  Imm(51)                                          -> x1
+    v39  Store { addr=v34, disp=4, value=v38, kind=I32 }  -> -
     v40  LocalAddr(-25)                                   -> x0
     v41  LocalAddr(-25)                                   -> x0
     v42  LocalAddr(-10)                                   -> x1
@@ -288,28 +288,28 @@ fn ent_pc=4 n_params=0 variadic=false locals=42
     terminator Return(v55)   (exit_acc=v55)
   block 6  start_pc=0
     v56  Imm(60)                                          -> x0
-    v57  Extend { value=v56, kind=I32 }                   -> x1
+    v57  Imm(60)                                          -> x0
     v58  Imm(0)                                           -> x1
     v59  LocalAddr(-28)                                   -> x1
-    v60  Store { addr=v59, disp=0, value=v56, kind=I32 }  -> -
-    v61  LocalAddr(-28)                                   -> x1
-    v62  BinopI { op=add, lhs=v61, rhs_imm=4 }            -> x2
-    v63  BinopI { op=add, lhs=v56, rhs_imm=1 }            -> x2
-    v64  BinopI { op=shl, lhs=v63, rhs_imm=32 }           -> x6
-    v65  Extend { value=v63, kind=I32 }                   -> x6
-    v66  Store { addr=v61, disp=4, value=v63, kind=I32 }  -> -
-    v67  LocalAddr(-28)                                   -> x1
-    v68  BinopI { op=add, lhs=v67, rhs_imm=8 }            -> x2
-    v69  BinopI { op=add, lhs=v56, rhs_imm=2 }            -> x2
-    v70  BinopI { op=shl, lhs=v69, rhs_imm=32 }           -> x6
-    v71  Extend { value=v69, kind=I32 }                   -> x6
-    v72  Store { addr=v67, disp=8, value=v69, kind=I32 }  -> -
-    v73  LocalAddr(-28)                                   -> x1
-    v74  BinopI { op=add, lhs=v73, rhs_imm=12 }           -> x2
-    v75  BinopI { op=add, lhs=v56, rhs_imm=3 }            -> x0
-    v76  BinopI { op=shl, lhs=v75, rhs_imm=32 }           -> x2
-    v77  Extend { value=v75, kind=I32 }                   -> x2
-    v78  Store { addr=v73, disp=12, value=v75, kind=I32 } -> -
+    v60  Store { addr=v59, disp=0, value=v57, kind=I32 }  -> -
+    v61  LocalAddr(-28)                                   -> x0
+    v62  BinopI { op=add, lhs=v61, rhs_imm=4 }            -> x1
+    v63  Imm(61)                                          -> x1
+    v64  Imm(261993005056)                                -> x1
+    v65  Imm(61)                                          -> x1
+    v66  Store { addr=v61, disp=4, value=v65, kind=I32 }  -> -
+    v67  LocalAddr(-28)                                   -> x0
+    v68  BinopI { op=add, lhs=v67, rhs_imm=8 }            -> x1
+    v69  Imm(62)                                          -> x1
+    v70  Imm(266287972352)                                -> x1
+    v71  Imm(62)                                          -> x1
+    v72  Store { addr=v67, disp=8, value=v71, kind=I32 }  -> -
+    v73  LocalAddr(-28)                                   -> x0
+    v74  BinopI { op=add, lhs=v73, rhs_imm=12 }           -> x1
+    v75  Imm(63)                                          -> x1
+    v76  Imm(270582939648)                                -> x1
+    v77  Imm(63)                                          -> x1
+    v78  Store { addr=v73, disp=12, value=v77, kind=I32 } -> -
     v79  LocalAddr(-28)                                   -> x0
     v80  LocalAddr(-28)                                   -> x0
     v81  LocalAddr(-13)                                   -> x1

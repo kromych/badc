@@ -11,82 +11,29 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movl	$0x1, %eax
-               	imulq	$-0x1, %rax, %rcx
-               	movl	%ecx, %ecx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %eax
                	retq
-               	imulq	$-0x1, %rax, %rcx
-               	movl	%ecx, %ecx
-               	orq	%rax, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x2, %eax
                	retq
-               	imulq	$-0x1, %rax, %rcx
-               	movl	%ecx, %ecx
-               	orq	%rax, %rcx
-               	shrq	$0x1f, %rcx
-               	cmpq	$0x1, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x3, %eax
                	retq
-               	xorq	%rcx, %rcx
-               	imulq	$-0x1, %rcx, %rdx
-               	movl	%edx, %edx
-               	orq	%rdx, %rcx
-               	shrq	$0x1f, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x4, %eax
                	retq
-               	imulq	$-0x1, %rax, %rcx
-               	movl	%ecx, %ecx
-               	movl	%ecx, %edx
-               	orq	%rax, %rdx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x5, %eax
                	retq
-               	movl	%ecx, %ecx
-               	orq	%rcx, %rax
-               	shrq	$0x1f, %rax
-               	cmpq	$0x1, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x6, %eax
                	retq
-               	movl	$0x1, %eax
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rax
-               	movl	%eax, %eax
-               	imulq	$-0x1, %rax, %rcx
-               	movl	%ecx, %ecx
-               	orq	%rcx, %rax
-               	shrq	$0x1f, %rax
-               	xorq	$0x1, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x7, %eax
                	retq
-               	movl	$0x5, %eax
-               	xorq	%rax, %rax
-               	movl	%eax, %eax
-               	imulq	$-0x1, %rax, %rcx
-               	movl	%ecx, %ecx
-               	orq	%rcx, %rax
-               	shrq	$0x1f, %rax
-               	xorq	$0x1, %rax
-               	movl	%eax, %eax
-               	cmpq	$0x1, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x8, %eax
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

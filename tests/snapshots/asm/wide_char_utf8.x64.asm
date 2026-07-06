@@ -11,14 +11,10 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movl	$0xe1, %eax
-               	movl	$0x20ac, %ecx           # imm = 0x20AC
-               	cmpq	$0xe1, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %eax
                	retq
-               	cmpq	$0x20ac, %rcx           # imm = 0x20AC
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax

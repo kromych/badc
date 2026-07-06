@@ -55,46 +55,22 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	movl	$0xfffffdc2, %eax       # imm = 0xFFFFFDC2
-               	xorq	%rcx, %rcx
-               	movl	%eax, %eax
-               	orq	%rcx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x23e, %rax           # imm = 0xFDC2
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	movl	$0xfffffdc2, %ecx       # imm = 0xFFFFFDC2
-               	movl	%ecx, %ecx
-               	orq	%rcx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x23e, %rax           # imm = 0xFDC2
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x2, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movl	$0xfffffdc2, %eax       # imm = 0xFFFFFDC2
-               	xorq	%rcx, %rcx
-               	movl	%eax, %eax
-               	xorq	%rcx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x23e, %rax           # imm = 0xFDC2
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x3, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movabsq	$-0x23e, %rcx           # imm = 0xFDC2
-               	movl	%eax, %eax
-               	andq	%rcx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x23e, %rax           # imm = 0xFDC2
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x4, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
@@ -138,4 +114,4 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

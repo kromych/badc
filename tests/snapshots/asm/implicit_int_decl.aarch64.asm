@@ -15,11 +15,7 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x29               // =41
-               	add	x0, x0, #0x1
-               	sxtw	x0, w0
-               	cmp	x0, #0x2a
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>

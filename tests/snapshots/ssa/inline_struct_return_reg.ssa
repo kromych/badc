@@ -87,17 +87,17 @@ fn ent_pc=2 n_params=0 variadic=false locals=18
     terminator Jmp(b6)   (exit_acc=v43)
   block 8  start_pc=0
     v45  Imm(85)                                          -> x1
-    v46  Imm(0)                                           -> x2
-    v47  LocalAddr(-17)                                   -> x2
-    v48  Imm(0)                                           -> x2
-    v49  LocalAddr(-17)                                   -> x2
-    v50  LocalAddr(-17)                                   -> x2
-    v51  LocalAddr(-13)                                   -> x2
-    v52  Imm(0)                                           -> x2
-    v53  LoadLocal { off=-11, kind=I64 }                  -> x2
-    v54  LocalAddr(-13)                                   -> x2
-    v55  Load { addr=v54, disp=0, kind=I64 }              -> x2
-    v56  Binop { op=add, lhs=v31, rhs=v45 }               -> x0
+    v46  Imm(0)                                           -> x1
+    v47  LocalAddr(-17)                                   -> x1
+    v48  Imm(0)                                           -> x1
+    v49  LocalAddr(-17)                                   -> x1
+    v50  LocalAddr(-17)                                   -> x1
+    v51  LocalAddr(-13)                                   -> x1
+    v52  Imm(0)                                           -> x1
+    v53  LoadLocal { off=-11, kind=I64 }                  -> x1
+    v54  LocalAddr(-13)                                   -> x1
+    v55  Load { addr=v54, disp=0, kind=I64 }              -> x1
+    v56  BinopI { op=add, lhs=v31, rhs_imm=85 }           -> x0
     v57  Imm(0)                                           -> x1
     v58  LoadLocal { off=-11, kind=I64 }                  -> x1
     v59  BinopI { op=eq, lhs=v56, rhs_imm=41045 }         -> x0

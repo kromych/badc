@@ -85,23 +85,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2a               // =42
-               	cmp	x0, #0x2a
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x7                // =7
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	add	x0, x0, x1
-               	add	x0, x0, x2
-               	sxtw	x0, w0
-               	sxtw	x0, w0
-               	cmp	x0, #0x6
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x8                // =8
                	ldr	x19, [sp]
                	add	sp, sp, #0x10

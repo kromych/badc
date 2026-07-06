@@ -7,10 +7,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v1   Imm(255)                                         -> x0
     v2   Imm(-72057594037927936)                          -> x0
     v3   Imm(-1)                                          -> x0
-    v4   Imm(0)                                           -> x1
-    v5   LoadLocal { off=-1, kind=I8 }                    -> x1
-    v6   BinopI { op=lt, lhs=v3, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v6, target=b3, fall=b1 }   (exit_acc=v6)
+    v4   Imm(0)                                           -> x0
+    v5   LoadLocal { off=-1, kind=I8 }                    -> x0
+    v6   Imm(1)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(0)                                           -> x1
     v8   Imm(0)                                           -> x0

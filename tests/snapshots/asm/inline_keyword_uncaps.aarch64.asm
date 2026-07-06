@@ -29,43 +29,6 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x0                // =0
-               	add	x0, x0, #0x1
-               	add	x0, x0, #0x2
-               	add	x0, x0, #0x3
-               	add	x0, x0, #0x4
-               	add	x0, x0, #0x5
-               	add	x0, x0, #0x6
-               	add	x0, x0, #0x7
-               	add	x0, x0, #0x8
-               	add	x0, x0, #0x9
-               	add	x0, x0, #0xa
-               	add	x0, x0, #0xb
-               	add	x0, x0, #0xc
-               	add	x0, x0, #0xd
-               	add	x0, x0, #0xe
-               	add	x0, x0, #0xf
-               	add	x0, x0, #0x10
-               	mov	x1, #0x64               // =100
-               	add	x1, x1, #0x1
-               	add	x1, x1, #0x2
-               	add	x1, x1, #0x3
-               	add	x1, x1, #0x4
-               	add	x1, x1, #0x5
-               	add	x1, x1, #0x6
-               	add	x1, x1, #0x7
-               	add	x1, x1, #0x8
-               	add	x1, x1, #0x9
-               	add	x1, x1, #0xa
-               	add	x1, x1, #0xb
-               	add	x1, x1, #0xc
-               	add	x1, x1, #0xd
-               	add	x1, x1, #0xe
-               	add	x1, x1, #0xf
-               	add	x1, x1, #0x10
-               	add	x0, x0, x1
-               	cmp	x0, #0x174
-               	b.ne	<addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1

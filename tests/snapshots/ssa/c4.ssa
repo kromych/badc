@@ -3628,8 +3628,8 @@ fn ent_pc=9 n_params=2 variadic=false locals=27
     v95  Imm(0)                                           -> x0
     v96  ImmData(1824)                                    -> x15
     v97  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v98  BinopI { op=shl, lhs=v93, rhs_imm=32 }           -> x0
-    v99  Extend { value=v93, kind=I32 }                   -> x7
+    v98  Imm(1125899906842624)                            -> x0
+    v99  Imm(262144)                                      -> x7
     v100 CallExt { binding_idx=54, args=[v99], fp_arg_mask=0x0 } -> x0
     v101 Store { addr=v96, disp=0, value=v100, kind=I64 } -> -
     v102 BinopI { op=eq, lhs=v100, rhs_imm=0 }            -> x0
@@ -3644,8 +3644,8 @@ fn ent_pc=9 n_params=2 variadic=false locals=27
     v107 ImmData(1808)                                    -> x15
     v108 ImmData(1800)                                    -> [spill 0]
     v109 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v110 BinopI { op=shl, lhs=v93, rhs_imm=32 }           -> x0
-    v111 Extend { value=v93, kind=I32 }                   -> x7
+    v110 Imm(1125899906842624)                            -> x0
+    v111 Imm(262144)                                      -> x7
     v112 CallExt { binding_idx=54, args=[v111], fp_arg_mask=0x0 } -> x0
     v113 Store { addr=v108, disp=0, value=v112, kind=I64 } -> -
     v114 Store { addr=v107, disp=0, value=v112, kind=I64 } -> -
@@ -3660,8 +3660,8 @@ fn ent_pc=9 n_params=2 variadic=false locals=27
   block 20  start_pc=0
     v120 ImmData(1792)                                    -> x15
     v121 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v122 BinopI { op=shl, lhs=v93, rhs_imm=32 }           -> x0
-    v123 Extend { value=v93, kind=I32 }                   -> x7
+    v122 Imm(1125899906842624)                            -> x0
+    v123 Imm(262144)                                      -> x7
     v124 CallExt { binding_idx=54, args=[v123], fp_arg_mask=0x0 } -> x0
     v125 Store { addr=v120, disp=0, value=v124, kind=I64 } -> -
     v126 BinopI { op=eq, lhs=v124, rhs_imm=0 }            -> x0
@@ -3674,8 +3674,8 @@ fn ent_pc=9 n_params=2 variadic=false locals=27
     terminator Return(v130)   (exit_acc=v130)
   block 22  start_pc=0
     v131 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v132 BinopI { op=shl, lhs=v93, rhs_imm=32 }           -> x0
-    v133 Extend { value=v93, kind=I32 }                   -> x7
+    v132 Imm(1125899906842624)                            -> x0
+    v133 Imm(262144)                                      -> x7
     v134 CallExt { binding_idx=54, args=[v133], fp_arg_mask=0x0 } -> x15
     v135 Imm(0)                                           -> x0
     v136 BinopI { op=eq, lhs=v134, rhs_imm=0 }            -> x0
@@ -3691,20 +3691,20 @@ fn ent_pc=9 n_params=2 variadic=false locals=27
     v142 Load { addr=v141, disp=0, kind=I64 }             -> x7
     v143 Imm(0)                                           -> [spill 0]
     v144 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v145 BinopI { op=shl, lhs=v93, rhs_imm=32 }           -> x0
-    v146 Extend { value=v93, kind=I32 }                   -> x2
+    v145 Imm(1125899906842624)                            -> x0
+    v146 Imm(262144)                                      -> x2
     v147 CallExt { binding_idx=95, args=[v142, v143, v146], fp_arg_mask=0x0 } -> x0
     v148 ImmData(1800)                                    -> x0
     v149 Load { addr=v148, disp=0, kind=I64 }             -> x7
     v150 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v151 BinopI { op=shl, lhs=v93, rhs_imm=32 }           -> x0
-    v152 Extend { value=v93, kind=I32 }                   -> x2
+    v151 Imm(1125899906842624)                            -> x0
+    v152 Imm(262144)                                      -> x2
     v153 CallExt { binding_idx=95, args=[v149, v143, v152], fp_arg_mask=0x0 } -> x0
     v154 ImmData(1792)                                    -> x0
     v155 Load { addr=v154, disp=0, kind=I64 }             -> x7
     v156 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v157 BinopI { op=shl, lhs=v93, rhs_imm=32 }           -> x0
-    v158 Extend { value=v93, kind=I32 }                   -> x2
+    v157 Imm(1125899906842624)                            -> x0
+    v158 Imm(262144)                                      -> x2
     v159 CallExt { binding_idx=95, args=[v155, v143, v158], fp_arg_mask=0x0 } -> x0
     v160 ImmData(1776)                                    -> x0
     v161 ImmData(1043)                                    -> x1
@@ -3770,8 +3770,8 @@ fn ent_pc=9 n_params=2 variadic=false locals=27
     v209 ImmData(1784)                                    -> [spill 1]
     v210 ImmData(1776)                                    -> [spill 2]
     v211 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v212 BinopI { op=shl, lhs=v93, rhs_imm=32 }           -> x0
-    v213 Extend { value=v93, kind=I32 }                   -> x7
+    v212 Imm(1125899906842624)                            -> x0
+    v213 Imm(262144)                                      -> x7
     v214 CallExt { binding_idx=54, args=[v213], fp_arg_mask=0x0 } -> x0
     v215 Store { addr=v210, disp=0, value=v214, kind=I64 } -> -
     v216 Store { addr=v209, disp=0, value=v214, kind=I64 } -> -
@@ -3790,9 +3790,9 @@ fn ent_pc=9 n_params=2 variadic=false locals=27
     v225 ImmData(1776)                                    -> x0
     v226 Load { addr=v225, disp=0, kind=I64 }             -> x6
     v227 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v228 BinopI { op=sub, lhs=v93, rhs_imm=1 }            -> x0
-    v229 BinopI { op=shl, lhs=v228, rhs_imm=32 }          -> x1
-    v230 Extend { value=v228, kind=I32 }                  -> x2
+    v228 Imm(262143)                                      -> x0
+    v229 Imm(1125895611875328)                            -> x0
+    v230 Imm(262143)                                      -> x2
     v231 CallExt { binding_idx=145, args=[v224, v226, v230], fp_arg_mask=0x0 } -> x0
     v232 Imm(0)                                           -> x1
     v233 BinopI { op=le, lhs=v231, rhs_imm=0 }            -> x1

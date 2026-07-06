@@ -155,8 +155,7 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	mov	x2, #0x14               // =20
                	bl	<addr>
-               	mov	x1, #0x160              // =352
-               	cmp	x0, x1
+               	cmp	x0, #0x160
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
                	b	<addr>

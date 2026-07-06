@@ -48,32 +48,15 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	$0x1, %eax
-               	movl	$0x2, %ecx
-               	movl	$0x3, %edx
-               	addq	%rcx, %rax
-               	addq	%rdx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x6, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movl	$0xa, %eax
-               	movabsq	$-0x4, %rcx
-               	movabsq	$-0x6, %rdx
-               	addq	%rcx, %rax
-               	addq	%rdx, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movl	$0x5, %eax
-               	movslq	%eax, %rax
-               	cmpq	$0x5, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
@@ -88,4 +71,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

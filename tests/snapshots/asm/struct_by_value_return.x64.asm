@@ -26,14 +26,7 @@ Disassembly of section .text:
                	retq
 
 <clobber>:
-               	movl	$0xdead, %eax           # imm = 0xDEAD
-               	movl	$0xbeef, %ecx           # imm = 0xBEEF
-               	movl	$0xcafe, %edx           # imm = 0xCAFE
-               	movl	$0xfacef, %esi          # imm = 0xFACEF
-               	addq	%rcx, %rax
-               	addq	%rdx, %rax
-               	addq	%rsi, %rax
-               	addq	%rdi, %rax
+               	leaq	0x121589(%rdi), %rax
                	movslq	%eax, %rax
                	retq
 
@@ -86,19 +79,7 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	movl	$0x7, %eax
-               	movl	$0xdead, %ecx           # imm = 0xDEAD
-               	movl	$0xbeef, %edx           # imm = 0xBEEF
-               	movl	$0xcafe, %esi           # imm = 0xCAFE
-               	movl	$0xfacef, %edi          # imm = 0xFACEF
-               	addq	%rdx, %rcx
-               	addq	%rsi, %rcx
-               	addq	%rdi, %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jmp	<addr>
                	movl	$0x63, %eax
                	addq	$0xc0, %rsp
                	popq	%rbp
@@ -253,3 +234,5 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

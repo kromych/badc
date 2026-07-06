@@ -21,10 +21,7 @@ Disassembly of section .text:
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
                	str	x19, [sp, #0x10]
-               	mov	x20, #0x0               // =0
-               	mov	x0, #0x1                // =1
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b	<addr>
                	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -35,16 +32,16 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	b	<addr>
-               	adrp	x21, <page>
-               	add	x21, x21, <lo12>
+               	adrp	x20, <page>
+               	add	x20, x20, <lo12>
                	mov	x0, #0x1                // =1
-               	mov	x9, x21
+               	mov	x9, x20
                	blr	x9
-               	add	x20, x20, x0
+               	add	x21, x0, #0x0
                	mov	x0, #0x2                // =2
-               	mov	x9, x21
+               	mov	x9, x20
                	blr	x9
-               	add	x20, x20, x0
+               	add	x20, x21, x0
                	b	<addr>
                	cmp	x1, #0x0
                	b.eq	<addr>

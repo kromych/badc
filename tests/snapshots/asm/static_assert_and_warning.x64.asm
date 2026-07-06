@@ -12,7 +12,7 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rcx, %rcx
-               	incq	%rcx
+               	movl	$0x1, %ecx
                	movslq	%ecx, %rax
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
@@ -20,3 +20,4 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	retq
+               	addb	%al, (%rax)

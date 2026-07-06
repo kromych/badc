@@ -37,18 +37,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v11  LocalAddr(-1)                                    -> x0
     v12  Imm(0)                                           -> x1
     v13  Imm(5)                                           -> x1
-    v14  Load { addr=v11, disp=0, kind=U32 }              -> x2
-    v15  BinopI { op=and, lhs=v14, rhs_imm=-16 }          -> x2
-    v16  Binop { op=or, lhs=v15, rhs=v13 }                -> x1
+    v14  Load { addr=v11, disp=0, kind=U32 }              -> x1
+    v15  BinopI { op=and, lhs=v14, rhs_imm=-16 }          -> x1
+    v16  BinopI { op=or, lhs=v15, rhs_imm=5 }             -> x1
     v17  Store { addr=v11, disp=0, value=v16, kind=I32 }  -> -
     v18  Imm(5764607523034234880)                         -> x0
     v19  LocalAddr(-1)                                    -> x0
     v20  Imm(4)                                           -> x1
     v21  BinopI { op=add, lhs=v19, rhs_imm=4 }            -> x1
     v22  Imm(3)                                           -> x1
-    v23  Load { addr=v19, disp=4, kind=U32 }              -> x2
-    v24  BinopI { op=and, lhs=v23, rhs_imm=-16 }          -> x2
-    v25  Binop { op=or, lhs=v24, rhs=v22 }                -> x1
+    v23  Load { addr=v19, disp=4, kind=U32 }              -> x1
+    v24  BinopI { op=and, lhs=v23, rhs_imm=-16 }          -> x1
+    v25  BinopI { op=or, lhs=v24, rhs_imm=3 }             -> x1
     v26  Store { addr=v19, disp=4, value=v25, kind=I32 }  -> -
     v27  Imm(3458764513820540928)                         -> x0
     v28  LocalAddr(-1)                                    -> x0

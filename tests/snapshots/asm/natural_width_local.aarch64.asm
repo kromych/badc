@@ -10,50 +10,29 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x0, #0x12c              // =300
-               	mov	x1, #0xc8               // =200
-               	mov	x3, #0x0                // =0
-               	mov	x2, x3
-               	sxtw	x4, w2
-               	cmp	x4, #0x4
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
+               	sxtw	x2, w0
+               	cmp	x2, #0x4
                	b.ge	<addr>
-               	sxtb	x4, w0
-               	add	x3, x3, x4
-               	add	x2, x2, #0x1
-               	sxtw	x2, w2
+               	add	x1, x1, #0x2c
+               	add	x0, x0, #0x1
+               	sxtw	x0, w0
                	b	<addr>
-               	mov	x4, #0x0                // =0
-               	sxtb	x2, w0
-               	cmp	x2, #0x2c
-               	b.eq	<addr>
-               	add	x2, x4, #0x1
-               	sxtw	x4, w2
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	mov	x17, #0x2c              // =44
-               	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
-               	add	x0, x4, #0x2
-               	sxtw	x4, w0
-               	sxtb	x0, w1
-               	mov	x17, #0xffc8            // =65480
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	add	x0, x4, #0x4
-               	sxtw	x4, w0
-               	sxtw	x0, w3
+               	mov	x2, #0x0                // =0
+               	b	<addr>
+               	mov	x2, #0x1                // =1
+               	b	<addr>
+               	add	x0, x2, #0x2
+               	sxtw	x2, w0
+               	b	<addr>
+               	add	x0, x2, #0x4
+               	sxtw	x2, w0
+               	sxtw	x0, w1
                	cmp	x0, #0xb0
                	b.eq	<addr>
-               	add	x0, x4, #0x8
-               	sxtw	x4, w0
-               	sxtw	x0, w4
+               	add	x0, x2, #0x8
+               	sxtw	x2, w0
+               	sxtw	x0, w2
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	b	<addr>

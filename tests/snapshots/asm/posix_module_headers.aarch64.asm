@@ -133,18 +133,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x400
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3                // =3
-               	mov	x1, #0x1                // =1
-               	cmp	x0, #0x0
-               	cset	x2, lt
+               	mov	x2, #0x1                // =1
+               	mov	x2, #0x0                // =0
                	cbnz	x2, <addr>
-               	cmp	x0, #0x0
-               	cset	x0, lt
-               	cmp	x0, #0x0
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	cmp	x1, #0x1
-               	cset	x2, ne
+               	mov	x2, #0x0                // =0
                	cbz	x2, <addr>
                	mov	x0, #0x9                // =9
                	ldr	x20, [sp]
@@ -176,21 +168,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x400
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x29c              // =668
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0xc                // =12
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	mov	x4, #0x0                // =0
-               	cbz	x0, <addr>
-               	cmp	x1, #0x0
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x4, ne
-               	cbz	x4, <addr>
-               	cmp	x2, #0x0
-               	cset	x4, eq
-               	cbz	x4, <addr>
+               	mov	x2, #0x0                // =0
+               	b	<addr>
+               	mov	x2, #0x0                // =0
+               	cbz	x2, <addr>
+               	mov	x2, #0x0                // =0
+               	cbz	x2, <addr>
                	mov	x0, #0xc                // =12
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
@@ -244,9 +227,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x400
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	mov	x2, x1
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

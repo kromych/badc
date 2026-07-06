@@ -132,16 +132,16 @@ fn ent_pc=7 n_params=0 variadic=false locals=34
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(7)                                           -> x0
-    v2   Extend { value=v1, kind=I32 }                    -> x1
+    v2   Imm(7)                                           -> x0
     v3   Imm(0)                                           -> x1
     v4   LocalAddr(-18)                                   -> x1
-    v5   Store { addr=v4, disp=0, value=v1, kind=I32 }    -> -
-    v6   LocalAddr(-18)                                   -> x1
-    v7   BinopI { op=add, lhs=v6, rhs_imm=4 }             -> x2
-    v8   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x2
-    v10  Extend { value=v8, kind=I32 }                    -> x2
-    v11  Store { addr=v6, disp=4, value=v8, kind=I32 }    -> -
+    v5   Store { addr=v4, disp=0, value=v2, kind=I32 }    -> -
+    v6   LocalAddr(-18)                                   -> x0
+    v7   BinopI { op=add, lhs=v6, rhs_imm=4 }             -> x1
+    v8   Imm(8)                                           -> x1
+    v9   Imm(34359738368)                                 -> x1
+    v10  Imm(8)                                           -> x1
+    v11  Store { addr=v6, disp=4, value=v10, kind=I32 }   -> -
     v12  LocalAddr(-18)                                   -> x0
     v13  LocalAddr(-18)                                   -> x0
     v14  LocalAddr(-1)                                    -> x1
@@ -209,16 +209,16 @@ fn ent_pc=7 n_params=0 variadic=false locals=34
     terminator Return(v57)   (exit_acc=v57)
   block 10  start_pc=0
     v58  Imm(20)                                          -> x0
-    v59  Extend { value=v58, kind=I32 }                   -> x1
+    v59  Imm(20)                                          -> x0
     v60  Imm(0)                                           -> x1
     v61  LocalAddr(-26)                                   -> x1
-    v62  Store { addr=v61, disp=0, value=v58, kind=I32 }  -> -
-    v63  LocalAddr(-26)                                   -> x1
-    v64  BinopI { op=add, lhs=v63, rhs_imm=4 }            -> x2
-    v65  BinopI { op=add, lhs=v58, rhs_imm=1 }            -> x0
-    v66  BinopI { op=shl, lhs=v65, rhs_imm=32 }           -> x2
-    v67  Extend { value=v65, kind=I32 }                   -> x2
-    v68  Store { addr=v63, disp=4, value=v65, kind=I32 }  -> -
+    v62  Store { addr=v61, disp=0, value=v59, kind=I32 }  -> -
+    v63  LocalAddr(-26)                                   -> x0
+    v64  BinopI { op=add, lhs=v63, rhs_imm=4 }            -> x1
+    v65  Imm(21)                                          -> x1
+    v66  Imm(90194313216)                                 -> x1
+    v67  Imm(21)                                          -> x1
+    v68  Store { addr=v63, disp=4, value=v67, kind=I32 }  -> -
     v69  LocalAddr(-26)                                   -> x0
     v70  LocalAddr(-26)                                   -> x0
     v71  Load { addr=v70, disp=0, kind=I32 }              -> x0
@@ -244,16 +244,16 @@ fn ent_pc=7 n_params=0 variadic=false locals=34
   block 14  start_pc=0
     v84  LocalAddr(-13)                                   -> x0
     v85  Imm(40)                                          -> x1
-    v86  Extend { value=v85, kind=I32 }                   -> x2
+    v86  Imm(40)                                          -> x1
     v87  Imm(0)                                           -> x2
     v88  LocalAddr(-31)                                   -> x2
-    v89  Store { addr=v88, disp=0, value=v85, kind=I32 }  -> -
-    v90  LocalAddr(-31)                                   -> x2
-    v91  BinopI { op=add, lhs=v90, rhs_imm=4 }            -> x6
-    v92  BinopI { op=add, lhs=v85, rhs_imm=1 }            -> x1
-    v93  BinopI { op=shl, lhs=v92, rhs_imm=32 }           -> x6
-    v94  Extend { value=v92, kind=I32 }                   -> x6
-    v95  Store { addr=v90, disp=4, value=v92, kind=I32 }  -> -
+    v89  Store { addr=v88, disp=0, value=v86, kind=I32 }  -> -
+    v90  LocalAddr(-31)                                   -> x1
+    v91  BinopI { op=add, lhs=v90, rhs_imm=4 }            -> x2
+    v92  Imm(41)                                          -> x2
+    v93  Imm(176093659136)                                -> x2
+    v94  Imm(41)                                          -> x2
+    v95  Store { addr=v90, disp=4, value=v94, kind=I32 }  -> -
     v96  LocalAddr(-31)                                   -> x1
     v97  LocalAddr(-31)                                   -> x1
     v98  Mcpy { dst=v84, src=v97, size=8 }                -> x0

@@ -2455,3 +2455,17 @@ fn ndebug_optimize_predefine() {
     // `-O` semantics are locked by `tests/cli_fixture_smoke.rs`.
     assert_eq!(run_fixture("ndebug_optimize_predefine.c"), 100);
 }
+
+#[test]
+fn constfold_post_inline_matches_interpreter() {
+    // The differential companion to the mid-end constant folder: the
+    // same fixture runs natively unoptimized and with -O via the
+    // fixture tables, so any fold that disagrees with the
+    // interpreter's evaluator surfaces as a lane divergence.
+    assert_eq!(run_fixture("constfold_post_inline.c"), 0);
+}
+
+#[test]
+fn rotate_inline_const_count_matches_interpreter() {
+    assert_eq!(run_fixture("rotate_inline_const_count.c"), 0);
+}

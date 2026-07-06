@@ -255,12 +255,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1234             // =4660
-               	movk	x0, #0x5678, lsl #16
-               	sub	x1, x29, #0x40
-               	ldrsw	x1, [x1, #0x4]
-               	mov	w1, w1
-               	cmp	x1, x0
+               	sub	x0, x29, #0x40
+               	ldrsw	x0, [x0, #0x4]
+               	mov	w0, w0
+               	mov	x17, #0x1234            // =4660
+               	movk	x17, #0x5678, lsl #16
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x22               // =34
                	add	sp, sp, #0x60

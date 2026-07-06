@@ -97,7 +97,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v37  Extend { value=v30, kind=I32 }                   -> x1
     v38  Imm(0)                                           -> x1
     v39  Imm(0)                                           -> x1
-    v40  Extend { value=v33, kind=I32 }                   -> x1
+    v40  Imm(7)                                           -> x1
     v41  Imm(0)                                           -> x1
     v42  Imm(0)                                           -> x1
     v43  Imm(4621819117588971520)                         -> x1
@@ -122,7 +122,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v62  Binop { op=add, lhs=v55, rhs=v61 }               -> x1
     v63  BinopI { op=shl, lhs=v62, rhs_imm=32 }           -> x2
     v64  Extend { value=v62, kind=I32 }                   -> x2
-    v65  Binop { op=add, lhs=v62, rhs=v33 }               -> x1
+    v65  BinopI { op=add, lhs=v62, rhs_imm=7 }            -> x1
     v66  BinopI { op=shl, lhs=v65, rhs_imm=32 }           -> x2
     v67  Extend { value=v65, kind=I32 }                   -> x1
     v68  Binop { op=ne, lhs=v20, rhs=v67 }                -> x0

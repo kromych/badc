@@ -73,9 +73,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x7                // =7
-               	cmp	x0, #0x7
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x10               // =16
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

@@ -68,11 +68,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x100(%rbp), %rdi
                	callq	<addr>
-               	movl	$0x110, %ecx            # imm = 0x110
-               	xorq	%rdx, %rdx
-               	addq	%rdx, %rcx
-               	sarq	$0x1, %rcx
-               	cmpq	%rcx, %rax
+               	cmpq	$0x88, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x120, %rsp            # imm = 0x120
@@ -98,4 +94,3 @@ Disassembly of section .text:
                	addq	$0x120, %rsp            # imm = 0x120
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

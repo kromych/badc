@@ -17,12 +17,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movslq	%eax, %rax
-               	cmpq	$-0x1, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x3, %eax
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

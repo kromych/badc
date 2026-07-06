@@ -10,50 +10,22 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x0, #0xa                // =10
-               	cmp	x0, #0xa
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x3                // =3
-               	cmp	x0, #0x3
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x0, #0xc0               // =192
-               	mov	x17, #0xc0              // =192
-               	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x0, #0x3f               // =63
-               	mov	x17, #0x3f              // =63
-               	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x0, #0x1                // =1
-               	mov	x17, #0x1               // =1
-               	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x6                // =6
                	ret
                	mov	x0, #0x0                // =0

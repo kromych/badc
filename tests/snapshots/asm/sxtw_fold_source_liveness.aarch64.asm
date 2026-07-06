@@ -18,12 +18,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x2                // =2
-               	mov	x1, #0x7                // =7
-               	lsl	x2, x0, #32
-               	add	x0, x0, x1
-               	asr	x2, x2, #32
-               	add	x0, x2, x0
-               	add	x0, x0, x1
-               	sxtw	x0, w0
+               	mov	x0, #0x12               // =18
                	ret

@@ -546,8 +546,7 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0xf
                	b.eq	<addr>
-               	mov	x17, #0x1               // =1
-               	orr	x20, x20, x17
+               	mov	x20, #0x1               // =1
                	mov	x0, #0xc                // =12
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2

@@ -275,17 +275,14 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x9, %eax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	$0x2, %edx
-               	movslq	(%rcx), %rsi
-               	imulq	$0xa, %rsi, %rsi
-               	addq	%rsi, %rax
-               	movslq	0x4(%rcx), %rcx
-               	imulq	$0x64, %rcx, %rcx
+               	leaq	-0x8(%rbp), %rax
+               	movslq	(%rax), %rcx
+               	imulq	$0xa, %rcx, %rcx
+               	addq	$0x9, %rcx
+               	movslq	0x4(%rax), %rax
+               	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
-               	imulq	$0x3e8, %rdx, %rcx      # imm = 0x3E8
-               	addq	%rcx, %rax
+               	addq	$0x7d0, %rax            # imm = 0x7D0
                	movslq	%eax, %rax
                	cmpq	$0x9eb, %rax            # imm = 0x9EB
                	je	<addr>
@@ -349,5 +346,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

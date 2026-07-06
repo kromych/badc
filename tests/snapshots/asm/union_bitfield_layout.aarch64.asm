@@ -39,24 +39,24 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x8
-               	mov	x1, #0x5                // =5
-               	ldr	w2, [x0]
+               	ldr	w1, [x0]
                	mov	x17, #0xfff0            // =65520
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x2, x2, x17
-               	orr	x1, x2, x1
+               	and	x1, x1, x17
+               	mov	x17, #0x5               // =5
+               	orr	x1, x1, x17
                	str	w1, [x0]
                	sub	x0, x29, #0x8
-               	mov	x1, #0x3                // =3
-               	ldr	w2, [x0, #0x4]
+               	ldr	w1, [x0, #0x4]
                	mov	x17, #0xfff0            // =65520
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x2, x2, x17
-               	orr	x1, x2, x1
+               	and	x1, x1, x17
+               	mov	x17, #0x3               // =3
+               	orr	x1, x1, x17
                	str	w1, [x0, #0x4]
                	sub	x0, x29, #0x8
                	ldr	w0, [x0]

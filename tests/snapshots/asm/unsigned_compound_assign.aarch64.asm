@@ -14,20 +14,10 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x70
                	str	x19, [sp]
-               	mov	x0, #0x64               // =100
-               	add	x0, x0, #0x5
-               	mov	w1, w0
-               	mov	x17, #0x69              // =105
-               	eor	x1, x1, x17
-               	mov	w1, w1
-               	cmp	x1, #0x0
-               	b.eq	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	w0, w0
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	b	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x69               // =105
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x1                // =1
@@ -35,20 +25,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	w0, w0
-               	sub	x0, x0, #0x3
-               	mov	w1, w0
-               	mov	x17, #0x66              // =102
-               	eor	x1, x1, x17
-               	mov	w1, w1
-               	cmp	x1, #0x0
-               	b.eq	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	w0, w0
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	b	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x66               // =102
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x1                // =1
@@ -56,10 +36,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3e8              // =1000
-               	add	x1, x0, #0x19f
-               	cmp	x1, #0x587
-               	b.eq	<addr>
+               	mov	x1, #0x587              // =1415
+               	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -69,21 +47,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x41c              // =1052
-               	mov	x1, #0x19f              // =415
-               	add	x0, x0, x1
-               	mov	w1, w0
-               	mov	x17, #0x5bb             // =1467
-               	eor	x1, x1, x17
-               	mov	w1, w1
-               	cmp	x1, #0x0
-               	b.eq	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	w0, w0
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	b	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x5bb              // =1467
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x1                // =1
@@ -91,22 +58,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xc8               // =200
-               	add	x0, x0, #0x3c
-               	mov	x17, #0xff              // =255
-               	and	x1, x0, x17
-               	mov	x17, #0x4               // =4
-               	eor	x1, x1, x17
-               	mov	w1, w1
-               	cmp	x1, #0x0
-               	b.eq	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	b	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x4                // =4
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x1                // =1

@@ -141,24 +141,11 @@ Disassembly of section .text:
                	addq	$0x3f0, %rsp            # imm = 0x3F0
                	popq	%rbp
                	retq
-               	movl	$0x3, %eax
-               	movl	$0x1, %ecx
-               	testq	%rax, %rax
-               	setl	%dl
-               	movzbq	%dl, %rdx
+               	movl	$0x1, %edx
+               	xorq	%rdx, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
-               	testq	%rax, %rax
-               	setl	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	jne	<addr>
-               	cmpq	$0x1, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	xorq	%rdx, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x9, %eax
@@ -189,27 +176,13 @@ Disassembly of section .text:
                	addq	$0x3f0, %rsp            # imm = 0x3F0
                	popq	%rbp
                	retq
-               	movl	$0x29c, %eax            # imm = 0x29C
-               	movl	$0x3, %ecx
-               	movl	$0xc, %edx
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	xorq	%rdi, %rdi
-               	testq	%rax, %rax
-               	je	<addr>
-               	testq	%rcx, %rcx
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%dil
-               	movzbq	%dil, %rdi
-               	testq	%rdi, %rdi
-               	je	<addr>
+               	xorq	%rdx, %rdx
+               	jmp	<addr>
+               	xorq	%rdx, %rdx
                	testq	%rdx, %rdx
-               	sete	%dil
-               	movzbq	%dil, %rdi
-               	testq	%rdi, %rdi
+               	je	<addr>
+               	xorq	%rdx, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0xc, %eax
                	movq	(%rsp), %rbx
@@ -271,9 +244,6 @@ Disassembly of section .text:
                	addq	$0x3f0, %rsp            # imm = 0x3F0
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movq	%rcx, %rdx
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

@@ -1531,6 +1531,11 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::struct_return_reg::run (aarch64)", || {
             crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
         });
+        // Constant folding over the post-inline tape; see x86_64.rs's
+        // matching block for the rationale.
+        super::ssa::emit_common::time_pass("passes::constfold::run (aarch64)", || {
+            crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
+        });
         super::ssa::emit_common::time_pass("passes::rotate::run (aarch64)", || {
             crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
         });

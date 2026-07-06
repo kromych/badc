@@ -82,8 +82,7 @@ Disassembly of section .text:
                	ldr	x2, [x2, x3, lsl #3]
                	add	x0, x0, x2
                	b	<addr>
-               	mov	x1, #0x55               // =85
-               	add	x0, x0, x1
+               	add	x0, x0, #0x55
                	mov	x17, #0xa055            // =41045
                	cmp	x0, x17
                	b.ne	<addr>

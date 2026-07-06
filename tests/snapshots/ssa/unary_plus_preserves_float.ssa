@@ -162,10 +162,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=11
     terminator Return(v99)   (exit_acc=v99)
   block 29  start_pc=0
     v100 Imm(7)                                           -> x0
-    v101 Imm(0)                                           -> x1
-    v102 LoadLocal { off=-6, kind=I32 }                   -> x1
-    v103 BinopI { op=ne, lhs=v100, rhs_imm=7 }            -> x0
-    terminator Bz { cond=v103, target=b31, fall=b30 }   (exit_acc=v103)
+    v101 Imm(0)                                           -> x0
+    v102 LoadLocal { off=-6, kind=I32 }                   -> x0
+    v103 Imm(0)                                           -> x0
+    terminator Jmp(b31)   (exit_acc=v103)
   block 30  start_pc=0
     v104 Imm(8)                                           -> x0
     terminator Return(v104)   (exit_acc=v104)

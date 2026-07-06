@@ -406,7 +406,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0xf, %rax
                	je	<addr>
-               	orq	$0x1, %rbx
+               	movl	$0x1, %ebx
                	movl	$0xc, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
@@ -572,4 +572,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

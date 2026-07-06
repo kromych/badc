@@ -67,12 +67,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	mov	x20, #0x0               // =0
                	mov	w0, w20
-               	mov	x1, #0x30               // =48
-               	mov	x2, #0x0                // =0
-               	add	x1, x1, x2
-               	asr	x1, x1, #3
-               	mov	w1, w1
-               	cmp	x0, x1
+               	cmp	x0, #0x6
                	b.hs	<addr>
                	b	<addr>
                	mov	w0, w20

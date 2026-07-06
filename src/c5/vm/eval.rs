@@ -5,25 +5,25 @@
 
 use super::super::ir::{BinOp, FpCastKind, LoadKind};
 
-/// Integer division / modulo by zero. C99 6.5.5p5 leaves the behavior
+/// Integer division / modulo by zero, named for the trapping op. C99 6.5.5p5 leaves the behavior
 /// undefined; the evaluator diagnoses it rather than invoking
 /// host-level UB. The VM re-wraps `message()` into its runtime error;
 /// the fold gate refuses the operands instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EvalTrap {
-    DivByZero,
-    ModByZero,
-    DivuByZero,
-    ModuByZero,
+    Div,
+    Mod,
+    Divu,
+    Modu,
 }
 
 impl EvalTrap {
     pub(crate) fn message(self) -> &'static str {
         match self {
-            EvalTrap::DivByZero => "vm_ssa: signed integer division by zero",
-            EvalTrap::ModByZero => "vm_ssa: signed integer modulo by zero",
-            EvalTrap::DivuByZero => "vm_ssa: unsigned integer division by zero",
-            EvalTrap::ModuByZero => "vm_ssa: unsigned integer modulo by zero",
+            EvalTrap::Div => "vm_ssa: signed integer division by zero",
+            EvalTrap::Mod => "vm_ssa: signed integer modulo by zero",
+            EvalTrap::Divu => "vm_ssa: unsigned integer division by zero",
+            EvalTrap::Modu => "vm_ssa: unsigned integer modulo by zero",
         }
     }
 }
@@ -73,27 +73,27 @@ pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap
         BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
         BinOp::Div => {
             if rhs == 0 {
-                return Err(EvalTrap::DivByZero);
+                return Err(EvalTrap::Div);
             }
             lhs.wrapping_div(rhs)
         }
         BinOp::Mod => {
             if rhs == 0 {
-                return Err(EvalTrap::ModByZero);
+                return Err(EvalTrap::Mod);
             }
             lhs.wrapping_rem(rhs)
         }
         BinOp::Divu => {
             let r = rhs as u64;
             if r == 0 {
-                return Err(EvalTrap::DivuByZero);
+                return Err(EvalTrap::Divu);
             }
             ((lhs as u64) / r) as i64
         }
         BinOp::Modu => {
             let r = rhs as u64;
             if r == 0 {
-                return Err(EvalTrap::ModuByZero);
+                return Err(EvalTrap::Modu);
             }
             ((lhs as u64) % r) as i64
         }

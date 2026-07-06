@@ -25,15 +25,9 @@ Disassembly of section .text:
                	ret
 
 <clobber>:
-               	mov	x1, #0xdead             // =57005
-               	mov	x2, #0xbeef             // =48879
-               	mov	x3, #0xcafe             // =51966
-               	mov	x4, #0xacef             // =44271
-               	movk	x4, #0xf, lsl #16
-               	add	x1, x1, x2
-               	add	x1, x1, x3
-               	add	x1, x1, x4
-               	add	x0, x1, x0
+               	mov	x17, #0x1589            // =5513
+               	movk	x17, #0x12, lsl #16
+               	add	x0, x0, x17
                	sxtw	x0, w0
                	ret
 
@@ -85,20 +79,7 @@ Disassembly of section .text:
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	mov	x0, #0x7                // =7
-               	mov	x1, #0xdead             // =57005
-               	mov	x2, #0xbeef             // =48879
-               	mov	x3, #0xcafe             // =51966
-               	mov	x4, #0xacef             // =44271
-               	movk	x4, #0xf, lsl #16
-               	add	x1, x1, x2
-               	add	x1, x1, x3
-               	add	x1, x1, x4
-               	add	x0, x1, x0
-               	sxtw	x0, w0
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b	<addr>
                	mov	x0, #0x63               // =99
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10

@@ -465,7 +465,7 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x0, x16
-               	sub	x0, x0, x1
+               	sub	x0, x0, #0x7
                	sxtw	x0, w0
                	cmp	x0, #0x64
                	cset	x0, eq
@@ -505,7 +505,7 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x0, x16
-               	add	x0, x0, x1
+               	add	x0, x0, #0x1
                	sxtw	x0, w0
                	cmp	x0, #0x65
                	cset	x0, eq

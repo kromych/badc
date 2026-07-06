@@ -12,9 +12,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
   block 2  start_pc=0
     v3   LocalAddr(-2)                                    -> x0
     v4   Imm(2147483647)                                  -> x1
-    v5   Load { addr=v3, disp=0, kind=U32 }               -> x2
-    v6   BinopI { op=and, lhs=v5, rhs_imm=-2147483648 }   -> x2
-    v7   Binop { op=or, lhs=v6, rhs=v4 }                  -> x1
+    v5   Load { addr=v3, disp=0, kind=U32 }               -> x1
+    v6   BinopI { op=and, lhs=v5, rhs_imm=-2147483648 }   -> x1
+    v7   BinopI { op=or, lhs=v6, rhs_imm=2147483647 }     -> x1
     v8   Store { addr=v3, disp=0, value=v7, kind=I32 }    -> -
     v9   LocalAddr(-2)                                    -> x0
     v10  BinopI { op=add, lhs=v9, rhs_imm=3 }             -> x1
@@ -22,14 +22,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v12  Load { addr=v9, disp=3, kind=U8 }                -> x1
     v13  BinopI { op=and, lhs=v12, rhs_imm=-129 }         -> x1
     v14  Imm(128)                                         -> x2
-    v15  Binop { op=or, lhs=v13, rhs=v14 }                -> x1
+    v15  BinopI { op=or, lhs=v13, rhs_imm=128 }           -> x1
     v16  Store { addr=v9, disp=3, value=v15, kind=I8 }    -> -
     v17  LocalAddr(-2)                                    -> x0
     v18  BinopI { op=add, lhs=v17, rhs_imm=4 }            -> x1
     v19  Imm(1073741823)                                  -> x1
-    v20  Load { addr=v17, disp=4, kind=U32 }              -> x2
-    v21  BinopI { op=and, lhs=v20, rhs_imm=-1073741824 }  -> x2
-    v22  Binop { op=or, lhs=v21, rhs=v19 }                -> x1
+    v20  Load { addr=v17, disp=4, kind=U32 }              -> x1
+    v21  BinopI { op=and, lhs=v20, rhs_imm=-1073741824 }  -> x1
+    v22  BinopI { op=or, lhs=v21, rhs_imm=1073741823 }    -> x1
     v23  Store { addr=v17, disp=4, value=v22, kind=I32 }  -> -
     v24  LocalAddr(-2)                                    -> x0
     v25  BinopI { op=add, lhs=v24, rhs_imm=7 }            -> x1
@@ -37,7 +37,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v27  Load { addr=v24, disp=7, kind=U8 }               -> x1
     v28  BinopI { op=and, lhs=v27, rhs_imm=-193 }         -> x1
     v29  Imm(192)                                         -> x2
-    v30  Binop { op=or, lhs=v28, rhs=v29 }                -> x1
+    v30  BinopI { op=or, lhs=v28, rhs_imm=192 }           -> x1
     v31  Store { addr=v24, disp=7, value=v30, kind=I8 }   -> -
     v32  LocalAddr(-2)                                    -> x0
     v33  BinopI { op=add, lhs=v32, rhs_imm=8 }            -> x1
@@ -139,16 +139,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
   block 18  start_pc=0
     v98  LocalAddr(-3)                                    -> x0
     v99  Imm(511)                                         -> x1
-    v100 Load { addr=v98, disp=0, kind=U16 }              -> x2
-    v101 BinopI { op=and, lhs=v100, rhs_imm=-512 }        -> x2
-    v102 Binop { op=or, lhs=v101, rhs=v99 }               -> x1
+    v100 Load { addr=v98, disp=0, kind=U16 }              -> x1
+    v101 BinopI { op=and, lhs=v100, rhs_imm=-512 }        -> x1
+    v102 BinopI { op=or, lhs=v101, rhs_imm=511 }          -> x1
     v103 Store { addr=v98, disp=0, value=v102, kind=I16 } -> -
     v104 LocalAddr(-3)                                    -> x0
     v105 BinopI { op=add, lhs=v104, rhs_imm=2 }           -> x1
     v106 Imm(291)                                         -> x1
-    v107 Load { addr=v104, disp=2, kind=U16 }             -> x2
-    v108 BinopI { op=and, lhs=v107, rhs_imm=-512 }        -> x2
-    v109 Binop { op=or, lhs=v108, rhs=v106 }              -> x1
+    v107 Load { addr=v104, disp=2, kind=U16 }             -> x1
+    v108 BinopI { op=and, lhs=v107, rhs_imm=-512 }        -> x1
+    v109 BinopI { op=or, lhs=v108, rhs_imm=291 }          -> x1
     v110 Store { addr=v104, disp=2, value=v109, kind=I16 } -> -
     v111 LocalAddr(-3)                                    -> x0
     v112 Load { addr=v111, disp=0, kind=U16 }             -> x0

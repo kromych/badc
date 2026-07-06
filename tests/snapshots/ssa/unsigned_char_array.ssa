@@ -87,21 +87,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     terminator Return(v62)   (exit_acc=v62)
   block 10  start_pc=0
     v63  Imm(5)                                           -> x1
-    v64  Imm(0)                                           -> x2
-    v65  ImmData(36)                                      -> x2
-    v66  LoadLocal { off=-1, kind=U8 }                    -> x2
-    v67  Binop { op=add, lhs=v1, rhs=v63 }                -> x2
-    v68  Load { addr=v67, disp=0, kind=U8 }               -> x2
-    v69  BinopI { op=xor, lhs=v68, rhs_imm=6 }            -> x2
-    v70  BinopI { op=and, lhs=v69, rhs_imm=4294967295 }   -> x2
-    v71  BinopI { op=ne, lhs=v70, rhs_imm=0 }             -> x2
+    v64  Imm(0)                                           -> x1
+    v65  ImmData(36)                                      -> x1
+    v66  LoadLocal { off=-1, kind=U8 }                    -> x1
+    v67  BinopI { op=add, lhs=v1, rhs_imm=5 }             -> x1
+    v68  Load { addr=v1, disp=5, kind=U8 }                -> x1
+    v69  BinopI { op=xor, lhs=v68, rhs_imm=6 }            -> x1
+    v70  BinopI { op=and, lhs=v69, rhs_imm=4294967295 }   -> x1
+    v71  BinopI { op=ne, lhs=v70, rhs_imm=0 }             -> x1
     terminator Bz { cond=v71, target=b12, fall=b11 }   (exit_acc=v71)
   block 11  start_pc=0
     v72  ImmData(191)                                     -> x7
-    v73  ImmData(36)                                      -> x2
-    v74  LoadLocal { off=-1, kind=U8 }                    -> x2
-    v75  Binop { op=add, lhs=v1, rhs=v63 }                -> x0
-    v76  Load { addr=v75, disp=0, kind=U8 }               -> x6
+    v73  ImmData(36)                                      -> x1
+    v74  LoadLocal { off=-1, kind=U8 }                    -> x1
+    v75  BinopI { op=add, lhs=v1, rhs_imm=5 }             -> x1
+    v76  Load { addr=v1, disp=5, kind=U8 }                -> x6
     v77  CallExt { binding_idx=0, args=[v72, v76], fp_arg_mask=0x0 } -> x0
     v78  Imm(1)                                           -> x0
     terminator Return(v78)   (exit_acc=v78)

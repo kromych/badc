@@ -15,9 +15,7 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x1                // =1
-               	cmp	x0, #0x1
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	b	<addr>
@@ -32,9 +30,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x0, #0x1                // =1
-               	cmp	x0, #0x1
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x6                // =6
                	ret
                	b	<addr>
@@ -43,21 +39,13 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x8                // =8
                	ret
-               	mov	x0, #0x2                // =2
-               	add	x0, x0, #0x64
-               	sxtw	x0, w0
-               	cmp	x0, #0x66
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x9                // =9
                	ret
                	b	<addr>
                	mov	x0, #0xa                // =10
                	ret
-               	mov	x0, #0x2a               // =42
-               	add	x0, x0, #0x64
-               	sxtw	x0, w0
-               	cmp	x0, #0x8e
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0xb                // =11
                	ret
                	mov	x0, #0x0                // =0

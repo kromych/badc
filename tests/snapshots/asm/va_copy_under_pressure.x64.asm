@@ -144,8 +144,7 @@ Disassembly of section .text:
                	movl	$0x14, %edx
                	movb	$0x0, %al
                	callq	<addr>
-               	movl	$0x160, %ecx            # imm = 0x160
-               	cmpq	%rcx, %rax
+               	cmpq	$0x160, %rax            # imm = 0x160
                	jne	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
@@ -153,4 +152,4 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

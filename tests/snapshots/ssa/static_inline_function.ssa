@@ -49,31 +49,31 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2)                                           -> x0
-    v2   Extend { value=v1, kind=I32 }                    -> x1
-    v3   Imm(0)                                           -> x1
-    v4   BinopI { op=mul, lhs=v1, rhs_imm=3 }             -> x0
-    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
-    v6   Extend { value=v4, kind=I32 }                    -> x1
-    v7   BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x0
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
-    v9   Extend { value=v7, kind=I32 }                    -> x0
-    v10  BinopI { op=ne, lhs=v9, rhs_imm=7 }              -> x0
-    terminator Bz { cond=v10, target=b2, fall=b1 }   (exit_acc=v10)
+    v2   Imm(2)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(6)                                           -> x0
+    v5   Imm(25769803776)                                 -> x0
+    v6   Imm(6)                                           -> x0
+    v7   Imm(7)                                           -> x0
+    v8   Imm(30064771072)                                 -> x0
+    v9   Imm(7)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v10)
   block 1  start_pc=0
     v11  Imm(1)                                           -> x0
     terminator Return(v11)   (exit_acc=v11)
   block 2  start_pc=0
     v12  Imm(-1)                                          -> x0
-    v13  Extend { value=v12, kind=I32 }                   -> x1
-    v14  Imm(0)                                           -> x1
-    v15  BinopI { op=mul, lhs=v12, rhs_imm=3 }            -> x0
-    v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
-    v17  Extend { value=v15, kind=I32 }                   -> x1
-    v18  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x0
-    v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x1
-    v20  Extend { value=v18, kind=I32 }                   -> x0
-    v21  BinopI { op=ne, lhs=v20, rhs_imm=-2 }            -> x0
-    terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v21)
+    v13  Imm(-1)                                          -> x0
+    v14  Imm(0)                                           -> x0
+    v15  Imm(-3)                                          -> x0
+    v16  Imm(-12884901888)                                -> x0
+    v17  Imm(-3)                                          -> x0
+    v18  Imm(-2)                                          -> x0
+    v19  Imm(-8589934592)                                 -> x0
+    v20  Imm(-2)                                          -> x0
+    v21  Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v21)
   block 3  start_pc=0
     v22  Imm(2)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)

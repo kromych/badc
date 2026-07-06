@@ -29,13 +29,11 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x7, %eax
-               	movslq	%eax, %rax
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
                	movl	$0x2, %eax
-               	movslq	%eax, %rax
                	cvtsi2sd	%rax, %xmm1
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
@@ -54,14 +52,12 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movl	$0x3, %eax
-               	movslq	%eax, %rax
                	cvtsi2sd	%rax, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x40800000, %eax       # imm = 0x40800000
                	movq	%rax, %xmm15
                	divss	%xmm15, %xmm0
                	movl	$0x5, %eax
-               	movslq	%eax, %rax
                	cvtsi2sd	%rax, %xmm1
                	cvtsd2ss	%xmm1, %xmm1
                	movl	$0x40800000, %eax       # imm = 0x40800000
@@ -81,14 +77,12 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movl	$0x6, %ecx
-               	movslq	%ecx, %rcx
                	cvtsi2sd	%rcx, %xmm1
                	cvtsd2ss	%xmm1, %xmm1
                	movl	$0x40800000, %ecx       # imm = 0x40800000
@@ -113,5 +107,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

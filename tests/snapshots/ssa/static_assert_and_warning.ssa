@@ -11,7 +11,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Jmp(b1)   (exit_acc=v3)
   block 1  start_pc=0
     v4   LoadLocal { off=-1, kind=I32 }                   -> x0
-    v5   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x1
+    v5   Imm(1)                                           -> x1
     v6   Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v5)
   block 2  start_pc=0

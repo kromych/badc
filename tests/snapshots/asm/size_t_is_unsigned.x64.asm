@@ -11,53 +11,23 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movabsq	$-0x1, %rax
-               	movl	$0x9, %ecx
-               	pushq	%rax
-               	pushq	%rdx
-               	xorq	%rdx, %rdx
-               	divq	%rcx
-               	movq	%rax, %rcx
-               	popq	%rdx
-               	popq	%rax
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	jmp	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	$0x9, %ecx
-               	pushq	%rax
-               	pushq	%rdx
-               	xorq	%rdx, %rdx
-               	divq	%rcx
-               	movq	%rax, %rcx
-               	popq	%rdx
-               	popq	%rax
-               	movabsq	$0x1c71c71c71c71c71, %r11 # imm = 0x1C71C71C71C71C71
-               	cmpq	%r11, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x2, %eax
                	retq
-               	cmpq	$0x3e8, %rax            # imm = 0x3E8
-               	jae	<addr>
+               	jmp	<addr>
                	movl	$0x3, %eax
                	retq
-               	movl	$0x80000000, %ecx       # imm = 0x80000000
-               	movl	$0x5, %edx
-               	movq	%rdx, %r10
-               	pushq	%rdx
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	popq	%rdx
-               	cmpq	%rax, %rcx
-               	jae	<addr>
-               	movq	%rcx, %rdx
+               	movl	$0x80000000, %eax       # imm = 0x80000000
+               	movq	%rax, %rdx
                	jmp	<addr>
-               	movl	%eax, %edx
-               	movl	%edx, %eax
-               	cmpq	%rcx, %rax
+               	movl	$0x33333333, %edx       # imm = 0x33333333
+               	movl	%edx, %ecx
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

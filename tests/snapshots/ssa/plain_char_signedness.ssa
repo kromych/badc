@@ -5,10 +5,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(-29)                                         -> x0
-    v2   Imm(0)                                           -> x1
-    v3   LoadLocal { off=-1, kind=I8 }                    -> x1
-    v4   BinopI { op=ne, lhs=v1, rhs_imm=-29 }            -> x0
-    terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=-1, kind=I8 }                    -> x0
+    v4   Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v4)
   block 1  start_pc=0
     v5   Imm(1)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
@@ -51,19 +51,19 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     terminator Return(v30)   (exit_acc=v30)
   block 8  start_pc=0
     v31  Imm(-29)                                         -> x0
-    v32  Imm(0)                                           -> x1
-    v33  LoadLocal { off=-6, kind=I8 }                    -> x1
-    v34  BinopI { op=ne, lhs=v31, rhs_imm=-29 }           -> x0
-    terminator Bz { cond=v34, target=b10, fall=b9 }   (exit_acc=v34)
+    v32  Imm(0)                                           -> x0
+    v33  LoadLocal { off=-6, kind=I8 }                    -> x0
+    v34  Imm(0)                                           -> x0
+    terminator Jmp(b10)   (exit_acc=v34)
   block 9  start_pc=0
     v35  Imm(5)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)
   block 10  start_pc=0
     v36  Imm(227)                                         -> x0
-    v37  Imm(0)                                           -> x1
-    v38  LoadLocal { off=-7, kind=U8 }                    -> x1
-    v39  BinopI { op=ne, lhs=v36, rhs_imm=227 }           -> x0
-    terminator Bz { cond=v39, target=b12, fall=b11 }   (exit_acc=v39)
+    v37  Imm(0)                                           -> x0
+    v38  LoadLocal { off=-7, kind=U8 }                    -> x0
+    v39  Imm(0)                                           -> x0
+    terminator Jmp(b12)   (exit_acc=v39)
   block 11  start_pc=0
     v40  Imm(6)                                           -> x0
     terminator Return(v40)   (exit_acc=v40)

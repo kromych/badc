@@ -89,12 +89,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=11
     v6   Phi { incoming=[b0:v4, b2:v16], kind=I64 }       -> x3
     v7   BinopI { op=and, lhs=v6, rhs_imm=4294967295 }    -> x0
     v8   Imm(48)                                          -> x1
-    v9   Imm(8)                                           -> x2
-    v10  Imm(0)                                           -> x2
-    v11  Binop { op=add, lhs=v8, rhs=v10 }                -> x1
-    v12  BinopI { op=shr, lhs=v11, rhs_imm=3 }            -> x1
-    v13  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x1
-    v14  Binop { op=ult, lhs=v7, rhs=v13 }                -> x0
+    v9   Imm(8)                                           -> x1
+    v10  Imm(0)                                           -> x1
+    v11  Imm(48)                                          -> x1
+    v12  Imm(6)                                           -> x1
+    v13  Imm(6)                                           -> x1
+    v14  BinopI { op=ult, lhs=v7, rhs_imm=6 }             -> x0
     terminator Bz { cond=v14, target=b4, fall=b3 }   (exit_acc=v14)
   block 2  start_pc=0
     v15  BinopI { op=and, lhs=v6, rhs_imm=4294967295 }    -> x0

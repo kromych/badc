@@ -298,9 +298,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=14
     terminator Bz { cond=v9, target=b15, fall=b1 }   (exit_acc=v9)
   block 1  start_pc=0
     v10  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v11  BinopI { op=or, lhs=v1, rhs_imm=1 }              -> x3
+    v11  Imm(1)                                           -> x3
     v12  Imm(0)                                           -> x0
-    v13  Extend { value=v11, kind=I32 }                   -> x0
+    v13  Imm(1)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v13)
   block 2  start_pc=0
     v14  Phi { incoming=[b15:v1, b1:v11], kind=I64 }      -> x3

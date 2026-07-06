@@ -517,7 +517,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	popq	%rax
                	movq	%r10, %rax
-               	subq	%rcx, %rax
+               	subq	$0x7, %rax
                	movslq	%eax, %rax
                	cmpq	$0x64, %rax
                	sete	%al
@@ -561,7 +561,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	popq	%rax
                	movq	%r10, %rax
-               	addq	%rcx, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	cmpq	$0x65, %rax
                	sete	%al

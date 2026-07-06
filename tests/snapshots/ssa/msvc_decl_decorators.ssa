@@ -50,7 +50,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x2
     v7   Extend { value=v5, kind=I32 }                    -> x2
     v8   Imm(3)                                           -> x2
-    v9   Binop { op=add, lhs=v5, rhs=v8 }                 -> x1
+    v9   BinopI { op=add, lhs=v5, rhs_imm=3 }             -> x1
     v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x2
     v11  Extend { value=v9, kind=I32 }                    -> x2
     v12  Store { addr=v1, disp=0, value=v9, kind=I32 }    -> -

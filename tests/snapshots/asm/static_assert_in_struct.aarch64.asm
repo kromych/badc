@@ -20,30 +20,28 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	mov	x1, #0x2                // =2
                	str	w1, [x0, #0x4]
-               	mov	x0, #0x4                // =4
                	b	<addr>
                	mov	x0, #0x1                // =1
                	ldr	x19, [sp]
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x8
-               	ldrsw	x1, [x1]
-               	cmp	x1, #0x1
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	sub	x1, x29, #0x8
-               	ldrsw	x1, [x1, #0x4]
-               	cmp	x1, #0x2
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	sub	x0, x29, #0x8
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x1
+               	cset	x1, ne
+               	cbnz	x1, <addr>
+               	sub	x0, x29, #0x8
+               	ldrsw	x0, [x0, #0x4]
+               	cmp	x0, #0x2
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ldr	x19, [sp]
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	x0, #0x0
-               	b.gt	<addr>
+               	b	<addr>
                	mov	x0, #0x3                // =3
                	ldr	x19, [sp]
                	add	sp, sp, #0x50

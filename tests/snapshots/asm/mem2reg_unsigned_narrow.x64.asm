@@ -11,54 +11,34 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movl	$0x12c, %eax            # imm = 0x12C
-               	movl	$0x12345, %ecx          # imm = 0x12345
-               	xorq	%rsi, %rsi
-               	movq	%rsi, %rdx
-               	movq	%rsi, %rdi
-               	movslq	%edi, %r8
-               	cmpq	$0x3, %r8
-               	jge	<addr>
-               	movq	%rax, %r8
-               	andq	$0xff, %r8
-               	addq	%r8, %rdx
-               	movq	%rcx, %r8
-               	andq	$0xffff, %r8            # imm = 0xFFFF
-               	addq	%r8, %rsi
-               	incq	%rdi
-               	movslq	%edi, %rdi
-               	jmp	<addr>
-               	xorq	%r8, %r8
-               	andq	$0xff, %rax
-               	xorq	$0x2c, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	leaq	0x1(%r8), %rax
-               	movslq	%eax, %r8
+               	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	xorq	$0x2345, %rax           # imm = 0x2345
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	leaq	0x2(%r8), %rax
-               	movslq	%eax, %r8
-               	movslq	%edx, %rax
+               	movq	%rcx, %rdx
+               	movslq	%edx, %rsi
+               	cmpq	$0x3, %rsi
+               	jge	<addr>
+               	addq	$0x2c, %rax
+               	addq	$0x2345, %rcx           # imm = 0x2345
+               	incq	%rdx
+               	movslq	%edx, %rdx
+               	jmp	<addr>
+               	xorq	%rsi, %rsi
+               	jmp	<addr>
+               	movl	$0x1, %esi
+               	jmp	<addr>
+               	leaq	0x2(%rsi), %rdx
+               	movslq	%edx, %rsi
+               	movslq	%eax, %rax
                	cmpq	$0x84, %rax
                	je	<addr>
-               	leaq	0x4(%r8), %rax
-               	movslq	%eax, %r8
-               	movslq	%esi, %rax
+               	leaq	0x4(%rsi), %rax
+               	movslq	%eax, %rsi
+               	movslq	%ecx, %rax
                	cmpq	$0x69cf, %rax           # imm = 0x69CF
                	je	<addr>
-               	leaq	0x8(%r8), %rax
-               	movslq	%eax, %r8
-               	movslq	%r8d, %rax
+               	leaq	0x8(%rsi), %rax
+               	movslq	%eax, %rsi
+               	movslq	%esi, %rax
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

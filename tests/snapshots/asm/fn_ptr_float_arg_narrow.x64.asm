@@ -81,9 +81,9 @@ Disassembly of section .text:
                	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movq	(%rcx,%rax,8), %rax
+               	leaq	-0x10(%rbp), %rax
+               	addq	$0x0, %rax
+               	movq	(%rax), %rax
                	movl	$0x40800000, %edi       # imm = 0x40800000
                	movq	%rdi, %xmm0
                	callq	*%rax
@@ -245,5 +245,3 @@ Disassembly of section .text:
                	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

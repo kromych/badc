@@ -21,34 +21,16 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	movabsq	$-0x5, %rax
-               	imulq	$-0x1, %rax, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x5, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xb, %eax
                	retq
-               	movl	$0x7, %eax
-               	imulq	$-0x1, %rax, %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x7, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xc, %eax
                	retq
-               	movl	$0x3, %eax
-               	imulq	$-0x1, %rax, %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x3, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xd, %eax
                	retq
-               	movabsq	$-0x1, %rax
-               	imulq	$-0x1, %rax, %rcx
-               	movslq	%ecx, %rcx
-               	imulq	$-0x1, %rax, %rax
-               	movslq	%eax, %rax
-               	cmpq	%rax, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xe, %eax
                	retq
                	xorq	%rax, %rax

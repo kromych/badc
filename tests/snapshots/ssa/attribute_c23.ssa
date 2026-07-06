@@ -95,13 +95,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     terminator Return(v23)   (exit_acc=v23)
   block 6  start_pc=0
     v24  Imm(5)                                           -> x0
-    v25  Extend { value=v24, kind=I32 }                   -> x1
-    v26  Imm(0)                                           -> x1
-    v27  BinopI { op=add, lhs=v24, rhs_imm=1 }            -> x0
-    v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x1
-    v29  Extend { value=v27, kind=I32 }                   -> x0
-    v30  BinopI { op=ne, lhs=v29, rhs_imm=6 }             -> x0
-    terminator Bz { cond=v30, target=b8, fall=b7 }   (exit_acc=v30)
+    v25  Imm(5)                                           -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(6)                                           -> x0
+    v28  Imm(25769803776)                                 -> x0
+    v29  Imm(6)                                           -> x0
+    v30  Imm(0)                                           -> x0
+    terminator Jmp(b8)   (exit_acc=v30)
   block 7  start_pc=0
     v31  Imm(3)                                           -> x0
     terminator Return(v31)   (exit_acc=v31)

@@ -12,20 +12,16 @@ Disassembly of section .text:
 
 <classify>:
                	movslq	%edi, %rdi
-               	xorq	%rax, %rax
                	cmpq	$0x2, %rdi
                	jl	<addr>
                	jmp	<addr>
                	movslq	%eax, %rax
                	retq
-               	movl	$0xa, %ecx
-               	addq	%rcx, %rax
+               	movl	$0xa, %eax
                	jmp	<addr>
-               	movl	$0x14, %ecx
-               	addq	%rcx, %rax
+               	movl	$0x14, %eax
                	jmp	<addr>
-               	movl	$0x1e, %ecx
-               	addq	%rcx, %rax
+               	movl	$0x1e, %eax
                	jmp	<addr>
                	cmpq	$0x1, %rdi
                	je	<addr>

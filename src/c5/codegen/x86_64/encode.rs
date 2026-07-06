@@ -1982,6 +1982,14 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::struct_return_reg::run (x86_64)", || {
             crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
         });
+        // Constant folding over the post-inline tape: `Extend(Imm)` /
+        // `Binop(Imm, Imm)` chains left by parameter substitution fold
+        // to plain `Imm`, and immediate-operand binops take `BinopI`
+        // form, so the rotate matcher and the branch folder see
+        // constants.
+        super::ssa::emit_common::time_pass("passes::constfold::run (x86_64)", || {
+            crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
+        });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
         // so post-inline parameter substitutions expose the constant

@@ -67,7 +67,6 @@ Disassembly of section .text:
                	leaq	0x2(%rbx), %rdx
                	movabsq	$0x3fd0000000000000, %rdi # imm = 0x3FD0000000000000
                	movl	$0x3fc00000, %r8d       # imm = 0x3FC00000
-               	movl	$0x7, %r9d
                	movabsq	$0x4024000000000000, %rcx # imm = 0x4024000000000000
                	movq	%rcx, %xmm15
                	movsd	0x18(%rsp), %xmm0
@@ -88,7 +87,7 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	cvttsd2si	%xmm0, %rdx
                	addq	%rdx, %rcx
-               	addq	%r9, %rcx
+               	addq	$0x7, %rcx
                	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
@@ -102,5 +101,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

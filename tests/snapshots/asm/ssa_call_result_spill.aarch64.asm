@@ -22,16 +22,10 @@ Disassembly of section .text:
                	ret
 
 <bs1>:
-               	mov	x1, #0xe                // =14
-               	sxtw	x1, w1
-               	ror	x1, x0, x1
-               	mov	x2, #0x12               // =18
-               	sxtw	x2, w2
-               	ror	x2, x0, x2
+               	ror	x1, x0, #0xe
+               	ror	x2, x0, #0x12
                	eor	x1, x1, x2
-               	mov	x2, #0x29               // =41
-               	sxtw	x2, w2
-               	ror	x0, x0, x2
+               	ror	x0, x0, #0x29
                	eor	x0, x1, x0
                	ret
 
@@ -61,16 +55,10 @@ Disassembly of section .text:
                	mov	x9, x2
                	mov	x2, x16
                	b	<addr>
-               	mov	x0, #0xe                // =14
-               	sxtw	x0, w0
-               	ror	x0, x5, x0
-               	mov	x10, #0x12              // =18
-               	sxtw	x10, w10
-               	ror	x10, x5, x10
+               	ror	x0, x5, #0xe
+               	ror	x10, x5, #0x12
                	eor	x0, x0, x10
-               	mov	x10, #0x29              // =41
-               	sxtw	x10, w10
-               	ror	x10, x5, x10
+               	ror	x10, x5, #0x29
                	eor	x0, x0, x10
                	and	x10, x5, x4
                	mvn	x11, x5
@@ -78,16 +66,10 @@ Disassembly of section .text:
                	eor	x10, x10, x11
                	add	x0, x0, x10
                	add	x0, x0, x2
-               	mov	x2, #0xe                // =14
-               	sxtw	x2, w2
-               	ror	x2, x9, x2
-               	mov	x10, #0x12              // =18
-               	sxtw	x10, w10
-               	ror	x10, x9, x10
+               	ror	x2, x9, #0xe
+               	ror	x10, x9, #0x12
                	eor	x2, x2, x10
-               	mov	x10, #0x29              // =41
-               	sxtw	x10, w10
-               	ror	x10, x9, x10
+               	ror	x10, x9, #0x29
                	eor	x2, x2, x10
                	add	x6, x6, x0
                	add	x2, x0, x2

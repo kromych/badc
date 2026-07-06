@@ -20,28 +20,24 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rax
-               	movl	$0x7fffffff, %ecx       # imm = 0x7FFFFFFF
-               	movl	(%rax), %edx
-               	andq	$-0x80000000, %rdx      # imm = 0x80000000
-               	orq	%rdx, %rcx
+               	movl	(%rax), %ecx
+               	andq	$-0x80000000, %rcx      # imm = 0x80000000
+               	orq	$0x7fffffff, %rcx       # imm = 0x7FFFFFFF
                	movl	%ecx, (%rax)
                	leaq	-0x10(%rbp), %rax
                	movzbq	0x3(%rax), %rcx
                	andq	$-0x81, %rcx
-               	movl	$0x80, %edx
-               	orq	%rdx, %rcx
+               	orq	$0x80, %rcx
                	movb	%cl, 0x3(%rax)
                	leaq	-0x10(%rbp), %rax
-               	movl	$0x3fffffff, %ecx       # imm = 0x3FFFFFFF
-               	movl	0x4(%rax), %edx
-               	andq	$-0x40000000, %rdx      # imm = 0xC0000000
-               	orq	%rdx, %rcx
+               	movl	0x4(%rax), %ecx
+               	andq	$-0x40000000, %rcx      # imm = 0xC0000000
+               	orq	$0x3fffffff, %rcx       # imm = 0x3FFFFFFF
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x10(%rbp), %rax
                	movzbq	0x7(%rax), %rcx
                	andq	$-0xc1, %rcx
-               	movl	$0xc0, %edx
-               	orq	%rdx, %rcx
+               	orq	$0xc0, %rcx
                	movb	%cl, 0x7(%rax)
                	leaq	-0x10(%rbp), %rax
                	movl	$0xdeadbeef, %ecx       # imm = 0xDEADBEEF
@@ -132,16 +128,14 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x18(%rbp), %rax
-               	movl	$0x1ff, %ecx            # imm = 0x1FF
-               	movzwq	(%rax), %rdx
-               	andq	$-0x200, %rdx           # imm = 0xFE00
-               	orq	%rdx, %rcx
+               	movzwq	(%rax), %rcx
+               	andq	$-0x200, %rcx           # imm = 0xFE00
+               	orq	$0x1ff, %rcx            # imm = 0x1FF
                	movw	%cx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	movl	$0x123, %ecx            # imm = 0x123
-               	movzwq	0x2(%rax), %rdx
-               	andq	$-0x200, %rdx           # imm = 0xFE00
-               	orq	%rdx, %rcx
+               	movzwq	0x2(%rax), %rcx
+               	andq	$-0x200, %rcx           # imm = 0xFE00
+               	orq	$0x123, %rcx            # imm = 0x123
                	movw	%cx, 0x2(%rax)
                	leaq	-0x18(%rbp), %rax
                	movzwq	(%rax), %rax
@@ -168,5 +162,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

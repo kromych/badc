@@ -166,15 +166,15 @@ fn ent_pc=9 n_params=0 variadic=false locals=10
     terminator Return(v16)   (exit_acc=v16)
   block 8  start_pc=0
     v17  Imm(-17)                                         -> x0
-    v18  Imm(5)                                           -> x1
-    v19  Imm(0)                                           -> x2
-    v20  Imm(0)                                           -> x2
-    v21  LocalAddr(-9)                                    -> x2
-    v22  Binop { op=div, lhs=v17, rhs=v18 }               -> x6
+    v18  Imm(5)                                           -> x0
+    v19  Imm(0)                                           -> x0
+    v20  Imm(0)                                           -> x0
+    v21  LocalAddr(-9)                                    -> x0
+    v22  Imm(-3)                                          -> x1
     v23  Store { addr=v21, disp=0, value=v22, kind=I64 }  -> -
-    v24  LocalAddr(-9)                                    -> x2
-    v25  BinopI { op=add, lhs=v24, rhs_imm=8 }            -> x6
-    v26  Binop { op=mod, lhs=v17, rhs=v18 }               -> x0
+    v24  LocalAddr(-9)                                    -> x0
+    v25  BinopI { op=add, lhs=v24, rhs_imm=8 }            -> x1
+    v26  Imm(-2)                                          -> x1
     v27  Store { addr=v24, disp=8, value=v26, kind=I64 }  -> -
     v28  LocalAddr(-9)                                    -> x0
     v29  LocalAddr(-9)                                    -> x0

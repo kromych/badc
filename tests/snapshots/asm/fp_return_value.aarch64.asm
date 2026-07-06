@@ -28,13 +28,11 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x7                // =7
-               	sxtw	x0, w0
                	scvtf	d0, x0
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fadd	d0, d0, d17
                	mov	x0, #0x2                // =2
-               	sxtw	x0, w0
                	scvtf	d1, x0
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
@@ -48,14 +46,12 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x3                // =3
-               	sxtw	x0, w0
                	scvtf	d0, x0
                	fcvt	s0, d0
                	mov	x0, #0x40800000         // =1082130432
                	fmov	s17, w0
                	fdiv	s0, s0, s17
                	mov	x0, #0x5                // =5
-               	sxtw	x0, w0
                	scvtf	d1, x0
                	fcvt	s1, d1
                	mov	x0, #0x40800000         // =1082130432
@@ -70,14 +66,12 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x1                // =1
-               	sxtw	x0, w0
                	scvtf	d0, x0
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fadd	d0, d0, d17
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	mov	x1, #0x6                // =6
-               	sxtw	x1, w1
                	scvtf	d1, x1
                	fcvt	s1, d1
                	mov	x1, #0x40800000         // =1082130432

@@ -167,7 +167,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=12
     v22  Imm(2)                                           -> x6
     v23  Call { target_pc=0, args=[v21, v22], fixed_args=2, fp_return=true, fp_arg_mask=0x0 } -> d0
     v24  Imm(7)                                           -> x0
-    v25  Extend { value=v24, kind=I32 }                   -> x0
+    v25  Imm(7)                                           -> x0
     v26  Imm(0)                                           -> x0
     v27  Imm(4602678819172646912)                         -> x0
     v28  Imm(4602678819172646912)                         -> x1

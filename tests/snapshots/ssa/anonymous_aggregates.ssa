@@ -257,13 +257,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=11
     v163 Imm(22136)                                       -> x0
     v164 Imm(1450704896)                                  -> x0
     v165 Imm(1450709556)                                  -> x0
-    v166 Imm(0)                                           -> x1
-    v167 LocalAddr(-8)                                    -> x1
-    v168 BinopI { op=add, lhs=v167, rhs_imm=4 }           -> x2
-    v169 Load { addr=v167, disp=4, kind=I32 }             -> x1
-    v170 BinopI { op=and, lhs=v169, rhs_imm=4294967295 }  -> x1
-    v171 LoadLocal { off=-9, kind=U32 }                   -> x2
-    v172 Binop { op=ne, lhs=v170, rhs=v165 }              -> x0
+    v166 Imm(0)                                           -> x0
+    v167 LocalAddr(-8)                                    -> x0
+    v168 BinopI { op=add, lhs=v167, rhs_imm=4 }           -> x1
+    v169 Load { addr=v167, disp=4, kind=I32 }             -> x0
+    v170 BinopI { op=and, lhs=v169, rhs_imm=4294967295 }  -> x0
+    v171 LoadLocal { off=-9, kind=U32 }                   -> x1
+    v172 BinopI { op=ne, lhs=v170, rhs_imm=1450709556 }   -> x0
     terminator Bz { cond=v172, target=b46, fall=b45 }   (exit_acc=v172)
   block 45  start_pc=0
     v173 Imm(34)                                          -> x0

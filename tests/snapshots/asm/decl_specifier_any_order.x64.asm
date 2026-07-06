@@ -24,31 +24,17 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x100000000, %rax      # imm = 0x100000000
-               	sarq	$0x20, %rax
-               	cmpq	$0x1, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x3, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x1, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jmp	<addr>
                	movl	$0x4, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x1, %rax
-               	andq	$0xff, %rax
-               	xorq	$0xff, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x5, %eax
                	addq	$0x30, %rsp
                	popq	%rbp

@@ -17,9 +17,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	movl	$0x5, %eax
-               	incq	%rax
-               	shlq	$0x1, %rax
-               	movslq	%eax, %rax
+               	movl	$0xc, %eax
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

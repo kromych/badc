@@ -124,15 +124,11 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x2, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jmp	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
                	movss	%xmm14, -0x38(%rbp,%riz)
                	jmp	<addr>
-               	cmpq	$0x1, %rax
-               	jne	<addr>
                	jmp	<addr>
                	movss	-0x38(%rbp,%riz), %xmm0
                	movl	$0x41a00000, %eax       # imm = 0x41A00000
@@ -166,4 +162,4 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

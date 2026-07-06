@@ -14,9 +14,7 @@ Disassembly of section .text:
                	ret
 
 <self_referencing_rhs>:
-               	mov	x0, #0x5                // =5
-               	add	x0, x0, #0x1
-               	sxtw	x0, w0
+               	mov	x0, #0x6                // =6
                	ret
 
 <store_consumed_after_branch_is_silenced>:
@@ -46,12 +44,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	str	x20, [sp]
                	mov	x0, #0x1                // =1
-               	mov	x1, #0x5                // =5
-               	add	x1, x1, #0x1
-               	add	x20, x0, x1
-               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x20, x0, #0x7
                	bl	<addr>
                	add	x0, x20, x0
                	sxtw	x0, w0

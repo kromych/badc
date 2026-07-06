@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movabsq	$-0x1, %rax
-               	testq	%rax, %rax
-               	jge	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	xorq	%rax, %rax
@@ -46,4 +43,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

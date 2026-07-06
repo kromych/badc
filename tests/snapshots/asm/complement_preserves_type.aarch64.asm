@@ -10,74 +10,25 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0x7fff, lsl #48
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0x7fff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x0                // =0
-               	mvn	x0, x0
-               	lsr	x0, x0, #1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0x7fff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x0, #0x0                // =0
-               	mvn	x0, x0
-               	mov	w0, w0
-               	lsr	x0, x0, #1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x7fff, lsl #16
-               	cmp	x0, x17
-               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	b	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	asr	x0, x0, #1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	mov	x1, #0x0                // =0
+               	mov	x1, #0x0                // =0
+               	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x0, #-0x8000000000000000 // =-9223372036854775808
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0x7fff, lsl #48
-               	cmp	x0, x17
-               	cset	x0, hi
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b	<addr>
                	mov	x0, #0x6                // =6
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>

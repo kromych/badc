@@ -151,22 +151,15 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x7fff, %eax           # imm = 0x7FFF
-               	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
-               	xorq	%rsi, %rsi
-               	cmpq	$0x7fff, %rax           # imm = 0x7FFF
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	xorq	%rcx, %rcx
+               	xorq	%rcx, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0xa, %eax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rcx, %rax
-               	cmpq	%r11, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xb, %eax
                	addq	$0x50, %rsp
                	popq	%rbp
@@ -180,4 +173,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

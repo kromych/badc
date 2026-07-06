@@ -44,13 +44,8 @@ Disassembly of section .text:
                	movl	$0x14, %edi
                	movl	$0x16, %esi
                	callq	*%rax
-               	movl	$0x1, %ecx
-               	addq	%rcx, %rcx
-               	addq	%rcx, %rax
-               	movl	$0x3, %ecx
-               	movl	$0x4, %edx
-               	addq	%rdx, %rcx
-               	addq	%rcx, %rax
+               	addq	$0x2, %rax
+               	addq	$0x7, %rax
                	movslq	%eax, %r12
                	movq	%rbx, %rax
                	movq	%r12, %rdi
@@ -78,3 +73,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

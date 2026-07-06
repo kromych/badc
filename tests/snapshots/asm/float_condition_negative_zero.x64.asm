@@ -30,7 +30,7 @@ Disassembly of section .text:
                	orq	%r10, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	orq	$0x1, %rcx
+               	movl	$0x1, %ecx
                	movsd	-0x10(%rbp,%riz), %xmm1
                	ucomisd	%xmm0, %xmm1
                	sete	%al
@@ -152,3 +152,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

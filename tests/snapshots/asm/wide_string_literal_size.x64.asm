@@ -11,45 +11,19 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movl	$0x4, %eax
-               	movq	%rax, %rcx
-               	xorq	$0x4, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
-               	movl	%ecx, %ecx
-               	xorq	$0x8, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	(%rax,%rax,2), %rcx
-               	movl	%ecx, %ecx
-               	xorq	$0xc, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	(%rax,%rax,2), %rcx
-               	movl	%ecx, %ecx
-               	xorq	$0xc, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x4, %eax
                	retq
-               	imulq	$0x6, %rax, %rax
-               	movl	%eax, %eax
-               	xorq	$0x18, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x5, %eax
                	retq
                	jmp	<addr>
@@ -90,4 +64,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

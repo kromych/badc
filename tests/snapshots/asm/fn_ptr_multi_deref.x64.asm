@@ -20,12 +20,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
                	movq	%rbx, (%rsp)
-               	movl	$0x2, %eax
-               	movl	$0x3, %ecx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x5, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
                	addq	$0x80, %rsp
@@ -84,4 +79,3 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

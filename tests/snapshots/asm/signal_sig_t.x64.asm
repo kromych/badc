@@ -16,16 +16,15 @@ Disassembly of section .text:
 
 <main>:
                	leaq	-<rip>, %rax        # <addr>
-               	xorq	%rcx, %rcx
-               	leaq	-<rip>, %rdx       # <addr>
-               	cmpq	%rdx, %rax
+               	leaq	-<rip>, %rcx       # <addr>
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x2, %eax
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

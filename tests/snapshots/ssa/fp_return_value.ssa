@@ -32,13 +32,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(7)                                           -> x0
-    v2   Extend { value=v1, kind=I32 }                    -> x0
+    v2   Imm(7)                                           -> x0
     v3   Imm(0)                                           -> x1
     v4   FpCast { kind=IntToFp, value=v2 }                -> d0
     v5   Imm(4602678819172646912)                         -> x0
     v6   Binop { op=fadd, lhs=v4, rhs=v5 }                -> d0
     v7   Imm(2)                                           -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x0
+    v8   Imm(2)                                           -> x0
     v9   Imm(0)                                           -> x1
     v10  FpCast { kind=IntToFp, value=v8 }                -> d1
     v11  Imm(4602678819172646912)                         -> x0
@@ -54,14 +54,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     terminator Return(v18)   (exit_acc=v18)
   block 2  start_pc=0
     v19  Imm(3)                                           -> x0
-    v20  Extend { value=v19, kind=I32 }                   -> x0
+    v20  Imm(3)                                           -> x0
     v21  Imm(0)                                           -> x1
     v22  FpCast { kind=IntToFp, value=v20 }               -> d0
     v23  FpCast { kind=F64ToF32, value=v22 }              -> d0 [f32]
     v24  Imm(1082130432)                                  -> x0 [f32]
     v25  Binop { op=fdiv, lhs=v23, rhs=v24 }              -> d0 [f32]
     v26  Imm(5)                                           -> x0
-    v27  Extend { value=v26, kind=I32 }                   -> x0
+    v27  Imm(5)                                           -> x0
     v28  Imm(0)                                           -> x1
     v29  FpCast { kind=IntToFp, value=v27 }               -> d1
     v30  FpCast { kind=F64ToF32, value=v29 }              -> d1 [f32]
@@ -78,7 +78,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     terminator Return(v38)   (exit_acc=v38)
   block 4  start_pc=0
     v39  Imm(1)                                           -> x0
-    v40  Extend { value=v39, kind=I32 }                   -> x0
+    v40  Imm(1)                                           -> x0
     v41  Imm(0)                                           -> x1
     v42  FpCast { kind=IntToFp, value=v40 }               -> d0
     v43  Imm(4602678819172646912)                         -> x0
@@ -86,7 +86,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v45  Imm(4611686018427387904)                         -> x0
     v46  Binop { op=fmul, lhs=v44, rhs=v45 }              -> d1
     v47  Imm(6)                                           -> x1
-    v48  Extend { value=v47, kind=I32 }                   -> x1
+    v48  Imm(6)                                           -> x1
     v49  Imm(0)                                           -> x2
     v50  FpCast { kind=IntToFp, value=v48 }               -> d1
     v51  FpCast { kind=F64ToF32, value=v50 }              -> d1 [f32]

@@ -11,10 +11,5 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movl	$0x5, %eax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
+               	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -67,11 +67,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0x100
                	bl	<addr>
-               	mov	x1, #0x110              // =272
-               	mov	x2, #0x0                // =0
-               	add	x1, x1, x2
-               	asr	x1, x1, #1
-               	cmp	x0, x1
+               	cmp	x0, #0x88
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x120

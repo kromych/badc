@@ -278,9 +278,9 @@ Disassembly of section .text:
                	movl	$0x32, %eax
                	leaq	-0xc8(%rbp), %rcx
                	movl	%eax, (%rcx)
-               	leaq	-0xc8(%rbp), %rcx
-               	incq	%rax
-               	movl	%eax, 0x4(%rcx)
+               	leaq	-0xc8(%rbp), %rax
+               	movl	$0x33, %ecx
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0xc8(%rbp), %rax
                	leaq	-0x50(%rbp), %rcx
                	pushq	%rdx
@@ -310,15 +310,15 @@ Disassembly of section .text:
                	movl	$0x3c, %eax
                	leaq	-0xe0(%rbp), %rcx
                	movl	%eax, (%rcx)
-               	leaq	-0xe0(%rbp), %rcx
-               	leaq	0x1(%rax), %rdx
-               	movl	%edx, 0x4(%rcx)
-               	leaq	-0xe0(%rbp), %rcx
-               	leaq	0x2(%rax), %rdx
-               	movl	%edx, 0x8(%rcx)
-               	leaq	-0xe0(%rbp), %rcx
-               	addq	$0x3, %rax
-               	movl	%eax, 0xc(%rcx)
+               	leaq	-0xe0(%rbp), %rax
+               	movl	$0x3d, %ecx
+               	movl	%ecx, 0x4(%rax)
+               	leaq	-0xe0(%rbp), %rax
+               	movl	$0x3e, %ecx
+               	movl	%ecx, 0x8(%rax)
+               	leaq	-0xe0(%rbp), %rax
+               	movl	$0x3f, %ecx
+               	movl	%ecx, 0xc(%rax)
                	leaq	-0xe0(%rbp), %rax
                	leaq	-0x68(%rbp), %rcx
                	pushq	%rdx
@@ -497,3 +497,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

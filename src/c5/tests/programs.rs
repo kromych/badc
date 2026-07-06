@@ -167,6 +167,21 @@ fn label_addr_array_init() {
 }
 
 #[test]
+fn static_init_once_guard() {
+    // C99 6.2.4p3: a static-local initialized by runtime stores
+    // (`&&label` elements) runs its initializer once; later calls
+    // must not clobber user writes to the table.
+    assert_eq!(run_fixture("static_init_once_guard.c"), 0);
+}
+
+#[test]
+fn computed_goto_static_table() {
+    // A static `&&label` dispatch table across repeated calls: the
+    // once-guard skip path must leave correct label addresses.
+    assert_eq!(run_fixture("computed_goto_static_table.c"), 0);
+}
+
+#[test]
 fn sieve_of_eratosthenes() {
     // Dense array write/read loop with a multiplicative inner stride;
     // the prime count below 100000 checks the result.
@@ -376,6 +391,14 @@ fn float_increment_decrement() {
     // `++` / `--` on a real floating type add / subtract 1 (C99 6.5.3.1 /
     // 6.5.2.4), prefix yielding the new value and postfix the prior.
     assert_eq!(run_fixture("float_increment_decrement.c"), 0);
+}
+
+#[test]
+fn compound_assign_float_register_resident() {
+    // A float lvalue updated via `op=` / `++` / `--` (C99 6.5.16.2,
+    // 6.5.2.4, 6.5.3.1) stays promotable to an FP register, matching
+    // the `x = x op k` form.
+    assert_eq!(run_fixture("compound_assign_float_register_resident.c"), 0);
 }
 
 #[test]

@@ -2993,7 +2993,7 @@ impl<'a> Walker<'a> {
                 let load_kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lhs);
-                let place = self.rmw_place(b, *lhs, store_kind)?;
+                let place = self.rmw_place(b, *lhs)?;
                 let old = place.load(b, load_kind, vol);
                 // Constant-rhs short-circuit (mirror of the
                 // `Expr::Binary` path): an integer-literal rhs
@@ -3112,7 +3112,7 @@ impl<'a> Walker<'a> {
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lvalue);
-                let place = self.rmw_place(b, *lvalue, store_kind)?;
+                let place = self.rmw_place(b, *lvalue)?;
                 let old = place.load(b, kind, vol);
                 let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind, vol);
@@ -3139,7 +3139,7 @@ impl<'a> Walker<'a> {
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lvalue);
-                let place = self.rmw_place(b, *lvalue, store_kind)?;
+                let place = self.rmw_place(b, *lvalue)?;
                 let old = place.load(b, kind, vol);
                 let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind, vol);
@@ -3508,18 +3508,15 @@ impl<'a> Walker<'a> {
     }
 
     /// Resolve where a read-modify-write operator targets its lvalue. A
-    /// non-thread-local `Token::Loc` Ident of integer-class storage width
-    /// keeps its frame slot so mem2reg can promote it; the float-stored
-    /// case (`StoreKind::F32`, which the fused `StoreLocal` does not
-    /// lower) and every non-local lvalue materialize an address through
-    /// `walk_expr_lvalue`. Mirrors the `Expr::Assign` local-target
-    /// shortcut so `i++` / `i += k` keep the counter register-resident,
-    /// not just `i = i + k`.
+    /// non-thread-local `Token::Loc` Ident keeps its frame slot so
+    /// mem2reg can promote it; every non-local lvalue materializes an
+    /// address through `walk_expr_lvalue`. Mirrors the `Expr::Assign`
+    /// local-target shortcut so `i++` / `i += k` keep the counter
+    /// register-resident, not just `i = i + k`.
     fn rmw_place(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         lvalue: ExprId,
-        store_kind: StoreKind,
     ) -> Result<RmwPlace, WalkError> {
         // A bitfield member: compute the storage unit's address once so
         // the read and the write target the same unit (the object is
@@ -3542,13 +3539,12 @@ impl<'a> Walker<'a> {
             };
             return Ok(RmwPlace::Bitfield { addr, bf });
         }
-        if !matches!(store_kind, StoreKind::F32)
-            && let Expr::Ident {
-                class,
-                val,
-                is_thread_local: false,
-                ..
-            } = self.ast.expr(lvalue)
+        if let Expr::Ident {
+            class,
+            val,
+            is_thread_local: false,
+            ..
+        } = self.ast.expr(lvalue)
             && *class == Token::Loc as i64
         {
             return Ok(RmwPlace::Slot(*val));

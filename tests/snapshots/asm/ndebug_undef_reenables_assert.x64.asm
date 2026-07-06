@@ -1,5 +1,5 @@
 
-object_macro_to_fn_macro_rescan.x64:	file format elf64-x86-64
+ndebug_undef_reenables_assert.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build CPython from the same recipe with badc and the platform reference
-compiler (clang on POSIX, cl on Windows), at -O and without (the -O legs
-define NDEBUG, matching release-build practice), and report
+compiler (clang on POSIX, cl on Windows), at -O and without (badc -O
+implies NDEBUG; the clang/cl -O legs define it explicitly), and report
 per-binary section sizes plus a runtime microbenchmark.
 
 The recipe -- the per-TU source list, defines, and includes -- comes from
@@ -72,7 +72,7 @@ def _compile_cmd(cc_kind, cc, target, src, defs, incs, obj, opt, reenable):
     lacks); the reference compiler has those headers, so re-enable them to give
     it its natural build of the same module set."""
     if cc_kind == "badc":
-        o = ["-O", "-DNDEBUG"] if opt else []
+        o = ["-O"] if opt else []
         return [cc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T",
                 '-DCOMPILER="[badc]"', *o, *defs, *incs, src, "-o", obj]
     if cc_kind == "clang":

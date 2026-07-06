@@ -166,7 +166,7 @@ def platform_build(badc: Path, work: Path) -> bool:
     objs = []
     for mod in modules:
         obj = work / f"{mod}.o"
-        cmd = [str(badc), "-c", *defines]
+        cmd = [str(badc), "-O", "-c", *defines]
         if mod == "rcore":
             cmd += rcore_extra
         if mod == "raudio":
@@ -183,7 +183,7 @@ def platform_build(badc: Path, work: Path) -> bool:
         return False
 
     logic_obj = work / "loderunner_logic.o"
-    if run([str(badc), "-c", "-I", str(RAYLIB_DIR),
+    if run([str(badc), "-O", "-c", "-I", str(RAYLIB_DIR),
             "-o", str(logic_obj), str(RAYLIB_DIR / "loderunner_logic.c")]).returncode != 0:
         return False
 
@@ -192,7 +192,7 @@ def platform_build(badc: Path, work: Path) -> bool:
     # `#pragma subsystem(windows)` drives the PE subsystem (a pragma in a
     # separately-compiled object is not visible at link). loderunner_logic.c
     # is still separately compiled to exercise the multi-object link.
-    if run([str(badc), *defines, "-I", str(inc), "-I", str(src),
+    if run([str(badc), "-O", *defines, "-I", str(inc), "-I", str(src),
             str(RAYLIB_DIR / "loderunner.c"), str(logic_obj),
             str(archive), "-o", str(game)]).returncode != 0:
         print("smoke FAIL: standalone link", file=sys.stderr)
@@ -283,7 +283,7 @@ def _validate_win_imports(badc: Path, game: Path, work: Path) -> bool:
     lines.append("return miss?1:0;}")
     src.write_text("\n".join(lines) + "\n")
     exe = work / f"import_probe{EXE}"
-    if run([str(badc), str(src), "-o", str(exe)]).returncode != 0:
+    if run([str(badc), "-O", str(src), "-o", str(exe)]).returncode != 0:
         print("smoke FAIL: could not build the import probe", file=sys.stderr)
         return False
     p = run([str(exe)], capture_output=True, text=True)

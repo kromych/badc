@@ -402,6 +402,22 @@ fn compound_assign_float_register_resident() {
 }
 
 #[test]
+fn float_literal_f_suffix() {
+    // C99 6.4.4.2p4-5: an `f`/`F`-suffixed floating constant has type
+    // `float` and its value is rounded to single precision at the
+    // literal. Covers sizeof, widening, the variadic default argument
+    // promotion, and hex-float spellings.
+    assert_eq!(run_fixture("float_literal_f_suffix.c"), 0);
+}
+
+#[test]
+fn float_literal_arith_single_precision() {
+    // C99 6.3.1.8: `float` combined with an `f`-suffixed constant
+    // computes in single precision with no widen / narrow hop.
+    assert_eq!(run_fixture("float_literal_arith_single_precision.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.
@@ -1727,9 +1743,9 @@ fn adjacent_string_literals_concatenate() {
 #[test]
 fn float_long_double_suffix_accepted() {
     // C99 6.4.4.2: the floating-suffix is one of `f`, `F`, `l`,
-    // `L`. The dialect stores every floating literal in `f64`,
-    // so the four spellings of the same value land identical at
-    // the bit level. The fixture also pins the integer-vs-float
+    // `L`. 1.0 is exact in every precision, so the four spellings
+    // of the value land identical at the bit level after conversion
+    // to double. The fixture also pins the integer-vs-float
     // disambiguator -- bare `7L` stays a `long` integer because
     // no `.` / `e` was seen.
     assert_eq!(run_fixture("float_long_double_suffix.c"), 0);
@@ -2062,6 +2078,15 @@ fn global_init_midexpr_cast_narrow() {
     // C99 6.3.1.3: a narrowing cast that is a sub-operand of a file-scope
     // constant initializer narrows the operand; reloc casts still resolve.
     assert_eq!(run_fixture("global_init_midexpr_cast_narrow.c"), 0);
+}
+
+#[test]
+fn init_brace_intermediate_cast() {
+    // C99 6.5.4 + 6.7.8p11: a brace-enclosed initializer element applies
+    // every cast in its chain -- `(long)(int)0x92492493` sign-extends
+    // through `int` -- in static and automatic storage, for array
+    // elements and struct members alike.
+    assert_eq!(run_fixture("init_brace_intermediate_cast.c"), 0);
 }
 
 #[test]

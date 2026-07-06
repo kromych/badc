@@ -22,9 +22,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
+               	mov	x0, #0x0                // =0
+               	fmov	s16, w0
+               	sub	x17, x29, #0x8
+               	str	s16, [x17]
                	mov	x1, #0x0                // =0
-               	fmov	d16, x1
-               	fcvt	s0, d16
                	sxtw	x0, w1
                	cmp	x0, #0xa
                	b.ge	<addr>
@@ -33,18 +35,21 @@ Disassembly of section .text:
                	add	x1, x0, #0x1
                	b	<addr>
                	sxtw	x0, w1
-               	scvtf	d1, x0
-               	fcvt	s1, d1
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fcvt	d1, s1
-               	fmov	d17, x0
-               	fmul	d1, d1, d17
-               	fcvt	s1, d1
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d16, x0
-               	fcvt	s2, d16
-               	fmadd	s0, s1, s2, s0
+               	scvtf	d0, x0
+               	fcvt	s0, d0
+               	mov	x0, #0x3f000000         // =1056964608
+               	fmov	s17, w0
+               	fmul	s0, s0, s17
+               	mov	x0, #0x40000000         // =1073741824
+               	sub	x16, x29, #0x8
+               	ldr	s1, [x16]
+               	fmov	s17, w0
+               	fmadd	s0, s0, s17, s1
+               	sub	x17, x29, #0x8
+               	str	s0, [x17]
                	b	<addr>
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
                	fcvt	d0, s0
                	fcvtzs	x0, d0
                	add	sp, sp, #0x30

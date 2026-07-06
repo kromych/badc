@@ -133,13 +133,13 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	cvtss2sd	%xmm0, %xmm0
-               	movq	%rbx, %xmm1
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %xmm1
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -148,13 +148,13 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	cvtss2sd	%xmm0, %xmm0
-               	movq	%rbx, %xmm1
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %xmm1
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>

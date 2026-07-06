@@ -21,11 +21,9 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	scvtf	d0, x0
                	fcvt	s0, d0
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fdiv	d0, d0, d17
-               	fcvt	s0, d0
+               	mov	x0, #0x40800000         // =1082130432
+               	fmov	s17, w0
+               	fdiv	s0, s0, s17
                	ret
 
 <main>:
@@ -58,25 +56,20 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	scvtf	d0, x0
                	fcvt	s0, d0
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fdiv	d0, d0, d17
-               	fcvt	s0, d0
+               	mov	x0, #0x40800000         // =1082130432
+               	fmov	s17, w0
+               	fdiv	s0, s0, s17
                	mov	x0, #0x5                // =5
                	sxtw	x0, w0
                	scvtf	d1, x0
                	fcvt	s1, d1
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fcvt	d1, s1
-               	fmov	d17, x0
-               	fdiv	d1, d1, d17
-               	fcvt	s1, d1
+               	mov	x0, #0x40800000         // =1082130432
+               	fmov	s17, w0
+               	fdiv	s1, s1, s17
                	fadd	s0, s0, s1
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
@@ -94,11 +87,9 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	scvtf	d1, x1
                	fcvt	s1, d1
-               	mov	x1, #0x4010000000000000 // =4616189618054758400
-               	fcvt	d1, s1
-               	fmov	d17, x1
-               	fdiv	d1, d1, d17
-               	fcvt	s1, d1
+               	mov	x1, #0x40800000         // =1082130432
+               	fmov	s17, w1
+               	fdiv	s1, s1, s17
                	fcvt	d1, s1
                	fmov	d17, x0
                	fmadd	d0, d0, d17, d1

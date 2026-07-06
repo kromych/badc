@@ -66,12 +66,11 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x7                // =7
                	scvtf	d0, x0
-               	mov	x0, #0x3333             // =13107
-               	movk	x0, #0x3333, lsl #16
-               	movk	x0, #0x3333, lsl #32
-               	movk	x0, #0x4007, lsl #48
-               	fmov	d17, x0
-               	fadd	d0, d0, d17
+               	mov	x0, #0x999a             // =39322
+               	movk	x0, #0x4039, lsl #16
+               	fmov	s16, w0
+               	fcvt	d1, s16
+               	fadd	d0, d0, d1
                	fcvtzs	x0, d0
                	sxtw	x0, w0
                	cmp	x0, #0x9

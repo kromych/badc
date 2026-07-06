@@ -781,7 +781,16 @@ fn run_inst<H: Host>(
     let inst = &frame.func.insts[v as usize];
     let name = match inst {
         Inst::Imm(k) => {
-            frame.regs[v as usize] = *k;
+            // An f32-marked imm carries the f32 bit pattern (the shape
+            // the native emit materialises); the interpreter's register
+            // convention keeps every f32 value as the f64 pattern of
+            // its single-precision value, so widen at the definition.
+            frame.regs[v as usize] = if matches!(frame.func.f32_values.get(v as usize), Some(true))
+            {
+                (f32::from_bits(*k as u32) as f64).to_bits() as i64
+            } else {
+                *k
+            };
             return Ok(());
         }
         Inst::ImmData(off) => {

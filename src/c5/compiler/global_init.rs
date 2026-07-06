@@ -26,15 +26,19 @@ use super::types::{
 };
 
 impl Compiler {
-    /// After a leading `(TYPE)` cast in a global initializer, returns
-    /// true when the cast applies to a relocation-bearing leaf (`&x`, a
+    /// After a leading `(TYPE)` cast in an initializer, returns true
+    /// when the cast applies to a relocation-bearing leaf (`&x`, a
     /// string literal, or a function / global-array name) rather than an
     /// arithmetic value. Reloc leaves keep the address-folding path; an
     /// arithmetic cast must instead reach the const-expr evaluator, which
     /// narrows per C99 6.3.1.3. Entry is positioned just inside the cast
     /// paren (depth 1); the lexer is restored before returning.
-    fn post_cast_is_reloc_leaf(&mut self) -> Result<bool, C5Error> {
+    pub(super) fn post_cast_is_reloc_leaf(&mut self) -> Result<bool, C5Error> {
         let snap = self.lex.snapshot();
+        // The scan may lex a string literal, whose bytes the lexer
+        // appends to the data segment; the snapshot does not cover
+        // the data segment, so truncate it back before returning.
+        let data_snap = self.data.len();
         let mut depth: i64 = 1;
         while depth > 0 && self.lex.tk != 0 {
             if self.lex.tk == '(' {
@@ -48,8 +52,28 @@ impl Compiler {
             }
             self.next()?;
         }
-        while self.lex.tk == '(' {
+        // The leaf may sit behind grouping parens and further casts
+        // (`(T)(((U)(fn)))`); skip both to reach it.
+        loop {
+            if self.lex.tk != '(' {
+                break;
+            }
             self.next()?;
+            if self.lex_is_type_start() {
+                let mut d: i64 = 1;
+                while d > 0 && self.lex.tk != 0 {
+                    if self.lex.tk == '(' {
+                        d += 1;
+                    } else if self.lex.tk == ')' {
+                        d -= 1;
+                        if d == 0 {
+                            self.next()?;
+                            break;
+                        }
+                    }
+                    self.next()?;
+                }
+            }
         }
         let reloc = self.lex.tk == Token::AndOp
             || self.lex.tk == '"'
@@ -61,6 +85,7 @@ impl Compiler {
                         && self.symbols[self.lex.curr_id_idx].array_size != 0)
             });
         self.lex.restore(snap);
+        self.data.truncate(data_snap);
         Ok(reloc)
     }
 

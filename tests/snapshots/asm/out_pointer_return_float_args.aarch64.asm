@@ -93,18 +93,14 @@ Disassembly of section .text:
                	sub	sp, sp, #0x130
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
-               	mov	x20, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x20
-               	fcvt	s0, d16
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d16, x0
-               	fcvt	s1, d16
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d16, x0
-               	fcvt	s2, d16
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fmov	d16, x0
-               	fcvt	s3, d16
+               	mov	x20, #0x3f800000        // =1065353216
+               	mov	x1, #0x40000000         // =1073741824
+               	mov	x2, #0x40400000         // =1077936128
+               	mov	x3, #0x40800000         // =1082130432
+               	fmov	d0, x20
+               	fmov	d1, x1
+               	fmov	d2, x2
+               	fmov	d3, x3
                	bl	<addr>
                	sub	x16, x29, #0xa8
                	str	s0, [x16]
@@ -122,18 +118,16 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x10
                	ldr	s0, [x0]
-               	fcvt	d0, s0
-               	fmov	d17, x20
-               	fcmp	d0, d17
+               	fmov	s17, w20
+               	fcmp	s0, s17
                	cset	x0, ne
                	mov	x20, #0x1               // =1
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x10
                	ldr	s0, [x0, #0x4]
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x20, ne
@@ -141,20 +135,18 @@ Disassembly of section .text:
                	cbnz	x20, <addr>
                	sub	x0, x29, #0x10
                	ldr	s0, [x0, #0x8]
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40400000         // =1077936128
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x21, ne
                	cbnz	x21, <addr>
                	sub	x0, x29, #0x10
                	ldr	s0, [x0, #0xc]
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40800000         // =1082130432
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x21, ne
                	cbz	x21, <addr>
                	mov	x0, #0x1                // =1
@@ -163,21 +155,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d16, x20
-               	fcvt	s0, d16
-               	mov	x0, #0x4004000000000000 // =4612811918334230528
-               	fmov	d16, x0
-               	fcvt	s1, d16
-               	mov	x0, #0x400c000000000000 // =4615063718147915776
-               	fmov	d16, x0
-               	fcvt	s2, d16
-               	mov	x0, #0x4012000000000000 // =4616752568008179712
-               	fmov	d16, x0
-               	fcvt	s3, d16
-               	mov	x0, #0x4016000000000000 // =4617878467915022336
-               	fmov	d16, x0
-               	fcvt	s4, d16
+               	mov	x20, #0x3fc00000        // =1069547520
+               	mov	x1, #0x40200000         // =1075838976
+               	mov	x2, #0x40600000         // =1080033280
+               	mov	x3, #0x40900000         // =1083179008
+               	mov	x4, #0x40b00000         // =1085276160
+               	fmov	d0, x20
+               	fmov	d1, x1
+               	fmov	d2, x2
+               	fmov	d3, x3
+               	fmov	d4, x4
                	sub	x8, x29, #0xd8
                	bl	<addr>
                	sub	x0, x29, #0xd8
@@ -199,18 +186,16 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x38
                	ldr	s0, [x0]
-               	fcvt	d0, s0
-               	fmov	d17, x20
-               	fcmp	d0, d17
+               	fmov	s17, w20
+               	fcmp	s0, s17
                	cset	x0, ne
                	mov	x20, #0x1               // =1
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x38
                	ldr	s0, [x0, #0x4]
-               	mov	x0, #0x4004000000000000 // =4612811918334230528
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40200000         // =1075838976
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x20, ne
@@ -218,10 +203,9 @@ Disassembly of section .text:
                	cbnz	x20, <addr>
                	sub	x0, x29, #0x38
                	ldr	s0, [x0, #0x8]
-               	mov	x0, #0x400c000000000000 // =4615063718147915776
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40600000         // =1080033280
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x21, ne
@@ -229,20 +213,18 @@ Disassembly of section .text:
                	cbnz	x21, <addr>
                	sub	x0, x29, #0x38
                	ldr	s0, [x0, #0xc]
-               	mov	x0, #0x4012000000000000 // =4616752568008179712
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40900000         // =1083179008
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x20, ne
                	cbnz	x20, <addr>
                	sub	x0, x29, #0x38
                	ldr	s0, [x0, #0x10]
-               	mov	x0, #0x4016000000000000 // =4617878467915022336
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40b00000         // =1085276160
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x20, ne
                	cbz	x20, <addr>
                	mov	x0, #0x2                // =2

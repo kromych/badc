@@ -174,31 +174,27 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x0
-               	fcvt	s0, d16
-               	mov	x0, #0x2                // =2
+               	mov	x0, #0x3f800000         // =1065353216
+               	mov	x1, #0x2                // =2
+               	fmov	d0, x0
+               	mov	x0, x1
                	bl	<addr>
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40800000         // =1082130432
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x4014000000000000 // =4617315517961601024
-               	fmov	d16, x0
-               	fcvt	s0, d16
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d16, x0
-               	fcvt	s1, d16
+               	mov	x0, #0x40a00000         // =1084227584
+               	mov	x1, #0x40400000         // =1077936128
+               	fmov	d0, x0
+               	fmov	d1, x1
                	bl	<addr>
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40000000         // =1073741824
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x8                // =8

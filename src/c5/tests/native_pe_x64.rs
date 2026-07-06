@@ -694,6 +694,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("union_bitfield_layout.c", 0),
     ("init_float_to_int.c", 0),
     ("global_init_midexpr_cast_narrow.c", 0),
+    ("init_brace_intermediate_cast.c", 0),
     ("ternary_arith_conversion.c", 0),
     ("struct_layout.c", 0),
     ("const_expr_conditional.c", 27),
@@ -768,6 +769,9 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // ABI, which this fixture doesn't exercise (no FP libc calls).
     ("float_arithmetic.c", 0),
     ("float_single_precision.c", 0),
+    ("float_literal_f_suffix.c", 0),
+    ("float_literal_arith_single_precision.c", 0),
+    ("float_literal_variadic_printf.c", 0),
     ("fp_arg_passed_in_fp_reg.c", 0),
     ("float_arg_single_precision.c", 0),
     ("fp_return_value.c", 0),

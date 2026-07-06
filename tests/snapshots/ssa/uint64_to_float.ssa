@@ -62,16 +62,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v36  LoadLocal { off=-1, kind=I64 }                   -> x1
     v37  FpCast { kind=UIntToFp, value=v1 }               -> d0
     v38  FpCast { kind=F64ToF32, value=v37 }              -> d0 [f32]
-    v39  Imm(4890909195324358656)                         -> x0
-    v40  FpCast { kind=F32ToF64, value=v38 }              -> d0
-    v41  Binop { op=fne, lhs=v40, rhs=v39 }               -> x0
-    terminator Bz { cond=v41, target=b12, fall=b11 }   (exit_acc=v41)
+    v39  Imm(1593835520)                                  -> x0 [f32]
+    v40  Binop { op=fne, lhs=v38, rhs=v39 }               -> x0
+    terminator Bz { cond=v40, target=b12, fall=b11 }   (exit_acc=v40)
   block 11  start_pc=0
-    v42  Imm(6)                                           -> x0
-    terminator Return(v42)   (exit_acc=v42)
+    v41  Imm(6)                                           -> x0
+    terminator Return(v41)   (exit_acc=v41)
   block 12  start_pc=0
-    v43  Imm(0)                                           -> x0
-    terminator Return(v43)   (exit_acc=v43)
+    v42  Imm(0)                                           -> x0
+    terminator Return(v42)   (exit_acc=v42)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

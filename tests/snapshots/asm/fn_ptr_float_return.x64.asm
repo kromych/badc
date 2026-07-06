@@ -11,18 +11,18 @@ Disassembly of section .text:
                	ud2
 
 <f_void>:
-               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
+               	movl	$0x40200000, %eax       # imm = 0x40200000
                	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
+               	movapd	%xmm14, %xmm0
                	retq
 
 <f_int>:
                	movslq	%edi, %rdi
                	cvtsi2sd	%rdi, %xmm0
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm15
-               	mulsd	%xmm15, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
+               	movl	$0x3f000000, %eax       # imm = 0x3F000000
+               	movq	%rax, %xmm15
+               	mulss	%xmm15, %xmm0
                	retq
 
 <f_double>:
@@ -48,10 +48,9 @@ Disassembly of section .text:
                	leaq	-<rip>, %rbx       # <addr>
                	movq	%rbx, %rax
                	callq	*%rax
-               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x40200000, %eax       # imm = 0x40200000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -67,10 +66,9 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax       # <addr>
                	movl	$0xa, %edi
                	callq	*%rax
-               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x40a00000, %eax       # imm = 0x40A00000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -87,10 +85,9 @@ Disassembly of section .text:
                	movabsq	$0x4000000000000000, %rdi # imm = 0x4000000000000000
                	movq	%rdi, %xmm0
                	callq	*%rax
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x40400000, %eax       # imm = 0x40400000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -105,10 +102,9 @@ Disassembly of section .text:
                	retq
                	movq	%rbx, %rax
                	callq	*%rax
-               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x40200000, %eax       # imm = 0x40200000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -144,4 +140,3 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

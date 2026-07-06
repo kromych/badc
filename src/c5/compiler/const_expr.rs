@@ -374,7 +374,7 @@ impl Compiler {
     /// contributes to the resulting value, matching clang/gcc.
     /// The `:` arm recurses back into `parse_const_expr_cond_val` so
     /// `a ? b : c ? d : e` parses right-associatively.
-    fn parse_const_expr_cond_val(&mut self) -> Result<ConstVal, C5Error> {
+    pub(super) fn parse_const_expr_cond_val(&mut self) -> Result<ConstVal, C5Error> {
         let cond = self.parse_const_expr_or_val()?;
         if self.lex.tk == Token::Cond {
             self.next()?;
@@ -880,6 +880,13 @@ impl Compiler {
             // the cast clamps it back to integer per C99 6.3.1.4.
             if self.lex_is_type_start() {
                 let mut target_ty = self.parse_decl_base_type()?;
+                // The type is consumed as a cast, not bound through a
+                // declarator; drop the declarator side channels it may set.
+                self.pending.base_is_function_type = false;
+                self.pending.bare_function_type_declarator = false;
+                self.pending.fn_ptr_indirection = None;
+                self.pending.typedef_fn_proto = None;
+                self.pending.fn_ptr_param_types = None;
                 while self.lex.tk == Token::MulOp {
                     self.next()?;
                     target_ty += Ty::Ptr as i64;

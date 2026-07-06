@@ -148,10 +148,9 @@ Disassembly of section .text:
                	cvtsi2sd	%r11, %xmm0
                	addsd	%xmm0, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
-               	movabsq	$0x43e0000000000000, %rax # imm = 0x43E0000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x5f000000, %eax       # imm = 0x5F000000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -167,4 +166,5 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

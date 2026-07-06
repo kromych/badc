@@ -67,30 +67,26 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v35  Imm(7)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)
   block 14  start_pc=0
-    v36  Imm(4612811918334230528)                         -> x0
-    v37  FpCast { kind=F64ToF32, value=v36 }              -> d0 [f32]
-    v38  CallExt { binding_idx=77, args=[v37], fp_arg_mask=0x1, fp_return=true } -> d0 [f32]
-    v39  Imm(4611686018427387904)                         -> x0
-    v40  FpCast { kind=F32ToF64, value=v38 }              -> d0
-    v41  Binop { op=fne, lhs=v40, rhs=v39 }               -> x0
-    terminator Bz { cond=v41, target=b16, fall=b15 }   (exit_acc=v41)
+    v36  Imm(1075838976)                                  -> x7 [f32]
+    v37  CallExt { binding_idx=77, args=[v36], fp_arg_mask=0x1, fp_return=true } -> d0 [f32]
+    v38  Imm(1073741824)                                  -> x0 [f32]
+    v39  Binop { op=fne, lhs=v37, rhs=v38 }               -> x0
+    terminator Bz { cond=v39, target=b16, fall=b15 }   (exit_acc=v39)
   block 15  start_pc=0
-    v42  Imm(8)                                           -> x0
-    terminator Return(v42)   (exit_acc=v42)
+    v40  Imm(8)                                           -> x0
+    terminator Return(v40)   (exit_acc=v40)
   block 16  start_pc=0
-    v43  Imm(4615063718147915776)                         -> x0
-    v44  FpCast { kind=F64ToF32, value=v43 }              -> d0 [f32]
-    v45  CallExt { binding_idx=78, args=[v44], fp_arg_mask=0x1, fp_return=true } -> d0 [f32]
-    v46  Imm(4616189618054758400)                         -> x0
-    v47  FpCast { kind=F32ToF64, value=v45 }              -> d0
-    v48  Binop { op=fne, lhs=v47, rhs=v46 }               -> x0
-    terminator Bz { cond=v48, target=b18, fall=b17 }   (exit_acc=v48)
+    v41  Imm(1080033280)                                  -> x7 [f32]
+    v42  CallExt { binding_idx=78, args=[v41], fp_arg_mask=0x1, fp_return=true } -> d0 [f32]
+    v43  Imm(1082130432)                                  -> x0 [f32]
+    v44  Binop { op=fne, lhs=v42, rhs=v43 }               -> x0
+    terminator Bz { cond=v44, target=b18, fall=b17 }   (exit_acc=v44)
   block 17  start_pc=0
-    v49  Imm(9)                                           -> x0
-    terminator Return(v49)   (exit_acc=v49)
+    v45  Imm(9)                                           -> x0
+    terminator Return(v45)   (exit_acc=v45)
   block 18  start_pc=0
-    v50  Imm(0)                                           -> x0
-    terminator Return(v50)   (exit_acc=v50)
+    v46  Imm(0)                                           -> x0
+    terminator Return(v46)   (exit_acc=v46)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

@@ -285,19 +285,22 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	leaq	-0x70(%rbp), %rcx
-               	leaq	<rip>, %rdx
-               	pushq	%rax
-               	movzbq	(%rdx), %rax
-               	movb	%al, (%rcx)
-               	movzbq	0x1(%rdx), %rax
-               	movb	%al, 0x1(%rcx)
-               	movzbq	0x2(%rdx), %rax
-               	movb	%al, 0x2(%rcx)
-               	movzbq	0x3(%rdx), %rax
-               	movb	%al, 0x3(%rcx)
-               	popq	%rax
+               	movq	%rax, %xmm14
+               	movss	%xmm14, -0x68(%rbp,%riz)
+               	leaq	-0x70(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	pushq	%rdx
+               	movzbq	(%rcx), %rdx
+               	movb	%dl, (%rax)
+               	movzbq	0x1(%rcx), %rdx
+               	movb	%dl, 0x1(%rax)
+               	movzbq	0x2(%rcx), %rdx
+               	movb	%dl, 0x2(%rax)
+               	movzbq	0x3(%rcx), %rdx
+               	movb	%dl, 0x3(%rax)
+               	popq	%rdx
                	movsd	-0x58(%rbp,%riz), %xmm0
+               	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
@@ -305,10 +308,11 @@ Disassembly of section .text:
                	movss	%xmm0, (%rax,%riz)
                	leaq	-0x70(%rbp), %rax
                	movss	(%rax,%riz), %xmm0
-               	movabsq	$0x400f1eb851eb851f, %rax # imm = 0x400F1EB851EB851F
-               	cvtss2sd	%xmm0, %xmm1
+               	movss	%xmm0, -0x68(%rbp,%riz)
+               	movss	-0x68(%rbp,%riz), %xmm0
+               	movl	$0x4078f5c3, %eax       # imm = 0x4078F5C3
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	ucomiss	%xmm15, %xmm0
                	setb	%r13b
                	movzbq	%r13b, %r13
                	setnp	%r10b
@@ -316,10 +320,10 @@ Disassembly of section .text:
                	andq	%r10, %r13
                	testq	%r13, %r13
                	jne	<addr>
-               	movabsq	$0x400f47ae147ae148, %rax # imm = 0x400F47AE147AE148
-               	cvtss2sd	%xmm0, %xmm0
+               	movss	-0x68(%rbp,%riz), %xmm0
+               	movl	$0x407a3d71, %eax       # imm = 0x407A3D71
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	seta	%r13b
                	movzbq	%r13b, %r13
                	testq	%r13, %r13
@@ -411,4 +415,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

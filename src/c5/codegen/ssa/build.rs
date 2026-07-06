@@ -64,6 +64,11 @@ struct LocalCacheEntry {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum PureKey {
     Imm(i64),
+    /// `Inst::Imm` holding an f32 bit pattern, tagged f32. Kept apart
+    /// from [`PureKey::Imm`]: the f32 mark changes the value's
+    /// materialisation, so an integer imm with an equal payload must
+    /// not unify with it.
+    ImmF32(i64),
     ImmData(i64),
     ImmCode(usize),
     TlsAddr(i64),
@@ -406,6 +411,19 @@ impl SsaBuilder {
         let id = self.push(Inst::Imm(v));
         self.pure_cache.insert(PureKey::Imm(v), id);
         id
+    }
+
+    /// `Inst::Imm` carrying an f32 bit pattern, tagged f32 (a `float`
+    /// constant, C99 6.4.4.2p4). Cached under its own key so it never
+    /// unifies with an integer imm of equal payload.
+    pub(crate) fn imm_f32(&mut self, f32_bits: u32) -> ValueId {
+        let v = f32_bits as i64;
+        if let Some(cached) = self.lookup_pure(PureKey::ImmF32(v)) {
+            return cached;
+        }
+        let id = self.push(Inst::Imm(v));
+        self.pure_cache.insert(PureKey::ImmF32(v), id);
+        self.mark_f32(id)
     }
 
     /// `Inst::ImmData` (data-segment offset). Same CSE shape as

@@ -304,70 +304,65 @@ fn ent_pc=8 n_params=0 variadic=false locals=45
     v108 Imm(4)                                           -> x0
     terminator Return(v108)   (exit_acc=v108)
   block 20  start_pc=0
-    v109 Imm(4609434218613702656)                         -> x3
-    v110 FpCast { kind=F64ToF32, value=v109 }             -> d0 [f32]
-    v111 Imm(4612811918334230528)                         -> x0
-    v112 FpCast { kind=F64ToF32, value=v111 }             -> d1 [f32]
-    v113 Call { target_pc=4, args=[v110, v112], fixed_args=2, fp_return=false, fp_arg_mask=0x3 } -> x0
-    v114 LocalAddr(-44)                                   -> x0
-    v115 LocalAddr(-21)                                   -> x1
-    v116 Mcpy { dst=v115, src=v114, size=8 }              -> x0
-    v117 LocalAddr(-21)                                   -> x0
-    v118 Load { addr=v117, disp=0, kind=F32 }             -> d0 [f32]
-    v119 FpCast { kind=F32ToF64, value=v118 }             -> d0
-    v120 Binop { op=fne, lhs=v119, rhs=v109 }             -> x3
-    v121 Imm(0)                                           -> x0
-    terminator Bnz { cond=v120, target=b37, fall=b21 }   (exit_acc=v120)
+    v109 Imm(1069547520)                                  -> x3 [f32]
+    v110 Imm(1075838976)                                  -> x6 [f32]
+    v111 Call { target_pc=4, args=[v109, v110], fixed_args=2, fp_return=false, fp_arg_mask=0x3 } -> x0
+    v112 LocalAddr(-44)                                   -> x0
+    v113 LocalAddr(-21)                                   -> x1
+    v114 Mcpy { dst=v113, src=v112, size=8 }              -> x0
+    v115 LocalAddr(-21)                                   -> x0
+    v116 Load { addr=v115, disp=0, kind=F32 }             -> d0 [f32]
+    v117 Binop { op=fne, lhs=v116, rhs=v109 }             -> x3
+    v118 Imm(0)                                           -> x0
+    terminator Bnz { cond=v117, target=b37, fall=b21 }   (exit_acc=v117)
   block 21  start_pc=0
-    v122 LocalAddr(-21)                                   -> x0
-    v123 BinopI { op=add, lhs=v122, rhs_imm=4 }           -> x1
-    v124 Load { addr=v122, disp=4, kind=F32 }             -> d0 [f32]
-    v125 Imm(4612811918334230528)                         -> x0
-    v126 FpCast { kind=F32ToF64, value=v124 }             -> d0
-    v127 Binop { op=fne, lhs=v126, rhs=v125 }             -> x3
-    v128 Imm(0)                                           -> x0
-    terminator Jmp(b22)   (exit_acc=v127)
+    v119 LocalAddr(-21)                                   -> x0
+    v120 BinopI { op=add, lhs=v119, rhs_imm=4 }           -> x1
+    v121 Load { addr=v119, disp=4, kind=F32 }             -> d0 [f32]
+    v122 Imm(1075838976)                                  -> x0 [f32]
+    v123 Binop { op=fne, lhs=v121, rhs=v122 }             -> x3
+    v124 Imm(0)                                           -> x0
+    terminator Jmp(b22)   (exit_acc=v123)
   block 22  start_pc=0
-    v129 Phi { incoming=[b37:v120, b21:v127], kind=I64 }  -> x3
-    v130 LoadLocal { off=-45, kind=I64 }                  -> x0
-    terminator Bz { cond=v129, target=b24, fall=b23 }   (exit_acc=v129)
+    v125 Phi { incoming=[b37:v117, b21:v123], kind=I64 }  -> x3
+    v126 LoadLocal { off=-45, kind=I64 }                  -> x0
+    terminator Bz { cond=v125, target=b24, fall=b23 }   (exit_acc=v125)
   block 23  start_pc=0
-    v131 Imm(5)                                           -> x0
-    terminator Return(v131)   (exit_acc=v131)
+    v127 Imm(5)                                           -> x0
+    terminator Return(v127)   (exit_acc=v127)
   block 24  start_pc=0
-    v132 LocalAddr(-24)                                   -> x0
-    v133 ImmData(8)                                       -> x1
-    v134 Mcpy { dst=v132, src=v133, size=16 }             -> x0
-    v135 LocalAddr(-4)                                    -> x7
-    v136 Call { target_pc=5, args=[v135], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
-    v137 Imm(4604930618986332160)                         -> x0
-    v138 Binop { op=fne, lhs=v136, rhs=v137 }             -> x0
-    terminator Bz { cond=v138, target=b26, fall=b25 }   (exit_acc=v138)
+    v128 LocalAddr(-24)                                   -> x0
+    v129 ImmData(8)                                       -> x1
+    v130 Mcpy { dst=v128, src=v129, size=16 }             -> x0
+    v131 LocalAddr(-4)                                    -> x7
+    v132 Call { target_pc=5, args=[v131], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v133 Imm(4604930618986332160)                         -> x0
+    v134 Binop { op=fne, lhs=v132, rhs=v133 }             -> x0
+    terminator Bz { cond=v134, target=b26, fall=b25 }   (exit_acc=v134)
   block 25  start_pc=0
-    v139 Imm(6)                                           -> x0
-    terminator Return(v139)   (exit_acc=v139)
+    v135 Imm(6)                                           -> x0
+    terminator Return(v135)   (exit_acc=v135)
   block 26  start_pc=0
-    v140 LocalAddr(-16)                                   -> x7
-    v141 Call { target_pc=6, args=[v140], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
-    v142 Imm(4636737291354636288)                         -> x0
-    v143 Binop { op=fne, lhs=v141, rhs=v142 }             -> x0
-    terminator Bz { cond=v143, target=b28, fall=b27 }   (exit_acc=v143)
+    v136 LocalAddr(-16)                                   -> x7
+    v137 Call { target_pc=6, args=[v136], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v138 Imm(4636737291354636288)                         -> x0
+    v139 Binop { op=fne, lhs=v137, rhs=v138 }             -> x0
+    terminator Bz { cond=v139, target=b28, fall=b27 }   (exit_acc=v139)
   block 27  start_pc=0
-    v144 Imm(7)                                           -> x0
-    terminator Return(v144)   (exit_acc=v144)
+    v140 Imm(7)                                           -> x0
+    terminator Return(v140)   (exit_acc=v140)
   block 28  start_pc=0
-    v145 LocalAddr(-24)                                   -> x7
-    v146 Call { target_pc=7, args=[v145], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
-    v147 Imm(4621819117588971520)                         -> x0
-    v148 FpCast { kind=F32ToF64, value=v146 }             -> d0
-    v149 Binop { op=fne, lhs=v148, rhs=v147 }             -> x0
-    terminator Bz { cond=v149, target=b30, fall=b29 }   (exit_acc=v149)
+    v141 LocalAddr(-24)                                   -> x7
+    v142 Call { target_pc=7, args=[v141], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v143 Imm(1092616192)                                  -> x0 [f32]
+    v144 Binop { op=fne, lhs=v142, rhs=v143 }             -> x0
+    terminator Bz { cond=v144, target=b30, fall=b29 }   (exit_acc=v144)
   block 29  start_pc=0
-    v150 Imm(8)                                           -> x0
-    terminator Return(v150)   (exit_acc=v150)
+    v145 Imm(8)                                           -> x0
+    terminator Return(v145)   (exit_acc=v145)
   block 30  start_pc=0
-    v151 Imm(0)                                           -> x0
-    terminator Return(v151)   (exit_acc=v151)
+    v146 Imm(0)                                           -> x0
+    terminator Return(v146)   (exit_acc=v146)
   block 31  start_pc=0
     terminator Jmp(b4)
   block 32  start_pc=0

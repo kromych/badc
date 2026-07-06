@@ -120,12 +120,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x0               // =0
-               	fmov	d16, x20
-               	fcvt	s0, d16
+               	mov	x0, #0x0                // =0
+               	fmov	d0, x0
                	bl	<addr>
                	fcvt	d0, s0
-               	fmov	d1, x20
+               	mov	x0, #0x0                // =0
+               	fmov	d1, x0
                	bl	<addr>
                	cmp	x0, #0x0
                	b.ne	<addr>
@@ -135,12 +135,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x0               // =0
-               	fmov	d16, x20
-               	fcvt	s0, d16
+               	mov	x0, #0x0                // =0
+               	fmov	d0, x0
                	bl	<addr>
                	fcvt	d0, s0
-               	fmov	d1, x20
+               	mov	x0, #0x0                // =0
+               	fmov	d1, x0
                	bl	<addr>
                	cmp	x0, #0x0
                	b.ne	<addr>

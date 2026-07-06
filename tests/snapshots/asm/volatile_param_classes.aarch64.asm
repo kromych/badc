@@ -104,9 +104,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x4014000000000000 // =4617315517961601024
-               	fmov	d16, x0
-               	fcvt	s0, d16
+               	mov	x0, #0x40a00000         // =1084227584
+               	fmov	d0, x0
                	bl	<addr>
                	mov	x0, #0x4004000000000000 // =4612811918334230528
                	fmov	d17, x0

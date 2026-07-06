@@ -955,9 +955,10 @@ impl Compiler {
         }
         // `(type)expr` cast or `(expr)` parenthesized constant in a
         // static initializer. After consuming `(`, peek the next
-        // token: if it starts a type, treat as a cast and recurse on
-        // the value (c5's i64-shaped representation makes integer /
-        // pointer casts no-ops). Otherwise it's a parenthesized
+        // token: if it starts a type, treat as a cast -- arithmetic
+        // operands go through the const-expr evaluator (which applies
+        // the cast's conversion), relocation-bearing leaves recurse
+        // with the cast dropped. Otherwise it's a parenthesized
         // constant expression -- evaluate it and expect `)`.
         if self.lex.tk == '(' {
             // Cast / float-content detection both need to look
@@ -995,6 +996,21 @@ impl Compiler {
                 // address. Distinguished from a plain cast by the `[`.
                 if self.lex.tk == Token::Brak {
                     return self.parse_array_compound_literal(cast_ty);
+                }
+                // A cast of an arithmetic operand converts to the target
+                // type (C99 6.5.4, 6.3.1.3); route the element through the
+                // constant-expression evaluator, which applies every cast
+                // in the chain at its own width, so
+                // `(long)(int)0x92492493` sign-extends through `int`.
+                // Only a cast of a relocation-bearing leaf keeps the
+                // skip-and-recurse path below, where the value is the
+                // leaf's address and the cast merely retypes it.
+                if !self.post_cast_is_reloc_leaf()? {
+                    self.lex.restore(snap);
+                    return Ok(match self.parse_const_expr_cond_val()? {
+                        ConstVal::Float(f) => (f.to_bits() as i64, InitElemReloc::Float64Bits),
+                        v @ ConstVal::Int { .. } => (v.as_int(), InitElemReloc::None),
+                    });
                 }
                 // Optional function-pointer abstract declarator
                 // `(*)(args)` after the base type. Same treatment

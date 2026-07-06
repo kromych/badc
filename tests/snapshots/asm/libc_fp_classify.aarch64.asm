@@ -148,18 +148,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x4000000000000000 // =4611686018427387904
-               	fmov	d16, x20
-               	fcvt	s0, d16
-               	mov	x0, #0x4014000000000000 // =4617315517961601024
-               	fmov	d16, x0
-               	fneg	d1, d16
-               	fcvt	s1, d1
+               	mov	x20, #0x40000000        // =1073741824
+               	mov	x0, #0x40a00000         // =1084227584
+               	fmov	s16, w0
+               	fneg	s0, s16
+               	fmov	d1, d0
+               	fmov	d0, x20
                	bl	<addr>
-               	fmov	d16, x20
-               	fneg	d1, d16
-               	fcvt	d0, s0
-               	fcmp	d0, d1
+               	fmov	s16, w20
+               	fneg	s1, s16
+               	fcmp	s0, s1
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3

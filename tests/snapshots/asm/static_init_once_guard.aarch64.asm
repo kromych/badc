@@ -49,8 +49,7 @@ Disassembly of section .text:
                	str	x2, [x1]
                	ldr	x1, [x0, #0x8]
                	str	x1, [x0]
-               	ldr	x0, [x0, #0x8]
-               	br	x0
+               	br	x1
                	ldr	x1, [x0]
                	ldr	x2, [x0, #0x8]
                	cmp	x1, x2
@@ -64,13 +63,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	str	x1, [x0]
-               	ldr	x0, [x0]
-               	br	x0
+               	br	x1
 
 <flag_table>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	sxtw	x1, w1
                	adrp	x2, <page>
@@ -94,8 +89,6 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	str	w1, [x2, #0x4]
                	ldrsw	x0, [x2, x0, lsl #2]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

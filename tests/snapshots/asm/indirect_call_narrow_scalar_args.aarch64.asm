@@ -25,7 +25,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	sub	sp, sp, #0x20
                	str	x20, [sp]
                	str	x19, [sp, #0x10]
                	adrp	x0, <page>
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x17, #0xcd17            // =52503
@@ -65,12 +65,12 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

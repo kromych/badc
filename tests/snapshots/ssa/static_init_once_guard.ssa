@@ -53,7 +53,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v33  Load { addr=v3, disp=8, kind=I64 }               -> x1
     v34  Store { addr=v3, disp=0, value=v33, kind=I64 }   -> -
     v35  Load { addr=v3, disp=8, kind=I64 }               -> x0
-    terminator GotoIndirect(v35)   (exit_acc=v33)
+    terminator GotoIndirect(v33)   (exit_acc=v33)
   block 7  start_pc=0
     v36  ImmData(32)                                      -> x1
     v37  Imm(0)                                           -> x1
@@ -73,7 +73,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v47  Load { addr=v46, disp=0, kind=I64 }              -> x1
     v48  Store { addr=v3, disp=0, value=v47, kind=I64 }   -> -
     v49  Load { addr=v3, disp=0, kind=I64 }               -> x0
-    terminator GotoIndirect(v49)   (exit_acc=v47)
+    terminator GotoIndirect(v47)   (exit_acc=v47)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=flag_table
 fn ent_pc=1 n_params=2 variadic=false locals=2

@@ -167,7 +167,9 @@ pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
                 observe(&mut hi, &mut work, *cond);
             }
-            Terminator::GotoIndirect { target } => observe(&mut hi, &mut work, *target),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                observe(&mut hi, &mut work, *target)
+            }
             Terminator::Return(v) if *v != NO_VALUE => observe(&mut hi, &mut work, *v),
             _ => {}
         }
@@ -408,6 +410,7 @@ mod tests {
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             has_returns_twice_call: false,

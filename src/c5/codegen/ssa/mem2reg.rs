@@ -66,8 +66,15 @@ pub(crate) fn promotable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
 /// Successor block ids of a terminator, in branch order. For
 /// `GotoIndirect` the successors are the function's address-taken
 /// label blocks (`cg_targets`, from `FunctionSsa::computed_goto_targets`);
-/// pass an empty slice for functions with no computed goto.
-pub(crate) fn successors(term: &Terminator, cg_targets: &[BlockId]) -> Vec<BlockId> {
+/// for `JumpTable` they are the distinct blocks of the terminator's
+/// entry in `jump_tables` (entries repeat; the CFG edge set does
+/// not). Pass empty slices for functions without either shape.
+/// TODO: fold into the shared BlockId remap utility once it lands.
+pub(crate) fn successors(
+    term: &Terminator,
+    cg_targets: &[BlockId],
+    jump_tables: &[Vec<BlockId>],
+) -> Vec<BlockId> {
     match term {
         Terminator::Jmp(b) | Terminator::FallThrough(b) => alloc::vec![*b],
         Terminator::Bz {
@@ -81,6 +88,15 @@ pub(crate) fn successors(term: &Terminator, cg_targets: &[BlockId]) -> Vec<Block
             ..
         } => alloc::vec![*target, *fall_through],
         Terminator::GotoIndirect { .. } => cg_targets.to_vec(),
+        Terminator::JumpTable { table, .. } => {
+            let mut out: Vec<BlockId> = Vec::new();
+            for &t in &jump_tables[*table as usize] {
+                if !out.contains(&t) {
+                    out.push(t);
+                }
+            }
+            out
+        }
         Terminator::Return(_) | Terminator::TailExt(_) => Vec::new(),
     }
 }
@@ -90,7 +106,11 @@ pub(crate) fn successors(term: &Terminator, cg_targets: &[BlockId]) -> Vec<Block
 pub(crate) fn predecessors(func: &FunctionSsa) -> Vec<Vec<BlockId>> {
     let mut preds: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); func.blocks.len()];
     for (idx, block) in func.blocks.iter().enumerate() {
-        for succ in successors(&block.terminator, &func.computed_goto_targets) {
+        for succ in successors(
+            &block.terminator,
+            &func.computed_goto_targets,
+            &func.jump_tables,
+        ) {
             preds[succ as usize].push(idx as BlockId);
         }
     }
@@ -118,6 +138,7 @@ fn postorder(func: &FunctionSsa) -> Vec<BlockId> {
         let succ = successors(
             &func.blocks[b as usize].terminator,
             &func.computed_goto_targets,
+            &func.jump_tables,
         );
         if si < succ.len() {
             stack.last_mut().unwrap().1 += 1;
@@ -303,7 +324,11 @@ fn slot_live_in_sets(func: &FunctionSsa, promotable: &BTreeSet<i64>) -> Vec<BTre
         changed = false;
         for b in (0..nblocks).rev() {
             let mut live_out: BTreeSet<i64> = BTreeSet::new();
-            for s in successors(&func.blocks[b].terminator, &func.computed_goto_targets) {
+            for s in successors(
+                &func.blocks[b].terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            ) {
                 live_out.extend(live_in[s as usize].iter().copied());
             }
             let mut ni = gen_set[b].clone();
@@ -422,6 +447,7 @@ pub(crate) fn insert_phis(
         match &mut block.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => remap(cond),
             Terminator::GotoIndirect { target } => remap(target),
+            Terminator::JumpTable { idx, .. } => remap(idx),
             Terminator::Return(v) => {
                 if *v != NO_VALUE {
                     remap(v);
@@ -1105,7 +1131,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                 // phi's place. Order matches the dom-tree walk; the
                 // BlockId tag makes lookup positional-independent.
                 let term = func.blocks[b as usize].terminator;
-                for succ in successors(&term, &func.computed_goto_targets) {
+                for succ in successors(&term, &func.computed_goto_targets, &func.jump_tables) {
                     for (slot, phi_id) in &phis_at[succ as usize].clone() {
                         if let Some(&val) = current.get(slot) {
                             if let Inst::Phi { incoming, .. } = &mut func.insts[*phi_id as usize] {
@@ -1215,6 +1241,9 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             Terminator::GotoIndirect { target } => {
                 *target = resolve(&redirect, *target);
             }
+            Terminator::JumpTable { idx, .. } => {
+                *idx = resolve(&redirect, *idx);
+            }
             Terminator::Return(v) => {
                 if *v != NO_VALUE {
                     *v = resolve(&redirect, *v);
@@ -1275,6 +1304,7 @@ mod tests {
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             has_returns_twice_call: false,

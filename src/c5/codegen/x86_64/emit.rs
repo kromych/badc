@@ -1589,6 +1589,10 @@ pub(crate) fn emit_function(
     // final `block_offsets` after the relaxation passes settle (only the
     // disp32 is patched, so the destination register need not be saved).
     let mut block_addr_fixups: Vec<(usize, u32)> = Vec::new();
+    // Text-embedded jump tables: `(table_start, table_idx)` per
+    // `Terminator::JumpTable`. Each 32-bit entry is patched to
+    // `block_offset - table_start` after the relaxation passes settle.
+    let mut jump_table_fixups: Vec<(usize, u32)> = Vec::new();
     // Branch relaxation. The block loop runs once with every local
     // branch in the rel32 long form (`branch_short` empty), then, when
     // `relax_branches` finds shortenable branches, once more with the
@@ -1615,6 +1619,7 @@ pub(crate) fn emit_function(
         let mut current_alloca_top: u32 = 0;
         // Re-collected each relaxation pass; resolved after the loop.
         block_addr_fixups.clear();
+        jump_table_fixups.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
             block_offsets[block_idx] = code.len();
@@ -1953,6 +1958,43 @@ pub(crate) fn emit_function(
                     };
                     super::encode::emit_jmp_r(code, rt);
                 }
+                Terminator::JumpTable { idx, table } => {
+                    // Table dispatch: `lea` the table base (embedded
+                    // right after the `jmp`), sign-extend the 32-bit
+                    // table-relative entry, add, and branch. The bounds
+                    // check preceding this terminator proves the index
+                    // in range.
+                    let iplace = alloc
+                        .places
+                        .get(idx as usize)
+                        .copied()
+                        .unwrap_or(Place::None);
+                    let Some(rt) = materialize_int(code, iplace, SCRATCH_R10, frame) else {
+                        bail_msg("JumpTable: idx Place not int reg / spill");
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        return false;
+                    };
+                    // rt is an allocated register or SCRATCH_R10, never
+                    // r11, so the table base cannot alias it. The lea's
+                    // disp32 spans a fixed distance to the table, so it
+                    // is patched here rather than post-layout.
+                    let lea_start = code.len();
+                    super::encode::emit_lea_r_rip32(code, SCRATCH_R11, 0);
+                    super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
+                    super::encode::emit_add_rr(code, SCRATCH_R10, SCRATCH_R11);
+                    super::encode::emit_jmp_r(code, SCRATCH_R10);
+                    let table_start = code.len();
+                    let disp = (table_start - (lea_start + super::encode::LEA_RIP32_LEN)) as i32;
+                    code[lea_start + 3..lea_start + 7].copy_from_slice(&disp.to_le_bytes());
+                    jump_table_fixups.push((table_start, table));
+                    let entries = func.jump_tables[table as usize].len();
+                    code.resize(code.len() + entries * 4, 0);
+                }
                 Terminator::TailExt(binding_idx) => {
                     // The parser emits `Terminator::TailExt` for the
                     // sys-trampoline bodies: the matching indirect
@@ -2042,6 +2084,20 @@ pub(crate) fn emit_function(
             }
         };
         code[*lea_start + 3..*lea_start + 7].copy_from_slice(&imm.to_le_bytes());
+    }
+
+    // Patch each jump table's entries with the target block's offset
+    // relative to the table base.
+    for (table_start, table) in &jump_table_fixups {
+        for (i, &t) in func.jump_tables[*table as usize].iter().enumerate() {
+            let rel = block_offsets[t as usize] as i64 - *table_start as i64;
+            debug_assert!(
+                i32::try_from(rel).is_ok(),
+                "JumpTable: entry offset out of i32 range"
+            );
+            let site = table_start + i * 4;
+            code[site..site + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+        }
     }
 
     // Patch recorded branches. The displacement is measured from the

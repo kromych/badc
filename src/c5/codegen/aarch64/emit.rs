@@ -56,11 +56,11 @@ use super::encode::{
     enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
     enc_ldaxr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off, enc_ldp_post, enc_ldr_d_imm,
     enc_ldr_d_post, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm,
-    enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv, enc_movz,
-    enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stlxr, enc_stp_d_off,
-    enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_str_d_imm, enc_str_d_pre, enc_str_imm,
-    enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm,
-    enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv, load_imm64,
+    enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldrsw_reg_lsl2, enc_lslv,
+    enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv,
+    enc_stlxr, enc_stp_d_off, enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_str_d_imm,
+    enc_str_d_pre, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm,
+    enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv, load_imm64,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
@@ -769,6 +769,10 @@ pub(crate) fn emit_function(
     // placeholder; `(site, target_block, rd)` is resolved against the
     // final `block_offsets` once every block has been laid out.
     let mut block_addr_fixups: Vec<(usize, BlockId, Reg)> = Vec::new();
+    // Text-embedded jump tables: `(table_start, table_idx)` per
+    // `Terminator::JumpTable`. Each 32-bit entry is patched to
+    // `block_offset - table_start` once every block is laid out.
+    let mut jump_table_fixups: Vec<(usize, u32)> = Vec::new();
     // Per-function alloca bookkeeping. Set by `Inst::AllocaInit`
     // and read by `Inst::Intrinsic { kind: Alloca }`; zero
     // means the function doesn't use alloca.
@@ -1126,6 +1130,45 @@ pub(crate) fn emit_function(
                 };
                 emit(code, enc_br(rt));
             }
+            Terminator::JumpTable { idx, table } => {
+                // Table dispatch: `adr` the table base (embedded right
+                // after the `br`, so the +/-1 MiB reach is trivially
+                // met), load the 32-bit table-relative entry, add, and
+                // branch. The bounds check preceding this terminator
+                // proves the index in range.
+                let iplace = alloc
+                    .places
+                    .get(idx as usize)
+                    .copied()
+                    .unwrap_or(Place::None);
+                let rt = match materialize_int(code, iplace, scratch.primary, frame) {
+                    Some(r) => r,
+                    None => {
+                        bail("JumpTable: idx Place not int", idx, iplace);
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
+                        macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                        macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                        return false;
+                    }
+                };
+                // rt is an allocated register or scratch.primary, never
+                // scratch.secondary, so the table base cannot alias it.
+                let tbl = scratch.secondary;
+                emit(code, enc_adr(tbl, 16));
+                emit(code, enc_ldrsw_reg_lsl2(scratch.primary, tbl, rt));
+                emit(code, enc_add_reg(tbl, tbl, scratch.primary));
+                emit(code, enc_br(tbl));
+                jump_table_fixups.push((code.len(), table));
+                let entries = func.jump_tables[table as usize].len();
+                code.resize(code.len() + entries * 4, 0);
+            }
             Terminator::TailExt(binding_idx) => {
                 // Tail-jump through the GOT-patched trampoline:
                 // `adrp x16, _ ; ldr x16, [x16, _] ; br x16`.
@@ -1173,6 +1216,19 @@ pub(crate) fn emit_function(
         }
         let word = enc_adr(*rd, rel as i32);
         code[*site..*site + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    // Patch each jump table's entries with the target block's offset
+    // relative to the table base.
+    for (table_start, table) in &jump_table_fixups {
+        for (i, &t) in func.jump_tables[*table as usize].iter().enumerate() {
+            let rel = block_offsets[t as usize] as i64 - *table_start as i64;
+            debug_assert!(
+                i32::try_from(rel).is_ok(),
+                "JumpTable: entry offset out of i32 range"
+            );
+            let site = table_start + i * 4;
+            code[site..site + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+        }
     }
     // Patch the recorded branches.
     for fx in &branch_fixups {

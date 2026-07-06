@@ -852,7 +852,9 @@ fn verify_allocation(
                 Terminator::Return(v) if (*v as usize) < used.len() => {
                     used[*v as usize] = true;
                 }
-                Terminator::GotoIndirect { target } if (*target as usize) < used.len() => {
+                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                    if (*target as usize) < used.len() =>
+                {
                     used[*target as usize] = true;
                 }
                 _ => {}
@@ -1176,7 +1178,10 @@ fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
             super::super::ir::Terminator::Bz { cond, .. } => bump_into(&mut counts, cond),
             super::super::ir::Terminator::Bnz { cond, .. } => bump_into(&mut counts, cond),
             super::super::ir::Terminator::Return(v) => bump_into(&mut counts, v),
-            super::super::ir::Terminator::GotoIndirect { target } => bump_into(&mut counts, target),
+            super::super::ir::Terminator::GotoIndirect { target }
+            | super::super::ir::Terminator::JumpTable { idx: target, .. } => {
+                bump_into(&mut counts, target)
+            }
             _ => {}
         }
     }
@@ -1718,7 +1723,9 @@ fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64>
                 }
             }
             Terminator::Return(v) if (*v as usize) < used.len() => used[*v as usize] = true,
-            Terminator::GotoIndirect { target } if (*target as usize) < used.len() => {
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                if (*target as usize) < used.len() =>
+            {
                 used[*target as usize] = true;
             }
             _ => {}
@@ -1943,7 +1950,9 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
         match &b.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(*cond),
             Terminator::Return(v) => bump(*v),
-            Terminator::GotoIndirect { target } => bump(*target),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                bump(*target)
+            }
             _ => {}
         }
     }
@@ -2008,7 +2017,11 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
         match &blk.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
             Terminator::Return(v) if *v != NO_VALUE => mark(*v),
-            Terminator::GotoIndirect { target } if *target != NO_VALUE => mark(*target),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                if *target != NO_VALUE =>
+            {
+                mark(*target)
+            }
             _ => {}
         }
     }
@@ -2024,9 +2037,11 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
         for b in (0..nblocks).rev() {
             let base = b * words;
             scratch.iter_mut().for_each(|w| *w = 0);
-            for s in
-                super::mem2reg::successors(&func.blocks[b].terminator, &func.computed_goto_targets)
-            {
+            for s in super::mem2reg::successors(
+                &func.blocks[b].terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            ) {
                 let sb = s as usize * words;
                 for w in 0..words {
                     scratch[w] |= live_in[sb + w];
@@ -2873,6 +2888,7 @@ int main(void) { return 0; }
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             has_returns_twice_call: false,

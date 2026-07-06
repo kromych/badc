@@ -540,6 +540,13 @@ pub(crate) enum Terminator {
     /// whose address is taken via `&&label`); the CFG treats this as
     /// a branch to all of them.
     GotoIndirect { target: ValueId },
+    /// Indexed branch through a per-function jump table: control
+    /// transfers to `jump_tables[table][idx]`. The switch lowering
+    /// proves `idx` in range with an unsigned bounds check before
+    /// this terminator, so no entry is out of bounds at runtime.
+    /// The target list lives in [`FunctionSsa::jump_tables`]
+    /// because `Terminator` is `Copy`.
+    JumpTable { idx: ValueId, table: u32 },
     /// Synthetic fall-through to a successor block. Preserved
     /// on the variant for object-file round-trips of SSA bodies
     /// that already carry it; new IR producers should use the
@@ -720,6 +727,12 @@ pub(crate) struct FunctionSsa {
     /// treat an indirect branch as a branch to all of these. Empty
     /// for functions with no computed goto.
     pub computed_goto_targets: Vec<BlockId>,
+    /// Target-block lists for the function's `Terminator::JumpTable`
+    /// terminators, keyed by the terminator's `table` index. Entry
+    /// `i` is the successor for a runtime index of `i`; blocks may
+    /// repeat (case-value holes point at the default block). Empty
+    /// for functions with no jump table.
+    pub jump_tables: Vec<Vec<BlockId>>,
     /// Boundary between the parser's declared local slots and the SSA
     /// builder's synthetic slots. `set_locals` records the declared-
     /// plus-alloca count here; every slot reserved afterward by

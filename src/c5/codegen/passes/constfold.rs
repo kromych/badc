@@ -167,7 +167,9 @@ fn count_uses(func: &FunctionSsa) -> Vec<u32> {
         match block.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(&mut counts, cond),
             Terminator::Return(v) => bump(&mut counts, v),
-            Terminator::GotoIndirect { target } => bump(&mut counts, target),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                bump(&mut counts, target)
+            }
             _ => {}
         }
         bump(&mut counts, block.exit_acc);
@@ -252,6 +254,7 @@ mod tests {
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             insts,

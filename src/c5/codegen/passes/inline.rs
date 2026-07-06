@@ -177,6 +177,13 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 say("GotoIndirect terminator");
                 return false;
             }
+            Terminator::JumpTable { .. } => {
+                // Splicing shifts the callee's block ids, which the
+                // caller-side jump_tables clone would have to remap; a
+                // table dispatcher is far past the size cap anyway.
+                say("JumpTable terminator");
+                return false;
+            }
             Terminator::Jmp(_)
             | Terminator::FallThrough(_)
             | Terminator::Bz { .. }
@@ -602,6 +609,9 @@ fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
         Terminator::GotoIndirect { target } => {
             *target = map_v(*target, remap);
         }
+        Terminator::JumpTable { idx, .. } => {
+            *idx = map_v(*idx, remap);
+        }
         Terminator::Return(v) => {
             *v = map_v(*v, remap);
         }
@@ -675,6 +685,12 @@ fn splice_multi_block(
             Terminator::GotoIndirect { target } => Terminator::GotoIndirect {
                 target: map_v(target, remap),
             },
+            // Multi-block splicing is skipped for jump-table callers
+            // (block_id_shift_unsafe); the table entries would need the
+            // same shift. TODO: remap via the shared BlockId utility.
+            Terminator::JumpTable { .. } => {
+                unreachable!("multi-block splice skips jump-table callers")
+            }
         }
     };
 
@@ -891,6 +907,9 @@ fn splice_multi_block(
                 Terminator::GotoIndirect { .. } => {
                     unreachable!("filter rejects GotoIndirect")
                 }
+                Terminator::JumpTable { .. } => {
+                    unreachable!("filter rejects JumpTable")
+                }
             };
             let exit_acc = if cblock.exit_acc != NO_VALUE {
                 map_v(cblock.exit_acc, &callee_remap)
@@ -995,6 +1014,10 @@ fn splice_multi_block(
         ret_is_fp: original.ret_is_fp,
         indirect_result_slot: original.indirect_result_slot,
         computed_goto_targets: original.computed_goto_targets,
+        // Multi-block splicing is skipped for jump-table callers and
+        // the filter rejects jump-table callees, so both lists are
+        // empty here.
+        jump_tables: original.jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: original.multi_cell_slots,
         // The candidate filter rejects returns-twice callees, so only
@@ -1366,6 +1389,7 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     // Skip multi-block splicing for either shape; the flat single-block
     // path above already ran and keeps block ids fixed.
     let block_id_shift_unsafe = !caller.computed_goto_targets.is_empty()
+        || !caller.jump_tables.is_empty()
         || caller
             .insts
             .iter()

@@ -24,8 +24,7 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	cmp	x1, #0x0
                	b.eq	<addr>
-               	mov	x17, #0x1               // =1
-               	orr	x2, x2, x17
+               	mov	x2, #0x1                // =1
                	cmp	x0, x0
                	b.eq	<addr>
                	mov	x17, #0x2               // =2

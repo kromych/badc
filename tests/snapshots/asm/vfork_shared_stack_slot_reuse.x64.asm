@@ -378,8 +378,7 @@ Disassembly of section .text:
                	addq	$0x5b0, %rsp            # imm = 0x5B0
                	popq	%rbp
                	retq
-               	movq	0x30(%rsp), %r10
-               	orq	$0x1, %r10
+               	movl	$0x1, %r10d
                	movq	%r10, 0x30(%rsp)
                	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
@@ -549,3 +548,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

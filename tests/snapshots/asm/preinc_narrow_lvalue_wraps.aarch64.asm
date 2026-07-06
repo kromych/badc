@@ -10,132 +10,83 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x0, #0xff               // =255
-               	mov	x2, #0x0                // =0
-               	add	x0, x0, #0x1
-               	mov	x17, #0xff              // =255
-               	and	x1, x0, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
-               	mov	x2, #0x1                // =1
-               	sxtw	x1, w2
-               	cmp	x1, #0x1
-               	cset	x2, eq
-               	cbz	x2, <addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	mov	x1, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	sxtw	x0, w1
+               	cmp	x0, #0x1
+               	cset	x1, eq
+               	cbz	x1, <addr>
+               	mov	x1, #0x1                // =1
+               	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
                	ret
-               	b	<addr>
                	b	<addr>
 
 <preinc_u16_wrap>:
-               	mov	x0, #0xffff             // =65535
-               	mov	x2, #0x0                // =0
-               	add	x0, x0, #0x1
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x0, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
-               	mov	x2, #0x1                // =1
-               	sxtw	x1, w2
-               	cmp	x1, #0x1
-               	cset	x2, eq
-               	cbz	x2, <addr>
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	mov	x1, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	sxtw	x0, w1
+               	cmp	x0, #0x1
+               	cset	x1, eq
+               	cbz	x1, <addr>
+               	mov	x1, #0x1                // =1
+               	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
                	ret
-               	b	<addr>
                	b	<addr>
 
 <preinc_u32_wrap>:
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	mov	x2, #0x0                // =0
-               	add	x0, x0, #0x1
-               	mov	w1, w0
-               	cmp	x1, #0x0
-               	b.ne	<addr>
-               	mov	x2, #0x1                // =1
-               	sxtw	x1, w2
-               	cmp	x1, #0x1
-               	cset	x2, eq
-               	cbz	x2, <addr>
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	mov	x1, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	sxtw	x0, w1
+               	cmp	x0, #0x1
+               	cset	x1, eq
+               	cbz	x1, <addr>
+               	mov	x1, #0x1                // =1
+               	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
                	ret
-               	b	<addr>
                	b	<addr>
 
 <compound_u8_wrap>:
-               	mov	x0, #0xf0               // =240
-               	mov	x2, #0x0                // =0
-               	add	x0, x0, #0x10
-               	mov	x17, #0xff              // =255
-               	and	x1, x0, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
-               	mov	x2, #0x1                // =1
-               	sxtw	x1, w2
-               	cmp	x1, #0x1
-               	cset	x2, eq
-               	cbz	x2, <addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	mov	x1, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	sxtw	x0, w1
+               	cmp	x0, #0x1
+               	cset	x1, eq
+               	cbz	x1, <addr>
+               	mov	x1, #0x1                // =1
+               	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
                	ret
-               	b	<addr>
                	b	<addr>
 
 <compound_u16_wrap>:
-               	mov	x0, #0xfff0             // =65520
-               	mov	x2, #0x0                // =0
-               	add	x0, x0, #0x10
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x0, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
-               	mov	x2, #0x1                // =1
-               	sxtw	x1, w2
-               	cmp	x1, #0x1
-               	cset	x2, eq
-               	cbz	x2, <addr>
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	mov	x1, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	sxtw	x0, w1
+               	cmp	x0, #0x1
+               	cset	x1, eq
+               	cbz	x1, <addr>
+               	mov	x1, #0x1                // =1
+               	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
                	ret
-               	b	<addr>
                	b	<addr>
 
 <preinc_u8_through_pointer>:
@@ -176,9 +127,9 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x20, #0x0               // =0
                	bl	<addr>
-               	orr	x20, x20, x0
+               	mov	x17, #0x0               // =0
+               	orr	x20, x0, x17
                	bl	<addr>
                	orr	x20, x20, x0
                	bl	<addr>

@@ -505,9 +505,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=57
     v384 LoadLocal { off=-16, kind=I32 }                  -> x0
     v385 Imm(1)                                           -> x0
     v386 Imm(4294967296)                                  -> x0
-    v387 BinopI { op=or, lhs=v145, rhs_imm=1 }            -> [spill 117]
+    v387 Imm(1)                                           -> [spill 117]
     v388 Imm(0)                                           -> x0
-    v389 Extend { value=v387, kind=I32 }                  -> x0
+    v389 Imm(1)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v389)
   block 10  start_pc=0
     v390 Phi { incoming=[b35:v145, b9:v387], kind=I64 }   -> [spill 117]

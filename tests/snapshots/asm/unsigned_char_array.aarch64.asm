@@ -101,19 +101,18 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	mov	x1, #0x5                // =5
-               	add	x2, x0, x1
-               	ldrb	w2, [x2]
+               	ldrb	w1, [x0, #0x5]
                	mov	x17, #0x6               // =6
-               	eor	x2, x2, x17
-               	mov	w2, w2
-               	cmp	x2, #0x0
+               	eor	x1, x1, x17
+               	mov	w1, w1
+               	cmp	x1, #0x0
                	b.eq	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	add	x0, x0, x1
-               	ldrb	w1, [x0]
-               	mov	x0, x2
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrb	w0, [x0, #0x5]
+               	mov	x16, x1
+               	mov	x1, x0
+               	mov	x0, x16
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x1                // =1

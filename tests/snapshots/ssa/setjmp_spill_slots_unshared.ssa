@@ -414,9 +414,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=32
     v394 LoadLocal { off=-10, kind=I32 }                  -> x0
     v395 Imm(1)                                           -> x0
     v396 Imm(4294967296)                                  -> x0
-    v397 BinopI { op=or, lhs=v99, rhs_imm=1 }             -> x2
+    v397 Imm(1)                                           -> x2
     v398 Imm(0)                                           -> x0
-    v399 Extend { value=v397, kind=I32 }                  -> x0
+    v399 Imm(1)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v399)
   block 8  start_pc=0
     v400 Phi { incoming=[b25:v99, b7:v397], kind=I64 }    -> x2

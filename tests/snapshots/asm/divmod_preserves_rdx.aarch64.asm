@@ -10,39 +10,18 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	str	x20, [sp, #-0x30]!
-               	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	mov	x0, #0x64               // =100
-               	mov	x1, #0x32               // =50
-               	mov	x2, #0x19               // =25
-               	mov	x3, #0xc                // =12
-               	mov	x4, #0x7                // =7
-               	sdiv	x5, x0, x4
-               	sdiv	x6, x1, x4
-               	sdiv	x7, x2, x4
-               	sdiv	x4, x3, x4
-               	add	x5, x5, x6
-               	add	x5, x5, x7
-               	add	x4, x5, x4
-               	add	x0, x4, x0
-               	add	x0, x0, x1
-               	add	x0, x0, x2
-               	add	x0, x0, x3
-               	sxtw	x20, w0
+               	str	x19, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
+               	mov	x1, #0xd4               // =212
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x20, #0xd4
-               	b.ne	<addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x19, [sp], #0x20
                	ret

@@ -6,9 +6,9 @@
 // emit every successor's phi moves and clobber live values on the
 // other table edges.
 
-static long chain(int op, long a, long b) {
-    long x = a;
-    long y = b;
+static long long chain(int op, long long a, long long b) {
+    long long x = a;
+    long long y = b;
     switch (op) {
         case 0: x = a + 1; /* fall through */
         case 1: y = x + 2; /* fall through */
@@ -28,14 +28,15 @@ static long chain(int op, long a, long b) {
 }
 
 int main(void) {
-    long h = 0;
+    long long h = 0;
     for (int op = -2; op < 14; op++) {
-        for (long a = -1; a < 3; a++) {
-            for (long b = 0; b < 3; b++) {
+        for (long long a = -1; a < 3; a++) {
+            for (long long b = 0; b < 3; b++) {
                 h = h * 33 + chain(op, a, b);
             }
         }
     }
+    // long long keeps 64-bit arithmetic on LLP64 (Windows) too.
     // Golden value cross-checked against clang -O2 and -O0.
-    return h == -3365603682695239840L ? 0 : 1;
+    return h == -3365603682695239840LL ? 0 : 1;
 }

@@ -81,26 +81,20 @@ Disassembly of section .text:
 <simple>:
                	mov	x2, #0x0                // =0
                	mov	x1, x2
-               	cmp	x2, x0
-               	b.ge	<addr>
-               	b	<addr>
-               	add	x2, x2, #0x1
                	b	<addr>
                	mov	x17, #0x3               // =3
                	mul	x3, x2, x17
                	add	x3, x3, #0x7
                	add	x1, x1, x3
-               	b	<addr>
+               	add	x2, x2, #0x1
+               	cmp	x2, x0
+               	b.lt	<addr>
                	mov	x0, x1
                	ret
 
 <heavy>:
                	mov	x2, #0x0                // =0
                	mov	x1, x2
-               	cmp	x2, x0
-               	b.ge	<addr>
-               	b	<addr>
-               	add	x2, x2, #0x1
                	b	<addr>
                	mov	x17, #0x3               // =3
                	mul	x3, x2, x17
@@ -114,7 +108,9 @@ Disassembly of section .text:
                	mul	x3, x2, x17
                	sub	x3, x3, x3
                	add	x1, x1, x3
-               	b	<addr>
+               	add	x2, x2, #0x1
+               	cmp	x2, x0
+               	b.lt	<addr>
                	mov	x0, x1
                	ret
 
@@ -328,12 +324,6 @@ Disassembly of section .text:
                	mov	x7, #0x0                // =0
                	mov	x0, x7
                	mov	x1, x7
-               	sxtw	x3, w0
-               	cmp	x3, #0x6
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w0
-               	add	x0, x0, #0x1
                	b	<addr>
                	sub	x3, x29, #0x50
                	sxtw	x4, w0
@@ -343,20 +333,22 @@ Disassembly of section .text:
                	add	x3, x0, #0x3e8
                	sxtw	x3, w3
                	add	x1, x1, x3
-               	b	<addr>
+               	sxtw	x0, w0
+               	add	x0, x0, #0x1
+               	sxtw	x3, w0
+               	cmp	x3, #0x6
+               	b.lt	<addr>
                	mov	x3, #0x0                // =0
-               	sxtw	x0, w3
-               	cmp	x0, #0x6
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w3
-               	add	x3, x0, #0x1
                	b	<addr>
                	sub	x0, x29, #0x50
                	sxtw	x4, w3
                	ldr	x0, [x0, x4, lsl #3]
                	add	x7, x7, x0
-               	b	<addr>
+               	sxtw	x0, w3
+               	add	x3, x0, #0x1
+               	sxtw	x0, w3
+               	cmp	x0, #0x6
+               	b.lt	<addr>
                	sxtw	x0, w2
                	mov	x20, #0x0               // =0
                	cbz	x0, <addr>

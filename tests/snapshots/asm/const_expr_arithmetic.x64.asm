@@ -16,7 +16,11 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rbx, %rbx
-               	jmp	<addr>
+               	movslq	%ebx, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
                	leaq	<rip>, %rdi
                	movl	$0x8, %esi
                	movb	$0x0, %al
@@ -65,10 +69,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x7, %ebx
-               	movslq	%ebx, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
                	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

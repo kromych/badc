@@ -65,19 +65,19 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v39  Store { addr=v37, disp=0, value=v38, kind=I32 }  -> -
     v40  Extend { value=v38, kind=I32 }                   -> x0
     v41  BinopI { op=eq, lhs=v40, rhs_imm=9 }             -> x0
-    terminator Bz { cond=v41, target=b12, fall=b11 }   (exit_acc=v41)
+    terminator Bz { cond=v41, target=b13, fall=b11 }   (exit_acc=v41)
   block 11  start_pc=0
     v42  Imm(0)                                           -> x1
     v43  Imm(0)                                           -> x0
-    terminator Jmp(b13)   (exit_acc=v42)
+    terminator Jmp(b12)   (exit_acc=v42)
   block 12  start_pc=0
-    v44  Imm(5)                                           -> x1
-    v45  Imm(0)                                           -> x0
-    terminator Jmp(b13)   (exit_acc=v44)
-  block 13  start_pc=0
-    v46  Phi { incoming=[b11:v42, b12:v44], kind=I64 }    -> x1
+    v46  Phi { incoming=[b11:v42, b13:v44], kind=I64 }    -> x1
     v47  LoadLocal { off=-2, kind=I64 }                   -> x0
     terminator Return(v46)   (exit_acc=v46)
+  block 13  start_pc=0
+    v44  Imm(5)                                           -> x1
+    v45  Imm(0)                                           -> x0
+    terminator Jmp(b12)   (exit_acc=v44)
   block 14  start_pc=0
     terminator Jmp(b4)
 ; --- SSA dump (ok=true) ent_pc=0 ---

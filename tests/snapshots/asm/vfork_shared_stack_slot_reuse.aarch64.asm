@@ -92,19 +92,17 @@ Disassembly of section .text:
                	str	x28, [sp, #0x40]
                	str	x19, [sp, #0x50]
                	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	cmp	x0, #0x40
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sxtw	x2, w1
                	add	x3, x2, #0x1
                	str	w3, [x0, x2, lsl #2]
-               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	sxtw	x0, w1
+               	cmp	x0, #0x40
+               	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
@@ -210,144 +208,6 @@ Disassembly of section .text:
                	sxtw	x0, w1
                	cmp	x20, x0
                	b.eq	<addr>
-               	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0, #0x40]
-               	mov	x17, #0x5               // =5
-               	mul	x1, x1, x17
-               	add	x1, x1, #0x1
-               	sxtw	x1, w1
-               	ldrsw	x2, [x0, #0x44]
-               	mov	x17, #0x5               // =5
-               	mul	x2, x2, x17
-               	add	x2, x2, #0x2
-               	sxtw	x2, w2
-               	ldrsw	x3, [x0, #0x48]
-               	mov	x17, #0x5               // =5
-               	mul	x3, x3, x17
-               	add	x3, x3, #0x3
-               	sxtw	x3, w3
-               	ldrsw	x4, [x0, #0x4c]
-               	mov	x17, #0x5               // =5
-               	mul	x4, x4, x17
-               	add	x4, x4, #0x4
-               	sxtw	x4, w4
-               	ldrsw	x5, [x0, #0x50]
-               	mov	x17, #0x5               // =5
-               	mul	x5, x5, x17
-               	add	x5, x5, #0x5
-               	sxtw	x5, w5
-               	ldrsw	x6, [x0, #0x54]
-               	mov	x17, #0x5               // =5
-               	mul	x6, x6, x17
-               	add	x6, x6, #0x6
-               	sxtw	x6, w6
-               	ldrsw	x7, [x0, #0x58]
-               	mov	x17, #0x5               // =5
-               	mul	x7, x7, x17
-               	add	x7, x7, #0x7
-               	sxtw	x7, w7
-               	ldrsw	x8, [x0, #0x5c]
-               	mov	x17, #0x5               // =5
-               	mul	x8, x8, x17
-               	add	x8, x8, #0x8
-               	sxtw	x8, w8
-               	ldrsw	x9, [x0, #0x60]
-               	mov	x17, #0x5               // =5
-               	mul	x9, x9, x17
-               	add	x9, x9, #0x9
-               	sxtw	x9, w9
-               	ldrsw	x10, [x0, #0x64]
-               	mov	x17, #0x5               // =5
-               	mul	x10, x10, x17
-               	add	x10, x10, #0xa
-               	sxtw	x10, w10
-               	ldrsw	x11, [x0, #0x68]
-               	mov	x17, #0x5               // =5
-               	mul	x11, x11, x17
-               	add	x11, x11, #0xb
-               	sxtw	x11, w11
-               	ldrsw	x12, [x0, #0x6c]
-               	mov	x17, #0x5               // =5
-               	mul	x12, x12, x17
-               	add	x12, x12, #0xc
-               	sxtw	x12, w12
-               	ldrsw	x13, [x0, #0x70]
-               	mov	x17, #0x5               // =5
-               	mul	x13, x13, x17
-               	add	x13, x13, #0xd
-               	sxtw	x13, w13
-               	ldrsw	x14, [x0, #0x74]
-               	mov	x17, #0x5               // =5
-               	mul	x14, x14, x17
-               	add	x14, x14, #0xe
-               	sxtw	x14, w14
-               	ldrsw	x15, [x0, #0x78]
-               	mov	x17, #0x5               // =5
-               	mul	x15, x15, x17
-               	add	x15, x15, #0xf
-               	sxtw	x15, w15
-               	ldrsw	x20, [x0, #0x7c]
-               	mov	x17, #0x5               // =5
-               	mul	x20, x20, x17
-               	add	x20, x20, #0x10
-               	sxtw	x20, w20
-               	ldrsw	x21, [x0, #0x80]
-               	mov	x17, #0x5               // =5
-               	mul	x21, x21, x17
-               	add	x21, x21, #0x11
-               	sxtw	x21, w21
-               	ldrsw	x22, [x0, #0x84]
-               	mov	x17, #0x5               // =5
-               	mul	x22, x22, x17
-               	add	x22, x22, #0x12
-               	sxtw	x22, w22
-               	ldrsw	x23, [x0, #0x88]
-               	mov	x17, #0x5               // =5
-               	mul	x23, x23, x17
-               	add	x23, x23, #0x13
-               	sxtw	x23, w23
-               	ldrsw	x0, [x0, #0x8c]
-               	mov	x17, #0x5               // =5
-               	mul	x0, x0, x17
-               	add	x0, x0, #0x14
-               	sxtw	x0, w0
-               	sub	sp, sp, #0x60
-               	str	x9, [sp]
-               	str	x10, [sp, #0x8]
-               	str	x11, [sp, #0x10]
-               	str	x12, [sp, #0x18]
-               	str	x13, [sp, #0x20]
-               	str	x14, [sp, #0x28]
-               	str	x15, [sp, #0x30]
-               	str	x20, [sp, #0x38]
-               	str	x21, [sp, #0x40]
-               	str	x22, [sp, #0x48]
-               	str	x23, [sp, #0x50]
-               	str	x0, [sp, #0x58]
-               	mov	x0, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
-               	mov	x5, x6
-               	mov	x6, x7
-               	mov	x7, x8
-               	bl	<addr>
-               	add	sp, sp, #0x60
-               	bl	<addr>
-               	sxtw	x0, w0
-               	mov	x0, #0x3                // =3
-               	ldr	x19, [sp, #0x50]
-               	ldr	x28, [sp, #0x40]
-               	ldp	x26, x27, [sp, #0x30]
-               	ldp	x24, x25, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x250
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x16, #0x1               // =1
                	str	x16, [sp, #0x60]
                	adrp	x0, <page>
@@ -541,3 +401,140 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x1, [x0, #0x40]
+               	mov	x17, #0x5               // =5
+               	mul	x1, x1, x17
+               	add	x1, x1, #0x1
+               	sxtw	x1, w1
+               	ldrsw	x2, [x0, #0x44]
+               	mov	x17, #0x5               // =5
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x2
+               	sxtw	x2, w2
+               	ldrsw	x3, [x0, #0x48]
+               	mov	x17, #0x5               // =5
+               	mul	x3, x3, x17
+               	add	x3, x3, #0x3
+               	sxtw	x3, w3
+               	ldrsw	x4, [x0, #0x4c]
+               	mov	x17, #0x5               // =5
+               	mul	x4, x4, x17
+               	add	x4, x4, #0x4
+               	sxtw	x4, w4
+               	ldrsw	x5, [x0, #0x50]
+               	mov	x17, #0x5               // =5
+               	mul	x5, x5, x17
+               	add	x5, x5, #0x5
+               	sxtw	x5, w5
+               	ldrsw	x6, [x0, #0x54]
+               	mov	x17, #0x5               // =5
+               	mul	x6, x6, x17
+               	add	x6, x6, #0x6
+               	sxtw	x6, w6
+               	ldrsw	x7, [x0, #0x58]
+               	mov	x17, #0x5               // =5
+               	mul	x7, x7, x17
+               	add	x7, x7, #0x7
+               	sxtw	x7, w7
+               	ldrsw	x8, [x0, #0x5c]
+               	mov	x17, #0x5               // =5
+               	mul	x8, x8, x17
+               	add	x8, x8, #0x8
+               	sxtw	x8, w8
+               	ldrsw	x9, [x0, #0x60]
+               	mov	x17, #0x5               // =5
+               	mul	x9, x9, x17
+               	add	x9, x9, #0x9
+               	sxtw	x9, w9
+               	ldrsw	x10, [x0, #0x64]
+               	mov	x17, #0x5               // =5
+               	mul	x10, x10, x17
+               	add	x10, x10, #0xa
+               	sxtw	x10, w10
+               	ldrsw	x11, [x0, #0x68]
+               	mov	x17, #0x5               // =5
+               	mul	x11, x11, x17
+               	add	x11, x11, #0xb
+               	sxtw	x11, w11
+               	ldrsw	x12, [x0, #0x6c]
+               	mov	x17, #0x5               // =5
+               	mul	x12, x12, x17
+               	add	x12, x12, #0xc
+               	sxtw	x12, w12
+               	ldrsw	x13, [x0, #0x70]
+               	mov	x17, #0x5               // =5
+               	mul	x13, x13, x17
+               	add	x13, x13, #0xd
+               	sxtw	x13, w13
+               	ldrsw	x14, [x0, #0x74]
+               	mov	x17, #0x5               // =5
+               	mul	x14, x14, x17
+               	add	x14, x14, #0xe
+               	sxtw	x14, w14
+               	ldrsw	x15, [x0, #0x78]
+               	mov	x17, #0x5               // =5
+               	mul	x15, x15, x17
+               	add	x15, x15, #0xf
+               	sxtw	x15, w15
+               	ldrsw	x20, [x0, #0x7c]
+               	mov	x17, #0x5               // =5
+               	mul	x20, x20, x17
+               	add	x20, x20, #0x10
+               	sxtw	x20, w20
+               	ldrsw	x21, [x0, #0x80]
+               	mov	x17, #0x5               // =5
+               	mul	x21, x21, x17
+               	add	x21, x21, #0x11
+               	sxtw	x21, w21
+               	ldrsw	x22, [x0, #0x84]
+               	mov	x17, #0x5               // =5
+               	mul	x22, x22, x17
+               	add	x22, x22, #0x12
+               	sxtw	x22, w22
+               	ldrsw	x23, [x0, #0x88]
+               	mov	x17, #0x5               // =5
+               	mul	x23, x23, x17
+               	add	x23, x23, #0x13
+               	sxtw	x23, w23
+               	ldrsw	x0, [x0, #0x8c]
+               	mov	x17, #0x5               // =5
+               	mul	x0, x0, x17
+               	add	x0, x0, #0x14
+               	sxtw	x0, w0
+               	sub	sp, sp, #0x60
+               	str	x9, [sp]
+               	str	x10, [sp, #0x8]
+               	str	x11, [sp, #0x10]
+               	str	x12, [sp, #0x18]
+               	str	x13, [sp, #0x20]
+               	str	x14, [sp, #0x28]
+               	str	x15, [sp, #0x30]
+               	str	x20, [sp, #0x38]
+               	str	x21, [sp, #0x40]
+               	str	x22, [sp, #0x48]
+               	str	x23, [sp, #0x50]
+               	str	x0, [sp, #0x58]
+               	mov	x0, x1
+               	mov	x1, x2
+               	mov	x2, x3
+               	mov	x3, x4
+               	mov	x4, x5
+               	mov	x5, x6
+               	mov	x6, x7
+               	mov	x7, x8
+               	bl	<addr>
+               	add	sp, sp, #0x60
+               	bl	<addr>
+               	sxtw	x0, w0
+               	mov	x0, #0x3                // =3
+               	ldr	x19, [sp, #0x50]
+               	ldr	x28, [sp, #0x40]
+               	ldp	x26, x27, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp]
+               	add	sp, sp, #0x250
+               	ldp	x29, x30, [sp], #0x10
+               	ret

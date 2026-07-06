@@ -67,11 +67,11 @@ Disassembly of section .text:
                	cset	x1, eq
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x1                // =1
                	mov	x0, x1
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x80
                	ret
+               	mov	x1, #0x1                // =1
+               	b	<addr>
                	b	<addr>

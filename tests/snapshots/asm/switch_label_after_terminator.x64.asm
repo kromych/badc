@@ -14,33 +14,27 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	cmpq	$0x2, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	retq
-               	movl	$0x1, %ecx
-               	jmp	<addr>
-               	movl	$0x2, %ecx
-               	jmp	<addr>
-               	movl	$0x3, %ecx
-               	jmp	<addr>
-               	movabsq	$-0x1, %rax
-               	retq
-               	cmpq	$0x1, %rdi
-               	je	<addr>
-               	jmp	<addr>
                	cmpq	$0x3, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	cmpq	$0x2, %rdi
-               	je	<addr>
-               	jmp	<addr>
                	cmpq	$0x3, %rdi
                	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
+               	movabsq	$-0x1, %rax
+               	retq
+               	movl	$0x3, %ecx
                	leaq	0x64(%rcx), %rax
                	movslq	%eax, %rax
                	retq
+               	cmpq	$0x2, %rdi
+               	jne	<addr>
+               	movl	$0x2, %ecx
+               	jmp	<addr>
+               	cmpq	$0x1, %rdi
+               	jne	<addr>
+               	movl	$0x1, %ecx
+               	jmp	<addr>
+               	xorq	%rax, %rax
+               	retq
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

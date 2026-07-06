@@ -171,11 +171,6 @@ Disassembly of section .text:
                	sub	x17, x29, #0x2, lsl #12 // =0x2000
                	sub	x17, x17, #0x50
                	str	x0, [x17]
-               	b	<addr>
-               	mov	x0, #0x1                // =1
-               	sub	x17, x29, #0x2, lsl #12 // =0x2000
-               	sub	x17, x17, #0x50
-               	str	x0, [x17]
                	sub	x16, x29, #0x2, lsl #12 // =0x2000
                	sub	x16, x16, #0x50
                	ldr	x0, [x16]
@@ -184,3 +179,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x1                // =1
+               	sub	x17, x29, #0x2, lsl #12 // =0x2000
+               	sub	x17, x17, #0x50
+               	str	x0, [x17]
+               	b	<addr>

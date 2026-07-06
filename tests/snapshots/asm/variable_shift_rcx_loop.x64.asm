@@ -14,18 +14,16 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	xorq	%r8, %r8
                	movq	%r8, %rcx
-               	cmpq	%rdi, %rcx
-               	jge	<addr>
                	jmp	<addr>
+               	leaq	(%r8,%rax), %rcx
                	movq	%rsi, %r9
                	pushq	%rcx
                	movq	%rdx, %rcx
                	shlq	%cl, %r9
                	popq	%rcx
                	addq	%r9, %r8
-               	jmp	<addr>
-               	leaq	(%r8,%rax), %rcx
-               	jmp	<addr>
+               	cmpq	%rdi, %rcx
+               	jl	<addr>
                	retq
 
 <main>:
@@ -39,8 +37,8 @@ Disassembly of section .text:
                	cmpq	$0x1, %rax
                	jne	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	popq	%rbp
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>

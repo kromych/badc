@@ -29,28 +29,22 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x1
                	b.lt	<addr>
-               	b	<addr>
-               	sxtw	x0, w0
-               	ret
-               	mov	x0, #0x64               // =100
-               	b	<addr>
-               	mov	x0, #0xc8               // =200
-               	b	<addr>
-               	mov	x0, #0x12c              // =300
-               	b	<addr>
-               	mov	x0, #0x190              // =400
-               	b	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
-               	b	<addr>
                	cmp	x0, #0x2
                	b.lt	<addr>
-               	b	<addr>
-               	cmp	x0, #0x1
-               	b.eq	<addr>
-               	b	<addr>
                	cmp	x0, #0x2
                	b.eq	<addr>
+               	mov	x0, #0x190              // =400
+               	sxtw	x0, w0
+               	ret
+               	mov	x0, #0x12c              // =300
+               	b	<addr>
+               	cmp	x0, #0x1
+               	b.ne	<addr>
+               	mov	x0, #0xc8               // =200
+               	b	<addr>
+               	cmp	x0, #0x0
+               	b.ne	<addr>
+               	mov	x0, #0x64               // =100
                	b	<addr>
                	b	<addr>
 

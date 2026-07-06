@@ -29,8 +29,7 @@ Disassembly of section .text:
                	add	x21, x21, <lo12>
                	mov	x22, #0x0               // =0
                	mov	x0, x22
-               	cmp	x22, x20
-               	b.ge	<addr>
+               	b	<addr>
                	lsl	x1, x22, #1
                	add	x1, x1, #0x1
                	add	x23, x0, x1
@@ -39,7 +38,8 @@ Disassembly of section .text:
                	blr	x9
                	add	x0, x23, x0
                	add	x22, x22, #0x1
-               	b	<addr>
+               	cmp	x22, x20
+               	b.lt	<addr>
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]

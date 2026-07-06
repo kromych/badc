@@ -15,35 +15,30 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	cmp	x0, x17
                	b.lo	<addr>
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x64               // =100
-               	ret
-               	mov	x0, #0xc8               // =200
-               	ret
-               	mov	x0, #0x5                // =5
-               	ret
-               	mov	x0, #0x3e7              // =999
-               	ret
-               	cmp	x0, #0x5
-               	b.eq	<addr>
-               	b	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	cmp	x0, x17
                	b.lo	<addr>
-               	b	<addr>
-               	mov	x17, #0xfffe            // =65534
-               	movk	x17, #0xffff, lsl #16
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	b	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	cmp	x0, x17
                	b.eq	<addr>
-               	b	<addr>
+               	mov	x0, #0x3e7              // =999
+               	ret
+               	mov	x0, #0x64               // =100
+               	ret
+               	mov	x17, #0xfffe            // =65534
+               	movk	x17, #0xffff, lsl #16
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	mov	x0, #0xc8               // =200
+               	ret
+               	cmp	x0, #0x5
+               	b.ne	<addr>
+               	mov	x0, #0x5                // =5
+               	ret
+               	mov	x0, #0x0                // =0
+               	ret
                	b	<addr>
 
 <u16>:
@@ -55,25 +50,22 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.lo	<addr>
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x64               // =100
-               	ret
-               	mov	x0, #0x7                // =7
-               	ret
-               	mov	x0, #0x3e7              // =999
-               	ret
-               	cmp	x0, #0x7
-               	b.eq	<addr>
-               	b	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.eq	<addr>
-               	b	<addr>
+               	mov	x0, #0x3e7              // =999
+               	ret
+               	mov	x0, #0x64               // =100
+               	ret
+               	cmp	x0, #0x7
+               	b.ne	<addr>
+               	mov	x0, #0x7                // =7
+               	ret
+               	mov	x0, #0x0                // =0
+               	ret
                	b	<addr>
 
 <u8>:
@@ -85,25 +77,22 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.lo	<addr>
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x64               // =100
-               	ret
-               	mov	x0, #0x3                // =3
-               	ret
-               	mov	x0, #0x3e7              // =999
-               	ret
-               	cmp	x0, #0x3
-               	b.eq	<addr>
-               	b	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.eq	<addr>
-               	b	<addr>
+               	mov	x0, #0x3e7              // =999
+               	ret
+               	mov	x0, #0x64               // =100
+               	ret
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	mov	x0, #0x3                // =3
+               	ret
+               	mov	x0, #0x0                // =0
+               	ret
                	b	<addr>
 
 <s32>:
@@ -114,29 +103,26 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.lt	<addr>
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x64               // =100
-               	ret
-               	mov	x0, #0xc8               // =200
-               	ret
-               	mov	x0, #0x3e7              // =999
-               	ret
-               	mov	x17, #0xfffe            // =65534
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	b	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.eq	<addr>
-               	b	<addr>
+               	mov	x0, #0x3e7              // =999
+               	ret
+               	mov	x0, #0x64               // =100
+               	ret
+               	mov	x17, #0xfffe            // =65534
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	mov	x0, #0xc8               // =200
+               	ret
+               	mov	x0, #0x0                // =0
+               	ret
                	b	<addr>
 
 <main>:

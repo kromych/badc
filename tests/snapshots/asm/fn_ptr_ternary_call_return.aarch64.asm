@@ -34,16 +34,10 @@ Disassembly of section .text:
                	movk	x20, #0x1, lsl #32
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	mov	x9, x1
                	mov	x0, x20
                	blr	x9
                	mov	x22, x0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	b	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x7890             // =30864
@@ -92,3 +86,9 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	b	<addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	b	<addr>

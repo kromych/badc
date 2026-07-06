@@ -13,15 +13,13 @@ Disassembly of section .text:
 <main>:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	movslq	%eax, %rdx
-               	cmpq	$0x5, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%eax, %rax
-               	incq	%rax
                	jmp	<addr>
                	addq	%rax, %rcx
                	movslq	%ecx, %rcx
-               	jmp	<addr>
+               	movslq	%eax, %rax
+               	incq	%rax
+               	movslq	%eax, %rdx
+               	cmpq	$0x5, %rdx
+               	jl	<addr>
                	movslq	%ecx, %rax
                	retq

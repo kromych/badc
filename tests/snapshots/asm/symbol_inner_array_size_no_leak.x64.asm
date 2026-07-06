@@ -13,17 +13,15 @@ Disassembly of section .text:
 <build_one>:
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	%rsi, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	incq	%rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
                	leaq	(%rax,%rax,2), %rdx
                	movslq	%edx, %r8
                	movw	%r8w, (%rdi,%rax,2)
-               	jmp	<addr>
+               	incq	%rcx
+               	movslq	%ecx, %rax
+               	cmpq	%rsi, %rax
+               	jl	<addr>
                	leaq	-0x1(%rsi), %rax
                	movslq	%eax, %rax
                	movswq	(%rdi,%rax,2), %rax

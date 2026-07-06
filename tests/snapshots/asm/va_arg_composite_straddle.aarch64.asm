@@ -50,12 +50,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
                	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	cmp	x0, #0x6
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
                	b	<addr>
                	sub	x0, x29, #0x20
                	mov	x17, x0
@@ -76,7 +70,11 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
-               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	sxtw	x0, w1
+               	cmp	x0, #0x6
+               	b.lt	<addr>
                	sub	x0, x29, #0x20
                	mov	x17, x0
                	str	x9, [sp, #-0x10]!

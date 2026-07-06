@@ -73,11 +73,12 @@ Disassembly of section .text:
                	ldrsb	x3, [x2, #0x10]
                	cbz	x3, <addr>
                	mov	x4, #0x0                // =0
-               	b	<addr>
-               	mov	x5, #0x0                // =0
-               	b	<addr>
                	cbz	x1, <addr>
-               	b	<addr>
+               	mov	x1, #0x7                // =7
+               	str	w1, [x2, #0x4]
+               	ldrsw	x0, [x2, x0, lsl #2]
+               	ret
+               	mov	x5, #0x0                // =0
                	mov	x5, #0x1                // =1
                	str	w5, [x2]
                	mov	x3, #0x0                // =0
@@ -86,10 +87,6 @@ Disassembly of section .text:
                	str	w4, [x2, #0x8]
                	strb	w4, [x2, #0x10]
                	b	<addr>
-               	mov	x1, #0x7                // =7
-               	str	w1, [x2, #0x4]
-               	ldrsw	x0, [x2, x0, lsl #2]
-               	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

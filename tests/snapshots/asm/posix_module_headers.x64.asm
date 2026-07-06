@@ -170,14 +170,6 @@ Disassembly of section .text:
                	movq	%rcx, 0x10(%rax)
                	leaq	-0xd0(%rbp), %rax
                	movq	%rcx, (%rax)
-               	jmp	<addr>
-               	movl	$0xb, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x3f0, %rsp            # imm = 0x3F0
-               	popq	%rbp
-               	retq
-               	xorq	%rdx, %rdx
-               	jmp	<addr>
                	xorq	%rdx, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
@@ -250,4 +242,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	movl	$0xb, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x3f0, %rsp            # imm = 0x3F0
+               	popq	%rbp
+               	retq
+               	xorq	%rdx, %rdx
+               	jmp	<addr>

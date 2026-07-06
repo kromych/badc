@@ -11,12 +11,12 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	cmp	x0, #0x5
-               	b.ge	<addr>
+               	b	<addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0
-               	b	<addr>
+               	sxtw	x0, w1
+               	cmp	x0, #0x5
+               	b.lt	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x5
                	b.ne	<addr>

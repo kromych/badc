@@ -32,8 +32,7 @@ Disassembly of section .text:
                	leaq	-<rip>, %r12       # <addr>
                	xorq	%r13, %r13
                	movq	%r13, %rax
-               	cmpq	%rbx, %r13
-               	jge	<addr>
+               	jmp	<addr>
                	movq	%r13, %rcx
                	shlq	$0x1, %rcx
                	incq	%rcx
@@ -43,7 +42,8 @@ Disassembly of section .text:
                	callq	*%rax
                	addq	%r14, %rax
                	incq	%r13
-               	jmp	<addr>
+               	cmpq	%rbx, %r13
+               	jl	<addr>
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13

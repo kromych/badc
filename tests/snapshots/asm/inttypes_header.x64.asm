@@ -18,66 +18,6 @@ Disassembly of section .text:
                	movq	%rax, -0x20(%rbp)
                	movl	$0x4, %eax
                	movq	%rax, -0x40(%rbp)
-               	jmp	<addr>
-               	movl	$0xb, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xc, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xd, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xe, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0xf, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x10, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x11, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x12, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x13, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x14, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x15, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x16, %eax
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
-               	retq
                	leaq	<rip>, %rax
                	movsbq	(%rax), %rcx
                	cmpq	$0x6c, %rcx
@@ -369,3 +309,52 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	movl	$0xb, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0xc, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0xd, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0xe, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0xf, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0x10, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0x11, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0x12, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0x13, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0x14, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0x15, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	movl	$0x16, %eax
+               	addq	$0x150, %rsp            # imm = 0x150
+               	popq	%rbp
+               	retq
+               	addb	%al, 0x41(%rdx)

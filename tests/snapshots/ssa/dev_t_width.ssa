@@ -5,19 +5,19 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v1)
+    terminator Jmp(b1)   (exit_acc=v1)
   block 1  start_pc=0
-    v2   Imm(1)                                           -> x0
-    terminator Return(v2)   (exit_acc=v2)
-  block 2  start_pc=0
     v3   Imm(0)                                           -> x0
-    terminator Jmp(b4)   (exit_acc=v3)
-  block 3  start_pc=0
-    v4   Imm(2)                                           -> x0
-    terminator Return(v4)   (exit_acc=v4)
-  block 4  start_pc=0
+    terminator Jmp(b2)   (exit_acc=v3)
+  block 2  start_pc=0
     v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
+  block 3  start_pc=0
+    v2   Imm(1)                                           -> x0
+    terminator Return(v2)   (exit_acc=v2)
+  block 4  start_pc=0
+    v4   Imm(2)                                           -> x0
+    terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

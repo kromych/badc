@@ -66,10 +66,10 @@ Disassembly of section .text:
                	cmpq	$0x3ea, %rax            # imm = 0x3EA
                	jne	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	addb	%al, 0x41(%rdx)

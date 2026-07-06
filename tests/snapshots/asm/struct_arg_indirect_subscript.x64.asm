@@ -33,14 +33,10 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	xorq	%rsi, %rsi
-               	jmp	<addr>
-               	xorq	%rsi, %rsi
                	addq	%rsi, %rax
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %edx
-               	jmp	<addr>
-               	xorq	%rdx, %rdx
                	addq	%rdx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -48,6 +44,10 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	pushq	%r11
                	retq
+               	xorq	%rdx, %rdx
+               	jmp	<addr>
+               	xorq	%rsi, %rsi
+               	jmp	<addr>
 
 <take_vec>:
                	popq	%r10
@@ -195,12 +195,6 @@ Disassembly of section .text:
                	leaq	-0x98(%rbp), %rax
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
-               	movslq	%ecx, %rax
-               	cmpq	$0x8, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	-0x98(%rbp), %rax
                	addq	$0x8, %rax
@@ -218,7 +212,11 @@ Disassembly of section .text:
                	shlq	$0x4, %rsi
                	addq	%rsi, %rax
                	movq	%rdx, 0x8(%rax)
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0x8, %rax
+               	jl	<addr>
                	leaq	-0x98(%rbp), %rdi
                	movl	$0x3, %esi
                	callq	<addr>

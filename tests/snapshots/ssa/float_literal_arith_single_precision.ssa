@@ -65,23 +65,23 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v21  StoreLocal { off=-1, value=v20, kind=F32 }       -> -
     v22  Imm(0)                                           -> x1
     v23  Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v22)
+    terminator Jmp(b7)   (exit_acc=v22)
   block 5  start_pc=0
-    v24  Phi { incoming=[b4:v22, b6:v28], kind=I64 }      -> x1
-    v25  Extend { value=v24, kind=I32 }                   -> x0
-    v26  BinopI { op=lt, lhs=v25, rhs_imm=10 }            -> x0
-    terminator Bz { cond=v26, target=b8, fall=b7 }   (exit_acc=v26)
-  block 6  start_pc=0
-    v27  Extend { value=v24, kind=I32 }                   -> x0
-    v28  BinopI { op=add, lhs=v27, rhs_imm=1 }            -> x1
-    v29  Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v28)
-  block 7  start_pc=0
     v30  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v31  Imm(1036831949)                                  -> x0 [f32]
     v32  Binop { op=fadd, lhs=v30, rhs=v31 }              -> d0 [f32]
     v33  StoreLocal { off=-1, value=v32, kind=F32 }       -> -
     terminator Jmp(b6)   (exit_acc=v33)
+  block 6  start_pc=0
+    v27  Extend { value=v24, kind=I32 }                   -> x0
+    v28  BinopI { op=add, lhs=v27, rhs_imm=1 }            -> x1
+    v29  Imm(0)                                           -> x0
+    terminator Jmp(b7)   (exit_acc=v28)
+  block 7  start_pc=0
+    v24  Phi { incoming=[b4:v22, b6:v28], kind=I64 }      -> x1
+    v25  Extend { value=v24, kind=I32 }                   -> x0
+    v26  BinopI { op=lt, lhs=v25, rhs_imm=10 }            -> x0
+    terminator Bnz { cond=v26, target=b5, fall=b8 }   (exit_acc=v26)
   block 8  start_pc=0
     v34  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v35  Imm(1065353216)                                  -> x0 [f32]

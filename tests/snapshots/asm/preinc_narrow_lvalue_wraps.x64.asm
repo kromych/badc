@@ -23,10 +23,10 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u16_wrap>:
@@ -42,10 +42,10 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u32_wrap>:
@@ -61,10 +61,10 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	jmp	<addr>
 
 <compound_u8_wrap>:
@@ -80,10 +80,10 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	jmp	<addr>
 
 <compound_u16_wrap>:
@@ -99,10 +99,10 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u8_through_pointer>:
@@ -133,12 +133,12 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
 

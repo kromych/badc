@@ -14,16 +14,6 @@ Disassembly of section .text:
                	movsbq	(%rdi), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	jmp	<addr>
-               	incq	%rdi
-               	incq	%rsi
-               	jmp	<addr>
-               	movsbq	(%rdi), %rax
-               	movsbq	(%rsi), %rcx
-               	cmpq	%rcx, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	retq
                	movsbq	(%rdi), %rax
                	movsbq	(%rsi), %rcx
                	cmpq	%rcx, %rax
@@ -31,16 +21,20 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
+               	incq	%rdi
+               	incq	%rsi
                	jmp	<addr>
                	jmp	<addr>
+               	movsbq	(%rdi), %rax
+               	movsbq	(%rsi), %rcx
+               	cmpq	%rcx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
@@ -77,11 +71,13 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x6, %eax
+               	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	movl	$0x1, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x6, %eax
                	popq	%rbp
                	retq
 

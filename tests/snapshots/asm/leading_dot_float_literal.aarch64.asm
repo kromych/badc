@@ -61,12 +61,12 @@ Disassembly of section .text:
                	sxtw	x0, w2
                	cbz	x0, <addr>
                	mov	x1, #0x7                // =7
-               	b	<addr>
-               	mov	x1, #0x0                // =0
                	mov	x0, x1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x1, #0x0                // =0
+               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

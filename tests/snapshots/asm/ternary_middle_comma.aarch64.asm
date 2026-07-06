@@ -31,8 +31,6 @@ Disassembly of section .text:
                	mov	x1, #0x2a               // =42
                	strb	w1, [x0]
                	mov	x1, #0x1                // =1
-               	b	<addr>
-               	mov	x1, #0x63               // =99
                	sxtw	x0, w1
                	cmp	x0, #0x1
                	cset	x2, ne
@@ -74,8 +72,6 @@ Disassembly of section .text:
                	mov	x1, #0x2a               // =42
                	strb	w1, [x0]
                	mov	x1, #0x1                // =1
-               	b	<addr>
-               	mov	x1, #0x63               // =99
                	sxtw	x0, w1
                	cmp	x0, #0x1
                	cset	x2, ne
@@ -117,8 +113,6 @@ Disassembly of section .text:
                	mov	x1, #0x2a               // =42
                	strb	w1, [x0]
                	mov	x1, #0x1                // =1
-               	b	<addr>
-               	mov	x1, #0x63               // =99
                	sxtw	x0, w1
                	cmp	x0, #0x1
                	cset	x2, ne
@@ -148,13 +142,6 @@ Disassembly of section .text:
                	mov	x3, #0x2                // =2
                	mov	x2, #0x3                // =3
                	mov	x1, #0x6                // =6
-               	b	<addr>
-               	mov	x1, #0xffff             // =65535
-               	movk	x1, #0xffff, lsl #16
-               	movk	x1, #0xffff, lsl #32
-               	movk	x1, #0xffff, lsl #48
-               	mov	x3, x2
-               	mov	x4, x2
                	sxtw	x0, w1
                	cmp	x0, #0x6
                	cset	x0, ne
@@ -206,12 +193,6 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x3]
                	strb	w10, [x0, #0x3]
                	ldr	x10, [sp], #0x10
-               	b	<addr>
-               	sub	x0, x29, #0x60
-               	mov	x1, #0xc8               // =200
-               	strb	w1, [x0]
-               	mov	x1, #0x1                // =1
-               	b	<addr>
                	mov	x1, #0x63               // =99
                	sxtw	x0, w1
                	cmp	x0, #0x63
@@ -245,4 +226,22 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
+               	b	<addr>
+               	mov	x1, #0x63               // =99
+               	b	<addr>
+               	mov	x1, #0x63               // =99
+               	b	<addr>
+               	mov	x1, #0x63               // =99
+               	b	<addr>
+               	mov	x1, #0xffff             // =65535
+               	movk	x1, #0xffff, lsl #16
+               	movk	x1, #0xffff, lsl #32
+               	movk	x1, #0xffff, lsl #48
+               	mov	x3, x2
+               	mov	x4, x2
+               	b	<addr>
+               	sub	x0, x29, #0x60
+               	mov	x1, #0xc8               // =200
+               	strb	w1, [x0]
+               	mov	x1, #0x1                // =1
                	b	<addr>

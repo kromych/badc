@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	retq
                	leaq	<rip>, %rax
                	movslq	0x10(%rax), %rax
                	testq	%rax, %rax
@@ -159,4 +156,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	movl	$0x1, %eax
+               	retq

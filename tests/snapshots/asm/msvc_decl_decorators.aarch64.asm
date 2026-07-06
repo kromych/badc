@@ -47,3 +47,5 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
+               	b	<addr>
+               	b	<addr>

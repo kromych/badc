@@ -13,15 +13,15 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	b	<addr>
+               	ldr	x0, [x1]
+               	add	x2, x2, x0
+               	add	x1, x1, #0x8
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	cmp	x1, x0
-               	b.eq	<addr>
-               	ldr	x0, [x1]
-               	add	x2, x2, x0
-               	add	x1, x1, #0x8
-               	b	<addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x18]

@@ -82,17 +82,15 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movl	$0x5, %eax
                	movl	%eax, -0x20(%rbp)
-               	movslq	-0x20(%rbp), %rax
-               	testq	%rax, %rax
-               	jle	<addr>
-               	jmp	<addr>
-               	movslq	-0x20(%rbp), %rax
-               	decq	%rax
-               	movl	%eax, -0x20(%rbp)
                	jmp	<addr>
                	movslq	-0x20(%rbp), %rax
                	addq	%rax, %rcx
-               	jmp	<addr>
+               	movslq	-0x20(%rbp), %rax
+               	decq	%rax
+               	movl	%eax, -0x20(%rbp)
+               	movslq	-0x20(%rbp), %rax
+               	testq	%rax, %rax
+               	jg	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0xf, %rax
                	je	<addr>

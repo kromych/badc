@@ -21,12 +21,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movss	%xmm14, -0x10(%rbp,%riz)
                	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x8, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	movss	-0x8(%rbp,%riz), %xmm0
                	movl	$0x40000000, %eax       # imm = 0x40000000
@@ -43,7 +37,11 @@ Disassembly of section .text:
                	addsd	%xmm15, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movss	%xmm0, -0x10(%rbp,%riz)
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0x8, %rax
+               	jl	<addr>
                	movss	-0x8(%rbp,%riz), %xmm0
                	movl	$0x42f00000, %eax       # imm = 0x42F00000
                	movq	%rax, %xmm15

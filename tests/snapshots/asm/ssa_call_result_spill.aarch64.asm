@@ -39,21 +39,6 @@ Disassembly of section .text:
                	mov	x3, #0x4000             // =16384
                	mov	x2, #0x8000             // =32768
                	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	cmp	x0, #0x4
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	mov	x16, x3
-               	mov	x3, x4
-               	mov	x4, x5
-               	mov	x5, x6
-               	mov	x6, x7
-               	mov	x7, x8
-               	mov	x8, x9
-               	mov	x9, x2
-               	mov	x2, x16
                	b	<addr>
                	ror	x0, x5, #0xe
                	ror	x10, x5, #0x12
@@ -73,7 +58,20 @@ Disassembly of section .text:
                	eor	x2, x2, x10
                	add	x6, x6, x0
                	add	x2, x0, x2
-               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	mov	x16, x3
+               	mov	x3, x4
+               	mov	x4, x5
+               	mov	x5, x6
+               	mov	x6, x7
+               	mov	x7, x8
+               	mov	x8, x9
+               	mov	x9, x2
+               	mov	x2, x16
+               	sxtw	x0, w1
+               	cmp	x0, #0x4
+               	b.lt	<addr>
                	mov	x17, #0xbb19            // =47897
                	movk	x17, #0xde61, lsl #16
                	movk	x17, #0x5d88, lsl #32

@@ -41,14 +41,14 @@ Disassembly of section .text:
                	je	<addr>
                	subsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x18(%rbp,%riz)
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x18(%rbp,%riz)
                	movsd	-0x18(%rbp,%riz), %xmm0
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	xorq	%rax, %rax
+               	movq	%rax, %xmm14
+               	movsd	%xmm14, -0x18(%rbp,%riz)
+               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
 

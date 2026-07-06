@@ -250,10 +250,6 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax      # <addr>
                	leaq	-<rip>, %rbx      # <addr>
                	xorq	%rdx, %rdx
-               	cmpq	$0x10, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	incq	%rdx
                	jmp	<addr>
                	leaq	<rip>, %rcx
                	movq	%rdx, %rsi
@@ -266,7 +262,9 @@ Disassembly of section .text:
                	movq	%rdx, %rsi
                	shlq	$0x1, %rsi
                	movq	%rsi, 0x8(%rcx)
-               	jmp	<addr>
+               	incq	%rdx
+               	cmpq	$0x10, %rdx
+               	jl	<addr>
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx

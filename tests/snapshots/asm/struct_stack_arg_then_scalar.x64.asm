@@ -35,8 +35,6 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x1, %ecx
-               	jmp	<addr>
-               	xorq	%rcx, %rcx
                	imulq	$0xf4240, %rcx, %rax    # imm = 0xF4240
                	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rcx
@@ -65,6 +63,8 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	pushq	%r11
                	retq
+               	xorq	%rcx, %rcx
+               	jmp	<addr>
 
 <dp>:
                	popq	%r10

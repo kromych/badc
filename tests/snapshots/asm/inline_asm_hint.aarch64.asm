@@ -16,16 +16,14 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	mov	x2, #0x0                // =0
                	mov	x1, x2
-               	sxtw	x3, w2
-               	cmp	x3, x0
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x2, w2
-               	add	x2, x2, #0x1
                	b	<addr>
                	yield
                	add	x1, x1, x2
-               	b	<addr>
+               	sxtw	x2, w2
+               	add	x2, x2, #0x1
+               	sxtw	x3, w2
+               	cmp	x3, x0
+               	b.lt	<addr>
                	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20

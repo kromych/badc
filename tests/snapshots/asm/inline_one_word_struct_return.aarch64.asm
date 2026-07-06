@@ -46,23 +46,21 @@ Disassembly of section .text:
 <main>:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	sxtw	x2, w1
-               	cmp	x2, #0x5
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
                	b	<addr>
                	add	x2, x1, #0x1
                	sxtw	x2, w2
                	mov	x17, #0xa               // =10
                	mul	x2, x2, x17
                	add	x0, x0, x2
-               	b	<addr>
+               	sxtw	x1, w1
+               	add	x1, x1, #0x1
+               	sxtw	x2, w1
+               	cmp	x2, #0x5
+               	b.lt	<addr>
                	cmp	x0, #0x96
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x1                // =1
                	mov	x0, x1
                	ret
+               	mov	x1, #0x1                // =1
+               	b	<addr>

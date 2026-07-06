@@ -12,6 +12,11 @@ Disassembly of section .text:
                	brk	#<addr>:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
+               	b	<addr>
+               	sxtw	x0, w0
+               	add	x0, x0, #0x1
+               	sxtw	x1, w1
+               	add	x1, x1, #0x1
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	sxtw	x3, w1
@@ -19,33 +24,24 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	ldr	x2, [x2]
                	cmp	x2, #0x0
-               	b.eq	<addr>
-               	b	<addr>
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
-               	b	<addr>
-               	sxtw	x0, w0
-               	add	x0, x0, #0x1
-               	b	<addr>
+               	b.ne	<addr>
                	sxtw	x0, w0
                	ret
 
 <sum_first_four>:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	sxtw	x2, w1
-               	cmp	x2, #0x4
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
                	b	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	sxtw	x3, w1
                	ldrsw	x2, [x2, x3, lsl #2]
                	add	x0, x0, x2
-               	b	<addr>
+               	sxtw	x1, w1
+               	add	x1, x1, #0x1
+               	sxtw	x2, w1
+               	cmp	x2, #0x4
+               	b.lt	<addr>
                	sxtw	x0, w0
                	ret
 

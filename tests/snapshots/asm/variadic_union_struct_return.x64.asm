@@ -67,8 +67,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movsbq	(%rax), %rsi
-               	jmp	<addr>
-               	xorq	%rsi, %rsi
                	leaq	(%rsi,%rcx), %rax
                	movl	%eax, (%rdx)
                	leaq	-0x38(%rbp), %rax
@@ -81,6 +79,8 @@ Disassembly of section .text:
                	addq	$0xf0, %rsp
                	popq	%rbp
                	retq
+               	xorq	%rsi, %rsi
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

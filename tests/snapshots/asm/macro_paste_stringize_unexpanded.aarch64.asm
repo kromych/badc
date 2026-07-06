@@ -61,14 +61,12 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	b	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
-               	b	<addr>
-               	mov	x0, #0x4                // =4
-               	ret
                	mov	x0, #0x0                // =0
                	ret
                	b	<addr>
                	b	<addr>
                	b	<addr>
+               	mov	x0, #0x3                // =3
+               	ret
+               	mov	x0, #0x4                // =4
+               	ret

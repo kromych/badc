@@ -78,19 +78,17 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movss	%xmm14, -0x8(%rbp,%riz)
                	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0xa, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	movss	-0x8(%rbp,%riz), %xmm0
                	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	movss	%xmm0, -0x8(%rbp,%riz)
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0xa, %rax
+               	jl	<addr>
                	movss	-0x8(%rbp,%riz), %xmm0
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movq	%rax, %xmm15

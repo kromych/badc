@@ -14,56 +14,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	movl	$0x69, %esi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	movl	$0x66, %esi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
                	movl	$0x587, %esi            # imm = 0x587
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	movl	$0x5bb, %esi            # imm = 0x5BB
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	movl	$0x4, %esi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
                	leaq	-0x40(%rbp), %rax
                	xorq	%rcx, %rcx
                	movl	%ecx, (%rax)
@@ -96,4 +47,47 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	leaq	<rip>, %rdi
+               	movl	$0x69, %esi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	movl	$0x1, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	<rip>, %rdi
+               	movl	$0x66, %esi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	movl	$0x1, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	<rip>, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	movl	$0x1, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	<rip>, %rdi
+               	movl	$0x5bb, %esi            # imm = 0x5BB
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	movl	$0x1, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	<rip>, %rdi
+               	movl	$0x4, %esi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	movl	$0x1, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq

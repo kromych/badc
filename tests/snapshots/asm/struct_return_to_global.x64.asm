@@ -78,12 +78,6 @@ Disassembly of section .text:
                	movq	0x8(%rbx), %rcx
                	addq	%rcx, %rax
                	leaq	(%rax), %r12
-               	movslq	%edx, %rax
-               	cmpq	$0x4, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%edx, %rax
-               	leaq	0x1(%rax), %rdx
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	%edx, %rcx
@@ -104,14 +98,12 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	jmp	<addr>
-               	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%edx, %rax
+               	leaq	0x1(%rax), %rdx
+               	movslq	%edx, %rax
                	cmpq	$0x4, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
+               	jl	<addr>
+               	xorq	%rcx, %rcx
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	%ecx, %rdx
@@ -121,7 +113,11 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %r12
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0x4, %rax
+               	jl	<addr>
                	leaq	-0x48(%rbp), %rax
                	movl	$0x3, %ecx
                	movq	%rcx, (%rax)
@@ -139,11 +135,11 @@ Disassembly of section .text:
                	cmpq	$0x4e, %rax
                	jne	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>

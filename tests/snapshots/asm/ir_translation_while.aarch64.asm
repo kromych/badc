@@ -10,8 +10,7 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
                	mov	x0, #0x0                // =0
+               	ret
+               	mov	x0, #0x1                // =1
                	ret

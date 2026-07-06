@@ -18,19 +18,17 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movslq	%ecx, %rax
-               	cmpq	%rsi, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
                	shlq	$0x3, %rax
                	addq	%rdi, %rax
                	movsd	(%rax,%riz), %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	%rsi, %rax
+               	jl	<addr>
                	movsd	-0x8(%rbp,%riz), %xmm0
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -68,14 +66,6 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	jmp	<addr>
-               	movslq	%esi, %rax
-               	leaq	-0x1(%rax), %rsi
-               	jmp	<addr>
-               	movslq	%esi, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	jmp	<addr>
                	leaq	-0x1(%rsi), %rax
                	movslq	%eax, %rax
                	movq	(%rdi,%rax,8), %rax
@@ -84,7 +74,13 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
+               	movslq	%esi, %rax
+               	leaq	-0x1(%rax), %rsi
                	jmp	<addr>
+               	jmp	<addr>
+               	movslq	%esi, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
                	movapd	%xmm14, %xmm0
@@ -94,7 +90,6 @@ Disassembly of section .text:
                	movq	(%rdi,%rax,8), %rax
                	cvtsi2sd	%rax, %xmm0
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -229,4 +224,3 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

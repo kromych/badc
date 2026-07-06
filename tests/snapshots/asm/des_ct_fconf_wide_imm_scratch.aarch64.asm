@@ -581,12 +581,6 @@ Disassembly of section .text:
                	mov	x21, #0xa5a5            // =42405
                	movk	x21, #0xa5a5, lsl #16
                	mov	x0, x20
-               	sxtw	x1, w20
-               	cmp	x1, #0x10
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x1, w20
-               	add	x20, x1, #0x1
                	b	<addr>
                	mov	w22, w0
                	mov	w0, w21
@@ -603,7 +597,11 @@ Disassembly of section .text:
                	movk	x17, #0x3c6e, lsl #16
                	add	x1, x1, x17
                	mov	w21, w1
-               	b	<addr>
+               	sxtw	x1, w20
+               	add	x20, x1, #0x1
+               	sxtw	x1, w20
+               	cmp	x1, #0x10
+               	b.lt	<addr>
                	mov	w0, w0
                	lsr	x1, x0, #8
                	eor	x1, x0, x1

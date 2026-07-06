@@ -102,14 +102,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v14  FpCast { kind=IntToFp, value=v13 }               -> d1
     v15  FpCast { kind=F64ToF32, value=v14 }              -> d1 [f32]
     v16  Binop { op=flt, lhs=v10, rhs=v15 }               -> x0
-    terminator Bz { cond=v16, target=b9, fall=b1 }   (exit_acc=v16)
+    terminator Bz { cond=v16, target=b10, fall=b1 }   (exit_acc=v16)
   block 1  start_pc=0
     v17  LoadLocal { off=-4, kind=F32 }                   -> d1 [f32]
     v18  Fneg(v10)                                        -> d2 [f32]
     v19  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v18)
   block 2  start_pc=0
-    v20  Phi { incoming=[b9:v10, b1:v18], kind=F32 }      -> d2 [f32]
+    v20  Phi { incoming=[b10:v10, b1:v18], kind=F32 }     -> d2 [f32]
     v21  LoadLocal { off=-4, kind=F32 }                   -> d1 [f32]
     v22  Imm(841731191)                                   -> x0 [f32]
     v23  Binop { op=fgt, lhs=v20, rhs=v22 }               -> x0
@@ -129,14 +129,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v33  Imm(0)                                           -> x0
     v34  FpCast { kind=IntToFp, value=v33 }               -> d0
     v35  Binop { op=flt, lhs=v30, rhs=v34 }               -> x0
-    terminator Bz { cond=v35, target=b10, fall=b5 }   (exit_acc=v35)
+    terminator Bz { cond=v35, target=b9, fall=b5 }   (exit_acc=v35)
   block 5  start_pc=0
     v36  LoadLocal { off=-6, kind=F64 }                   -> d0
     v37  Fneg(v30)                                        -> d1
     v38  Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v37)
   block 6  start_pc=0
-    v39  Phi { incoming=[b10:v30, b5:v37], kind=F64 }     -> d1
+    v39  Phi { incoming=[b9:v30, b5:v37], kind=F64 }      -> d1
     v40  LoadLocal { off=-6, kind=F64 }                   -> d0
     v41  Imm(4472406533629990549)                         -> x0
     v42  Binop { op=flt, lhs=v39, rhs=v41 }               -> x0
@@ -148,9 +148,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v44  Imm(0)                                           -> x0
     terminator Return(v44)   (exit_acc=v44)
   block 9  start_pc=0
-    terminator Jmp(b2)
-  block 10  start_pc=0
     terminator Jmp(b6)
+  block 10  start_pc=0
+    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=assign_double_to_float_narrows
 fn ent_pc=3 n_params=0 variadic=false locals=4

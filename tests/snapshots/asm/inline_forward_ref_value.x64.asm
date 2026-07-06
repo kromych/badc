@@ -40,7 +40,13 @@ Disassembly of section .text:
                	leaq	0x1(%rdi), %rcx
                	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
+               	movabsq	$-0x1, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	movq	%rax, %rdx
+               	shlq	$0x1, %rdx
                	movq	%rdx, %rdi
                	movq	%rcx, %rsi
                	callq	<addr>
@@ -55,14 +61,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x1, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movq	%rax, %rdx
-               	shlq	$0x1, %rdx
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

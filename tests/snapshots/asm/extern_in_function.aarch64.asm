@@ -28,17 +28,13 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	b	<addr>
+               	mov	x0, #0x0                // =0
+               	ret
                	mov	x0, #0xb                // =11
                	ret
-               	b	<addr>
                	mov	x0, #0xc                // =12
                	ret
-               	b	<addr>
                	mov	x0, #0xd                // =13
                	ret
-               	b	<addr>
                	mov	x0, #0xe                // =14
-               	ret
-               	mov	x0, #0x0                // =0
                	ret

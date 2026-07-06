@@ -147,9 +147,9 @@ Disassembly of section .text:
                	cmpq	$0x160, %rax            # imm = 0x160
                	jne	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	popq	%rbp
                	retq
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	addb	%al, (%rax)

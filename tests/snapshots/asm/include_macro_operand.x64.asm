@@ -25,14 +25,12 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	jmp	<addr>
+               	xorq	%rax, %rax
+               	popq	%rbp
+               	retq
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	xorq	%rax, %rax
                	popq	%rbp
                	retq

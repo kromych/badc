@@ -104,8 +104,8 @@ Disassembly of section .text:
                	cmp	x0, #0x24
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
-               	sxtw	x1, w0
                	mov	x0, x1
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sxtw	x1, w0
+               	b	<addr>

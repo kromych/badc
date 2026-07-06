@@ -14,16 +14,6 @@ Disassembly of section .text:
                	movsbq	(%rdi), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	jmp	<addr>
-               	incq	%rdi
-               	incq	%rsi
-               	jmp	<addr>
-               	movsbq	(%rdi), %rax
-               	movsbq	(%rsi), %rcx
-               	cmpq	%rcx, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	retq
                	movsbq	(%rdi), %rax
                	movsbq	(%rsi), %rcx
                	cmpq	%rcx, %rax
@@ -31,8 +21,16 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
+               	incq	%rdi
+               	incq	%rsi
                	jmp	<addr>
                	jmp	<addr>
+               	movsbq	(%rdi), %rax
+               	movsbq	(%rsi), %rcx
+               	cmpq	%rcx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	retq
 
 <direct>:
                	leaq	<rip>, %rax

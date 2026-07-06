@@ -34,18 +34,26 @@ Disassembly of section .text:
                	movslq	%r12d, %r12
                	movslq	(%rbx,%r12,4), %r13
                	leaq	-0x1(%r14), %r15
-               	movslq	%r14d, %rax
-               	cmpq	%r12, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%r14d, %rax
-               	leaq	0x1(%rax), %r14
                	jmp	<addr>
                	movslq	%r14d, %rax
                	movslq	(%rbx,%rax,4), %rax
                	cmpq	%r13, %rax
                	jg	<addr>
+               	incq	%r15
+               	movslq	%r15d, %rax
+               	shlq	$0x2, %rax
+               	leaq	(%rbx,%rax), %rdi
+               	movslq	%r14d, %rax
+               	shlq	$0x2, %rax
+               	leaq	(%rbx,%rax), %rsi
+               	callq	<addr>
                	jmp	<addr>
+               	jmp	<addr>
+               	movslq	%r14d, %rax
+               	leaq	0x1(%rax), %r14
+               	movslq	%r14d, %rax
+               	cmpq	%r12, %rax
+               	jl	<addr>
                	leaq	0x1(%r15), %rax
                	movslq	%eax, %rax
                	shlq	$0x2, %rax
@@ -64,16 +72,6 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	incq	%r15
-               	movslq	%r15d, %rax
-               	shlq	$0x2, %rax
-               	leaq	(%rbx,%rax), %rdi
-               	movslq	%r14d, %rax
-               	shlq	$0x2, %rax
-               	leaq	(%rbx,%rax), %rsi
-               	callq	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <quicksort>:
                	pushq	%rbp

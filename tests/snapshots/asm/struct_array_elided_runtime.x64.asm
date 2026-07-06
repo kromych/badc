@@ -177,18 +177,16 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rbx, %rbx
-               	movslq	%ebx, %rax
-               	cmpq	$0x14, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
                	jmp	<addr>
                	movslq	%ebx, %rdi
                	callq	<addr>
                	testq	%rax, %rax
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
+               	movslq	%ebx, %rax
+               	leaq	0x1(%rax), %rbx
+               	movslq	%ebx, %rax
+               	cmpq	$0x14, %rax
+               	jl	<addr>
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp

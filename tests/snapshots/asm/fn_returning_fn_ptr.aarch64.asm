@@ -19,10 +19,10 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
-               	mov	x1, #0x0                // =0
                	mov	x0, x1
                	ret
+               	mov	x1, #0x0                // =0
+               	b	<addr>
 
 <main>:
                	str	x19, [sp, #-0x20]!

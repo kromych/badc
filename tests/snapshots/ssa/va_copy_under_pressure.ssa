@@ -127,19 +127,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v35  LoadLocal { off=-1, kind=I64 }                   -> x1
     v36  LoadLocal { off=-2, kind=I64 }                   -> x1
     v37  BinopI { op=eq, lhs=v4, rhs_imm=352 }            -> x0
-    terminator Bz { cond=v37, target=b2, fall=b1 }   (exit_acc=v37)
+    terminator Bz { cond=v37, target=b3, fall=b1 }   (exit_acc=v37)
   block 1  start_pc=0
     v38  Imm(0)                                           -> x1
     v39  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v38)
+    terminator Jmp(b2)   (exit_acc=v38)
   block 2  start_pc=0
-    v40  Imm(1)                                           -> x1
-    v41  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v40)
-  block 3  start_pc=0
-    v42  Phi { incoming=[b1:v38, b2:v40], kind=I64 }      -> x1
+    v42  Phi { incoming=[b1:v38, b3:v40], kind=I64 }      -> x1
     v43  LoadLocal { off=-5, kind=I64 }                   -> x0
     terminator Return(v42)   (exit_acc=v42)
+  block 3  start_pc=0
+    v40  Imm(1)                                           -> x1
+    v41  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v40)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

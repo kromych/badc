@@ -42,6 +42,11 @@ Disassembly of section .text:
                	jne	<addr>
                	orq	$0x2, %rcx
                	xorq	%rdx, %rdx
+               	jmp	<addr>
+               	incq	%rdx
+               	movslq	%edx, %rax
+               	cmpq	$0x2, %rax
+               	jg	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -51,18 +56,10 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	testq	%rax, %rax
-               	je	<addr>
-               	incq	%rdx
-               	movslq	%edx, %rax
-               	cmpq	$0x2, %rax
-               	jle	<addr>
-               	jmp	<addr>
+               	jne	<addr>
                	movslq	%edx, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	orq	$0x4, %rcx
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
@@ -74,8 +71,6 @@ Disassembly of section .text:
                	orq	%r10, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	orq	$0x8, %rcx
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
@@ -88,8 +83,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %edx
-               	jmp	<addr>
-               	xorq	%rdx, %rdx
                	movslq	%edx, %rax
                	testq	%rax, %rax
                	je	<addr>
@@ -147,9 +140,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	xorq	%rdx, %rdx
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	jmp	<addr>
+               	jmp	<addr>

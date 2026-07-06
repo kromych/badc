@@ -13,28 +13,24 @@ Disassembly of section .text:
 <run>:
                	xorq	%rdx, %rdx
                	movl	$0x1, %ecx
-               	movslq	%ecx, %rax
-               	cmpq	$0x5, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	xorq	%rsi, %rsi
-               	jmp	<addr>
-               	movslq	%edx, %rax
-               	retq
-               	movslq	%esi, %rax
-               	cmpq	$0x10, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%esi, %rax
-               	leaq	0x1(%rax), %rsi
                	jmp	<addr>
                	imulq	$0x64, %rcx, %rax
                	addq	%rsi, %rax
                	addq	%rax, %rdx
-               	jmp	<addr>
+               	movslq	%esi, %rax
+               	leaq	0x1(%rax), %rsi
+               	movslq	%esi, %rax
+               	cmpq	$0x10, %rax
+               	jl	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0x5, %rax
+               	jl	<addr>
+               	movslq	%edx, %rax
+               	retq
                	jmp	<addr>
 
 <main>:

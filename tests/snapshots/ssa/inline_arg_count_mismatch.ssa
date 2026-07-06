@@ -42,15 +42,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   block 1  start_pc=0
     v18  Imm(0)                                           -> x1
     v19  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v18)
+    terminator Jmp(b2)   (exit_acc=v18)
   block 2  start_pc=0
-    v20  Imm(1)                                           -> x1
-    v21  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v20)
-  block 3  start_pc=0
-    v22  Phi { incoming=[b1:v18, b2:v20], kind=I64 }      -> x1
+    v22  Phi { incoming=[b1:v18, b3:v20], kind=I64 }      -> x1
     v23  LoadLocal { off=-4, kind=I64 }                   -> x0
     terminator Return(v22)   (exit_acc=v22)
+  block 3  start_pc=0
+    v20  Imm(1)                                           -> x1
+    v21  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v20)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

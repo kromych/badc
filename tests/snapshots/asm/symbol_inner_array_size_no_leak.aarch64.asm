@@ -12,18 +12,16 @@ Disassembly of section .text:
                	brk	#<addr>:
                	sxtw	x1, w1
                	mov	x3, #0x0                // =0
-               	sxtw	x2, w3
-               	cmp	x2, x1
-               	b.ge	<addr>
-               	b	<addr>
-               	add	x3, x3, #0x1
                	b	<addr>
                	sxtw	x2, w3
                	mov	x17, #0x3               // =3
                	mul	x4, x2, x17
                	sxtw	x5, w4
                	strh	w5, [x0, x2, lsl #1]
-               	b	<addr>
+               	add	x3, x3, #0x1
+               	sxtw	x2, w3
+               	cmp	x2, x1
+               	b.lt	<addr>
                	sub	x1, x1, #0x1
                	sxtw	x1, w1
                	ldrsh	x0, [x0, x1, lsl #1]

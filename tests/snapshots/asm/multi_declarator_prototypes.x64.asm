@@ -25,17 +25,15 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0xa, %ecx
                	movl	%ecx, (%rax)
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	retq
-               	jmp	<addr>
-               	movl	$0x2, %eax
-               	retq
                	movslq	(%rax), %rax
                	cmpq	$0xa, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	xorq	%rax, %rax
+               	retq
+               	movl	$0x1, %eax
+               	retq
+               	movl	$0x2, %eax
                	retq
                	addb	%al, (%rax)

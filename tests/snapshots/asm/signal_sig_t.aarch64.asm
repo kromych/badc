@@ -22,8 +22,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	b	<addr>
-               	mov	x0, #0x2                // =2
-               	ret
                	mov	x0, #0x0                // =0
+               	ret
+               	mov	x0, #0x2                // =2
                	ret

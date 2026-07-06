@@ -14,37 +14,30 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	cmpq	$0x5, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	retq
-               	xorq	%rax, %rax
-               	retq
-               	movl	$0x28, %eax
-               	retq
-               	movl	$0x32, %eax
+               	cmpq	$0x6, %rdi
+               	jl	<addr>
+               	cmpq	$0x6, %rdi
+               	je	<addr>
+               	movabsq	$-0x1, %rax
                	retq
                	movl	$0x3c, %eax
                	retq
-               	movabsq	$-0x1, %rax
+               	cmpq	$0x5, %rdi
+               	jne	<addr>
+               	movl	$0x32, %eax
                	retq
                	cmpq	$0x4, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	cmpq	$0x6, %rdi
-               	jl	<addr>
-               	jmp	<addr>
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	jmp	<addr>
                	cmpq	$0x4, %rdi
-               	je	<addr>
-               	jmp	<addr>
-               	cmpq	$0x5, %rdi
-               	je	<addr>
-               	jmp	<addr>
-               	cmpq	$0x6, %rdi
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
+               	movl	$0x28, %eax
+               	retq
+               	testq	%rdi, %rdi
+               	jne	<addr>
+               	xorq	%rax, %rax
+               	retq
+               	xorq	%rax, %rax
+               	retq
                	jmp	<addr>
 
 <main>:
@@ -147,3 +140,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

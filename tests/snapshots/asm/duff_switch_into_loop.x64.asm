@@ -120,6 +120,7 @@ Disassembly of section .text:
                	jg	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	jmp	<addr>
                	movq	%rdi, %rcx
                	movq	%r8, %rdx
                	jmp	<addr>
@@ -139,12 +140,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
                	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x27, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	-0x28(%rbp), %rax
                	movslq	%ecx, %rdx
@@ -155,18 +150,16 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	xorq	%rdx, %rdx
                	movb	%dl, (%rax)
-               	jmp	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0x27, %rax
+               	jl	<addr>
                	leaq	-0x50(%rbp), %rdi
                	leaq	-0x28(%rbp), %rsi
                	movl	$0x27, %edx
                	callq	<addr>
                	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x27, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	-0x50(%rbp), %rax
                	movslq	%ecx, %rdx
@@ -177,8 +170,12 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	movsbq	(%rdx), %rdx
                	cmpq	%rdx, %rax
-               	je	<addr>
-               	jmp	<addr>
+               	jne	<addr>
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0x27, %rax
+               	jl	<addr>
                	xorq	%rax, %rax
                	addq	$0x70, %rsp
                	popq	%rbp
@@ -189,4 +186,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

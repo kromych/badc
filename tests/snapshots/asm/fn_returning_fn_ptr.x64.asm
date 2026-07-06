@@ -21,10 +21,10 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	leaq	-<rip>, %rcx       # <addr>
-               	jmp	<addr>
-               	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	retq
+               	xorq	%rcx, %rcx
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

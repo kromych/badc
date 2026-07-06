@@ -13,16 +13,14 @@ Disassembly of section .text:
 <fold>:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	cmpq	$0x8, %rax
-               	jae	<addr>
-               	jmp	<addr>
-               	incq	%rax
                	jmp	<addr>
                	shlq	$0x8, %rcx
                	leaq	(%rdi,%rax), %rdx
                	movzbq	(%rdx), %rdx
                	orq	%rdx, %rcx
-               	jmp	<addr>
+               	incq	%rax
+               	cmpq	$0x8, %rax
+               	jb	<addr>
                	movq	%rcx, %rax
                	retq
 
@@ -43,17 +41,15 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	xorq	%rcx, %rcx
-               	cmpq	$0x8, %rcx
-               	jae	<addr>
-               	jmp	<addr>
-               	incq	%rcx
                	jmp	<addr>
                	leaq	-0x8(%rbp), %rax
                	addq	%rcx, %rax
                	leaq	0x1(%rcx), %rdx
                	andq	$0xff, %rdx
                	movb	%dl, (%rax)
-               	jmp	<addr>
+               	incq	%rcx
+               	cmpq	$0x8, %rcx
+               	jb	<addr>
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
                	movabsq	$0x102030405060708, %r11 # imm = 0x102030405060708
@@ -63,13 +59,13 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x2, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -10,18 +10,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v4   StoreLocal { off=-2, value=v3, kind=F32 }        -> -
     v5   Imm(0)                                           -> x1
     v6   Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v5)
+    terminator Jmp(b3)   (exit_acc=v5)
   block 1  start_pc=0
-    v7   Phi { incoming=[b0:v5, b2:v11], kind=I64 }       -> x1
-    v8   Extend { value=v7, kind=I32 }                    -> x0
-    v9   BinopI { op=lt, lhs=v8, rhs_imm=8 }              -> x0
-    terminator Bz { cond=v9, target=b4, fall=b3 }   (exit_acc=v9)
-  block 2  start_pc=0
-    v10  Extend { value=v7, kind=I32 }                    -> x0
-    v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x1
-    v12  Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v11)
-  block 3  start_pc=0
     v13  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v14  Imm(1073741824)                                  -> x0 [f32]
     v15  Binop { op=fsub, lhs=v13, rhs=v14 }              -> d0 [f32]
@@ -37,6 +27,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v25  FpCast { kind=F64ToF32, value=v24 }              -> d0 [f32]
     v26  StoreLocal { off=-2, value=v25, kind=F32 }       -> -
     terminator Jmp(b2)   (exit_acc=v26)
+  block 2  start_pc=0
+    v10  Extend { value=v7, kind=I32 }                    -> x0
+    v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x1
+    v12  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v11)
+  block 3  start_pc=0
+    v7   Phi { incoming=[b0:v5, b2:v11], kind=I64 }       -> x1
+    v8   Extend { value=v7, kind=I32 }                    -> x0
+    v9   BinopI { op=lt, lhs=v8, rhs_imm=8 }              -> x0
+    terminator Bnz { cond=v9, target=b1, fall=b4 }   (exit_acc=v9)
   block 4  start_pc=0
     v27  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v28  Imm(1123024896)                                  -> x0 [f32]

@@ -14,70 +14,65 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	cmpq	$0x42, %rdi
                	jl	<addr>
-               	jmp	<addr>
+               	cmpq	$0x62, %rdi
+               	jl	<addr>
+               	cmpq	$0x63, %rdi
+               	jl	<addr>
+               	cmpq	$0x64, %rdi
+               	jl	<addr>
+               	cmpq	$0x64, %rdi
+               	je	<addr>
                	xorq	%rax, %rax
                	retq
                	movl	$0x1, %eax
                	retq
+               	cmpq	$0x63, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x62, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x61, %rdi
+               	jl	<addr>
+               	cmpq	$0x61, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x42, %rdi
+               	jne	<addr>
                	movl	$0x2, %eax
-               	retq
-               	movl	$0x3, %eax
-               	retq
-               	xorq	%rax, %rax
                	retq
                	cmpq	$0x32, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	cmpq	$0x62, %rdi
+               	cmpq	$0x33, %rdi
                	jl	<addr>
+               	cmpq	$0x41, %rdi
+               	jl	<addr>
+               	cmpq	$0x41, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x33, %rdi
+               	jne	<addr>
+               	movl	$0x3, %eax
+               	retq
+               	cmpq	$0x32, %rdi
+               	je	<addr>
                	jmp	<addr>
                	cmpq	$0x31, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	cmpq	$0x33, %rdi
-               	jl	<addr>
+               	cmpq	$0x31, %rdi
+               	je	<addr>
                	jmp	<addr>
                	cmpq	$0x30, %rdi
                	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x31, %rdi
-               	je	<addr>
+               	xorq	%rax, %rax
+               	retq
                	jmp	<addr>
-               	cmpq	$0x32, %rdi
-               	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x41, %rdi
-               	jl	<addr>
                	jmp	<addr>
-               	cmpq	$0x33, %rdi
-               	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x41, %rdi
-               	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x61, %rdi
-               	jl	<addr>
                	jmp	<addr>
-               	cmpq	$0x63, %rdi
-               	jl	<addr>
-               	jmp	<addr>
-               	cmpq	$0x42, %rdi
-               	je	<addr>
-               	jmp	<addr>
-               	cmpq	$0x61, %rdi
-               	je	<addr>
-               	jmp	<addr>
-               	cmpq	$0x62, %rdi
-               	je	<addr>
-               	jmp	<addr>
-               	cmpq	$0x64, %rdi
-               	jl	<addr>
-               	jmp	<addr>
-               	cmpq	$0x63, %rdi
-               	je	<addr>
-               	jmp	<addr>
-               	cmpq	$0x64, %rdi
-               	je	<addr>
                	jmp	<addr>
                	jmp	<addr>
 

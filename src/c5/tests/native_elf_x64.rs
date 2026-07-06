@@ -303,6 +303,9 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("do_while.c", 5),
     ("break_continue.c", 4),
     ("for_loop.c", 10),
+    ("layout_bottom_test_loop.c", 45),
+    ("layout_nested_loops.c", 27),
+    ("layout_goto_block_addr.c", 16),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
     ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4

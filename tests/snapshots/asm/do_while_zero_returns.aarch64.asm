@@ -13,9 +13,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ge	<addr>
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -26,27 +23,28 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
+               	mov	x0, #0x0                // =0
+               	ret
 
 <classify>:
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
                	cmp	x0, #0x0
                	b.le	<addr>
                	mov	x1, #0x1                // =1
-               	b	<addr>
+               	mov	x0, x1
+               	ret
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
                	movk	x1, #0xffff, lsl #48
-               	mov	x0, x1
+               	b	<addr>
+               	mov	x0, #0x0                // =0
                	ret
+               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

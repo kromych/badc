@@ -12,16 +12,7 @@ Disassembly of section .text:
                	brk	#<addr>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
                	mov	x2, #0x0                // =0
-               	sxtw	x1, w2
-               	cmp	x1, #0x5
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x1, w2
-               	add	x2, x1, #0x1
                	b	<addr>
                	sxtw	x1, w2
                	add	x3, x0, x1
@@ -33,10 +24,16 @@ Disassembly of section .text:
                	eor	x1, x3, x1
                	mov	w1, w1
                	cmp	x1, #0x0
-               	b.eq	<addr>
-               	b	<addr>
+               	b.ne	<addr>
+               	sxtw	x1, w2
+               	add	x2, x1, #0x1
+               	sxtw	x1, w2
+               	cmp	x1, #0x5
+               	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	ret
                	mov	x0, #0x2                // =2
+               	ret
+               	mov	x0, #0x1                // =1
                	ret
                	b	<addr>

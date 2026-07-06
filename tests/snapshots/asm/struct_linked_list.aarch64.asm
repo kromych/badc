@@ -16,27 +16,25 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x20, #0x0               // =0
                	mov	x21, x20
-               	sxtw	x0, w20
-               	cmp	x0, #0x5
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
-               	mov	x21, x1
                	b	<addr>
                	mov	x0, #0x10               // =16
                	bl	<addr>
                	mov	x1, x0
                	str	w20, [x1]
                	str	x21, [x1, #0x8]
-               	b	<addr>
+               	sxtw	x0, w20
+               	add	x20, x0, #0x1
+               	mov	x21, x1
+               	sxtw	x0, w20
+               	cmp	x0, #0x5
+               	b.lt	<addr>
                	mov	x1, #0x0                // =0
-               	cmp	x21, #0x0
-               	b.eq	<addr>
+               	b	<addr>
                	ldrsw	x0, [x21]
                	add	x1, x1, x0
                	ldr	x21, [x21, #0x8]
-               	b	<addr>
+               	cmp	x21, #0x0
+               	b.ne	<addr>
                	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]

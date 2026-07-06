@@ -60,16 +60,14 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	jmp	<addr>
-               	movl	$0x3, %eax
-               	retq
-               	jmp	<addr>
-               	movl	$0x4, %eax
-               	retq
                	xorq	%rax, %rax
                	retq
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	movl	$0x3, %eax
+               	retq
+               	movl	$0x4, %eax
+               	retq
                	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

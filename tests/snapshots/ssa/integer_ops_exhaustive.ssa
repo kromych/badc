@@ -14,587 +14,345 @@ fn ent_pc=1 n_params=0 variadic=false locals=32
     v6   LoadLocal { off=-2, kind=U32 }                   -> x0
     v7   Imm(1)                                           -> x0
     v8   Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v8)
+    terminator Jmp(b2)   (exit_acc=v8)
   block 2  start_pc=0
     v13  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v13)
   block 3  start_pc=0
-    terminator Jmp(b6)
-  block 4  start_pc=0
-    v9   ImmData(36)                                      -> x7
-    v10  ImmData(46)                                      -> x6
-    v11  CallExt { binding_idx=0, args=[v9, v10], fp_arg_mask=0x0 } -> x0
-    v12  Imm(1)                                           -> x0
-    terminator Return(v12)   (exit_acc=v12)
-  block 5  start_pc=0
-    terminator Jmp(b2)
-  block 6  start_pc=0
     v14  LoadLocal { off=-2, kind=U32 }                   -> x0
     v15  LoadLocal { off=-1, kind=U32 }                   -> x0
     v16  Imm(1)                                           -> x0
     v17  Imm(0)                                           -> x0
-    terminator Jmp(b10)   (exit_acc=v17)
-  block 7  start_pc=0
+    terminator Jmp(b4)   (exit_acc=v17)
+  block 4  start_pc=0
     v22  Imm(0)                                           -> x0
-    terminator Jmp(b8)   (exit_acc=v22)
-  block 8  start_pc=0
-    terminator Jmp(b11)
-  block 9  start_pc=0
-    v18  ImmData(65)                                      -> x7
-    v19  ImmData(75)                                      -> x6
-    v20  CallExt { binding_idx=0, args=[v18, v19], fp_arg_mask=0x0 } -> x0
-    v21  Imm(1)                                           -> x0
-    terminator Return(v21)   (exit_acc=v21)
-  block 10  start_pc=0
-    terminator Jmp(b7)
-  block 11  start_pc=0
+    terminator Jmp(b5)   (exit_acc=v22)
+  block 5  start_pc=0
     v23  LoadLocal { off=-1, kind=U32 }                   -> x0
     v24  LoadLocal { off=-2, kind=U32 }                   -> x0
     v25  Imm(1)                                           -> x0
     v26  Imm(0)                                           -> x0
-    terminator Jmp(b15)   (exit_acc=v26)
-  block 12  start_pc=0
+    terminator Jmp(b6)   (exit_acc=v26)
+  block 6  start_pc=0
     v31  Imm(0)                                           -> x0
-    terminator Jmp(b13)   (exit_acc=v31)
-  block 13  start_pc=0
-    terminator Jmp(b16)
-  block 14  start_pc=0
-    v27  ImmData(94)                                      -> x7
-    v28  ImmData(104)                                     -> x6
-    v29  CallExt { binding_idx=0, args=[v27, v28], fp_arg_mask=0x0 } -> x0
-    v30  Imm(1)                                           -> x0
-    terminator Return(v30)   (exit_acc=v30)
-  block 15  start_pc=0
-    terminator Jmp(b12)
-  block 16  start_pc=0
+    terminator Jmp(b7)   (exit_acc=v31)
+  block 7  start_pc=0
     v32  LoadLocal { off=-2, kind=U32 }                   -> x0
     v33  LoadLocal { off=-1, kind=U32 }                   -> x0
     v34  Imm(1)                                           -> x0
     v35  Imm(0)                                           -> x0
-    terminator Jmp(b20)   (exit_acc=v35)
-  block 17  start_pc=0
+    terminator Jmp(b8)   (exit_acc=v35)
+  block 8  start_pc=0
     v40  Imm(0)                                           -> x0
-    terminator Jmp(b18)   (exit_acc=v40)
-  block 18  start_pc=0
-    terminator Jmp(b21)
-  block 19  start_pc=0
-    v36  ImmData(124)                                     -> x7
-    v37  ImmData(134)                                     -> x6
-    v38  CallExt { binding_idx=0, args=[v36, v37], fp_arg_mask=0x0 } -> x0
-    v39  Imm(1)                                           -> x0
-    terminator Return(v39)   (exit_acc=v39)
-  block 20  start_pc=0
-    terminator Jmp(b17)
-  block 21  start_pc=0
+    terminator Jmp(b9)   (exit_acc=v40)
+  block 9  start_pc=0
     v41  LoadLocal { off=-1, kind=U32 }                   -> x0
     v42  LoadLocal { off=-2, kind=U32 }                   -> x0
     v43  Imm(1)                                           -> x0
     v44  Imm(0)                                           -> x0
-    terminator Jmp(b25)   (exit_acc=v44)
-  block 22  start_pc=0
+    terminator Jmp(b10)   (exit_acc=v44)
+  block 10  start_pc=0
     v49  Imm(0)                                           -> x0
-    terminator Jmp(b23)   (exit_acc=v49)
-  block 23  start_pc=0
-    terminator Jmp(b26)
-  block 24  start_pc=0
-    v45  ImmData(154)                                     -> x7
-    v46  ImmData(164)                                     -> x6
-    v47  CallExt { binding_idx=0, args=[v45, v46], fp_arg_mask=0x0 } -> x0
-    v48  Imm(1)                                           -> x0
-    terminator Return(v48)   (exit_acc=v48)
-  block 25  start_pc=0
-    terminator Jmp(b22)
-  block 26  start_pc=0
+    terminator Jmp(b11)   (exit_acc=v49)
+  block 11  start_pc=0
     v50  LoadLocal { off=-1, kind=U32 }                   -> x0
     v51  LoadLocal { off=-2, kind=U32 }                   -> x0
     v52  Imm(0)                                           -> x0
     v53  Imm(1)                                           -> x0
     v54  Imm(0)                                           -> x0
-    terminator Jmp(b30)   (exit_acc=v54)
-  block 27  start_pc=0
+    terminator Jmp(b12)   (exit_acc=v54)
+  block 12  start_pc=0
     v59  Imm(0)                                           -> x0
-    terminator Jmp(b28)   (exit_acc=v59)
-  block 28  start_pc=0
+    terminator Jmp(b13)   (exit_acc=v59)
+  block 13  start_pc=0
     v60  Imm(-2)                                          -> x0
     v61  Imm(0)                                           -> x0
     v62  Imm(1)                                           -> x0
     v63  Imm(0)                                           -> x1
-    terminator Jmp(b31)   (exit_acc=v62)
-  block 29  start_pc=0
-    v55  ImmData(184)                                     -> x7
-    v56  ImmData(194)                                     -> x6
-    v57  CallExt { binding_idx=0, args=[v55, v56], fp_arg_mask=0x0 } -> x0
-    v58  Imm(1)                                           -> x0
-    terminator Return(v58)   (exit_acc=v58)
-  block 30  start_pc=0
-    terminator Jmp(b27)
-  block 31  start_pc=0
+    terminator Jmp(b14)   (exit_acc=v62)
+  block 14  start_pc=0
     v64  LoadLocal { off=-3, kind=I32 }                   -> x0
     v65  LoadLocal { off=-4, kind=I32 }                   -> x0
     v66  Imm(1)                                           -> x0
     v67  Imm(0)                                           -> x0
-    terminator Jmp(b35)   (exit_acc=v67)
-  block 32  start_pc=0
+    terminator Jmp(b15)   (exit_acc=v67)
+  block 15  start_pc=0
     v72  Imm(0)                                           -> x0
-    terminator Jmp(b33)   (exit_acc=v72)
-  block 33  start_pc=0
-    terminator Jmp(b36)
-  block 34  start_pc=0
-    v68  ImmData(214)                                     -> x7
-    v69  ImmData(224)                                     -> x6
-    v70  CallExt { binding_idx=0, args=[v68, v69], fp_arg_mask=0x0 } -> x0
-    v71  Imm(1)                                           -> x0
-    terminator Return(v71)   (exit_acc=v71)
-  block 35  start_pc=0
-    terminator Jmp(b32)
-  block 36  start_pc=0
+    terminator Jmp(b16)   (exit_acc=v72)
+  block 16  start_pc=0
     v73  LoadLocal { off=-4, kind=I32 }                   -> x0
     v74  LoadLocal { off=-3, kind=I32 }                   -> x0
     v75  Imm(1)                                           -> x0
     v76  Imm(0)                                           -> x0
-    terminator Jmp(b40)   (exit_acc=v76)
-  block 37  start_pc=0
+    terminator Jmp(b17)   (exit_acc=v76)
+  block 17  start_pc=0
     v81  Imm(0)                                           -> x0
-    terminator Jmp(b38)   (exit_acc=v81)
-  block 38  start_pc=0
-    terminator Jmp(b41)
-  block 39  start_pc=0
-    v77  ImmData(235)                                     -> x7
-    v78  ImmData(245)                                     -> x6
-    v79  CallExt { binding_idx=0, args=[v77, v78], fp_arg_mask=0x0 } -> x0
-    v80  Imm(1)                                           -> x0
-    terminator Return(v80)   (exit_acc=v80)
-  block 40  start_pc=0
-    terminator Jmp(b37)
-  block 41  start_pc=0
+    terminator Jmp(b18)   (exit_acc=v81)
+  block 18  start_pc=0
     v82  LoadLocal { off=-3, kind=I32 }                   -> x0
     v83  LoadLocal { off=-4, kind=I32 }                   -> x0
     v84  Imm(1)                                           -> x0
     v85  Imm(0)                                           -> x0
-    terminator Jmp(b45)   (exit_acc=v85)
-  block 42  start_pc=0
+    terminator Jmp(b19)   (exit_acc=v85)
+  block 19  start_pc=0
     v90  Imm(0)                                           -> x0
-    terminator Jmp(b43)   (exit_acc=v90)
-  block 43  start_pc=0
-    terminator Jmp(b46)
-  block 44  start_pc=0
-    v86  ImmData(256)                                     -> x7
-    v87  ImmData(266)                                     -> x6
-    v88  CallExt { binding_idx=0, args=[v86, v87], fp_arg_mask=0x0 } -> x0
-    v89  Imm(1)                                           -> x0
-    terminator Return(v89)   (exit_acc=v89)
-  block 45  start_pc=0
-    terminator Jmp(b42)
-  block 46  start_pc=0
+    terminator Jmp(b20)   (exit_acc=v90)
+  block 20  start_pc=0
     v91  LoadLocal { off=-4, kind=I32 }                   -> x0
     v92  LoadLocal { off=-3, kind=I32 }                   -> x0
     v93  Imm(1)                                           -> x0
     v94  Imm(0)                                           -> x0
-    terminator Jmp(b50)   (exit_acc=v94)
-  block 47  start_pc=0
+    terminator Jmp(b21)   (exit_acc=v94)
+  block 21  start_pc=0
     v99  Imm(0)                                           -> x0
-    terminator Jmp(b48)   (exit_acc=v99)
-  block 48  start_pc=0
+    terminator Jmp(b22)   (exit_acc=v99)
+  block 22  start_pc=0
     v100 Imm(-2)                                          -> x0
     v101 Imm(0)                                           -> x0
     v102 Imm(1)                                           -> x0
     v103 Imm(0)                                           -> x1
-    terminator Jmp(b51)   (exit_acc=v102)
-  block 49  start_pc=0
-    v95  ImmData(278)                                     -> x7
-    v96  ImmData(288)                                     -> x6
-    v97  CallExt { binding_idx=0, args=[v95, v96], fp_arg_mask=0x0 } -> x0
-    v98  Imm(1)                                           -> x0
-    terminator Return(v98)   (exit_acc=v98)
-  block 50  start_pc=0
-    terminator Jmp(b47)
-  block 51  start_pc=0
+    terminator Jmp(b23)   (exit_acc=v102)
+  block 23  start_pc=0
     v104 LoadLocal { off=-5, kind=I64 }                   -> x0
     v105 LoadLocal { off=-6, kind=I64 }                   -> x0
     v106 Imm(1)                                           -> x0
     v107 Imm(0)                                           -> x0
-    terminator Jmp(b55)   (exit_acc=v107)
-  block 52  start_pc=0
+    terminator Jmp(b24)   (exit_acc=v107)
+  block 24  start_pc=0
     v112 Imm(0)                                           -> x0
-    terminator Jmp(b53)   (exit_acc=v112)
-  block 53  start_pc=0
-    terminator Jmp(b56)
-  block 54  start_pc=0
-    v108 ImmData(300)                                     -> x7
-    v109 ImmData(310)                                     -> x6
-    v110 CallExt { binding_idx=0, args=[v108, v109], fp_arg_mask=0x0 } -> x0
-    v111 Imm(1)                                           -> x0
-    terminator Return(v111)   (exit_acc=v111)
-  block 55  start_pc=0
-    terminator Jmp(b52)
-  block 56  start_pc=0
+    terminator Jmp(b25)   (exit_acc=v112)
+  block 25  start_pc=0
     v113 LoadLocal { off=-5, kind=I64 }                   -> x0
     v114 LoadLocal { off=-6, kind=I64 }                   -> x0
     v115 Imm(1)                                           -> x0
     v116 Imm(0)                                           -> x0
-    terminator Jmp(b60)   (exit_acc=v116)
-  block 57  start_pc=0
+    terminator Jmp(b26)   (exit_acc=v116)
+  block 26  start_pc=0
     v121 Imm(0)                                           -> x0
-    terminator Jmp(b58)   (exit_acc=v121)
-  block 58  start_pc=0
-    terminator Jmp(b61)
-  block 59  start_pc=0
-    v117 ImmData(323)                                     -> x7
-    v118 ImmData(333)                                     -> x6
-    v119 CallExt { binding_idx=0, args=[v117, v118], fp_arg_mask=0x0 } -> x0
-    v120 Imm(1)                                           -> x0
-    terminator Return(v120)   (exit_acc=v120)
-  block 60  start_pc=0
-    terminator Jmp(b57)
-  block 61  start_pc=0
+    terminator Jmp(b27)   (exit_acc=v121)
+  block 27  start_pc=0
     v122 LoadLocal { off=-6, kind=I64 }                   -> x0
     v123 LoadLocal { off=-5, kind=I64 }                   -> x0
     v124 Imm(1)                                           -> x0
     v125 Imm(0)                                           -> x0
-    terminator Jmp(b65)   (exit_acc=v125)
-  block 62  start_pc=0
+    terminator Jmp(b28)   (exit_acc=v125)
+  block 28  start_pc=0
     v130 Imm(0)                                           -> x0
-    terminator Jmp(b63)   (exit_acc=v130)
-  block 63  start_pc=0
+    terminator Jmp(b29)   (exit_acc=v130)
+  block 29  start_pc=0
     v131 Imm(-2)                                          -> x0
     v132 Imm(0)                                           -> x0
     v133 Imm(1)                                           -> x0
     v134 Imm(0)                                           -> x1
-    terminator Jmp(b66)   (exit_acc=v133)
-  block 64  start_pc=0
-    v126 ImmData(347)                                     -> x7
-    v127 ImmData(357)                                     -> x6
-    v128 CallExt { binding_idx=0, args=[v126, v127], fp_arg_mask=0x0 } -> x0
-    v129 Imm(1)                                           -> x0
-    terminator Return(v129)   (exit_acc=v129)
-  block 65  start_pc=0
-    terminator Jmp(b62)
-  block 66  start_pc=0
+    terminator Jmp(b30)   (exit_acc=v133)
+  block 30  start_pc=0
     v135 LoadLocal { off=-8, kind=I64 }                   -> x0
     v136 LoadLocal { off=-7, kind=I64 }                   -> x0
     v137 Imm(1)                                           -> x0
     v138 Imm(0)                                           -> x0
-    terminator Jmp(b70)   (exit_acc=v138)
-  block 67  start_pc=0
+    terminator Jmp(b31)   (exit_acc=v138)
+  block 31  start_pc=0
     v143 Imm(0)                                           -> x0
-    terminator Jmp(b68)   (exit_acc=v143)
-  block 68  start_pc=0
-    terminator Jmp(b71)
-  block 69  start_pc=0
-    v139 ImmData(370)                                     -> x7
-    v140 ImmData(380)                                     -> x6
-    v141 CallExt { binding_idx=0, args=[v139, v140], fp_arg_mask=0x0 } -> x0
-    v142 Imm(1)                                           -> x0
-    terminator Return(v142)   (exit_acc=v142)
-  block 70  start_pc=0
-    terminator Jmp(b67)
-  block 71  start_pc=0
+    terminator Jmp(b32)   (exit_acc=v143)
+  block 32  start_pc=0
     v144 LoadLocal { off=-7, kind=I64 }                   -> x0
     v145 Imm(1)                                           -> x0
     v146 Imm(0)                                           -> x0
-    terminator Jmp(b75)   (exit_acc=v146)
-  block 72  start_pc=0
+    terminator Jmp(b33)   (exit_acc=v146)
+  block 33  start_pc=0
     v151 Imm(0)                                           -> x0
-    terminator Jmp(b73)   (exit_acc=v151)
-  block 73  start_pc=0
+    terminator Jmp(b34)   (exit_acc=v151)
+  block 34  start_pc=0
     v152 Imm(254)                                         -> x0
     v153 Imm(0)                                           -> x0
     v154 Imm(1)                                           -> x0
     v155 Imm(0)                                           -> x1
-    terminator Jmp(b76)   (exit_acc=v154)
-  block 74  start_pc=0
-    v147 ImmData(391)                                     -> x7
-    v148 ImmData(401)                                     -> x6
-    v149 CallExt { binding_idx=0, args=[v147, v148], fp_arg_mask=0x0 } -> x0
-    v150 Imm(1)                                           -> x0
-    terminator Return(v150)   (exit_acc=v150)
-  block 75  start_pc=0
-    terminator Jmp(b72)
-  block 76  start_pc=0
+    terminator Jmp(b35)   (exit_acc=v154)
+  block 35  start_pc=0
     v156 LoadLocal { off=-9, kind=U8 }                    -> x0
     v157 LoadLocal { off=-10, kind=U8 }                   -> x0
     v158 Imm(1)                                           -> x0
     v159 Imm(0)                                           -> x0
-    terminator Jmp(b80)   (exit_acc=v159)
-  block 77  start_pc=0
+    terminator Jmp(b36)   (exit_acc=v159)
+  block 36  start_pc=0
     v164 Imm(0)                                           -> x0
-    terminator Jmp(b78)   (exit_acc=v164)
-  block 78  start_pc=0
-    terminator Jmp(b81)
-  block 79  start_pc=0
-    v160 ImmData(412)                                     -> x7
-    v161 ImmData(422)                                     -> x6
-    v162 CallExt { binding_idx=0, args=[v160, v161], fp_arg_mask=0x0 } -> x0
-    v163 Imm(1)                                           -> x0
-    terminator Return(v163)   (exit_acc=v163)
-  block 80  start_pc=0
-    terminator Jmp(b77)
-  block 81  start_pc=0
+    terminator Jmp(b37)   (exit_acc=v164)
+  block 37  start_pc=0
     v165 LoadLocal { off=-10, kind=U8 }                   -> x0
     v166 LoadLocal { off=-9, kind=U8 }                    -> x0
     v167 Imm(1)                                           -> x0
     v168 Imm(0)                                           -> x0
-    terminator Jmp(b85)   (exit_acc=v168)
-  block 82  start_pc=0
+    terminator Jmp(b38)   (exit_acc=v168)
+  block 38  start_pc=0
     v173 Imm(0)                                           -> x0
-    terminator Jmp(b83)   (exit_acc=v173)
-  block 83  start_pc=0
+    terminator Jmp(b39)   (exit_acc=v173)
+  block 39  start_pc=0
     v174 Imm(-2)                                          -> x0
     v175 Imm(0)                                           -> x0
     v176 Imm(1)                                           -> x0
     v177 Imm(0)                                           -> x1
-    terminator Jmp(b86)   (exit_acc=v176)
-  block 84  start_pc=0
-    v169 ImmData(434)                                     -> x7
-    v170 ImmData(444)                                     -> x6
-    v171 CallExt { binding_idx=0, args=[v169, v170], fp_arg_mask=0x0 } -> x0
-    v172 Imm(1)                                           -> x0
-    terminator Return(v172)   (exit_acc=v172)
-  block 85  start_pc=0
-    terminator Jmp(b82)
-  block 86  start_pc=0
+    terminator Jmp(b40)   (exit_acc=v176)
+  block 40  start_pc=0
     v178 LoadLocal { off=-11, kind=I8 }                   -> x0
     v179 LoadLocal { off=-12, kind=I8 }                   -> x0
     v180 Imm(1)                                           -> x0
     v181 Imm(0)                                           -> x0
-    terminator Jmp(b90)   (exit_acc=v181)
-  block 87  start_pc=0
+    terminator Jmp(b41)   (exit_acc=v181)
+  block 41  start_pc=0
     v186 Imm(0)                                           -> x0
-    terminator Jmp(b88)   (exit_acc=v186)
-  block 88  start_pc=0
-    terminator Jmp(b91)
-  block 89  start_pc=0
-    v182 ImmData(456)                                     -> x7
-    v183 ImmData(466)                                     -> x6
-    v184 CallExt { binding_idx=0, args=[v182, v183], fp_arg_mask=0x0 } -> x0
-    v185 Imm(1)                                           -> x0
-    terminator Return(v185)   (exit_acc=v185)
-  block 90  start_pc=0
-    terminator Jmp(b87)
-  block 91  start_pc=0
+    terminator Jmp(b42)   (exit_acc=v186)
+  block 42  start_pc=0
     v187 LoadLocal { off=-12, kind=I8 }                   -> x0
     v188 LoadLocal { off=-11, kind=I8 }                   -> x0
     v189 Imm(1)                                           -> x0
     v190 Imm(0)                                           -> x0
-    terminator Jmp(b95)   (exit_acc=v190)
-  block 92  start_pc=0
+    terminator Jmp(b43)   (exit_acc=v190)
+  block 43  start_pc=0
     v195 Imm(0)                                           -> x0
-    terminator Jmp(b93)   (exit_acc=v195)
-  block 93  start_pc=0
+    terminator Jmp(b44)   (exit_acc=v195)
+  block 44  start_pc=0
     v196 Imm(100)                                         -> x0
     v197 Imm(0)                                           -> x0
     v198 LoadLocal { off=-13, kind=U32 }                  -> x0
     v199 Imm(105)                                         -> x0
     v200 Imm(0)                                           -> x0
     v201 Imm(105)                                         -> x0
-    terminator Jmp(b96)   (exit_acc=v201)
-  block 94  start_pc=0
-    v191 ImmData(476)                                     -> x7
-    v192 ImmData(486)                                     -> x6
-    v193 CallExt { binding_idx=0, args=[v191, v192], fp_arg_mask=0x0 } -> x0
-    v194 Imm(1)                                           -> x0
-    terminator Return(v194)   (exit_acc=v194)
-  block 95  start_pc=0
-    terminator Jmp(b92)
-  block 96  start_pc=0
+    terminator Jmp(b45)   (exit_acc=v201)
+  block 45  start_pc=0
     v202 Imm(105)                                         -> x0
     v203 Imm(0)                                           -> x0
     v204 Imm(0)                                           -> x0
     v205 Imm(1)                                           -> x0
     v206 Imm(0)                                           -> x0
-    terminator Jmp(b100)   (exit_acc=v206)
-  block 97  start_pc=0
+    terminator Jmp(b46)   (exit_acc=v206)
+  block 46  start_pc=0
     v211 Imm(0)                                           -> x0
-    terminator Jmp(b98)   (exit_acc=v211)
-  block 98  start_pc=0
+    terminator Jmp(b47)   (exit_acc=v211)
+  block 47  start_pc=0
     v212 Imm(105)                                         -> x0
     v213 Imm(95)                                          -> x0
     v214 Imm(0)                                           -> x0
     v215 Imm(95)                                          -> x0
-    terminator Jmp(b101)   (exit_acc=v215)
-  block 99  start_pc=0
-    v207 ImmData(496)                                     -> x7
-    v208 ImmData(506)                                     -> x6
-    v209 CallExt { binding_idx=0, args=[v207, v208], fp_arg_mask=0x0 } -> x0
-    v210 Imm(1)                                           -> x0
-    terminator Return(v210)   (exit_acc=v210)
-  block 100  start_pc=0
-    terminator Jmp(b97)
-  block 101  start_pc=0
+    terminator Jmp(b48)   (exit_acc=v215)
+  block 48  start_pc=0
     v216 Imm(95)                                          -> x0
     v217 Imm(0)                                           -> x0
     v218 Imm(0)                                           -> x0
     v219 Imm(1)                                           -> x0
     v220 Imm(0)                                           -> x0
-    terminator Jmp(b105)   (exit_acc=v220)
-  block 102  start_pc=0
+    terminator Jmp(b49)   (exit_acc=v220)
+  block 49  start_pc=0
     v225 Imm(0)                                           -> x0
-    terminator Jmp(b103)   (exit_acc=v225)
-  block 103  start_pc=0
+    terminator Jmp(b50)   (exit_acc=v225)
+  block 50  start_pc=0
     v226 Imm(95)                                          -> x0
     v227 Imm(190)                                         -> x0
     v228 Imm(0)                                           -> x0
     v229 Imm(190)                                         -> x0
-    terminator Jmp(b106)   (exit_acc=v229)
-  block 104  start_pc=0
-    v221 ImmData(515)                                     -> x7
-    v222 ImmData(525)                                     -> x6
-    v223 CallExt { binding_idx=0, args=[v221, v222], fp_arg_mask=0x0 } -> x0
-    v224 Imm(1)                                           -> x0
-    terminator Return(v224)   (exit_acc=v224)
-  block 105  start_pc=0
-    terminator Jmp(b102)
-  block 106  start_pc=0
+    terminator Jmp(b51)   (exit_acc=v229)
+  block 51  start_pc=0
     v230 Imm(190)                                         -> x0
     v231 Imm(0)                                           -> x0
     v232 Imm(0)                                           -> x0
     v233 Imm(1)                                           -> x0
     v234 Imm(0)                                           -> x0
-    terminator Jmp(b110)   (exit_acc=v234)
-  block 107  start_pc=0
+    terminator Jmp(b52)   (exit_acc=v234)
+  block 52  start_pc=0
     v239 Imm(0)                                           -> x0
-    terminator Jmp(b108)   (exit_acc=v239)
-  block 108  start_pc=0
+    terminator Jmp(b53)   (exit_acc=v239)
+  block 53  start_pc=0
     v240 Imm(190)                                         -> x0
     v241 Imm(5)                                           -> x0
     v242 Imm(38)                                          -> x0
     v243 Imm(0)                                           -> x0
     v244 Imm(38)                                          -> x0
-    terminator Jmp(b111)   (exit_acc=v244)
-  block 109  start_pc=0
-    v235 ImmData(535)                                     -> x7
-    v236 ImmData(545)                                     -> x6
-    v237 CallExt { binding_idx=0, args=[v235, v236], fp_arg_mask=0x0 } -> x0
-    v238 Imm(1)                                           -> x0
-    terminator Return(v238)   (exit_acc=v238)
-  block 110  start_pc=0
-    terminator Jmp(b107)
-  block 111  start_pc=0
+    terminator Jmp(b54)   (exit_acc=v244)
+  block 54  start_pc=0
     v245 Imm(38)                                          -> x0
     v246 Imm(0)                                           -> x0
     v247 Imm(0)                                           -> x0
     v248 Imm(1)                                           -> x0
     v249 Imm(0)                                           -> x0
-    terminator Jmp(b115)   (exit_acc=v249)
-  block 112  start_pc=0
+    terminator Jmp(b55)   (exit_acc=v249)
+  block 55  start_pc=0
     v254 Imm(0)                                           -> x0
-    terminator Jmp(b113)   (exit_acc=v254)
-  block 113  start_pc=0
+    terminator Jmp(b56)   (exit_acc=v254)
+  block 56  start_pc=0
     v255 Imm(38)                                          -> x0
     v256 Imm(7)                                           -> x0
     v257 Imm(3)                                           -> x0
     v258 Imm(0)                                           -> x0
     v259 Imm(3)                                           -> x0
-    terminator Jmp(b116)   (exit_acc=v259)
-  block 114  start_pc=0
-    v250 ImmData(554)                                     -> x7
-    v251 ImmData(564)                                     -> x6
-    v252 CallExt { binding_idx=0, args=[v250, v251], fp_arg_mask=0x0 } -> x0
-    v253 Imm(1)                                           -> x0
-    terminator Return(v253)   (exit_acc=v253)
-  block 115  start_pc=0
-    terminator Jmp(b112)
-  block 116  start_pc=0
+    terminator Jmp(b57)   (exit_acc=v259)
+  block 57  start_pc=0
     v260 Imm(3)                                           -> x0
     v261 Imm(0)                                           -> x0
     v262 Imm(0)                                           -> x0
     v263 Imm(1)                                           -> x0
     v264 Imm(0)                                           -> x0
-    terminator Jmp(b120)   (exit_acc=v264)
-  block 117  start_pc=0
+    terminator Jmp(b58)   (exit_acc=v264)
+  block 58  start_pc=0
     v269 Imm(0)                                           -> x0
-    terminator Jmp(b118)   (exit_acc=v269)
-  block 118  start_pc=0
+    terminator Jmp(b59)   (exit_acc=v269)
+  block 59  start_pc=0
     v270 Imm(1)                                           -> x0
     v271 Imm(0)                                           -> x0
     v272 LoadLocal { off=-14, kind=U32 }                  -> x0
     v273 Imm(-1)                                          -> x0
     v274 Imm(4294967295)                                  -> x0
     v275 Imm(0)                                           -> x1
-    terminator Jmp(b121)   (exit_acc=v274)
-  block 119  start_pc=0
-    v265 ImmData(573)                                     -> x7
-    v266 ImmData(583)                                     -> x6
-    v267 CallExt { binding_idx=0, args=[v265, v266], fp_arg_mask=0x0 } -> x0
-    v268 Imm(1)                                           -> x0
-    terminator Return(v268)   (exit_acc=v268)
-  block 120  start_pc=0
-    terminator Jmp(b117)
-  block 121  start_pc=0
+    terminator Jmp(b60)   (exit_acc=v274)
+  block 60  start_pc=0
     v276 Imm(4294967295)                                  -> x0
     v277 Imm(1)                                           -> x0
     v278 Imm(0)                                           -> x0
-    terminator Jmp(b125)   (exit_acc=v278)
-  block 122  start_pc=0
+    terminator Jmp(b61)   (exit_acc=v278)
+  block 61  start_pc=0
     v283 Imm(0)                                           -> x0
-    terminator Jmp(b123)   (exit_acc=v283)
-  block 123  start_pc=0
+    terminator Jmp(b62)   (exit_acc=v283)
+  block 62  start_pc=0
     v284 Imm(1000)                                        -> x0
     v285 Imm(0)                                           -> x0
     v286 LoadLocal { off=-15, kind=I64 }                  -> x0
     v287 Imm(1415)                                        -> x0
     v288 Imm(0)                                           -> x1
-    terminator Jmp(b126)   (exit_acc=v287)
-  block 124  start_pc=0
-    v279 ImmData(592)                                     -> x7
-    v280 ImmData(602)                                     -> x6
-    v281 CallExt { binding_idx=0, args=[v279, v280], fp_arg_mask=0x0 } -> x0
-    v282 Imm(1)                                           -> x0
-    terminator Return(v282)   (exit_acc=v282)
-  block 125  start_pc=0
-    terminator Jmp(b122)
-  block 126  start_pc=0
+    terminator Jmp(b63)   (exit_acc=v287)
+  block 63  start_pc=0
     v289 LoadLocal { off=-15, kind=I64 }                  -> x0
     v290 Imm(1)                                           -> x0
     v291 Imm(0)                                           -> x0
-    terminator Jmp(b130)   (exit_acc=v291)
-  block 127  start_pc=0
+    terminator Jmp(b64)   (exit_acc=v291)
+  block 64  start_pc=0
     v296 Imm(0)                                           -> x0
-    terminator Jmp(b128)   (exit_acc=v296)
-  block 128  start_pc=0
+    terminator Jmp(b65)   (exit_acc=v296)
+  block 65  start_pc=0
     v297 LoadLocal { off=-15, kind=I64 }                  -> x0
     v298 Imm(4245)                                        -> x0
     v299 Imm(0)                                           -> x1
-    terminator Jmp(b131)   (exit_acc=v298)
-  block 129  start_pc=0
-    v292 ImmData(616)                                     -> x7
-    v293 ImmData(626)                                     -> x6
-    v294 CallExt { binding_idx=0, args=[v292, v293], fp_arg_mask=0x0 } -> x0
-    v295 Imm(1)                                           -> x0
-    terminator Return(v295)   (exit_acc=v295)
-  block 130  start_pc=0
-    terminator Jmp(b127)
-  block 131  start_pc=0
+    terminator Jmp(b66)   (exit_acc=v298)
+  block 66  start_pc=0
     v300 LoadLocal { off=-15, kind=I64 }                  -> x0
     v301 Imm(1)                                           -> x0
     v302 Imm(0)                                           -> x0
-    terminator Jmp(b135)   (exit_acc=v302)
-  block 132  start_pc=0
+    terminator Jmp(b67)   (exit_acc=v302)
+  block 67  start_pc=0
     v307 Imm(0)                                           -> x0
-    terminator Jmp(b133)   (exit_acc=v307)
-  block 133  start_pc=0
+    terminator Jmp(b68)   (exit_acc=v307)
+  block 68  start_pc=0
     v308 LoadLocal { off=-15, kind=I64 }                  -> x0
     v309 Imm(5)                                           -> x0
     v310 Imm(849)                                         -> x0
     v311 Imm(0)                                           -> x1
-    terminator Jmp(b136)   (exit_acc=v310)
-  block 134  start_pc=0
-    v303 ImmData(637)                                     -> x7
-    v304 ImmData(647)                                     -> x6
-    v305 CallExt { binding_idx=0, args=[v303, v304], fp_arg_mask=0x0 } -> x0
-    v306 Imm(1)                                           -> x0
-    terminator Return(v306)   (exit_acc=v306)
-  block 135  start_pc=0
-    terminator Jmp(b132)
-  block 136  start_pc=0
+    terminator Jmp(b69)   (exit_acc=v310)
+  block 69  start_pc=0
     v312 LoadLocal { off=-15, kind=I64 }                  -> x0
     v313 Imm(1)                                           -> x0
     v314 Imm(0)                                           -> x0
-    terminator Jmp(b140)   (exit_acc=v314)
-  block 137  start_pc=0
+    terminator Jmp(b70)   (exit_acc=v314)
+  block 70  start_pc=0
     v319 Imm(0)                                           -> x0
-    terminator Jmp(b138)   (exit_acc=v319)
-  block 138  start_pc=0
+    terminator Jmp(b71)   (exit_acc=v319)
+  block 71  start_pc=0
     v320 Imm(4278255360)                                  -> x0
     v321 Imm(0)                                           -> x0
     v322 LoadLocal { off=-16, kind=U32 }                  -> x0
@@ -607,476 +365,718 @@ fn ent_pc=1 n_params=0 variadic=false locals=32
     v329 Imm(-4278255361)                                 -> x0
     v330 Imm(16711935)                                    -> x0
     v331 Imm(0)                                           -> x1
-    terminator Jmp(b141)   (exit_acc=v330)
-  block 139  start_pc=0
-    v315 ImmData(656)                                     -> x7
-    v316 ImmData(666)                                     -> x6
-    v317 CallExt { binding_idx=0, args=[v315, v316], fp_arg_mask=0x0 } -> x0
-    v318 Imm(1)                                           -> x0
-    terminator Return(v318)   (exit_acc=v318)
-  block 140  start_pc=0
-    terminator Jmp(b137)
-  block 141  start_pc=0
+    terminator Jmp(b72)   (exit_acc=v330)
+  block 72  start_pc=0
     v332 Imm(251662080)                                   -> x0
     v333 Imm(0)                                           -> x0
     v334 Imm(0)                                           -> x0
     v335 Imm(1)                                           -> x0
     v336 Imm(0)                                           -> x0
-    terminator Jmp(b145)   (exit_acc=v336)
-  block 142  start_pc=0
+    terminator Jmp(b73)   (exit_acc=v336)
+  block 73  start_pc=0
     v341 Imm(0)                                           -> x0
-    terminator Jmp(b143)   (exit_acc=v341)
-  block 143  start_pc=0
-    terminator Jmp(b146)
-  block 144  start_pc=0
-    v337 ImmData(675)                                     -> x7
-    v338 ImmData(685)                                     -> x6
-    v339 CallExt { binding_idx=0, args=[v337, v338], fp_arg_mask=0x0 } -> x0
-    v340 Imm(1)                                           -> x0
-    terminator Return(v340)   (exit_acc=v340)
-  block 145  start_pc=0
-    terminator Jmp(b142)
-  block 146  start_pc=0
+    terminator Jmp(b74)   (exit_acc=v341)
+  block 74  start_pc=0
     v342 Imm(4279238400)                                  -> x0
     v343 Imm(1)                                           -> x0
     v344 Imm(0)                                           -> x0
-    terminator Jmp(b150)   (exit_acc=v344)
-  block 147  start_pc=0
+    terminator Jmp(b75)   (exit_acc=v344)
+  block 75  start_pc=0
     v349 Imm(0)                                           -> x0
-    terminator Jmp(b148)   (exit_acc=v349)
-  block 148  start_pc=0
-    terminator Jmp(b151)
-  block 149  start_pc=0
-    v345 ImmData(691)                                     -> x7
-    v346 ImmData(701)                                     -> x6
-    v347 CallExt { binding_idx=0, args=[v345, v346], fp_arg_mask=0x0 } -> x0
-    v348 Imm(1)                                           -> x0
-    terminator Return(v348)   (exit_acc=v348)
-  block 150  start_pc=0
-    terminator Jmp(b147)
-  block 151  start_pc=0
+    terminator Jmp(b76)   (exit_acc=v349)
+  block 76  start_pc=0
     v350 Imm(16711935)                                    -> x0
     v351 Imm(0)                                           -> x0
     v352 Imm(0)                                           -> x0
     v353 Imm(1)                                           -> x0
     v354 Imm(0)                                           -> x0
-    terminator Jmp(b155)   (exit_acc=v354)
-  block 152  start_pc=0
+    terminator Jmp(b77)   (exit_acc=v354)
+  block 77  start_pc=0
     v359 Imm(0)                                           -> x0
-    terminator Jmp(b153)   (exit_acc=v359)
-  block 153  start_pc=0
-    terminator Jmp(b156)
-  block 154  start_pc=0
-    v355 ImmData(707)                                     -> x7
-    v356 ImmData(717)                                     -> x6
-    v357 CallExt { binding_idx=0, args=[v355, v356], fp_arg_mask=0x0 } -> x0
-    v358 Imm(1)                                           -> x0
-    terminator Return(v358)   (exit_acc=v358)
-  block 155  start_pc=0
-    terminator Jmp(b152)
-  block 156  start_pc=0
+    terminator Jmp(b78)   (exit_acc=v359)
+  block 78  start_pc=0
     v360 Imm(16711935)                                    -> x0
     v361 Imm(0)                                           -> x0
     v362 Imm(0)                                           -> x0
     v363 Imm(1)                                           -> x0
     v364 Imm(0)                                           -> x0
-    terminator Jmp(b160)   (exit_acc=v364)
-  block 157  start_pc=0
+    terminator Jmp(b79)   (exit_acc=v364)
+  block 79  start_pc=0
     v369 Imm(0)                                           -> x0
-    terminator Jmp(b158)   (exit_acc=v369)
-  block 158  start_pc=0
+    terminator Jmp(b80)   (exit_acc=v369)
+  block 80  start_pc=0
     v370 Imm(305419896)                                   -> x0
     v371 Imm(0)                                           -> x0
     v372 LoadLocal { off=-21, kind=U32 }                  -> x0
     v373 Imm(4886718336)                                  -> x0
     v374 Imm(591751040)                                   -> x0
     v375 Imm(0)                                           -> x1
-    terminator Jmp(b161)   (exit_acc=v374)
-  block 159  start_pc=0
-    v365 ImmData(723)                                     -> x7
-    v366 ImmData(733)                                     -> x6
-    v367 CallExt { binding_idx=0, args=[v365, v366], fp_arg_mask=0x0 } -> x0
-    v368 Imm(1)                                           -> x0
-    terminator Return(v368)   (exit_acc=v368)
-  block 160  start_pc=0
-    terminator Jmp(b157)
-  block 161  start_pc=0
+    terminator Jmp(b81)   (exit_acc=v374)
+  block 81  start_pc=0
     v376 Imm(591751040)                                   -> x0
     v377 Imm(0)                                           -> x0
     v378 Imm(0)                                           -> x0
     v379 Imm(1)                                           -> x0
     v380 Imm(0)                                           -> x0
-    terminator Jmp(b165)   (exit_acc=v380)
-  block 162  start_pc=0
+    terminator Jmp(b82)   (exit_acc=v380)
+  block 82  start_pc=0
     v385 Imm(0)                                           -> x0
-    terminator Jmp(b163)   (exit_acc=v385)
-  block 163  start_pc=0
+    terminator Jmp(b83)   (exit_acc=v385)
+  block 83  start_pc=0
     v386 Imm(1)                                           -> x0
     v387 Imm(0)                                           -> x0
     v388 LoadLocal { off=-23, kind=U32 }                  -> x0
     v389 Imm(2147483648)                                  -> x0
     v390 Imm(2147483648)                                  -> x0
     v391 Imm(0)                                           -> x1
-    terminator Jmp(b166)   (exit_acc=v390)
-  block 164  start_pc=0
-    v381 ImmData(739)                                     -> x7
-    v382 ImmData(749)                                     -> x6
-    v383 CallExt { binding_idx=0, args=[v381, v382], fp_arg_mask=0x0 } -> x0
-    v384 Imm(1)                                           -> x0
-    terminator Return(v384)   (exit_acc=v384)
-  block 165  start_pc=0
-    terminator Jmp(b162)
-  block 166  start_pc=0
+    terminator Jmp(b84)   (exit_acc=v390)
+  block 84  start_pc=0
     v392 Imm(2147483648)                                  -> x0
     v393 Imm(1)                                           -> x0
     v394 Imm(0)                                           -> x0
-    terminator Jmp(b170)   (exit_acc=v394)
-  block 167  start_pc=0
+    terminator Jmp(b85)   (exit_acc=v394)
+  block 85  start_pc=0
     v399 Imm(0)                                           -> x0
-    terminator Jmp(b168)   (exit_acc=v399)
-  block 168  start_pc=0
+    terminator Jmp(b86)   (exit_acc=v399)
+  block 86  start_pc=0
     v400 Imm(1)                                           -> x0
     v401 Imm(0)                                           -> x1
-    terminator Jmp(b171)   (exit_acc=v400)
-  block 169  start_pc=0
-    v395 ImmData(758)                                     -> x7
-    v396 ImmData(768)                                     -> x6
-    v397 CallExt { binding_idx=0, args=[v395, v396], fp_arg_mask=0x0 } -> x0
-    v398 Imm(1)                                           -> x0
-    terminator Return(v398)   (exit_acc=v398)
-  block 170  start_pc=0
-    terminator Jmp(b167)
-  block 171  start_pc=0
+    terminator Jmp(b87)   (exit_acc=v400)
+  block 87  start_pc=0
     v402 LoadLocal { off=-25, kind=I64 }                  -> x0
     v403 Imm(-9223372036854775808)                        -> x0
     v404 Imm(1)                                           -> x0
     v405 Imm(0)                                           -> x0
-    terminator Jmp(b175)   (exit_acc=v405)
-  block 172  start_pc=0
+    terminator Jmp(b88)   (exit_acc=v405)
+  block 88  start_pc=0
     v410 Imm(0)                                           -> x0
-    terminator Jmp(b173)   (exit_acc=v410)
-  block 173  start_pc=0
+    terminator Jmp(b89)   (exit_acc=v410)
+  block 89  start_pc=0
     v411 Imm(-1)                                          -> x0
     v412 Imm(0)                                           -> x0
     v413 Imm(1)                                           -> x0
     v414 Imm(0)                                           -> x1
-    terminator Jmp(b176)   (exit_acc=v413)
-  block 174  start_pc=0
-    v406 ImmData(778)                                     -> x7
-    v407 ImmData(788)                                     -> x6
-    v408 CallExt { binding_idx=0, args=[v406, v407], fp_arg_mask=0x0 } -> x0
-    v409 Imm(1)                                           -> x0
-    terminator Return(v409)   (exit_acc=v409)
-  block 175  start_pc=0
-    terminator Jmp(b172)
-  block 176  start_pc=0
+    terminator Jmp(b90)   (exit_acc=v413)
+  block 90  start_pc=0
     v415 LoadLocal { off=-26, kind=I32 }                  -> x0
     v416 Imm(4294967295)                                  -> x0
     v417 LoadLocal { off=-27, kind=U32 }                  -> x0
     v418 Imm(1)                                           -> x0
     v419 Imm(0)                                           -> x0
-    terminator Jmp(b180)   (exit_acc=v419)
-  block 177  start_pc=0
+    terminator Jmp(b91)   (exit_acc=v419)
+  block 91  start_pc=0
     v424 Imm(0)                                           -> x0
-    terminator Jmp(b178)   (exit_acc=v424)
-  block 178  start_pc=0
-    terminator Jmp(b181)
-  block 179  start_pc=0
-    v420 ImmData(798)                                     -> x7
-    v421 ImmData(808)                                     -> x6
-    v422 CallExt { binding_idx=0, args=[v420, v421], fp_arg_mask=0x0 } -> x0
-    v423 Imm(1)                                           -> x0
-    terminator Return(v423)   (exit_acc=v423)
-  block 180  start_pc=0
-    terminator Jmp(b177)
-  block 181  start_pc=0
+    terminator Jmp(b92)   (exit_acc=v424)
+  block 92  start_pc=0
     v425 LoadLocal { off=-26, kind=I32 }                  -> x0
     v426 LoadLocal { off=-27, kind=U32 }                  -> x0
     v427 Imm(4294967296)                                  -> x0
     v428 Imm(1)                                           -> x0
     v429 Imm(1)                                           -> x0
     v430 Imm(0)                                           -> x0
-    terminator Jmp(b185)   (exit_acc=v430)
-  block 182  start_pc=0
+    terminator Jmp(b93)   (exit_acc=v430)
+  block 93  start_pc=0
     v435 Imm(0)                                           -> x0
-    terminator Jmp(b183)   (exit_acc=v435)
-  block 183  start_pc=0
+    terminator Jmp(b94)   (exit_acc=v435)
+  block 94  start_pc=0
     v436 Imm(4294967294)                                  -> x0
     v437 Imm(0)                                           -> x0
     v438 LoadLocal { off=-28, kind=U32 }                  -> x0
     v439 Imm(4294967295)                                  -> x0
     v440 Imm(0)                                           -> x0
     v441 Imm(4294967295)                                  -> x0
-    terminator Jmp(b186)   (exit_acc=v441)
-  block 184  start_pc=0
-    v431 ImmData(820)                                     -> x7
-    v432 ImmData(830)                                     -> x6
-    v433 CallExt { binding_idx=0, args=[v431, v432], fp_arg_mask=0x0 } -> x0
-    v434 Imm(1)                                           -> x0
-    terminator Return(v434)   (exit_acc=v434)
-  block 185  start_pc=0
-    terminator Jmp(b182)
-  block 186  start_pc=0
+    terminator Jmp(b95)   (exit_acc=v441)
+  block 95  start_pc=0
     v442 Imm(4294967295)                                  -> x0
     v443 Imm(1)                                           -> x0
     v444 Imm(0)                                           -> x0
-    terminator Jmp(b190)   (exit_acc=v444)
-  block 187  start_pc=0
+    terminator Jmp(b96)   (exit_acc=v444)
+  block 96  start_pc=0
     v449 Imm(0)                                           -> x0
-    terminator Jmp(b188)   (exit_acc=v449)
-  block 188  start_pc=0
+    terminator Jmp(b97)   (exit_acc=v449)
+  block 97  start_pc=0
     v450 Imm(4294967295)                                  -> x0
     v451 Imm(4294967296)                                  -> x0
     v452 Imm(0)                                           -> x0
     v453 Imm(0)                                           -> x0
-    terminator Jmp(b191)   (exit_acc=v453)
-  block 189  start_pc=0
-    v445 ImmData(841)                                     -> x7
-    v446 ImmData(851)                                     -> x6
-    v447 CallExt { binding_idx=0, args=[v445, v446], fp_arg_mask=0x0 } -> x0
-    v448 Imm(1)                                           -> x0
-    terminator Return(v448)   (exit_acc=v448)
-  block 190  start_pc=0
-    terminator Jmp(b187)
-  block 191  start_pc=0
+    terminator Jmp(b98)   (exit_acc=v453)
+  block 98  start_pc=0
     v454 Imm(0)                                           -> x0
     v455 Imm(1)                                           -> x0
     v456 Imm(0)                                           -> x0
-    terminator Jmp(b195)   (exit_acc=v456)
-  block 192  start_pc=0
+    terminator Jmp(b99)   (exit_acc=v456)
+  block 99  start_pc=0
     v461 Imm(0)                                           -> x0
-    terminator Jmp(b193)   (exit_acc=v461)
-  block 193  start_pc=0
+    terminator Jmp(b100)   (exit_acc=v461)
+  block 100  start_pc=0
     v462 Imm(254)                                         -> x0
     v463 Imm(0)                                           -> x0
     v464 LoadLocal { off=-29, kind=U8 }                   -> x0
     v465 Imm(255)                                         -> x0
     v466 Imm(0)                                           -> x0
     v467 Imm(255)                                         -> x0
-    terminator Jmp(b196)   (exit_acc=v467)
-  block 194  start_pc=0
-    v457 ImmData(866)                                     -> x7
-    v458 ImmData(876)                                     -> x6
-    v459 CallExt { binding_idx=0, args=[v457, v458], fp_arg_mask=0x0 } -> x0
-    v460 Imm(1)                                           -> x0
-    terminator Return(v460)   (exit_acc=v460)
-  block 195  start_pc=0
-    terminator Jmp(b192)
-  block 196  start_pc=0
+    terminator Jmp(b101)   (exit_acc=v467)
+  block 101  start_pc=0
     v468 Imm(255)                                         -> x0
     v469 Imm(0)                                           -> x0
     v470 Imm(0)                                           -> x0
     v471 Imm(1)                                           -> x0
     v472 Imm(0)                                           -> x0
-    terminator Jmp(b200)   (exit_acc=v472)
-  block 197  start_pc=0
+    terminator Jmp(b102)   (exit_acc=v472)
+  block 102  start_pc=0
     v477 Imm(0)                                           -> x0
-    terminator Jmp(b198)   (exit_acc=v477)
-  block 198  start_pc=0
+    terminator Jmp(b103)   (exit_acc=v477)
+  block 103  start_pc=0
     v478 Imm(255)                                         -> x0
     v479 Imm(256)                                         -> x0
     v480 Imm(0)                                           -> x0
     v481 Imm(0)                                           -> x0
-    terminator Jmp(b201)   (exit_acc=v481)
-  block 199  start_pc=0
-    v473 ImmData(894)                                     -> x7
-    v474 ImmData(904)                                     -> x6
-    v475 CallExt { binding_idx=0, args=[v473, v474], fp_arg_mask=0x0 } -> x0
-    v476 Imm(1)                                           -> x0
-    terminator Return(v476)   (exit_acc=v476)
-  block 200  start_pc=0
-    terminator Jmp(b197)
-  block 201  start_pc=0
+    terminator Jmp(b104)   (exit_acc=v481)
+  block 104  start_pc=0
     v482 Imm(0)                                           -> x0
     v483 Imm(1)                                           -> x0
     v484 Imm(0)                                           -> x0
-    terminator Jmp(b205)   (exit_acc=v484)
-  block 202  start_pc=0
+    terminator Jmp(b105)   (exit_acc=v484)
+  block 105  start_pc=0
     v489 Imm(0)                                           -> x0
-    terminator Jmp(b203)   (exit_acc=v489)
-  block 203  start_pc=0
+    terminator Jmp(b106)   (exit_acc=v489)
+  block 106  start_pc=0
     v490 Imm(-2)                                          -> x0
     v491 Imm(0)                                           -> x0
     v492 LoadLocal { off=-30, kind=I64 }                  -> x0
     v493 Imm(-1)                                          -> x0
     v494 Imm(0)                                           -> x1
-    terminator Jmp(b206)   (exit_acc=v493)
+    terminator Jmp(b107)   (exit_acc=v493)
+  block 107  start_pc=0
+    v495 LoadLocal { off=-30, kind=I64 }                  -> x0
+    v496 Imm(1)                                           -> x0
+    v497 Imm(0)                                           -> x0
+    terminator Jmp(b108)   (exit_acc=v497)
+  block 108  start_pc=0
+    v502 Imm(0)                                           -> x0
+    terminator Jmp(b109)   (exit_acc=v502)
+  block 109  start_pc=0
+    v503 LoadLocal { off=-30, kind=I64 }                  -> x0
+    v504 Imm(0)                                           -> x0
+    v505 Imm(0)                                           -> x1
+    terminator Jmp(b110)   (exit_acc=v504)
+  block 110  start_pc=0
+    v506 LoadLocal { off=-30, kind=I64 }                  -> x0
+    v507 Imm(1)                                           -> x0
+    v508 Imm(0)                                           -> x0
+    terminator Jmp(b111)   (exit_acc=v508)
+  block 111  start_pc=0
+    v513 Imm(0)                                           -> x0
+    terminator Jmp(b112)   (exit_acc=v513)
+  block 112  start_pc=0
+    v514 Imm(1)                                           -> x0
+    v515 Imm(0)                                           -> x0
+    terminator Jmp(b113)   (exit_acc=v515)
+  block 113  start_pc=0
+    v520 Imm(0)                                           -> x0
+    terminator Jmp(b114)   (exit_acc=v520)
+  block 114  start_pc=0
+    v521 Imm(1)                                           -> x0
+    v522 Imm(0)                                           -> x0
+    terminator Jmp(b115)   (exit_acc=v522)
+  block 115  start_pc=0
+    v527 Imm(0)                                           -> x0
+    terminator Jmp(b116)   (exit_acc=v527)
+  block 116  start_pc=0
+    v528 Imm(1)                                           -> x0
+    v529 Imm(0)                                           -> x0
+    terminator Jmp(b117)   (exit_acc=v529)
+  block 117  start_pc=0
+    v534 Imm(0)                                           -> x0
+    terminator Jmp(b118)   (exit_acc=v534)
+  block 118  start_pc=0
+    v535 Imm(1)                                           -> x0
+    v536 Imm(0)                                           -> x0
+    terminator Jmp(b119)   (exit_acc=v536)
+  block 119  start_pc=0
+    v541 Imm(0)                                           -> x0
+    terminator Jmp(b120)   (exit_acc=v541)
+  block 120  start_pc=0
+    v542 Imm(1)                                           -> x0
+    v543 Imm(0)                                           -> x0
+    terminator Jmp(b121)   (exit_acc=v543)
+  block 121  start_pc=0
+    v548 Imm(0)                                           -> x0
+    terminator Jmp(b122)   (exit_acc=v548)
+  block 122  start_pc=0
+    v549 Imm(1)                                           -> x0
+    v550 Imm(0)                                           -> x0
+    terminator Jmp(b123)   (exit_acc=v550)
+  block 123  start_pc=0
+    v555 Imm(0)                                           -> x0
+    terminator Jmp(b124)   (exit_acc=v555)
+  block 124  start_pc=0
+    v556 Imm(1)                                           -> x0
+    v557 Imm(0)                                           -> x0
+    terminator Jmp(b125)   (exit_acc=v557)
+  block 125  start_pc=0
+    v562 Imm(0)                                           -> x0
+    terminator Jmp(b126)   (exit_acc=v562)
+  block 126  start_pc=0
+    v563 Imm(1)                                           -> x0
+    v564 Imm(0)                                           -> x0
+    terminator Jmp(b127)   (exit_acc=v564)
+  block 127  start_pc=0
+    v569 Imm(0)                                           -> x0
+    terminator Jmp(b128)   (exit_acc=v569)
+  block 128  start_pc=0
+    v570 Imm(0)                                           -> x0
+    terminator Return(v570)   (exit_acc=v570)
+  block 129  start_pc=0
+    terminator Jmp(b3)
+  block 130  start_pc=0
+    v9   ImmData(36)                                      -> x7
+    v10  ImmData(46)                                      -> x6
+    v11  CallExt { binding_idx=0, args=[v9, v10], fp_arg_mask=0x0 } -> x0
+    v12  Imm(1)                                           -> x0
+    terminator Return(v12)   (exit_acc=v12)
+  block 131  start_pc=0
+    terminator Jmp(b2)
+  block 132  start_pc=0
+    terminator Jmp(b5)
+  block 133  start_pc=0
+    v18  ImmData(65)                                      -> x7
+    v19  ImmData(75)                                      -> x6
+    v20  CallExt { binding_idx=0, args=[v18, v19], fp_arg_mask=0x0 } -> x0
+    v21  Imm(1)                                           -> x0
+    terminator Return(v21)   (exit_acc=v21)
+  block 134  start_pc=0
+    terminator Jmp(b4)
+  block 135  start_pc=0
+    terminator Jmp(b7)
+  block 136  start_pc=0
+    v27  ImmData(94)                                      -> x7
+    v28  ImmData(104)                                     -> x6
+    v29  CallExt { binding_idx=0, args=[v27, v28], fp_arg_mask=0x0 } -> x0
+    v30  Imm(1)                                           -> x0
+    terminator Return(v30)   (exit_acc=v30)
+  block 137  start_pc=0
+    terminator Jmp(b6)
+  block 138  start_pc=0
+    terminator Jmp(b9)
+  block 139  start_pc=0
+    v36  ImmData(124)                                     -> x7
+    v37  ImmData(134)                                     -> x6
+    v38  CallExt { binding_idx=0, args=[v36, v37], fp_arg_mask=0x0 } -> x0
+    v39  Imm(1)                                           -> x0
+    terminator Return(v39)   (exit_acc=v39)
+  block 140  start_pc=0
+    terminator Jmp(b8)
+  block 141  start_pc=0
+    terminator Jmp(b11)
+  block 142  start_pc=0
+    v45  ImmData(154)                                     -> x7
+    v46  ImmData(164)                                     -> x6
+    v47  CallExt { binding_idx=0, args=[v45, v46], fp_arg_mask=0x0 } -> x0
+    v48  Imm(1)                                           -> x0
+    terminator Return(v48)   (exit_acc=v48)
+  block 143  start_pc=0
+    terminator Jmp(b10)
+  block 144  start_pc=0
+    v55  ImmData(184)                                     -> x7
+    v56  ImmData(194)                                     -> x6
+    v57  CallExt { binding_idx=0, args=[v55, v56], fp_arg_mask=0x0 } -> x0
+    v58  Imm(1)                                           -> x0
+    terminator Return(v58)   (exit_acc=v58)
+  block 145  start_pc=0
+    terminator Jmp(b12)
+  block 146  start_pc=0
+    terminator Jmp(b16)
+  block 147  start_pc=0
+    v68  ImmData(214)                                     -> x7
+    v69  ImmData(224)                                     -> x6
+    v70  CallExt { binding_idx=0, args=[v68, v69], fp_arg_mask=0x0 } -> x0
+    v71  Imm(1)                                           -> x0
+    terminator Return(v71)   (exit_acc=v71)
+  block 148  start_pc=0
+    terminator Jmp(b15)
+  block 149  start_pc=0
+    terminator Jmp(b18)
+  block 150  start_pc=0
+    v77  ImmData(235)                                     -> x7
+    v78  ImmData(245)                                     -> x6
+    v79  CallExt { binding_idx=0, args=[v77, v78], fp_arg_mask=0x0 } -> x0
+    v80  Imm(1)                                           -> x0
+    terminator Return(v80)   (exit_acc=v80)
+  block 151  start_pc=0
+    terminator Jmp(b17)
+  block 152  start_pc=0
+    terminator Jmp(b20)
+  block 153  start_pc=0
+    v86  ImmData(256)                                     -> x7
+    v87  ImmData(266)                                     -> x6
+    v88  CallExt { binding_idx=0, args=[v86, v87], fp_arg_mask=0x0 } -> x0
+    v89  Imm(1)                                           -> x0
+    terminator Return(v89)   (exit_acc=v89)
+  block 154  start_pc=0
+    terminator Jmp(b19)
+  block 155  start_pc=0
+    v95  ImmData(278)                                     -> x7
+    v96  ImmData(288)                                     -> x6
+    v97  CallExt { binding_idx=0, args=[v95, v96], fp_arg_mask=0x0 } -> x0
+    v98  Imm(1)                                           -> x0
+    terminator Return(v98)   (exit_acc=v98)
+  block 156  start_pc=0
+    terminator Jmp(b21)
+  block 157  start_pc=0
+    terminator Jmp(b25)
+  block 158  start_pc=0
+    v108 ImmData(300)                                     -> x7
+    v109 ImmData(310)                                     -> x6
+    v110 CallExt { binding_idx=0, args=[v108, v109], fp_arg_mask=0x0 } -> x0
+    v111 Imm(1)                                           -> x0
+    terminator Return(v111)   (exit_acc=v111)
+  block 159  start_pc=0
+    terminator Jmp(b24)
+  block 160  start_pc=0
+    terminator Jmp(b27)
+  block 161  start_pc=0
+    v117 ImmData(323)                                     -> x7
+    v118 ImmData(333)                                     -> x6
+    v119 CallExt { binding_idx=0, args=[v117, v118], fp_arg_mask=0x0 } -> x0
+    v120 Imm(1)                                           -> x0
+    terminator Return(v120)   (exit_acc=v120)
+  block 162  start_pc=0
+    terminator Jmp(b26)
+  block 163  start_pc=0
+    v126 ImmData(347)                                     -> x7
+    v127 ImmData(357)                                     -> x6
+    v128 CallExt { binding_idx=0, args=[v126, v127], fp_arg_mask=0x0 } -> x0
+    v129 Imm(1)                                           -> x0
+    terminator Return(v129)   (exit_acc=v129)
+  block 164  start_pc=0
+    terminator Jmp(b28)
+  block 165  start_pc=0
+    terminator Jmp(b32)
+  block 166  start_pc=0
+    v139 ImmData(370)                                     -> x7
+    v140 ImmData(380)                                     -> x6
+    v141 CallExt { binding_idx=0, args=[v139, v140], fp_arg_mask=0x0 } -> x0
+    v142 Imm(1)                                           -> x0
+    terminator Return(v142)   (exit_acc=v142)
+  block 167  start_pc=0
+    terminator Jmp(b31)
+  block 168  start_pc=0
+    v147 ImmData(391)                                     -> x7
+    v148 ImmData(401)                                     -> x6
+    v149 CallExt { binding_idx=0, args=[v147, v148], fp_arg_mask=0x0 } -> x0
+    v150 Imm(1)                                           -> x0
+    terminator Return(v150)   (exit_acc=v150)
+  block 169  start_pc=0
+    terminator Jmp(b33)
+  block 170  start_pc=0
+    terminator Jmp(b37)
+  block 171  start_pc=0
+    v160 ImmData(412)                                     -> x7
+    v161 ImmData(422)                                     -> x6
+    v162 CallExt { binding_idx=0, args=[v160, v161], fp_arg_mask=0x0 } -> x0
+    v163 Imm(1)                                           -> x0
+    terminator Return(v163)   (exit_acc=v163)
+  block 172  start_pc=0
+    terminator Jmp(b36)
+  block 173  start_pc=0
+    v169 ImmData(434)                                     -> x7
+    v170 ImmData(444)                                     -> x6
+    v171 CallExt { binding_idx=0, args=[v169, v170], fp_arg_mask=0x0 } -> x0
+    v172 Imm(1)                                           -> x0
+    terminator Return(v172)   (exit_acc=v172)
+  block 174  start_pc=0
+    terminator Jmp(b38)
+  block 175  start_pc=0
+    terminator Jmp(b42)
+  block 176  start_pc=0
+    v182 ImmData(456)                                     -> x7
+    v183 ImmData(466)                                     -> x6
+    v184 CallExt { binding_idx=0, args=[v182, v183], fp_arg_mask=0x0 } -> x0
+    v185 Imm(1)                                           -> x0
+    terminator Return(v185)   (exit_acc=v185)
+  block 177  start_pc=0
+    terminator Jmp(b41)
+  block 178  start_pc=0
+    v191 ImmData(476)                                     -> x7
+    v192 ImmData(486)                                     -> x6
+    v193 CallExt { binding_idx=0, args=[v191, v192], fp_arg_mask=0x0 } -> x0
+    v194 Imm(1)                                           -> x0
+    terminator Return(v194)   (exit_acc=v194)
+  block 179  start_pc=0
+    terminator Jmp(b43)
+  block 180  start_pc=0
+    v207 ImmData(496)                                     -> x7
+    v208 ImmData(506)                                     -> x6
+    v209 CallExt { binding_idx=0, args=[v207, v208], fp_arg_mask=0x0 } -> x0
+    v210 Imm(1)                                           -> x0
+    terminator Return(v210)   (exit_acc=v210)
+  block 181  start_pc=0
+    terminator Jmp(b46)
+  block 182  start_pc=0
+    v221 ImmData(515)                                     -> x7
+    v222 ImmData(525)                                     -> x6
+    v223 CallExt { binding_idx=0, args=[v221, v222], fp_arg_mask=0x0 } -> x0
+    v224 Imm(1)                                           -> x0
+    terminator Return(v224)   (exit_acc=v224)
+  block 183  start_pc=0
+    terminator Jmp(b49)
+  block 184  start_pc=0
+    v235 ImmData(535)                                     -> x7
+    v236 ImmData(545)                                     -> x6
+    v237 CallExt { binding_idx=0, args=[v235, v236], fp_arg_mask=0x0 } -> x0
+    v238 Imm(1)                                           -> x0
+    terminator Return(v238)   (exit_acc=v238)
+  block 185  start_pc=0
+    terminator Jmp(b52)
+  block 186  start_pc=0
+    v250 ImmData(554)                                     -> x7
+    v251 ImmData(564)                                     -> x6
+    v252 CallExt { binding_idx=0, args=[v250, v251], fp_arg_mask=0x0 } -> x0
+    v253 Imm(1)                                           -> x0
+    terminator Return(v253)   (exit_acc=v253)
+  block 187  start_pc=0
+    terminator Jmp(b55)
+  block 188  start_pc=0
+    v265 ImmData(573)                                     -> x7
+    v266 ImmData(583)                                     -> x6
+    v267 CallExt { binding_idx=0, args=[v265, v266], fp_arg_mask=0x0 } -> x0
+    v268 Imm(1)                                           -> x0
+    terminator Return(v268)   (exit_acc=v268)
+  block 189  start_pc=0
+    terminator Jmp(b58)
+  block 190  start_pc=0
+    v279 ImmData(592)                                     -> x7
+    v280 ImmData(602)                                     -> x6
+    v281 CallExt { binding_idx=0, args=[v279, v280], fp_arg_mask=0x0 } -> x0
+    v282 Imm(1)                                           -> x0
+    terminator Return(v282)   (exit_acc=v282)
+  block 191  start_pc=0
+    terminator Jmp(b61)
+  block 192  start_pc=0
+    v292 ImmData(616)                                     -> x7
+    v293 ImmData(626)                                     -> x6
+    v294 CallExt { binding_idx=0, args=[v292, v293], fp_arg_mask=0x0 } -> x0
+    v295 Imm(1)                                           -> x0
+    terminator Return(v295)   (exit_acc=v295)
+  block 193  start_pc=0
+    terminator Jmp(b64)
+  block 194  start_pc=0
+    v303 ImmData(637)                                     -> x7
+    v304 ImmData(647)                                     -> x6
+    v305 CallExt { binding_idx=0, args=[v303, v304], fp_arg_mask=0x0 } -> x0
+    v306 Imm(1)                                           -> x0
+    terminator Return(v306)   (exit_acc=v306)
+  block 195  start_pc=0
+    terminator Jmp(b67)
+  block 196  start_pc=0
+    v315 ImmData(656)                                     -> x7
+    v316 ImmData(666)                                     -> x6
+    v317 CallExt { binding_idx=0, args=[v315, v316], fp_arg_mask=0x0 } -> x0
+    v318 Imm(1)                                           -> x0
+    terminator Return(v318)   (exit_acc=v318)
+  block 197  start_pc=0
+    terminator Jmp(b70)
+  block 198  start_pc=0
+    terminator Jmp(b74)
+  block 199  start_pc=0
+    v337 ImmData(675)                                     -> x7
+    v338 ImmData(685)                                     -> x6
+    v339 CallExt { binding_idx=0, args=[v337, v338], fp_arg_mask=0x0 } -> x0
+    v340 Imm(1)                                           -> x0
+    terminator Return(v340)   (exit_acc=v340)
+  block 200  start_pc=0
+    terminator Jmp(b73)
+  block 201  start_pc=0
+    terminator Jmp(b76)
+  block 202  start_pc=0
+    v345 ImmData(691)                                     -> x7
+    v346 ImmData(701)                                     -> x6
+    v347 CallExt { binding_idx=0, args=[v345, v346], fp_arg_mask=0x0 } -> x0
+    v348 Imm(1)                                           -> x0
+    terminator Return(v348)   (exit_acc=v348)
+  block 203  start_pc=0
+    terminator Jmp(b75)
   block 204  start_pc=0
+    terminator Jmp(b78)
+  block 205  start_pc=0
+    v355 ImmData(707)                                     -> x7
+    v356 ImmData(717)                                     -> x6
+    v357 CallExt { binding_idx=0, args=[v355, v356], fp_arg_mask=0x0 } -> x0
+    v358 Imm(1)                                           -> x0
+    terminator Return(v358)   (exit_acc=v358)
+  block 206  start_pc=0
+    terminator Jmp(b77)
+  block 207  start_pc=0
+    v365 ImmData(723)                                     -> x7
+    v366 ImmData(733)                                     -> x6
+    v367 CallExt { binding_idx=0, args=[v365, v366], fp_arg_mask=0x0 } -> x0
+    v368 Imm(1)                                           -> x0
+    terminator Return(v368)   (exit_acc=v368)
+  block 208  start_pc=0
+    terminator Jmp(b79)
+  block 209  start_pc=0
+    v381 ImmData(739)                                     -> x7
+    v382 ImmData(749)                                     -> x6
+    v383 CallExt { binding_idx=0, args=[v381, v382], fp_arg_mask=0x0 } -> x0
+    v384 Imm(1)                                           -> x0
+    terminator Return(v384)   (exit_acc=v384)
+  block 210  start_pc=0
+    terminator Jmp(b82)
+  block 211  start_pc=0
+    v395 ImmData(758)                                     -> x7
+    v396 ImmData(768)                                     -> x6
+    v397 CallExt { binding_idx=0, args=[v395, v396], fp_arg_mask=0x0 } -> x0
+    v398 Imm(1)                                           -> x0
+    terminator Return(v398)   (exit_acc=v398)
+  block 212  start_pc=0
+    terminator Jmp(b85)
+  block 213  start_pc=0
+    v406 ImmData(778)                                     -> x7
+    v407 ImmData(788)                                     -> x6
+    v408 CallExt { binding_idx=0, args=[v406, v407], fp_arg_mask=0x0 } -> x0
+    v409 Imm(1)                                           -> x0
+    terminator Return(v409)   (exit_acc=v409)
+  block 214  start_pc=0
+    terminator Jmp(b88)
+  block 215  start_pc=0
+    terminator Jmp(b92)
+  block 216  start_pc=0
+    v420 ImmData(798)                                     -> x7
+    v421 ImmData(808)                                     -> x6
+    v422 CallExt { binding_idx=0, args=[v420, v421], fp_arg_mask=0x0 } -> x0
+    v423 Imm(1)                                           -> x0
+    terminator Return(v423)   (exit_acc=v423)
+  block 217  start_pc=0
+    terminator Jmp(b91)
+  block 218  start_pc=0
+    v431 ImmData(820)                                     -> x7
+    v432 ImmData(830)                                     -> x6
+    v433 CallExt { binding_idx=0, args=[v431, v432], fp_arg_mask=0x0 } -> x0
+    v434 Imm(1)                                           -> x0
+    terminator Return(v434)   (exit_acc=v434)
+  block 219  start_pc=0
+    terminator Jmp(b93)
+  block 220  start_pc=0
+    v445 ImmData(841)                                     -> x7
+    v446 ImmData(851)                                     -> x6
+    v447 CallExt { binding_idx=0, args=[v445, v446], fp_arg_mask=0x0 } -> x0
+    v448 Imm(1)                                           -> x0
+    terminator Return(v448)   (exit_acc=v448)
+  block 221  start_pc=0
+    terminator Jmp(b96)
+  block 222  start_pc=0
+    v457 ImmData(866)                                     -> x7
+    v458 ImmData(876)                                     -> x6
+    v459 CallExt { binding_idx=0, args=[v457, v458], fp_arg_mask=0x0 } -> x0
+    v460 Imm(1)                                           -> x0
+    terminator Return(v460)   (exit_acc=v460)
+  block 223  start_pc=0
+    terminator Jmp(b99)
+  block 224  start_pc=0
+    v473 ImmData(894)                                     -> x7
+    v474 ImmData(904)                                     -> x6
+    v475 CallExt { binding_idx=0, args=[v473, v474], fp_arg_mask=0x0 } -> x0
+    v476 Imm(1)                                           -> x0
+    terminator Return(v476)   (exit_acc=v476)
+  block 225  start_pc=0
+    terminator Jmp(b102)
+  block 226  start_pc=0
     v485 ImmData(923)                                     -> x7
     v486 ImmData(933)                                     -> x6
     v487 CallExt { binding_idx=0, args=[v485, v486], fp_arg_mask=0x0 } -> x0
     v488 Imm(1)                                           -> x0
     terminator Return(v488)   (exit_acc=v488)
-  block 205  start_pc=0
-    terminator Jmp(b202)
-  block 206  start_pc=0
-    v495 LoadLocal { off=-30, kind=I64 }                  -> x0
-    v496 Imm(1)                                           -> x0
-    v497 Imm(0)                                           -> x0
-    terminator Jmp(b210)   (exit_acc=v497)
-  block 207  start_pc=0
-    v502 Imm(0)                                           -> x0
-    terminator Jmp(b208)   (exit_acc=v502)
-  block 208  start_pc=0
-    v503 LoadLocal { off=-30, kind=I64 }                  -> x0
-    v504 Imm(0)                                           -> x0
-    v505 Imm(0)                                           -> x1
-    terminator Jmp(b211)   (exit_acc=v504)
-  block 209  start_pc=0
+  block 227  start_pc=0
+    terminator Jmp(b105)
+  block 228  start_pc=0
     v498 ImmData(950)                                     -> x7
     v499 ImmData(960)                                     -> x6
     v500 CallExt { binding_idx=0, args=[v498, v499], fp_arg_mask=0x0 } -> x0
     v501 Imm(1)                                           -> x0
     terminator Return(v501)   (exit_acc=v501)
-  block 210  start_pc=0
-    terminator Jmp(b207)
-  block 211  start_pc=0
-    v506 LoadLocal { off=-30, kind=I64 }                  -> x0
-    v507 Imm(1)                                           -> x0
-    v508 Imm(0)                                           -> x0
-    terminator Jmp(b215)   (exit_acc=v508)
-  block 212  start_pc=0
-    v513 Imm(0)                                           -> x0
-    terminator Jmp(b213)   (exit_acc=v513)
-  block 213  start_pc=0
-    terminator Jmp(b216)
-  block 214  start_pc=0
+  block 229  start_pc=0
+    terminator Jmp(b108)
+  block 230  start_pc=0
+    terminator Jmp(b112)
+  block 231  start_pc=0
     v509 ImmData(975)                                     -> x7
     v510 ImmData(985)                                     -> x6
     v511 CallExt { binding_idx=0, args=[v509, v510], fp_arg_mask=0x0 } -> x0
     v512 Imm(1)                                           -> x0
     terminator Return(v512)   (exit_acc=v512)
-  block 215  start_pc=0
-    terminator Jmp(b212)
-  block 216  start_pc=0
-    v514 Imm(1)                                           -> x0
-    v515 Imm(0)                                           -> x0
-    terminator Jmp(b220)   (exit_acc=v515)
-  block 217  start_pc=0
-    v520 Imm(0)                                           -> x0
-    terminator Jmp(b218)   (exit_acc=v520)
-  block 218  start_pc=0
-    terminator Jmp(b221)
-  block 219  start_pc=0
+  block 232  start_pc=0
+    terminator Jmp(b111)
+  block 233  start_pc=0
+    terminator Jmp(b114)
+  block 234  start_pc=0
     v516 ImmData(1003)                                    -> x7
     v517 ImmData(1013)                                    -> x6
     v518 CallExt { binding_idx=0, args=[v516, v517], fp_arg_mask=0x0 } -> x0
     v519 Imm(1)                                           -> x0
     terminator Return(v519)   (exit_acc=v519)
-  block 220  start_pc=0
-    terminator Jmp(b217)
-  block 221  start_pc=0
-    v521 Imm(1)                                           -> x0
-    v522 Imm(0)                                           -> x0
-    terminator Jmp(b225)   (exit_acc=v522)
-  block 222  start_pc=0
-    v527 Imm(0)                                           -> x0
-    terminator Jmp(b223)   (exit_acc=v527)
-  block 223  start_pc=0
-    terminator Jmp(b226)
-  block 224  start_pc=0
+  block 235  start_pc=0
+    terminator Jmp(b113)
+  block 236  start_pc=0
+    terminator Jmp(b116)
+  block 237  start_pc=0
     v523 ImmData(1024)                                    -> x7
     v524 ImmData(1034)                                    -> x6
     v525 CallExt { binding_idx=0, args=[v523, v524], fp_arg_mask=0x0 } -> x0
     v526 Imm(1)                                           -> x0
     terminator Return(v526)   (exit_acc=v526)
-  block 225  start_pc=0
-    terminator Jmp(b222)
-  block 226  start_pc=0
-    v528 Imm(1)                                           -> x0
-    v529 Imm(0)                                           -> x0
-    terminator Jmp(b230)   (exit_acc=v529)
-  block 227  start_pc=0
-    v534 Imm(0)                                           -> x0
-    terminator Jmp(b228)   (exit_acc=v534)
-  block 228  start_pc=0
-    terminator Jmp(b231)
-  block 229  start_pc=0
+  block 238  start_pc=0
+    terminator Jmp(b115)
+  block 239  start_pc=0
+    terminator Jmp(b118)
+  block 240  start_pc=0
     v530 ImmData(1048)                                    -> x7
     v531 ImmData(1058)                                    -> x6
     v532 CallExt { binding_idx=0, args=[v530, v531], fp_arg_mask=0x0 } -> x0
     v533 Imm(1)                                           -> x0
     terminator Return(v533)   (exit_acc=v533)
-  block 230  start_pc=0
-    terminator Jmp(b227)
-  block 231  start_pc=0
-    v535 Imm(1)                                           -> x0
-    v536 Imm(0)                                           -> x0
-    terminator Jmp(b235)   (exit_acc=v536)
-  block 232  start_pc=0
-    v541 Imm(0)                                           -> x0
-    terminator Jmp(b233)   (exit_acc=v541)
-  block 233  start_pc=0
-    terminator Jmp(b236)
-  block 234  start_pc=0
+  block 241  start_pc=0
+    terminator Jmp(b117)
+  block 242  start_pc=0
+    terminator Jmp(b120)
+  block 243  start_pc=0
     v537 ImmData(1070)                                    -> x7
     v538 ImmData(1080)                                    -> x6
     v539 CallExt { binding_idx=0, args=[v537, v538], fp_arg_mask=0x0 } -> x0
     v540 Imm(1)                                           -> x0
     terminator Return(v540)   (exit_acc=v540)
-  block 235  start_pc=0
-    terminator Jmp(b232)
-  block 236  start_pc=0
-    v542 Imm(1)                                           -> x0
-    v543 Imm(0)                                           -> x0
-    terminator Jmp(b240)   (exit_acc=v543)
-  block 237  start_pc=0
-    v548 Imm(0)                                           -> x0
-    terminator Jmp(b238)   (exit_acc=v548)
-  block 238  start_pc=0
-    terminator Jmp(b241)
-  block 239  start_pc=0
+  block 244  start_pc=0
+    terminator Jmp(b119)
+  block 245  start_pc=0
+    terminator Jmp(b122)
+  block 246  start_pc=0
     v544 ImmData(1092)                                    -> x7
     v545 ImmData(1102)                                    -> x6
     v546 CallExt { binding_idx=0, args=[v544, v545], fp_arg_mask=0x0 } -> x0
     v547 Imm(1)                                           -> x0
     terminator Return(v547)   (exit_acc=v547)
-  block 240  start_pc=0
-    terminator Jmp(b237)
-  block 241  start_pc=0
-    v549 Imm(1)                                           -> x0
-    v550 Imm(0)                                           -> x0
-    terminator Jmp(b245)   (exit_acc=v550)
-  block 242  start_pc=0
-    v555 Imm(0)                                           -> x0
-    terminator Jmp(b243)   (exit_acc=v555)
-  block 243  start_pc=0
-    terminator Jmp(b246)
-  block 244  start_pc=0
+  block 247  start_pc=0
+    terminator Jmp(b121)
+  block 248  start_pc=0
+    terminator Jmp(b124)
+  block 249  start_pc=0
     v551 ImmData(1114)                                    -> x7
     v552 ImmData(1124)                                    -> x6
     v553 CallExt { binding_idx=0, args=[v551, v552], fp_arg_mask=0x0 } -> x0
     v554 Imm(1)                                           -> x0
     terminator Return(v554)   (exit_acc=v554)
-  block 245  start_pc=0
-    terminator Jmp(b242)
-  block 246  start_pc=0
-    v556 Imm(1)                                           -> x0
-    v557 Imm(0)                                           -> x0
-    terminator Jmp(b250)   (exit_acc=v557)
-  block 247  start_pc=0
-    v562 Imm(0)                                           -> x0
-    terminator Jmp(b248)   (exit_acc=v562)
-  block 248  start_pc=0
-    terminator Jmp(b251)
-  block 249  start_pc=0
+  block 250  start_pc=0
+    terminator Jmp(b123)
+  block 251  start_pc=0
+    terminator Jmp(b126)
+  block 252  start_pc=0
     v558 ImmData(1144)                                    -> x7
     v559 ImmData(1154)                                    -> x6
     v560 CallExt { binding_idx=0, args=[v558, v559], fp_arg_mask=0x0 } -> x0
     v561 Imm(1)                                           -> x0
     terminator Return(v561)   (exit_acc=v561)
-  block 250  start_pc=0
-    terminator Jmp(b247)
-  block 251  start_pc=0
-    v563 Imm(1)                                           -> x0
-    v564 Imm(0)                                           -> x0
-    terminator Jmp(b255)   (exit_acc=v564)
-  block 252  start_pc=0
-    v569 Imm(0)                                           -> x0
-    terminator Jmp(b253)   (exit_acc=v569)
   block 253  start_pc=0
-    v570 Imm(0)                                           -> x0
-    terminator Return(v570)   (exit_acc=v570)
+    terminator Jmp(b125)
   block 254  start_pc=0
     v565 ImmData(1166)                                    -> x7
     v566 ImmData(1176)                                    -> x6
@@ -1084,7 +1084,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=32
     v568 Imm(1)                                           -> x0
     terminator Return(v568)   (exit_acc=v568)
   block 255  start_pc=0
-    terminator Jmp(b252)
+    terminator Jmp(b127)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

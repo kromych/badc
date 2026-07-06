@@ -22,12 +22,6 @@ Disassembly of section .text:
 <ref_ror>:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	movslq	%ecx, %rdx
-               	cmpq	$0x40, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
                	jmp	<addr>
                	movl	$0x1, %edx
                	movslq	%ecx, %r8
@@ -38,8 +32,6 @@ Disassembly of section .text:
                	andq	%rdi, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
-               	jmp	<addr>
-               	retq
                	movq	%rcx, %rdx
                	subq	%rsi, %rdx
                	andq	$0x3f, %rdx
@@ -54,6 +46,12 @@ Disassembly of section .text:
                	orq	%rdx, %rax
                	jmp	<addr>
                	jmp	<addr>
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	movslq	%ecx, %rdx
+               	cmpq	$0x40, %rdx
+               	jl	<addr>
+               	retq
 
 <main>:
                	pushq	%rbp
@@ -78,35 +76,8 @@ Disassembly of section .text:
                	movq	%rdx, 0x28(%rax)
                	popq	%rdx
                	xorq	%rbx, %rbx
-               	movl	%ebx, %eax
-               	cmpq	$0x6, %rax
-               	jae	<addr>
-               	jmp	<addr>
-               	movl	%ebx, %eax
-               	leaq	0x1(%rax), %rbx
                	jmp	<addr>
                	movl	$0x1, %eax
-               	movl	%eax, -0x40(%rbp)
-               	jmp	<addr>
-               	movabsq	$0x123456789abcdef, %rdi # imm = 0x123456789ABCDEF
-               	movq	%rdi, -0x48(%rbp)
-               	movq	-0x48(%rbp), %rax
-               	shrq	$0x7, %rax
-               	movq	-0x48(%rbp), %rcx
-               	shlq	$0x39, %rcx
-               	movq	%rax, %rbx
-               	orq	%rcx, %rbx
-               	movl	$0x7, %esi
-               	callq	<addr>
-               	cmpq	%rax, %rbx
-               	je	<addr>
-               	jmp	<addr>
-               	movslq	-0x40(%rbp), %rax
-               	cmpq	$0x40, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	-0x40(%rbp), %rax
-               	incq	%rax
                	movl	%eax, -0x40(%rbp)
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rax
@@ -121,16 +92,30 @@ Disassembly of section .text:
                	movslq	-0x40(%rbp), %rsi
                	callq	<addr>
                	cmpq	%rax, %r12
+               	jne	<addr>
+               	movslq	-0x40(%rbp), %rax
+               	incq	%rax
+               	movl	%eax, -0x40(%rbp)
+               	movslq	-0x40(%rbp), %rax
+               	cmpq	$0x40, %rax
+               	jl	<addr>
+               	movl	%ebx, %eax
+               	leaq	0x1(%rax), %rbx
+               	movl	%ebx, %eax
+               	cmpq	$0x6, %rax
+               	jb	<addr>
+               	movabsq	$0x123456789abcdef, %rdi # imm = 0x123456789ABCDEF
+               	movq	%rdi, -0x48(%rbp)
+               	movq	-0x48(%rbp), %rax
+               	shrq	$0x7, %rax
+               	movq	-0x48(%rbp), %rcx
+               	shlq	$0x39, %rcx
+               	movq	%rax, %rbx
+               	orq	%rcx, %rbx
+               	movl	$0x7, %esi
+               	callq	<addr>
+               	cmpq	%rax, %rbx
                	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x70, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -143,4 +128,12 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	movl	$0x1, %eax
+               	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	addq	$0x70, %rsp
+               	popq	%rbp
+               	retq
+               	jmp	<addr>
+               	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

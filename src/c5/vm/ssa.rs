@@ -15,8 +15,9 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::host::Host;
 use super::super::ir::{
-    AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
+    AtomicRmwOp, BinOp, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
 };
+use super::eval::{self, round_if_f32};
 
 /// `Inst::ImmCode` results are tagged with this bit set so
 /// `Inst::CallIndirect` can distinguish a function pointer from
@@ -994,7 +995,7 @@ fn run_inst<H: Host>(
         }
         Inst::Fneg(src) => {
             let raw = frame.regs[*src as usize];
-            let neg = (-f64::from_bits(raw as u64)).to_bits() as i64;
+            let neg = eval::eval_fneg(raw);
             frame.regs[v as usize] = round_if_f32(neg, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
@@ -1005,56 +1006,26 @@ fn run_inst<H: Host>(
             neg_product,
             neg_addend,
         } => {
-            // Single-rounding fused multiply-add (C99 6.5p8). Match the
-            // host fmadd / vfmadd: round once, at the result's width.
-            // `libm::fma` / `fmaf` give the same single rounding as the
-            // native instruction (and, unlike `f64::mul_add`, are
-            // available in the no_std build) so the VM reference agrees
-            // with native codegen on every target.
             let is_f32 = matches!(frame.func.f32_values.get(v as usize), Some(true));
-            let mut av = f64::from_bits(frame.regs[*a as usize] as u64);
-            let bv = f64::from_bits(frame.regs[*b as usize] as u64);
-            let mut cv = f64::from_bits(frame.regs[*c as usize] as u64);
-            if *neg_product {
-                av = -av;
-            }
-            if *neg_addend {
-                cv = -cv;
-            }
-            let res = if is_f32 {
-                libm::fmaf(av as f32, bv as f32, cv as f32) as f64
-            } else {
-                libm::fma(av, bv, cv)
-            };
-            frame.regs[v as usize] =
-                round_if_f32(res.to_bits() as i64, frame.func.f32_values.get(v as usize));
+            let res = eval::eval_fma(
+                frame.regs[*a as usize],
+                frame.regs[*b as usize],
+                frame.regs[*c as usize],
+                *neg_product,
+                *neg_addend,
+                is_f32,
+            );
+            frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
         Inst::Extend { value, kind } => {
             let raw = frame.regs[*value as usize];
-            frame.regs[v as usize] = match kind {
-                LoadKind::I8 => raw as i8 as i64,
-                LoadKind::I16 => raw as i16 as i64,
-                LoadKind::I32 => raw as i32 as i64,
-                _ => raw,
-            };
+            frame.regs[v as usize] = eval::eval_extend(raw, *kind);
             return Ok(());
         }
         Inst::FpCast { kind, value } => {
             let raw = frame.regs[*value as usize];
-            frame.regs[v as usize] = match kind {
-                FpCastKind::FpToInt => f64::from_bits(raw as u64) as i64,
-                FpCastKind::UFpToInt => f64::from_bits(raw as u64) as u64 as i64,
-                FpCastKind::IntToFp => (raw as f64).to_bits() as i64,
-                FpCastKind::UIntToFp => (raw as u64 as f64).to_bits() as i64,
-                // A register carrying a single-precision value already
-                // holds the f64 bit pattern of that f32 (the F32 load
-                // widens on read). Widening to double is therefore a
-                // no-op; narrowing rounds the f64 to f32 then re-stores
-                // the f32-as-f64 bit pattern (C99 6.3.1.5).
-                FpCastKind::F32ToF64 => raw,
-                FpCastKind::F64ToF32 => (f64::from_bits(raw as u64) as f32 as f64).to_bits() as i64,
-            };
+            frame.regs[v as usize] = eval::eval_fpcast(*kind, raw);
             return Ok(());
         }
         Inst::Call {
@@ -2249,97 +2220,11 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
     }
 }
 
-/// Round a result to single precision when `f32_flag` marks the
-/// defining value f32 (C99 6.3.1.8). The register convention keeps an
-/// f32 value as the f64 bit pattern of its single-precision value, so
-/// the round-trip through `f32` reproduces hardware single-precision
-/// arithmetic. A non-f32 (double) value passes through unchanged. The
-/// flag is `None` for SSA built outside the walker (no f32 tracking),
-/// which also passes through as double.
-fn round_if_f32(bits: i64, f32_flag: Option<&bool>) -> i64 {
-    if matches!(f32_flag, Some(true)) {
-        (f64::from_bits(bits as u64) as f32 as f64).to_bits() as i64
-    } else {
-        bits
-    }
-}
-
-/// Binop dispatch. Mirrors `fold_int_binop` in `ast::walk`;
-/// the two share C99-driven semantics for arithmetic / bitwise /
-/// shift / comparison ops. FP arms (Fadd, Feq, ...) treat each
-/// operand as the bit pattern of an `f64` and return a fresh
-/// bit pattern (arithmetic) or 0 / 1 (compares). Integer divide
-/// by zero surfaces as a runtime error -- C99 6.5.5p5 leaves
-/// division-by-zero undefined and we'd rather diagnose it than
-/// invoke host-level UB.
+/// Binop dispatch, shared with the compile-time constant folder
+/// (`super::eval`); a division trap re-wraps as the VM's runtime
+/// error.
 fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, C5Error> {
-    let r = match op {
-        BinOp::Add => lhs.wrapping_add(rhs),
-        BinOp::Sub => lhs.wrapping_sub(rhs),
-        BinOp::Mul => lhs.wrapping_mul(rhs),
-        BinOp::And => lhs & rhs,
-        BinOp::Or => lhs | rhs,
-        BinOp::Xor => lhs ^ rhs,
-        BinOp::Shl => ((lhs as u64) << (rhs as u32 & 63)) as i64,
-        BinOp::Shr => lhs >> (rhs as u32 & 63),
-        BinOp::Shru => ((lhs as u64) >> (rhs as u32 & 63)) as i64,
-        BinOp::Ror => (lhs as u64).rotate_right(rhs as u32 & 63) as i64,
-        BinOp::Eq => (lhs == rhs) as i64,
-        BinOp::Ne => (lhs != rhs) as i64,
-        BinOp::Lt => (lhs < rhs) as i64,
-        BinOp::Gt => (lhs > rhs) as i64,
-        BinOp::Le => (lhs <= rhs) as i64,
-        BinOp::Ge => (lhs >= rhs) as i64,
-        BinOp::Ult => ((lhs as u64) < (rhs as u64)) as i64,
-        BinOp::Ugt => ((lhs as u64) > (rhs as u64)) as i64,
-        BinOp::Ule => ((lhs as u64) <= (rhs as u64)) as i64,
-        BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
-        BinOp::Div => {
-            if rhs == 0 {
-                return Err(C5Error::Runtime(
-                    "vm_ssa: signed integer division by zero".to_string(),
-                ));
-            }
-            lhs.wrapping_div(rhs)
-        }
-        BinOp::Mod => {
-            if rhs == 0 {
-                return Err(C5Error::Runtime(
-                    "vm_ssa: signed integer modulo by zero".to_string(),
-                ));
-            }
-            lhs.wrapping_rem(rhs)
-        }
-        BinOp::Divu => {
-            let r = rhs as u64;
-            if r == 0 {
-                return Err(C5Error::Runtime(
-                    "vm_ssa: unsigned integer division by zero".to_string(),
-                ));
-            }
-            ((lhs as u64) / r) as i64
-        }
-        BinOp::Modu => {
-            let r = rhs as u64;
-            if r == 0 {
-                return Err(C5Error::Runtime(
-                    "vm_ssa: unsigned integer modulo by zero".to_string(),
-                ));
-            }
-            ((lhs as u64) % r) as i64
-        }
-        BinOp::Fadd => (f64::from_bits(lhs as u64) + f64::from_bits(rhs as u64)).to_bits() as i64,
-        BinOp::Fsub => (f64::from_bits(lhs as u64) - f64::from_bits(rhs as u64)).to_bits() as i64,
-        BinOp::Fmul => (f64::from_bits(lhs as u64) * f64::from_bits(rhs as u64)).to_bits() as i64,
-        BinOp::Fdiv => (f64::from_bits(lhs as u64) / f64::from_bits(rhs as u64)).to_bits() as i64,
-        BinOp::Feq => (f64::from_bits(lhs as u64) == f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fne => (f64::from_bits(lhs as u64) != f64::from_bits(rhs as u64)) as i64,
-        BinOp::Flt => (f64::from_bits(lhs as u64) < f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fgt => (f64::from_bits(lhs as u64) > f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fle => (f64::from_bits(lhs as u64) <= f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fge => (f64::from_bits(lhs as u64) >= f64::from_bits(rhs as u64)) as i64,
-    };
-    Ok(r)
+    eval::apply_binop(op, lhs, rhs).map_err(|t| C5Error::Runtime(t.message().to_string()))
 }
 
 #[cfg(test)]

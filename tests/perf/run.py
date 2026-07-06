@@ -20,6 +20,9 @@ Compilers probed (skipped silently when absent):
 * cl /Od       -- MSVC cl.exe on Windows.
 * cl /O2       -- MSVC cl.exe on Windows.
 
+The optimized entries (badc -O, clang -O2, cl /O2) define NDEBUG, matching
+release-build practice; the unoptimized entries keep asserts live.
+
 Override the badc binary via $BADC; override the tcc binary via $TCC.
 """
 
@@ -155,7 +158,7 @@ def probe_compilers() -> list[Compiler]:
         badc = REPO_ROOT / "target" / "release" / f"badc{EXE}"
     if badc.is_file():
         found.append(Compiler("badc", [str(badc)]))
-        found.append(Compiler("badc -O", [str(badc), "-O"]))
+        found.append(Compiler("badc -O", [str(badc), "-O", "-DNDEBUG"]))
     else:
         print(f"info: badc not at {badc}; skipping badc rows", file=sys.stderr)
 
@@ -213,7 +216,7 @@ def probe_compilers() -> list[Compiler]:
         # libSystem. Without `-lm` clang fails to link quickjs_bench.
         clang_trailing = ("-lm",) if sys.platform == "linux" else ()
         found.append(Compiler("clang -O0", ["clang", "-O0"], trailing=clang_trailing))
-        found.append(Compiler("clang -O2", ["clang", "-O2"], trailing=clang_trailing))
+        found.append(Compiler("clang -O2", ["clang", "-O2", "-DNDEBUG"], trailing=clang_trailing))
 
     if WIN and shutil.which("cl"):
         found.append(
@@ -226,7 +229,7 @@ def probe_compilers() -> list[Compiler]:
         found.append(
             Compiler(
                 "cl /O2",
-                ["cl", "/nologo", "/O2"],
+                ["cl", "/nologo", "/O2", "/DNDEBUG"],
                 output_dash_o=False,
             )
         )

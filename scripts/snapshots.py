@@ -119,12 +119,18 @@ def normalise_asm(text: str) -> str:
     return text
 
 
-def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
+def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> bool:
     # Pin the cross-target so the SSA dump's register allocation is
     # host-independent (the docstring at the top of this file calls
     # the dump target-independent; without --target the host's
     # default arch leaks into the snapshot register names, which
     # then diff between macOS aarch64 hosts and Linux x86_64 CI).
+    # Pass the source path relative to the repo root (with cwd=root)
+    # so `__FILE__` in an `assert` embeds a checkout-independent path
+    # into `.data`; an absolute path bakes the checkout prefix into
+    # the segment and drifts the snapshot across differently-named
+    # trees.
+    rel = src.relative_to(root)
     proc = subprocess.run(
         [
             str(badc),
@@ -134,10 +140,11 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
             "--dump-ssa",
             "-o",
             str(tmp_bin),
-            str(src),
+            str(rel),
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
+        cwd=root,
     )
     # `--target=<arch>` emits a cross-host advisory on stderr only
     # when the target arch differs from the host arch. The line is
@@ -151,7 +158,7 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
         line for line in text.splitlines()
         if not line.startswith("info: produced a Linux/")
     )
-    text = text.replace(str(src), src.name)
+    text = text.replace(str(src.relative_to(root)), src.name).replace(str(src), src.name)
     if text and not text.endswith("\n"):
         text += "\n"
     dst.write_text(text)
@@ -200,11 +207,15 @@ def build_info_stop_address(binary: Path) -> int | None:
     return None
 
 
-def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str) -> bool:
+def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root: Path) -> bool:
+    # Relative source path + cwd=root: keep `__FILE__` checkout-independent
+    # (see emit_ssa).
     proc = subprocess.run(
-        [str(badc), "-q", "-O", f"--target={target}", "-o", str(tmp_bin), str(src)],
+        [str(badc), "-q", "-O", f"--target={target}", "-o", str(tmp_bin),
+         str(src.relative_to(root))],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        cwd=root,
     )
     if proc.returncode != 0:
         return False
@@ -253,7 +264,7 @@ def regenerate(root: Path, only: list[str] | None) -> int:
         for src in sources:
             name = src.stem
             ssa_path = snap_root / "ssa" / f"{name}.ssa"
-            ok = emit_ssa(badc, src, ssa_path, tmp)
+            ok = emit_ssa(badc, src, ssa_path, tmp, root)
             if not ok:
                 ssa_path.unlink(missing_ok=True)
                 for suffix, _ in TARGETS:
@@ -262,7 +273,7 @@ def regenerate(root: Path, only: list[str] | None) -> int:
                 continue
             for suffix, target in TARGETS:
                 asm_path = snap_root / "asm" / f"{name}.{suffix}.asm"
-                if not emit_asm(badc, src, asm_path, tmp, target):
+                if not emit_asm(badc, src, asm_path, tmp, target, root):
                     asm_path.unlink(missing_ok=True)
             written += 1
 

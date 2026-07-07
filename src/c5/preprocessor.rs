@@ -547,6 +547,13 @@ impl Preprocessor {
             Target::LinuxAarch64 | Target::LinuxX64 => {
                 macros.insert("__linux__".to_string(), "1".to_string());
                 macros.insert("__unix__".to_string(), "1".to_string());
+                // badc links the GNU C library on Linux targets, so source
+                // gating a glibc-only feature (pthread_getattr_np,
+                // __GLIBC_PREREQ) keys on these instead of a degraded
+                // fallback, matching a gcc/clang build here. A 2.17 baseline;
+                // installed before the CLI lists so `-D`/`-U __GLIBC__` win.
+                macros.insert("__GLIBC__".to_string(), "2".to_string());
+                macros.insert("__GLIBC_MINOR__".to_string(), "17".to_string());
             }
             Target::WindowsX64 | Target::WindowsAarch64 => {
                 // Target-detection macros plus the `__intN` fixed-width
@@ -5214,6 +5221,54 @@ mod tests {
             let out = pp.process(src).expect("preprocessor failed");
             assert!(!out.contains("int lp64;"), "{t:?} must not define __LP64__");
         }
+    }
+
+    #[test]
+    fn glibc_predefined_for_linux_targets_only() {
+        let probe = "#ifdef __GLIBC__\nint have;\n#endif\n\
+                     #if defined(__GLIBC__) && __GLIBC__==2 && __GLIBC_MINOR__==17\n\
+                     int baseline;\n#endif\n";
+        for t in [Target::LinuxAarch64, Target::LinuxX64] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            let out = pp.process(probe).expect("preprocessor failed");
+            assert!(out.contains("int have;"), "{t:?} should define __GLIBC__");
+            assert!(
+                out.contains("int baseline;"),
+                "{t:?} should define __GLIBC__==2 / __GLIBC_MINOR__==17"
+            );
+        }
+        // Not glibc: macOS is Darwin libc, Windows links the CRT.
+        for t in [
+            Target::MacOSAarch64,
+            Target::WindowsX64,
+            Target::WindowsAarch64,
+        ] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            let out = pp.process(probe).expect("preprocessor failed");
+            assert!(
+                !out.contains("int have;"),
+                "{t:?} must not define __GLIBC__"
+            );
+        }
+    }
+
+    #[test]
+    fn glibc_cli_define_and_undef_win() {
+        // The CLI define/undef lists are applied after the target
+        // predefines (compiler::configure_preprocessor), so an explicit
+        // `-U __GLIBC__` removes the Linux baseline and `-D __GLIBC__=<v>`
+        // overrides its value. This mirrors that exact ordering.
+        let undef = "#ifdef __GLIBC__\nint present;\n#endif\n";
+        let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+        pp.undef("__GLIBC__");
+        let out = pp.process(undef).expect("preprocessor failed");
+        assert!(!out.contains("int present;"), "-U __GLIBC__ must remove it");
+
+        let over = "#if __GLIBC__==9\nint nine;\n#endif\n";
+        let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+        pp.define("__GLIBC__", "9");
+        let out = pp.process(over).expect("preprocessor failed");
+        assert!(out.contains("int nine;"), "-D __GLIBC__=9 must override");
     }
 
     #[test]

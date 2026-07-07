@@ -88,7 +88,7 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 /// different models) and emit a relocatable object. `no_entry_point` is the
 /// `-c` mode: no `main` required, every non-static function is an external
 /// symbol. The explicit target keeps the bytes host-independent.
-fn reloc_bytes(src: &str, target: Target) -> alloc::vec::Vec<u8> {
+fn reloc_bytes_raw(src: &str, target: Target) -> alloc::vec::Vec<u8> {
     let copts = CompileOptions {
         no_entry_point: true,
         ..Default::default()
@@ -104,78 +104,107 @@ fn reloc_bytes(src: &str, target: Target) -> alloc::vec::Vec<u8> {
         .unwrap_or_else(|e| panic!("emit relocatable for {target:?}: {e}"))
 }
 
+/// Zero the build-provenance marker (`OUTPUT_MARKER`) wherever the emitter
+/// placed it in the object. The marker carries `CARGO_PKG_VERSION`, so it
+/// changes on every release bump although the generated code is identical, and
+/// it is non-executed metadata rather than codegen output. Zeroing is
+/// length-preserving, so the digest and the pinned length stay independent of
+/// the version string while still catching any real change to code,
+/// relocations, or layout. A bump that changes the marker's byte length (a
+/// wider version string) shifts container offsets and still needs a refresh.
+fn mask_build_marker(bytes: &mut [u8]) {
+    let marker = crate::OUTPUT_MARKER.as_bytes();
+    let mut i = 0;
+    while i + marker.len() <= bytes.len() {
+        if &bytes[i..i + marker.len()] == marker {
+            bytes[i..i + marker.len()].fill(0);
+            i += marker.len();
+        } else {
+            i += 1;
+        }
+    }
+}
+
+/// Emit a relocatable object with the version-bearing marker masked; this is
+/// the form the digest is taken over.
+fn reloc_bytes(src: &str, target: Target) -> alloc::vec::Vec<u8> {
+    let mut bytes = reloc_bytes_raw(src, target);
+    mask_build_marker(&mut bytes);
+    bytes
+}
+
 /// (fixture, target, digest, len). Host-independent: the bytes are a function
 /// of (source, target, options) only. Regenerate by running
 /// `reloc_object_bytes_match_golden` -- it panics with the current table.
 const GOLDEN: &[(&str, &str, u64, usize)] = &[
-    ("ret42", "linux-x64", 0x2fab302afe7d051f, 1472),
-    ("ret42", "linux-arm64", 0xa1f9fbf7bb9cbb2c, 1472),
-    ("ret42", "macos-arm64", 0xa1f9fbf7bb9cbb2c, 1472),
-    ("ret42", "win-x64", 0x2fab302afe7d051f, 1472),
-    ("ret42", "win-arm64", 0xa1f9fbf7bb9cbb2c, 1472),
-    ("intarith", "linux-x64", 0x23f78314c1cff274, 1776),
-    ("intarith", "linux-arm64", 0xfe88c2dcdf472389, 1744),
-    ("intarith", "macos-arm64", 0xfe88c2dcdf472389, 1744),
-    ("intarith", "win-x64", 0xe333573652a24424, 1800),
-    ("intarith", "win-arm64", 0x09376f54c31f167d, 1784),
-    ("fparith", "linux-x64", 0xaed28d15dbe12f9f, 1752),
-    ("fparith", "linux-arm64", 0x10b5c40cae1c98b9, 1688),
-    ("fparith", "macos-arm64", 0x10b5c40cae1c98b9, 1688),
-    ("fparith", "win-x64", 0xbc441586c78cb6ab, 1840),
-    ("fparith", "win-arm64", 0x10b5c40cae1c98b9, 1688),
-    ("fpunary", "linux-x64", 0xa7c6296710fb7597, 1848),
-    ("fpunary", "linux-arm64", 0x23cf0e4149bb3595, 1752),
-    ("fpunary", "macos-arm64", 0x23cf0e4149bb3595, 1752),
-    ("fpunary", "win-x64", 0xbc02ab7882ec515f, 1984),
-    ("fpunary", "win-arm64", 0x23cf0e4149bb3595, 1752),
-    ("mem", "linux-x64", 0xb5e67861feca0b63, 1600),
-    ("mem", "linux-arm64", 0x30acdb6f0e6ff6be, 1608),
-    ("mem", "macos-arm64", 0x30acdb6f0e6ff6be, 1608),
-    ("mem", "win-x64", 0x445055ce1605ec83, 1600),
-    ("mem", "win-arm64", 0x30acdb6f0e6ff6be, 1608),
-    ("data_calls", "linux-x64", 0xe8c2b32035325e81, 1664),
-    ("data_calls", "linux-arm64", 0x6f46939d6a2a0046, 1688),
-    ("data_calls", "macos-arm64", 0x6f46939d6a2a0046, 1688),
-    ("data_calls", "win-x64", 0xc3ebc6db69470097, 1680),
-    ("data_calls", "win-arm64", 0x6f46939d6a2a0046, 1688),
-    ("struct_param_spill", "linux-x64", 0x46151b2f7769d061, 1680),
+    ("ret42", "linux-x64", 0x972e37b869431c8d, 1472),
+    ("ret42", "linux-arm64", 0x18a4bccaa8386e66, 1472),
+    ("ret42", "macos-arm64", 0x18a4bccaa8386e66, 1472),
+    ("ret42", "win-x64", 0x972e37b869431c8d, 1472),
+    ("ret42", "win-arm64", 0x18a4bccaa8386e66, 1472),
+    ("intarith", "linux-x64", 0x24208a248ae5252a, 1776),
+    ("intarith", "linux-arm64", 0xd5b04f3d242edc77, 1744),
+    ("intarith", "macos-arm64", 0xd5b04f3d242edc77, 1744),
+    ("intarith", "win-x64", 0x1dbdd9f8a0a631ee, 1800),
+    ("intarith", "win-arm64", 0xb59f2159d80c7baf, 1784),
+    ("fparith", "linux-x64", 0xf97054d931986a49, 1752),
+    ("fparith", "linux-arm64", 0xc553c29d037841ff, 1688),
+    ("fparith", "macos-arm64", 0xc553c29d037841ff, 1688),
+    ("fparith", "win-x64", 0x2dcb79d6ed35b119, 1840),
+    ("fparith", "win-arm64", 0xc553c29d037841ff, 1688),
+    ("fpunary", "linux-x64", 0xa2320aca8c0c7c6d, 1848),
+    ("fpunary", "linux-arm64", 0xa97c9658c8e9337f, 1752),
+    ("fpunary", "macos-arm64", 0xa97c9658c8e9337f, 1752),
+    ("fpunary", "win-x64", 0x7b07e4f1b8dd24f1, 1984),
+    ("fpunary", "win-arm64", 0xa97c9658c8e9337f, 1752),
+    ("mem", "linux-x64", 0x88790aab62328ea5, 1600),
+    ("mem", "linux-arm64", 0x8cb0f935c6c90c08, 1608),
+    ("mem", "macos-arm64", 0x8cb0f935c6c90c08, 1608),
+    ("mem", "win-x64", 0x46d23c8c6fd48245, 1600),
+    ("mem", "win-arm64", 0x8cb0f935c6c90c08, 1608),
+    ("data_calls", "linux-x64", 0x6c72a27551a6b867, 1664),
+    ("data_calls", "linux-arm64", 0xc256010a265c1c38, 1688),
+    ("data_calls", "macos-arm64", 0xc256010a265c1c38, 1688),
+    ("data_calls", "win-x64", 0xeb5afe3dc95f8bf5, 1680),
+    ("data_calls", "win-arm64", 0xc256010a265c1c38, 1688),
+    ("struct_param_spill", "linux-x64", 0xd69bc01b8f732917, 1680),
     (
         "struct_param_spill",
         "linux-arm64",
-        0xff95238ed7250147,
+        0x60a2bcd6ef88226d,
         1664,
     ),
     (
         "struct_param_spill",
         "macos-arm64",
-        0xff95238ed7250147,
+        0x60a2bcd6ef88226d,
         1664,
     ),
-    ("struct_param_spill", "win-x64", 0x3fef0b9e920a5ec2, 1720),
-    ("struct_param_spill", "win-arm64", 0xb9721374270c6243, 1696),
+    ("struct_param_spill", "win-x64", 0x220bba68b632f99c, 1720),
+    ("struct_param_spill", "win-arm64", 0x7a22b9d4505e21bd, 1696),
     (
         "fp_across_struct_call",
         "linux-x64",
-        0x2ff371699761f6ca,
+        0x0b31913136bfba08,
         1744,
     ),
     (
         "fp_across_struct_call",
         "linux-arm64",
-        0x8bfeabe2701aede3,
+        0x55ce18cc6a27bed5,
         1688,
     ),
     (
         "fp_across_struct_call",
         "macos-arm64",
-        0x8bfeabe2701aede3,
+        0x55ce18cc6a27bed5,
         1688,
     ),
-    ("fp_across_struct_call", "win-x64", 0x87d8fca72654ef11, 1816),
+    ("fp_across_struct_call", "win-x64", 0xb370179c43a5b0b3, 1816),
     (
         "fp_across_struct_call",
         "win-arm64",
-        0x8bfeabe2701aede3,
+        0x55ce18cc6a27bed5,
         1688,
     ),
 ];
@@ -244,5 +273,25 @@ fn reloc_golden_detects_a_one_byte_source_change() {
     assert_ne!(
         base, perturbed,
         "golden digest is insensitive to a return-value change"
+    );
+}
+
+#[test]
+fn build_marker_is_masked_out_of_hashed_bytes() {
+    // The raw object embeds the version-bearing marker; the hashed form must
+    // not, so a release bump cannot move the golden. Masking is length-
+    // preserving, keeping the pinned length a real-size check.
+    let marker = crate::OUTPUT_MARKER.as_bytes();
+    let src = "int f(void){return 42;}";
+    let raw = reloc_bytes_raw(src, Target::LinuxX64);
+    assert!(
+        raw.windows(marker.len()).any(|w| w == marker),
+        "raw relocatable object does not carry the build marker"
+    );
+    let hashed = reloc_bytes(src, Target::LinuxX64);
+    assert_eq!(raw.len(), hashed.len(), "masking changed the object length");
+    assert!(
+        !hashed.windows(marker.len()).any(|w| w == marker),
+        "build marker survived into the hashed bytes"
     );
 }

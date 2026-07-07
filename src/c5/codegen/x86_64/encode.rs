@@ -2019,6 +2019,11 @@ pub(crate) fn lower(
                 target.abi(),
             );
         });
+        // Turn self-tail-recursion into a loop back edge on the
+        // post-inline bodies, before the phi-sensitive passes below.
+        super::ssa::emit_common::time_pass("passes::tailrec::run (x86_64)", || {
+            crate::c5::codegen::passes::tailrec::run(&mut ssa_funcs);
+        });
         // Forward an inlined one-word struct return out of its frame slot:
         // a single full-width store + slot reads collapse to the stored
         // register value. Runs after the inliner produces the slot and

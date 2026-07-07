@@ -342,6 +342,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_byval_param_followed_by_ptr.c", 0),
     ("tail_call_no_address_escape.c", 0),
     ("fib.c", 0),
+    ("tailrec_narrow_param.c", 0),
+    ("tailrec_void_accumulate.c", 0),
     ("queens.c", 0),
     ("inline_keyword_uncaps.c", 0),
     ("ssa_bail_fixup_rollback.c", 0),

@@ -1624,6 +1624,11 @@ pub(crate) fn lower(
                 target.abi(),
             );
         });
+        // Turn self-tail-recursion into a loop back edge; see x86_64.rs's
+        // matching block for the rationale.
+        super::ssa::emit_common::time_pass("passes::tailrec::run (aarch64)", || {
+            crate::c5::codegen::passes::tailrec::run(&mut ssa_funcs);
+        });
         // Forward an inlined one-word struct return out of its frame slot;
         // see x86_64.rs's matching block for the rationale.
         super::ssa::emit_common::time_pass("passes::struct_return_reg::run (aarch64)", || {

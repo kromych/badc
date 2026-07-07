@@ -27,7 +27,7 @@ int main(void) {
     if (i2f(16777219) != 16777220.0f) return 7;
 
     // Widest signed source: the largest i64 converts to 0x1p63 in f32.
-    long big = 0x7FFFFFFFFFFFFFFFL;
+    long long big = 0x7FFFFFFFFFFFFFFFLL;  // long is 32-bit on LLP64; need 64-bit width
     if (i2f((int)0) != 0.0f) return 8;
     float wide = (float)big;
     if (wide != 9223372036854775808.0f) return 9;

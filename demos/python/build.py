@@ -461,6 +461,12 @@ def build(target: str, do_link: bool, log) -> Path | None:
     badc = badc_path()
     out = PY_DIR / ".cache" / f"obj-{target}"
     out.mkdir(parents=True, exist_ok=True)
+    # Remove the previous interpreter up front. Every TU is recompiled
+    # and relinked each run, but a build that fails partway would
+    # otherwise leave the prior run's binary in place -- a stale
+    # interpreter that a loose `find .cache -name python` then picks up
+    # and mistakes for a fresh successful build.
+    (out / ("python.exe" if win else "python")).unlink(missing_ok=True)
     dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
     opt = ["-O"]
 

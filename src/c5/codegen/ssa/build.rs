@@ -64,6 +64,11 @@ struct LocalCacheEntry {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum PureKey {
     Imm(i64),
+    /// `Inst::Imm` holding an f32 bit pattern, tagged f32. Kept apart
+    /// from [`PureKey::Imm`]: the f32 mark changes the value's
+    /// materialisation, so an integer imm with an equal payload must
+    /// not unify with it.
+    ImmF32(i64),
     ImmData(i64),
     ImmCode(usize),
     TlsAddr(i64),
@@ -81,6 +86,11 @@ enum PureKey {
     FpCast {
         kind: FpCastKind,
         value: ValueId,
+        /// Result single-precision marker. An `int -> float` and an
+        /// `int -> double` of the same source share a `kind` and
+        /// `value` but produce different values (single vs double
+        /// rounding), so the CSE key must keep them apart.
+        f32: bool,
     },
     Extend {
         value: ValueId,
@@ -166,8 +176,11 @@ impl SsaBuilder {
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            has_returns_twice_call: false,
+            did_unroll: false,
         };
         let mut b = Self {
             func,
@@ -408,6 +421,19 @@ impl SsaBuilder {
         id
     }
 
+    /// `Inst::Imm` carrying an f32 bit pattern, tagged f32 (a `float`
+    /// constant, C99 6.4.4.2p4). Cached under its own key so it never
+    /// unifies with an integer imm of equal payload.
+    pub(crate) fn imm_f32(&mut self, f32_bits: u32) -> ValueId {
+        let v = f32_bits as i64;
+        if let Some(cached) = self.lookup_pure(PureKey::ImmF32(v)) {
+            return cached;
+        }
+        let id = self.push(Inst::Imm(v));
+        self.pure_cache.insert(PureKey::ImmF32(v), id);
+        self.mark_f32(id)
+    }
+
     /// `Inst::ImmData` (data-segment offset). Same CSE shape as
     /// `imm`. Externally-resolved data offsets use
     /// `imm_data_extern`, which records a per-site reloc entry
@@ -459,6 +485,16 @@ impl SsaBuilder {
     /// address.
     pub(crate) fn goto_indirect(&mut self, target: ValueId) {
         self.close(Terminator::GotoIndirect { target }, target);
+    }
+
+    /// Close the current block with `Terminator::JumpTable`:
+    /// control transfers to `targets[idx]`. The caller must have
+    /// proven `idx` in `0..targets.len()` (an unsigned bounds
+    /// check branching to the default block).
+    pub(crate) fn jump_table(&mut self, idx: ValueId, targets: alloc::vec::Vec<BlockId>) {
+        let table = self.func.jump_tables.len() as u32;
+        self.func.jump_tables.push(targets);
+        self.close(Terminator::JumpTable { idx, table }, idx);
     }
 
     /// `Inst::ImmCode(0)` whose target lives in another TU.
@@ -963,13 +999,36 @@ impl SsaBuilder {
     /// the dedicated [`Self::fp_narrow`] / [`Self::mark_f32`] helpers;
     /// `F32ToF64` clears it.
     pub(crate) fn fp_cast(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
-        let key = PureKey::FpCast { kind, value };
+        let key = PureKey::FpCast {
+            kind,
+            value,
+            f32: false,
+        };
         if let Some(cached) = self.lookup_pure(key) {
             return cached;
         }
         let id = self.push(Inst::FpCast { kind, value });
         self.pure_cache.insert(key, id);
         id
+    }
+
+    /// `Inst::FpCast` producing a single-precision result. Used for the
+    /// direct `int -> float` conversion (C99 6.3.1.4): the per-arch emit
+    /// picks the single-precision converter (`scvtf s` / `cvtsi2ss`) from
+    /// the value's f32 marker, so no `double`-then-narrow pair is built.
+    /// Keyed apart from the f64-producing [`Self::fp_cast`].
+    pub(crate) fn fp_cast_to_f32(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
+        let key = PureKey::FpCast {
+            kind,
+            value,
+            f32: true,
+        };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::FpCast { kind, value });
+        self.pure_cache.insert(key, id);
+        self.mark_f32(id)
     }
 
     /// Widen a single-precision value to double (C99 6.3.1.5). If
@@ -1129,7 +1188,18 @@ impl SsaBuilder {
     /// block, va_start / va_arg may write through caller buffers.
     pub(crate) fn intrinsic(&mut self, kind: i64, args: Vec<ValueId>) -> ValueId {
         self.local_cache.clear();
-        self.push(Inst::Intrinsic { kind, args })
+        let id = self.push(Inst::Intrinsic { kind, args });
+        if super::reg_alloc::is_setjmp_barrier(&self.func.insts[id as usize]) {
+            self.func.has_returns_twice_call = true;
+        }
+        id
+    }
+
+    /// Record that the function calls a returns-twice function (the
+    /// setjmp family / vfork). See
+    /// [`FunctionSsa::has_returns_twice_call`].
+    pub(crate) fn mark_returns_twice(&mut self) {
+        self.func.has_returns_twice_call = true;
     }
 
     /// Reserve a fresh per-function 8-byte stack slot for the

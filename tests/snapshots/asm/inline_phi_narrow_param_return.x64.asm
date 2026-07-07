@@ -16,42 +16,31 @@ Disassembly of section .text:
                	retq
 
 <phi_accumulate>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movslq	%edi, %rdi
-               	movl	$0x1, %edx
-               	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	%rdi, %rax
-               	jge	<addr>
+               	movl	$0x1, %ecx
+               	xorq	%rax, %rax
                	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
-               	jmp	<addr>
-               	imulq	$0xf4243, %rdx, %rax    # imm = 0xF4243
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	leaq	0x1(%rax), %rdx
-               	jmp	<addr>
-               	movq	%rdx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	imulq	$0xf4243, %rcx, %rcx    # imm = 0xF4243
+               	addq	%rax, %rcx
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	leaq	0x1(%rdx), %rax
+               	movslq	%eax, %rdx
+               	cmpq	%rdi, %rdx
+               	jl	<addr>
+               	movq	%rcx, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x32, %edi
                	callq	<addr>
                	cmpq	$-0x4728dfba, %rax      # imm = 0xB8D72046
                	jne	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	movl	$0x1, %eax
+               	jmp	<addr>
                	addb	%al, 0x41(%rdx)

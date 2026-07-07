@@ -11,20 +11,12 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	jmp	<addr>
+               	xorq	%rax, %rax
+               	retq
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	$0xb8, %eax
-               	xorq	%rcx, %rcx
-               	addq	%rcx, %rax
-               	sarq	$0x3, %rax
-               	cmpq	$0x17, %rax
-               	je	<addr>
                	movl	$0x3, %eax
-               	retq
-               	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)

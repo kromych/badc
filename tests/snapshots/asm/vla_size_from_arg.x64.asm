@@ -37,32 +37,22 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	xorq	%rax, %rax
                	movl	%eax, -0x18(%rbp)
-               	movslq	-0x18(%rbp), %rax
-               	movslq	0x10(%rbp), %rcx
-               	cmpq	%rcx, %rax
-               	jge	<addr>
                	jmp	<addr>
+               	movq	-0x8(%rbp), %rcx
+               	movslq	-0x18(%rbp), %rax
+               	leaq	(%rcx,%rax), %rdx
+               	incq	%rax
+               	movslq	%eax, %rcx
+               	movb	%cl, (%rdx)
                	movslq	-0x18(%rbp), %rax
                	incq	%rax
                	movl	%eax, -0x18(%rbp)
-               	jmp	<addr>
-               	movq	-0x8(%rbp), %rax
-               	movslq	-0x18(%rbp), %rcx
-               	addq	%rcx, %rax
-               	incq	%rcx
-               	movslq	%ecx, %rdx
-               	movb	%dl, (%rax)
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	movl	%eax, -0x20(%rbp)
-               	movl	%eax, -0x28(%rbp)
-               	movslq	-0x28(%rbp), %rax
+               	movslq	-0x18(%rbp), %rax
                	movslq	0x10(%rbp), %rcx
                	cmpq	%rcx, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	-0x28(%rbp), %rax
-               	incq	%rax
+               	jl	<addr>
+               	xorq	%rax, %rax
+               	movl	%eax, -0x20(%rbp)
                	movl	%eax, -0x28(%rbp)
                	jmp	<addr>
                	movslq	-0x20(%rbp), %rax
@@ -72,7 +62,13 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rcx
                	addq	%rcx, %rax
                	movl	%eax, -0x20(%rbp)
-               	jmp	<addr>
+               	movslq	-0x28(%rbp), %rax
+               	incq	%rax
+               	movl	%eax, -0x28(%rbp)
+               	movslq	-0x28(%rbp), %rax
+               	movslq	0x10(%rbp), %rcx
+               	cmpq	%rcx, %rax
+               	jl	<addr>
                	movslq	-0x20(%rbp), %rax
                	addq	$0x2030, %rsp           # imm = 0x2030
                	popq	%rbp
@@ -101,4 +97,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

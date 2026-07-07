@@ -11,16 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	xorq	%rcx, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x5, %rax
-               	jge	<addr>
-               	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	cmpq	$0x5, %rax
-               	jne	<addr>
                	movl	$0x1, %eax
                	retq
                	xorq	%rax, %rax

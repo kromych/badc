@@ -27,10 +27,9 @@ Disassembly of section .text:
                	str	d5, [sp, #0x90]
                	str	d6, [sp, #0xa0]
                	str	d7, [sp, #0xb0]
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x50
-               	str	x19, [sp]
+               	str	x19, [sp, #-0x60]!
+               	stp	x29, x30, [sp, #0x50]
+               	add	x29, sp, #0x50
                	sub	x0, x29, #0x20
                	add	x1, x29, #0x10
                	mov	x16, x0
@@ -50,15 +49,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	sxtw	x2, w1
-               	ldursw	x3, [x29, #0x10]
-               	cmp	x2, x3
-               	b.ge	<addr>
-               	b	<addr>
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	b	<addr>
                	sub	x2, x29, #0x20
                	mov	x17, x2
@@ -79,24 +71,27 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x2, x16
-               	sub	x3, x29, #0x38
+               	sub	x4, x29, #0x38
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x2]
-               	str	x10, [x3]
+               	str	x10, [x4]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x3
+               	mov	x2, x4
                	sub	x2, x29, #0x38
-               	ldrsw	x2, [x2]
-               	sub	x3, x29, #0x38
-               	ldrsw	x3, [x3, #0x4]
-               	add	x2, x2, x3
-               	add	x0, x0, x2
-               	b	<addr>
-               	sub	x1, x29, #0x20
-               	sxtw	x0, w0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
+               	ldrsw	x4, [x2]
+               	sub	x2, x29, #0x38
+               	ldrsw	x2, [x2, #0x4]
+               	add	x2, x4, x2
+               	add	x1, x1, x2
+               	add	x0, x3, #0x1
+               	sxtw	x3, w0
+               	ldursw	x2, [x29, #0x10]
+               	cmp	x3, x2
+               	b.lt	<addr>
+               	sub	x0, x29, #0x20
+               	sxtw	x0, w1
+               	ldp	x29, x30, [sp, #0x50]
+               	ldr	x19, [sp], #0x60
                	add	sp, sp, #0xc0
                	ret
 

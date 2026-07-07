@@ -15,27 +15,28 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
+               	movq	%r12, 0x8(%rsp)
+               	movq	%rsi, %r8
+               	movq	%rdx, %r9
                	movslq	%edi, %rdi
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	movslq	%ecx, %r8
-               	cmpq	%rdi, %r8
-               	jge	<addr>
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
-               	jmp	<addr>
-               	movslq	%ecx, %r8
-               	shlq	$0x2, %r8
-               	leaq	(%rsi,%r8), %r9
-               	movslq	(%r9), %r9
-               	addq	%rdx, %r8
-               	movslq	(%r8), %r8
-               	imulq	%r9, %r8
-               	addq	%r8, %rax
-               	jmp	<addr>
-               	movslq	%eax, %rax
+               	movq	%rdx, %rsi
+               	shlq	$0x2, %rsi
+               	leaq	(%r8,%rsi), %rbx
+               	movslq	(%rbx), %rbx
+               	addq	%r9, %rsi
+               	movslq	(%rsi), %rsi
+               	imulq	%rbx, %rsi
+               	addq	%rsi, %rcx
+               	leaq	0x1(%rdx), %rax
+               	movslq	%eax, %rdx
+               	cmpq	%rdi, %rdx
+               	jl	<addr>
+               	movslq	%ecx, %rax
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -66,12 +67,9 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x46, %rax
                	jne	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)
+               	movl	$0x1, %eax
+               	jmp	<addr>

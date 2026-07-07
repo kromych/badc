@@ -22,17 +22,12 @@ Disassembly of section .text:
                	ret
 
 <twogroups>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0xe0
-               	str	x20, [sp]
-               	str	x21, [sp, #0x8]
-               	str	x22, [sp, #0x10]
-               	str	x23, [sp, #0x18]
-               	str	x24, [sp, #0x20]
-               	str	x25, [sp, #0x28]
-               	str	x26, [sp, #0x30]
-               	str	x27, [sp, #0x38]
+               	stp	x20, x21, [sp, #-0x50]!
+               	stp	x22, x23, [sp, #0x10]
+               	stp	x24, x25, [sp, #0x20]
+               	stp	x26, x27, [sp, #0x30]
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
                	add	x20, x0, #0x1
                	add	x21, x0, #0x2
                	add	x22, x0, #0x3
@@ -67,16 +62,11 @@ Disassembly of section .text:
                	add	x0, x0, x25
                	add	x0, x0, x26
                	add	x0, x0, x27
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	ldr	x27, [sp, #0x38]
-               	add	sp, sp, #0xe0
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x26, x27, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x50
                	ret
 
 <main>:

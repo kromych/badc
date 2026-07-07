@@ -52,14 +52,16 @@ use super::encode::{
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
     enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
     enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
-    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzu_x_d, enc_fdiv_d,
-    enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
-    enc_ldaxr, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
+    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzs_x_s,
+    enc_fcvtzu_x_d, enc_fcvtzu_x_s, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d,
+    enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldaxr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off,
+    enc_ldp_post, enc_ldr_d_imm, enc_ldr_d_post, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
     enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
-    enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv,
-    enc_stlxr, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
-    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv,
-    load_imm64,
+    enc_ldrsw_reg_lsl2, enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret,
+    enc_scvtf_d_x, enc_scvtf_s_x, enc_sdiv, enc_stlxr, enc_stp_d_off, enc_stp_d_pre, enc_stp_off,
+    enc_stp_pre, enc_str_d_imm, enc_str_d_pre, enc_str_imm, enc_str_pre, enc_str_s_imm,
+    enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm,
+    enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv, load_imm64,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
@@ -667,11 +669,15 @@ pub(crate) fn emit_function(
             moves.push((Place::IntReg(src), dst));
             vids.push(vid);
             homes.push(dst);
-            // Sign-extend on entry only when a consumer reads the
-            // parameter's upper bits; otherwise the low word already
-            // holds the C99 6.5.2.2p4-converted value.
-            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32)
-                && alloc.high_observed.get(vid).copied().unwrap_or(true)
+            // The caller passes the raw 64-bit value; the callee
+            // performs the C99 6.5.2.2p4 conversion. An I8/I16 extend
+            // rewrites bits 8..63 / 16..63 and is always required; an
+            // I32 extend touches only bits 32..63 and is skipped when
+            // no consumer reads them (`high_observed` tracks exactly
+            // that range).
+            if matches!(kind, LoadKind::I8 | LoadKind::I16)
+                || (matches!(kind, LoadKind::I32)
+                    && alloc.high_observed.get(vid).copied().unwrap_or(true))
             {
                 exts.push((dst, *kind));
             }
@@ -764,6 +770,10 @@ pub(crate) fn emit_function(
     // placeholder; `(site, target_block, rd)` is resolved against the
     // final `block_offsets` once every block has been laid out.
     let mut block_addr_fixups: Vec<(usize, BlockId, Reg)> = Vec::new();
+    // Text-embedded jump tables: `(table_start, table_idx)` per
+    // `Terminator::JumpTable`. Each 32-bit entry is patched to
+    // `block_offset - table_start` once every block is laid out.
+    let mut jump_table_fixups: Vec<(usize, u32)> = Vec::new();
     // Per-function alloca bookkeeping. Set by `Inst::AllocaInit`
     // and read by `Inst::Intrinsic { kind: Alloca }`; zero
     // means the function doesn't use alloca.
@@ -1121,6 +1131,45 @@ pub(crate) fn emit_function(
                 };
                 emit(code, enc_br(rt));
             }
+            Terminator::JumpTable { idx, table } => {
+                // Table dispatch: `adr` the table base (embedded right
+                // after the `br`, so the +/-1 MiB reach is trivially
+                // met), load the 32-bit table-relative entry, add, and
+                // branch. The bounds check preceding this terminator
+                // proves the index in range.
+                let iplace = alloc
+                    .places
+                    .get(idx as usize)
+                    .copied()
+                    .unwrap_or(Place::None);
+                let rt = match materialize_int(code, iplace, scratch.primary, frame) {
+                    Some(r) => r,
+                    None => {
+                        bail("JumpTable: idx Place not int", idx, iplace);
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
+                        macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                        macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                        return false;
+                    }
+                };
+                // rt is an allocated register or scratch.primary, never
+                // scratch.secondary, so the table base cannot alias it.
+                let tbl = scratch.secondary;
+                emit(code, enc_adr(tbl, 16));
+                emit(code, enc_ldrsw_reg_lsl2(scratch.primary, tbl, rt));
+                emit(code, enc_add_reg(tbl, tbl, scratch.primary));
+                emit(code, enc_br(tbl));
+                jump_table_fixups.push((code.len(), table));
+                let entries = func.jump_tables[table as usize].len();
+                code.resize(code.len() + entries * 4, 0);
+            }
             Terminator::TailExt(binding_idx) => {
                 // Tail-jump through the GOT-patched trampoline:
                 // `adrp x16, _ ; ldr x16, [x16, _] ; br x16`.
@@ -1168,6 +1217,19 @@ pub(crate) fn emit_function(
         }
         let word = enc_adr(*rd, rel as i32);
         code[*site..*site + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    // Patch each jump table's entries with the target block's offset
+    // relative to the table base.
+    for (table_start, table) in &jump_table_fixups {
+        for (i, &t) in func.jump_tables[*table as usize].iter().enumerate() {
+            let rel = block_offsets[t as usize] as i64 - *table_start as i64;
+            debug_assert!(
+                i32::try_from(rel).is_ok(),
+                "JumpTable: entry offset out of i32 range"
+            );
+            let site = table_start + i * 4;
+            code[site..site + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+        }
     }
     // Patch the recorded branches.
     for fx in &branch_fixups {
@@ -1367,14 +1429,9 @@ fn emit_prologue(
             emit(code, enc_str_imm(Reg(r), Reg(31), off));
         }
         // Standard frame below the gr-save area. A variadic callee is
-        // never a full leaf (`param_spill_bytes != 0`), so the
-        // stp / mov-fp pair always follows.
-        emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
-        emit(code, enc_add_imm(Reg(29), Reg(31), 0));
-        if frame.frame_bytes > 0 {
-            emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
-        }
-        emit_prologue_saved_regs(code, alloc, frame);
+        // never a full leaf (`param_spill_bytes != 0`), so the frame
+        // record always follows.
+        emit_frame_and_saves(code, alloc, frame, abi);
         return;
     }
     // AAPCS64 variadic register save area (AAPCS64 Appendix B). Reserve
@@ -1410,12 +1467,7 @@ fn emit_prologue(
                 enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
             );
         }
-        emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
-        emit(code, enc_add_imm(Reg(29), Reg(31), 0));
-        if frame.frame_bytes > 0 {
-            emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
-        }
-        emit_prologue_saved_regs(code, alloc, frame);
+        emit_frame_and_saves(code, alloc, frame, abi);
         return;
     }
     // Host-arg-reg spill for non-variadic functions: spill each
@@ -1527,13 +1579,9 @@ fn emit_prologue(
     if is_full_leaf(func, frame, alloc) {
         return;
     }
-    // Standard frame: stp fp/lr; mov fp, sp; sub sp, sp, frame_bytes.
-    emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
-    emit(code, enc_add_imm(Reg(29), Reg(31), 0));
-    if frame.frame_bytes > 0 {
-        emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
-    }
-    emit_prologue_saved_regs(code, alloc, frame);
+    // Standard frame: frame record, fp, frame allocation, callee
+    // saves (folded into one pre-indexed group when the frame fits).
+    emit_frame_and_saves(code, alloc, frame, abi);
     emit_struct_param_scatter(code, func, abi, frame);
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result
@@ -1693,29 +1741,200 @@ fn emit_struct_param_scatter(
 
 /// Save the allocator-reported callee-saved GPRs + FP regs at the
 /// bottom of the frame. The saved-reg region sits just above sp; its
-/// offsets are one slot per saved register, so the 12-bit scaled
-/// immediate (range 0..32760 in multiples of 8) always covers them. The
-/// allocator spill region, by contrast, can exceed that reach and is
-/// addressed through the range-checked SP helpers. Using `stur` off fp
-/// would silently truncate the 9-bit immediate for frames larger than
-/// ~256 bytes. x19 is saved just past the allocator-saved gprs, but only
-/// when the function clobbers it; the slot is reserved either way so the
-/// surrounding offsets stay fixed.
-fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
-    for (i, &r) in alloc.fp_used.iter().enumerate() {
-        let off = (i as u32) * 8;
-        emit(code, enc_str_d_imm(r, Reg(31), off));
+/// offsets are one slot per saved register, so the pair imm7 (scaled by
+/// 8, range -512..504) and the 12-bit scaled immediate always cover
+/// them. The allocator spill region, by contrast, can exceed that reach
+/// and is addressed through the range-checked SP helpers. x19 is saved
+/// just past the allocator-saved gprs, but only when the function
+/// clobbers it; the slot is reserved either way so the surrounding
+/// offsets stay fixed. Adjacent slots within each region save as
+/// stp / ldp pairs; a region's odd tail saves alone.
+///
+/// When `fold != 0` (see [`frame_fold_bytes`]) the first save carries
+/// the whole allocation -- frame plus the fp/lr slot pair -- as a
+/// pre-indexed store of `-fold` bytes, replacing the prologue's
+/// `stp x29, x30, [sp, #-16]!` / `sub sp` pair; the first save always
+/// targets offset 0, so every other offset is unchanged.
+fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
+    let mut alloc_pending = fold != 0;
+    let fp = &alloc.fp_used;
+    let mut i = 0usize;
+    while i + 1 < fp.len() {
+        if core::mem::take(&mut alloc_pending) {
+            emit(
+                code,
+                enc_stp_d_pre(fp[i], fp[i + 1], Reg(31), -(fold as i32)),
+            );
+        } else {
+            emit(
+                code,
+                enc_stp_d_off(fp[i], fp[i + 1], Reg(31), (i as i32) * 8),
+            );
+        }
+        i += 2;
     }
-    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = saved_fpr_bytes + (i as u32) * 8;
-        emit(code, enc_str_imm(Reg(r), Reg(31), off));
+    if i < fp.len() {
+        if core::mem::take(&mut alloc_pending) {
+            emit(code, enc_str_d_pre(fp[i], Reg(31), -(fold as i32)));
+        } else {
+            emit(code, enc_str_d_imm(fp[i], Reg(31), (i as u32) * 8));
+        }
+    }
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(fp.len() as u32);
+    let gpr = &alloc.gpr_used;
+    let mut i = 0usize;
+    while i + 1 < gpr.len() {
+        let off = (saved_fpr_bytes + (i as u32) * 8) as i32;
+        if core::mem::take(&mut alloc_pending) {
+            emit(
+                code,
+                enc_stp_pre(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), -(fold as i32)),
+            );
+        } else {
+            emit(
+                code,
+                enc_stp_off(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), off),
+            );
+        }
+        i += 2;
+    }
+    if i < gpr.len() {
+        if core::mem::take(&mut alloc_pending) {
+            emit(code, enc_str_pre(Reg(gpr[i]), Reg(31), -(fold as i32)));
+        } else {
+            let off = saved_fpr_bytes + (i as u32) * 8;
+            emit(code, enc_str_imm(Reg(gpr[i]), Reg(31), off));
+        }
     }
     if frame.uses_x19 {
-        let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
-        let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
-        emit(code, enc_str_imm(Reg(19), Reg(31), x19_save_off));
+        if core::mem::take(&mut alloc_pending) {
+            emit(code, enc_str_pre(Reg(19), Reg(31), -(fold as i32)));
+        } else {
+            let saved_gpr_bytes = super::ssa::emit_common::slots16(gpr.len() as u32);
+            emit(
+                code,
+                enc_str_imm(Reg(19), Reg(31), saved_fpr_bytes + saved_gpr_bytes),
+            );
+        }
     }
+    debug_assert!(!alloc_pending, "frame fold requested with no callee save");
+}
+
+/// Restore what [`emit_prologue_saved_regs`] saved, in mirror order
+/// (x19, gprs descending, fp regs descending) so the offset-0 access
+/// comes last and, when `fold != 0`, tears the frame down as a
+/// post-indexed load of `fold` bytes, replacing the epilogue's
+/// `add sp` and the fp/lr `ldp`. `fold` is the total writeback
+/// (frame plus the fp/lr pair), or 0 for the unfolded shape.
+fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
+    let gpr = &alloc.gpr_used;
+    if frame.uses_x19 {
+        let saved_gpr_bytes = super::ssa::emit_common::slots16(gpr.len() as u32);
+        let off = saved_fpr_bytes + saved_gpr_bytes;
+        if off == 0 && fold != 0 {
+            emit(code, enc_ldr_post(Reg(19), Reg(31), fold as i32));
+        } else {
+            emit(code, enc_ldr_imm(Reg(19), Reg(31), off));
+        }
+    }
+    let mut i = gpr.len();
+    if i % 2 == 1 {
+        i -= 1;
+        let off = saved_fpr_bytes + (i as u32) * 8;
+        if off == 0 && fold != 0 {
+            emit(code, enc_ldr_post(Reg(gpr[i]), Reg(31), fold as i32));
+        } else {
+            emit(code, enc_ldr_imm(Reg(gpr[i]), Reg(31), off));
+        }
+    }
+    while i >= 2 {
+        i -= 2;
+        let off = (saved_fpr_bytes + (i as u32) * 8) as i32;
+        if off == 0 && fold != 0 {
+            emit(
+                code,
+                enc_ldp_post(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), fold as i32),
+            );
+        } else {
+            emit(
+                code,
+                enc_ldp_off(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), off),
+            );
+        }
+    }
+    let fp = &alloc.fp_used;
+    let mut i = fp.len();
+    if i % 2 == 1 {
+        i -= 1;
+        if i == 0 && fold != 0 {
+            emit(code, enc_ldr_d_post(fp[i], Reg(31), fold as i32));
+        } else {
+            emit(code, enc_ldr_d_imm(fp[i], Reg(31), (i as u32) * 8));
+        }
+    }
+    while i >= 2 {
+        i -= 2;
+        if i == 0 && fold != 0 {
+            emit(code, enc_ldp_d_post(fp[i], fp[i + 1], Reg(31), fold as i32));
+        } else {
+            emit(
+                code,
+                enc_ldp_d_off(fp[i], fp[i + 1], Reg(31), (i as i32) * 8),
+            );
+        }
+    }
+}
+
+/// Frame bytes the folded prologue / epilogue shape can carry, or 0
+/// when the fold does not apply. The folded shape extends the frame by
+/// the 16-byte fp/lr slot pair at its top: the first callee save
+/// pre-indexes `-(frame_bytes + 16)`, fp/lr store / load through the
+/// signed-offset pair form at `[sp, #frame_bytes]`, and the last
+/// restore post-indexes the whole amount back. All three must fit
+/// their immediates: the scaled imm7 pair forms reach +-504/512, so a
+/// pair-first frame folds up to 488 (16-aligned: 480); a single-register
+/// bottom save uses the unscaled imm9 (+-255) and folds up to 224.
+/// Both sides compute the fold from the same inputs so they agree.
+fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
+    let n_bottom = if !alloc.fp_used.is_empty() {
+        alloc.fp_used.len()
+    } else if !alloc.gpr_used.is_empty() {
+        alloc.gpr_used.len()
+    } else if frame.uses_x19 {
+        1
+    } else {
+        return 0;
+    };
+    debug_assert!(frame.frame_bytes >= 16, "saves imply a non-empty frame");
+    let limit = if n_bottom >= 2 { 480 } else { 224 };
+    if frame.frame_bytes <= limit {
+        frame.frame_bytes
+    } else {
+        0
+    }
+}
+
+/// Establish the frame record and fp, allocate the frame, and save the
+/// callee-saved registers. The folded shape allocates everything with
+/// the first callee save's pre-index and keeps fp and every offset
+/// identical to the unfolded `stp fp/lr; mov fp, sp; sub sp` shape;
+/// fp/lr restore first in the epilogue, so the `ret`-feeding lr load
+/// issues off an address that depends on no other restore.
+fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, abi: super::Abi) {
+    let fold = frame_fold_bytes(alloc, frame);
+    if fold != 0 {
+        emit_prologue_saved_regs(code, alloc, frame, fold + 16);
+        emit(code, enc_stp_off(Reg(29), Reg(30), Reg(31), fold as i32));
+        emit(code, enc_add_imm(Reg(29), Reg(31), fold));
+        return;
+    }
+    emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
+    emit(code, enc_add_imm(Reg(29), Reg(31), 0));
+    if frame.frame_bytes > 0 {
+        emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
+    }
+    emit_prologue_saved_regs(code, alloc, frame, 0);
 }
 
 /// Byte offset (positive) from fp to the start of the saved-reg
@@ -1912,16 +2131,16 @@ fn emit_inst(
             };
             // The encoding to write `dst <- sign-extend(arg_reg)`.
             // For full-width kinds (I64), it is a plain mov. The
-            // sign-extension is skipped when no consumer reads the
-            // parameter's upper bits.
+            // caller passes the raw 64-bit value, so an I8/I16
+            // conversion always runs; an I32 extend touches only
+            // bits 32..63 and is skipped when no consumer reads them.
             let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
             let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
                 let rn = Reg(arg_reg);
                 match kind {
-                    _ if high_dead => emit_mov_reg(code, rd, rn),
                     LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
                     LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
-                    LoadKind::I32 => emit(code, super::encode::enc_sxtw(rd, rn)),
+                    LoadKind::I32 if !high_dead => emit(code, super::encode::enc_sxtw(rd, rn)),
                     _ => emit_mov_reg(code, rd, rn),
                 }
             };
@@ -2315,10 +2534,15 @@ fn emit_inst(
                         Place::Spill(_) => SCRATCH_FP0,
                         _ => return false,
                     };
-                    let enc = if matches!(kind, FpCastKind::UIntToFp) {
-                        enc_ucvtf_d_x(dd, rn)
-                    } else {
-                        enc_scvtf_d_x(dd, rn)
+                    // C99 6.3.1.4: when the result is `float`, convert the
+                    // integer directly to single precision (one rounding)
+                    // rather than to double followed by a narrowing `fcvt`.
+                    let res_f32 = alloc.is_f32(v);
+                    let enc = match (matches!(kind, FpCastKind::UIntToFp), res_f32) {
+                        (true, true) => enc_ucvtf_s_x(dd, rn),
+                        (true, false) => enc_ucvtf_d_x(dd, rn),
+                        (false, true) => enc_scvtf_s_x(dd, rn),
+                        (false, false) => enc_scvtf_d_x(dd, rn),
                     };
                     emit(code, enc);
                     if let Place::Spill(slot) = dst {
@@ -2328,19 +2552,32 @@ fn emit_inst(
                     true
                 }
                 FpCastKind::FpToInt | FpCastKind::UFpToInt => {
-                    let dn = match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
-                        Some(r) => r,
-                        None => return false,
+                    // C99 6.3.1.4: a `float` source truncates directly to
+                    // the integer (one conversion) rather than widening to
+                    // double first. Read the source in its single-precision
+                    // view when it is f32-marked.
+                    let src_f32 = alloc.is_f32(*value);
+                    let dn = if src_f32 {
+                        match materialize_fp_f32(code, src_place, SCRATCH_FP0, frame) {
+                            Some(r) => r,
+                            None => return false,
+                        }
+                    } else {
+                        match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
+                            Some(r) => r,
+                            None => return false,
+                        }
                     };
                     let rd = match dst {
                         Place::IntReg(r) => Reg(r),
                         Place::Spill(_) => scratch.primary,
                         _ => return false,
                     };
-                    let enc = if matches!(kind, FpCastKind::UFpToInt) {
-                        enc_fcvtzu_x_d(rd, dn)
-                    } else {
-                        enc_fcvtzs_x_d(rd, dn)
+                    let enc = match (matches!(kind, FpCastKind::UFpToInt), src_f32) {
+                        (true, true) => enc_fcvtzu_x_s(rd, dn),
+                        (true, false) => enc_fcvtzu_x_d(rd, dn),
+                        (false, true) => enc_fcvtzs_x_s(rd, dn),
+                        (false, false) => enc_fcvtzs_x_d(rd, dn),
                     };
                     emit(code, enc);
                     if let Place::Spill(slot) = dst {
@@ -3864,13 +4101,10 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
     }
 }
 
-/// Indirect call through a function-pointer value. Mirrors the
-/// pool path's indirect-call lowering: marshal args per the host
-/// ABI, capture the target into a callee-overwritable scratch
-/// register that arg marshalling won't clobber, `blr`, recover
-/// the return value.
-/// FP args and variadic indirect callees aren't part of the thin
-/// slice; either case returns false.
+/// Indirect call through a function-pointer value: marshal args per
+/// the host ABI, capture the target into a callee-overwritable
+/// scratch register that arg marshalling won't clobber, `blr`,
+/// recover the return value.
 #[allow(clippy::too_many_arguments)]
 fn emit_call_indirect(
     code: &mut Vec<u8>,
@@ -3922,173 +4156,84 @@ fn emit_call_indirect(
         .copied()
         .find(|r| !arg_source_regs.contains(r))
         .map(Reg);
-    if (callee_variadic
-        && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()))
-        || !aggs.is_empty()
-        || ret_agg.is_some()
-    {
-        // Host ABI through a function pointer, taken for a host
-        // variadic callee or any call passing an aggregate by value
-        // (aggregates are placed by `marshal_args`, which the
-        // c5-stack push path below does not handle): the named
-        // arguments follow AAPCS64 (int / FP bank) and the variadic tail
-        // rides the host stack at 8-byte stride (macOS,
-        // `variadic_on_stack`), the integer register bank then the
-        // stack (Windows arm64, `variadic_int_only`), or both banks then
-        // the stack (Linux aarch64, `aarch64_host_variadic`) -- the same
-        // placement `emit_call` uses for a direct variadic call. The
-        // target pointer rides a non-arg-passing scratch that
-        // `marshal_args` will not clobber, or a reserved stack cell
-        // above the argument slots when no such scratch is free.
-        let mut plan =
-            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
-        let staged_off = match free_target_reg {
-            Some(_) => None,
-            None => {
-                // One 16-byte cell keeps SP 16-aligned; the argument
-                // slots stay below the original scratch_bytes.
-                plan.scratch_bytes += 16;
-                Some(plan.scratch_bytes - 16)
-            }
-        };
-        let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
-            Some(r) => r,
-            None => return false,
-        };
-        let target_reg = match free_target_reg {
-            Some(r) => {
-                if target_r.0 != r.0 {
-                    emit_mov_reg(code, r, target_r);
-                }
-                r
-            }
-            None => {
-                if target_r.0 != scratch.primary.0 {
-                    emit_mov_reg(code, scratch.primary, target_r);
-                }
-                scratch.primary
-            }
-        };
-        emit_sub_sp_imm(code, plan.scratch_bytes);
-        if let Some(off) = staged_off {
-            emit_sp_str_x_auto(code, target_reg, off);
+    // Host ABI through a function pointer, for variadic and
+    // non-variadic callees alike: `marshal_args` places the named
+    // arguments per AAPCS64 (int / FP bank, overflow on the host
+    // stack) and a variadic tail per the target's host variadic
+    // placement (`variadic_on_stack` on macOS, `variadic_int_only`
+    // on Windows arm64, both banks then the stack on Linux
+    // aarch64) -- the same placement `emit_call` uses for a direct
+    // call. A non-variadic call plans every argument as fixed,
+    // mirroring the direct path; the walker lowers an unrecoverable
+    // prototype as all-fixed non-variadic, which this placement
+    // serves. The target pointer rides a non-arg-passing scratch
+    // that `marshal_args` will not clobber, or a reserved stack
+    // cell above the argument slots when no such scratch is free.
+    let plan_fixed = if callee_variadic {
+        fixed_args
+    } else {
+        args.len()
+    };
+    let mut plan =
+        super::plan_call_args_aggs(args.len(), plan_fixed, fp_arg_mask, abi, &aggs, false);
+    let staged_off = match free_target_reg {
+        Some(_) => None,
+        None => {
+            // One 16-byte cell keeps SP 16-aligned; the argument
+            // slots stay below the original scratch_bytes.
+            plan.scratch_bytes += 16;
+            Some(plan.scratch_bytes - 16)
         }
-        if !marshal_args(
-            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
-        ) {
-            return false;
-        }
-        setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
-        // The marshal consumed every argument source, so x9 is free
-        // to carry the staged pointer to the blr.
-        let call_reg = match staged_off {
-            Some(off) => {
-                emit_sp_ldr_x(code, Reg(9), off);
-                Reg(9)
+    };
+    let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    let target_reg = match free_target_reg {
+        Some(r) => {
+            if target_r.0 != r.0 {
+                emit_mov_reg(code, r, target_r);
             }
-            None => target_reg,
-        };
-        emit(code, enc_blr(call_reg));
-        emit_add_sp_imm(code, plan.scratch_bytes);
-        finish_call_result(
-            code,
-            ret_agg,
-            ret_slot_off,
-            agg_descs,
-            dst,
-            frame,
-            scratch,
-            fp_return,
-        );
-        return true;
-    }
-    // Indirect calls keep the c5-stack push shape regardless of
-    // whether the callee is variadic. Variadic c5 callees read
-    // their args off the 16-byte-stride stack (their prologue
-    // skips the host-arg-reg spill); non-variadic callees pull
-    // their args from x0..x7 + host stack overflow, ignoring the
-    // c5 stack pushes. Mirroring the pool path's indirect-call
-    // shape -- push every arg first, then load the prefix into
-    // host arg regs, then blr -- handles both at the indirect
-    // call site without needing the callee's variadic flag.
-    // `fp_arg_mask` is supplied by the caller from the argument types;
-    // the reload loop below routes each masked argument into its
-    // d-register per the plan.
-    for (i, &arg_id) in args.iter().rev().enumerate() {
-        let arg_place = alloc
-            .places
-            .get(arg_id as usize)
-            .copied()
-            .unwrap_or(Place::None);
-        let sp_shift = (i as u32) * 16;
-        let src = if let Place::FpReg(_) = arg_place {
-            // FP value: load into d-reg, then move bit pattern
-            // into x16 for the 16-byte stride push.
-            let dn = match materialize_fp_shifted(code, arg_place, 0, frame, sp_shift) {
-                Some(r) => r,
-                None => return false,
-            };
-            emit(code, enc_fmov_d_to_x(scratch.primary, dn));
+            r
+        }
+        None => {
+            if target_r.0 != scratch.primary.0 {
+                emit_mov_reg(code, scratch.primary, target_r);
+            }
             scratch.primary
-        } else {
-            match materialize_int_shifted(code, arg_place, scratch.primary, frame, sp_shift) {
-                Some(r) => r,
-                None => return false,
-            }
-        };
-        emit(code, enc_str_pre(src, Reg(31), -16));
-    }
-    let pushed_bytes = (args.len() as u32) * 16;
-    // The pushes consumed every argument source, so x9 holds no live
-    // value; capture the pointer here, with SP shifted by the pushes.
-    let target_reg = Reg(9);
-    let target_r =
-        match materialize_int_shifted(code, target_place, target_reg, frame, pushed_bytes) {
-            Some(r) => r,
-            None => return false,
-        };
-    if target_r.0 != target_reg.0 {
-        emit_mov_reg(code, target_reg, target_r);
-    }
-    // Load the prefix into host arg regs from the c5-stride
-    // stack we just laid down. Non-variadic callees expect this
-    // shape; variadic callees ignore the host arg regs but read
-    // the same slots through the address-of-local path. Stack
-    // overflow (args
-    // past 8) stays on the c5 stack at `[sp + i*16]`, which the
-    // callee prologue's overflow restripe loop also reads from.
-    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
-    emit_sub_sp_imm(code, plan.scratch_bytes);
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        match placement {
-            super::ArgPlacement::IntReg(r) => {
-                let src_off = plan.scratch_bytes + (i as u32) * 16;
-                emit(code, enc_ldr_imm(Reg(r), Reg(31), src_off));
-            }
-            super::ArgPlacement::FpReg(r) => {
-                let src_off = plan.scratch_bytes + (i as u32) * 16;
-                emit(code, enc_ldr_d_imm(r, Reg(31), src_off));
-            }
-            super::ArgPlacement::Stack(off) => {
-                let src_off = plan.scratch_bytes + (i as u32) * 16;
-                emit(code, enc_ldr_imm(scratch.primary, Reg(31), src_off));
-                emit(code, enc_str_imm(scratch.primary, Reg(31), off));
-            }
-            // This path plans with the scalar `plan_call_args`, so
-            // aggregate placements never occur here.
-            super::ArgPlacement::StructRegs { .. }
-            | super::ArgPlacement::StructByRefReg(_)
-            | super::ArgPlacement::StructByRefStack(_)
-            | super::ArgPlacement::StructStack { .. } => {
-                unreachable!("aggregate arg placement on the scalar indirect path")
-            }
         }
+    };
+    emit_sub_sp_imm(code, plan.scratch_bytes);
+    if let Some(off) = staged_off {
+        emit_sp_str_x_auto(code, target_reg, off);
     }
-    emit(code, enc_blr(target_reg));
+    if !marshal_args(
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+    ) {
+        return false;
+    }
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
+    // The marshal consumed every argument source, so x9 is free
+    // to carry the staged pointer to the blr.
+    let call_reg = match staged_off {
+        Some(off) => {
+            emit_sp_ldr_x(code, Reg(9), off);
+            Reg(9)
+        }
+        None => target_reg,
+    };
+    emit(code, enc_blr(call_reg));
     emit_add_sp_imm(code, plan.scratch_bytes);
-    // Drop the 16-byte-stride argument pushes.
-    emit_add_sp_imm(code, pushed_bytes);
-    move_call_result(code, dst, frame, fp_return);
+    finish_call_result(
+        code,
+        ret_agg,
+        ret_slot_off,
+        agg_descs,
+        dst,
+        frame,
+        scratch,
+        fp_return,
+    );
     true
 }
 
@@ -6565,28 +6710,6 @@ fn emit_return(
             emit_mov_reg(code, Reg(0), src);
         }
     }
-    // Restore saved callee-saved GPRs + FP regs (mirror of
-    // prologue). Addressing through sp uses `enc_ldr_imm`'s
-    // 12-bit scaled immediate (range 0..32760 in multiples of
-    // 8); the matching prologue uses `enc_str_imm` at the same
-    // offsets.
-    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = saved_fpr_bytes + (i as u32) * 8;
-        emit(code, enc_ldr_imm(Reg(r), Reg(31), off));
-    }
-    for (i, &r) in alloc.fp_used.iter().enumerate() {
-        let off = (i as u32) * 8;
-        emit(code, enc_ldr_d_imm(r, Reg(31), off));
-    }
-    // Restore x19 from the dedicated slot above the allocator saves;
-    // mirror of the prologue's save, emitted only when the function
-    // clobbers x19.
-    if frame.uses_x19 {
-        let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
-        let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
-        emit(code, enc_ldr_imm(Reg(19), Reg(31), x19_save_off));
-    }
     // Leaf-function elision: prologue emitted no save, so the
     // epilogue emits no matching restore -- the function body is
     // bracketed only by the return-value materialization and the
@@ -6596,11 +6719,22 @@ fn emit_return(
         emit(code, enc_ret(Reg(30)));
         return;
     }
-    // Tear down the frame.
-    if frame.frame_bytes > 0 {
-        emit_add_sp_imm(code, frame.frame_bytes);
+    // Restore fp/lr first in the folded shape (the lr load feeds `ret`,
+    // so it issues off sp before the writeback chain), then x19 and the
+    // callee-saved GPRs / FP regs in mirror order of the prologue's
+    // saves; the final restore's post-index tears the frame down. The
+    // unfolded shape keeps the restore / `add sp` / fp-lr `ldp` order.
+    let fold = frame_fold_bytes(alloc, frame);
+    if fold != 0 {
+        emit(code, enc_ldp_off(Reg(29), Reg(30), Reg(31), fold as i32));
+        emit_epilogue_restore_regs(code, alloc, frame, fold + 16);
+    } else {
+        emit_epilogue_restore_regs(code, alloc, frame, 0);
+        if frame.frame_bytes > 0 {
+            emit_add_sp_imm(code, frame.frame_bytes);
+        }
+        emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
     }
-    emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
     // Drop whatever bytes the prologue allocated above the saved
     // fp/lr for c5 cdecl parameter slots. The single source of
     // truth is `prologue_param_spill_bytes`, recorded on

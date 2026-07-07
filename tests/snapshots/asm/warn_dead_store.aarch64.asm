@@ -14,22 +14,16 @@ Disassembly of section .text:
                	ret
 
 <self_referencing_rhs>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x0, #0x5                // =5
-               	add	x0, x0, #0x1
-               	sxtw	x0, w0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x6                // =6
                	ret
 
 <store_consumed_after_branch_is_silenced>:
+               	mov	x1, x0
+               	sxtw	x1, w1
+               	mov	x0, #0x1                // =1
+               	cbz	x1, <addr>
+               	mov	x0, #0x2                // =2
                	sxtw	x0, w0
-               	mov	x2, #0x1                // =1
-               	cbz	x0, <addr>
-               	mov	x2, #0x2                // =2
-               	sxtw	x0, w2
                	ret
                	b	<addr>
 
@@ -46,21 +40,15 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x20, [sp]
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x5                // =5
-               	add	x1, x1, #0x1
-               	add	x20, x0, x1
+               	str	x20, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	add	x20, x20, x0
+               	add	x20, x0, #0x7
                	bl	<addr>
                	add	x0, x20, x0
                	sxtw	x0, w0
-               	ldr	x20, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x20, [sp], #0x20
                	ret

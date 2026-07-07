@@ -22,47 +22,209 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x1
-    v2   FpCast { kind=F64ToF32, value=v1 }               -> d0 [f32]
+    v1   Imm(0)                                           -> x0 [f32]
+    v2   StoreLocal { off=-1, value=v1, kind=F32 }        -> -
     v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v1)
+    v4   Imm(0)                                           -> x1
+    terminator Jmp(b1)   (exit_acc=v3)
   block 1  start_pc=0
-    v5   Phi { incoming=[b0:v1, b2:v10], kind=I64 }       -> x1
-    v6   Phi { incoming=[b0:v2, b2:v28], kind=F32 }       -> d0 [f32]
-    v7   Extend { value=v5, kind=I32 }                    -> x0
-    v8   BinopI { op=lt, lhs=v7, rhs_imm=10 }             -> x0
-    terminator Bz { cond=v8, target=b4, fall=b3 }   (exit_acc=v8)
-  block 2  start_pc=0
-    v9   Extend { value=v5, kind=I32 }                    -> x0
-    v10  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x1
+    v5   Imm(0)                                           -> x0
+    v6   Imm(1)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    v8   FpCast { kind=IntToFp, value=v7 }                -> d0 [f32]
+    v9   Imm(1056964608)                                  -> x0 [f32]
+    v10  Binop { op=fmul, lhs=v8, rhs=v9 }                -> d0 [f32]
     v11  Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v10)
-  block 3  start_pc=0
-    v12  Extend { value=v5, kind=I32 }                    -> x0
-    v13  FpCast { kind=IntToFp, value=v12 }               -> d1
-    v14  FpCast { kind=F64ToF32, value=v13 }              -> d1 [f32]
-    v15  Imm(4602678819172646912)                         -> x0
-    v16  FpCast { kind=F32ToF64, value=v14 }              -> d1
-    v17  Binop { op=fmul, lhs=v16, rhs=v15 }              -> d1
-    v18  FpCast { kind=F64ToF32, value=v17 }              -> d1 [f32]
-    v19  Imm(0)                                           -> x0
-    v20  LoadLocal { off=-3, kind=F32 }                   -> d2 [f32]
-    v21  Imm(4611686018427387904)                         -> x0
-    v22  FpCast { kind=F64ToF32, value=v21 }              -> d2 [f32]
-    v23  LoadLocal { off=-1, kind=F32 }                   -> d3 [f32]
-    v24  Imm(0)                                           -> x0
-    v25  Imm(0)                                           -> x0
-    v26  Imm(0)                                           -> x0
-    v27  Binop { op=fmul, lhs=v18, rhs=v22 }              -> d3 [f32]
-    v28  Fma { a=v18, b=v22, c=v6, neg_product=false, neg_addend=false } -> d0 [f32]
-    v29  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v28)
-  block 4  start_pc=0
-    v30  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v31  FpCast { kind=F32ToF64, value=v6 }               -> d0
-    v32  FpCast { kind=FpToInt, value=v31 }               -> x0
-    terminator Return(v32)   (exit_acc=v32)
+    v12  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v13  Imm(1073741824)                                  -> x0 [f32]
+    v14  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v15  Imm(0)                                           -> x1
+    v16  Imm(0)                                           -> x1
+    v17  Imm(0)                                           -> x1
+    v18  Binop { op=fmul, lhs=v10, rhs=v13 }              -> d2 [f32]
+    v19  Fma { a=v10, b=v13, c=v14, neg_product=false, neg_addend=false } -> d0 [f32]
+    v20  StoreLocal { off=-1, value=v19, kind=F32 }       -> -
+    v21  Imm(0)                                           -> x0
+    v22  Imm(1)                                           -> x0
+    v23  Imm(0)                                           -> x0
+    v24  Imm(1)                                           -> x0
+    v25  Imm(1)                                           -> x0
+    v26  Imm(1)                                           -> x0
+    v27  FpCast { kind=IntToFp, value=v26 }               -> d0 [f32]
+    v28  Imm(1056964608)                                  -> x0 [f32]
+    v29  Binop { op=fmul, lhs=v27, rhs=v28 }              -> d0 [f32]
+    v30  Imm(0)                                           -> x0
+    v31  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v32  Imm(1073741824)                                  -> x0 [f32]
+    v33  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v34  Imm(0)                                           -> x1
+    v35  Imm(0)                                           -> x1
+    v36  Imm(0)                                           -> x1
+    v37  Binop { op=fmul, lhs=v29, rhs=v32 }              -> d2 [f32]
+    v38  Fma { a=v29, b=v32, c=v33, neg_product=false, neg_addend=false } -> d0 [f32]
+    v39  StoreLocal { off=-1, value=v38, kind=F32 }       -> -
+    v40  Imm(1)                                           -> x0
+    v41  Imm(2)                                           -> x0
+    v42  Imm(0)                                           -> x0
+    v43  Imm(2)                                           -> x0
+    v44  Imm(1)                                           -> x0
+    v45  Imm(2)                                           -> x0
+    v46  FpCast { kind=IntToFp, value=v45 }               -> d0 [f32]
+    v47  Imm(1056964608)                                  -> x0 [f32]
+    v48  Binop { op=fmul, lhs=v46, rhs=v47 }              -> d0 [f32]
+    v49  Imm(0)                                           -> x0
+    v50  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v51  Imm(1073741824)                                  -> x0 [f32]
+    v52  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v53  Imm(0)                                           -> x1
+    v54  Imm(0)                                           -> x1
+    v55  Imm(0)                                           -> x1
+    v56  Binop { op=fmul, lhs=v48, rhs=v51 }              -> d2 [f32]
+    v57  Fma { a=v48, b=v51, c=v52, neg_product=false, neg_addend=false } -> d0 [f32]
+    v58  StoreLocal { off=-1, value=v57, kind=F32 }       -> -
+    v59  Imm(2)                                           -> x0
+    v60  Imm(3)                                           -> x0
+    v61  Imm(0)                                           -> x0
+    v62  Imm(3)                                           -> x0
+    v63  Imm(1)                                           -> x0
+    v64  Imm(3)                                           -> x0
+    v65  FpCast { kind=IntToFp, value=v64 }               -> d0 [f32]
+    v66  Imm(1056964608)                                  -> x0 [f32]
+    v67  Binop { op=fmul, lhs=v65, rhs=v66 }              -> d0 [f32]
+    v68  Imm(0)                                           -> x0
+    v69  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v70  Imm(1073741824)                                  -> x0 [f32]
+    v71  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v72  Imm(0)                                           -> x1
+    v73  Imm(0)                                           -> x1
+    v74  Imm(0)                                           -> x1
+    v75  Binop { op=fmul, lhs=v67, rhs=v70 }              -> d2 [f32]
+    v76  Fma { a=v67, b=v70, c=v71, neg_product=false, neg_addend=false } -> d0 [f32]
+    v77  StoreLocal { off=-1, value=v76, kind=F32 }       -> -
+    v78  Imm(3)                                           -> x0
+    v79  Imm(4)                                           -> x0
+    v80  Imm(0)                                           -> x0
+    v81  Imm(4)                                           -> x0
+    v82  Imm(1)                                           -> x0
+    v83  Imm(4)                                           -> x0
+    v84  FpCast { kind=IntToFp, value=v83 }               -> d0 [f32]
+    v85  Imm(1056964608)                                  -> x0 [f32]
+    v86  Binop { op=fmul, lhs=v84, rhs=v85 }              -> d0 [f32]
+    v87  Imm(0)                                           -> x0
+    v88  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v89  Imm(1073741824)                                  -> x0 [f32]
+    v90  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v91  Imm(0)                                           -> x1
+    v92  Imm(0)                                           -> x1
+    v93  Imm(0)                                           -> x1
+    v94  Binop { op=fmul, lhs=v86, rhs=v89 }              -> d2 [f32]
+    v95  Fma { a=v86, b=v89, c=v90, neg_product=false, neg_addend=false } -> d0 [f32]
+    v96  StoreLocal { off=-1, value=v95, kind=F32 }       -> -
+    v97  Imm(4)                                           -> x0
+    v98  Imm(5)                                           -> x0
+    v99  Imm(0)                                           -> x0
+    v100 Imm(5)                                           -> x0
+    v101 Imm(1)                                           -> x0
+    v102 Imm(5)                                           -> x0
+    v103 FpCast { kind=IntToFp, value=v102 }              -> d0 [f32]
+    v104 Imm(1056964608)                                  -> x0 [f32]
+    v105 Binop { op=fmul, lhs=v103, rhs=v104 }            -> d0 [f32]
+    v106 Imm(0)                                           -> x0
+    v107 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v108 Imm(1073741824)                                  -> x0 [f32]
+    v109 LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v110 Imm(0)                                           -> x1
+    v111 Imm(0)                                           -> x1
+    v112 Imm(0)                                           -> x1
+    v113 Binop { op=fmul, lhs=v105, rhs=v108 }            -> d2 [f32]
+    v114 Fma { a=v105, b=v108, c=v109, neg_product=false, neg_addend=false } -> d0 [f32]
+    v115 StoreLocal { off=-1, value=v114, kind=F32 }      -> -
+    v116 Imm(5)                                           -> x0
+    v117 Imm(6)                                           -> x0
+    v118 Imm(0)                                           -> x0
+    v119 Imm(6)                                           -> x0
+    v120 Imm(1)                                           -> x0
+    v121 Imm(6)                                           -> x0
+    v122 FpCast { kind=IntToFp, value=v121 }              -> d0 [f32]
+    v123 Imm(1056964608)                                  -> x0 [f32]
+    v124 Binop { op=fmul, lhs=v122, rhs=v123 }            -> d0 [f32]
+    v125 Imm(0)                                           -> x0
+    v126 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v127 Imm(1073741824)                                  -> x0 [f32]
+    v128 LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v129 Imm(0)                                           -> x1
+    v130 Imm(0)                                           -> x1
+    v131 Imm(0)                                           -> x1
+    v132 Binop { op=fmul, lhs=v124, rhs=v127 }            -> d2 [f32]
+    v133 Fma { a=v124, b=v127, c=v128, neg_product=false, neg_addend=false } -> d0 [f32]
+    v134 StoreLocal { off=-1, value=v133, kind=F32 }      -> -
+    v135 Imm(6)                                           -> x0
+    v136 Imm(7)                                           -> x0
+    v137 Imm(0)                                           -> x0
+    v138 Imm(7)                                           -> x0
+    v139 Imm(1)                                           -> x0
+    v140 Imm(7)                                           -> x0
+    v141 FpCast { kind=IntToFp, value=v140 }              -> d0 [f32]
+    v142 Imm(1056964608)                                  -> x0 [f32]
+    v143 Binop { op=fmul, lhs=v141, rhs=v142 }            -> d0 [f32]
+    v144 Imm(0)                                           -> x0
+    v145 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v146 Imm(1073741824)                                  -> x0 [f32]
+    v147 LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v148 Imm(0)                                           -> x1
+    v149 Imm(0)                                           -> x1
+    v150 Imm(0)                                           -> x1
+    v151 Binop { op=fmul, lhs=v143, rhs=v146 }            -> d2 [f32]
+    v152 Fma { a=v143, b=v146, c=v147, neg_product=false, neg_addend=false } -> d0 [f32]
+    v153 StoreLocal { off=-1, value=v152, kind=F32 }      -> -
+    v154 Imm(7)                                           -> x0
+    v155 Imm(8)                                           -> x0
+    v156 Imm(0)                                           -> x0
+    v157 Imm(8)                                           -> x0
+    v158 Imm(1)                                           -> x0
+    v159 Imm(8)                                           -> x0
+    v160 FpCast { kind=IntToFp, value=v159 }              -> d0 [f32]
+    v161 Imm(1056964608)                                  -> x0 [f32]
+    v162 Binop { op=fmul, lhs=v160, rhs=v161 }            -> d0 [f32]
+    v163 Imm(0)                                           -> x0
+    v164 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v165 Imm(1073741824)                                  -> x0 [f32]
+    v166 LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v167 Imm(0)                                           -> x1
+    v168 Imm(0)                                           -> x1
+    v169 Imm(0)                                           -> x1
+    v170 Binop { op=fmul, lhs=v162, rhs=v165 }            -> d2 [f32]
+    v171 Fma { a=v162, b=v165, c=v166, neg_product=false, neg_addend=false } -> d0 [f32]
+    v172 StoreLocal { off=-1, value=v171, kind=F32 }      -> -
+    v173 Imm(8)                                           -> x0
+    v174 Imm(9)                                           -> x0
+    v175 Imm(0)                                           -> x0
+    v176 Imm(9)                                           -> x0
+    v177 Imm(1)                                           -> x0
+    v178 Imm(9)                                           -> x0
+    v179 FpCast { kind=IntToFp, value=v178 }              -> d0 [f32]
+    v180 Imm(1056964608)                                  -> x0 [f32]
+    v181 Binop { op=fmul, lhs=v179, rhs=v180 }            -> d0 [f32]
+    v182 Imm(0)                                           -> x0
+    v183 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v184 Imm(1073741824)                                  -> x0 [f32]
+    v185 LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v186 Imm(0)                                           -> x1
+    v187 Imm(0)                                           -> x1
+    v188 Imm(0)                                           -> x1
+    v189 Binop { op=fmul, lhs=v181, rhs=v184 }            -> d2 [f32]
+    v190 Fma { a=v181, b=v184, c=v185, neg_product=false, neg_addend=false } -> d0 [f32]
+    v191 StoreLocal { off=-1, value=v190, kind=F32 }      -> -
+    v192 Imm(9)                                           -> x0
+    v193 Imm(10)                                          -> x0
+    v194 Imm(0)                                           -> x0
+    v195 Imm(10)                                          -> x0
+    v196 Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v196)
+  block 2  start_pc=0
+    v197 LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v198 FpCast { kind=FpToInt, value=v197 }              -> x0
+    terminator Return(v198)   (exit_acc=v198)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

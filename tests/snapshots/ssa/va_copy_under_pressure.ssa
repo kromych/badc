@@ -122,24 +122,24 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v30  Imm(332)                                         -> x1
     v31  Imm(1425929142272)                               -> x1
     v32  Imm(352)                                         -> x1
-    v33  Imm(1511828488192)                               -> x2
-    v34  Imm(0)                                           -> x2
-    v35  LoadLocal { off=-1, kind=I64 }                   -> x2
-    v36  LoadLocal { off=-2, kind=I64 }                   -> x2
-    v37  Binop { op=eq, lhs=v4, rhs=v32 }                 -> x0
-    terminator Bz { cond=v37, target=b2, fall=b1 }   (exit_acc=v37)
+    v33  Imm(1511828488192)                               -> x1
+    v34  Imm(0)                                           -> x1
+    v35  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v36  LoadLocal { off=-2, kind=I64 }                   -> x1
+    v37  BinopI { op=eq, lhs=v4, rhs_imm=352 }            -> x0
+    terminator Bz { cond=v37, target=b3, fall=b1 }   (exit_acc=v37)
   block 1  start_pc=0
-    v38  Imm(0)                                           -> x1
-    v39  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v38)
+    v38  Imm(0)                                           -> x0
+    v39  Imm(0)                                           -> x1
+    terminator Jmp(b2)   (exit_acc=v38)
   block 2  start_pc=0
-    v40  Imm(1)                                           -> x1
-    v41  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v40)
-  block 3  start_pc=0
-    v42  Phi { incoming=[b1:v38, b2:v40], kind=I64 }      -> x1
-    v43  LoadLocal { off=-5, kind=I64 }                   -> x0
+    v42  Phi { incoming=[b1:v38, b3:v40], kind=I64 }      -> x0
+    v43  LoadLocal { off=-5, kind=I64 }                   -> x1
     terminator Return(v42)   (exit_acc=v42)
+  block 3  start_pc=0
+    v40  Imm(1)                                           -> x0
+    v41  Imm(0)                                           -> x1
+    terminator Jmp(b2)   (exit_acc=v40)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

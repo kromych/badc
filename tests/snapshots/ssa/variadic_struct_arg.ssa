@@ -7,44 +7,44 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     v1   LocalAddr(-3)                                    -> x0
     v2   LocalAddr(2)                                     -> x1
     v3   Intrinsic { kind=4, args=[v1, v2] }              -> x0
-    v4   Imm(0)                                           -> x1
-    v5   Imm(0)                                           -> x0
-    v6   Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v4)
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x1
+    v6   Imm(0)                                           -> x1
+    terminator Jmp(b3)   (exit_acc=v4)
   block 1  start_pc=0
-    v7   Phi { incoming=[b0:v4, b2:v13], kind=I64 }       -> x1
-    v8   Phi { incoming=[b0:v4, b2:v29], kind=I64 }       -> x0
-    v9   Extend { value=v7, kind=I32 }                    -> x2
-    v10  LoadLocal { off=2, kind=I32 }                    -> x6
-    v11  Binop { op=lt, lhs=v9, rhs=v10 }                 -> x2
-    terminator Bz { cond=v11, target=b4, fall=b3 }   (exit_acc=v11)
-  block 2  start_pc=0
-    v12  Extend { value=v7, kind=I32 }                    -> x1
-    v13  BinopI { op=add, lhs=v12, rhs_imm=1 }            -> x1
-    v14  Imm(0)                                           -> x2
-    terminator Jmp(b1)   (exit_acc=v13)
-  block 3  start_pc=0
     v15  LocalAddr(-3)                                    -> x2
-    v16  Imm(8)                                           -> x6
+    v16  Imm(8)                                           -> x7
     v17  Intrinsic { kind=5, args=[v15, v16] }            -> x2
-    v18  LocalAddr(-6)                                    -> x6
+    v18  LocalAddr(-6)                                    -> x7
     v19  Mcpy { dst=v18, src=v17, size=8 }                -> x2
     v20  Extend { value=v8, kind=I32 }                    -> x2
     v21  LocalAddr(-6)                                    -> x2
-    v22  Load { addr=v21, disp=0, kind=I32 }              -> x2
-    v23  LocalAddr(-6)                                    -> x6
-    v24  BinopI { op=add, lhs=v23, rhs_imm=4 }            -> x7
-    v25  Load { addr=v23, disp=4, kind=I32 }              -> x6
+    v22  Load { addr=v21, disp=0, kind=I32 }              -> x7
+    v23  LocalAddr(-6)                                    -> x2
+    v24  BinopI { op=add, lhs=v23, rhs_imm=4 }            -> x8
+    v25  Load { addr=v23, disp=4, kind=I32 }              -> x2
     v26  Binop { op=add, lhs=v22, rhs=v25 }               -> x2
-    v27  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x6
-    v28  Extend { value=v26, kind=I32 }                   -> x6
-    v29  Binop { op=add, lhs=v8, rhs=v26 }                -> x0
+    v27  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x7
+    v28  Extend { value=v26, kind=I32 }                   -> x7
+    v29  Binop { op=add, lhs=v8, rhs=v26 }                -> x1
     v30  Imm(0)                                           -> x2
     v31  Extend { value=v29, kind=I32 }                   -> x2
     terminator Jmp(b2)   (exit_acc=v31)
+  block 2  start_pc=0
+    v12  Extend { value=v7, kind=I32 }                    -> x0
+    v13  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x0
+    v14  Imm(0)                                           -> x2
+    terminator Jmp(b3)   (exit_acc=v13)
+  block 3  start_pc=0
+    v7   Phi { incoming=[b0:v4, b2:v13], kind=I64 }       -> x0
+    v8   Phi { incoming=[b0:v4, b2:v29], kind=I64 }       -> x1
+    v9   Extend { value=v7, kind=I32 }                    -> x6
+    v10  LoadLocal { off=2, kind=I32 }                    -> x2
+    v11  Binop { op=lt, lhs=v9, rhs=v10 }                 -> x2
+    terminator Bnz { cond=v11, target=b1, fall=b4 }   (exit_acc=v11)
   block 4  start_pc=0
-    v32  LocalAddr(-3)                                    -> x1
-    v33  Intrinsic { kind=6, args=[v32] }                 -> x1
+    v32  LocalAddr(-3)                                    -> x0
+    v33  Intrinsic { kind=6, args=[v32] }                 -> x0
     v34  Extend { value=v8, kind=I32 }                    -> x0
     terminator Return(v34)   (exit_acc=v34)
 ; --- SSA dump (ok=true) ent_pc=1 ---

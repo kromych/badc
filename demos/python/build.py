@@ -299,6 +299,21 @@ def _fix_winsock_fd_gates() -> None:
         sys.exit("build: select() fd-range gate not found in selectmodule.c")
 
 
+def _widen_stack_margin() -> None:
+    """badc's register allocator does not yet split live ranges, so
+    _PyEval_EvalFrameDefault's frame is several times larger than the
+    reference compilers'. CPython requires the recursion-check margin to
+    exceed one eval frame (pycore_pythonrun.h); raise it from 2^11 to
+    2^13 words until the allocator work shrinks the frame."""
+    pythonrun = SRC / "Include/internal/pycore_pythonrun.h"
+    text = pythonrun.read_text()
+    needle = "#  define _PyOS_LOG2_STACK_MARGIN 11"
+    if needle in text:
+        pythonrun.write_text(text.replace(needle, "#  define _PyOS_LOG2_STACK_MARGIN 13", 1))
+    elif "#  define _PyOS_LOG2_STACK_MARGIN 13" not in text:
+        sys.exit("build: _PyOS_LOG2_STACK_MARGIN not found in pycore_pythonrun.h")
+
+
 def _check_frozen() -> None:
     missing = [
         h for h in re.findall(r'frozen_modules/[\w.]+\.h', (SRC / "Python/frozen.c").read_text())
@@ -316,6 +331,7 @@ def ensure_inputs(target: str, log) -> None:
         sys.stderr.write(r.stdout + r.stderr)
         sys.exit("build: setup.py failed")
     cfg = TARGETS[target]
+    _widen_stack_margin()
     if cfg.get("windows"):
         # Windows derives its config from the in-tree PC/ files rather than a
         # committed manifest: disable mimalloc, wire the extra builtins into the
@@ -445,8 +461,14 @@ def build(target: str, do_link: bool, log) -> Path | None:
     badc = badc_path()
     out = PY_DIR / ".cache" / f"obj-{target}"
     out.mkdir(parents=True, exist_ok=True)
+    # Remove the previous interpreter up front. Every TU is recompiled
+    # and relinked each run, but a build that fails partway would
+    # otherwise leave the prior run's binary in place -- a stale
+    # interpreter that a loose `find .cache -name python` then picks up
+    # and mistakes for a fresh successful build.
+    (out / ("python.exe" if win else "python")).unlink(missing_ok=True)
     dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
-    opt = ["-O"] if os.environ.get("BADC_PY_O") else []
+    opt = ["-O"]
 
     entries = _entries(target)
     jobs = [(badc, target, src, defs, incs, dbg, opt, str(out), str(SRC)) for src, defs, incs in entries]
@@ -473,7 +495,7 @@ def build(target: str, do_link: bool, log) -> Path | None:
         # the core defines (no CPython includes needed).
         for helper in _WIN_HELPERS:
             hobj = out / (helper[:-2] + ".o")
-            hcmd = [badc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T", *dbg,
+            hcmd = [badc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T", *dbg, *opt,
                     *[f"-D{d}" for d in _WIN_DEFINES], str(PY_DIR / helper), "-o", str(hobj)]
             r = run(hcmd, timeout=120)
             if r.returncode != 0:
@@ -738,7 +760,10 @@ def run_tests(target: str, py: Path, log, tier2: bool = False) -> int:
     r = run([str(exe), "-m", "test", "-q", "-w", *ignore, *slice_], cwd=str(cwd), env=env, timeout=1800)
     print(f"build: test slice {' '.join(slice_)} exit={r.returncode}")
     if r.returncode != 0:
-        sys.stderr.write((r.stdout + r.stderr)[-3000:])
+        # Keep the head too: a fatal-error dump puts the message and the
+        # aborting frame above hundreds of repeated traceback lines.
+        blob = r.stdout + r.stderr
+        sys.stderr.write(blob[:3000] + ("\n...\n" + blob[-3000:] if len(blob) > 3000 else ""))
         return 1
     return 0
 

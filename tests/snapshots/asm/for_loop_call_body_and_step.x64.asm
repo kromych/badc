@@ -21,19 +21,17 @@ Disassembly of section .text:
                	retq
 
 <driver>:
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	movslq	%ecx, %rdx
-               	cmpq	$0x7, %rdx
-               	jge	<addr>
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>
                	incq	%rcx
                	movslq	%ecx, %rcx
-               	jmp	<addr>
                	incq	%rax
                	movslq	%eax, %rax
-               	jmp	<addr>
-               	imulq	$0x6, %rax, %rax
+               	movslq	%eax, %rdx
+               	cmpq	$0x7, %rdx
+               	jl	<addr>
+               	imulq	$0x6, %rcx, %rax
                	movslq	%eax, %rax
                	retq
 

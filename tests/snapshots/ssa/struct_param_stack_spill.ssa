@@ -34,10 +34,10 @@ fn ent_pc=0 n_params=9 variadic=false locals=2
     v28  LocalAddr(-2)                                    -> x1
     v29  Load { addr=v28, disp=0, kind=I64 }              -> x1
     v30  BinopI { op=mul, lhs=v29, rhs_imm=1000 }         -> x1
-    v31  Binop { op=add, lhs=v27, rhs=v30 }               -> x0
-    v32  LocalAddr(-2)                                    -> x1
+    v31  Binop { op=add, lhs=v27, rhs=v30 }               -> x1
+    v32  LocalAddr(-2)                                    -> x0
     v33  BinopI { op=add, lhs=v32, rhs_imm=8 }            -> x2
-    v34  Load { addr=v32, disp=8, kind=I64 }              -> x1
+    v34  Load { addr=v32, disp=8, kind=I64 }              -> x0
     v35  Binop { op=add, lhs=v31, rhs=v34 }               -> x0
     terminator Return(v35)   (exit_acc=v35)
 ; --- SSA dump (ok=true) ent_pc=1 ---
@@ -72,23 +72,23 @@ fn ent_pc=1 n_params=9 variadic=false locals=2
     v24  LoadLocal { off=8, kind=I64 }                    -> x1
     v25  Binop { op=add, lhs=v23, rhs=v24 }               -> x0
     v26  LoadLocal { off=9, kind=I64 }                    -> x1
-    v27  Binop { op=add, lhs=v25, rhs=v26 }               -> x0
-    v28  LocalAddr(-2)                                    -> x1
-    v29  Load { addr=v28, disp=0, kind=I32 }              -> x1
-    v30  BinopI { op=mul, lhs=v29, rhs_imm=100 }          -> x1
+    v27  Binop { op=add, lhs=v25, rhs=v26 }               -> x1
+    v28  LocalAddr(-2)                                    -> x0
+    v29  Load { addr=v28, disp=0, kind=I32 }              -> x0
+    v30  BinopI { op=mul, lhs=v29, rhs_imm=100 }          -> x0
     v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x2
-    v32  Extend { value=v30, kind=I32 }                   -> x1
-    v33  Binop { op=add, lhs=v27, rhs=v32 }               -> x0
-    v34  LocalAddr(-2)                                    -> x1
+    v32  Extend { value=v30, kind=I32 }                   -> x0
+    v33  Binop { op=add, lhs=v27, rhs=v32 }               -> x1
+    v34  LocalAddr(-2)                                    -> x0
     v35  BinopI { op=add, lhs=v34, rhs_imm=4 }            -> x2
-    v36  Load { addr=v34, disp=4, kind=I32 }              -> x1
-    v37  BinopI { op=mul, lhs=v36, rhs_imm=10 }           -> x1
+    v36  Load { addr=v34, disp=4, kind=I32 }              -> x0
+    v37  BinopI { op=mul, lhs=v36, rhs_imm=10 }           -> x0
     v38  BinopI { op=shl, lhs=v37, rhs_imm=32 }           -> x2
-    v39  Extend { value=v37, kind=I32 }                   -> x1
-    v40  Binop { op=add, lhs=v33, rhs=v39 }               -> x0
-    v41  LocalAddr(-2)                                    -> x1
+    v39  Extend { value=v37, kind=I32 }                   -> x0
+    v40  Binop { op=add, lhs=v33, rhs=v39 }               -> x1
+    v41  LocalAddr(-2)                                    -> x0
     v42  BinopI { op=add, lhs=v41, rhs_imm=8 }            -> x2
-    v43  Load { addr=v41, disp=8, kind=I32 }              -> x1
+    v43  Load { addr=v41, disp=8, kind=I32 }              -> x0
     v44  Binop { op=add, lhs=v40, rhs=v43 }               -> x0
     terminator Return(v44)   (exit_acc=v44)
 ; --- SSA dump (ok=true) ent_pc=2 ---

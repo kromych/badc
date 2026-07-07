@@ -33,13 +33,13 @@ Disassembly of section .text:
                	mov	x0, #0x4004000000000000 // =4612811918334230528
                	fmov	d17, x0
                	fcmp	d1, d17
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x10
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x7
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
@@ -55,15 +55,15 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	ldr	x0, [x0]
                	cmp	x0, #0xb
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x20
                	ldr	d1, [x0, #0x8]
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fcmp	d1, d17
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
@@ -84,15 +84,15 @@ Disassembly of section .text:
                	mov	x0, #0x400c000000000000 // =4615063718147915776
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
                	sub	x0, x29, #0x30
                	ldr	d0, [x0, #0x8]
                	mov	x0, #0x4012000000000000 // =4616752568008179712
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10

@@ -1,0 +1,95 @@
+
+call_arg_extend_drop.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$<entry_off>, %esi
+               	callq	<addr>
+               	ud2
+
+<addv>:
+               	leaq	(%rdi,%rsi), %rax
+               	movslq	%eax, %rax
+               	retq
+
+<fib>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	movq	%r12, 0x8(%rsp)
+               	movq	%rdi, %rbx
+               	movslq	%ebx, %rbx
+               	xorq	%r12, %r12
+               	jmp	<addr>
+               	leaq	-0x1(%rbx), %rdi
+               	callq	<addr>
+               	movq	%rax, %rcx
+               	leaq	-0x2(%rbx), %rax
+               	movslq	%eax, %rbx
+               	addq	%rcx, %r12
+               	cmpq	$0x2, %rbx
+               	jge	<addr>
+               	leaq	(%r12,%rbx), %rax
+               	movslq	%eax, %rax
+               	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+
+<cell_escapes>:
+               	popq	%r10
+               	subq	$0x10, %rsp
+               	movq	%rdi, (%rsp)
+               	pushq	%r10
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movl	%edi, 0x10(%rbp)
+               	leaq	0x10(%rbp), %rax
+               	movslq	(%rax), %rax
+               	leaq	(%rax,%rax,2), %rax
+               	popq	%rbp
+               	popq	%r11
+               	addq	$0x10, %rsp
+               	pushq	%r11
+               	retq
+
+<narrow>:
+               	movsbq	%dil, %rdi
+               	movswq	%si, %rsi
+               	imulq	$0x64, %rdi, %rax
+               	addq	%rsi, %rax
+               	movslq	%eax, %rax
+               	retq
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movl	$0x14, %edi
+               	callq	<addr>
+               	cmpq	$0x1a6d, %rax           # imm = 0x1A6D
+               	je	<addr>
+               	movl	$0x2, %eax
+               	popq	%rbp
+               	retq
+               	movabsq	$-0x7, %rdi
+               	callq	<addr>
+               	cmpq	$-0x15, %rax
+               	je	<addr>
+               	movl	$0x3, %eax
+               	popq	%rbp
+               	retq
+               	xorq	%rax, %rax
+               	popq	%rbp
+               	retq
+               	movl	$0x1, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x4, %eax
+               	popq	%rbp
+               	retq
+               	addb	%al, 0x41(%rdx)

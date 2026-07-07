@@ -1101,6 +1101,41 @@ pub(crate) fn emit_cvttsd2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+/// `CVTSI2SS xmm, r64` -- signed 64-bit int to single, with REX.W.
+/// Encoding: `F3 REX.W 0F 2A /r`. The direct form for `(float)n`
+/// (C99 6.3.1.4, one rounding) that avoids `cvtsi2sd` + `cvtsd2ss`.
+pub(crate) fn emit_cvtsi2ss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF3);
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2A);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `CVTTSS2SI r64, xmm` -- truncating single-to-signed-int.
+/// Encoding: `F3 REX.W 0F 2C /r`. The direct form for `(int)f`
+/// that avoids widening the `float` to double first.
+pub(crate) fn emit_cvttss2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF3);
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2C);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `XORPS xmm, xmm` -- bitwise XOR of packed singles. With identical
+/// operands it zeroes the destination in the FP domain; emitted
+/// before `cvtsi2sd` / `cvtsi2ss` to break the false dependency the
+/// convert carries on the destination's prior upper bits.
+pub(crate) fn emit_xorps(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x57);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `MOVSS xmm, [base+disp32]` -- load 4 bytes (single-precision) into
 /// the low dword of an XMM register, zeroing the rest. Encoding:
 /// `F3 0F 10 /r`. Used by [`LoadKind::F32`] to pull a `float`-typed lvalue
@@ -1965,6 +2000,15 @@ pub(crate) fn lower(
                 }
             }
         });
+        // Unroll constant-trip loops after mem2reg (the loop-carried
+        // values are phis by then) and before the inliner, so a helper
+        // whose body was a short loop becomes a single-block inline
+        // candidate and the cloned call sites join the inliner's
+        // worklist. The post-inline constant folder then collapses the
+        // per-copy `Extend(Imm)` / `BinopI(Imm, k)` index chains.
+        super::ssa::emit_common::time_pass("passes::unroll::run (x86_64)", || {
+            crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
+        });
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.
@@ -1975,12 +2019,44 @@ pub(crate) fn lower(
                 target.abi(),
             );
         });
+        // Turn self-tail-recursion into a loop back edge on the
+        // post-inline bodies, before the phi-sensitive passes below.
+        super::ssa::emit_common::time_pass("passes::tailrec::run (x86_64)", || {
+            crate::c5::codegen::passes::tailrec::run(&mut ssa_funcs);
+        });
         // Forward an inlined one-word struct return out of its frame slot:
         // a single full-width store + slot reads collapse to the stored
         // register value. Runs after the inliner produces the slot and
         // before store-forwarding cleans up any second-hop reload.
         super::ssa::emit_common::time_pass("passes::struct_return_reg::run (x86_64)", || {
             crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
+        });
+        // Constant folding over the post-inline tape: `Extend(Imm)` /
+        // `Binop(Imm, Imm)` chains left by parameter substitution fold
+        // to plain `Imm`, and immediate-operand binops take `BinopI`
+        // form, so the rotate matcher and the branch folder see
+        // constants.
+        super::ssa::emit_common::time_pass("passes::constfold::run (x86_64)", || {
+            crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
+        });
+        // Split constant-index local arrays that unrolling exposed into
+        // per-element slots and re-run mem2reg to promote them to SSA
+        // values. Gated to functions the unroll pass expanded so the
+        // mem2reg rebuild is confined; the promoted element slots feed
+        // the same debug-info location drop as the initial mem2reg.
+        super::ssa::emit_common::time_pass("passes::sroa::run (x86_64)", || {
+            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
+            for f in &mut ssa_funcs {
+                if f.did_unroll {
+                    let promoted = crate::c5::codegen::passes::sroa::run(f, usable_gpr);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
         });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
@@ -2021,6 +2097,13 @@ pub(crate) fn lower(
         // register-starved unrolled loop.
         super::ssa::emit_common::time_pass("passes::store_forward::run (x86_64)", || {
             crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
+        });
+        // Block layout: fallthrough chains, loop rotation to
+        // bottom-test, branch inversion. Reorders blocks and remaps
+        // block ids only, so it runs last; the emit elides jumps to
+        // the next block in the new order.
+        super::ssa::emit_common::time_pass("passes::layout::run (x86_64)", || {
+            crate::c5::codegen::passes::layout::run(&mut ssa_funcs);
         });
     }
     // Upper bound on ent_pcs the lowering will reference. The

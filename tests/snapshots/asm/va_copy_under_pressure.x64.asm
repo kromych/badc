@@ -139,21 +139,16 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
                	movl	$0x2, %edi
                	movl	$0xa, %esi
                	movl	$0x14, %edx
                	movb	$0x0, %al
                	callq	<addr>
-               	movl	$0x160, %ecx            # imm = 0x160
-               	cmpq	%rcx, %rax
+               	cmpq	$0x160, %rax            # imm = 0x160
                	jne	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x30, %rsp
+               	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	movl	$0x1, %eax
+               	jmp	<addr>
                	addb	%al, 0x41(%rdx)

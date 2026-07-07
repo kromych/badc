@@ -39,13 +39,18 @@ fn run_one(func: &mut FunctionSsa) {
     // block ids, which `Inst::BlockAddr` and computed_goto_targets
     // reference directly. Such functions carry no phis (mem2reg is
     // skipped for them), so there are no critical edges to split.
+    // Jump-table functions are NOT skipped: split blocks are appended
+    // (existing ids stay stable) and table entries are retargetable,
+    // so an edge from the dispatcher to a phi-carrying case block is
+    // split like any other -- without it, `emit_phi_predecessor_moves`
+    // would emit every case block's moves at the dispatcher exit.
     if !func.computed_goto_targets.is_empty() {
         return;
     }
     // Count predecessors per block. Walking terminators is enough.
     let mut pred_count: Vec<u32> = alloc::vec![0; n_original];
     for block in &func.blocks {
-        for succ in successors(&block.terminator) {
+        for succ in successors(&block.terminator, &func.jump_tables) {
             if (succ as usize) < n_original {
                 pred_count[succ as usize] += 1;
             }
@@ -55,7 +60,7 @@ fn run_one(func: &mut FunctionSsa) {
     // while we walk it. Each entry is `(pred, original_succ)`.
     let mut splits: Vec<(BlockId, BlockId)> = Vec::new();
     for (idx, block) in func.blocks.iter().enumerate().take(n_original) {
-        let succs = successors(&block.terminator);
+        let succs = successors(&block.terminator, &func.jump_tables);
         if succs.len() < 2 {
             continue;
         }
@@ -137,6 +142,17 @@ fn run_one(func: &mut FunctionSsa) {
                     fall_through
                 },
             },
+            // Retarget every table entry naming the split successor;
+            // repeated entries (case-value holes on the default block)
+            // all route through the one synthetic block.
+            Terminator::JumpTable { table, .. } => {
+                for t in func.jump_tables[table as usize].iter_mut() {
+                    if *t == original_succ {
+                        *t = new_id;
+                    }
+                }
+                term
+            }
             other => other,
         };
         func.blocks[pred as usize].terminator = new_term;
@@ -160,7 +176,7 @@ fn run_one(func: &mut FunctionSsa) {
     }
 }
 
-fn successors(term: &Terminator) -> Vec<BlockId> {
+fn successors(term: &Terminator, jump_tables: &[Vec<BlockId>]) -> Vec<BlockId> {
     match term {
         Terminator::Jmp(b) | Terminator::FallThrough(b) => alloc::vec![*b],
         Terminator::Bz {
@@ -173,6 +189,17 @@ fn successors(term: &Terminator) -> Vec<BlockId> {
             fall_through,
             ..
         } => alloc::vec![*target, *fall_through],
+        // Distinct targets only, so a table's repeated entries yield
+        // one split per (pred, succ) edge.
+        Terminator::JumpTable { table, .. } => {
+            let mut out: Vec<BlockId> = Vec::new();
+            for &t in &jump_tables[*table as usize] {
+                if !out.contains(&t) {
+                    out.push(t);
+                }
+            }
+            out
+        }
         // This pass is skipped for functions with a computed goto (its
         // run() guards on computed_goto_targets), so an indirect branch
         // never reaches here; its successors live on the function, not
@@ -208,8 +235,11 @@ mod tests {
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            has_returns_twice_call: false,
+            did_unroll: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -382,5 +412,68 @@ mod tests {
         );
         run_one(&mut f);
         assert_eq!(f.blocks[3].exit_acc, NO_VALUE);
+    }
+
+    #[test]
+    fn jump_table_entries_retargeted_to_trampoline() {
+        // b0 -[JumpTable [1, 2, 1]]-> b1 (phi), b2 (no phi)
+        // b3 -[Jmp]-> b1
+        // b1 has two predecessors and a phi, so both table entries
+        // naming it must retarget to one synthetic trampoline; the
+        // phi's b0 incoming renames to the trampoline. b2 has a
+        // single predecessor and stays a direct entry.
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Phi {
+                    incoming: alloc::vec![(0, 0), (3, 3)],
+                    kind: LoadKind::I64,
+                },
+                Inst::Imm(2),
+                Inst::Imm(3),
+            ],
+            vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::JumpTable { idx: 0, table: 0 },
+                    exit_acc: 0,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 1..2,
+                    terminator: Terminator::Return(1),
+                    exit_acc: 1,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 2..3,
+                    terminator: Terminator::Return(2),
+                    exit_acc: 2,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 3..4,
+                    terminator: Terminator::Jmp(1),
+                    exit_acc: 3,
+                },
+            ],
+        );
+        f.jump_tables = alloc::vec![alloc::vec![1, 2, 1]];
+        run_one(&mut f);
+        assert_eq!(f.blocks.len(), 5);
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::JumpTable { idx: 0, table: 0 }
+        ));
+        assert_eq!(f.jump_tables[0], alloc::vec![4, 2, 4]);
+        assert!(matches!(f.blocks[4].terminator, Terminator::Jmp(1)));
+        assert_eq!(f.blocks[4].inst_range.len(), 0);
+        let Inst::Phi { incoming, .. } = &f.insts[1] else {
+            panic!("expected phi");
+        };
+        assert!(incoming.iter().any(|(b, _)| *b == 4));
+        assert!(incoming.iter().any(|(b, _)| *b == 3));
+        assert!(!incoming.iter().any(|(b, _)| *b == 0));
     }
 }

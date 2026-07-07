@@ -252,7 +252,7 @@ def compile_one(
     target: str | None,
 ) -> tuple[bool, str]:
     """Run badc -c against `src`. Returns (ok, captured_stderr_head)."""
-    cmd = [str(badc), "-q", "-I", str(TINYCC_DIR)]
+    cmd = [str(badc), "-q", "-O", "-I", str(TINYCC_DIR)]
     if target is not None:
         cmd.append(f"--target={target}")
     for d in cpp_defs:
@@ -373,7 +373,7 @@ def main() -> int:
         src_files = [str(TINYCC_DIR / name) for name in active]
         link_target_is_win = key[0] == "Windows"
         out_path = work / ("tcc.exe" if link_target_is_win else "tcc")
-        cmd = [str(badc), "-q", "-I", str(TINYCC_DIR)]
+        cmd = [str(badc), "-q", "-O", "-I", str(TINYCC_DIR)]
         if target is not None:
             cmd.append(f"--target={target}")
         for d in cpp_defs:

@@ -36,6 +36,7 @@ Disassembly of section .text:
                	movslq	0x90(%rbp), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movsd	0xa0(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
@@ -48,7 +49,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x90, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
@@ -85,7 +86,7 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
-               	addq	$0x90, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	movl	$0xa, %edi
@@ -120,7 +121,7 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
-               	addq	$0x90, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
@@ -128,8 +129,6 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
-               	addq	$0x90, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

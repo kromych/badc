@@ -10,28 +10,24 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x5, #0x0                // =0
-               	mov	x4, x5
-               	cmp	x4, x0
-               	b.ge	<addr>
+               	mov	x4, x0
+               	mov	x5, x1
+               	mov	x6, x2
+               	mov	x2, x3
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	b	<addr>
-               	lsl	x6, x1, x2
-               	add	x5, x5, x6
-               	b	<addr>
-               	add	x4, x5, x3
-               	b	<addr>
-               	mov	x0, x3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	add	x1, x0, x2
+               	lsl	x3, x5, x6
+               	add	x0, x0, x3
+               	cmp	x1, x4
+               	b.lt	<addr>
+               	mov	x0, x2
                	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
                	mov	x0, #0x64               // =100
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3
@@ -39,10 +35,8 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x1
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x1                // =1
-               	mov	x0, x1
-               	add	sp, sp, #0x30
+               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x1                // =1
+               	b	<addr>

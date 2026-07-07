@@ -33,15 +33,15 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	leaq	-0x30(%rbp), %rcx
                	movq	%rax, (%rcx)
-               	leaq	-0x8(%rbp), %rax
-               	leaq	-0x30(%rbp), %rcx
-               	movq	%rax, 0x8(%rcx)
-               	leaq	<rip>, %rax
-               	leaq	-0x30(%rbp), %rcx
-               	movq	%rax, 0x10(%rcx)
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x30(%rbp), %rcx
-               	movq	%rax, 0x18(%rcx)
+               	leaq	-0x8(%rbp), %rcx
+               	leaq	-0x30(%rbp), %rax
+               	movq	%rcx, 0x8(%rax)
+               	leaq	<rip>, %rcx
+               	leaq	-0x30(%rbp), %rax
+               	movq	%rcx, 0x10(%rax)
+               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x30(%rbp), %rax
+               	movq	%rcx, 0x18(%rax)
                	leaq	-0x30(%rbp), %rax
                	movq	0x8(%rax), %rax
                	movslq	(%rax), %rax

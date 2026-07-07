@@ -83,10 +83,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x0
-               	fmov	d17, x0
-               	fcmp	d16, d17
+               	mov	x0, #0x3f800000         // =1065353216
+               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
+               	fmov	s16, w0
+               	fcvt	d0, s16
+               	fmov	d17, x1
+               	fcmp	d0, d17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x8                // =8

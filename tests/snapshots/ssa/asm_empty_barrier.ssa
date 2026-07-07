@@ -41,8 +41,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v8   LoadLocal { off=-1, kind=I32 }                   -> x0
     v9   BinopI { op=add, lhs=v8, rhs_imm=1 }             -> x0
     v10  StoreLocal { off=-1, value=v9, kind=I32 }        -> -
-    v11  ImmData(24)                                      -> x0
-    v12  LoadLocal { off=-1, kind=I32 }                   -> x1
+    v11  ImmData(24)                                      -> x1
+    v12  LoadLocal { off=-1, kind=I32 }                   -> x0
     v13  Store { addr=v11, disp=0, value=v12, kind=I32 }  -> -
     v14  Extend { value=v12, kind=I32 }                   -> x0
     v15  BinopI { op=sub, lhs=v14, rhs_imm=42 }           -> x0

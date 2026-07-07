@@ -79,21 +79,19 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	movl	$0x5, %eax
-               	movl	%eax, -0x20(%rbp)
-               	movslq	-0x20(%rbp), %rax
-               	testq	%rax, %rax
-               	jle	<addr>
+               	xorq	%rax, %rax
+               	movl	$0x5, %ecx
+               	movl	%ecx, -0x20(%rbp)
                	jmp	<addr>
-               	movslq	-0x20(%rbp), %rax
-               	decq	%rax
-               	movl	%eax, -0x20(%rbp)
-               	jmp	<addr>
-               	movslq	-0x20(%rbp), %rax
-               	addq	%rax, %rcx
-               	jmp	<addr>
-               	movslq	%ecx, %rax
+               	movslq	-0x20(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movslq	-0x20(%rbp), %rcx
+               	decq	%rcx
+               	movl	%ecx, -0x20(%rbp)
+               	movslq	-0x20(%rbp), %rcx
+               	testq	%rcx, %rcx
+               	jg	<addr>
+               	movslq	%eax, %rax
                	cmpq	$0xf, %rax
                	je	<addr>
                	movl	$0x8, %eax

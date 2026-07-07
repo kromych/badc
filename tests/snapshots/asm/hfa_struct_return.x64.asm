@@ -222,7 +222,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x180, %rsp            # imm = 0x180
                	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
                	movabsq	$0x401c000000000000, %rbx # imm = 0x401C000000000000
                	movq	%rbx, %xmm0
                	callq	<addr>
@@ -247,7 +246,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x180, %rsp            # imm = 0x180
                	popq	%rbp
                	retq
@@ -271,28 +269,27 @@ Disassembly of section .text:
                	movsd	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rbx
-               	testq	%rbx, %rbx
+               	orq	%r10, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x20(%rbp), %rax
                	movsd	0x8(%rax,%riz), %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rbx
-               	testq	%rbx, %rbx
+               	orq	%r10, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x180, %rsp            # imm = 0x180
                	popq	%rbp
                	retq
@@ -317,13 +314,13 @@ Disassembly of section .text:
                	movsd	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
+               	setne	%cl
+               	movzbq	%cl, %rcx
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	movl	$0x1, %ebx
-               	testq	%rax, %rax
+               	orq	%r10, %rcx
+               	movl	$0x1, %eax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x48(%rbp), %rax
                	movsd	0x8(%rax,%riz), %xmm0
@@ -336,25 +333,24 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	testq	%rax, %rax
-               	setne	%bl
-               	movzbq	%bl, %rbx
-               	testq	%rbx, %rbx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x48(%rbp), %rax
                	movsd	0x10(%rax,%riz), %xmm0
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rbx
-               	testq	%rbx, %rbx
+               	orq	%r10, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x180, %rsp            # imm = 0x180
                	popq	%rbp
                	retq
@@ -387,7 +383,7 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	movl	$0x1, %ebx
+               	movl	$0x1, %ecx
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x80(%rbp), %rax
@@ -401,10 +397,10 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	testq	%rax, %rax
-               	setne	%bl
-               	movzbq	%bl, %rbx
-               	movl	$0x1, %r12d
-               	testq	%rbx, %rbx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %eax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x80(%rbp), %rax
                	movsd	0x10(%rax,%riz), %xmm0
@@ -417,34 +413,31 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	testq	%rax, %rax
-               	setne	%r12b
-               	movzbq	%r12b, %r12
-               	testq	%r12, %r12
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x80(%rbp), %rax
                	movsd	0x18(%rax,%riz), %xmm0
                	movabsq	$0x4044000000000000, %rax # imm = 0x4044000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%r12b
-               	movzbq	%r12b, %r12
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %r12
-               	testq	%r12, %r12
+               	orq	%r10, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x180, %rsp            # imm = 0x180
                	popq	%rbp
                	retq
-               	movabsq	$0x3ff8000000000000, %rbx # imm = 0x3FF8000000000000
-               	movq	%rbx, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
-               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
-               	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm1
+               	movl	$0x3fc00000, %ebx       # imm = 0x3FC00000
+               	movl	$0x40200000, %esi       # imm = 0x40200000
+               	movq	%rbx, %xmm0
+               	movq	%rsi, %xmm1
                	callq	<addr>
                	movsd	%xmm0, -0x160(%rbp,%riz)
                	leaq	-0x160(%rbp), %rax
@@ -456,32 +449,29 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	leaq	-0xa8(%rbp), %rax
                	movss	(%rax,%riz), %xmm0
-               	cvtss2sd	%xmm0, %xmm0
                	movq	%rbx, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	ucomiss	%xmm15, %xmm0
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rbx
-               	testq	%rbx, %rbx
+               	orq	%r10, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0xa8(%rbp), %rax
                	movss	0x4(%rax,%riz), %xmm0
-               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x40200000, %eax       # imm = 0x40200000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	ucomiss	%xmm15, %xmm0
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rbx
-               	testq	%rbx, %rbx
+               	orq	%r10, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x180, %rsp            # imm = 0x180
                	popq	%rbp
                	retq
@@ -510,7 +500,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x180, %rsp            # imm = 0x180
                	popq	%rbp
                	retq
@@ -539,7 +528,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x180, %rsp            # imm = 0x180
                	popq	%rbp
                	retq
@@ -548,10 +536,9 @@ Disassembly of section .text:
                	movsd	(%r10,%riz), %xmm0
                	movsd	0x8(%r10,%riz), %xmm1
                	callq	<addr>
-               	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x41200000, %eax       # imm = 0x41200000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -561,13 +548,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x8, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x180, %rsp            # imm = 0x180
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x180, %rsp            # imm = 0x180
                	popq	%rbp
                	retq

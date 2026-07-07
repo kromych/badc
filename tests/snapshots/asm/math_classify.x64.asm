@@ -28,28 +28,23 @@ Disassembly of section .text:
                	jne	<addr>
                	testq	%rcx, %rcx
                	jne	<addr>
+               	movl	$0x2, %eax
+               	addq	$0x30, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x3, %eax
                	jmp	<addr>
                	cmpq	$0x7ff, %rax            # imm = 0x7FF
                	jne	<addr>
-               	jmp	<addr>
-               	movl	$0x2, %ecx
-               	jmp	<addr>
-               	movl	$0x3, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
                	testq	%rcx, %rcx
                	jne	<addr>
-               	jmp	<addr>
-               	movl	$0x4, %eax
+               	movl	$0x1, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %ecx
+               	xorq	%rax, %rax
                	jmp	<addr>
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	movl	$0x4, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq

@@ -10,61 +10,42 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	cmp	x0, #0x3
                	b.lt	<addr>
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0xa                // =10
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x14               // =20
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x1e               // =30
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	cmp	x0, #0x5
-               	cset	x2, ge
-               	cbz	x2, <addr>
-               	b	<addr>
-               	cmp	x0, #0x2
-               	b.lt	<addr>
-               	b	<addr>
                	cmp	x0, #0x4
                	b.lt	<addr>
-               	b	<addr>
-               	cmp	x0, #0x1
+               	cmp	x0, #0x4
                	b.eq	<addr>
-               	b	<addr>
-               	cmp	x0, #0x2
-               	b.eq	<addr>
+               	cmp	x0, #0x5
+               	cset	x1, ge
+               	cbz	x1, <addr>
+               	cmp	x0, #0x8
+               	cset	x1, le
+               	cbz	x1, <addr>
+               	mov	x0, #0x1e               // =30
+               	ret
+               	mov	x0, #0x0                // =0
+               	ret
                	b	<addr>
                	cmp	x0, #0x3
                	b.eq	<addr>
                	b	<addr>
-               	cmp	x0, #0x4
-               	b.eq	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	cmp	x0, #0x8
-               	cset	x2, le
-               	cbz	x2, <addr>
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	cmp	x0, #0x2
+               	b.lt	<addr>
+               	cmp	x0, #0x2
+               	b.ne	<addr>
+               	mov	x0, #0x14               // =20
                	ret
+               	cmp	x0, #0x1
+               	b.ne	<addr>
+               	mov	x0, #0xa                // =10
+               	ret
+               	mov	x0, #0x0                // =0
+               	ret
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
                	b	<addr>
 
 <main>:

@@ -97,7 +97,7 @@ def main() -> int:
     # `--export-all` puts the engine's API in the executable's dynamic
     # symbol table so a dlopen'd native module resolves its references to
     # the host (JS_NewObject, JS_ToIndex, ...) from the global scope.
-    cmd = [str(badc), "--export-all"]
+    cmd = [str(badc), "-O", "--export-all"]
     for d in DEFINES:
         cmd += ["-D", d]
     cmd += ["-I", str(QJS_DIR)]
@@ -158,7 +158,7 @@ def main() -> int:
     )
     module_passed = 0
     for src, so, test, cwd in modules:
-        build = [str(badc), "--export-all", "--shared"]
+        build = [str(badc), "-O", "--export-all", "--shared"]
         for d in DEFINES:
             build += ["-D", d]
         build += ["-D", "JS_SHARED_LIBRARY", "-I", str(QJS_DIR), str(src), "-o", str(so)]

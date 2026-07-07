@@ -28,8 +28,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v1   ImmData(48)                                      -> x0
     v2   Imm(7)                                           -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I32 }    -> -
-    v4   ImmData(56)                                      -> x1
-    v5   Imm(35)                                          -> x2
+    v4   ImmData(56)                                      -> x2
+    v5   Imm(35)                                          -> x1
     v6   Store { addr=v4, disp=0, value=v5, kind=I32 }    -> -
     v7   ImmData(40)                                      -> x3
     v8   Load { addr=v1, disp=0, kind=I32 }               -> x6

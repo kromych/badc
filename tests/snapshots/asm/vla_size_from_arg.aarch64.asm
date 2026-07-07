@@ -34,33 +34,23 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x18]
-               	ldursw	x0, [x29, #-0x18]
-               	ldursw	x1, [x29, #0x10]
-               	cmp	x0, x1
-               	b.ge	<addr>
                	b	<addr>
+               	ldur	x1, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x18]
+               	add	x1, x1, x0
+               	add	x0, x0, #0x1
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
+               	strb	w0, [x1]
                	ldursw	x0, [x29, #-0x18]
                	add	x0, x0, #0x1
                	stur	w0, [x29, #-0x18]
-               	b	<addr>
-               	ldur	x0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x18]
-               	add	x0, x0, x1
-               	add	x1, x1, #0x1
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
-               	strb	w1, [x0]
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x20]
-               	stur	w0, [x29, #-0x28]
-               	ldursw	x0, [x29, #-0x28]
+               	ldursw	x0, [x29, #-0x18]
                	ldursw	x1, [x29, #0x10]
                	cmp	x0, x1
-               	b.ge	<addr>
-               	b	<addr>
-               	ldursw	x0, [x29, #-0x28]
-               	add	x0, x0, #0x1
+               	b.lt	<addr>
+               	mov	x0, #0x0                // =0
+               	stur	w0, [x29, #-0x20]
                	stur	w0, [x29, #-0x28]
                	b	<addr>
                	ldursw	x0, [x29, #-0x20]
@@ -70,7 +60,13 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	add	x0, x0, x1
                	stur	w0, [x29, #-0x20]
-               	b	<addr>
+               	ldursw	x0, [x29, #-0x28]
+               	add	x0, x0, #0x1
+               	stur	w0, [x29, #-0x28]
+               	ldursw	x0, [x29, #-0x28]
+               	ldursw	x1, [x29, #0x10]
+               	cmp	x0, x1
+               	b.lt	<addr>
                	ldursw	x0, [x29, #-0x20]
                	ldr	x19, [sp]
                	add	sp, sp, #0x2, lsl #12   // =0x2000

@@ -20,8 +20,8 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp]
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -31,8 +31,8 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
-               	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp]
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -41,8 +41,8 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
-               	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp]
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -81,12 +81,11 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	cmp	x0, #0x0
                	b.eq	<addr>
-               	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x4                // =4
-               	mov	x0, x1
-               	ldr	x20, [sp]
+               	mov	x0, #0x0                // =0
                	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp]
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x4                // =4
+               	b	<addr>

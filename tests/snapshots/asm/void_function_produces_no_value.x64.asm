@@ -11,12 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <no_value_void>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <early_return_void>:
@@ -31,7 +26,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	leaq	-<rip>, %rax       # <addr>
                	movl	$0x6, %edi
@@ -46,7 +41,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x50, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	leaq	-<rip>, %rbx       # <addr>
@@ -62,7 +57,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x50, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movl	$0x5, %edi
@@ -77,7 +72,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x50, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rbx, %rbx
@@ -85,8 +80,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x50, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

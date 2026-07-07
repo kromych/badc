@@ -16,10 +16,11 @@ Disassembly of section .text:
 <g>:
                	sxtw	x0, w0
                	sxtw	x1, w1
-               	scvtf	d2, x0
+               	fmov	d2, d1
+               	scvtf	d1, x0
                	scvtf	d3, x1
-               	fmul	d1, d1, d3
-               	fmadd	d0, d0, d2, d1
+               	fmul	d2, d2, d3
+               	fmadd	d0, d0, d1, d2
                	ret
 
 <main>:
@@ -41,17 +42,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3                // =3
-               	mov	x1, #0x3ff8000000000000 // =4609434218613702656
-               	mov	x2, #0x4                // =4
-               	mov	x3, #0x4004000000000000 // =4612811918334230528
-               	sxtw	x0, w0
-               	sxtw	x2, w2
-               	scvtf	d0, x0
-               	scvtf	d1, x2
-               	fmov	d16, x3
-               	fmul	d1, d16, d1
+               	mov	x0, #0x3ff8000000000000 // =4609434218613702656
+               	mov	x1, #0x4004000000000000 // =4612811918334230528
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
+               	scvtf	d0, x2
+               	scvtf	d1, x3
                	fmov	d16, x1
+               	fmul	d1, d16, d1
+               	fmov	d16, x0
                	fmadd	d0, d16, d0, d1
                	mov	x0, #0x402d000000000000 // =4624352392379367424
                	fmov	d17, x0

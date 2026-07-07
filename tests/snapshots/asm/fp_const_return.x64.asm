@@ -15,22 +15,19 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movslq	%esi, %rsi
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %xmm14
+               	xorq	%rax, %rax
+               	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movslq	%ecx, %rax
-               	cmpq	%rsi, %rax
-               	jge	<addr>
                	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	shlq	$0x3, %rax
-               	addq	%rdi, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movq	%rcx, %rdx
+               	shlq	$0x3, %rdx
+               	addq	%rdi, %rdx
+               	movsd	(%rdx,%riz), %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
-               	jmp	<addr>
+               	leaq	0x1(%rcx), %rax
+               	movslq	%eax, %rcx
+               	cmpq	%rsi, %rcx
+               	jl	<addr>
                	movsd	-0x8(%rbp,%riz), %xmm0
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -55,53 +52,42 @@ Disassembly of section .text:
                	retq
 
 <ret_quarter_f>:
-               	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
+               	movl	$0x3e800000, %eax       # imm = 0x3E800000
                	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
+               	movapd	%xmm14, %xmm0
                	retq
 
 <sum_zero>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%esi, %rsi
-               	movslq	%esi, %rax
-               	testq	%rax, %rax
-               	setg	%cl
-               	movzbq	%cl, %rcx
+               	movslq	%esi, %rcx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	jmp	<addr>
-               	movslq	%esi, %rax
-               	leaq	-0x1(%rax), %rsi
-               	jmp	<addr>
-               	movslq	%esi, %rax
+               	setg	%al
+               	movzbq	%al, %rax
                	testq	%rax, %rax
-               	jne	<addr>
-               	jmp	<addr>
+               	je	<addr>
                	leaq	-0x1(%rsi), %rax
                	movslq	%eax, %rax
                	movq	(%rdi,%rax,8), %rax
                	testq	%rax, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
+               	leaq	-0x1(%rcx), %rsi
                	jmp	<addr>
+               	jmp	<addr>
+               	testq	%rcx, %rcx
+               	jne	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
                	movapd	%xmm14, %xmm0
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	leaq	-0x1(%rsi), %rax
                	movslq	%eax, %rax
                	movq	(%rdi,%rax,8), %rax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -195,10 +181,9 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	movl	$0x2, %esi
                	callq	<addr>
-               	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
+               	movl	$0x3e800000, %eax       # imm = 0x3E800000
                	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
-               	cvtss2sd	%xmm0, %xmm0
+               	cvtss2sd	%xmm14, %xmm0
                	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -237,4 +222,4 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

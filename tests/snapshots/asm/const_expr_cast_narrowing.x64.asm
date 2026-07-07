@@ -11,29 +11,12 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movslq	%eax, %rax
-               	cmpq	$-0x1, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	retq
+               	movl	$0x1, %eax
+               	retq
+               	movl	$0x2, %eax
+               	retq
+               	movl	$0x3, %eax
                	retq
                	addb	%al, (%rax)

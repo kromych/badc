@@ -18,22 +18,17 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%rdi, %rbx
                	movslq	%ebx, %rbx
+               	xorq	%r12, %r12
+               	jmp	<addr>
+               	leaq	-0x1(%rbx), %rdi
+               	callq	<addr>
+               	movq	%rax, %rcx
+               	leaq	-0x2(%rbx), %rax
+               	movslq	%eax, %rbx
+               	addq	%rcx, %r12
                	cmpq	$0x2, %rbx
                	jge	<addr>
-               	movq	%rbx, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x1(%rbx), %rax
-               	movslq	%eax, %rdi
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	-0x2(%rbx), %rax
-               	movslq	%eax, %rdi
-               	callq	<addr>
-               	addq	%r12, %rax
+               	leaq	(%r12,%rbx), %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp

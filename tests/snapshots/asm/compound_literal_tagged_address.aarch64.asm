@@ -62,9 +62,9 @@ Disassembly of section .text:
                	str	x0, [x1]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	add	x1, x1, #0x8
-               	sub	x2, x29, #0x40
-               	str	x1, [x2, #0x8]
+               	add	x2, x1, #0x8
+               	sub	x1, x29, #0x40
+               	str	x2, [x1, #0x8]
                	sub	x1, x29, #0x40
                	sub	x2, x29, #0x30
                	str	x10, [sp, #-0x10]!

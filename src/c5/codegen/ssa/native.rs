@@ -206,18 +206,26 @@ mod tests {
         assert!(!bytes.is_empty(), "sum3 produced zero bytes");
         // emit_prologue runs three c5 param-spill stores (one per
         // declared int param), then the AAPCS64 frame setup:
-        // `stp x29, x30, [sp, #-0x10]!` = 0xa9bf7bfd. Verify the
-        // sentinel appears in the first 32 bytes so the prologue
-        // is recognisable without pinning every byte.
+        // an `stp x29, x30` in pre-indexed or signed-offset form (the
+        // locals allocation may fold into the pre-index, and under
+        // register pressure the pair lands at a signed offset into an
+        // already-adjusted frame). Match with the imm7 field masked.
         let preamble_words = bytes.len().min(32) / 4;
         let found_stp = (0..preamble_words).any(|w| {
             let off = w * 4;
-            u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
-                == 0xa9bf7bfd
+            let word =
+                u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]]);
+            word & 0xffc0_7fff == 0xa980_7bfd || word & 0xffc0_7fff == 0xa900_7bfd
         });
+        let preamble: alloc::vec::Vec<u32> = (0..preamble_words)
+            .map(|w| {
+                let off = w * 4;
+                u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
+            })
+            .collect();
         assert!(
             found_stp,
-            "sum3 prologue: stp x29/x30 not found in first 32 bytes"
+            "sum3 prologue: stp x29/x30 not found in first 32 bytes: {preamble:08x?}"
         );
     }
 

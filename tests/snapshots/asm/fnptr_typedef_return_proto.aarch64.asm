@@ -25,29 +25,23 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	str	x19, [sp]
+               	str	x19, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x14               // =20
                	mov	x2, #0x16               // =22
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
+               	mov	x0, x1
+               	mov	x1, x2
                	blr	x9
-               	add	sp, sp, #0x20
                	sxtw	x0, w0
                	cmp	x0, #0x2a
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x1                // =1
-               	mov	x0, x1
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x19, [sp], #0x20
                	ret
+               	mov	x0, #0x1                // =1
+               	b	<addr>

@@ -1,8 +1,8 @@
 // Locks C99 6.4.4.2 -- the floating-suffix is one of f / F / l / L.
-// `f`/`F` mark `float`, `l`/`L` mark `long double`. The c5 dialect
-// stores every floating literal in `f64` and treats the suffix as
-// informational, so the four spellings of the same value must all
-// land at the same bit pattern.
+// `f`/`F` type the constant `float`, `l`/`L` `long double` (which c5
+// represents as double). 1.0 is exact in every precision, so the
+// four spellings of the value must all land at the same bit pattern
+// after conversion to double.
 //
 // Returns 0 only when every check passes; each failure path
 // returns a distinct nonzero code.

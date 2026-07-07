@@ -122,6 +122,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$-0x7538dcfb76180000, %rax # imm = 0x8AC7230489E80000
+               	xorps	%xmm0, %xmm0
                	movq	%rax, %r10
                	testq	%r10, %r10
                	js	<addr>
@@ -154,3 +155,4 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

@@ -50,23 +50,21 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	$0x2a, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x2a, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x1, %eax
+               	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

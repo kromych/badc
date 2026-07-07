@@ -10,34 +10,28 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	fsub	d1, d0, d1
+               	fsub	d0, d0, d1
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	fcmp	d1, d0
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
-               	fneg	d1, d1
+               	fneg	d0, d0
                	mov	x0, #0xd695             // =54933
                	movk	x0, #0xe826, lsl #16
                	movk	x0, #0x2e0b, lsl #32
                	movk	x0, #0x3e11, lsl #48
                	fmov	d17, x0
-               	fcmp	d1, d17
+               	fcmp	d0, d17
                	cset	x0, mi
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	str	x20, [sp]
+               	str	x20, [sp, #-0x30]!
                	str	x19, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	mov	x20, #0x0               // =0
                	fmov	d0, x20
                	bl	<addr>
@@ -46,10 +40,9 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d0, x0
@@ -60,10 +53,9 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x20, #0x0               // =0
                	fmov	d0, x20
@@ -73,10 +65,9 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x20, #0x4000000000000000 // =4611686018427387904
                	fmov	d0, x20
@@ -87,10 +78,9 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x4                // =4
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x20, #0x4008000000000000 // =4613937818241073152
                	fmov	d0, x20
@@ -101,10 +91,9 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x5                // =5
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x20, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d0, x20
@@ -115,44 +104,40 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x6                // =6
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x30
                	ret
-               	mov	x20, #0x0               // =0
-               	fmov	d16, x20
-               	fcvt	s0, d16
+               	mov	x0, #0x0                // =0
+               	fmov	d0, x0
                	bl	<addr>
                	fcvt	d0, s0
-               	fmov	d1, x20
+               	mov	x0, #0x0                // =0
+               	fmov	d1, x0
                	bl	<addr>
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x7                // =7
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x30
                	ret
-               	mov	x20, #0x0               // =0
-               	fmov	d16, x20
-               	fcvt	s0, d16
+               	mov	x0, #0x0                // =0
+               	fmov	d0, x0
                	bl	<addr>
                	fcvt	d0, s0
-               	fmov	d1, x20
+               	mov	x0, #0x0                // =0
+               	fmov	d1, x0
                	bl	<addr>
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x8                // =8
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x0, #0x0                // =0
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x30
                	ret

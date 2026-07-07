@@ -37,10 +37,11 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rcx
                	cmpq	%rcx, %rax
                	jne	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x1, %eax
+               	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

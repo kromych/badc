@@ -87,10 +87,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=12
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4607182418800017408)                         -> x0
     v2   Imm(4611686018427387904)                         -> x1
-    v3   Imm(4613937818241073152)                         -> x2
-    v4   Imm(4616189618054758400)                         -> x6
-    v5   Imm(4617315517961601024)                         -> x7
-    v6   Imm(4618441417868443648)                         -> x8
+    v3   Imm(4613937818241073152)                         -> x7
+    v4   Imm(4616189618054758400)                         -> x8
+    v5   Imm(4617315517961601024)                         -> x2
+    v6   Imm(4618441417868443648)                         -> x6
     v7   Imm(0)                                           -> x9
     v8   Imm(0)                                           -> x9
     v9   Imm(0)                                           -> x9
@@ -140,9 +140,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=12
     v47  Imm(2)                                           -> x0
     terminator Return(v47)   (exit_acc=v47)
   block 4  start_pc=0
-    v48  Imm(4621819117588971520)                         -> x0
-    v49  Imm(4607182418800017408)                         -> x1
-    v50  Imm(0)                                           -> x2
+    v48  Imm(4621819117588971520)                         -> x1
+    v49  Imm(4607182418800017408)                         -> x2
+    v50  Imm(0)                                           -> x0
     v51  Imm(0)                                           -> x6
     v52  Imm(0)                                           -> x6
     v53  Imm(0)                                           -> x6
@@ -160,16 +160,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=12
     v65  Fma { a=v48, b=v49, c=v64, neg_product=false, neg_addend=false } -> d0
     v66  Binop { op=fmul, lhs=v50, rhs=v50 }              -> d1
     v67  Fma { a=v50, b=v50, c=v65, neg_product=false, neg_addend=false } -> d0
-    v68  Imm(0)                                           -> x1
-    v69  LocalAddr(-12)                                   -> x1
+    v68  Imm(0)                                           -> x0
+    v69  LocalAddr(-12)                                   -> x0
     v70  FpCast { kind=FpToInt, value=v67 }               -> x2
     v71  Store { addr=v69, disp=0, value=v70, kind=I32 }  -> -
-    v72  LocalAddr(-12)                                   -> x1
+    v72  LocalAddr(-12)                                   -> x0
     v73  BinopI { op=add, lhs=v72, rhs_imm=4 }            -> x2
     v74  Imm(4611686018427387904)                         -> x2
     v75  Binop { op=fmul, lhs=v67, rhs=v74 }              -> d1
     v76  Fma { a=v67, b=v74, c=v48, neg_product=false, neg_addend=false } -> d0
-    v77  FpCast { kind=FpToInt, value=v76 }               -> x0
+    v77  FpCast { kind=FpToInt, value=v76 }               -> x1
     v78  Store { addr=v72, disp=4, value=v77, kind=I32 }  -> -
     v79  LocalAddr(-12)                                   -> x0
     v80  LocalAddr(-12)                                   -> x0

@@ -220,6 +220,10 @@ pub struct CompileOptions {
     /// for auto-included names another input defines, so the user's
     /// definition wins over the header's library binding.
     pub implicit_extern_fns: Vec<String>,
+    /// `-O` -- predefine `NDEBUG` and `__OPTIMIZE__`, both `1`, so a
+    /// single flag selects release semantics (optimization passes plus
+    /// asserts compiled out). Explicit `-D` / `-U` flags override.
+    pub optimize: bool,
 }
 
 impl CompileOptions {
@@ -236,6 +240,11 @@ impl CompileOptions {
     /// Replace the `-U` undefine list.
     pub fn with_undefines(mut self, undefines: Vec<String>) -> Self {
         self.undefines = undefines;
+        self
+    }
+    /// Enable the `-O` predefines. See [`Self::optimize`].
+    pub fn with_optimize(mut self, on: bool) -> Self {
+        self.optimize = on;
         self
     }
     /// Replace the `-I` include-search-path list.
@@ -1218,6 +1227,12 @@ impl Compiler {
         }
         for name in &opts.force_includes {
             pp.add_force_include(name);
+        }
+        // `-O` predefines, installed before the CLI lists so an explicit
+        // `-D NDEBUG=<v>` overrides the value and `-U NDEBUG` removes it.
+        if opts.optimize {
+            pp.define("NDEBUG", "1");
+            pp.define("__OPTIMIZE__", "1");
         }
         for (name, body) in &opts.defines {
             pp.define(name, body);

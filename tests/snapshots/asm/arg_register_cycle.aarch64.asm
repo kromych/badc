@@ -22,7 +22,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x2, x2, #0x1
-               	sxtw	x2, w2
                	mov	x16, x1
                	mov	x1, x0
                	mov	x0, x16

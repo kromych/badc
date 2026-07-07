@@ -6,9 +6,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v0   AllocaInit(0)                                    -> -
     v1   Imm(-9223372036854775808)                        -> x0
     v2   Imm(0)                                           -> x1
-    v3   Imm(-6101065172474983726)                        -> x1
-    v4   Imm(0)                                           -> x2
-    v5   Imm(-1)                                          -> x2
+    v3   Imm(-6101065172474983726)                        -> x2
+    v4   Imm(0)                                           -> x1
+    v5   Imm(-1)                                          -> x1
     v6   Imm(0)                                           -> x6
     v7   Imm(100)                                         -> x6
     v8   Imm(0)                                           -> x7
@@ -24,32 +24,32 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
   block 2  start_pc=0
     v15  LoadLocal { off=-2, kind=I64 }                   -> x7
     v16  FpCast { kind=UIntToFp, value=v3 }               -> d0
-    v17  Imm(4892433759222981601)                         -> x1
-    v18  Binop { op=fne, lhs=v16, rhs=v17 }               -> x1
+    v17  Imm(4892433759222981601)                         -> x2
+    v18  Binop { op=fne, lhs=v16, rhs=v17 }               -> x2
     terminator Bz { cond=v18, target=b4, fall=b3 }   (exit_acc=v18)
   block 3  start_pc=0
     v19  Imm(2)                                           -> x0
     terminator Return(v19)   (exit_acc=v19)
   block 4  start_pc=0
-    v20  LoadLocal { off=-3, kind=I64 }                   -> x1
+    v20  LoadLocal { off=-3, kind=I64 }                   -> x2
     v21  FpCast { kind=UIntToFp, value=v5 }               -> d0
-    v22  Imm(4895412794951729152)                         -> x1
-    v23  Binop { op=fne, lhs=v21, rhs=v22 }               -> x1
+    v22  Imm(4895412794951729152)                         -> x2
+    v23  Binop { op=fne, lhs=v21, rhs=v22 }               -> x2
     terminator Bz { cond=v23, target=b6, fall=b5 }   (exit_acc=v23)
   block 5  start_pc=0
     v24  Imm(3)                                           -> x0
     terminator Return(v24)   (exit_acc=v24)
   block 6  start_pc=0
-    v25  LoadLocal { off=-4, kind=I64 }                   -> x1
+    v25  LoadLocal { off=-4, kind=I64 }                   -> x2
     v26  FpCast { kind=UIntToFp, value=v7 }               -> d0
-    v27  Imm(4636737291354636288)                         -> x1
-    v28  Binop { op=fne, lhs=v26, rhs=v27 }               -> x1
+    v27  Imm(4636737291354636288)                         -> x2
+    v28  Binop { op=fne, lhs=v26, rhs=v27 }               -> x2
     terminator Bz { cond=v28, target=b8, fall=b7 }   (exit_acc=v28)
   block 7  start_pc=0
     v29  Imm(4)                                           -> x0
     terminator Return(v29)   (exit_acc=v29)
   block 8  start_pc=0
-    v30  LoadLocal { off=-5, kind=I64 }                   -> x1
+    v30  LoadLocal { off=-5, kind=I64 }                   -> x2
     v31  FpCast { kind=IntToFp, value=v5 }                -> d0
     v32  Imm(4607182418800017408)                         -> x1
     v33  Fneg(v32)                                        -> d1
@@ -60,18 +60,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     terminator Return(v35)   (exit_acc=v35)
   block 10  start_pc=0
     v36  LoadLocal { off=-1, kind=I64 }                   -> x1
-    v37  FpCast { kind=UIntToFp, value=v1 }               -> d0
-    v38  FpCast { kind=F64ToF32, value=v37 }              -> d0 [f32]
-    v39  Imm(4890909195324358656)                         -> x0
-    v40  FpCast { kind=F32ToF64, value=v38 }              -> d0
-    v41  Binop { op=fne, lhs=v40, rhs=v39 }               -> x0
-    terminator Bz { cond=v41, target=b12, fall=b11 }   (exit_acc=v41)
+    v37  FpCast { kind=UIntToFp, value=v1 }               -> d0 [f32]
+    v38  Imm(1593835520)                                  -> x0 [f32]
+    v39  Binop { op=fne, lhs=v37, rhs=v38 }               -> x0
+    terminator Bz { cond=v39, target=b12, fall=b11 }   (exit_acc=v39)
   block 11  start_pc=0
-    v42  Imm(6)                                           -> x0
-    terminator Return(v42)   (exit_acc=v42)
+    v40  Imm(6)                                           -> x0
+    terminator Return(v40)   (exit_acc=v40)
   block 12  start_pc=0
-    v43  Imm(0)                                           -> x0
-    terminator Return(v43)   (exit_acc=v43)
+    v41  Imm(0)                                           -> x0
+    terminator Return(v41)   (exit_acc=v41)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

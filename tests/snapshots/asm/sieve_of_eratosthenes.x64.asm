@@ -11,74 +11,53 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
                	movl	$0x2, %ecx
-               	movslq	%ecx, %rax
-               	imulq	%rax, %rax
-               	cmpq	$0x186a0, %rax          # imm = 0x186A0
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
                	jmp	<addr>
                	leaq	<rip>, %rax
-               	movslq	%ecx, %rdx
-               	addq	%rdx, %rax
+               	addq	%rdi, %rax
                	movsbq	(%rax), %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
-               	xorq	%rdx, %rdx
-               	movl	$0x2, %ecx
-               	jmp	<addr>
                	movq	%rcx, %rax
                	imulq	%rcx, %rax
-               	movslq	%eax, %rdx
+               	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
-               	movslq	%edx, %rax
-               	cmpq	$0x186a0, %rax          # imm = 0x186A0
-               	jge	<addr>
-               	jmp	<addr>
-               	addq	%rcx, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movslq	%edx, %rsi
-               	addq	%rsi, %rax
+               	leaq	<rip>, %rsi
+               	addq	%rsi, %rdx
                	movl	$0x1, %esi
-               	movb	%sil, (%rax)
-               	jmp	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rax
+               	movb	%sil, (%rdx)
+               	addq	%rcx, %rax
+               	movslq	%eax, %rdx
+               	cmpq	$0x186a0, %rdx          # imm = 0x186A0
+               	jl	<addr>
+               	leaq	0x1(%rdi), %rcx
+               	movslq	%ecx, %rdi
+               	movq	%rdi, %rax
+               	imulq	%rdi, %rax
                	cmpq	$0x186a0, %rax          # imm = 0x186A0
-               	jge	<addr>
+               	jl	<addr>
+               	xorq	%rax, %rax
+               	movl	$0x2, %ecx
                	jmp	<addr>
-               	movslq	%ecx, %rax
-               	leaq	0x1(%rax), %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movslq	%ecx, %rsi
-               	addq	%rsi, %rax
-               	movsbq	(%rax), %rax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rsi
+               	addq	%rdx, %rsi
+               	movsbq	(%rsi), %rsi
+               	testq	%rsi, %rsi
                	jne	<addr>
+               	movslq	%eax, %rax
+               	incq	%rax
                	jmp	<addr>
-               	movslq	%edx, %rax
+               	jmp	<addr>
+               	leaq	0x1(%rdx), %rcx
+               	movslq	%ecx, %rdx
+               	cmpq	$0x186a0, %rdx          # imm = 0x186A0
+               	jl	<addr>
+               	movslq	%eax, %rax
                	cmpq	$0x2578, %rax           # imm = 0x2578
                	jne	<addr>
-               	jmp	<addr>
-               	movslq	%edx, %rax
-               	leaq	0x1(%rax), %rdx
-               	jmp	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	xorq	%rax, %rax
                	retq
+               	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)
+               	jmp	<addr>
+               	jmp	<addr>

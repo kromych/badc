@@ -21,17 +21,17 @@ Disassembly of section .text:
                	movq	%r15, 0x20(%rsp)
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rbx
-               	movq	0x10(%rax), %r12
-               	movq	0x20(%rax), %r13
-               	movq	0x28(%rax), %r14
+               	movq	0x8(%rax), %r12
+               	movq	0x10(%rax), %r13
+               	movq	0x20(%rax), %r14
+               	movq	0x28(%rax), %r15
                	leaq	<rip>, %rdi
                	movl	$0x42, %esi
                	movl	$0x1a4, %edx            # imm = 0x1A4
                	movq	%rcx, %rax
                	callq	*%rax
-               	movslq	%eax, %r15
-               	testq	%r15, %r15
+               	movslq	%eax, %rbx
+               	testq	%rbx, %rbx
                	jge	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -43,8 +43,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x400, %esi            # imm = 0x400
-               	movq	%r14, %rax
-               	movq	%r15, %rdi
+               	movq	%r15, %rax
+               	movq	%rbx, %rdi
                	callq	*%rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -59,8 +59,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0xc8(%rbp), %rsi
-               	movq	%r13, %rax
-               	movq	%r15, %rdi
+               	movq	%r14, %rax
+               	movq	%rbx, %rdi
                	callq	*%rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -76,8 +76,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %esi
                	movl	$0x1, %edx
-               	movq	%r12, %rcx
-               	movq	%r15, %rdi
+               	movq	%r13, %rcx
+               	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	*%rcx
                	movslq	%eax, %rax
@@ -92,8 +92,8 @@ Disassembly of section .text:
                	addq	$0x110, %rsp            # imm = 0x110
                	popq	%rbp
                	retq
-               	movq	%rbx, %rax
-               	movq	%r15, %rdi
+               	movq	%r12, %rax
+               	movq	%rbx, %rdi
                	callq	*%rax
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx

@@ -43,14 +43,6 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x100000003, %rax      # imm = 0x100000003
-               	movslq	%eax, %rax
-               	cmpq	$0x3, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
                	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -65,10 +57,10 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rax
                	movsbq	(%rax), %rax
                	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movl	$0x1, %edx
-               	testq	%rax, %rax
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %eax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x18(%rbp), %rax
                	movsbq	0x1(%rax), %rax
@@ -76,16 +68,16 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x18(%rbp), %rax
                	movsbq	0x2(%rax), %rax
                	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x40, %rsp
@@ -105,3 +97,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+               	movl	$0x2, %eax
+               	addq	$0x40, %rsp
+               	popq	%rbp
+               	retq
+               	addb	%al, (%rax)

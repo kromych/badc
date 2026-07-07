@@ -11,171 +11,92 @@ Disassembly of section .text:
                	ud2
 
 <preinc_u8_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0xff, %eax
-               	xorq	%rdx, %rdx
-               	incq	%rax
-               	movq	%rax, %rcx
-               	andq	$0xff, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	andq	$0xff, %rax
+               	xorq	%rax, %rax
+               	movl	$0x1, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x1, %rax
+               	sete	%al
+               	movzbq	%al, %rax
                	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	movl	$0x1, %eax
+               	testq	%rax, %rax
+               	je	<addr>
+               	xorq	%rax, %rax
                	retq
+               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u16_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0xffff, %eax           # imm = 0xFFFF
-               	xorq	%rdx, %rdx
-               	incq	%rax
-               	movq	%rax, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	xorq	%rax, %rax
+               	movl	$0x1, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x1, %rax
+               	sete	%al
+               	movzbq	%al, %rax
                	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	movl	$0x1, %eax
+               	testq	%rax, %rax
+               	je	<addr>
+               	xorq	%rax, %rax
                	retq
+               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
 
 <preinc_u32_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	xorq	%rdx, %rdx
-               	incq	%rax
-               	movl	%eax, %ecx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movl	%eax, %eax
+               	xorq	%rax, %rax
+               	movl	$0x1, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x1, %rax
+               	sete	%al
+               	movzbq	%al, %rax
                	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	movl	$0x1, %eax
+               	testq	%rax, %rax
+               	je	<addr>
+               	xorq	%rax, %rax
                	retq
+               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
 
 <compound_u8_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0xf0, %eax
-               	xorq	%rdx, %rdx
-               	addq	$0x10, %rax
-               	movq	%rax, %rcx
-               	andq	$0xff, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	andq	$0xff, %rax
+               	xorq	%rax, %rax
+               	movl	$0x1, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x1, %rax
+               	sete	%al
+               	movzbq	%al, %rax
                	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	movl	$0x1, %eax
+               	testq	%rax, %rax
+               	je	<addr>
+               	xorq	%rax, %rax
                	retq
+               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
 
 <compound_u16_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0xfff0, %eax           # imm = 0xFFF0
-               	xorq	%rdx, %rdx
-               	addq	$0x10, %rax
-               	movq	%rax, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0x1, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	xorq	%rax, %rax
+               	movl	$0x1, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x1, %rax
+               	sete	%al
+               	movzbq	%al, %rax
                	testq	%rax, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	movl	$0x1, %eax
+               	testq	%rax, %rax
+               	je	<addr>
+               	xorq	%rax, %rax
                	retq
+               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
 
@@ -186,44 +107,43 @@ Disassembly of section .text:
                	movl	$0xff, %eax
                	movb	%al, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movzbq	(%rax), %rcx
-               	incq	%rcx
-               	movb	%cl, (%rax)
+               	xorq	%rcx, %rcx
+               	movzbq	(%rax), %rdx
+               	incq	%rdx
+               	movb	%dl, (%rax)
                	movzbq	(%rax), %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movl	$0x1, %edx
-               	movslq	%edx, %rax
+               	movl	$0x1, %ecx
+               	movslq	%ecx, %rax
                	cmpq	$0x1, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movzbq	-0x8(%rbp), %rax
                	testq	%rax, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x1, %eax
+               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	xorq	%rbx, %rbx
                	callq	<addr>
-               	orq	%rax, %rbx
+               	movq	%rax, %rbx
+               	orq	$0x0, %rbx
                	callq	<addr>
                	orq	%rax, %rbx
                	callq	<addr>
@@ -241,6 +161,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movslq	%ebx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x30, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

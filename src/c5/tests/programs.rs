@@ -167,6 +167,21 @@ fn label_addr_array_init() {
 }
 
 #[test]
+fn static_init_once_guard() {
+    // C99 6.2.4p3: a static-local initialized by runtime stores
+    // (`&&label` elements) runs its initializer once; later calls
+    // must not clobber user writes to the table.
+    assert_eq!(run_fixture("static_init_once_guard.c"), 0);
+}
+
+#[test]
+fn computed_goto_static_table() {
+    // A static `&&label` dispatch table across repeated calls: the
+    // once-guard skip path must leave correct label addresses.
+    assert_eq!(run_fixture("computed_goto_static_table.c"), 0);
+}
+
+#[test]
 fn sieve_of_eratosthenes() {
     // Dense array write/read loop with a multiplicative inner stride;
     // the prime count below 100000 checks the result.
@@ -376,6 +391,30 @@ fn float_increment_decrement() {
     // `++` / `--` on a real floating type add / subtract 1 (C99 6.5.3.1 /
     // 6.5.2.4), prefix yielding the new value and postfix the prior.
     assert_eq!(run_fixture("float_increment_decrement.c"), 0);
+}
+
+#[test]
+fn compound_assign_float_register_resident() {
+    // A float lvalue updated via `op=` / `++` / `--` (C99 6.5.16.2,
+    // 6.5.2.4, 6.5.3.1) stays promotable to an FP register, matching
+    // the `x = x op k` form.
+    assert_eq!(run_fixture("compound_assign_float_register_resident.c"), 0);
+}
+
+#[test]
+fn float_literal_f_suffix() {
+    // C99 6.4.4.2p4-5: an `f`/`F`-suffixed floating constant has type
+    // `float` and its value is rounded to single precision at the
+    // literal. Covers sizeof, widening, the variadic default argument
+    // promotion, and hex-float spellings.
+    assert_eq!(run_fixture("float_literal_f_suffix.c"), 0);
+}
+
+#[test]
+fn float_literal_arith_single_precision() {
+    // C99 6.3.1.8: `float` combined with an `f`-suffixed constant
+    // computes in single precision with no widen / narrow hop.
+    assert_eq!(run_fixture("float_literal_arith_single_precision.c"), 0);
 }
 
 #[test]
@@ -703,6 +742,14 @@ fn inline_two_word_struct_return() {
 }
 
 #[test]
+fn store_forward_local_slot() {
+    // A frame-slot store immediately reloaded in one block forwards to
+    // the stored value; volatile, address-taken, and cross-block pairs
+    // reload from memory.
+    assert_eq!(run_fixture("store_forward_local_slot.c"), 0);
+}
+
+#[test]
 fn struct_return_reg_computed_goto() {
     // A one-word-struct return that carries a label address is promoted out
     // of its frame slot; the computed-goto terminator reading the field must
@@ -748,6 +795,19 @@ fn inline_phi_narrow_param_return() {
     // converge the Extend's operand, and the parameter narrows the wide
     // argument every iteration (the callee-narrows ABI).
     assert_eq!(run_fixture("inline_phi_narrow_param_return.c"), 0);
+}
+
+#[test]
+fn reg_alloc_callee_bank_call_block_before_loop() {
+    // A recursive function whose call block is laid out at a lower pc
+    // than its hot loop: only the values whose CFG live range spans
+    // the calls need callee-saved homes. A pc-interval class test also
+    // flagged the loop-local values, overfilled the callee bank, and
+    // spilled the loop induction variable.
+    assert_eq!(
+        run_fixture("reg_alloc_callee_bank_call_block_before_loop.c"),
+        0
+    );
 }
 
 #[test]
@@ -1000,6 +1060,9 @@ fn switch_statement() {
     // a == 2 -> res = 20, falls through to case 3 -> res += 5 -> 25
     assert_eq!(run_fixture("switch_statement.c"), 25);
     assert_eq!(run_fixture("switch_binary_search.c"), 0);
+    assert_eq!(run_fixture("switch_jump_table_dense.c"), 0);
+    assert_eq!(run_fixture("switch_jump_table_sparse_kept.c"), 0);
+    assert_eq!(run_fixture("switch_jump_table_phi_join.c"), 0);
     assert_eq!(run_fixture("branch_relaxation.c"), 21);
     assert_eq!(run_fixture("float_register_resident.c"), 45);
     assert_eq!(run_fixture("variadic_struct_arg.c"), 18);
@@ -1099,8 +1162,52 @@ fn for_loop() {
 }
 
 #[test]
+fn layout_bottom_test_loop() {
+    assert_eq!(run_fixture("layout_bottom_test_loop.c"), 45);
+}
+
+#[test]
+fn layout_nested_loops() {
+    assert_eq!(run_fixture("layout_nested_loops.c"), 27);
+}
+
+#[test]
+fn layout_goto_block_addr() {
+    assert_eq!(run_fixture("layout_goto_block_addr.c"), 16);
+}
+
+#[test]
+fn unroll_const_trip_copy() {
+    assert_eq!(run_fixture("unroll_const_trip_copy.c"), 0);
+}
+
+#[test]
+fn unroll_trip_17_stays_rolled() {
+    assert_eq!(run_fixture("unroll_trip_17_stays_rolled.c"), 0);
+}
+
+#[test]
+fn unroll_volatile_stays_rolled() {
+    assert_eq!(run_fixture("unroll_volatile_stays_rolled.c"), 0);
+}
+
+#[test]
 fn recursion_factorial() {
     assert_eq!(run_fixture("recursion_factorial.c"), 120);
+}
+
+#[test]
+fn tailrec_narrow_param() {
+    // C99 6.3.1.3: a signed-char-parameter accumulator recursion whose
+    // tail leg becomes a loop must re-narrow the back-edge argument.
+    assert_eq!(run_fixture("tailrec_narrow_param.c"), 0);
+}
+
+#[test]
+fn tailrec_void_accumulate() {
+    // A void helper's same-block tail call lowers to a loop; the
+    // per-level global store stays inside the loop body.
+    assert_eq!(run_fixture("tailrec_void_accumulate.c"), 0);
 }
 
 #[test]
@@ -1704,9 +1811,9 @@ fn adjacent_string_literals_concatenate() {
 #[test]
 fn float_long_double_suffix_accepted() {
     // C99 6.4.4.2: the floating-suffix is one of `f`, `F`, `l`,
-    // `L`. The dialect stores every floating literal in `f64`,
-    // so the four spellings of the same value land identical at
-    // the bit level. The fixture also pins the integer-vs-float
+    // `L`. 1.0 is exact in every precision, so the four spellings
+    // of the value land identical at the bit level after conversion
+    // to double. The fixture also pins the integer-vs-float
     // disambiguator -- bare `7L` stays a `long` integer because
     // no `.` / `e` was seen.
     assert_eq!(run_fixture("float_long_double_suffix.c"), 0);
@@ -2042,6 +2149,84 @@ fn global_init_midexpr_cast_narrow() {
 }
 
 #[test]
+fn init_brace_intermediate_cast() {
+    // C99 6.5.4 + 6.7.8p11: a brace-enclosed initializer element applies
+    // every cast in its chain -- `(long)(int)0x92492493` sign-extends
+    // through `int` -- in static and automatic storage, for array
+    // elements and struct members alike.
+    assert_eq!(run_fixture("init_brace_intermediate_cast.c"), 0);
+}
+
+#[test]
+fn dead_local_load_frame_elide() {
+    // C99 6.2.4p2: a local that is never observed needs no storage. A
+    // promotion-orphaned slot load with no consumers emits no code and
+    // must not force a frame; a volatile access (5.1.2.3p2) keeps it.
+    assert_eq!(run_fixture("dead_local_load_frame_elide.c"), 0);
+}
+
+#[test]
+fn narrow_param_entry_extend() {
+    // C99 6.5.2.2p4 / 6.3.1.3: a register-passed narrow parameter is
+    // converted on entry; an I8/I16 conversion rewrites bits 8..31,
+    // so it cannot be skipped on a bits-32..63-only liveness proof.
+    assert_eq!(run_fixture("narrow_param_entry_extend.c"), 0);
+}
+
+#[test]
+fn qsort_scan_extend_dedup() {
+    // One sign-extension result per (value, kind): re-extensions at
+    // dominated positions redirect to the dominating one.
+    assert_eq!(run_fixture("qsort_scan_extend_dedup.c"), 0);
+}
+
+#[test]
+fn call_arg_extend_drop() {
+    // The caller-side re-extension of a direct-call argument drops
+    // only when the callee re-derives the parameter from the low bits.
+    assert_eq!(run_fixture("call_arg_extend_drop.c"), 0);
+}
+
+#[test]
+fn indirect_call_narrow_scalar_args() {
+    // C99 6.5.2.2p7: a non-variadic indirect call converts each
+    // argument to the pointee prototype's parameter type; narrow
+    // (char/short) parameters read the same values as a direct call.
+    assert_eq!(run_fixture("indirect_call_narrow_scalar_args.c"), 0);
+}
+
+#[test]
+fn indirect_call_ten_scalar_args() {
+    // Ten integer arguments through a function pointer: args 9 and 10
+    // ride the host stack overflow slots; positional weights catch a
+    // slot permutation or a missed overflow store.
+    assert_eq!(run_fixture("indirect_call_ten_scalar_args.c"), 0);
+}
+
+#[test]
+fn indirect_call_mixed_fp_int_args() {
+    // Interleaved int/FP scalars through a non-variadic function
+    // pointer: the banks advance independently per the arg-type mask.
+    assert_eq!(run_fixture("indirect_call_mixed_fp_int_args.c"), 0);
+}
+
+#[test]
+fn float_param_stack_overflow() {
+    // `float` parameters past the FP argument registers ride the host
+    // stack at single precision; the argument cell carries the f32 bit
+    // pattern on both the native and the interpreter paths.
+    assert_eq!(run_fixture("float_param_stack_overflow.c"), 0);
+}
+
+#[test]
+fn indirect_call_variadic_fp_control() {
+    // A variadic callee through a function pointer keeps the host
+    // variadic placement; mixed int/double varargs cover both banks
+    // and the stack tail.
+    assert_eq!(run_fixture("indirect_call_variadic_fp_control.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec
@@ -2219,6 +2404,13 @@ fn quicksort() {
 }
 
 #[test]
+fn loop_iv_spill_priority() {
+    // Loop-depth-weighted spill ordering keeps the loop's induction
+    // variable and accumulator in registers; the result is unchanged.
+    assert_eq!(run_fixture("loop_iv_spill_priority.c"), 40);
+}
+
+#[test]
 fn linked_list() {
     assert_eq!(run_fixture("linked_list.c"), 10);
 }
@@ -2330,4 +2522,26 @@ fn darwin_enotsup_is_distinct_from_eopnotsupp() {
                int main(void){ return (ENOTSUP==45 && EOPNOTSUPP==102\n\
                && ENOTSUP!=EOPNOTSUPP) ? 0 : 1; }";
     assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
+fn ndebug_optimize_predefine() {
+    // The library harness never sets the driver's `-O`, so neither
+    // NDEBUG nor __OPTIMIZE__ is predefined here; the CLI-level
+    // `-O` semantics are locked by `tests/cli_fixture_smoke.rs`.
+    assert_eq!(run_fixture("ndebug_optimize_predefine.c"), 100);
+}
+
+#[test]
+fn constfold_post_inline_matches_interpreter() {
+    // The differential companion to the mid-end constant folder: the
+    // same fixture runs natively unoptimized and with -O via the
+    // fixture tables, so any fold that disagrees with the
+    // interpreter's evaluator surfaces as a lane divergence.
+    assert_eq!(run_fixture("constfold_post_inline.c"), 0);
+}
+
+#[test]
+fn rotate_inline_const_count_matches_interpreter() {
+    assert_eq!(run_fixture("rotate_inline_const_count.c"), 0);
 }

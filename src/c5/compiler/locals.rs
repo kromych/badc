@@ -496,8 +496,19 @@ impl Compiler {
     /// element with runtime stores at the declaration point. The data
     /// image holds zeros; each element is parsed through the expression
     /// grammar (so `&&label` yields a block-address node) and stored into
-    /// `arr[i]` via an `Expr::Assign` statement the walker lowers to a
-    /// global address store. A constant element is stored the same way.
+    /// `arr[i]` via an `Expr::Assign` the walker lowers to a global
+    /// address store. A constant element is stored the same way.
+    ///
+    /// C99 6.2.4p3: static storage duration means one initialization for
+    /// the whole program run, so the stores are wrapped in a hidden
+    /// once-guard: a guard byte placed directly after the array's storage
+    /// (same data object -- no object start in between -- so data DCE and
+    /// linker rebase move it with the array). The whole declaration
+    /// lowers to a single statement `guard ? 0 : (e0, ..., en, guard = 1)`
+    /// because the enclosing declaration parse captures every pushed
+    /// stmt id as a top-level block item.
+    /// TODO: the generic fix resolves `&&label` elements in the data
+    /// image via label relocations, removing the runtime stores.
     pub(super) fn emit_static_array_init_runtime(
         &mut self,
         loc_idx: usize,
@@ -522,12 +533,17 @@ impl Compiler {
             }
             c
         };
+        let guard_off = self.data.len() as i64 - self.symbols[loc_idx].val;
+        for _ in 0..8 {
+            self.data.push(0);
+        }
         debug_assert!(self.lex.tk == '{');
         self.next()?; // consume `{`
         // The array Ident decays to its base address; the index is the
         // element's byte offset, matching the walker's pre-scaled
         // `Expr::Index` convention.
         let arr_ty = ty + Ty::Ptr as i64;
+        let mut assigns: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut i: i64 = 0;
         while self.lex.tk != '}' {
             // Optional designator: `[N] = ...` (C99 6.7.8p6) or the GCC
@@ -595,14 +611,65 @@ impl Compiler {
                         },
                         pos,
                     );
-                    self.ast
-                        .push_stmt(super::super::ast::Stmt::Expr(assign_id), pos);
+                    assigns.push(assign_id);
                 }
             }
             i = range_end + 1;
             self.accept(',')?;
         }
         self.next()?; // consume `}`
+        if let Some(&first) = assigns.first() {
+            use super::super::ast::Expr;
+            let g_ty = Ty::Char as i64;
+            let guard_at = |c: &mut Self| {
+                let base = c.ast_emit_ident(loc_idx as u32, arr_ty);
+                let idx = c.ast_emit_int_lit(guard_off, Ty::Int as i64);
+                let pos = c.ast_src_pos();
+                c.ast.push_expr(
+                    Expr::Index {
+                        array: base,
+                        idx,
+                        ty: g_ty,
+                    },
+                    pos,
+                )
+            };
+            let guard_read = guard_at(self);
+            let guard_lhs = guard_at(self);
+            let one = self.ast_emit_int_lit(1, Ty::Int as i64);
+            let pos = self.ast_src_pos();
+            let guard_set = self.ast.push_expr(
+                Expr::Assign {
+                    lhs: guard_lhs,
+                    rhs: one,
+                    ty: g_ty,
+                },
+                pos,
+            );
+            let mut chain = first;
+            for &e in assigns.iter().skip(1).chain(core::iter::once(&guard_set)) {
+                chain = self.ast.push_expr(
+                    Expr::Comma {
+                        lhs: chain,
+                        rhs: e,
+                        ty: g_ty,
+                    },
+                    pos,
+                );
+            }
+            let zero = self.ast_emit_int_lit(0, Ty::Int as i64);
+            let guarded = self.ast.push_expr(
+                Expr::Ternary {
+                    cond: guard_read,
+                    then_e: zero,
+                    else_e: chain,
+                    ty: Ty::Int as i64,
+                },
+                pos,
+            );
+            self.ast
+                .push_stmt(super::super::ast::Stmt::Expr(guarded), pos);
+        }
         self.ast_acc = None;
         Ok(())
     }

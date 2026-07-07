@@ -33,7 +33,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
   block 1  start_pc=0
     v13  Imm(7)                                           -> x0
     v14  StoreLocal { off=-1, value=v13, kind=I32 }       -> -
-    v15  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v15  Extend { value=v13, kind=I32 }                   -> x0
     v16  BinopI { op=eq, lhs=v15, rhs_imm=7 }             -> x0
     terminator Bz { cond=v16, target=b3, fall=b2 }   (exit_acc=v16)
   block 2  start_pc=0
@@ -57,7 +57,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=7
     v2   StoreLocal { off=2, value=v1, kind=I32 }         -> -
     v3   Imm(0)                                           -> x0
     v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
-    v5   LoadLocal { off=2, kind=I32 }                    -> x0
+    v5   Extend { value=v1, kind=I32 }                    -> x0
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   BlockAddr(block=4)                               -> x0
@@ -86,7 +86,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=7
   block 5  start_pc=0
     v22  Imm(2)                                           -> x0
     v23  StoreLocal { off=-1, value=v22, kind=I32 }       -> -
-    v24  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v24  Extend { value=v22, kind=I32 }                   -> x0
     v25  BinopI { op=eq, lhs=v24, rhs_imm=2 }             -> x0
     terminator Bz { cond=v25, target=b7, fall=b6 }   (exit_acc=v25)
   block 6  start_pc=0

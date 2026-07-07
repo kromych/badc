@@ -70,7 +70,7 @@ def pe_subsystem(path: Path) -> int:
 
 
 def build_pe(badc: Path, target: str, source: Path, out: Path) -> None:
-    cmd = [str(badc), f"--target={target}", str(source), "-o", str(out)]
+    cmd = [str(badc), "-O", f"--target={target}", str(source), "-o", str(out)]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         print(

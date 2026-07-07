@@ -11,50 +11,33 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movabsq	$-0x1, %rax
-               	testq	%rax, %rax
-               	jge	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
                	xorq	%rax, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x1, %ecx
-               	jmp	<addr>
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
+               	xorq	%rax, %rax
+               	retq
+               	movl	$0x1, %eax
                	jmp	<addr>
-               	movl	$0x1, %ecx
-               	testq	%rcx, %rcx
+               	jmp	<addr>
+               	movl	$0x1, %eax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	jmp	<addr>
-               	movl	$0x1, %ecx
-               	testq	%rcx, %rcx
+               	movl	$0x1, %eax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>

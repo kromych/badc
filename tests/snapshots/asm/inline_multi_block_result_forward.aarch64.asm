@@ -15,19 +15,16 @@ Disassembly of section .text:
                	ret
 
 <helper_two>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	lsl	x0, x0, #1
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <test>:
                	sxtw	x0, w0
-               	b	<addr>
+               	sxtw	x1, w0
+               	lsl	x1, x1, #1
+               	sxtw	x1, w1
                	add	x2, x0, x0
                	cmp	x0, #0x3
                	b.le	<addr>
@@ -36,10 +33,6 @@ Disassembly of section .text:
                	add	x0, x1, x2
                	sxtw	x0, w0
                	ret
-               	sxtw	x1, w0
-               	lsl	x1, x1, #1
-               	sxtw	x1, w1
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

@@ -11,15 +11,10 @@ Disassembly of section .text:
                	ud2
 
 <approx>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm0, %xmm1
-               	subsd	%xmm15, %xmm1
+               	subsd	%xmm1, %xmm0
                	xorq	%rax, %rax
-               	cvtsi2sd	%rax, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -29,17 +24,15 @@ Disassembly of section .text:
                	je	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	xorpd	%xmm15, %xmm0
                	movabsq	$0x3eb0c6f7a0b5ed8d, %rax # imm = 0x3EB0C6F7A0B5ED8D
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	ucomisd	%xmm15, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	jmp	<addr>
 
@@ -122,9 +115,8 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
-               	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
+               	movl	$0x40a00000, %edi       # imm = 0x40A00000
+               	movq	%rdi, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	cvtss2sd	%xmm0, %xmm0
@@ -138,13 +130,13 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	cvtss2sd	%xmm0, %xmm0
-               	movq	%rbx, %xmm1
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %xmm1
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>

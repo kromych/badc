@@ -11,59 +11,17 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	$0xa, %eax
-               	cmpq	$0xa, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x3, %eax
-               	cmpq	$0x3, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xc0, %eax
-               	xorq	$0xc0, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x3f, %eax
-               	xorq	$0x3f, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movabsq	$-0x1, %rax
-               	cmpq	$-0x1, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x1, %eax
-               	xorq	$0x1, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	movl	$0x1, %eax
+               	retq
+               	movl	$0x2, %eax
+               	retq
+               	movl	$0x3, %eax
+               	retq
+               	movl	$0x4, %eax
+               	retq
+               	movl	$0x5, %eax
+               	retq
+               	movl	$0x6, %eax
+               	retq

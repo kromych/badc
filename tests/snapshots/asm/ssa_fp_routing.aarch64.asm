@@ -69,13 +69,8 @@ Disassembly of section .text:
                	ret
 
 <round_through_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	fcvt	s0, d0
                	fcvt	d0, s0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:
@@ -278,7 +273,6 @@ Disassembly of section .text:
                	mov	x0, #0x14               // =20
                	ret
                	mov	x0, #0x2a               // =42
-               	sxtw	x0, w0
                	scvtf	d0, x0
                	mov	x0, #0x4045000000000000 // =4631107791820423168
                	fmov	d17, x0
@@ -291,7 +285,6 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	sxtw	x0, w0
                	scvtf	d0, x0
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d16, x0

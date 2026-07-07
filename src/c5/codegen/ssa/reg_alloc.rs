@@ -107,10 +107,8 @@ pub(crate) struct Allocation {
     /// Highest PC index that names each value as an operand, raised
     /// across back edges by `extend_last_use_across_blocks`. A value
     /// defined at PC `i` is live throughout `[i, last_use[i]]`. The
-    /// allocator's interval tests read it: `class_last_use` feeds
-    /// `promote_calls_after_def_to_classes` so a value whose range
-    /// spans a call takes a callee-saved home, and the coalescing
-    /// hints avoid a caller-saved register such a call would clobber.
+    /// coalescing hints read it to avoid sending a value that outlives
+    /// a call into a caller-saved register the call would clobber.
     pub last_use: Vec<u32>,
     /// For `BinopI(Shr, X, K)` insts the allocator recognised as
     /// the upper half of a sign-narrow `Shl K; Shr K` pair (K in
@@ -263,6 +261,19 @@ impl RegBanks {
     }
 }
 
+/// General-purpose registers the allocator may use for `target`, after
+/// the codegen-test bank caps (`BADC_MAX_GPR` / the per-thread override).
+/// The scalar-promotion pass (`passes::sroa`) uses this as the ceiling on
+/// how many array element slots it lifts to registers: promoting more
+/// loop-carried values than the file holds spills them back to the frame
+/// at a net loss, so an array whose element count would overflow the file
+/// stays memory-resident.
+pub(crate) fn usable_gpr_count(target: Target) -> usize {
+    let banks = RegBanks::for_target(target);
+    let (max_gpr, _) = pool_size_limits();
+    (banks.caller_gprs.len() + banks.callee_gprs.len()).min(max_gpr)
+}
+
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
 /// Callee-saved registers the emit pass reserves as fixed scratch and
@@ -386,29 +397,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // until every member of its class is dead.
     let liveness = super::liveness::Liveness::compute(func);
     let mut classes = super::phi_class::PhiClasses::build(func, &liveness);
-    let class_last_use: Vec<u32> = {
-        let n = func.insts.len();
-        let mut cl = alloc::vec![0u32; n];
-        for (v, &lu) in last_use.iter().enumerate().take(n) {
-            let c = classes.find(v as ValueId) as usize;
-            if lu > cl[c] {
-                cl[c] = lu;
-            }
-        }
-        cl
-    };
     let mut calls_after_def = compute_calls_after_def(func, &liveness, target);
-    // Promote per-value `calls_after_def` to the class's combined
-    // live range. Without this, a class member whose own last use
-    // does not cross a call but whose class root lives past one
-    // would be placed in a caller-saved register and clobbered.
-    promote_calls_after_def_to_classes(
-        &mut classes,
-        func,
-        &class_last_use,
-        target,
-        &mut calls_after_def,
-    );
+    // Promote per-value `calls_after_def` to the class: members share
+    // one register, so a member whose own range does not cross a call
+    // still needs a callee-saved home when another member's does.
+    promote_calls_after_def_to_classes(&mut classes, &mut calls_after_def);
     // Call-argument coalescing hints. Run after `last_use` and
     // `calls_after_def` so the per-value safety guards can read them.
     // The prior unconditional ABI-hint pass was reverted in commit
@@ -427,7 +420,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // in its bank spills. Unlike a pc-interval linear scan this models
     // a value live across a back-edge passthrough block, whose live
     // range wraps the pc axis.
-    let _ = &class_last_use;
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
@@ -453,6 +445,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         entry.forbid |= param_incoming_forbid[v];
     }
     let (max_gpr, max_fpr) = pool_size_limits();
+    let spill_weights = compute_spill_weights(func, &node_of);
     let coloring = color_graph(
         &interference,
         &node_of,
@@ -460,6 +453,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         &banks,
         max_gpr,
         max_fpr,
+        func.has_returns_twice_call,
+        &spill_weights,
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
@@ -872,7 +867,9 @@ fn verify_allocation(
                 Terminator::Return(v) if (*v as usize) < used.len() => {
                     used[*v as usize] = true;
                 }
-                Terminator::GotoIndirect { target } if (*target as usize) < used.len() => {
+                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                    if (*target as usize) < used.len() =>
+                {
                     used[*target as usize] = true;
                 }
                 _ => {}
@@ -1021,13 +1018,18 @@ fn pool_size_limits() -> (usize, usize) {
 /// Assign a register or spill slot to every constrained node so that
 /// no two interfering nodes share a register, then propagate each
 /// node's placement to its class members. Greedy coloring: nodes are
-/// processed in ascending id (roughly definition order); a node takes
-/// its hint when bank-legal and free, otherwise a caller-saved
-/// register (to avoid a prologue save) unless it must be callee-saved,
-/// otherwise a callee-saved register, and spills when its bank offers
-/// no free register. The interference graph (built from CFG liveness)
-/// is the sole source of conflicts, so a value live across a back-edge
+/// processed by descending `weights` entry (loop-depth-weighted use
+/// count, so the hottest values color first), ties broken by ascending
+/// node id for host-independent output; an empty `weights` slice orders
+/// by ascending id. A node takes its hint when bank-legal and free,
+/// otherwise a caller-saved register (to avoid a prologue save) unless
+/// it must be callee-saved, otherwise a callee-saved register, and
+/// spills when its bank offers no free register. Because the coldest
+/// remaining node is colored last, it is the one left to spill when a
+/// bank fills. The interference graph (built from CFG liveness) is the
+/// sole source of conflicts, so a value live across a back-edge
 /// passthrough block is never given a register that block reuses.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn color_graph(
     interference: &super::liveness::Interference,
     node_of: &[ValueId],
@@ -1035,10 +1037,19 @@ pub(crate) fn color_graph(
     banks: &RegBanks,
     max_gpr: usize,
     max_fpr: usize,
+    no_slot_share: bool,
+    weights: &[u64],
 ) -> Coloring {
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
     let mut spill_count: u32 = 0;
+    // Coloring order: highest spill weight first, so the coldest values
+    // are the ones left without a register when a bank fills. The id
+    // tie-break is a total order, keeping the output host-independent.
+    let mut order: Vec<usize> = (0..n).collect();
+    if !weights.is_empty() {
+        order.sort_by(|&a, &b| weights[b].cmp(&weights[a]).then(a.cmp(&b)));
+    }
     // Per-slot "stamp" marking which slots interfering neighbours hold,
     // refreshed per node by bumping `stamp` instead of clearing. Slot
     // indices are bounded by `spill_count <= n`, so `n` entries suffice.
@@ -1047,7 +1058,7 @@ pub(crate) fn color_graph(
     // not a linear scan of the neighbour list.
     let mut slot_used: Vec<u32> = vec![0u32; n];
     let mut stamp: u32 = 0;
-    for node in 0..n {
+    for &node in &order {
         let Some(c) = constraints[node] else {
             continue;
         };
@@ -1115,13 +1126,24 @@ pub(crate) fn color_graph(
                 // later-coloured value that interferes excludes this
                 // slot, preserving distinct storage for live ranges that
                 // overlap.
-                let slot = (0..spill_count)
-                    .find(|&s| slot_used[s as usize] != stamp)
-                    .unwrap_or_else(|| {
-                        let s = spill_count;
-                        spill_count += 1;
-                        s
-                    });
+                //
+                // `no_slot_share` (the caller invokes a returns-twice
+                // function): liveness no longer bounds slot lifetime. A
+                // value dead on the first-return path is still read
+                // after the second return -- C99 7.13.2.1p3 for setjmp,
+                // and under vfork the child's writes land on the
+                // parent's shared stack -- so every value gets a
+                // dedicated slot.
+                let slot = if no_slot_share {
+                    None
+                } else {
+                    (0..spill_count).find(|&s| slot_used[s as usize] != stamp)
+                }
+                .unwrap_or_else(|| {
+                    let s = spill_count;
+                    spill_count += 1;
+                    s
+                });
                 Place::Spill(slot)
             }
         };
@@ -1155,6 +1177,66 @@ pub(crate) fn color_graph(
     }
 }
 
+/// Per-loop-level use-weight multiplier. A use in a block nested `d`
+/// loops deep counts `LOOP_WEIGHT^d` times so a value live in a hot
+/// loop outranks one used the same number of times at function scope.
+const LOOP_WEIGHT: u64 = 10;
+/// Cap on the loop depth fed to the weight exponent. Depth beyond this
+/// is bounded so a pathologically nested CFG cannot overflow the u64
+/// weight; the relative order of hot vs cold values is unaffected.
+const LOOP_DEPTH_CAP: u32 = 6;
+
+/// Loop-depth-weighted use count per interference node, keyed by node
+/// id (the phi-congruence-class root). Each use site of any class
+/// member contributes `LOOP_WEIGHT^min(depth, cap)` for the depth of
+/// the block holding the use. `color_graph` colors highest-weight
+/// nodes first, so the coldest values are the ones that spill when a
+/// bank fills. Straight-line functions weight every use at depth 0, so
+/// the order degrades to raw use count.
+fn compute_spill_weights(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<u64> {
+    let n = func.insts.len();
+    let depths = crate::c5::codegen::passes::layout::loop_depths(func);
+    let block_weight: Vec<u64> = depths
+        .iter()
+        .map(|&d| LOOP_WEIGHT.saturating_pow(d.min(LOOP_DEPTH_CAP)))
+        .collect();
+    let mut w: Vec<u64> = vec![0u64; n];
+    for (b, block) in func.blocks.iter().enumerate() {
+        let wb = block_weight[b];
+        for i in block.inst_range.clone() {
+            let inst = &func.insts[i as usize];
+            for_each_operand(inst, |op| {
+                if op != NO_VALUE && (op as usize) < n {
+                    let root = node_of[op as usize] as usize;
+                    w[root] = w[root].saturating_add(wb);
+                }
+            });
+            if let Inst::CallIndirect { target, .. } = inst {
+                let t = *target;
+                if t != NO_VALUE && (t as usize) < n {
+                    let root = node_of[t as usize] as usize;
+                    w[root] = w[root].saturating_add(wb);
+                }
+            }
+        }
+        let mut bump_term = |v: ValueId| {
+            if v != NO_VALUE && (v as usize) < n {
+                let root = node_of[v as usize] as usize;
+                w[root] = w[root].saturating_add(wb);
+            }
+        };
+        match block.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump_term(cond),
+            Terminator::Return(v) => bump_term(v),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                bump_term(target)
+            }
+            _ => {}
+        }
+    }
+    w
+}
+
 /// Count consumers for every SSA value, then iterate to fixed point
 /// so transitively-dead pure insts also drop to use_count == 0.
 /// Drives the emit pass's dead-code skip.
@@ -1184,7 +1266,10 @@ fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
             super::super::ir::Terminator::Bz { cond, .. } => bump_into(&mut counts, cond),
             super::super::ir::Terminator::Bnz { cond, .. } => bump_into(&mut counts, cond),
             super::super::ir::Terminator::Return(v) => bump_into(&mut counts, v),
-            super::super::ir::Terminator::GotoIndirect { target } => bump_into(&mut counts, target),
+            super::super::ir::Terminator::GotoIndirect { target }
+            | super::super::ir::Terminator::JumpTable { idx: target, .. } => {
+                bump_into(&mut counts, target)
+            }
             _ => {}
         }
     }
@@ -1726,7 +1811,9 @@ fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64>
                 }
             }
             Terminator::Return(v) if (*v as usize) < used.len() => used[*v as usize] = true,
-            Terminator::GotoIndirect { target } if (*target as usize) < used.len() => {
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                if (*target as usize) < used.len() =>
+            {
                 used[*target as usize] = true;
             }
             _ => {}
@@ -1934,10 +2021,9 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
     // such carrier to `end_pc` so a value defined inside the block
     // but read only by the terminator (the common Return-value case)
     // has its interval cover any intervening call. Without this the
-    // forward scan leaves `last_use[v]` at v's own def PC, the
-    // `compute_calls_after_def` interval test then misses the
-    // intervening call, and a downstream coalescing hint can place
-    // `v` in a caller-saved register that the call clobbers.
+    // forward scan leaves `last_use[v]` at v's own def PC and a
+    // downstream coalescing hint, which guards on `last_use`, can
+    // place `v` in a caller-saved register that the call clobbers.
     for b in &func.blocks {
         let end_pc = b.inst_range.end;
         let mut bump = |v: ValueId| {
@@ -1952,7 +2038,9 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
         match &b.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(*cond),
             Terminator::Return(v) => bump(*v),
-            Terminator::GotoIndirect { target } => bump(*target),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                bump(*target)
+            }
             _ => {}
         }
     }
@@ -2017,7 +2105,11 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
         match &blk.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
             Terminator::Return(v) if *v != NO_VALUE => mark(*v),
-            Terminator::GotoIndirect { target } if *target != NO_VALUE => mark(*target),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                if *target != NO_VALUE =>
+            {
+                mark(*target)
+            }
             _ => {}
         }
     }
@@ -2033,9 +2125,11 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
         for b in (0..nblocks).rev() {
             let base = b * words;
             scratch.iter_mut().for_each(|w| *w = 0);
-            for s in
-                super::mem2reg::successors(&func.blocks[b].terminator, &func.computed_goto_targets)
-            {
+            for s in super::mem2reg::successors(
+                &func.blocks[b].terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            ) {
                 let sb = s as usize * words;
                 for w in 0..words {
                     scratch[w] |= live_in[sb + w];
@@ -2099,53 +2193,24 @@ fn compute_calls_after_def(
 }
 
 /// Promote each phi class's `calls_after_def` flag so every member
-/// inherits the class's combined call-crossing status. Without this,
-/// `compute_calls_after_def` reads per-value `last_use[v]` -- a class
-/// member whose own last use does not cross any call but whose
-/// *class root* lives past a call would be placed in a caller-saved
-/// register and clobbered by that call.
+/// inherits the class's combined call-crossing status: the class flag
+/// is the OR of the members' CFG-precise per-value flags. Class
+/// members share one register, so if any member is live across a call
+/// the shared register must be callee-saved. Where no member is live
+/// the shared register holds nothing a call could clobber, so the
+/// class stays eligible for a caller-saved home.
 fn promote_calls_after_def_to_classes(
     classes: &mut super::phi_class::PhiClasses,
-    func: &FunctionSsa,
-    class_last_use: &[u32],
-    target: Target,
     calls_after_def: &mut [bool],
 ) {
-    let tls_addr_is_call = matches!(target, Target::MacOSAarch64);
-    let n = func.insts.len();
-    let mut call_pcs: Vec<u32> = Vec::new();
-    for (idx, inst) in func.insts.iter().enumerate() {
-        let is_call = matches!(
-            inst,
-            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
-            || is_setjmp_barrier(inst);
-        if is_call {
-            call_pcs.push(idx as u32);
-        }
-    }
-    call_pcs.sort_unstable();
-    // For every value, check whether any call sits between the
-    // class's first definition (= class root's PC) and the class's
-    // combined last use. If so, every member of the class needs a
-    // callee-saved placement.
     let mut class_must_callee: alloc::collections::BTreeMap<ValueId, bool> =
         alloc::collections::BTreeMap::new();
-    for v in 0..n {
+    for (v, &crosses) in calls_after_def.iter().enumerate() {
         let root = classes.find(v as ValueId);
-        if class_must_callee.contains_key(&root) {
-            continue;
-        }
-        let lo = call_pcs.binary_search(&(root + 1)).unwrap_or_else(|i| i);
-        let crosses_call = call_pcs
-            .get(lo)
-            .map(|&first| first < class_last_use[root as usize])
-            .unwrap_or(false);
-        class_must_callee.insert(root, crosses_call);
+        *class_must_callee.entry(root).or_insert(false) |= crosses;
     }
-    for (v, entry) in calls_after_def.iter_mut().enumerate().take(n) {
-        let root = classes.find(v as ValueId);
-        if class_must_callee[&root] {
+    for (v, entry) in calls_after_def.iter_mut().enumerate() {
+        if class_must_callee[&classes.find(v as ValueId)] {
             *entry = true;
         }
     }
@@ -2322,7 +2387,16 @@ int main(void) { return 0; }
             int_node(false, None),
             int_node(false, None),
         ];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &[],
+        );
         assert_eq!(r.spill_count, 0);
         let regs: Vec<Place> = r.places.clone();
         assert_ne!(regs[0], regs[1]);
@@ -2339,7 +2413,16 @@ int main(void) { return 0; }
         let g = Interference::from_edges(5, &edges);
         let node_of = [0u32, 1, 2, 3, 4];
         let cons: Vec<Option<NodeConstraints>> = (0..5).map(|_| int_node(false, None)).collect();
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &[],
+        );
         assert_eq!(
             r.spill_count, 1,
             "four registers, five live values -> one spill"
@@ -2353,13 +2436,65 @@ int main(void) { return 0; }
     }
 
     #[test]
+    fn returns_twice_caller_never_shares_spill_slots() {
+        // Nodes 0-3 fill the four registers; 4 and 5 both spill and do
+        // not interfere with each other, so slot sharing would give
+        // them one slot. A returns-twice caller (setjmp / vfork) must
+        // keep the slots distinct: the value dead on the first-return
+        // path is still read after the second return (C99 7.13.2.1p3).
+        let mut edges: Vec<(u32, u32)> = (0..4u32)
+            .flat_map(|a| (a + 1..4u32).map(move |b| (a, b)))
+            .collect();
+        for spilled in [4u32, 5] {
+            edges.extend((0..4u32).map(|r| (r, spilled)));
+        }
+        let g = Interference::from_edges(6, &edges);
+        let node_of = [0u32, 1, 2, 3, 4, 5];
+        let cons: Vec<Option<NodeConstraints>> = (0..6).map(|_| int_node(false, None)).collect();
+        let shared = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &[],
+        );
+        assert_eq!(shared.spill_count, 1, "non-interfering spills share");
+        assert_eq!(shared.places[4], shared.places[5]);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            true,
+            &[],
+        );
+        assert_eq!(r.spill_count, 2, "returns-twice: one slot per value");
+        assert_eq!(r.places[4], Place::Spill(0));
+        assert_eq!(r.places[5], Place::Spill(1));
+    }
+
+    #[test]
     fn must_callee_node_avoids_caller_saved() {
         // A single call-crossing node must land in a callee-saved
         // register even though caller-saved are free and preferred.
         let g = Interference::from_edges(1, &[]);
         let node_of = [0u32];
         let cons = [int_node(true, None)];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &[],
+        );
         assert!(
             matches!(r.places[0], Place::IntReg(20) | Place::IntReg(21)),
             "call-crossing value must take a callee-saved register, got {:?}",
@@ -2374,7 +2509,16 @@ int main(void) { return 0; }
         let g = Interference::from_edges(1, &[]);
         let node_of = [0u32];
         let cons = [int_node(false, None)];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &[],
+        );
         assert!(
             matches!(r.places[0], Place::IntReg(0) | Place::IntReg(1)),
             "non-crossing value should prefer caller-saved, got {:?}",
@@ -2387,7 +2531,16 @@ int main(void) { return 0; }
         let g = Interference::from_edges(2, &[(0, 1)]);
         let node_of = [0u32, 1];
         let cons = [int_node(false, Some(21)), int_node(false, None)];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &[],
+        );
         assert_eq!(
             r.places[0],
             Place::IntReg(21),
@@ -2403,9 +2556,154 @@ int main(void) { return 0; }
         let g = Interference::from_edges(3, &[(0, 2)]);
         let node_of = [0u32, 0, 2];
         let cons = [int_node(false, None), None, int_node(false, None)];
-        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &[],
+        );
         assert_eq!(r.places[0], r.places[1], "class members share a register");
         assert_ne!(r.places[0], r.places[2]);
+    }
+
+    #[test]
+    fn hot_node_colored_before_cold_node() {
+        // Three mutually interfering values, two registers (max_gpr 1
+        // keeps one caller-saved and one callee-saved slot). The
+        // coldest value is the one left to spill. With node 0 weighted
+        // lowest it spills; reversing the weights keeps it in a
+        // register and spills a colder value instead. This is the
+        // qsort shape: a once-used value must not hold a register while
+        // a loop-carried value spills.
+        let g = Interference::from_edges(3, &[(0, 1), (1, 2), (0, 2)]);
+        let node_of = [0u32, 1, 2];
+        let cons: Vec<Option<NodeConstraints>> = (0..3).map(|_| int_node(false, None)).collect();
+        let cold = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            1,
+            usize::MAX,
+            false,
+            &[1, 100, 100],
+        );
+        assert_eq!(cold.spill_count, 1);
+        assert!(
+            matches!(cold.places[0], Place::Spill(_)),
+            "the coldest value must spill, got {:?}",
+            cold.places[0]
+        );
+        assert!(matches!(cold.places[1], Place::IntReg(_)));
+        assert!(matches!(cold.places[2], Place::IntReg(_)));
+        let hot = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            1,
+            usize::MAX,
+            false,
+            &[100, 1, 1],
+        );
+        assert!(
+            matches!(hot.places[0], Place::IntReg(_)),
+            "the hottest value must hold a register, got {:?}",
+            hot.places[0]
+        );
+        assert_eq!(
+            hot.places
+                .iter()
+                .filter(|p| matches!(p, Place::Spill(_)))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn coloring_order_is_deterministic_and_ties_break_by_id() {
+        // Five mutually interfering values, four registers -> one spill.
+        // Equal weights fall back to ascending-id order, so the highest
+        // id spills; the choice is stable across runs.
+        let edges: Vec<(u32, u32)> = (0..5u32)
+            .flat_map(|a| (a + 1..5u32).map(move |b| (a, b)))
+            .collect();
+        let g = Interference::from_edges(5, &edges);
+        let node_of = [0u32, 1, 2, 3, 4];
+        let cons: Vec<Option<NodeConstraints>> = (0..5).map(|_| int_node(false, None)).collect();
+        let equal = [7u64; 5];
+        let a = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &equal,
+        );
+        let b = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &equal,
+        );
+        assert_eq!(
+            a.places, b.places,
+            "same input must yield the same coloring"
+        );
+        assert!(
+            matches!(a.places[4], Place::Spill(_)),
+            "equal weights spill the highest id, got {:?}",
+            a.places[4]
+        );
+        for v in 0..4 {
+            assert!(matches!(a.places[v], Place::IntReg(_)));
+        }
+    }
+
+    #[test]
+    fn loop_depths_and_weights_reflect_nesting() {
+        use crate::c5::codegen::passes::layout::loop_depths;
+        // Straight-line function: no loop, every block at depth 0, and
+        // no use weight reaches the loop multiplier (weights are the
+        // raw use counts).
+        let sl = lift("tests/fixtures/c/quicksort.c");
+        let swap = sl.iter().find(|f| f.name == "swap").expect("swap");
+        assert!(
+            loop_depths(swap).iter().all(|&d| d == 0),
+            "a loop-free function must report loop depth 0 for every block"
+        );
+        let node_of: Vec<ValueId> = (0..swap.insts.len() as ValueId).collect();
+        assert!(
+            compute_spill_weights(swap, &node_of)
+                .iter()
+                .all(|&w| w < LOOP_WEIGHT),
+            "a loop-free function weights every use at depth 0 (raw use count)"
+        );
+        // Loop function: the loop body sits at depth >= 1 and a
+        // loop-carried value's weight reaches the loop multiplier.
+        let lp = lift("tests/fixtures/c/loop_iv_spill_priority.c");
+        let hot = lp.iter().find(|f| f.name == "hot").expect("hot");
+        assert!(
+            loop_depths(hot).iter().any(|&d| d >= 1),
+            "a loop body must report depth >= 1"
+        );
+        let node_of: Vec<ValueId> = (0..hot.insts.len() as ValueId).collect();
+        assert!(
+            compute_spill_weights(hot, &node_of)
+                .iter()
+                .any(|&w| w >= LOOP_WEIGHT),
+            "a loop-carried value must outweigh a function-scope value"
+        );
     }
 
     /// Allocate every function in quicksort.c on aarch64. The
@@ -2659,9 +2957,10 @@ int main(void) { return 0; }
     /// `Inst::Load { addr }` reads `addr` and writes the result into
     /// the same bank. When `addr` dies at the load, the dst hint
     /// targets its register so the x86_64 `mov rd, [rd]` and aarch64
-    /// `ldr rd, [rd]` shapes self-elide the staging mov. Returning a
-    /// constant rather than the load lets `populate_return_hints`
-    /// skip the load result so the in-loop coalesce gets the slot.
+    /// `ldr rd, [rd]` shapes self-elide the staging mov. The stored
+    /// address and the returned value are distinct constants used once
+    /// each, so no value outweighs the load-addr coalesce pair in the
+    /// loop-depth-weighted coloring order and the coalesce fires.
     #[test]
     fn load_addr_coalesce_fires_when_addr_dies_at_load() {
         use crate::c5::codegen::ssa::build::SsaBuilder;
@@ -2671,9 +2970,10 @@ int main(void) { return 0; }
         let mut b = SsaBuilder::new(0, 0, false);
         let v_addr = b.imm(0x1000);
         let v_load = b.load(v_addr, LoadKind::I64);
-        let v_zero = b.imm(0);
-        b.store(v_zero, v_load, StoreKind::I64);
-        b.return_(v_zero);
+        let v_dst = b.imm(0);
+        b.store(v_dst, v_load, StoreKind::I64);
+        let v_ret = b.imm(5);
+        b.return_(v_ret);
         let func = b.finish();
 
         // x86_64 `mov rd, [rd]` and aarch64 `ldr rd, [rd]` both read
@@ -2822,8 +3122,11 @@ int main(void) { return 0; }
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            has_returns_twice_call: false,
+            did_unroll: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

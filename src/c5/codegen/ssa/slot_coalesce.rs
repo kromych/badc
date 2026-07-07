@@ -54,6 +54,14 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) -> CoalesceDwarf {
 }
 
 fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
+    // A returns-twice call (setjmp family / vfork) re-enters the frame
+    // after the first-return path ran: live ranges from ordinary
+    // liveness do not bound slot lifetime (C99 7.13.2.1p3), so every
+    // slot stays dedicated -- the same rule the register allocator
+    // applies to spill slots.
+    if f.has_returns_twice_call {
+        return BTreeMap::new();
+    }
     // `synthetic_base > 0` marks a walker-built function with declared
     // locals; hand-built SSA (sys-trampolines, CRT entry) carries 0 and is
     // left alone -- its slot model is not the walker's.
@@ -272,7 +280,7 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
         .blocks
         .iter()
         .map(|blk| {
-            successors(&blk.terminator, &f.computed_goto_targets)
+            successors(&blk.terminator, &f.computed_goto_targets, &f.jump_tables)
                 .iter()
                 .map(|&b| b as usize)
                 .collect()

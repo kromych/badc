@@ -11,23 +11,25 @@ Disassembly of section .text:
                	ud2
 
 <outer>:
-               	movq	(%rdi), %rax
-               	movl	$0x18, %ecx
-               	pushq	%rax
+               	movq	(%rdi), %rcx
+               	movl	$0x18, %eax
+               	movq	%rax, %r10
                	pushq	%rdx
-               	xorq	%rdx, %rdx
-               	divq	%rcx
-               	movq	%rax, %rcx
-               	popq	%rdx
-               	popq	%rax
-               	movl	$0x7, %edx
-               	movq	%rdx, %r10
-               	pushq	%rdx
+               	movq	%rcx, %rax
                	xorq	%rdx, %rdx
                	divq	%r10
-               	movq	%rdx, %rax
                	popq	%rdx
-               	imulq	$0x64, %rcx, %rcx
+               	movl	$0x7, %edx
+               	movq	%rdx, %r10
+               	pushq	%rax
+               	pushq	%rdx
+               	movq	%rcx, %rax
+               	xorq	%rdx, %rdx
+               	divq	%r10
+               	movq	%rdx, %rcx
+               	popq	%rdx
+               	popq	%rax
+               	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
@@ -42,34 +44,33 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rcx
-               	movl	$0x18, %edx
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	movq	%rax, %rdx
-               	popq	%rax
-               	movl	$0x7, %eax
+               	leaq	-0x8(%rbp), %rcx
+               	movq	(%rcx), %rdx
+               	movl	$0x18, %eax
                	movq	%rax, %r10
                	pushq	%rdx
-               	movq	%rcx, %rax
+               	movq	%rdx, %rax
                	xorq	%rdx, %rdx
                	divq	%r10
-               	movq	%rdx, %rax
                	popq	%rdx
-               	imulq	$0x64, %rdx, %rcx
+               	movl	$0x7, %ecx
+               	pushq	%rax
+               	pushq	%rdx
+               	movq	%rdx, %rax
+               	xorq	%rdx, %rdx
+               	divq	%rcx
+               	movq	%rdx, %rcx
+               	popq	%rdx
+               	popq	%rax
+               	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x3ea, %rax            # imm = 0x3EA
                	jne	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	movl	$0x1, %eax
+               	jmp	<addr>
+               	addb	%al, (%rax)

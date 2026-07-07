@@ -26,43 +26,15 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0xa, %eax
-               	incq	%rax
-               	movslq	%eax, %rax
-               	cmpq	$0xb, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	xorq	%rdx, %rdx
+               	xorq	%rax, %rax
+               	movl	$0x1, %eax
                	testq	%rax, %rax
                	je	<addr>
-               	movl	$0xa, %eax
-               	addq	$0x2, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0xc, %rax
-               	sete	%al
-               	movzbq	%al, %rax
+               	movl	$0x1, %eax
                	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	je	<addr>
-               	movl	$0xa, %eax
-               	addq	$0x3, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0xd, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	xorq	%rax, %rax
                	retq
+               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>

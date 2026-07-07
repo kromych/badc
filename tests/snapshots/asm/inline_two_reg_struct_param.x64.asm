@@ -57,9 +57,9 @@ Disassembly of section .text:
                	movq	%rsi, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rax
-               	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	leaq	-0x10(%rbp), %rcx
-               	movq	0x8(%rcx), %rcx
+               	imulq	$0x3e8, %rax, %rcx      # imm = 0x3E8
+               	leaq	-0x10(%rbp), %rax
+               	movq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp

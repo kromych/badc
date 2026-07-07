@@ -11,33 +11,26 @@ Disassembly of section .text:
                	ud2
 
 <streq>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movsbq	(%rdi), %rcx
-               	testq	%rcx, %rcx
+               	movsbq	(%rdi), %rax
+               	testq	%rax, %rax
                	je	<addr>
-               	jmp	<addr>
+               	movsbq	(%rdi), %rax
+               	movsbq	(%rsi), %rcx
+               	cmpq	%rcx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
+               	je	<addr>
                	incq	%rdi
                	incq	%rsi
+               	jmp	<addr>
                	jmp	<addr>
                	movsbq	(%rdi), %rax
                	movsbq	(%rsi), %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
-               	movsbq	(%rdi), %rax
-               	movsbq	(%rsi), %rcx
-               	cmpq	%rcx, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <direct>:
                	leaq	<rip>, %rax
@@ -126,4 +119,4 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

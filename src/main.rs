@@ -57,7 +57,9 @@ Multi-TU knobs:
 Compile knobs:
   -O, --optimize           Run the SSA optimization passes (mem2reg,
                            inlining, rotate and branch const-fold,
-                           immediate dedup). Off by default. The
+                           immediate dedup) and predefine `NDEBUG=1`
+                           and `__OPTIMIZE__=1` (override with `-D` /
+                           `-U`). Off by default. The
                            `-O1`/`-O2`/`-O3`/`-Os`/`-Oz`/`-Ofast`/`-Og`
                            forms all select this single level; `-O0`
                            disables it.
@@ -745,6 +747,7 @@ fn run() {
         };
         let copts = badc::CompileOptions::default()
             .with_gnu(gnu)
+            .with_optimize(optimize_flag)
             .with_defines(defines.clone())
             .with_undefines(undefines.clone())
             .with_include_paths(include_paths.clone())
@@ -829,6 +832,7 @@ fn run() {
             };
             let opts = badc::CompileOptions::default()
                 .with_gnu(gnu)
+                .with_optimize(optimize_flag)
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -922,6 +926,7 @@ fn run() {
                 .with_source_label(src_path.to_string())
                 .with_show_includes(show_includes)
                 .with_warn_dead_store(warn_dead_store)
+                .with_optimize(optimize_flag)
                 .with_export_all_functions(export_all)
                 .with_implicit_extern_fns(implicit_externs.to_vec())
                 .with_no_entry_point(true);
@@ -967,6 +972,7 @@ fn run() {
             }
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
+                .with_optimize(optimize_flag)
                 .with_defines(copts_defines)
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -1458,6 +1464,7 @@ fn run() {
                 .with_source_label(src_path.to_string())
                 .with_show_includes(show_includes)
                 .with_warn_dead_store(warn_dead_store)
+                .with_optimize(optimize_flag)
                 .with_no_entry_point(true);
             let mut compiler = Compiler::with_options(src_bytes, target, copts);
             if show_includes {
@@ -1563,6 +1570,7 @@ fn run() {
                 .with_source_label(src_path.to_string())
                 .with_show_includes(show_includes)
                 .with_warn_dead_store(warn_dead_store)
+                .with_optimize(optimize_flag)
                 .with_no_entry_point(true);
             let mut compiler = Compiler::with_options(src_bytes, target, copts);
             if show_includes {

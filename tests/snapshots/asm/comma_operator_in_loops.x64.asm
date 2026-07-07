@@ -11,12 +11,13 @@ Disassembly of section .text:
                	ud2
 
 <bump>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdx
+               	movq	%rdi, %rcx
+               	movslq	%ecx, %rcx
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rdx
                	incq	%rdx
-               	movl	%edx, (%rcx)
+               	movl	%edx, (%rax)
+               	movq	%rcx, %rax
                	retq
 
 <main>:
@@ -35,29 +36,18 @@ Disassembly of section .text:
                	addq	$0x64, %rbx
                	movl	$0x7, %edi
                	callq	<addr>
-               	jmp	<addr>
-               	xorq	%r12, %r12
-               	jmp	<addr>
-               	incq	%rbx
-               	jmp	<addr>
                	addq	$0x3e8, %rbx            # imm = 0x3E8
-               	jmp	<addr>
-               	addq	$0x1869f, %rbx          # imm = 0x1869F
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	xorq	%rdi, %rdi
                	callq	<addr>
-               	movslq	%r12d, %rax
-               	cmpq	$0x3, %rax
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%r12d, %rax
-               	leaq	0x1(%rax), %r12
-               	jmp	<addr>
                	incq	%rbx
-               	jmp	<addr>
+               	xorq	%rdi, %rdi
+               	callq	<addr>
+               	incq	%rbx
+               	xorq	%rdi, %rdi
+               	callq	<addr>
+               	incq	%rbx
+               	xorq	%rdi, %rdi
+               	callq	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x7, %rax
@@ -75,4 +65,10 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	incq	%rbx
+               	jmp	<addr>
+               	addq	$0x1869f, %rbx          # imm = 0x1869F
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

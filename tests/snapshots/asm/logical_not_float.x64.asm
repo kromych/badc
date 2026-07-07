@@ -22,9 +22,6 @@ Disassembly of section .text:
                	retq
 
 <notf>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorq	%rax, %rax
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
@@ -34,8 +31,6 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -110,11 +105,10 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	xorq	%rcx, %rcx
                	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
-               	xorq	%rax, %rax
-               	cvtss2sd	%xmm0, %xmm0
-               	movq	%rax, %xmm15
+               	cvtss2sd	%xmm14, %xmm0
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	sete	%al
                	movzbq	%al, %rax
@@ -127,12 +121,11 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
+               	movl	$0x40600000, %eax       # imm = 0x40600000
+               	xorq	%rcx, %rcx
                	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
-               	xorq	%rax, %rax
-               	cvtss2sd	%xmm0, %xmm0
-               	movq	%rax, %xmm15
+               	cvtss2sd	%xmm14, %xmm0
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	sete	%al
                	movzbq	%al, %rax

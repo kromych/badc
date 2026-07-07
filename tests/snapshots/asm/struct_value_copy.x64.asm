@@ -20,11 +20,11 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movl	$0x2, %ecx
                	movl	%ecx, 0x4(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x63, %ecx
-               	movl	%ecx, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	%ecx, 0x4(%rax)
+               	leaq	-0x10(%rbp), %rcx
+               	movl	$0x63, %eax
+               	movl	%eax, (%rcx)
+               	leaq	-0x10(%rbp), %rcx
+               	movl	%eax, 0x4(%rcx)
                	leaq	-0x10(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
                	pushq	%rdx

@@ -47,28 +47,53 @@ pub(crate) fn slots16(n_slots: u32) -> u32 {
     align16(n_slots * 8)
 }
 
+/// True when the emitted form of `inst` addresses the locals region
+/// (negative slot offset): slot loads / stores / address-takes, the
+/// alloca-arena bookkeeping store, and a call gathering an aggregate
+/// return into its result-temp slot. Purely structural; whether the
+/// instruction is emitted at all is `is_dead_pure`'s decision, and the
+/// frame gate below combines the two so it cannot disagree with the
+/// per-inst emit skip.
+fn inst_addresses_local(inst: &super::super::ir::Inst) -> bool {
+    use super::super::ir::Inst;
+    match inst {
+        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } | Inst::LocalAddr(off) => {
+            *off < 0
+        }
+        Inst::AllocaInit(slot) => *slot != 0,
+        Inst::Call { ret_slot_local, .. }
+        | Inst::CallIndirect { ret_slot_local, .. }
+        | Inst::CallExt { ret_slot_local, .. } => *ret_slot_local < 0,
+        _ => false,
+    }
+}
+
 /// The frame regions both targets size identically: the locals region, the
 /// allocator spill region, and the saved callee-GPR region, each a 16-byte
-/// aligned byte count. The locals region is zero when no surviving instruction
+/// aligned byte count. The locals region is zero when no emitted instruction
 /// references a user local (negative `off`); after mem2reg and dead-store
 /// elimination such an object is never observed and needs no storage
-/// (C99 6.2.4p2). Param cells use non-negative `off` and are sized separately.
+/// (C99 6.2.4p2). An instruction the per-inst dispatch skips as dead pure
+/// (`is_dead_pure`) produces no machine code and therefore no access; the
+/// same predicate gates both decisions. Param cells use non-negative `off`
+/// and are sized separately.
 pub(crate) fn compute_frame_base(
     func: &super::super::ir::FunctionSsa,
     alloc: &super::reg_alloc::Allocation,
 ) -> (u32, u32, u32) {
-    use super::super::ir::Inst;
     let declared_locals_bytes = slots16(func.locals.max(0) as u32);
-    // A function returning an aggregate larger than 16 bytes saves the
-    // caller-supplied indirect-result pointer into its `indirect_result_slot`
-    // in the prologue and reads it on return; that slot is reached through a
-    // FunctionSsa field rather than an instruction, so it counts as a local
-    // access even when no LoadLocal / StoreLocal / LocalAddr references it.
+    // Two prologue paths reach the locals region through FunctionSsa fields
+    // rather than instructions and count as accesses on their own: saving
+    // the caller-supplied indirect-result pointer into `indirect_result_slot`,
+    // and scattering a by-value aggregate parameter into its body local.
     let any_local_access = func.indirect_result_slot < 0
-        || func.insts.iter().any(|i| match i {
-            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
-            Inst::LocalAddr(off) => *off < 0,
-            _ => false,
+        || func
+            .param_aggs
+            .iter()
+            .zip(func.param_local_slots.iter())
+            .any(|(agg, slot)| agg.is_some() && *slot < 0)
+        || func.insts.iter().enumerate().any(|(idx, i)| {
+            inst_addresses_local(i) && !is_dead_pure(i, idx as super::super::ir::ValueId, alloc)
         });
     let locals_bytes = if any_local_access {
         declared_locals_bytes
@@ -425,6 +450,18 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 ..
             } => alloc::vec![target, fall_through],
             Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
+            Terminator::JumpTable { table, .. } => {
+                // Distinct targets only: entries repeat (holes point at
+                // the default block) but each CFG edge's phi moves are
+                // emitted once.
+                let mut out: alloc::vec::Vec<super::super::ir::BlockId> = alloc::vec::Vec::new();
+                for &t in &func.jump_tables[table as usize] {
+                    if !out.contains(&t) {
+                        out.push(t);
+                    }
+                }
+                out
+            }
             Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
         };
     for succ in succs {

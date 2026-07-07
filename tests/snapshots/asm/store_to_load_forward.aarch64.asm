@@ -10,9 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	str	x1, [x0]
                	str	w2, [x0, #0x8]
                	strh	w2, [x0, #0xc]
@@ -20,19 +17,17 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x1, x2, x17
                	strb	w1, [x0, #0xf]
-               	ldr	x1, [x0]
-               	ldrsw	x3, [x0, #0x8]
-               	ldrsh	x4, [x0, #0xc]
+               	ldr	x4, [x0]
+               	ldrsw	x1, [x0, #0x8]
+               	ldrsh	x3, [x0, #0xc]
                	sxtb	x2, w2
                	ldrb	w0, [x0, #0xf]
+               	add	x1, x4, x1
                	add	x1, x1, x3
-               	add	x1, x1, x4
                	add	x1, x1, x2
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
                	add	x0, x1, x0
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <deref_twice>:
@@ -41,23 +36,18 @@ Disassembly of section .text:
                	ret
 
 <no_forward_across_call>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	str	x20, [sp]
-               	str	x21, [sp, #0x8]
+               	str	x20, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
                	mov	x20, x0
-               	mov	x21, #0x0               // =0
                	str	x1, [x20]
                	mov	x0, x20
                	bl	<addr>
-               	add	x0, x21, x0
+               	add	x0, x0, #0x0
                	ldr	x1, [x20]
                	add	x0, x0, x1
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x20, [sp], #0x20
                	ret
 
 <main>:

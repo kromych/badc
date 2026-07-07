@@ -28,69 +28,13 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0xfffb             // =65531
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	mul	x0, x0, x17
-               	sxtw	x0, w0
-               	cmp	x0, #0x5
-               	b.eq	<addr>
+               	mov	x0, #0x0                // =0
+               	ret
                	mov	x0, #0xb                // =11
                	ret
-               	mov	x0, #0x7                // =7
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	mul	x0, x0, x17
-               	sxtw	x0, w0
-               	mov	x17, #0xfff9            // =65529
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ret
-               	mov	x0, #0x3                // =3
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	mul	x0, x0, x17
-               	sxtw	x0, w0
-               	mov	x17, #0xfffd            // =65533
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	mul	x1, x0, x17
-               	sxtw	x1, w1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	mul	x0, x0, x17
-               	sxtw	x0, w0
-               	cmp	x1, x0
-               	b.eq	<addr>
                	mov	x0, #0xe                // =14
-               	ret
-               	mov	x0, #0x0                // =0
                	ret

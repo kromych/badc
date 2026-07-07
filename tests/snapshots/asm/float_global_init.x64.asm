@@ -11,20 +11,17 @@ Disassembly of section .text:
                	ud2
 
 <near>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	subsd	%xmm1, %xmm0
                	movabsq	$0x3f50624dd2f1a9fc, %rax # imm = 0x3F50624DD2F1A9FC
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	xorq	%rdx, %rdx
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	xorq	%rax, %rax
+               	testq	%rcx, %rcx
                	je	<addr>
                	movabsq	$0x3f50624dd2f1a9fc, %rax # imm = 0x3F50624DD2F1A9FC
                	movq	%rax, %xmm1
@@ -35,11 +32,8 @@ Disassembly of section .text:
                	seta	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rdx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	setne	%al
+               	movzbq	%al, %rax
                	retq
                	jmp	<addr>
 
@@ -134,4 +128,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

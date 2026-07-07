@@ -27,11 +27,10 @@ Disassembly of section .text:
                	ret
 
 <driver>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x80
-               	str	x20, [sp]
+               	str	x20, [sp, #-0x90]!
                	str	x19, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x80]
+               	add	x29, sp, #0x80
                	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -49,36 +48,25 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x20, #0x1               // =1
                	mov	x3, #0x64               // =100
-               	str	x3, [sp, #-0x10]!
-               	str	x20, [sp, #-0x10]!
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
-               	ldr	x2, [sp, #0x20]
-               	ldr	x3, [sp, #0x30]
+               	mov	x0, x1
+               	mov	x1, x2
+               	mov	x2, x20
                	blr	x9
-               	add	sp, sp, #0x40
                	sub	x0, x29, #0x10
                	ldr	x0, [x0]
                	ldr	x0, [x0, #0x8]
                	sub	x1, x29, #0x10
                	sub	x2, x29, #0x40
-               	str	x20, [sp, #-0x10]!
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
                	mov	x9, x0
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
-               	ldr	x2, [sp, #0x20]
+               	mov	x0, x1
+               	mov	x1, x2
+               	mov	x2, x20
                	blr	x9
-               	add	sp, sp, #0x30
                	ldursw	x0, [x29, #-0x40]
-               	ldr	x20, [sp]
+               	ldp	x29, x30, [sp, #0x80]
                	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	x20, [sp], #0x90
                	ret
 
 <main>:

@@ -96,11 +96,10 @@ Disassembly of section .text:
                	andq	%r10, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	movl	$0x1, %eax
+               	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

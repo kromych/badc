@@ -14,42 +14,30 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	testq	%rdi, %rdi
                	jge	<addr>
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	retq
                	imulq	$-0x1, %rdi, %rax
                	movslq	%eax, %rax
                	retq
                	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
+               	xorq	%rax, %rax
+               	retq
 
 <classify>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	testq	%rdi, %rdi
                	jne	<addr>
-               	jmp	<addr>
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
                	testq	%rdi, %rdi
                	jle	<addr>
-               	movl	$0x1, %ecx
-               	jmp	<addr>
-               	movabsq	$-0x1, %rcx
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	movl	$0x1, %eax
                	retq
+               	movabsq	$-0x1, %rax
+               	jmp	<addr>
+               	xorq	%rax, %rax
+               	retq
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -92,5 +80,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

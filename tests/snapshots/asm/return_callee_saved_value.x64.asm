@@ -13,7 +13,7 @@ Disassembly of section .text:
 <held_across_call>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	leaq	(%rdi,%rdi,2), %rax
                	leaq	0x1(%rax), %rbx
@@ -23,7 +23,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movq	%rbx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 

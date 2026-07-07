@@ -26,24 +26,21 @@ Disassembly of section .text:
                	ret
 
 <call_via_table>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
+               	str	x19, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
+               	mov	x2, x1
                	sxtw	x0, w0
-               	sxtw	x1, w1
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x0, [x2, x0, lsl #3]
-               	str	x1, [sp, #-0x10]!
+               	sxtw	x2, w2
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x0, [x1, x0, lsl #3]
                	mov	x9, x0
-               	ldr	x0, [sp]
+               	mov	x0, x2
                	blr	x9
-               	add	sp, sp, #0x10
                	sxtw	x0, w0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x19, [sp], #0x20
                	ret
 
 <main>:

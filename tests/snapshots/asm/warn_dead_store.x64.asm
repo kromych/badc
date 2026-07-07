@@ -15,23 +15,16 @@ Disassembly of section .text:
                	retq
 
 <self_referencing_rhs>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x5, %eax
-               	incq	%rax
-               	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	movl	$0x6, %eax
                	retq
 
 <store_consumed_after_branch_is_silenced>:
                	movslq	%edi, %rdi
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	testq	%rdi, %rdi
                	je	<addr>
-               	movl	$0x2, %ecx
-               	movslq	%ecx, %rax
+               	movl	$0x2, %eax
+               	movslq	%eax, %rax
                	retq
                	jmp	<addr>
 
@@ -52,13 +45,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	movl	$0x1, %eax
-               	movl	$0x5, %ecx
-               	incq	%rcx
-               	leaq	(%rax,%rcx), %rbx
                	movl	$0x1, %edi
                	callq	<addr>
-               	addq	%rax, %rbx
+               	leaq	0x7(%rax), %rbx
                	callq	<addr>
                	addq	%rbx, %rax
                	movslq	%eax, %rax
@@ -66,5 +55,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

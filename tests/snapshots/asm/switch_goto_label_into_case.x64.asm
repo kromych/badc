@@ -11,65 +11,46 @@ Disassembly of section .text:
                	ud2
 
 <classify>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	cmpq	$0x3, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xa, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x14, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x1e, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	cmpq	$0x5, %rdi
-               	setge	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	jmp	<addr>
-               	cmpq	$0x2, %rdi
-               	jl	<addr>
-               	jmp	<addr>
                	cmpq	$0x4, %rdi
                	jl	<addr>
-               	jmp	<addr>
-               	cmpq	$0x1, %rdi
+               	cmpq	$0x4, %rdi
                	je	<addr>
-               	jmp	<addr>
-               	cmpq	$0x2, %rdi
+               	cmpq	$0x5, %rdi
+               	setge	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
+               	cmpq	$0x8, %rdi
+               	setle	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x1e, %eax
+               	retq
+               	xorq	%rax, %rax
+               	retq
                	jmp	<addr>
                	cmpq	$0x3, %rdi
                	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x4, %rdi
-               	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	cmpq	$0x8, %rdi
-               	setle	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	cmpq	$0x2, %rdi
+               	jl	<addr>
+               	cmpq	$0x2, %rdi
+               	jne	<addr>
+               	movl	$0x14, %eax
                	retq
+               	cmpq	$0x1, %rdi
+               	jne	<addr>
+               	movl	$0xa, %eax
+               	retq
+               	xorq	%rax, %rax
+               	retq
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
                	jmp	<addr>
 
 <main>:
@@ -141,4 +122,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

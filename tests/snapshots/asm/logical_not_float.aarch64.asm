@@ -17,16 +17,11 @@ Disassembly of section .text:
                	ret
 
 <notf>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
                	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, eq
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:
@@ -86,11 +81,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	fmov	d16, x0
-               	fcvt	s0, d16
-               	mov	x0, #0x0                // =0
-               	fcvt	d0, s0
-               	fmov	d17, x0
+               	mov	x1, #0x0                // =0
+               	fmov	s16, w0
+               	fcvt	d0, s16
+               	fmov	d17, x1
                	fcmp	d0, d17
                	cset	x0, eq
                	cmp	x0, #0x1
@@ -99,12 +93,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x400c000000000000 // =4615063718147915776
-               	fmov	d16, x0
-               	fcvt	s0, d16
-               	mov	x0, #0x0                // =0
-               	fcvt	d0, s0
-               	fmov	d17, x0
+               	mov	x0, #0x40600000         // =1080033280
+               	mov	x1, #0x0                // =0
+               	fmov	s16, w0
+               	fcvt	d0, s16
+               	fmov	d17, x1
                	fcmp	d0, d17
                	cset	x0, eq
                	cmp	x0, #0x0

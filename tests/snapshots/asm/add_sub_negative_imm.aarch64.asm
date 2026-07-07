@@ -90,21 +90,19 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x0, #0x5                // =5
-               	stur	w0, [x29, #-0x20]
-               	ldursw	x0, [x29, #-0x20]
-               	cmp	x0, #0x0
-               	b.le	<addr>
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x5                // =5
+               	stur	w1, [x29, #-0x20]
                	b	<addr>
-               	ldursw	x0, [x29, #-0x20]
-               	sub	x0, x0, #0x1
-               	stur	w0, [x29, #-0x20]
-               	b	<addr>
-               	ldursw	x0, [x29, #-0x20]
-               	add	x1, x1, x0
-               	b	<addr>
-               	sxtw	x0, w1
+               	ldursw	x1, [x29, #-0x20]
+               	add	x0, x0, x1
+               	ldursw	x1, [x29, #-0x20]
+               	sub	x1, x1, #0x1
+               	stur	w1, [x29, #-0x20]
+               	ldursw	x1, [x29, #-0x20]
+               	cmp	x1, #0x0
+               	b.gt	<addr>
+               	sxtw	x0, w0
                	cmp	x0, #0xf
                	b.eq	<addr>
                	mov	x0, #0x8                // =8

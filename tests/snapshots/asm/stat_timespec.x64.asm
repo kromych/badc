@@ -26,10 +26,10 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x90(%rbp), %rax
+               	movq	0x58(%rax), %rcx
+               	leaq	-0x90(%rbp), %rax
                	movq	0x58(%rax), %rax
-               	leaq	-0x90(%rbp), %rcx
-               	movq	0x58(%rcx), %rcx
-               	cmpq	%rcx, %rax
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0xa0, %rsp

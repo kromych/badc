@@ -27,109 +27,94 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rbx, (%rsp)
                	callq	<addr>
-               	movsd	%xmm0, 0x18(%rsp)
-               	xorq	%rbx, %rbx
-               	movsd	0x18(%rsp), %xmm14
-               	movq	%rbx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setb	%al
-               	movzbq	%al, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	setb	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x1, %rbx
-               	xorq	%rax, %rax
-               	movsd	0x18(%rsp), %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movl	$0x1, %eax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	seta	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x2, %rbx
-               	xorq	%rax, %rax
-               	movsd	0x18(%rsp), %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setbe	%al
-               	movzbq	%al, %rax
+               	orq	$0x2, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	setbe	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x4, %rbx
-               	xorq	%rax, %rax
-               	movsd	0x18(%rsp), %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setae	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	orq	$0x4, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	setae	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x8, %rbx
-               	xorq	%rax, %rax
-               	movsd	0x18(%rsp), %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	sete	%al
-               	movzbq	%al, %rax
+               	orq	$0x8, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x10, %rbx
-               	xorq	%rax, %rax
-               	movsd	0x18(%rsp), %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setne	%al
-               	movzbq	%al, %rax
+               	orq	$0x10, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	setne	%cl
+               	movzbq	%cl, %rcx
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	orq	%r10, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	orq	$0x20, %rbx
-               	movsd	0x18(%rsp), %xmm14
-               	movsd	0x18(%rsp), %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setb	%al
-               	movzbq	%al, %rax
+               	orq	$0x20, %rax
+               	ucomisd	%xmm0, %xmm0
+               	setb	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x40, %rbx
-               	movsd	0x18(%rsp), %xmm14
-               	movsd	0x18(%rsp), %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	sete	%al
-               	movzbq	%al, %rax
+               	orq	$0x40, %rax
+               	ucomisd	%xmm0, %xmm0
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	orq	$0x80, %rbx
-               	movslq	%ebx, %rax
-               	testq	%rax, %rax
+               	orq	$0x80, %rax
+               	movslq	%eax, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%ebx, %rsi
+               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
@@ -137,8 +122,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>
@@ -149,3 +132,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

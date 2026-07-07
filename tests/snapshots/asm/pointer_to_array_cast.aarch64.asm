@@ -13,21 +13,17 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	cmp	x0, #0x18
-               	b.ge	<addr>
+               	mov	x0, #0x0                // =0
                	b	<addr>
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	b	<addr>
-               	sub	x0, x29, #0x30
-               	sxtw	x2, w1
+               	sub	x3, x29, #0x30
                	mov	x17, #0x3               // =3
-               	mul	x3, x2, x17
-               	sxtw	x4, w3
-               	strh	w4, [x0, x2, lsl #1]
-               	b	<addr>
+               	mul	x2, x1, x17
+               	sxtw	x4, w2
+               	strh	w4, [x3, x1, lsl #1]
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
+               	cmp	x1, #0x18
+               	b.lt	<addr>
                	sub	x0, x29, #0x30
                	sub	x1, x29, #0x30
                	cmp	x0, x1

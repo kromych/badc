@@ -11,107 +11,39 @@ Disassembly of section .text:
                	ud2
 
 <simple_sum>:
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	movslq	%ecx, %rdx
-               	cmpq	$0xa, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
-               	jmp	<addr>
-               	addq	%rcx, %rax
-               	jmp	<addr>
-               	movslq	%eax, %rax
+               	movl	$0x2d, %eax
                	retq
 
 <multi_decl>:
-               	xorq	%rdx, %rdx
-               	movl	$0xa, %ecx
-               	movq	%rdx, %rax
-               	movslq	%edx, %rsi
-               	movslq	%ecx, %rdi
-               	cmpq	%rdi, %rsi
-               	jge	<addr>
-               	jmp	<addr>
-               	incq	%rdx
-               	movslq	%ecx, %rcx
-               	decq	%rcx
-               	jmp	<addr>
-               	leaq	(%rdx,%rcx), %rsi
-               	addq	%rsi, %rax
-               	jmp	<addr>
-               	movslq	%eax, %rax
+               	movl	$0x32, %eax
                	retq
 
 <shadowing>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x2a, %eax
-               	xorq	%rdx, %rdx
-               	movslq	%edx, %rcx
-               	cmpq	$0x3, %rcx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%edx, %rcx
-               	leaq	0x1(%rcx), %rdx
-               	jmp	<addr>
-               	jmp	<addr>
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <adjacent_fors>:
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	movslq	%ecx, %rdx
-               	cmpq	$0x5, %rdx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
-               	jmp	<addr>
-               	addq	%rcx, %rax
-               	jmp	<addr>
-               	movl	$0xa, %edx
-               	movslq	%edx, %rcx
-               	cmpq	$0xd, %rcx
-               	jge	<addr>
-               	jmp	<addr>
-               	movslq	%edx, %rcx
-               	leaq	0x1(%rcx), %rdx
-               	jmp	<addr>
-               	addq	%rdx, %rax
-               	jmp	<addr>
-               	movslq	%eax, %rax
+               	movl	$0x2b, %eax
                	retq
 
 <struct_ptr_init>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	<rip>, %rax
-               	xorq	%rsi, %rsi
+               	leaq	<rip>, %rdx
+               	xorq	%rax, %rax
                	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, (%rdx)
                	movl	$0x4, %ecx
-               	movl	$0x2, %edx
-               	movl	%edx, 0x4(%rax)
-               	movl	%ecx, 0x8(%rax)
-               	movq	%rax, %rcx
-               	leaq	0xc(%rax), %rdx
-               	cmpq	%rdx, %rcx
-               	jge	<addr>
+               	movl	$0x2, %esi
+               	movl	%esi, 0x4(%rdx)
+               	movl	%ecx, 0x8(%rdx)
+               	movq	%rdx, %rcx
                	jmp	<addr>
+               	movslq	(%rcx), %rsi
+               	addq	%rsi, %rax
                	addq	$0x4, %rcx
-               	jmp	<addr>
-               	movslq	(%rcx), %rdx
-               	addq	%rdx, %rsi
-               	jmp	<addr>
-               	movslq	%esi, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leaq	0xc(%rdx), %rsi
+               	cmpq	%rsi, %rcx
+               	jl	<addr>
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -199,4 +131,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

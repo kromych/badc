@@ -1091,7 +1091,9 @@ impl<'a> Walker<'a> {
                     sorted.sort_by_key(|p| p.0);
                 }
                 let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
-                self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
+                if !self.emit_switch_table(b, disc_val, &sorted, deflt) {
+                    self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
+                }
 
                 // Walk the body linearly. The opening block is reachable
                 // only by a goto into the switch ahead of the first case
@@ -1335,11 +1337,62 @@ impl<'a> Walker<'a> {
         blk
     }
 
-    /// Reserve a block for every `case` value and for `default` in a
-    /// switch body, descending into nested statements but not into a
-    /// nested switch (whose labels belong to it, C99 6.8.4.2). A
-    /// duplicate case value keeps the first block; the parser already
-    /// rejects duplicates.
+    /// Emit a jump-table dispatcher for a dense case list: a bias
+    /// subtract, an unsigned bounds check branching to `deflt`, and a
+    /// `Terminator::JumpTable` indexed by the biased discriminant.
+    /// Returns false (leaving the cursor untouched) when the case set
+    /// is too small or too sparse; the caller falls back to the
+    /// compare tree. `cases` is sorted with values already converted
+    /// to the promoted controlling type, so consecutive entries differ
+    /// by their true unsigned distance regardless of signedness.
+    fn emit_switch_table(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        disc: super::super::ir::ValueId,
+        cases: &[(i64, super::super::ir::BlockId)],
+        deflt: super::super::ir::BlockId,
+    ) -> bool {
+        const MIN_CASES: usize = 8;
+        if cases.len() < MIN_CASES {
+            return false;
+        }
+        let lo = cases[0].0;
+        let hi = cases[cases.len() - 1].0;
+        // Exact unsigned span; wrapping covers the full i64 label
+        // domain (hi >= lo in the sort order, so the difference is
+        // < 2^64 and the wrapped subtraction is exact).
+        let span = (hi as u64).wrapping_sub(lo as u64);
+        // Density gate: at least half the table slots hold a real
+        // case. The bound also caps the table at 2 * cases entries.
+        if span >= 2 * cases.len() as u64 {
+            return false;
+        }
+        let mut targets = alloc::vec![deflt; span as usize + 1];
+        for &(v, blk) in cases {
+            let slot = &mut targets[(v as u64).wrapping_sub(lo as u64) as usize];
+            // First case wins on a converted-value collision, matching
+            // the compare tree's first-match order.
+            if *slot == deflt {
+                *slot = blk;
+            }
+        }
+        // idx = disc - lo; the wrapped 64-bit subtraction with the
+        // unsigned bound accepts exactly disc in [lo, hi] for every
+        // promoted width (the discriminant is already sign- or
+        // zero-extended to the same domain as the labels).
+        let idx = if lo != 0 {
+            b.binop_imm(BinOp::Sub, disc, lo)
+        } else {
+            disc
+        };
+        let inb = b.binop_imm(BinOp::Ult, idx, span as i64 + 1);
+        let dispatch = b.new_block();
+        b.branch_zero(inb, deflt, dispatch);
+        b.switch_to(dispatch);
+        b.jump_table(idx, targets);
+        true
+    }
+
     /// Emit a balanced binary search over a sorted, distinct case list
     /// as the switch dispatcher. The cursor is at an open block on entry
     /// and the block is closed on return. Internal nodes branch on
@@ -1374,6 +1427,11 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Reserve a block for every `case` value and for `default` in a
+    /// switch body, descending into nested statements but not into a
+    /// nested switch (whose labels belong to it, C99 6.8.4.2). A
+    /// duplicate case value keeps the first block; the parser already
+    /// rejects duplicates.
     fn collect_switch_cases(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
@@ -1447,9 +1505,7 @@ impl<'a> Walker<'a> {
                 // f64 bits untagged.
                 if is_float_ty(*ty) {
                     let f32_bits = f64::from_bits(*bits) as f32;
-                    let imm = f32_bits.to_bits() as i64;
-                    let v = b.imm(imm);
-                    return Ok(b.mark_f32(v));
+                    return Ok(b.imm_f32(f32_bits.to_bits()));
                 }
                 Ok(b.imm(*bits as i64))
             }
@@ -2392,6 +2448,12 @@ impl<'a> Walker<'a> {
                         return Ok(call);
                     }
                     if *class == Token::Sys as i64 {
+                        // A returns-twice callee (setjmp family /
+                        // vfork) disables spill-slot sharing in this
+                        // function; see FunctionSsa::has_returns_twice_call.
+                        if crate::c5::ir::returns_twice_fn_name(&self.symbols[*sym as usize].name) {
+                            b.mark_returns_twice();
+                        }
                         // The Ident's `val` is the binding's
                         // flat index across all `#pragma
                         // binding(...)` directives -- exactly
@@ -2926,44 +2988,61 @@ impl<'a> Walker<'a> {
                     return Ok(b.binop_imm(BinOp::Ne, v, 0));
                 }
                 if target_is_fp && !source_is_fp {
-                    // Integer -> FP (C99 6.3.1.4) produces an f64; a
-                    // `float` target then narrows to single precision.
-                    // An unsigned 64-bit source (`unsigned long` /
-                    // `unsigned long long`) can exceed the signed range,
-                    // where the signed convert yields a negative result,
-                    // so it takes the unsigned converter. Narrower
+                    // Integer -> FP (C99 6.3.1.4), one rounding to the
+                    // target type. An unsigned 64-bit source (`unsigned
+                    // long` / `unsigned long long`) can exceed the signed
+                    // range, where the signed convert yields a negative
+                    // result, so it takes the unsigned converter. Narrower
                     // unsigned types fit the signed range zero-extended.
                     let stripped = src_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
                     let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
                         && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
+                    let to_float = is_float_ty(*to_ty);
+                    // Fold a constant operand to the converted FP constant
+                    // (the conversion of a constant is itself a constant).
+                    if let Some(k) = b.peek_imm(v) {
+                        if to_float {
+                            let f = if unsigned_64 {
+                                k as u64 as f32
+                            } else {
+                                k as f32
+                            };
+                            return Ok(b.imm_f32(f.to_bits()));
+                        }
+                        let d = if unsigned_64 {
+                            k as u64 as f64
+                        } else {
+                            k as f64
+                        };
+                        return Ok(b.imm(d.to_bits() as i64));
+                    }
                     let kind = if unsigned_64 {
                         super::super::ir::FpCastKind::UIntToFp
                     } else {
                         super::super::ir::FpCastKind::IntToFp
                     };
-                    let f = b.fp_cast(kind, v);
-                    if is_float_ty(*to_ty) {
-                        return Ok(b.fp_narrow_to_f32(f));
+                    // A `float` target converts directly to single
+                    // precision; a `double` target stays f64.
+                    if to_float {
+                        return Ok(b.fp_cast_to_f32(kind, v));
                     }
-                    return Ok(f);
+                    return Ok(b.fp_cast(kind, v));
                 } else if !target_is_fp && source_is_fp {
-                    // FP -> integer (C99 6.3.1.4) truncates an f64; a
-                    // `float` source widens to f64 first so the same
-                    // converter handles both precisions. An unsigned
-                    // 64-bit target can hold a value in [2^63, 2^64),
-                    // which the signed truncate would saturate, so it
-                    // takes the unsigned converter. Narrower unsigned
-                    // targets fit the signed range.
-                    let d = b.fp_widen_to_f64(v);
+                    // FP -> integer (C99 6.3.1.4) truncates toward zero.
+                    // An unsigned 64-bit target can hold a value in
+                    // [2^63, 2^64), which the signed truncate would
+                    // saturate, so it takes the unsigned converter whose
+                    // lowering compares against 2^63 in double precision --
+                    // a `float` source widens to f64 for it. The signed
+                    // converter truncates a `float` source directly.
                     let stripped_to = *to_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
                     let target_unsigned_64 = (*to_ty & UNSIGNED_BIT) != 0
                         && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
-                    let kind = if target_unsigned_64 {
-                        super::super::ir::FpCastKind::UFpToInt
-                    } else {
-                        super::super::ir::FpCastKind::FpToInt
-                    };
-                    return Ok(b.fp_cast(kind, d));
+                    if target_unsigned_64 {
+                        let d = b.fp_widen_to_f64(v);
+                        return Ok(b.fp_cast(super::super::ir::FpCastKind::UFpToInt, d));
+                    }
+                    return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, v));
                 }
                 // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens,
                 // `(float)d` narrows. The conversion is a no-op only when
@@ -2993,7 +3072,7 @@ impl<'a> Walker<'a> {
                 let load_kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lhs);
-                let place = self.rmw_place(b, *lhs, store_kind)?;
+                let place = self.rmw_place(b, *lhs)?;
                 let old = place.load(b, load_kind, vol);
                 // Constant-rhs short-circuit (mirror of the
                 // `Expr::Binary` path): an integer-literal rhs
@@ -3112,7 +3191,7 @@ impl<'a> Walker<'a> {
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lvalue);
-                let place = self.rmw_place(b, *lvalue, store_kind)?;
+                let place = self.rmw_place(b, *lvalue)?;
                 let old = place.load(b, kind, vol);
                 let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind, vol);
@@ -3139,7 +3218,7 @@ impl<'a> Walker<'a> {
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lvalue);
-                let place = self.rmw_place(b, *lvalue, store_kind)?;
+                let place = self.rmw_place(b, *lvalue)?;
                 let old = place.load(b, kind, vol);
                 let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind, vol);
@@ -3508,18 +3587,15 @@ impl<'a> Walker<'a> {
     }
 
     /// Resolve where a read-modify-write operator targets its lvalue. A
-    /// non-thread-local `Token::Loc` Ident of integer-class storage width
-    /// keeps its frame slot so mem2reg can promote it; the float-stored
-    /// case (`StoreKind::F32`, which the fused `StoreLocal` does not
-    /// lower) and every non-local lvalue materialize an address through
-    /// `walk_expr_lvalue`. Mirrors the `Expr::Assign` local-target
-    /// shortcut so `i++` / `i += k` keep the counter register-resident,
-    /// not just `i = i + k`.
+    /// non-thread-local `Token::Loc` Ident keeps its frame slot so
+    /// mem2reg can promote it; every non-local lvalue materializes an
+    /// address through `walk_expr_lvalue`. Mirrors the `Expr::Assign`
+    /// local-target shortcut so `i++` / `i += k` keep the counter
+    /// register-resident, not just `i = i + k`.
     fn rmw_place(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         lvalue: ExprId,
-        store_kind: StoreKind,
     ) -> Result<RmwPlace, WalkError> {
         // A bitfield member: compute the storage unit's address once so
         // the read and the write target the same unit (the object is
@@ -3542,13 +3618,12 @@ impl<'a> Walker<'a> {
             };
             return Ok(RmwPlace::Bitfield { addr, bf });
         }
-        if !matches!(store_kind, StoreKind::F32)
-            && let Expr::Ident {
-                class,
-                val,
-                is_thread_local: false,
-                ..
-            } = self.ast.expr(lvalue)
+        if let Expr::Ident {
+            class,
+            val,
+            is_thread_local: false,
+            ..
+        } = self.ast.expr(lvalue)
             && *class == Token::Loc as i64
         {
             return Ok(RmwPlace::Slot(*val));

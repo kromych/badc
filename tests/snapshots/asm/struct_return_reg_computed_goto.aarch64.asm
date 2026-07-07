@@ -32,7 +32,7 @@ Disassembly of section .text:
                	br	x0
                	mov	x0, #0x7                // =7
                	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
+               	sxtw	x0, w0
                	cmp	x0, #0x7
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
@@ -51,9 +51,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	stur	w0, [x29, #0x10]
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #0x10]
+               	mov	x1, #0x0                // =0
+               	stur	w1, [x29, #-0x8]
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	adr	x0, <addr>
                	stur	x0, [x29, #-0x28]
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
+               	sxtw	x0, w0
                	cmp	x0, #0x2
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

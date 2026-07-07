@@ -16,32 +16,25 @@ Disassembly of section .text:
                	retq
 
 <helper_two>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <test>:
                	movslq	%edi, %rdi
-               	jmp	<addr>
-               	leaq	(%rdi,%rdi), %rdx
-               	cmpq	$0x3, %rdi
-               	jle	<addr>
-               	movslq	%ecx, %rax
-               	retq
-               	leaq	(%rcx,%rdx), %rax
-               	movslq	%eax, %rax
-               	retq
                	movslq	%edi, %rax
                	shlq	$0x1, %rax
-               	movslq	%eax, %rcx
-               	jmp	<addr>
+               	movslq	%eax, %rax
+               	leaq	(%rdi,%rdi), %rcx
+               	cmpq	$0x3, %rdi
+               	jle	<addr>
+               	movslq	%eax, %rax
+               	retq
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
+               	retq
 
 <main>:
                	pushq	%rbp

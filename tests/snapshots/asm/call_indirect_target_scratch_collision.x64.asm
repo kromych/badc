@@ -11,10 +11,11 @@ Disassembly of section .text:
                	ud2
 
 <sink_op>:
-               	xorq	%rax, %rax
-               	movsbq	(%rsi), %rdx
-               	addq	%rdx, %rcx
-               	movl	%ecx, (%r8)
+               	xorq	%rdx, %rdx
+               	movsbq	(%rsi), %rax
+               	addq	%rcx, %rax
+               	movl	%eax, (%r8)
+               	movq	%rdx, %rax
                	retq
 
 <forward>:
@@ -52,22 +53,21 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movslq	%ebx, %rax
                	testq	%rax, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	-0x10(%rbp), %rax
                	cmpq	$0x10040, %rax          # imm = 0x10040
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movl	$0x1, %ecx
+               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
+               	movl	$0x1, %eax
+               	jmp	<addr>
                	jmp	<addr>

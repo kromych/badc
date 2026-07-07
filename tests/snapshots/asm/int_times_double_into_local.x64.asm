@@ -18,10 +18,12 @@ Disassembly of section .text:
                	movabsq	$0x400921fb54442d18, %rax # imm = 0x400921FB54442D18
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movabsq	$-0x2, %rax
-               	cvtsi2sd	%rax, %xmm0
-               	movsd	-0x8(%rbp,%riz), %xmm1
-               	mulsd	%xmm1, %xmm0
+               	movabsq	$-0x4000000000000000, %rax # imm = 0xC000000000000000
+               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movapd	%xmm0, %xmm15
+               	movq	%rax, %xmm0
+               	mulsd	%xmm15, %xmm0
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rsi, %xmm1
                	mulsd	%xmm1, %xmm0
                	addq	$0x20, %rsp
@@ -104,3 +106,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -108,6 +108,13 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
         say("variadic");
         return false;
     }
+    // A body calling a returns-twice function (setjmp family / vfork)
+    // stays out of line: splicing it would silently drop the caller's
+    // no-slot-share discipline (`FunctionSsa::has_returns_twice_call`).
+    if func.has_returns_twice_call {
+        say("calls a returns-twice function");
+        return false;
+    }
     // Host-ABI aggregates are admitted only in the shapes the splice can
     // reproduce: a by-value parameter passed in a single integer register
     // (it arrives as the address of the caller's copy in one argument, and
@@ -168,6 +175,13 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 // address-taken label blocks; splicing the body into a
                 // caller would shift those block ids. Keep it out of line.
                 say("GotoIndirect terminator");
+                return false;
+            }
+            Terminator::JumpTable { .. } => {
+                // Splicing shifts the callee's block ids, which the
+                // caller-side jump_tables clone would have to remap; a
+                // table dispatcher is far past the size cap anyway.
+                say("JumpTable terminator");
                 return false;
             }
             Terminator::Jmp(_)
@@ -426,7 +440,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
 
 /// Map a single operand `v` through `remap`. `NO_VALUE` stays.
 #[inline]
-fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
+pub(super) fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
     if v == NO_VALUE || (v as usize) >= remap.len() {
         v
     } else {
@@ -436,7 +450,7 @@ fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
 
 /// Apply the caller's value remap to every operand in `inst`. The
 /// caller hands us a fresh clone; we mutate in place.
-fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
+pub(super) fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
     match inst {
         Inst::Imm(_)
         | Inst::ImmData(_)
@@ -586,7 +600,7 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
 }
 
 /// Rewrite block terminators through the caller's value remap.
-fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
+pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
     match term {
         Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
         Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
@@ -594,6 +608,9 @@ fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
         }
         Terminator::GotoIndirect { target } => {
             *target = map_v(*target, remap);
+        }
+        Terminator::JumpTable { idx, .. } => {
+            *idx = map_v(*idx, remap);
         }
         Terminator::Return(v) => {
             *v = map_v(*v, remap);
@@ -668,6 +685,12 @@ fn splice_multi_block(
             Terminator::GotoIndirect { target } => Terminator::GotoIndirect {
                 target: map_v(target, remap),
             },
+            // Multi-block splicing is skipped for jump-table callers
+            // (block_id_shift_unsafe); the table entries would need the
+            // same shift. TODO: remap via the shared BlockId utility.
+            Terminator::JumpTable { .. } => {
+                unreachable!("multi-block splice skips jump-table callers")
+            }
         }
     };
 
@@ -884,6 +907,9 @@ fn splice_multi_block(
                 Terminator::GotoIndirect { .. } => {
                     unreachable!("filter rejects GotoIndirect")
                 }
+                Terminator::JumpTable { .. } => {
+                    unreachable!("filter rejects JumpTable")
+                }
             };
             let exit_acc = if cblock.exit_acc != NO_VALUE {
                 map_v(cblock.exit_acc, &callee_remap)
@@ -988,8 +1014,16 @@ fn splice_multi_block(
         ret_is_fp: original.ret_is_fp,
         indirect_result_slot: original.indirect_result_slot,
         computed_goto_targets: original.computed_goto_targets,
+        // Multi-block splicing is skipped for jump-table callers and
+        // the filter rejects jump-table callees, so both lists are
+        // empty here.
+        jump_tables: original.jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: original.multi_cell_slots,
+        // The candidate filter rejects returns-twice callees, so only
+        // the caller's own flag can be set here.
+        has_returns_twice_call: original.has_returns_twice_call,
+        did_unroll: original.did_unroll,
     };
 }
 
@@ -1356,6 +1390,7 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     // Skip multi-block splicing for either shape; the flat single-block
     // path above already ran and keeps block ids fixed.
     let block_id_shift_unsafe = !caller.computed_goto_targets.is_empty()
+        || !caller.jump_tables.is_empty()
         || caller
             .insts
             .iter()
@@ -1481,6 +1516,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             inline_caller(caller, &local);
             if caller.insts.len() != before {
                 changed = true;
+                // A spliced callee whose loops were unrolled carries
+                // constant-offset array accesses into the caller; mark
+                // the caller so the post-inline scalar promotion scans it.
+                if local.values().any(|c| c.did_unroll) {
+                    caller.did_unroll = true;
+                }
             }
         }
         if !changed {

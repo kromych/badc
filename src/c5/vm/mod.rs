@@ -7,6 +7,7 @@ use super::host::Host;
 use super::ir::FunctionSsa;
 use super::program::Program;
 
+pub(crate) mod eval;
 mod ssa;
 
 /// Whether the VM should emit a per-instruction trace to the host's

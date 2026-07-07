@@ -41,10 +41,9 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movss	(%rax,%riz), %xmm0
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	cvtss2sd	%xmm0, %xmm0
+               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	sete	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -56,4 +55,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)

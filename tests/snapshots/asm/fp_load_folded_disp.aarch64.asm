@@ -41,31 +41,28 @@ Disassembly of section .text:
                	movk	x1, #0xffff, lsl #48
                	str	x1, [x0]
                	sub	x0, x29, #0x28
-               	mov	x1, #0x3ff4000000000000 // =4608308318706860032
-               	fmov	d16, x1
-               	fcvt	s0, d16
-               	str	s0, [x0, #0x8]
+               	mov	x1, #0x3fa00000         // =1067450368
+               	fmov	s16, w1
+               	str	s16, [x0, #0x8]
                	sub	x0, x29, #0x28
                	mov	x2, #0x4004000000000000 // =4612811918334230528
                	fmov	d16, x2
                	str	d16, [x0, #0x10]
                	sub	x0, x29, #0x28
                	mov	x2, #0x0                // =0
-               	fmov	d16, x2
-               	fcvt	s0, d16
-               	str	s0, [x0, #0x18]
+               	fmov	s16, w2
+               	str	s16, [x0, #0x18]
                	sub	x0, x29, #0x28
-               	str	s0, [x0, #0x1c]
+               	fmov	s16, w2
+               	str	s16, [x0, #0x1c]
                	sub	x0, x29, #0x28
-               	mov	x2, #0x4013000000000000 // =4617034042984890368
-               	fmov	d16, x2
-               	fcvt	s0, d16
-               	str	s0, [x0, #0x20]
+               	mov	x2, #0x40980000         // =1083703296
+               	fmov	s16, w2
+               	str	s16, [x0, #0x20]
                	sub	x0, x29, #0x28
                	ldr	s0, [x0, #0x8]
-               	fcvt	d0, s0
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	fmov	s17, w1
+               	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
@@ -85,10 +82,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x28
                	ldr	s0, [x0, #0x20]
-               	mov	x0, #0x4013000000000000 // =4617034042984890368
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x0, #0x40980000         // =1083703296
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3

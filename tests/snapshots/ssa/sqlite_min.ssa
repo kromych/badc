@@ -11,11 +11,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=28
     v4   Imm(0)                                           -> x2
     v5   Imm(8)                                           -> x2
     v6   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x2
-    v7   Load { addr=v1, disp=8, kind=I64 }               -> x3
+    v7   Load { addr=v1, disp=8, kind=I64 }               -> x12
     v8   Imm(0)                                           -> x2
     v9   Imm(16)                                          -> x2
     v10  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x2
-    v11  Load { addr=v1, disp=16, kind=I64 }              -> x12
+    v11  Load { addr=v1, disp=16, kind=I64 }              -> x13
     v12  Imm(0)                                           -> x2
     v13  Imm(24)                                          -> x2
     v14  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x2
@@ -23,11 +23,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=28
     v16  Imm(0)                                           -> x2
     v17  Imm(32)                                          -> x2
     v18  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x2
-    v19  Load { addr=v1, disp=32, kind=I64 }              -> x13
+    v19  Load { addr=v1, disp=32, kind=I64 }              -> x14
     v20  Imm(0)                                           -> x2
     v21  Imm(40)                                          -> x2
     v22  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> x2
-    v23  Load { addr=v1, disp=40, kind=I64 }              -> x14
+    v23  Load { addr=v1, disp=40, kind=I64 }              -> x15
     v24  Imm(0)                                           -> x0
     v25  ImmData(96)                                      -> x7
     v26  Imm(66)                                          -> x6
@@ -35,7 +35,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=28
     v28  LoadLocal { off=-1, kind=I64 }                   -> x0
     v29  CallIndirect { target=v3, args=[v25, v26, v27], callee_variadic=false, fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v30  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x1
-    v31  Extend { value=v29, kind=I32 }                   -> x15
+    v31  Extend { value=v29, kind=I32 }                   -> x3
     v32  Imm(0)                                           -> x0
     v33  LoadLocal { off=-7, kind=I32 }                   -> x0
     v34  BinopI { op=lt, lhs=v31, rhs_imm=0 }             -> x0

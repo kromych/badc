@@ -18,27 +18,27 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(41)                                          -> x0
-    v2   Extend { value=v1, kind=I32 }                    -> x1
-    v3   Imm(0)                                           -> x1
-    v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
-    v6   Extend { value=v4, kind=I32 }                    -> x0
-    v7   BinopI { op=ne, lhs=v6, rhs_imm=42 }             -> x0
-    terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
+    v2   Imm(41)                                          -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(42)                                          -> x0
+    v5   Imm(180388626432)                                -> x0
+    v6   Imm(42)                                          -> x0
+    v7   Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v7)
   block 1  start_pc=0
-    v8   Imm(1)                                           -> x0
-    terminator Return(v8)   (exit_acc=v8)
-  block 2  start_pc=0
     v9   ImmData(8)                                       -> x0
     v10  Load { addr=v9, disp=0, kind=I32 }               -> x0
     v11  BinopI { op=ne, lhs=v10, rhs_imm=5 }             -> x0
-    terminator Bz { cond=v11, target=b4, fall=b3 }   (exit_acc=v11)
-  block 3  start_pc=0
+    terminator Bz { cond=v11, target=b3, fall=b2 }   (exit_acc=v11)
+  block 2  start_pc=0
     v12  Imm(2)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
-  block 4  start_pc=0
+  block 3  start_pc=0
     v13  Imm(0)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)
+  block 4  start_pc=0
+    v8   Imm(1)                                           -> x0
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

@@ -219,6 +219,64 @@ fn opt_level_flags_map_to_the_single_level() {
     assert_eq!(os, o, "-Os should match -O");
 }
 
+// `-O` predefines `NDEBUG=1` and `__OPTIMIZE__=1` (release semantics).
+// The predefines land before the CLI `-D` / `-U` lists, so an explicit
+// `-D NDEBUG=<v>` keeps the user's value and `-U NDEBUG` removes the
+// implied one, re-enabling `assert`.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn optimize_flag_predefines_ndebug() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    let fixtures = PathBuf::from(manifest)
+        .join("tests")
+        .join("fixtures")
+        .join("c");
+    let dir = std::env::temp_dir().join(format!("badc-ndebug-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    let run = |tag: &str, flags: &[&str], src: &std::path::Path| -> std::process::ExitStatus {
+        let exe = dir.join(tag);
+        let mut cmd = Command::new(badc);
+        for f in flags {
+            cmd.arg(f);
+        }
+        let out = cmd.arg(src).arg("-o").arg(&exe).output().expect("run badc");
+        assert!(
+            out.status.success(),
+            "compile {tag} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        Command::new(&exe).output().expect("run prog").status
+    };
+
+    // Exit codes: both predefines -> NDEBUG's value, exactly one -> 101,
+    // neither -> 100 (see the fixture).
+    let probe = fixtures.join("ndebug_optimize_predefine.c");
+    assert_eq!(run("plain", &[], &probe).code(), Some(100));
+    assert_eq!(run("opt", &["-O"], &probe).code(), Some(1));
+    assert_eq!(
+        run("opt-dval", &["-O", "-DNDEBUG=7"], &probe).code(),
+        Some(7)
+    );
+    assert_eq!(
+        run("opt-undef", &["-O", "-UNDEBUG"], &probe).code(),
+        Some(101)
+    );
+
+    // Under `-O` the assert(0) is compiled out; `-U NDEBUG` re-enables
+    // it and the program traps instead of exiting 0.
+    let trap = fixtures.join("ndebug_undef_reenables_assert.c");
+    assert_eq!(run("assert-off", &["-O"], &trap).code(), Some(0));
+    let fired = run("assert-on", &["-O", "-UNDEBUG"], &trap);
+    assert!(
+        !fired.success(),
+        "-U NDEBUG under -O must re-enable assert (got {fired:?})"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // `--install <dir>` writes every embedded header under <dir>/include
 // (recreating subdirectories) and the runtime source under <dir>/lib.
 #[test]

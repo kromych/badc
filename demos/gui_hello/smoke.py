@@ -78,7 +78,7 @@ def main() -> int:
     for target, source, suffix in BUILDS:
         src = GUI_DIR / source
         out = work / f"hello-{target}{suffix}"
-        cmd = [str(badc), f"--target={target}", str(src), "-o", str(out)]
+        cmd = [str(badc), "-O", f"--target={target}", str(src), "-o", str(out)]
         if target.startswith("windows"):
             cmd.extend(["-include", "msvc_compat.h"])
         proc = subprocess.run(cmd, capture_output=True, text=True)

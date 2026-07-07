@@ -47,18 +47,19 @@ use super::Target;
 use super::encode::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
     emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
-    emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_divss,
-    emit_imul_r_mem, emit_imul_rr, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem,
-    emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r, emit_mov_mem_r, emit_mov_r_imm64,
-    emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r, emit_movsd_mem_xmm,
-    emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16,
-    emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem, emit_movzx_r_mem16,
-    emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_neg_r, emit_or_r_mem, emit_or_rr, emit_pop_r,
-    emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl,
-    emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd, emit_subss,
-    emit_test_rr, emit_ucomisd, emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd,
-    emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
-    emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
+    emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtsi2ss, emit_cvtss2sd, emit_cvttsd2si, emit_cvttss2si,
+    emit_divsd, emit_divss, emit_imul_r_mem, emit_imul_rr, emit_jcc_rel8, emit_jmp_rel8,
+    emit_lea_r_mem, emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r, emit_mov_mem_r,
+    emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r,
+    emit_movsd_mem_xmm, emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem,
+    emit_movsx_r_mem16, emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem,
+    emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_neg_r, emit_or_r_mem,
+    emit_or_rr, emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl,
+    emit_shr_r_cl, emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd,
+    emit_subss, emit_test_rr, emit_ucomisd, emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss,
+    emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd,
+    emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
+    emit_xorps,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
@@ -1536,11 +1537,15 @@ pub(crate) fn emit_function(
             moves.push((Place::IntReg(src), dst));
             vids.push(vid);
             homes.push(dst);
-            // Sign-extend on entry only when a consumer reads the
-            // parameter's upper bits; otherwise the low word already
-            // holds the C99 6.5.2.2p4-converted value.
-            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32)
-                && alloc.high_observed.get(vid).copied().unwrap_or(true)
+            // The caller passes the raw 64-bit value; the callee
+            // performs the C99 6.5.2.2p4 conversion. An I8/I16 extend
+            // rewrites bits 8..63 / 16..63 and is always required; an
+            // I32 extend touches only bits 32..63 and is skipped when
+            // no consumer reads them (`high_observed` tracks exactly
+            // that range).
+            if matches!(kind, LoadKind::I8 | LoadKind::I16)
+                || (matches!(kind, LoadKind::I32)
+                    && alloc.high_observed.get(vid).copied().unwrap_or(true))
             {
                 exts.push((dst, *kind));
             }
@@ -1585,6 +1590,10 @@ pub(crate) fn emit_function(
     // final `block_offsets` after the relaxation passes settle (only the
     // disp32 is patched, so the destination register need not be saved).
     let mut block_addr_fixups: Vec<(usize, u32)> = Vec::new();
+    // Text-embedded jump tables: `(table_start, table_idx)` per
+    // `Terminator::JumpTable`. Each 32-bit entry is patched to
+    // `block_offset - table_start` after the relaxation passes settle.
+    let mut jump_table_fixups: Vec<(usize, u32)> = Vec::new();
     // Branch relaxation. The block loop runs once with every local
     // branch in the rel32 long form (`branch_short` empty), then, when
     // `relax_branches` finds shortenable branches, once more with the
@@ -1611,6 +1620,7 @@ pub(crate) fn emit_function(
         let mut current_alloca_top: u32 = 0;
         // Re-collected each relaxation pass; resolved after the loop.
         block_addr_fixups.clear();
+        jump_table_fixups.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
             block_offsets[block_idx] = code.len();
@@ -1949,6 +1959,43 @@ pub(crate) fn emit_function(
                     };
                     super::encode::emit_jmp_r(code, rt);
                 }
+                Terminator::JumpTable { idx, table } => {
+                    // Table dispatch: `lea` the table base (embedded
+                    // right after the `jmp`), sign-extend the 32-bit
+                    // table-relative entry, add, and branch. The bounds
+                    // check preceding this terminator proves the index
+                    // in range.
+                    let iplace = alloc
+                        .places
+                        .get(idx as usize)
+                        .copied()
+                        .unwrap_or(Place::None);
+                    let Some(rt) = materialize_int(code, iplace, SCRATCH_R10, frame) else {
+                        bail_msg("JumpTable: idx Place not int reg / spill");
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        return false;
+                    };
+                    // rt is an allocated register or SCRATCH_R10, never
+                    // r11, so the table base cannot alias it. The lea's
+                    // disp32 spans a fixed distance to the table, so it
+                    // is patched here rather than post-layout.
+                    let lea_start = code.len();
+                    super::encode::emit_lea_r_rip32(code, SCRATCH_R11, 0);
+                    super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
+                    super::encode::emit_add_rr(code, SCRATCH_R10, SCRATCH_R11);
+                    super::encode::emit_jmp_r(code, SCRATCH_R10);
+                    let table_start = code.len();
+                    let disp = (table_start - (lea_start + super::encode::LEA_RIP32_LEN)) as i32;
+                    code[lea_start + 3..lea_start + 7].copy_from_slice(&disp.to_le_bytes());
+                    jump_table_fixups.push((table_start, table));
+                    let entries = func.jump_tables[table as usize].len();
+                    code.resize(code.len() + entries * 4, 0);
+                }
                 Terminator::TailExt(binding_idx) => {
                     // The parser emits `Terminator::TailExt` for the
                     // sys-trampoline bodies: the matching indirect
@@ -2038,6 +2085,20 @@ pub(crate) fn emit_function(
             }
         };
         code[*lea_start + 3..*lea_start + 7].copy_from_slice(&imm.to_le_bytes());
+    }
+
+    // Patch each jump table's entries with the target block's offset
+    // relative to the table base.
+    for (table_start, table) in &jump_table_fixups {
+        for (i, &t) in func.jump_tables[*table as usize].iter().enumerate() {
+            let rel = block_offsets[t as usize] as i64 - *table_start as i64;
+            debug_assert!(
+                i32::try_from(rel).is_ok(),
+                "JumpTable: entry offset out of i32 range"
+            );
+            let site = table_start + i * 4;
+            code[site..site + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+        }
     }
 
     // Patch recorded branches. The displacement is measured from the
@@ -2796,30 +2857,31 @@ fn emit_inst(
                     return false;
                 }
             };
-            // Skip the entry sign-extension when no consumer reads the
-            // parameter's upper bits; the low word already holds it.
+            // The caller passes the raw 64-bit value, so an I8/I16
+            // conversion always runs; an I32 extend touches only
+            // bits 32..63 and is skipped when no consumer reads them.
             let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
             let materialize = |code: &mut Vec<u8>, rd: Reg| {
                 if from_home {
                     match kind {
-                        _ if high_dead => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
                         LoadKind::I8 => {
                             super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
                         }
                         LoadKind::I16 => {
                             super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
                         }
-                        LoadKind::I32 => {
+                        LoadKind::I32 if !high_dead => {
                             super::encode::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
                         }
                         _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
                     }
                 } else {
                     match kind {
-                        _ if high_dead => emit_mov_rr(code, rd, arg_reg),
                         LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, arg_reg),
                         LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, arg_reg),
-                        LoadKind::I32 => super::encode::emit_movsxd_r_r(code, rd, arg_reg),
+                        LoadKind::I32 if !high_dead => {
+                            super::encode::emit_movsxd_r_r(code, rd, arg_reg)
+                        }
                         _ => emit_mov_rr(code, rd, arg_reg),
                     }
                 }
@@ -3065,7 +3127,7 @@ fn emit_inst(
             frame,
         ),
         Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
-        Inst::FpCast { kind, value } => emit_fp_cast(code, dst, *kind, *value, alloc, frame),
+        Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(
             code,
             dst,
@@ -4206,6 +4268,7 @@ fn emit_fp_unary(
 fn emit_fp_cast(
     code: &mut Vec<u8>,
     dst: Place,
+    v: super::super::ir::ValueId,
     kind: FpCastKind,
     value: u32,
     alloc: &Allocation,
@@ -4232,7 +4295,17 @@ fn emit_fp_cast(
                     return false;
                 }
             };
-            emit_cvtsi2sd(code, dd, rn);
+            // Break the false dependency `cvtsi2*` carries on the
+            // destination's prior contents (it merges into the low
+            // element, leaving a read-after-write chain otherwise).
+            emit_xorps(code, dd, dd);
+            // C99 6.3.1.4: a `float` result converts directly to single
+            // precision (one rounding) rather than to double + narrow.
+            if alloc.is_f32(v) {
+                emit_cvtsi2ss(code, dd, rn);
+            } else {
+                emit_cvtsi2sd(code, dd, rn);
+            }
             fp_spill_dst_to_slot(code, dst, dd, frame);
             true
         }
@@ -4260,11 +4333,20 @@ fn emit_fp_cast(
             // clobbered by the shift/and below.
             let rn = SCRATCH_R10;
             let t = SCRATCH_R11;
+            // C99 6.3.1.4: a `float` result converts in single precision.
+            let res_f32 = alloc.is_f32(v);
+            // Break the false dependency the converts carry on `dd`;
+            // covers both branch targets since it precedes the test.
+            emit_xorps(code, dd, dd);
             emit_mov_rr(code, rn, src);
             emit_test_rr(code, rn, rn);
             emit_jcc_rel8(code, Cc::S, 0);
             let js_fixup = code.len() - 1;
-            emit_cvtsi2sd(code, dd, rn);
+            if res_f32 {
+                emit_cvtsi2ss(code, dd, rn);
+            } else {
+                emit_cvtsi2sd(code, dd, rn);
+            }
             emit_jmp_rel8(code, 0);
             let jmp_fixup = code.len() - 1;
             let big = code.len();
@@ -4273,8 +4355,13 @@ fn emit_fp_cast(
             emit_shr_r_imm8(code, t, 1);
             emit_and_r_imm32(code, rn, 1);
             emit_or_rr(code, t, rn);
-            emit_cvtsi2sd(code, dd, t);
-            emit_addsd(code, dd, dd);
+            if res_f32 {
+                emit_cvtsi2ss(code, dd, t);
+                emit_addss(code, dd, dd);
+            } else {
+                emit_cvtsi2sd(code, dd, t);
+                emit_addsd(code, dd, dd);
+            }
             let done = code.len();
             code[jmp_fixup] = (done - jmp_fixup - 1) as i8 as u8;
             fp_spill_dst_to_slot(code, dst, dd, frame);
@@ -4292,7 +4379,14 @@ fn emit_fp_cast(
                 bail_msg("FpCast FpToInt: dst not int reg / spill");
                 return false;
             };
-            emit_cvttsd2si(code, rd, dn);
+            // C99 6.3.1.4: a `float` source truncates directly to the
+            // integer (`cvttss2si` reads the single in the low dword)
+            // rather than widening to double first.
+            if alloc.is_f32(value) {
+                emit_cvttss2si(code, rd, dn);
+            } else {
+                emit_cvttsd2si(code, rd, dn);
+            }
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }

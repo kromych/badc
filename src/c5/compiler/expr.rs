@@ -448,15 +448,18 @@ impl Compiler {
             self.ast_emit_int_lit(val, self.ty);
             self.next()?;
         } else if self.lex.tk == Token::FloatNum {
-            // C99 6.4.4.2: floating constant. The lexer parsed
-            // `1.5` etc. into f64 and stored `f64::to_bits()` cast
-            // to i64 in `ival`. The byte pattern flows through
-            // the integer-literal emit unmodified; the codegen
-            // reads it back via `f64::from_bits` when the
-            // surrounding `self.ty` marks the value as floating.
+            // C99 6.4.4.2p4: an unsuffixed floating constant has
+            // type double, `f`/`F` float, `l`/`L` long double
+            // (represented as f64 in c5). The lexer stored the
+            // value -- already rounded to single precision for
+            // `f`/`F` -- as `f64::to_bits()` cast to i64 in `ival`.
             let bits = self.lex.ival as u64;
             self.emit_imm(self.lex.ival);
-            self.ty = Ty::Double as i64;
+            self.ty = if self.lex.float_suffix_f32 {
+                Ty::Float as i64
+            } else {
+                Ty::Double as i64
+            };
             self.ast_emit_float_lit(bits, self.ty);
             self.next()?;
         } else if self.lex.tk == '"' {

@@ -540,6 +540,13 @@ pub(crate) enum Terminator {
     /// whose address is taken via `&&label`); the CFG treats this as
     /// a branch to all of them.
     GotoIndirect { target: ValueId },
+    /// Indexed branch through a per-function jump table: control
+    /// transfers to `jump_tables[table][idx]`. The switch lowering
+    /// proves `idx` in range with an unsigned bounds check before
+    /// this terminator, so no entry is out of bounds at runtime.
+    /// The target list lives in [`FunctionSsa::jump_tables`]
+    /// because `Terminator` is `Copy`.
+    JumpTable { idx: ValueId, table: u32 },
     /// Synthetic fall-through to a successor block. Preserved
     /// on the variant for object-file round-trips of SSA bodies
     /// that already carry it; new IR producers should use the
@@ -720,6 +727,12 @@ pub(crate) struct FunctionSsa {
     /// treat an indirect branch as a branch to all of these. Empty
     /// for functions with no computed goto.
     pub computed_goto_targets: Vec<BlockId>,
+    /// Target-block lists for the function's `Terminator::JumpTable`
+    /// terminators, keyed by the terminator's `table` index. Entry
+    /// `i` is the successor for a runtime index of `i`; blocks may
+    /// repeat (case-value holes point at the default block). Empty
+    /// for functions with no jump table.
+    pub jump_tables: Vec<Vec<BlockId>>,
     /// Boundary between the parser's declared local slots and the SSA
     /// builder's synthetic slots. `set_locals` records the declared-
     /// plus-alloca count here; every slot reserved afterward by
@@ -739,4 +752,32 @@ pub(crate) struct FunctionSsa {
     /// an interior cell, which is referenced by no instruction. Empty for SSA
     /// built outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
+    /// True when the body calls a function that may return twice into
+    /// this frame: the setjmp family (C99 7.13) or vfork(2). Ordinary
+    /// liveness under-approximates storage lifetime here -- a value
+    /// dead on the first-return path is still read after the second
+    /// return (C99 7.13.2.1p3), and under vfork the child's writes
+    /// land on the parent's stack. Spill-slot sharing and frame-slot
+    /// coalescing are disabled when set, and the inliner keeps such a
+    /// body out of line.
+    pub has_returns_twice_call: bool,
+    /// True once `passes::unroll` fully expanded at least one loop in this
+    /// function. Set by the unroll pass; read by the post-inline scalar
+    /// promotion (`passes::sroa`) to gate its mem2reg re-run to functions
+    /// whose constant-trip loops turned array subscripts into constant
+    /// offsets. False for every function the unroll pass left unchanged.
+    pub did_unroll: bool,
+}
+
+/// External functions that may return twice into the caller's frame:
+/// the setjmp family (C99 7.13.1.1) plus vfork(2). Matched on the
+/// c5-side symbol name; `__c5_msvcrt_setjmp` is the target of the
+/// Windows x86_64 `setjmp` macro (headers/include/setjmp.h). The
+/// AArch64 inline setjmp is an intrinsic, recognised structurally by
+/// `codegen::ssa::reg_alloc::is_setjmp_barrier`.
+pub(crate) fn returns_twice_fn_name(name: &str) -> bool {
+    matches!(
+        name,
+        "setjmp" | "_setjmp" | "sigsetjmp" | "__sigsetjmp" | "__c5_msvcrt_setjmp" | "vfork"
+    )
 }

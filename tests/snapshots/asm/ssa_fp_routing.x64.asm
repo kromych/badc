@@ -82,6 +82,7 @@ Disassembly of section .text:
 
 <itof>:
                	movslq	%edi, %rdi
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rdi, %xmm0
                	retq
 
@@ -90,13 +91,8 @@ Disassembly of section .text:
                	retq
 
 <round_through_f32>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	cvtsd2ss	%xmm0, %xmm0
                	cvtss2sd	%xmm0, %xmm0
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:
@@ -384,7 +380,7 @@ Disassembly of section .text:
                	movl	$0x14, %eax
                	retq
                	movl	$0x2a, %eax
-               	movslq	%eax, %rax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x4045000000000000, %rax # imm = 0x4045000000000000
                	movq	%rax, %xmm15
@@ -399,7 +395,7 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	retq
                	movabsq	$-0x3, %rax
-               	movslq	%eax, %rax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm1

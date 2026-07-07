@@ -37,7 +37,7 @@ fn ent_pc=1 n_params=1 variadic=true locals=2
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=15
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2)                                           -> x7
@@ -48,20 +48,20 @@ fn ent_pc=2 n_params=0 variadic=false locals=15
     v6   LocalAddr(-2)                                    -> x0
     v7   Load { addr=v6, disp=0, kind=F64 }               -> d0
     v8   Imm(4613937818241073152)                         -> x0
-    v9   Binop { op=fne, lhs=v7, rhs=v8 }                 -> x3
-    v10  Imm(0)                                           -> x0
-    terminator Bnz { cond=v9, target=b9, fall=b1 }   (exit_acc=v9)
+    v9   Binop { op=fne, lhs=v7, rhs=v8 }                 -> x0
+    v10  Imm(0)                                           -> x1
+    terminator Bnz { cond=v9, target=b10, fall=b1 }   (exit_acc=v9)
   block 1  start_pc=0
     v11  LocalAddr(-2)                                    -> x0
     v12  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x1
     v13  Load { addr=v11, disp=8, kind=F64 }              -> d0
     v14  Imm(4612248968380809216)                         -> x0
-    v15  Binop { op=fne, lhs=v13, rhs=v14 }               -> x3
-    v16  Imm(0)                                           -> x0
+    v15  Binop { op=fne, lhs=v13, rhs=v14 }               -> x0
+    v16  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v15)
   block 2  start_pc=0
-    v17  Phi { incoming=[b9:v9, b1:v15], kind=I64 }       -> x3
-    v18  LoadLocal { off=-12, kind=I64 }                  -> x0
+    v17  Phi { incoming=[b10:v9, b1:v15], kind=I64 }      -> x0
+    v18  LoadLocal { off=-12, kind=I64 }                  -> x1
     terminator Bz { cond=v17, target=b4, fall=b3 }   (exit_acc=v17)
   block 3  start_pc=0
     v19  Imm(1)                                           -> x0
@@ -75,19 +75,19 @@ fn ent_pc=2 n_params=0 variadic=false locals=15
     v25  LocalAddr(-6)                                    -> x0
     v26  Load { addr=v25, disp=0, kind=F64 }              -> d0
     v27  Imm(4602678819172646912)                         -> x0
-    v28  Binop { op=fne, lhs=v26, rhs=v27 }               -> x1
-    v29  Imm(0)                                           -> x0
-    terminator Bnz { cond=v28, target=b10, fall=b5 }   (exit_acc=v28)
+    v28  Binop { op=fne, lhs=v26, rhs=v27 }               -> x0
+    v29  Imm(0)                                           -> x1
+    terminator Bnz { cond=v28, target=b9, fall=b5 }   (exit_acc=v28)
   block 5  start_pc=0
     v30  LocalAddr(-6)                                    -> x0
     v31  BinopI { op=add, lhs=v30, rhs_imm=8 }            -> x1
     v32  Load { addr=v30, disp=8, kind=I64 }              -> x0
-    v33  BinopI { op=ne, lhs=v32, rhs_imm=42 }            -> x1
-    v34  Imm(0)                                           -> x0
+    v33  BinopI { op=ne, lhs=v32, rhs_imm=42 }            -> x0
+    v34  Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v33)
   block 6  start_pc=0
-    v35  Phi { incoming=[b10:v28, b5:v33], kind=I64 }     -> x1
-    v36  LoadLocal { off=-15, kind=I64 }                  -> x0
+    v35  Phi { incoming=[b9:v28, b5:v33], kind=I64 }      -> x0
+    v36  LoadLocal { off=-15, kind=I64 }                  -> x1
     terminator Bz { cond=v35, target=b8, fall=b7 }   (exit_acc=v35)
   block 7  start_pc=0
     v37  Imm(2)                                           -> x0
@@ -96,9 +96,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=15
     v38  Imm(0)                                           -> x0
     terminator Return(v38)   (exit_acc=v38)
   block 9  start_pc=0
-    terminator Jmp(b2)
-  block 10  start_pc=0
     terminator Jmp(b6)
+  block 10  start_pc=0
+    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

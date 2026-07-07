@@ -11,10 +11,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v5   BinopI { op=add, lhs=v4, rhs_imm=4 }             -> x1
     v6   Imm(2)                                           -> x1
     v7   Store { addr=v4, disp=4, value=v6, kind=I32 }    -> -
-    v8   LocalAddr(-2)                                    -> x0
-    v9   Imm(99)                                          -> x1
+    v8   LocalAddr(-2)                                    -> x1
+    v9   Imm(99)                                          -> x0
     v10  Store { addr=v8, disp=0, value=v9, kind=I32 }    -> -
-    v11  LocalAddr(-2)                                    -> x0
+    v11  LocalAddr(-2)                                    -> x1
     v12  BinopI { op=add, lhs=v11, rhs_imm=4 }            -> x2
     v13  Store { addr=v11, disp=4, value=v9, kind=I32 }   -> -
     v14  LocalAddr(-2)                                    -> x0

@@ -214,6 +214,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x7, %eax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movsd	-0x8(%rbp,%riz), %xmm0
@@ -276,3 +277,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

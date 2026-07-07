@@ -15,26 +15,14 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-<rip>, %rax       # <addr>
-               	xorq	%rcx, %rcx
-               	leaq	-<rip>, %rdx       # <addr>
-               	cmpq	%rdx, %rax
+               	leaq	-<rip>, %rax        # <addr>
+               	leaq	-<rip>, %rcx       # <addr>
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	movl	$0x2, %eax
+               	retq
+               	addb	%al, 0x41(%rdx)

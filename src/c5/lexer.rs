@@ -240,6 +240,13 @@ pub(crate) struct Lexer {
     /// decimal constant with no `u` suffix stays signed.
     pub int_is_decimal: bool,
 
+    /// `true` when the most recent `Token::FloatNum` carried an `f`/`F`
+    /// suffix (C99 6.4.4.2p4: the constant has type `float`). `ival`
+    /// then holds the value already rounded to single precision,
+    /// re-widened to f64 bits. An `l`/`L` suffix keeps the flag false:
+    /// c5 represents long double as f64.
+    pub float_suffix_f32: bool,
+
     /// `true` when the most recent `'"'` string-literal token came from
     /// a wide (`L"..."`) literal. The element width follows
     /// `wchar_bytes`; the initializer and expression parsers read this
@@ -385,6 +392,7 @@ impl Lexer {
             int_suffix_long: 0,
             int_suffix_unsigned: false,
             int_is_decimal: true,
+            float_suffix_f32: false,
             str_is_wide: false,
             wchar_bytes: 4,
             char_signed: true,
@@ -484,10 +492,11 @@ impl Lexer {
             )));
         }
         let mut exp = if exp_neg { -exp } else { exp };
-        // The `f`/`F`/`l`/`L` suffix only selects the type; c5 stores
-        // every floating constant as f64, so it is consumed and
-        // discarded.
+        // C99 6.4.4.2p4: `f`/`F` types the constant `float`, `l`/`L`
+        // long double (represented as f64 in c5). Record the float
+        // suffix; the value is rounded to single precision below.
         if self.pos < self.src.len() && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L') {
+            self.float_suffix_f32 = matches!(self.src[self.pos], b'f' | b'F');
             self.pos += 1;
         }
         // Scale by 2^exp through exact doubling / halving so the
@@ -499,6 +508,11 @@ impl Lexer {
         while exp < 0 {
             mant *= 0.5;
             exp += 1;
+        }
+        // An `f`-suffixed constant is a value of type float (C99
+        // 6.4.4.2p4-5): round to single precision, kept as f64 bits.
+        if self.float_suffix_f32 {
+            mant = mant as f32 as f64;
         }
         Ok(mant)
     }
@@ -1000,6 +1014,7 @@ impl Lexer {
         self.int_suffix_long = 0;
         self.int_suffix_unsigned = false;
         self.int_is_decimal = true;
+        self.float_suffix_f32 = false;
         loop {
             if self.pos >= self.src.len() {
                 self.tk = Tok::EOF;
@@ -1269,11 +1284,10 @@ impl Lexer {
                     if self.pos < self.src.len()
                         && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L')
                     {
-                        // Consume the floating-point suffix per C99
-                        // 6.4.4.2: `f`/`F` is float, `l`/`L` is long
-                        // double. The c5 dialect aliases long double
-                        // to double, so every suffix lands in `f64`
-                        // and the suffix is purely informational.
+                        // Floating-point suffix per C99 6.4.4.2p4:
+                        // `f`/`F` types the constant `float`, `l`/`L`
+                        // long double (represented as f64 in c5).
+                        self.float_suffix_f32 = matches!(self.src[self.pos], b'f' | b'F');
                         self.pos += 1;
                     }
                     let lit =
@@ -1283,12 +1297,18 @@ impl Lexer {
                                 self.line
                             )))
                         })?;
-                    let f: f64 = lit.parse().map_err(|e| {
+                    let mut f: f64 = lit.parse().map_err(|e| {
                         C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                             "{}: malformed float literal `{lit}`: {e}",
                             self.line
                         )))
                     })?;
+                    // An `f`-suffixed constant is a value of type float
+                    // (C99 6.4.4.2p5): round to single precision, kept
+                    // as f64 bits.
+                    if self.float_suffix_f32 {
+                        f = f as f32 as f64;
+                    }
                     self.ival = f.to_bits() as i64;
                     self.tk = Tok(Token::FloatNum as i64);
                     return self.end_number();
@@ -1633,12 +1653,11 @@ impl Lexer {
                             if self.pos < self.src.len()
                                 && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L')
                             {
-                                // Floating-point suffix (C99 6.4.4.2):
-                                // `f`/`F` -> float, `l`/`L` -> long
-                                // double. The c5 dialect aliases long
-                                // double to double, so the suffix is
-                                // informational and the bytes land in
-                                // `f64`.
+                                // Floating-point suffix per C99
+                                // 6.4.4.2p4: `f`/`F` types the constant
+                                // `float`, `l`/`L` long double
+                                // (represented as f64 in c5).
+                                self.float_suffix_f32 = matches!(self.src[self.pos], b'f' | b'F');
                                 self.pos += 1;
                             }
                             let lit = core::str::from_utf8(&self.src[int_start..body_end])
@@ -1648,12 +1667,18 @@ impl Lexer {
                                         self.line
                                     )))
                                 })?;
-                            let f: f64 = lit.parse().map_err(|e| {
+                            let mut f: f64 = lit.parse().map_err(|e| {
                                 C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                                     "{}: malformed float literal `{lit}`: {e}",
                                     self.line
                                 )))
                             })?;
+                            // An `f`-suffixed constant is a value of
+                            // type float (C99 6.4.4.2p5): round to
+                            // single precision, kept as f64 bits.
+                            if self.float_suffix_f32 {
+                                f = f as f32 as f64;
+                            }
                             self.ival = f.to_bits() as i64;
                             self.tk = Tok(Token::FloatNum as i64);
                         } else {

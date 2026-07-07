@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build CPython from the same recipe with badc and the platform reference
-compiler (clang on POSIX, cl on Windows), at -O and without, and report
+compiler (clang on POSIX, cl on Windows), at -O and without (badc -O
+implies NDEBUG; the clang/cl -O legs define it explicitly), and report
 per-binary section sizes plus a runtime microbenchmark.
 
 The recipe -- the per-TU source list, defines, and includes -- comes from
@@ -75,7 +76,7 @@ def _compile_cmd(cc_kind, cc, target, src, defs, incs, obj, opt, reenable):
         return [cc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T",
                 '-DCOMPILER="[badc]"', *o, *defs, *incs, src, "-o", obj]
     if cc_kind == "clang":
-        o = ["-O2"] if opt else ["-O0"]
+        o = ["-O2", "-DNDEBUG"] if opt else ["-O0"]
         redef = [f"-D{m}=1" for m in reenable]
         # Force the same no-__int128 path badc takes, so the bigint code is
         # identical and the comparison isolates the compiler, not the dialect.

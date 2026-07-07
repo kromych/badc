@@ -71,7 +71,9 @@ impl Liveness {
             };
             match &blk.terminator {
                 Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => term_use(*cond),
-                Terminator::GotoIndirect { target } => term_use(*target),
+                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                    term_use(*target)
+                }
                 Terminator::Return(v) => term_use(*v),
                 Terminator::Jmp(_) | Terminator::TailExt(_) | Terminator::FallThrough(_) => {}
             }
@@ -124,7 +126,11 @@ impl Liveness {
             }
             match &blk.terminator {
                 Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
-                Terminator::GotoIndirect { target } if *target != NO_VALUE => mark(*target),
+                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                    if *target != NO_VALUE =>
+                {
+                    mark(*target)
+                }
                 Terminator::Return(v) if *v != NO_VALUE => mark(*v),
                 _ => {}
             }
@@ -142,6 +148,7 @@ impl Liveness {
                 for s in super::mem2reg::successors(
                     &func.blocks[b].terminator,
                     &func.computed_goto_targets,
+                    &func.jump_tables,
                 ) {
                     let sb = s as usize * words;
                     for w in 0..words {
@@ -248,7 +255,9 @@ impl Liveness {
         }
         match &blk.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => *cond == x,
-            Terminator::GotoIndirect { target } => *target == x,
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                *target == x
+            }
             Terminator::Return(v) => *v == x,
             _ => false,
         }
@@ -313,7 +322,9 @@ impl Liveness {
                         live.insert(*cond);
                     }
                 }
-                Terminator::GotoIndirect { target } if (*target as usize) < n => {
+                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                    if (*target as usize) < n =>
+                {
                     live.insert(*target);
                 }
                 Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
@@ -390,7 +401,9 @@ impl Liveness {
                         live.insert(*cond);
                     }
                 }
-                Terminator::GotoIndirect { target } if (*target as usize) < n => {
+                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                    if (*target as usize) < n =>
+                {
                     live.insert(*target);
                 }
                 Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
@@ -488,8 +501,11 @@ mod tests {
             ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            has_returns_twice_call: false,
+            did_unroll: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

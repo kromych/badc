@@ -11,9 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <use_struct>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
                	movq	%rsi, (%rdi)
                	movl	%edx, 0x8(%rdi)
                	movw	%dx, 0xc(%rdi)
@@ -21,19 +18,17 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	andq	$0xff, %rax
                	movb	%al, 0xf(%rdi)
-               	movq	(%rdi), %rax
-               	movslq	0x8(%rdi), %rcx
-               	movswq	0xc(%rdi), %rsi
+               	movq	(%rdi), %rsi
+               	movslq	0x8(%rdi), %rax
+               	movswq	0xc(%rdi), %rcx
                	movsbq	%dl, %rdx
                	movzbq	0xf(%rdi), %rdi
-               	addq	%rcx, %rax
                	addq	%rsi, %rax
+               	addq	%rcx, %rax
                	addq	%rdx, %rax
                	movq	%rdi, %rcx
                	andq	$0xff, %rcx
                	addq	%rcx, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
 
 <deref_twice>:
@@ -44,20 +39,17 @@ Disassembly of section .text:
 <no_forward_across_call>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
                	movq	%rdi, %rbx
-               	xorq	%r12, %r12
                	movq	%rsi, (%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
-               	addq	%r12, %rax
+               	addq	$0x0, %rax
                	movq	(%rbx), %rcx
                	addq	%rcx, %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x30, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 

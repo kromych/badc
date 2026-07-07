@@ -48,16 +48,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v26  LoadLocal { off=-1, kind=I32 }                   -> x1
     v27  LocalAddr(-3)                                    -> x1
     v28  Store { addr=v27, disp=0, value=v21, kind=I32 }  -> -
-    v29  Imm(20)                                          -> x0
-    v30  LocalAddr(-3)                                    -> x1
+    v29  Imm(20)                                          -> x1
+    v30  LocalAddr(-3)                                    -> x0
     v31  BinopI { op=add, lhs=v30, rhs_imm=4 }            -> x2
     v32  Store { addr=v30, disp=4, value=v29, kind=I32 }  -> -
-    v33  Imm(30)                                          -> x0
-    v34  LocalAddr(-3)                                    -> x1
+    v33  Imm(30)                                          -> x1
+    v34  LocalAddr(-3)                                    -> x0
     v35  BinopI { op=add, lhs=v34, rhs_imm=8 }            -> x2
     v36  Store { addr=v34, disp=8, value=v33, kind=I32 }  -> -
-    v37  Imm(40)                                          -> x0
-    v38  LocalAddr(-3)                                    -> x1
+    v37  Imm(40)                                          -> x1
+    v38  LocalAddr(-3)                                    -> x0
     v39  BinopI { op=add, lhs=v38, rhs_imm=12 }           -> x2
     v40  Store { addr=v38, disp=12, value=v37, kind=I32 } -> -
     v41  LocalAddr(-3)                                    -> x0

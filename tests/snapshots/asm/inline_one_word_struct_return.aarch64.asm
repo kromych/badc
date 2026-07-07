@@ -44,30 +44,21 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x40
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	sxtw	x2, w1
-               	cmp	x2, #0x5
-               	b.ge	<addr>
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	b	<addr>
-               	sxtw	x1, w1
-               	add	x1, x1, #0x1
-               	b	<addr>
-               	add	x2, x1, #0x1
-               	sxtw	x2, w2
+               	add	x3, x0, #0x1
+               	sxtw	x3, w3
                	mov	x17, #0xa               // =10
-               	mul	x2, x2, x17
-               	add	x0, x0, x2
-               	b	<addr>
-               	cmp	x0, #0x96
+               	mul	x3, x3, x17
+               	add	x1, x1, x3
+               	add	x0, x2, #0x1
+               	sxtw	x2, w0
+               	cmp	x2, #0x5
+               	b.lt	<addr>
+               	cmp	x1, #0x96
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x1, #0x1                // =1
-               	mov	x0, x1
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x0                // =0
                	ret
+               	mov	x0, #0x1                // =1
+               	b	<addr>

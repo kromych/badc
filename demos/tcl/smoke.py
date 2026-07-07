@@ -114,7 +114,7 @@ def compile_units(badc: str, unix: Path, generic: Path, out: Path, log) -> list[
     objs, fails = [], []
     for src, obj, flags in cmds:
         objp = out / f"{obj}.o"
-        cmd = [badc, "-c", "-UHAVE_CPUID", *extra, *flags, *includes, src, "-o", str(objp)]
+        cmd = [badc, "-O", "-c", "-UHAVE_CPUID", *extra, *flags, *includes, src, "-o", str(objp)]
         r = run(cmd, timeout=180)
         if r.returncode != 0:
             msg = (r.stderr.strip().splitlines() or [f"rc{r.returncode}"])[-1]
@@ -127,7 +127,7 @@ def compile_units(badc: str, unix: Path, generic: Path, out: Path, log) -> list[
     zflags = ["-DHAVE_ZLIB=1", "-DBUILD_tcl", "-DSTDC", "-I" + str(zdir)]
     for name in ZLIB_UNITS:
         objp = out / f"Z{name}.o"
-        r = run([badc, "-c", *zflags, str(zdir / f"{name}.c"), "-o", str(objp)], timeout=180)
+        r = run([badc, "-O", "-c", *zflags, str(zdir / f"{name}.c"), "-o", str(objp)], timeout=180)
         if r.returncode != 0:
             fails.append((f"zlib {name}", (r.stderr.strip().splitlines() or ["rc"])[-1][:160]))
         else:

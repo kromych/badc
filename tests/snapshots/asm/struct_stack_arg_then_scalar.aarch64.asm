@@ -38,41 +38,41 @@ Disassembly of section .text:
                	str	x17, [x16, #0x8]
                	mov	x2, x3
                	cbz	x0, <addr>
-               	mov	x1, #0x1                // =1
-               	b	<addr>
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x1                // =1
                	mov	x17, #0x4240            // =16960
                	movk	x17, #0xf, lsl #16
-               	mul	x0, x1, x17
-               	sxtw	x0, w0
-               	sub	x1, x29, #0x10
-               	ldr	x1, [x1, #0x8]
+               	mul	x0, x0, x17
+               	sxtw	x1, w0
+               	sub	x0, x29, #0x10
+               	ldr	x0, [x0, #0x8]
                	mov	x17, #0x2710            // =10000
-               	mul	x1, x1, x17
-               	add	x0, x0, x1
+               	mul	x0, x0, x17
+               	add	x1, x1, x0
                	mov	x17, #0x3e8             // =1000
-               	mul	x1, x2, x17
-               	sxtw	x1, w1
-               	add	x0, x0, x1
-               	sub	x1, x29, #0x20
-               	ldr	x1, [x1, #0x8]
+               	mul	x0, x2, x17
+               	sxtw	x0, w0
+               	add	x1, x1, x0
+               	sub	x0, x29, #0x20
+               	ldr	x0, [x0, #0x8]
                	mov	x17, #0x64              // =100
-               	mul	x1, x1, x17
-               	add	x0, x0, x1
-               	sub	x1, x29, #0x30
-               	ldr	x1, [x1, #0x8]
+               	mul	x0, x0, x17
+               	add	x1, x1, x0
+               	sub	x0, x29, #0x30
+               	ldr	x0, [x0, #0x8]
                	mov	x17, #0xa               // =10
-               	mul	x1, x1, x17
-               	add	x0, x0, x1
-               	sub	x1, x29, #0x40
-               	ldr	x1, [x1, #0x8]
-               	add	x0, x0, x1
+               	mul	x0, x0, x17
+               	add	x1, x1, x0
+               	sub	x0, x29, #0x40
+               	ldr	x0, [x0, #0x8]
+               	add	x0, x1, x0
                	ldursw	x1, [x29, #0x70]
                	add	x0, x0, x1
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x70
                	ret
+               	mov	x0, #0x0                // =0
+               	b	<addr>
 
 <dp>:
                	sub	sp, sp, #0x10

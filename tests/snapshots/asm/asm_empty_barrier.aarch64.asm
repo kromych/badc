@@ -30,11 +30,11 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x8]
                	add	x0, x0, #0x1
                	stur	w0, [x29, #-0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldursw	x1, [x29, #-0x8]
-               	str	w1, [x0]
-               	sxtw	x0, w1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldursw	x0, [x29, #-0x8]
+               	str	w0, [x1]
+               	sxtw	x0, w0
                	sub	x0, x0, #0x2a
                	sxtw	x0, w0
                	add	sp, sp, #0x10

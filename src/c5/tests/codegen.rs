@@ -917,6 +917,70 @@ fn jmp_to_next_block_falls_through() {
     );
 }
 
+/// Switch lowering: a dense case set (>= 8 cases, span < 2 * cases)
+/// dispatches through `Terminator::JumpTable` behind an unsigned
+/// bounds check to default; a hole's table slot routes to default.
+/// A small or sparse set keeps the balanced compare tree.
+#[test]
+fn dense_switch_lowers_to_jump_table_sparse_keeps_tree() {
+    use crate::Target;
+    use crate::c5::ir::{FunctionSsa, Terminator};
+    let program = super::compile_str_bare(
+        "int dense8(int x) { switch (x) { \
+             case 3: return 1; case 4: return 2; case 5: return 3; \
+             case 6: return 4; case 8: return 5; case 9: return 6; \
+             case 10: return 7; case 11: return 8; default: return 0; } } \
+         int dense7(int x) { switch (x) { \
+             case 0: return 1; case 1: return 2; case 2: return 3; \
+             case 3: return 4; case 4: return 5; case 5: return 6; \
+             case 6: return 7; default: return 0; } } \
+         int half8(int x) { switch (x) { \
+             case 0: return 1; case 2: return 2; case 4: return 3; \
+             case 6: return 4; case 8: return 5; case 10: return 6; \
+             case 12: return 7; case 14: return 8; default: return 0; } } \
+         int sparse8(int x) { switch (x) { \
+             case 0: return 1; case 3: return 2; case 6: return 3; \
+             case 9: return 4; case 12: return 5; case 15: return 6; \
+             case 18: return 7; case 21: return 8; default: return 0; } } \
+         int main(void) { return dense8(3) + dense7(0) + half8(0) + sparse8(0); }",
+    );
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host())
+        .expect("produce_ssa_funcs");
+    let table_of = |name: &str| -> Option<(u32, u32)> {
+        let f: &FunctionSsa = funcs.iter().find(|f| f.name == name).unwrap();
+        f.blocks.iter().enumerate().find_map(|(b, blk)| {
+            if let Terminator::JumpTable { table, .. } = blk.terminator {
+                Some((b as u32, table))
+            } else {
+                None
+            }
+        })
+    };
+    // dense8: cases 3..11 with a hole at 7 -> a 9-entry table whose
+    // hole slot names the same block the bounds check defaults to.
+    let (dispatch, table) = table_of("dense8").expect("dense8 uses a jump table");
+    let dense8: &FunctionSsa = funcs.iter().find(|f| f.name == "dense8").unwrap();
+    assert_eq!(dense8.jump_tables[table as usize].len(), 9);
+    let deflt = dense8
+        .blocks
+        .iter()
+        .find_map(|blk| match blk.terminator {
+            Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            } if fall_through == dispatch => Some(target),
+            _ => None,
+        })
+        .expect("bounds check branches to default ahead of the table");
+    assert_eq!(dense8.jump_tables[table as usize][4], deflt);
+    // half8: span 14 with 8 cases passes the 50% density gate.
+    assert!(table_of("half8").is_some(), "half-dense set uses a table");
+    // dense7 is below the case minimum; sparse8 fails the density gate.
+    assert!(table_of("dense7").is_none(), "7 cases keep the tree");
+    assert!(table_of("sparse8").is_none(), "sparse set keeps the tree");
+}
+
 /// C99 6.3.1.8 + 6.5p5: the post-binop sign-narrow that renormalizes an
 /// `int` result is built as `Inst::Extend { kind: I32 }`, which the
 /// aarch64 emit lowers to `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`) and the
@@ -2042,4 +2106,159 @@ fn aarch64_call_sp_adjust_covers_wide_outgoing_area() {
             "caller must not adjust SP by 65536 (mis-encoded 4112): {word:#010x}"
         );
     }
+}
+
+/// Build the walker SSA for `src` (a `main` is appended so it links)
+/// and return the named function.
+fn ssa_func_named(src: &str, name: &str) -> crate::c5::ir::FunctionSsa {
+    use crate::Target;
+    use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
+    let src = format!("{src}\nint main(void) {{ return 0; }}\n");
+    let program = crate::Compiler::new(super::with_prelude(&src))
+        .compile()
+        .expect("compile");
+    let funcs = produce_ssa_funcs(&program, Target::host()).expect("produce_ssa_funcs");
+    funcs
+        .into_iter()
+        .find(|f| f.name == name)
+        .unwrap_or_else(|| panic!("function `{name}` not found"))
+}
+
+/// C99 6.3.1.4: `(float)n` converts the integer directly to single
+/// precision. The walker emits a single `FpCast(IntToFp)` whose result
+/// is f32-marked -- no `IntToFp`-to-double followed by an `F64ToF32`
+/// narrowing (the double-then-narrow pair the direct path removes).
+#[test]
+fn int_to_float_lowers_to_single_precision_fpcast() {
+    use crate::c5::ir::{FpCastKind, Inst};
+    let f = ssa_func_named("float f(int n) { return (float)n; }", "f");
+    let mut int_to_fp = None;
+    for (i, inst) in f.insts.iter().enumerate() {
+        if let Inst::FpCast { kind, .. } = inst {
+            assert!(
+                !matches!(kind, FpCastKind::F32ToF64 | FpCastKind::F64ToF32),
+                "unexpected float<->double hop in a direct int->float cast"
+            );
+            assert!(int_to_fp.is_none(), "expected exactly one FpCast");
+            int_to_fp = Some(i);
+        }
+    }
+    let idx = int_to_fp.expect("an IntToFp cast");
+    assert!(
+        matches!(
+            f.insts[idx],
+            Inst::FpCast {
+                kind: FpCastKind::IntToFp,
+                ..
+            }
+        ),
+        "the cast is IntToFp"
+    );
+    assert_eq!(
+        f.f32_values.get(idx),
+        Some(&true),
+        "the IntToFp result is single-precision so emit picks scvtf s / cvtsi2ss"
+    );
+}
+
+/// C99 6.3.1.4: `(int)f` on a `float` truncates directly. The walker
+/// emits a single `FpCast(FpToInt)` reading the f32-marked source -- no
+/// `F32ToF64` widen bracketing the conversion.
+#[test]
+fn float_to_int_lowers_to_direct_fpcast() {
+    use crate::c5::ir::{FpCastKind, Inst};
+    let f = ssa_func_named("int g(float x) { return (int)x; }", "g");
+    let mut fp_to_int = None;
+    for (i, inst) in f.insts.iter().enumerate() {
+        if let Inst::FpCast { kind, value } = inst {
+            assert!(
+                !matches!(kind, FpCastKind::F32ToF64 | FpCastKind::F64ToF32),
+                "unexpected float<->double hop in a direct float->int cast"
+            );
+            assert!(matches!(kind, FpCastKind::FpToInt), "the cast is FpToInt");
+            assert_eq!(
+                f.f32_values.get(*value as usize),
+                Some(&true),
+                "the source is single-precision so emit picks fcvtzs s / cvttss2si"
+            );
+            fp_to_int = Some(i);
+        }
+    }
+    assert!(fp_to_int.is_some(), "expected an FpToInt cast");
+}
+
+/// C99 6.6: `(float)K` / `(double)K` of an integer literal folds to the
+/// converted floating constant at build time -- no runtime `FpCast`,
+/// so no int-register-to-FP conversion is materialised.
+#[test]
+fn int_const_cast_to_float_folds_to_imm() {
+    use crate::c5::ir::Inst;
+    for (src, name, want_f32) in [
+        ("float h(void) { return (float)6; }", "h", true),
+        ("double d(void) { return (double)6; }", "d", false),
+    ] {
+        let f = ssa_func_named(src, name);
+        assert!(
+            !f.insts.iter().any(|i| matches!(i, Inst::FpCast { .. })),
+            "{name}: a constant cast must not leave a runtime FpCast"
+        );
+        // The returned value is an f32-marked (float) / plain (double)
+        // Imm carrying the converted bit pattern.
+        let found = f.insts.iter().enumerate().any(|(i, inst)| {
+            matches!(inst, Inst::Imm(_)) && f.f32_values.get(i) == Some(&want_f32)
+        });
+        assert!(found, "{name}: expected a folded floating Imm constant");
+    }
+}
+
+/// x86_64: an int->float convert emits an `xorps` of the destination
+/// (dependency break) before `cvtsi2ss`, and the direct single-precision
+/// convert means no `cvtss2sd` / `cvtsd2ss` (opcode `0F 5A`) double hop.
+#[test]
+fn x64_int_to_float_breaks_dep_and_avoids_double_hop() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        String::from("float f(int n) { return (float)n; }\nint main(void){return 0;}"),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    let obj = emit_native_with_options(
+        &program,
+        Target::LinuxX64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        },
+    )
+    .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let entry = elf_func_value(&obj, "f").expect("f symbol") as usize;
+    let size = elf_func_symbols(&obj)
+        .into_iter()
+        .find(|(n, _)| n == "f")
+        .map(|(_, s)| s as usize)
+        .expect("f size");
+    let body = &text[entry..(entry + size).min(text.len())];
+    // `xorps xmm0, xmm0` = 0F 57 C0 (dependency break).
+    let has_xorps = body.windows(3).any(|w| w == [0x0F, 0x57, 0xC0]);
+    assert!(
+        has_xorps,
+        "expected an xorps dep-break before cvtsi2ss: {body:02x?}"
+    );
+    // `cvtsi2ss xmm, r64` = F3 REX.W 0F 2A (direct single convert).
+    let has_cvtsi2ss = body
+        .windows(4)
+        .any(|w| w[0] == 0xF3 && w[1] & 0xF8 == 0x48 && w[2] == 0x0F && w[3] == 0x2A);
+    assert!(
+        has_cvtsi2ss,
+        "expected cvtsi2ss (direct int->single): {body:02x?}"
+    );
+    // `0F 5A` is cvtss2sd / cvtsd2ss -- the double-then-narrow hop that
+    // the direct path removes.
+    let has_hop = body.windows(2).any(|w| w == [0x0F, 0x5A]);
+    assert!(
+        !has_hop,
+        "unexpected float<->double convert (double hop): {body:02x?}"
+    );
 }

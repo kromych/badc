@@ -204,6 +204,66 @@ pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
         | (rt.0 as u32)
 }
 
+/// Shared field packer for the LDP / STP (SIMD&FP, 64-bit) forms below.
+/// `imm` scales by 8 into the imm7 field, same as the X-register forms.
+fn enc_ldst_pair_d(base: u32, dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(dt < 32 && dt2 < 32);
+    debug_assert!(imm % 8 == 0, "ldp/stp d: imm must be 8-byte aligned");
+    let imm7 = imm / 8;
+    debug_assert!(
+        (-64..64).contains(&imm7),
+        "ldp/stp d: offset {imm} (scaled {imm7}) out of range"
+    );
+    base | (((imm7 as u32) & 0x7F) << 15)
+        | ((dt2 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (dt as u32)
+}
+
+/// `STP <Dt1>, <Dt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset.
+pub(crate) fn enc_stp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    enc_ldst_pair_d(0x6D00_0000, dt, dt2, rn, imm)
+}
+
+/// `LDP <Dt1>, <Dt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset.
+pub(crate) fn enc_ldp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    enc_ldst_pair_d(0x6D40_0000, dt, dt2, rn, imm)
+}
+
+/// `STP <Dt1>, <Dt2>, [<Xn|SP>, #imm]!` -- store-pair, pre-indexed.
+pub(crate) fn enc_stp_d_pre(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    enc_ldst_pair_d(0x6D80_0000, dt, dt2, rn, imm)
+}
+
+/// `LDP <Dt1>, <Dt2>, [<Xn|SP>], #imm` -- load-pair, post-indexed.
+pub(crate) fn enc_ldp_d_post(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
+    enc_ldst_pair_d(0x6CC0_0000, dt, dt2, rn, imm)
+}
+
+/// `STR <Dt>, [<Xn|SP>, #imm]!` -- pre-indexed store with writeback
+/// (unscaled imm9). D-register mirror of [`enc_str_pre`].
+pub(crate) fn enc_str_d_pre(dt: u8, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(dt < 32);
+    debug_assert!(
+        (-256..256).contains(&imm),
+        "str-d-pre imm: {imm} out of range"
+    );
+    let imm9 = (imm as u32) & 0x1FF;
+    0xFC00_0C00 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32)
+}
+
+/// `LDR <Dt>, [<Xn|SP>], #imm` -- post-indexed load with writeback
+/// (unscaled imm9). D-register mirror of [`enc_ldr_post`].
+pub(crate) fn enc_ldr_d_post(dt: u8, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(dt < 32);
+    debug_assert!(
+        (-256..256).contains(&imm),
+        "ldr-d-post imm: {imm} out of range"
+    );
+    let imm9 = (imm as u32) & 0x1FF;
+    0xFC40_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32)
+}
+
 /// `MOV <Xd>, <Xn>` -- alias for `ORR <Xd>, XZR, <Xn>`. Note that ARM
 /// uses two distinct mov forms: this one (register-to-register, where
 /// `Rn` field 31 means XZR) and `add xd, sp, #0` (which is what you
@@ -680,6 +740,38 @@ pub(crate) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {
 pub(crate) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> u32 {
     debug_assert!(dd < 32);
     0x9E63_0000 | ((xn.0 as u32) << 5) | (dd as u32)
+}
+
+/// `SCVTF <Sd>, <Xn>` -- signed int-to-single. The `enc_scvtf_d_x`
+/// encoding with the ptype field cleared to `00` (single). Converts
+/// a 64-bit integer to `float` in one rounding (C99 6.3.1.4), the
+/// direct form for `(float)n` that avoids the double-then-narrow pair.
+pub(crate) fn enc_scvtf_s_x(sd: u8, xn: Reg) -> u32 {
+    debug_assert!(sd < 32);
+    0x9E22_0000 | ((xn.0 as u32) << 5) | (sd as u32)
+}
+
+/// `UCVTF <Sd>, <Xn>` -- unsigned int-to-single. `enc_ucvtf_d_x`
+/// with ptype `00`.
+pub(crate) fn enc_ucvtf_s_x(sd: u8, xn: Reg) -> u32 {
+    debug_assert!(sd < 32);
+    0x9E23_0000 | ((xn.0 as u32) << 5) | (sd as u32)
+}
+
+/// `FCVTZS <Xd>, <Sn>` -- truncating signed single-to-int.
+/// `enc_fcvtzs_x_d` with the ptype field cleared to `00` (single
+/// source). The direct form for `(int)f` that avoids widening the
+/// `float` to double first.
+pub(crate) fn enc_fcvtzs_x_s(rd: Reg, sn: u8) -> u32 {
+    debug_assert!(sn < 32);
+    0x9E38_0000 | ((sn as u32) << 5) | (rd.0 as u32)
+}
+
+/// `FCVTZU <Xd>, <Sn>` -- truncating unsigned single-to-int.
+/// `enc_fcvtzu_x_d` with ptype `00`.
+pub(crate) fn enc_fcvtzu_x_s(rd: Reg, sn: u8) -> u32 {
+    debug_assert!(sn < 32);
+    0x9E39_0000 | ((sn as u32) << 5) | (rd.0 as u32)
 }
 
 /// `MRS <Xt>, TPIDR_EL0` -- read the per-thread pointer system
@@ -1517,6 +1609,12 @@ pub(crate) fn lower(
                 }
             }
         });
+        // Unroll constant-trip loops before the inliner so a helper
+        // whose body was a short loop becomes a single-block inline
+        // candidate; see x86_64.rs's matching block for the rationale.
+        super::ssa::emit_common::time_pass("passes::unroll::run (aarch64)", || {
+            crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
+        });
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
         super::ssa::emit_common::time_pass("passes::inline::run (aarch64)", || {
@@ -1526,10 +1624,38 @@ pub(crate) fn lower(
                 target.abi(),
             );
         });
+        // Turn self-tail-recursion into a loop back edge; see x86_64.rs's
+        // matching block for the rationale.
+        super::ssa::emit_common::time_pass("passes::tailrec::run (aarch64)", || {
+            crate::c5::codegen::passes::tailrec::run(&mut ssa_funcs);
+        });
         // Forward an inlined one-word struct return out of its frame slot;
         // see x86_64.rs's matching block for the rationale.
         super::ssa::emit_common::time_pass("passes::struct_return_reg::run (aarch64)", || {
             crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
+        });
+        // Constant folding over the post-inline tape; see x86_64.rs's
+        // matching block for the rationale.
+        super::ssa::emit_common::time_pass("passes::constfold::run (aarch64)", || {
+            crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
+        });
+        // Split constant-index local arrays that unrolling exposed into
+        // per-element slots and re-run mem2reg to promote them to SSA
+        // values. Gated to functions the unroll pass expanded so the
+        // mem2reg rebuild is confined; see x86_64.rs's matching block.
+        super::ssa::emit_common::time_pass("passes::sroa::run (aarch64)", || {
+            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
+            for f in &mut ssa_funcs {
+                if f.did_unroll {
+                    let promoted = crate::c5::codegen::passes::sroa::run(f, usable_gpr);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
         });
         super::ssa::emit_common::time_pass("passes::rotate::run (aarch64)", || {
             crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
@@ -1566,6 +1692,13 @@ pub(crate) fn lower(
         // register-starved unrolled loop.
         super::ssa::emit_common::time_pass("passes::store_forward::run (aarch64)", || {
             crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
+        });
+        // Block layout: fallthrough chains, loop rotation to
+        // bottom-test, branch inversion. Reorders blocks and remaps
+        // block ids only, so it runs last; the emit elides jumps to
+        // the next block in the new order.
+        super::ssa::emit_common::time_pass("passes::layout::run (aarch64)", || {
+            crate::c5::codegen::passes::layout::run(&mut ssa_funcs);
         });
     }
     // Upper bound on ent_pcs the lowering will reference. The

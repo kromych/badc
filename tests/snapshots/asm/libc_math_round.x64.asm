@@ -94,10 +94,10 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0xe8d4a51000, %rax     # imm = 0xE8D4A51000
-               	cvtsi2sd	%rax, %xmm0
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm15
+               	movabsq	$0x426d1a94a2000000, %rax # imm = 0x426D1A94A2000000
+               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
+               	movq	%rcx, %xmm15
+               	movq	%rax, %xmm0
                	addsd	%xmm15, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>

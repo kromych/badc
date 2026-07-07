@@ -16,8 +16,7 @@ Disassembly of section .text:
 
 <f_int>:
                	sxtw	x0, w0
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17

@@ -20,7 +20,9 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	movapd	%xmm1, %xmm2
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rdi, %xmm1
+               	xorps	%xmm3, %xmm3
                	cvtsi2sd	%rsi, %xmm3
                	mulsd	%xmm3, %xmm2
                	movapd	%xmm0, %xmm14
@@ -57,7 +59,9 @@ Disassembly of section .text:
                	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
                	movl	$0x3, %edx
                	movl	$0x4, %esi
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rdx, %xmm0
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rsi, %xmm1
                	movapd	%xmm1, %xmm15
                	movq	%rcx, %xmm1

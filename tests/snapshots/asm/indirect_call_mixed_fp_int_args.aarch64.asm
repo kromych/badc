@@ -24,8 +24,7 @@ Disassembly of section .text:
                	mov	x1, #0x40000000         // =1073741824
                	fmov	s17, w1
                	fmul	s0, s2, s17
-               	fcvt	d0, s0
-               	fcvtzs	x1, d0
+               	fcvtzs	x1, s0
                	add	x0, x0, x1
                	add	x0, x0, x2
                	sxtw	x0, w0
@@ -85,8 +84,7 @@ Disassembly of section .text:
                	fmov	s16, w5
                	fmov	s17, w1
                	fmul	s0, s16, s17
-               	fcvt	d0, s0
-               	fcvtzs	x1, d0
+               	fcvtzs	x1, s0
                	add	x0, x0, x1
                	add	x0, x0, #0x7
                	sxtw	x0, w0

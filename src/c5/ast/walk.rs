@@ -2988,44 +2988,61 @@ impl<'a> Walker<'a> {
                     return Ok(b.binop_imm(BinOp::Ne, v, 0));
                 }
                 if target_is_fp && !source_is_fp {
-                    // Integer -> FP (C99 6.3.1.4) produces an f64; a
-                    // `float` target then narrows to single precision.
-                    // An unsigned 64-bit source (`unsigned long` /
-                    // `unsigned long long`) can exceed the signed range,
-                    // where the signed convert yields a negative result,
-                    // so it takes the unsigned converter. Narrower
+                    // Integer -> FP (C99 6.3.1.4), one rounding to the
+                    // target type. An unsigned 64-bit source (`unsigned
+                    // long` / `unsigned long long`) can exceed the signed
+                    // range, where the signed convert yields a negative
+                    // result, so it takes the unsigned converter. Narrower
                     // unsigned types fit the signed range zero-extended.
                     let stripped = src_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
                     let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
                         && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
+                    let to_float = is_float_ty(*to_ty);
+                    // Fold a constant operand to the converted FP constant
+                    // (the conversion of a constant is itself a constant).
+                    if let Some(k) = b.peek_imm(v) {
+                        if to_float {
+                            let f = if unsigned_64 {
+                                k as u64 as f32
+                            } else {
+                                k as f32
+                            };
+                            return Ok(b.imm_f32(f.to_bits()));
+                        }
+                        let d = if unsigned_64 {
+                            k as u64 as f64
+                        } else {
+                            k as f64
+                        };
+                        return Ok(b.imm(d.to_bits() as i64));
+                    }
                     let kind = if unsigned_64 {
                         super::super::ir::FpCastKind::UIntToFp
                     } else {
                         super::super::ir::FpCastKind::IntToFp
                     };
-                    let f = b.fp_cast(kind, v);
-                    if is_float_ty(*to_ty) {
-                        return Ok(b.fp_narrow_to_f32(f));
+                    // A `float` target converts directly to single
+                    // precision; a `double` target stays f64.
+                    if to_float {
+                        return Ok(b.fp_cast_to_f32(kind, v));
                     }
-                    return Ok(f);
+                    return Ok(b.fp_cast(kind, v));
                 } else if !target_is_fp && source_is_fp {
-                    // FP -> integer (C99 6.3.1.4) truncates an f64; a
-                    // `float` source widens to f64 first so the same
-                    // converter handles both precisions. An unsigned
-                    // 64-bit target can hold a value in [2^63, 2^64),
-                    // which the signed truncate would saturate, so it
-                    // takes the unsigned converter. Narrower unsigned
-                    // targets fit the signed range.
-                    let d = b.fp_widen_to_f64(v);
+                    // FP -> integer (C99 6.3.1.4) truncates toward zero.
+                    // An unsigned 64-bit target can hold a value in
+                    // [2^63, 2^64), which the signed truncate would
+                    // saturate, so it takes the unsigned converter whose
+                    // lowering compares against 2^63 in double precision --
+                    // a `float` source widens to f64 for it. The signed
+                    // converter truncates a `float` source directly.
                     let stripped_to = *to_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
                     let target_unsigned_64 = (*to_ty & UNSIGNED_BIT) != 0
                         && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
-                    let kind = if target_unsigned_64 {
-                        super::super::ir::FpCastKind::UFpToInt
-                    } else {
-                        super::super::ir::FpCastKind::FpToInt
-                    };
-                    return Ok(b.fp_cast(kind, d));
+                    if target_unsigned_64 {
+                        let d = b.fp_widen_to_f64(v);
+                        return Ok(b.fp_cast(super::super::ir::FpCastKind::UFpToInt, d));
+                    }
+                    return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, v));
                 }
                 // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens,
                 // `(float)d` narrows. The conversion is a no-op only when

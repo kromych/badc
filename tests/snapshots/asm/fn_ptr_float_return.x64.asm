@@ -18,8 +18,8 @@ Disassembly of section .text:
 
 <f_int>:
                	movslq	%edi, %rdi
-               	cvtsi2sd	%rdi, %xmm0
-               	cvtsd2ss	%xmm0, %xmm0
+               	xorps	%xmm0, %xmm0
+               	cvtsi2ss	%rdi, %xmm0
                	movl	$0x3f000000, %eax       # imm = 0x3F000000
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm0
@@ -34,6 +34,7 @@ Disassembly of section .text:
 
 <d_int>:
                	movslq	%edi, %rdi
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rdi, %xmm0
                	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
                	movq	%rax, %xmm15
@@ -140,3 +141,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

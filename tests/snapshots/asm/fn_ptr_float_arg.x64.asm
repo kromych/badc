@@ -14,13 +14,11 @@ Disassembly of section .text:
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm0
-               	cvtss2sd	%xmm0, %xmm0
-               	cvttsd2si	%xmm0, %rax
+               	cvttss2si	%xmm0, %rax
                	retq
 
 <mix>:
-               	cvtss2sd	%xmm0, %xmm0
-               	cvttsd2si	%xmm0, %rax
+               	cvttss2si	%xmm0, %rax
                	addq	%rdi, %rax
                	movslq	%eax, %rax
                	retq
@@ -36,8 +34,7 @@ Disassembly of section .text:
                	retq
 
 <cb_impl>:
-               	cvtss2sd	%xmm0, %xmm0
-               	cvttsd2si	%xmm0, %rax
+               	cvttss2si	%xmm0, %rax
                	addq	%rdi, %rax
                	movslq	%eax, %rax
                	retq

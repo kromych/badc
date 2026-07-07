@@ -34,8 +34,8 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
@@ -69,8 +69,8 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
@@ -93,8 +93,8 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
@@ -115,8 +115,8 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
@@ -146,8 +146,8 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912

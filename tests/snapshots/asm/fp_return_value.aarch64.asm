@@ -19,8 +19,7 @@ Disassembly of section .text:
 
 <make_float>:
                	sxtw	x0, w0
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x40800000         // =1082130432
                	fmov	s17, w0
                	fdiv	s0, s0, s17
@@ -46,14 +45,12 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x3                // =3
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x40800000         // =1082130432
                	fmov	s17, w0
                	fdiv	s0, s0, s17
                	mov	x0, #0x5                // =5
-               	scvtf	d1, x0
-               	fcvt	s1, d1
+               	scvtf	s1, x0
                	mov	x0, #0x40800000         // =1082130432
                	fmov	s17, w0
                	fdiv	s1, s1, s17
@@ -72,8 +69,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d17
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	mov	x1, #0x6                // =6
-               	scvtf	d1, x1
-               	fcvt	s1, d1
+               	scvtf	s1, x1
                	mov	x1, #0x40800000         // =1082130432
                	fmov	s17, w1
                	fdiv	s1, s1, s17

@@ -39,8 +39,10 @@ Disassembly of section .text:
                	leaq	-0xe0(%rbp), %r10
                	movq	%r10, 0x10(%rax)
                	xorq	%rax, %rax
-               	cvtsi2sd	%rax, %xmm0
+               	movq	%rax, %xmm14
+               	movsd	%xmm14, -0x20(%rbp,%riz)
                	jmp	<addr>
+               	movsd	-0x20(%rbp,%riz), %xmm0
                	leaq	-0x18(%rbp), %rdx
                	movq	%rdx, %r11
                	movl	0x4(%r11), %r10d
@@ -54,12 +56,14 @@ Disassembly of section .text:
                	movq	%r10, %rdx
                	movsd	(%rdx,%riz), %xmm1
                	addsd	%xmm1, %xmm0
+               	movsd	%xmm0, -0x20(%rbp,%riz)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	movslq	-0xe0(%rbp), %rdx
                	cmpq	%rdx, %rcx
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
+               	movsd	-0x20(%rbp,%riz), %xmm0
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
@@ -233,4 +237,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

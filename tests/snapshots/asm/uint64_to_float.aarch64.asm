@@ -64,8 +64,7 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ret
-               	ucvtf	d0, x0
-               	fcvt	s0, d0
+               	ucvtf	s0, x0
                	mov	x0, #0x5f000000         // =1593835520
                	fmov	s17, w0
                	fcmp	s0, s17

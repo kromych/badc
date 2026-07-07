@@ -183,13 +183,13 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0xb                // =11
                	ret
-               	mov	x0, #0x2                // =2
-               	scvtf	d0, x0
-               	mov	x0, #0x3                // =3
-               	scvtf	d1, x0
-               	mov	x0, #0x4                // =4
-               	scvtf	d2, x0
-               	fmadd	d0, d0, d1, d2
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	mov	x1, #0x4008000000000000 // =4613937818241073152
+               	mov	x2, #0x4010000000000000 // =4616189618054758400
+               	fmov	d16, x0
+               	fmov	d17, x1
+               	fmov	d18, x2
+               	fmadd	d0, d16, d17, d18
                	mov	x0, #0x4024000000000000 // =4621819117588971520
                	fmov	d17, x0
                	fcmp	d0, d17

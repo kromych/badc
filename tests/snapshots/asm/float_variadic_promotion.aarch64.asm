@@ -12,8 +12,8 @@ Disassembly of section .text:
                	brk	#<addr>:
                	fsub	d0, d0, d1
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d0, d0
@@ -68,8 +68,12 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
+               	fmov	d16, x0
+               	sub	x17, x29, #0x28
+               	str	d16, [x17]
                	b	<addr>
+               	sub	x16, x29, #0x28
+               	ldr	d0, [x16]
                	sub	x2, x29, #0x20
                	mov	x17, x2
                	str	x9, [sp, #-0x10]!
@@ -91,12 +95,16 @@ Disassembly of section .text:
                	mov	x2, x16
                	ldr	d1, [x2]
                	fadd	d0, d0, d1
+               	sub	x17, x29, #0x28
+               	str	d0, [x17]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	ldursw	x2, [x29, #0x10]
                	cmp	x1, x2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
+               	sub	x16, x29, #0x28
+               	ldr	d0, [x16]
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
                	add	sp, sp, #0xc0
@@ -167,14 +175,16 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x60
                	ret
                	mov	x0, #0x3                // =3
-               	mov	x1, #0xa                // =10
-               	scvtf	d0, x1
+               	mov	x1, #0x4024000000000000 // =4621819117588971520
                	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	fcvt	d0, s0
+               	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fcvt	d1, s1
-               	sub	x16, x29, #0x10
-               	ldr	s2, [x16]
-               	fcvt	d2, s2
+               	fmov	d2, d1
+               	fmov	d1, d0
+               	fmov	d0, x1
                	bl	<addr>
                	mov	x0, #0xe148             // =57672
                	movk	x0, #0x147a, lsl #16

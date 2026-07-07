@@ -47,18 +47,19 @@ use super::Target;
 use super::encode::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
     emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
-    emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_divss,
-    emit_imul_r_mem, emit_imul_rr, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem,
-    emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r, emit_mov_mem_r, emit_mov_r_imm64,
-    emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r, emit_movsd_mem_xmm,
-    emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16,
-    emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem, emit_movzx_r_mem16,
-    emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_neg_r, emit_or_r_mem, emit_or_rr, emit_pop_r,
-    emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl,
-    emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd, emit_subss,
-    emit_test_rr, emit_ucomisd, emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd,
-    emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
-    emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
+    emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtsi2ss, emit_cvtss2sd, emit_cvttsd2si, emit_cvttss2si,
+    emit_divsd, emit_divss, emit_imul_r_mem, emit_imul_rr, emit_jcc_rel8, emit_jmp_rel8,
+    emit_lea_r_mem, emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r, emit_mov_mem_r,
+    emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r,
+    emit_movsd_mem_xmm, emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem,
+    emit_movsx_r_mem16, emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem,
+    emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_neg_r, emit_or_r_mem,
+    emit_or_rr, emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl,
+    emit_shr_r_cl, emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd,
+    emit_subss, emit_test_rr, emit_ucomisd, emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss,
+    emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd,
+    emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
+    emit_xorps,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
@@ -3126,7 +3127,7 @@ fn emit_inst(
             frame,
         ),
         Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
-        Inst::FpCast { kind, value } => emit_fp_cast(code, dst, *kind, *value, alloc, frame),
+        Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(
             code,
             dst,
@@ -4267,6 +4268,7 @@ fn emit_fp_unary(
 fn emit_fp_cast(
     code: &mut Vec<u8>,
     dst: Place,
+    v: super::super::ir::ValueId,
     kind: FpCastKind,
     value: u32,
     alloc: &Allocation,
@@ -4293,7 +4295,17 @@ fn emit_fp_cast(
                     return false;
                 }
             };
-            emit_cvtsi2sd(code, dd, rn);
+            // Break the false dependency `cvtsi2*` carries on the
+            // destination's prior contents (it merges into the low
+            // element, leaving a read-after-write chain otherwise).
+            emit_xorps(code, dd, dd);
+            // C99 6.3.1.4: a `float` result converts directly to single
+            // precision (one rounding) rather than to double + narrow.
+            if alloc.is_f32(v) {
+                emit_cvtsi2ss(code, dd, rn);
+            } else {
+                emit_cvtsi2sd(code, dd, rn);
+            }
             fp_spill_dst_to_slot(code, dst, dd, frame);
             true
         }
@@ -4321,11 +4333,20 @@ fn emit_fp_cast(
             // clobbered by the shift/and below.
             let rn = SCRATCH_R10;
             let t = SCRATCH_R11;
+            // C99 6.3.1.4: a `float` result converts in single precision.
+            let res_f32 = alloc.is_f32(v);
+            // Break the false dependency the converts carry on `dd`;
+            // covers both branch targets since it precedes the test.
+            emit_xorps(code, dd, dd);
             emit_mov_rr(code, rn, src);
             emit_test_rr(code, rn, rn);
             emit_jcc_rel8(code, Cc::S, 0);
             let js_fixup = code.len() - 1;
-            emit_cvtsi2sd(code, dd, rn);
+            if res_f32 {
+                emit_cvtsi2ss(code, dd, rn);
+            } else {
+                emit_cvtsi2sd(code, dd, rn);
+            }
             emit_jmp_rel8(code, 0);
             let jmp_fixup = code.len() - 1;
             let big = code.len();
@@ -4334,8 +4355,13 @@ fn emit_fp_cast(
             emit_shr_r_imm8(code, t, 1);
             emit_and_r_imm32(code, rn, 1);
             emit_or_rr(code, t, rn);
-            emit_cvtsi2sd(code, dd, t);
-            emit_addsd(code, dd, dd);
+            if res_f32 {
+                emit_cvtsi2ss(code, dd, t);
+                emit_addss(code, dd, dd);
+            } else {
+                emit_cvtsi2sd(code, dd, t);
+                emit_addsd(code, dd, dd);
+            }
             let done = code.len();
             code[jmp_fixup] = (done - jmp_fixup - 1) as i8 as u8;
             fp_spill_dst_to_slot(code, dst, dd, frame);
@@ -4353,7 +4379,14 @@ fn emit_fp_cast(
                 bail_msg("FpCast FpToInt: dst not int reg / spill");
                 return false;
             };
-            emit_cvttsd2si(code, rd, dn);
+            // C99 6.3.1.4: a `float` source truncates directly to the
+            // integer (`cvttss2si` reads the single in the low dword)
+            // rather than widening to double first.
+            if alloc.is_f32(value) {
+                emit_cvttss2si(code, rd, dn);
+            } else {
+                emit_cvttsd2si(code, rd, dn);
+            }
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }

@@ -777,6 +777,8 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("float_single_precision.c", 0),
     ("float_literal_f_suffix.c", 0),
     ("float_literal_arith_single_precision.c", 0),
+    ("fp_direct_width_cast.c", 0),
+    ("fp_const_fold_cast.c", 0),
     ("float_literal_variadic_printf.c", 0),
     ("fp_arg_passed_in_fp_reg.c", 0),
     ("float_arg_single_precision.c", 0),

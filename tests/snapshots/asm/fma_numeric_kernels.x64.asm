@@ -222,6 +222,7 @@ Disassembly of section .text:
                	addq	%rcx, %rsi
                	incq	%rsi
                	movslq	%esi, %rsi
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rsi, %xmm0
                	movsd	%xmm0, (%r8,%riz)
                	leaq	-0xb8(%rbp), %rsi
@@ -911,5 +912,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

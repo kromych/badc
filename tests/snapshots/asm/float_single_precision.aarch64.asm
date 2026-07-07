@@ -27,9 +27,8 @@ Disassembly of section .text:
                	ldr	s1, [x16]
                	fsub	s0, s0, s1
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcvt	s1, d1
-               	fcmp	s0, s1
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	s0, s0
@@ -148,9 +147,8 @@ Disassembly of section .text:
                	ldr	s1, [x16]
                	fsub	s0, s0, s1
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcvt	s1, d1
-               	fcmp	s0, s1
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	s0, s0
@@ -199,9 +197,8 @@ Disassembly of section .text:
                	fmov	s18, w0
                	fnmsub	s0, s1, s0, s18
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcvt	s1, d1
-               	fcmp	s0, s1
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	s0, s0

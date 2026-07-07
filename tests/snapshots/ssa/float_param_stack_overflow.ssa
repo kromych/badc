@@ -63,9 +63,8 @@ fn ent_pc=0 n_params=10 variadic=false locals=10
     v57  Imm(1140850688)                                  -> x0 [f32]
     v58  Binop { op=fmul, lhs=v19, rhs=v57 }              -> d1 [f32]
     v59  Fma { a=v19, b=v57, c=v55, neg_product=false, neg_addend=false } -> d0 [f32]
-    v60  FpCast { kind=F32ToF64, value=v59 }              -> d0
-    v61  FpCast { kind=FpToInt, value=v60 }               -> x0
-    terminator Return(v61)   (exit_acc=v61)
+    v60  FpCast { kind=FpToInt, value=v59 }               -> x0
+    terminator Return(v60)   (exit_acc=v60)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=14

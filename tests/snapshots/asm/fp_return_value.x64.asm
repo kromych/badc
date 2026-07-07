@@ -12,6 +12,7 @@ Disassembly of section .text:
 
 <make_double>:
                	movslq	%edi, %rdi
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rdi, %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
@@ -20,8 +21,8 @@ Disassembly of section .text:
 
 <make_float>:
                	movslq	%edi, %rdi
-               	cvtsi2sd	%rdi, %xmm0
-               	cvtsd2ss	%xmm0, %xmm0
+               	xorps	%xmm0, %xmm0
+               	cvtsi2ss	%rdi, %xmm0
                	movl	$0x40800000, %eax       # imm = 0x40800000
                	movq	%rax, %xmm15
                	divss	%xmm15, %xmm0
@@ -29,11 +30,13 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x7, %eax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
                	movl	$0x2, %eax
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
@@ -52,14 +55,14 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movl	$0x3, %eax
-               	cvtsi2sd	%rax, %xmm0
-               	cvtsd2ss	%xmm0, %xmm0
+               	xorps	%xmm0, %xmm0
+               	cvtsi2ss	%rax, %xmm0
                	movl	$0x40800000, %eax       # imm = 0x40800000
                	movq	%rax, %xmm15
                	divss	%xmm15, %xmm0
                	movl	$0x5, %eax
-               	cvtsi2sd	%rax, %xmm1
-               	cvtsd2ss	%xmm1, %xmm1
+               	xorps	%xmm1, %xmm1
+               	cvtsi2ss	%rax, %xmm1
                	movl	$0x40800000, %eax       # imm = 0x40800000
                	movq	%rax, %xmm15
                	divss	%xmm15, %xmm1
@@ -77,14 +80,15 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	movl	$0x1, %eax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movl	$0x6, %ecx
-               	cvtsi2sd	%rcx, %xmm1
-               	cvtsd2ss	%xmm1, %xmm1
+               	xorps	%xmm1, %xmm1
+               	cvtsi2ss	%rcx, %xmm1
                	movl	$0x40800000, %ecx       # imm = 0x40800000
                	movq	%rcx, %xmm15
                	divss	%xmm15, %xmm1

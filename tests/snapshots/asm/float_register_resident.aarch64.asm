@@ -22,8 +22,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s16, [x17]
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -35,8 +34,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x0, #0x1                // =1
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -48,8 +46,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x0, #0x2                // =2
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -61,8 +58,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x0, #0x3                // =3
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -74,8 +70,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x0, #0x4                // =4
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -87,8 +82,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x0, #0x5                // =5
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -100,8 +94,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x0, #0x6                // =6
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -113,8 +106,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x0, #0x7                // =7
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -126,8 +118,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x0, #0x8                // =8
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -139,8 +130,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x0, #0x9                // =9
-               	scvtf	d0, x0
-               	fcvt	s0, d0
+               	scvtf	s0, x0
                	mov	x0, #0x3f000000         // =1056964608
                	fmov	s17, w0
                	fmul	s0, s0, s17
@@ -153,8 +143,7 @@ Disassembly of section .text:
                	str	s0, [x17]
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
-               	fcvt	d0, s0
-               	fcvtzs	x0, d0
+               	fcvtzs	x0, s0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

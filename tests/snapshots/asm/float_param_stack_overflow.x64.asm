@@ -67,8 +67,7 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	cvtss2sd	%xmm0, %xmm0
-               	cvttsd2si	%xmm0, %rax
+               	cvttss2si	%xmm0, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	popq	%r11

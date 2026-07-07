@@ -1052,7 +1052,8 @@ fn run_inst<H: Host>(
         }
         Inst::FpCast { kind, value } => {
             let raw = frame.regs[*value as usize];
-            frame.regs[v as usize] = eval::eval_fpcast(*kind, raw);
+            let result_f32 = matches!(frame.func.f32_values.get(v as usize), Some(true));
+            frame.regs[v as usize] = eval::eval_fpcast(*kind, raw, result_f32);
             return Ok(());
         }
         Inst::Call {

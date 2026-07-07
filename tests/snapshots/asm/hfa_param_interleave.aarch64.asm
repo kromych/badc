@@ -67,8 +67,7 @@ Disassembly of section .text:
                	ldrb	w1, [x1, #0x3]
                	add	x0, x0, x1
                	sxtw	x0, w0
-               	scvtf	d1, x0
-               	fcvt	s1, d1
+               	scvtf	s1, x0
                	fadd	s0, s0, s1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

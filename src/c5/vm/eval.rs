@@ -157,12 +157,17 @@ pub(crate) fn eval_extend(raw: i64, kind: LoadKind) -> i64 {
 /// already holds the f64 bit pattern of that f32 (the F32 load widens
 /// on read). Widening to double is therefore a no-op; narrowing
 /// rounds the f64 to f32 then re-stores the f32-as-f64 bit pattern
-/// (C99 6.3.1.5).
-pub(crate) fn eval_fpcast(kind: FpCastKind, raw: i64) -> i64 {
+/// (C99 6.3.1.5). `result_f32` marks an `int -> float` result: the
+/// integer converts directly to single precision (one rounding, C99
+/// 6.3.1.4), matching the native `cvtsi2ss` / `scvtf s` rather than the
+/// double-rounding a convert-to-double-then-narrow would produce.
+pub(crate) fn eval_fpcast(kind: FpCastKind, raw: i64, result_f32: bool) -> i64 {
     match kind {
         FpCastKind::FpToInt => f64::from_bits(raw as u64) as i64,
         FpCastKind::UFpToInt => f64::from_bits(raw as u64) as u64 as i64,
+        FpCastKind::IntToFp if result_f32 => (raw as f32 as f64).to_bits() as i64,
         FpCastKind::IntToFp => (raw as f64).to_bits() as i64,
+        FpCastKind::UIntToFp if result_f32 => (raw as u64 as f32 as f64).to_bits() as i64,
         FpCastKind::UIntToFp => (raw as u64 as f64).to_bits() as i64,
         FpCastKind::F32ToF64 => raw,
         FpCastKind::F64ToF32 => (f64::from_bits(raw as u64) as f32 as f64).to_bits() as i64,

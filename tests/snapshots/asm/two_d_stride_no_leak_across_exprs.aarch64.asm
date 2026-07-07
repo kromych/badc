@@ -37,8 +37,7 @@ Disassembly of section .text:
                	sub	x2, x29, #0x508
                	lsl	x3, x1, #2
                	add	x2, x2, x3
-               	scvtf	d0, x1
-               	fcvt	s0, d0
+               	scvtf	s0, x1
                	mov	x3, #0x3e800000         // =1048576000
                	fmov	s17, w3
                	fmul	s0, s0, s17

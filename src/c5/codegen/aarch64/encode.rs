@@ -742,6 +742,38 @@ pub(crate) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> u32 {
     0x9E63_0000 | ((xn.0 as u32) << 5) | (dd as u32)
 }
 
+/// `SCVTF <Sd>, <Xn>` -- signed int-to-single. The `enc_scvtf_d_x`
+/// encoding with the ptype field cleared to `00` (single). Converts
+/// a 64-bit integer to `float` in one rounding (C99 6.3.1.4), the
+/// direct form for `(float)n` that avoids the double-then-narrow pair.
+pub(crate) fn enc_scvtf_s_x(sd: u8, xn: Reg) -> u32 {
+    debug_assert!(sd < 32);
+    0x9E22_0000 | ((xn.0 as u32) << 5) | (sd as u32)
+}
+
+/// `UCVTF <Sd>, <Xn>` -- unsigned int-to-single. `enc_ucvtf_d_x`
+/// with ptype `00`.
+pub(crate) fn enc_ucvtf_s_x(sd: u8, xn: Reg) -> u32 {
+    debug_assert!(sd < 32);
+    0x9E23_0000 | ((xn.0 as u32) << 5) | (sd as u32)
+}
+
+/// `FCVTZS <Xd>, <Sn>` -- truncating signed single-to-int.
+/// `enc_fcvtzs_x_d` with the ptype field cleared to `00` (single
+/// source). The direct form for `(int)f` that avoids widening the
+/// `float` to double first.
+pub(crate) fn enc_fcvtzs_x_s(rd: Reg, sn: u8) -> u32 {
+    debug_assert!(sn < 32);
+    0x9E38_0000 | ((sn as u32) << 5) | (rd.0 as u32)
+}
+
+/// `FCVTZU <Xd>, <Sn>` -- truncating unsigned single-to-int.
+/// `enc_fcvtzu_x_d` with ptype `00`.
+pub(crate) fn enc_fcvtzu_x_s(rd: Reg, sn: u8) -> u32 {
+    debug_assert!(sn < 32);
+    0x9E39_0000 | ((sn as u32) << 5) | (rd.0 as u32)
+}
+
 /// `MRS <Xt>, TPIDR_EL0` -- read the per-thread pointer system
 /// register. Linux glibc populates `TPIDR_EL0` at thread setup
 /// with the address of `struct pthread`, and the TLS image (our

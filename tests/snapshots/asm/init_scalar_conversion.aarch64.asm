@@ -119,11 +119,12 @@ Disassembly of section .text:
                	str	x10, [x0, #0x18]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	sub	x0, x29, #0x40
-               	str	d0, [x0]
-               	sub	x0, x29, #0x40
-               	str	d0, [x0, #0x8]
+               	sub	x1, x29, #0x40
+               	fmov	d16, x0
+               	str	d16, [x1]
+               	sub	x1, x29, #0x40
+               	fmov	d16, x0
+               	str	d16, [x1, #0x8]
                	scvtf	d0, x20
                	sub	x0, x29, #0x40
                	str	d0, [x0, #0x10]
@@ -296,11 +297,12 @@ Disassembly of section .text:
                	str	x10, [x0, #0x18]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	sub	x0, x29, #0x98
-               	str	d0, [x0]
-               	sub	x0, x29, #0x98
-               	str	d0, [x0, #0x8]
+               	sub	x1, x29, #0x98
+               	fmov	d16, x0
+               	str	d16, [x1]
+               	sub	x1, x29, #0x98
+               	fmov	d16, x0
+               	str	d16, [x1, #0x8]
                	scvtf	d0, x20
                	sub	x0, x29, #0x98
                	str	d0, [x0, #0x10]

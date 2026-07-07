@@ -85,6 +85,7 @@ Disassembly of section .text:
                	leaq	-0x1(%rsi), %rax
                	movslq	%eax, %rax
                	movq	(%rdi,%rax,8), %rax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	retq
 
@@ -221,4 +222,4 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

@@ -21,14 +21,11 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x8
                	str	d16, [x17]
-               	mov	x0, #0xfffe             // =65534
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	scvtf	d0, x0
+               	mov	x0, #-0x4000000000000000 // =-4611686018427387904
                	sub	x16, x29, #0x8
-               	ldr	d1, [x16]
-               	fmul	d0, d0, d1
+               	ldr	d0, [x16]
+               	fmov	d16, x0
+               	fmul	d0, d16, d0
                	scvtf	d1, x1
                	fmul	d0, d0, d1
                	add	sp, sp, #0x20

@@ -159,8 +159,12 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
                	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
+               	fmov	d16, x0
+               	sub	x17, x29, #0x28
+               	str	d16, [x17]
                	b	<addr>
+               	sub	x16, x29, #0x28
+               	ldr	d0, [x16]
                	sub	x2, x29, #0x20
                	mov	x17, x2
                	str	x9, [sp, #-0x10]!
@@ -182,12 +186,16 @@ Disassembly of section .text:
                	mov	x2, x16
                	ldr	d1, [x2]
                	fadd	d0, d0, d1
+               	sub	x17, x29, #0x28
+               	str	d0, [x17]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	ldursw	x2, [x29, #0x10]
                	cmp	x1, x2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
+               	sub	x16, x29, #0x28
+               	ldr	d0, [x16]
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
                	add	sp, sp, #0xc0

@@ -38,8 +38,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fsub	d0, d0, d17
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d0, d0
@@ -79,8 +79,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fsub	d0, d0, d17
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d0, d0
@@ -125,9 +125,8 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fsub	s0, s1, s0
                	mov	x0, #0x0                // =0
-               	scvtf	d2, x0
-               	fcvt	s2, d2
-               	fcmp	s0, s2
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	s0, s0
@@ -146,8 +145,8 @@ Disassembly of section .text:
                	ldr	d1, [x16]
                	fsub	d0, d0, d1
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d0, d0
@@ -189,9 +188,8 @@ Disassembly of section .text:
                	ldr	s1, [x16]
                	fsub	s0, s0, s1
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcvt	s1, d1
-               	fcmp	s0, s1
+               	fmov	s17, w0
+               	fcmp	s0, s17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	s0, s0

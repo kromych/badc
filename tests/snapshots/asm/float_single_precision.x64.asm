@@ -25,9 +25,8 @@ Disassembly of section .text:
                	movss	-0x10(%rbp,%riz), %xmm1
                	subss	%xmm1, %xmm0
                	xorq	%rax, %rax
-               	cvtsi2sd	%rax, %xmm1
-               	cvtsd2ss	%xmm1, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -119,9 +118,8 @@ Disassembly of section .text:
                	movss	-0x18(%rbp,%riz), %xmm1
                	subss	%xmm1, %xmm0
                	xorq	%rax, %rax
-               	cvtsi2sd	%rax, %xmm1
-               	cvtsd2ss	%xmm1, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -181,9 +179,8 @@ Disassembly of section .text:
                	movq	%rax, %xmm0
                	vfmsub231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) - xmm0
                	xorq	%rax, %rax
-               	cvtsi2sd	%rax, %xmm1
-               	cvtsd2ss	%xmm1, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	setb	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -235,3 +232,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

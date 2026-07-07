@@ -1101,6 +1101,41 @@ pub(crate) fn emit_cvttsd2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+/// `CVTSI2SS xmm, r64` -- signed 64-bit int to single, with REX.W.
+/// Encoding: `F3 REX.W 0F 2A /r`. The direct form for `(float)n`
+/// (C99 6.3.1.4, one rounding) that avoids `cvtsi2sd` + `cvtsd2ss`.
+pub(crate) fn emit_cvtsi2ss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF3);
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2A);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `CVTTSS2SI r64, xmm` -- truncating single-to-signed-int.
+/// Encoding: `F3 REX.W 0F 2C /r`. The direct form for `(int)f`
+/// that avoids widening the `float` to double first.
+pub(crate) fn emit_cvttss2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF3);
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2C);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `XORPS xmm, xmm` -- bitwise XOR of packed singles. With identical
+/// operands it zeroes the destination in the FP domain; emitted
+/// before `cvtsi2sd` / `cvtsi2ss` to break the false dependency the
+/// convert carries on the destination's prior upper bits.
+pub(crate) fn emit_xorps(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x57);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `MOVSS xmm, [base+disp32]` -- load 4 bytes (single-precision) into
 /// the low dword of an XMM register, zeroing the rest. Encoding:
 /// `F3 0F 10 /r`. Used by [`LoadKind::F32`] to pull a `float`-typed lvalue

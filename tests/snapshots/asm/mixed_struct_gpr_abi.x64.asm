@@ -22,6 +22,7 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rax
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	leaq	-0x10(%rbp), %rax
                	movsd	0x8(%rax,%riz), %xmm0
@@ -119,3 +120,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

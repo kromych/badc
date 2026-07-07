@@ -53,8 +53,7 @@ Disassembly of section .text:
                	mov	x0, #0x44000000         // =1140850688
                	fmov	s17, w0
                	fmadd	s0, s8, s17, s0
-               	fcvt	d0, s0
-               	fcvtzs	x0, d0
+               	fcvtzs	x0, s0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	d10, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x30

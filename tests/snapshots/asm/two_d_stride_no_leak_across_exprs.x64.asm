@@ -39,8 +39,8 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	shlq	$0x2, %rsi
                	addq	%rsi, %rdx
-               	cvtsi2sd	%rcx, %xmm0
-               	cvtsd2ss	%xmm0, %xmm0
+               	xorps	%xmm0, %xmm0
+               	cvtsi2ss	%rcx, %xmm0
                	movl	$0x3e800000, %esi       # imm = 0x3E800000
                	movq	%rsi, %xmm15
                	mulss	%xmm15, %xmm0
@@ -88,5 +88,3 @@ Disassembly of section .text:
                	addq	$0x520, %rsp            # imm = 0x520
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -13,13 +13,11 @@ Disassembly of section .text:
                	mov	x0, #0x40000000         // =1073741824
                	fmov	s17, w0
                	fmul	s0, s0, s17
-               	fcvt	d0, s0
-               	fcvtzs	x0, d0
+               	fcvtzs	x0, s0
                	ret
 
 <mix>:
-               	fcvt	d0, s0
-               	fcvtzs	x1, d0
+               	fcvtzs	x1, s0
                	add	x0, x0, x1
                	sxtw	x0, w0
                	ret
@@ -37,8 +35,7 @@ Disassembly of section .text:
                	ret
 
 <cb_impl>:
-               	fcvt	d0, s0
-               	fcvtzs	x1, d0
+               	fcvtzs	x1, s0
                	add	x0, x0, x1
                	sxtw	x0, w0
                	ret

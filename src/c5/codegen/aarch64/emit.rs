@@ -52,15 +52,16 @@ use super::encode::{
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
     enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
     enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
-    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzu_x_d, enc_fdiv_d,
-    enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
-    enc_ldaxr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off, enc_ldp_post, enc_ldr_d_imm,
-    enc_ldr_d_post, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm,
-    enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldrsw_reg_lsl2, enc_lslv,
-    enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv,
-    enc_stlxr, enc_stp_d_off, enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_str_d_imm,
-    enc_str_d_pre, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm,
-    enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv, load_imm64,
+    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzs_x_s,
+    enc_fcvtzu_x_d, enc_fcvtzu_x_s, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d,
+    enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldaxr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off,
+    enc_ldp_post, enc_ldr_d_imm, enc_ldr_d_post, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
+    enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
+    enc_ldrsw_reg_lsl2, enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret,
+    enc_scvtf_d_x, enc_scvtf_s_x, enc_sdiv, enc_stlxr, enc_stp_d_off, enc_stp_d_pre, enc_stp_off,
+    enc_stp_pre, enc_str_d_imm, enc_str_d_pre, enc_str_imm, enc_str_pre, enc_str_s_imm,
+    enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm,
+    enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv, load_imm64,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
@@ -2533,10 +2534,15 @@ fn emit_inst(
                         Place::Spill(_) => SCRATCH_FP0,
                         _ => return false,
                     };
-                    let enc = if matches!(kind, FpCastKind::UIntToFp) {
-                        enc_ucvtf_d_x(dd, rn)
-                    } else {
-                        enc_scvtf_d_x(dd, rn)
+                    // C99 6.3.1.4: when the result is `float`, convert the
+                    // integer directly to single precision (one rounding)
+                    // rather than to double followed by a narrowing `fcvt`.
+                    let res_f32 = alloc.is_f32(v);
+                    let enc = match (matches!(kind, FpCastKind::UIntToFp), res_f32) {
+                        (true, true) => enc_ucvtf_s_x(dd, rn),
+                        (true, false) => enc_ucvtf_d_x(dd, rn),
+                        (false, true) => enc_scvtf_s_x(dd, rn),
+                        (false, false) => enc_scvtf_d_x(dd, rn),
                     };
                     emit(code, enc);
                     if let Place::Spill(slot) = dst {
@@ -2546,19 +2552,32 @@ fn emit_inst(
                     true
                 }
                 FpCastKind::FpToInt | FpCastKind::UFpToInt => {
-                    let dn = match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
-                        Some(r) => r,
-                        None => return false,
+                    // C99 6.3.1.4: a `float` source truncates directly to
+                    // the integer (one conversion) rather than widening to
+                    // double first. Read the source in its single-precision
+                    // view when it is f32-marked.
+                    let src_f32 = alloc.is_f32(*value);
+                    let dn = if src_f32 {
+                        match materialize_fp_f32(code, src_place, SCRATCH_FP0, frame) {
+                            Some(r) => r,
+                            None => return false,
+                        }
+                    } else {
+                        match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
+                            Some(r) => r,
+                            None => return false,
+                        }
                     };
                     let rd = match dst {
                         Place::IntReg(r) => Reg(r),
                         Place::Spill(_) => scratch.primary,
                         _ => return false,
                     };
-                    let enc = if matches!(kind, FpCastKind::UFpToInt) {
-                        enc_fcvtzu_x_d(rd, dn)
-                    } else {
-                        enc_fcvtzs_x_d(rd, dn)
+                    let enc = match (matches!(kind, FpCastKind::UFpToInt), src_f32) {
+                        (true, true) => enc_fcvtzu_x_s(rd, dn),
+                        (true, false) => enc_fcvtzu_x_d(rd, dn),
+                        (false, true) => enc_fcvtzs_x_s(rd, dn),
+                        (false, false) => enc_fcvtzs_x_d(rd, dn),
                     };
                     emit(code, enc);
                     if let Place::Spill(slot) = dst {

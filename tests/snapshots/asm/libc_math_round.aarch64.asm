@@ -84,13 +84,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	mov	x0, #0x1000             // =4096
-               	movk	x0, #0xd4a5, lsl #16
-               	movk	x0, #0xe8, lsl #32
-               	scvtf	d0, x0
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d17, x0
-               	fadd	d0, d0, d17
+               	mov	x0, #0xa2000000         // =2717908992
+               	movk	x0, #0x1a94, lsl #32
+               	movk	x0, #0x426d, lsl #48
+               	mov	x1, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d16, x0
+               	fmov	d17, x1
+               	fadd	d0, d16, d17
                	bl	<addr>
                	mov	x17, #0x1001            // =4097
                	movk	x17, #0xd4a5, lsl #16

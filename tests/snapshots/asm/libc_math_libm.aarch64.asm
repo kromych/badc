@@ -12,8 +12,8 @@ Disassembly of section .text:
                	brk	#<addr>:
                	fsub	d0, d0, d1
                	mov	x0, #0x0                // =0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d0, d0

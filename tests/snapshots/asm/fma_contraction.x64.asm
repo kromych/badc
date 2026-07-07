@@ -261,15 +261,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	movl	$0x2, %eax
-               	cvtsi2sd	%rax, %xmm0
-               	movl	$0x3, %eax
-               	cvtsi2sd	%rax, %xmm1
-               	movl	$0x4, %eax
-               	cvtsi2sd	%rax, %xmm2
-               	movapd	%xmm0, %xmm14
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm2, %xmm0
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
+               	movabsq	$0x4010000000000000, %rdx # imm = 0x4010000000000000
+               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm15
+               	movq	%rdx, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
                	movq	%rax, %xmm15
@@ -286,4 +283,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -9,9 +9,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v3   LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     v4   Imm(1073741824)                                  -> x0 [f32]
     v5   Binop { op=fmul, lhs=v1, rhs=v4 }                -> d0 [f32]
-    v6   FpCast { kind=F32ToF64, value=v5 }               -> d0
-    v7   FpCast { kind=FpToInt, value=v6 }                -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v6   FpCast { kind=FpToInt, value=v5 }                -> x0
+    terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=mix
 fn ent_pc=1 n_params=2 variadic=false locals=1
@@ -24,12 +23,11 @@ fn ent_pc=1 n_params=2 variadic=false locals=1
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=2, kind=I32 }                    -> x0
     v6   LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v7   FpCast { kind=F32ToF64, value=v3 }               -> d0
-    v8   FpCast { kind=FpToInt, value=v7 }                -> x0
-    v9   Binop { op=add, lhs=v1, rhs=v8 }                 -> x0
-    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x1
-    v11  Extend { value=v9, kind=I32 }                    -> x0
-    terminator Return(v11)   (exit_acc=v11)
+    v7   FpCast { kind=FpToInt, value=v3 }                -> x0
+    v8   Binop { op=add, lhs=v1, rhs=v7 }                 -> x0
+    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
+    v10  Extend { value=v8, kind=I32 }                    -> x0
+    terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=run
 fn ent_pc=2 n_params=3 variadic=false locals=3
@@ -61,12 +59,11 @@ fn ent_pc=3 n_params=2 variadic=false locals=1
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=2, kind=I32 }                    -> x0
     v6   LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v7   FpCast { kind=F32ToF64, value=v3 }               -> d0
-    v8   FpCast { kind=FpToInt, value=v7 }                -> x0
-    v9   Binop { op=add, lhs=v1, rhs=v8 }                 -> x0
-    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x1
-    v11  Extend { value=v9, kind=I32 }                    -> x0
-    terminator Return(v11)   (exit_acc=v11)
+    v7   FpCast { kind=FpToInt, value=v3 }                -> x0
+    v8   Binop { op=add, lhs=v1, rhs=v7 }                 -> x0
+    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
+    v10  Extend { value=v8, kind=I32 }                    -> x0
+    terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
 fn ent_pc=4 n_params=0 variadic=false locals=5

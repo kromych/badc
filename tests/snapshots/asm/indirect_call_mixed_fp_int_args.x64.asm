@@ -27,8 +27,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	movapd	%xmm2, %xmm0
                	mulss	%xmm15, %xmm0
-               	cvtss2sd	%xmm0, %xmm0
-               	cvttsd2si	%xmm0, %rcx
+               	cvttss2si	%xmm0, %rcx
                	addq	%rcx, %rax
                	addq	%rdx, %rax
                	movslq	%eax, %rax
@@ -84,8 +83,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	movq	%r8, %xmm0
                	mulss	%xmm15, %xmm0
-               	cvtss2sd	%xmm0, %xmm0
-               	cvttsd2si	%xmm0, %rcx
+               	cvttss2si	%xmm0, %rcx
                	addq	%rcx, %rax
                	addq	$0x7, %rax
                	movslq	%eax, %rax

@@ -61,8 +61,8 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	cvtsi2sd	%rax, %xmm1
-               	cvtsd2ss	%xmm1, %xmm1
+               	xorps	%xmm1, %xmm1
+               	cvtsi2ss	%rax, %xmm1
                	addss	%xmm1, %xmm0
                	addq	$0x30, %rsp
                	popq	%rbp
@@ -185,5 +185,3 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -86,6 +86,11 @@ enum PureKey {
     FpCast {
         kind: FpCastKind,
         value: ValueId,
+        /// Result single-precision marker. An `int -> float` and an
+        /// `int -> double` of the same source share a `kind` and
+        /// `value` but produce different values (single vs double
+        /// rounding), so the CSE key must keep them apart.
+        f32: bool,
     },
     Extend {
         value: ValueId,
@@ -994,13 +999,36 @@ impl SsaBuilder {
     /// the dedicated [`Self::fp_narrow`] / [`Self::mark_f32`] helpers;
     /// `F32ToF64` clears it.
     pub(crate) fn fp_cast(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
-        let key = PureKey::FpCast { kind, value };
+        let key = PureKey::FpCast {
+            kind,
+            value,
+            f32: false,
+        };
         if let Some(cached) = self.lookup_pure(key) {
             return cached;
         }
         let id = self.push(Inst::FpCast { kind, value });
         self.pure_cache.insert(key, id);
         id
+    }
+
+    /// `Inst::FpCast` producing a single-precision result. Used for the
+    /// direct `int -> float` conversion (C99 6.3.1.4): the per-arch emit
+    /// picks the single-precision converter (`scvtf s` / `cvtsi2ss`) from
+    /// the value's f32 marker, so no `double`-then-narrow pair is built.
+    /// Keyed apart from the f64-producing [`Self::fp_cast`].
+    pub(crate) fn fp_cast_to_f32(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
+        let key = PureKey::FpCast {
+            kind,
+            value,
+            f32: true,
+        };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::FpCast { kind, value });
+        self.pure_cache.insert(key, id);
+        self.mark_f32(id)
     }
 
     /// Widen a single-precision value to double (C99 6.3.1.5). If

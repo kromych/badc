@@ -55,10 +55,9 @@ fn ent_pc=0 n_params=6 variadic=false locals=6
     v49  Binop { op=add, lhs=v43, rhs=v48 }               -> x0
     v50  BinopI { op=shl, lhs=v49, rhs_imm=32 }           -> x1
     v51  Extend { value=v49, kind=I32 }                   -> x0
-    v52  FpCast { kind=IntToFp, value=v51 }               -> d1
-    v53  FpCast { kind=F64ToF32, value=v52 }              -> d1 [f32]
-    v54  Binop { op=fadd, lhs=v31, rhs=v53 }              -> d0 [f32]
-    terminator Return(v54)   (exit_acc=v54)
+    v52  FpCast { kind=IntToFp, value=v51 }               -> d1 [f32]
+    v53  Binop { op=fadd, lhs=v31, rhs=v52 }              -> d0 [f32]
+    terminator Return(v53)   (exit_acc=v53)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=12

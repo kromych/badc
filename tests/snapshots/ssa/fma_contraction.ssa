@@ -261,11 +261,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Return(v104)   (exit_acc=v104)
   block 22  start_pc=0
     v105 Imm(2)                                           -> x0
-    v106 FpCast { kind=IntToFp, value=v105 }              -> d0
-    v107 Imm(3)                                           -> x0
-    v108 FpCast { kind=IntToFp, value=v107 }              -> d1
-    v109 Imm(4)                                           -> x0
-    v110 FpCast { kind=IntToFp, value=v109 }              -> d2
+    v106 Imm(4611686018427387904)                         -> x0
+    v107 Imm(3)                                           -> x1
+    v108 Imm(4613937818241073152)                         -> x1
+    v109 Imm(4)                                           -> x2
+    v110 Imm(4616189618054758400)                         -> x2
     v111 Fma { a=v106, b=v108, c=v110, neg_product=false, neg_addend=false } -> d0
     v112 Imm(4621819117588971520)                         -> x0
     v113 Binop { op=fne, lhs=v111, rhs=v112 }             -> x0

@@ -11,6 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <lt_float_int>:
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rdi, %xmm1
                	ucomisd	%xmm1, %xmm0
                	setb	%al
@@ -21,6 +22,7 @@ Disassembly of section .text:
                	retq
 
 <le_float_int>:
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rdi, %xmm1
                	ucomisd	%xmm1, %xmm0
                	setbe	%al
@@ -40,10 +42,12 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	subq	%rdi, %rcx
                	movslq	%ecx, %rcx
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
                	movapd	%xmm0, %xmm15
                	movq	%rdx, %xmm0
                	addsd	%xmm15, %xmm0
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
                	setb	%cl
@@ -57,6 +61,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x4062d00000000000, %rcx # imm = 0x4062D00000000000
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movq	%rcx, %xmm14
                	ucomisd	%xmm0, %xmm14
@@ -70,7 +75,9 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
                	setbe	%cl
@@ -83,10 +90,12 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
                	movq	%rcx, %xmm15
                	addsd	%xmm15, %xmm0
+               	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
                	setbe	%al
@@ -106,4 +115,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

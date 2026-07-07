@@ -132,8 +132,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=13
     v94  LoadLocal { off=-9, kind=I64 }                   -> x1
     v95  FpCast { kind=IntToFp, value=v90 }               -> d0
     v96  Imm(1)                                           -> x0
-    v97  FpCast { kind=IntToFp, value=v96 }               -> d1
-    v98  LoadLocal { off=-10, kind=F64 }                  -> d2
+    v97  Imm(4607182418800017408)                         -> x0
+    v98  LoadLocal { off=-10, kind=F64 }                  -> d1
     v99  Binop { op=fdiv, lhs=v97, rhs=v98 }              -> d1
     v100 Binop { op=fadd, lhs=v95, rhs=v99 }              -> d0
     v101 FpCast { kind=FpToInt, value=v100 }              -> x0
@@ -156,7 +156,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=13
     v114 StoreLocal { off=-12, value=v113, kind=F64 }     -> -
     v115 LoadLocal { off=-12, kind=F64 }                  -> d0
     v116 Imm(2)                                           -> x0
-    v117 FpCast { kind=IntToFp, value=v116 }              -> d1
+    v117 Imm(4611686018427387904)                         -> x0
     v118 Binop { op=fmul, lhs=v115, rhs=v117 }            -> d0
     v119 StoreLocal { off=-12, value=v118, kind=F64 }     -> -
     v120 LoadLocal { off=-12, kind=F64 }                  -> d0

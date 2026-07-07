@@ -82,6 +82,7 @@ Disassembly of section .text:
 
 <itof>:
                	movslq	%edi, %rdi
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rdi, %xmm0
                	retq
 
@@ -379,6 +380,7 @@ Disassembly of section .text:
                	movl	$0x14, %eax
                	retq
                	movl	$0x2a, %eax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x4045000000000000, %rax # imm = 0x4045000000000000
                	movq	%rax, %xmm15
@@ -393,6 +395,7 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	retq
                	movabsq	$-0x3, %rax
+               	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm1
@@ -459,4 +462,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

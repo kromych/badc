@@ -14,20 +14,19 @@ fn ent_pc=13 n_params=2 variadic=false locals=1
     v8   Imm(0)                                           -> x0
     v9   LoadLocal { off=-1, kind=F64 }                   -> d1
     v10  Imm(0)                                           -> x0
-    v11  FpCast { kind=IntToFp, value=v10 }               -> d1
-    v12  Binop { op=flt, lhs=v7, rhs=v11 }                -> x0
-    terminator Bz { cond=v12, target=b3, fall=b1 }   (exit_acc=v12)
+    v11  Binop { op=flt, lhs=v7, rhs=v10 }                -> x0
+    terminator Bz { cond=v11, target=b3, fall=b1 }   (exit_acc=v11)
   block 1  start_pc=0
-    v13  LoadLocal { off=-1, kind=F64 }                   -> d1
-    v14  Fneg(v7)                                         -> d0
-    v15  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v14)
+    v12  LoadLocal { off=-1, kind=F64 }                   -> d1
+    v13  Fneg(v7)                                         -> d0
+    v14  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v13)
   block 2  start_pc=0
-    v16  Phi { incoming=[b3:v7, b1:v14], kind=F64 }       -> d0
-    v17  LoadLocal { off=-1, kind=F64 }                   -> d1
-    v18  Imm(4517329193108106637)                         -> x0
-    v19  Binop { op=flt, lhs=v16, rhs=v18 }               -> x0
-    terminator Return(v19)   (exit_acc=v19)
+    v15  Phi { incoming=[b3:v7, b1:v13], kind=F64 }       -> d0
+    v16  LoadLocal { off=-1, kind=F64 }                   -> d1
+    v17  Imm(4517329193108106637)                         -> x0
+    v18  Binop { op=flt, lhs=v15, rhs=v17 }               -> x0
+    terminator Return(v18)   (exit_acc=v18)
   block 3  start_pc=0
     terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=14 ---

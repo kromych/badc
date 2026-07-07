@@ -57,8 +57,8 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     terminator Return(v28)   (exit_acc=v28)
   block 12  start_pc=0
     v29  Imm(1000000000000)                               -> x0
-    v30  FpCast { kind=IntToFp, value=v29 }               -> d0
-    v31  Imm(4602678819172646912)                         -> x0
+    v30  Imm(4786511204640096256)                         -> x0
+    v31  Imm(4602678819172646912)                         -> x1
     v32  Binop { op=fadd, lhs=v30, rhs=v31 }              -> d0
     v33  CallExt { binding_idx=36, args=[v32], fp_arg_mask=0x1 } -> x0
     v34  BinopI { op=ne, lhs=v33, rhs_imm=1000000000001 } -> x0

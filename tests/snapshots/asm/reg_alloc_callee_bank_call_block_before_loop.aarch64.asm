@@ -19,13 +19,7 @@ Disassembly of section .text:
                	mov	x5, x1
                	sxtw	x5, w5
                	sxtw	x22, w22
-               	cmp	x5, x22
-               	b.lt	<addr>
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
-               	ret
+               	b	<addr>
                	add	x0, x5, x22
                	sxtw	x0, w0
                	asr	x1, x0, #63
@@ -37,24 +31,32 @@ Disassembly of section .text:
                	mov	x20, x5
                	b	<addr>
                	b	<addr>
-               	add	x20, x3, #0x1
-               	sxtw	x3, w20
-               	ldrsw	x1, [x21, x3, lsl #2]
+               	sxtw	x1, w20
+               	add	x20, x1, #0x1
+               	sxtw	x1, w20
+               	ldrsw	x1, [x21, x1, lsl #2]
                	cmp	x1, x0
                	b.lt	<addr>
                	b	<addr>
+               	sxtw	x1, w2
                	sub	x2, x1, #0x1
                	sxtw	x1, w2
-               	ldrsw	x4, [x21, x1, lsl #2]
-               	cmp	x4, x0
+               	ldrsw	x1, [x21, x1, lsl #2]
+               	cmp	x1, x0
                	b.gt	<addr>
-               	cmp	x3, x1
+               	sxtw	x1, w20
+               	sxtw	x3, w2
+               	cmp	x1, x3
                	b.gt	<addr>
-               	ldrsw	x4, [x21, x3, lsl #2]
-               	ldrsw	x6, [x21, x1, lsl #2]
-               	str	w6, [x21, x3, lsl #2]
+               	sxtw	x1, w20
+               	ldrsw	x3, [x21, x1, lsl #2]
+               	sxtw	x4, w2
+               	ldrsw	x4, [x21, x4, lsl #2]
                	str	w4, [x21, x1, lsl #2]
+               	sxtw	x1, w2
+               	str	w3, [x21, x1, lsl #2]
                	add	x20, x20, #0x1
+               	sxtw	x1, w2
                	sub	x2, x1, #0x1
                	b	<addr>
                	sxtw	x1, w20
@@ -64,10 +66,9 @@ Disassembly of section .text:
                	mov	x0, x21
                	mov	x1, x5
                	bl	<addr>
-               	mov	x0, x21
-               	mov	x2, x22
-               	mov	x1, x20
-               	bl	<addr>
+               	sxtw	x5, w20
+               	cmp	x5, x22
+               	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]

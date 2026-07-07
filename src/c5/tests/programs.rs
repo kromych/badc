@@ -1197,6 +1197,20 @@ fn recursion_factorial() {
 }
 
 #[test]
+fn tailrec_narrow_param() {
+    // C99 6.3.1.3: a signed-char-parameter accumulator recursion whose
+    // tail leg becomes a loop must re-narrow the back-edge argument.
+    assert_eq!(run_fixture("tailrec_narrow_param.c"), 0);
+}
+
+#[test]
+fn tailrec_void_accumulate() {
+    // A void helper's same-block tail call lowers to a loop; the
+    // per-level global store stays inside the loop body.
+    assert_eq!(run_fixture("tailrec_void_accumulate.c"), 0);
+}
+
+#[test]
 fn pointers() {
     assert_eq!(run_fixture("pointers.c"), 200);
 }

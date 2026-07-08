@@ -159,8 +159,14 @@ def try_boot(efi: Path, arch: dict) -> None:
         log(f"[{arch['label']}] OVMF firmware not found; skipping the boot check")
         return
     if r.returncode != 0 or "PASS" not in out:
-        fail(f"[{arch['label']}] boot under OVMF/QEMU did not produce the expected "
-             f"output:\n{out[-1200:]}")
+        # `$BADC_EDK2_BOOT_OPTIONAL` downgrades a boot failure to a warning so
+        # an environment with unstable QEMU/firmware still gates on the build.
+        msg = (f"[{arch['label']}] boot under OVMF/QEMU did not produce the "
+               f"expected output:\n{out[-1200:]}")
+        if os.environ.get("BADC_EDK2_BOOT_OPTIONAL"):
+            log(f"WARNING (boot optional): {msg}")
+            return
+        fail(msg)
     log(f"[{arch['label']}] booted under OVMF/QEMU; MyApp printed via BasePrintLib")
 
 

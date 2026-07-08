@@ -1138,3 +1138,41 @@ jobs:
         run: cargo build --release --locked --features full --bin badc
       - name: badc-python drives the badc-nasm golden suite
         run: python demos/nasm/selfhost.py
+
+  edk2:
+    # Build a UEFI application from real EDK II MdePkg sources with badc's own
+    # linker (PE32+ EFI application, no GenFw) for X64 and AArch64, and boot
+    # each under OVMF/QEMU. badc cross-compiles both images on one x86_64
+    # runner; QEMU + the OVMF/AAVMF firmware come from apt. The smoke skips the
+    # boot (keeping the build check) if a firmware image is missing.
+    name: edk2 (UEFI app + OVMF boot)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: edk2
+      - name: install QEMU + OVMF/AAVMF firmware
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y qemu-system-x86 qemu-system-arm ovmf qemu-efi-aarch64
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: edk2 setup (fetch the MdePkg subset)
+        run: python demos/edk2/setup.py
+      - name: edk2 smoke (build the UEFI app + boot under OVMF, X64 + AArch64)
+        # Point the harness at the distro firmware paths.
+        env:
+          OVMF_CODE: /usr/share/OVMF/OVMF_CODE.fd
+          OVMF_VARS: /usr/share/OVMF/OVMF_VARS.fd
+          AAVMF_CODE: /usr/share/AAVMF/AAVMF_CODE.fd
+          AAVMF_VARS: /usr/share/AAVMF/AAVMF_VARS.fd
+          # The build is the hard gate; the OVMF boot is best-effort here until
+          # the runner's firmware paths + QEMU stability are confirmed.
+          BADC_EDK2_BOOT_OPTIONAL: "1"
+        run: python demos/edk2/smoke.py

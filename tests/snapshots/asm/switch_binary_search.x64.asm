@@ -54,9 +54,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <classify_unsigned>:
                	movl	%edi, %eax
@@ -96,9 +93,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

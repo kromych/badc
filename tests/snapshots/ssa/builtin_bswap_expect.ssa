@@ -100,24 +100,6 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
   block 8  start_pc=0
     v84  Imm(0)                                           -> x0
     terminator Return(v84)   (exit_acc=v84)
-  block 9  start_pc=0
-    v7   Imm(1)                                           -> x0
-    terminator Return(v7)   (exit_acc=v7)
-  block 10  start_pc=0
-    v22  Imm(2)                                           -> x0
-    terminator Return(v22)   (exit_acc=v22)
-  block 11  start_pc=0
-    v53  Imm(3)                                           -> x0
-    terminator Return(v53)   (exit_acc=v53)
-  block 12  start_pc=0
-    v77  Imm(5)                                           -> x0
-    terminator Return(v77)   (exit_acc=v77)
-  block 13  start_pc=0
-    v80  Imm(6)                                           -> x0
-    terminator Return(v80)   (exit_acc=v80)
-  block 14  start_pc=0
-    v83  Intrinsic { kind=10, args=[] }                   -> x0
-    terminator Jmp(b8)   (exit_acc=v83)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

@@ -103,11 +103,3 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	mov	x0, #0x2                // =2
-               	ret
-               	mov	x0, #0x6                // =6
-               	ret
-               	mov	x0, #0x8                // =8
-               	ret

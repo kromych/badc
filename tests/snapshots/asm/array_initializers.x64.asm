@@ -311,25 +311,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x4, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x6, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xb, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x16, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x18, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

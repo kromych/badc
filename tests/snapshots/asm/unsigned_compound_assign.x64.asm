@@ -47,47 +47,5 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
-               	movl	$0x69, %esi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rdi
-               	movl	$0x66, %esi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rdi
-               	movl	$0x5bb, %esi            # imm = 0x5BB
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rdi
-               	movl	$0x4, %esi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

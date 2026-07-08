@@ -13,14 +13,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>
-               	add	x0, x0, #0x2
-               	sxtw	x0, w0
-               	b	<addr>
-               	add	x0, x0, #0x4
-               	sxtw	x0, w0
-               	b	<addr>
-               	add	x0, x0, #0x8
-               	sxtw	x0, w0
-               	b	<addr>

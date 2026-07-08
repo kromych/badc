@@ -212,28 +212,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x2, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x5, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x6, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x7, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x8, %eax
-               	popq	%rbp
-               	retq
                	addb	%al, (%rax)

@@ -46,7 +46,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x64               // =100
                	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

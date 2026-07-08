@@ -51,11 +51,3 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x60
                	ret
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
-               	ret
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
-               	ret

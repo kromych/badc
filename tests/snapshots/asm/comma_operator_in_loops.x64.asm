@@ -65,10 +65,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	incq	%rbx
-               	jmp	<addr>
-               	addq	$0x1869f, %rbx          # imm = 0x1869F
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

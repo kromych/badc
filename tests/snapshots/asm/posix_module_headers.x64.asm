@@ -242,10 +242,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0xb, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x3f0, %rsp            # imm = 0x3F0
-               	popq	%rbp
-               	retq
-               	xorq	%rax, %rax
-               	jmp	<addr>
+               	addb	%al, (%rax)

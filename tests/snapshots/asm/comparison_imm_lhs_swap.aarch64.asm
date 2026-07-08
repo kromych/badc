@@ -45,13 +45,3 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
-               	ret
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x30
-               	ret

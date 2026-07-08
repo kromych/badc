@@ -37,9 +37,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
 
 <u16>:
                	mov	x17, #0xffff            // =65535
@@ -64,9 +61,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
 
 <u8>:
                	mov	x17, #0xff              // =255
@@ -91,9 +85,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
 
 <s32>:
                	sxtw	x0, w0
@@ -121,9 +112,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0xc8               // =200
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

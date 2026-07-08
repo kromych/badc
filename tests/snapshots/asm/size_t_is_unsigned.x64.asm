@@ -20,12 +20,5 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	movl	$0x1, %eax
-               	retq
-               	movl	$0x2, %eax
-               	retq
-               	movl	$0x3, %eax
-               	retq
-               	movl	$0x33333333, %ecx       # imm = 0x33333333
-               	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -28,12 +28,4 @@ Disassembly of section .text:
                	addq	$0x110, %rsp            # imm = 0x110
                	popq	%rbp
                	retq
-               	movl	$0x2, %eax
-               	addq	$0x110, %rsp            # imm = 0x110
-               	popq	%rbp
-               	retq
-               	movl	$0x3, %eax
-               	addq	$0x110, %rsp            # imm = 0x110
-               	popq	%rbp
-               	retq
                	addb	%al, (%rax)

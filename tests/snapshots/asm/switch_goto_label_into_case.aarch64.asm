@@ -41,9 +41,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0xa                // =10
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

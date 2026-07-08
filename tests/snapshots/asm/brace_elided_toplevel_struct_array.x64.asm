@@ -145,16 +145,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x5, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x8, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	addb	%al, (%rax)

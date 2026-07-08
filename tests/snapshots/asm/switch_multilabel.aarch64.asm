@@ -64,9 +64,6 @@ Disassembly of section .text:
                	cmp	x0, #0x30
                	b.eq	<addr>
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

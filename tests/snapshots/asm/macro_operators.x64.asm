@@ -66,10 +66,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	movl	$0x7, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x8, %eax
-               	popq	%rbp
-               	retq
-               	addb	%al, (%rax)

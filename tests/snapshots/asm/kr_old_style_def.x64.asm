@@ -31,7 +31,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	movl	$0x1, %eax
-               	retq
-               	movl	$0x2, %eax
-               	retq

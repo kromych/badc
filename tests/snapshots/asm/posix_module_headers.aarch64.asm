@@ -224,11 +224,3 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0xb                // =11
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp]
-               	add	sp, sp, #0x400
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>

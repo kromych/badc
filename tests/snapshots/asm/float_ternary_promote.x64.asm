@@ -148,12 +148,4 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	jmp	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm14
-               	movss	%xmm14, -0x38(%rbp,%riz)
-               	jmp	<addr>
-               	movl	$0x41200000, %eax       # imm = 0x41200000
-               	movq	%rax, %xmm14
-               	movss	%xmm14, -0x40(%rbp,%riz)
-               	jmp	<addr>
                	addb	%al, (%rax)

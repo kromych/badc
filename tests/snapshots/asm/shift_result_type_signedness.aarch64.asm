@@ -21,13 +21,3 @@ Disassembly of section .text:
 <main>:
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x0, #0x1                // =1
-               	ret
-               	mov	x0, #0x2                // =2
-               	ret
-               	mov	x0, #0x3                // =3
-               	ret
-               	mov	x0, #0x4                // =4
-               	ret
-               	mov	x0, #0x5                // =5
-               	ret

@@ -20,11 +20,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ret
                	b	<addr>
-               	mov	x0, #0x15               // =21
-               	ret
-               	mov	x0, #0x16               // =22
-               	ret
-               	mov	x0, #0xa                // =10
-               	ret
-               	mov	x0, #0xb                // =11
-               	ret

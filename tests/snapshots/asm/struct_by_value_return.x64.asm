@@ -234,8 +234,3 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x63, %eax
-               	addq	$0xc0, %rsp
-               	popq	%rbp
-               	retq
-               	addb	%al, (%rax)

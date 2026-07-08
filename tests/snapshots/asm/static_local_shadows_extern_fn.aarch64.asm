@@ -41,7 +41,6 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	sxtw	x0, w0
                	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

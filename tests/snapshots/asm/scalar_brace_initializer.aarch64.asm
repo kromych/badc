@@ -53,11 +53,3 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x5                // =5
-               	ret
-               	mov	x0, #0x2                // =2
-               	ret
-               	mov	x0, #0x4                // =4
-               	ret
-               	mov	x0, #0x6                // =6
-               	ret

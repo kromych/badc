@@ -32,6 +32,4 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x0, #0x1                // =1
-               	ret
                	b	<addr>

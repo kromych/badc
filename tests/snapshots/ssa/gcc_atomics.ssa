@@ -1034,7 +1034,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=54
     v660 Imm(0)                                           -> x1
     terminator Jmp(b185)   (exit_acc=v659)
   block 185  start_pc=0
-    v668 Phi { incoming=[b184:v659, b274:v666], kind=I64 } -> x0
+    v668 Phi { incoming=[b184:v659], kind=I64 }           -> x0
     v669 LoadLocal { off=-54, kind=I64 }                  -> x1
     terminator Bz { cond=v668, target=b187, fall=b186 }   (exit_acc=v668)
   block 186  start_pc=0
@@ -1220,12 +1220,6 @@ fn ent_pc=0 n_params=0 variadic=false locals=54
   block 273  start_pc=0
     terminator Jmp(b182)
   block 274  start_pc=0
-    v664 ImmData(24)                                      -> x0
-    v665 Load { addr=v664, disp=0, kind=I32 }             -> x0
-    v666 BinopI { op=eq, lhs=v665, rhs_imm=0 }            -> x0
-    v667 Imm(0)                                           -> x1
-    terminator Jmp(b185)   (exit_acc=v666)
-  block 275  start_pc=0
     terminator Jmp(b187)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

@@ -23,8 +23,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
 
 <classify>:
                	sxtw	x0, w0
@@ -40,9 +38,6 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
                	b	<addr>
 
 <main>:

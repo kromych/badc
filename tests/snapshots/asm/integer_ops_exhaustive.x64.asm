@@ -17,488 +17,79 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

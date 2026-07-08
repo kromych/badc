@@ -164,9 +164,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=11
     v15  Imm(4602678819172646912)                         -> x0
     v16  StoreLocal { off=-7, value=v15, kind=F64 }       -> -
     terminator Jmp(b4)   (exit_acc=v16)
-  block 31  start_pc=0
-    v99  Imm(8)                                           -> x0
-    terminator Return(v99)   (exit_acc=v99)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

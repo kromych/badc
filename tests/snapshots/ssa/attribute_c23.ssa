@@ -51,8 +51,6 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v9   Imm(10)                                          -> x0
     v10  Imm(0)                                           -> x1
     terminator Jmp(b5)   (exit_acc=v9)
-  block 8  start_pc=0
-    terminator Jmp(b7)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=6
@@ -158,12 +156,6 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     terminator Jmp(b14)
   block 18  start_pc=0
     terminator Jmp(b3)
-  block 19  start_pc=0
-    v11  Imm(1)                                           -> x0
-    terminator Return(v11)   (exit_acc=v11)
-  block 20  start_pc=0
-    v31  Imm(3)                                           -> x0
-    terminator Return(v31)   (exit_acc=v31)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=die
 fn ent_pc=3 n_params=0 variadic=false locals=0
@@ -178,9 +170,6 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Jmp(b1)
   block 3  start_pc=0
     terminator Jmp(b1)
-  block 4  start_pc=0
-    v2   Imm(0)                                           -> x0
-    terminator Return(v2)   (exit_acc=v2)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

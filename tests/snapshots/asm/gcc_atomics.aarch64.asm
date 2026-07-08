@@ -1029,10 +1029,4 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	b	<addr>
                	b	<addr>

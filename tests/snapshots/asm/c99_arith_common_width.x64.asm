@@ -56,8 +56,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	testq	%rax, %rax
@@ -67,126 +65,19 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
-               	movl	$0x1, %ebx
-               	movl	%ebx, (%rax)
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x1a, %edx
-               	movq	%rbx, %rcx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movl	$0x2, %ebx
-               	movl	%ebx, (%rax)
-               	movq	%rbx, %rdi
-               	callq	<addr>
-               	movq	%rax, %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x21, %edx
-               	movq	%rbx, %rcx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movl	$0x3, %ebx
-               	movl	%ebx, (%rax)
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x29, %edx
-               	movq	%rbx, %rcx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movl	$0x4, %ebx
-               	movl	%ebx, (%rax)
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x31, %edx
-               	movq	%rbx, %rcx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movl	$0x5, %ebx
-               	movl	%ebx, (%rax)
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x3e, %edx
-               	movq	%rbx, %rcx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movl	$0x64, %ebx
-               	movl	%ebx, (%rax)
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x4b, %edx
-               	movq	%rbx, %rcx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movl	$0x65, %ebx
-               	movl	%ebx, (%rax)
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x54, %edx
-               	movq	%rbx, %rcx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movl	$0x66, %ebx
-               	movl	%ebx, (%rax)
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x5d, %edx
-               	movq	%rbx, %rcx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

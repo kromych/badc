@@ -31,17 +31,5 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movl	$0x4, %eax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movl	$0x6, %eax
-               	jmp	<addr>
-               	movl	$0x7, %eax
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

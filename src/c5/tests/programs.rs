@@ -2062,6 +2062,25 @@ int main(void){\n\
 }
 
 #[test]
+fn const_init_address_of_parenthesized_symbol() {
+    // Parentheses around the operand of a constant `&` are transparent: the
+    // address folds through the recursive designation grammar, so `&(g)` and
+    // `(fp)&(fn)` in an aggregate initializer relocate against the data /
+    // code symbol exactly as `&g` / `(fp)&fn` do. Regression for a
+    // token-peek that only matched `& <bare-identifier>` and misrouted
+    // `&(id)` to the offsetof integer folder.
+    let src = "\
+static int g = 7;\n\
+static int fn(int x){ return x + 1; }\n\
+typedef int (*fp)(int);\n\
+int main(void){\n\
+    struct { int *p; fp f; } t[] = { { &(g), (fp)&(fn) } };\n\
+    return *t[0].p + t[0].f(34);\n\
+}\n";
+    assert_eq!(super::run_str(src), 42);
+}
+
+#[test]
 fn toascii_masks_to_seven_bits() {
     // XSI (SVID / X/Open) `toascii(c)` reduces a value to 7-bit ASCII
     // (`c & 0x7f`), provided as a <ctype.h> inline.

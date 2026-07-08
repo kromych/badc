@@ -67,11 +67,30 @@ pub(super) enum ConstVal {
 /// type or the pointer type. Designators (`->`, `.`, `[]`) fold constant
 /// offsets onto `value`; parentheses recurse, so any nesting works. C99
 /// 6.6p9 permits such address constants in a constant expression.
+///
+/// When the designation is rooted at a named object -- `&global`, `&func`,
+/// or a designator chain on one -- `sym` carries the symbol index and
+/// `value` is the byte displacement from it; the address then needs a
+/// relocation, not a plain integer. `sym` is `None` for a purely
+/// integer-foldable address (the `&((T*)0)->field` offsetof form).
 #[derive(Copy, Clone)]
 struct ConstDesig {
     value: i64,
     ty: i64,
     is_lvalue: bool,
+    sym: Option<usize>,
+    /// For `sym`: a code symbol (function / libc stub -> code relocation)
+    /// rather than a data symbol.
+    sym_code: bool,
+}
+
+/// The folded value of a constant `&` operand: a byte displacement plus, when
+/// the address is symbol-relative, the symbol to relocate against.
+#[derive(Copy, Clone)]
+pub(super) struct ConstAddr {
+    pub value: i64,
+    pub sym: Option<usize>,
+    pub sym_code: bool,
 }
 
 /// Operator selector for [`Compiler::const_int_binop`], the single
@@ -688,10 +707,20 @@ impl Compiler {
             return Ok(self.const_unary_promoted(!v.as_int(), v.int_ty()));
         }
         if self.lex.tk == Token::AndOp {
-            // Address constant: full-width, no arithmetic conversion.
-            let v = self.parse_const_address_of()?;
+            // Address constant: full-width, no arithmetic conversion. A
+            // symbol-relative address (`&global` / `&func`) is a relocation,
+            // not an integer constant expression -- valid only in a static
+            // initializer, which folds it through `parse_const_address_of`
+            // directly; reject it in an integer-constant context.
+            let a = self.parse_const_address_of()?;
+            if a.sym.is_some() {
+                return Err(self.compile_err(
+                    "address of an object or function is not an integer \
+                     constant expression",
+                ));
+            }
             return Ok(ConstVal::Int {
-                val: v,
+                val: a.value,
                 ty: Ty::Ptr as i64,
             });
         }
@@ -737,7 +766,13 @@ impl Compiler {
     /// No expression shape is special-cased -- `((T*)0)->m`, `(((T*)0)->m)`,
     /// nested `.field` chains, and `((char*)0)[N]` all fold through the same
     /// recursive designation grammar.
-    fn parse_const_address_of(&mut self) -> Result<i64, C5Error> {
+    /// Fold the operand of a leading `&` (current token) to a constant
+    /// address. The result carries the symbol to relocate against, if the
+    /// designation is rooted at a named object; `sym == None` is the pure
+    /// integer offsetof form. Parentheses and casts around the operand are
+    /// transparent because the designation grammar recurses through them, so
+    /// `&foo`, `&(foo)`, and `&((T*)0)->m` all fold here.
+    pub(super) fn parse_const_address_of(&mut self) -> Result<ConstAddr, C5Error> {
         let line = self.lex.line;
         self.next()?; // consume `&`
         let d = self.parse_const_designation()?;
@@ -748,7 +783,11 @@ impl Compiler {
                  such as `((T*)0)->field`",
             ));
         }
-        Ok(d.value)
+        Ok(ConstAddr {
+            value: d.value,
+            sym: d.sym,
+            sym_code: d.sym_code,
+        })
     }
 
     /// Parse and fold a constant designation (see [`ConstDesig`]). Every
@@ -779,6 +818,8 @@ impl Compiler {
                     value: d.value + off,
                     ty: fty,
                     is_lvalue: true,
+                    sym: d.sym,
+                    sym_code: d.sym_code,
                 };
             } else if self.lex.tk == Token::Dot {
                 self.next()?;
@@ -793,6 +834,8 @@ impl Compiler {
                     value: d.value + off,
                     ty: fty,
                     is_lvalue: true,
+                    sym: d.sym,
+                    sym_code: d.sym_code,
                 };
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
@@ -810,6 +853,8 @@ impl Compiler {
                         value: d.value + n * self.size_of_type(d.ty) as i64,
                         ty: d.ty,
                         is_lvalue: true,
+                        sym: d.sym,
+                        sym_code: d.sym_code,
                     };
                 } else {
                     // Pointer index `p[N]` == `*(p+N)`: an lvalue at
@@ -819,6 +864,8 @@ impl Compiler {
                         value: d.value + n * self.size_of_type(pointee) as i64,
                         ty: pointee,
                         is_lvalue: true,
+                        sym: d.sym,
+                        sym_code: d.sym_code,
                     };
                 }
             } else {
@@ -843,6 +890,8 @@ impl Compiler {
                 value: inner.value,
                 ty: inner.ty + Ty::Ptr as i64,
                 is_lvalue: false,
+                sym: inner.sym,
+                sym_code: inner.sym_code,
             });
         }
         if self.lex.tk == '(' {
@@ -872,6 +921,8 @@ impl Compiler {
                     value: operand.as_int(),
                     ty,
                     is_lvalue: false,
+                    sym: None,
+                    sym_code: false,
                 });
             }
             // Parenthesized designation: parentheses are transparent.
@@ -884,6 +935,32 @@ impl Compiler {
             self.next()?;
             return Ok(inner);
         }
+        // A named object -- a global, a function, or a libc-bound stub -- is an
+        // lvalue whose address is a relocation against that symbol, not an
+        // integer (C99 6.3.2.1p4: a function designator decays to its address).
+        // Record the symbol; `value` seeds the displacement and any following
+        // `.field`/`[N]` designators fold onto it.
+        if self.lex.tk == Token::Id {
+            let idx = self.lex.curr_id_idx;
+            let class = self.symbols[idx].class;
+            if class == Token::Glo as i64
+                || class == Token::Fun as i64
+                || class == Token::Sys as i64
+            {
+                let is_code = class != Token::Glo as i64;
+                let ty = self.symbols[idx].type_;
+                let value = self.symbols[idx].val;
+                self.symbols[idx].was_referenced = true;
+                self.next()?;
+                return Ok(ConstDesig {
+                    value,
+                    ty,
+                    is_lvalue: true,
+                    sym: Some(idx),
+                    sym_code: is_code,
+                });
+            }
+        }
         // Any other primary is a plain constant value -- the integer such as
         // the `0` in `(T*)0` -- an rvalue that is neither pointer nor lvalue.
         let v = self.parse_const_expr_unary_val()?;
@@ -891,6 +968,8 @@ impl Compiler {
             value: v.as_int(),
             ty: v.int_ty(),
             is_lvalue: false,
+            sym: None,
+            sym_code: false,
         })
     }
 

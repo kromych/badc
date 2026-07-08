@@ -233,6 +233,13 @@ fn run() {
     // (`__c5_entry` by default, or `#pragma entrypoint`), which the
     // program must define. Requested only by this flag.
     let mut freestanding = false;
+    // `--entry=<sym>` / `--subsystem=<kind>` set the image entry symbol
+    // and PE subsystem from the command line, so a link of precompiled
+    // `.o` inputs (which carry no source-level `#pragma entrypoint` /
+    // `#pragma subsystem`) can still name its entry and subsystem. When
+    // set they take precedence over any per-TU pragma.
+    let mut cli_entry: Option<String> = None;
+    let mut cli_subsystem: Option<badc::Subsystem> = None;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
@@ -485,6 +492,40 @@ fn run() {
             }
             s if s.starts_with("--target=") => {
                 target_spec = Some(s["--target=".len()..].to_string());
+            }
+            // `--entry=<sym>` fixes the image entry symbol at the link
+            // step, so precompiled `.o` inputs need no `#pragma entrypoint`
+            // stub. Mirrors the pragma but wins over it.
+            s if s.starts_with("--entry=") => {
+                cli_entry = Some(s["--entry=".len()..].to_string());
+            }
+            // `--subsystem=<kind>` selects the PE subsystem; kinds match
+            // `#pragma subsystem(<kind>)`. Needed to stamp EFI application
+            // / boot-service-driver / runtime-driver images built from
+            // precompiled objects.
+            s if s.starts_with("--subsystem=") => {
+                let kind = &s["--subsystem=".len()..];
+                cli_subsystem = Some(match kind {
+                    "console" | "cui" => badc::Subsystem::Console,
+                    "windows" | "gui" => badc::Subsystem::Windows,
+                    "native" | "nt" | "driver" => badc::Subsystem::Native,
+                    "efi_application" | "efi-application" => badc::Subsystem::EfiApplication,
+                    "efi_boot_service_driver" | "efi-boot-service-driver" => {
+                        badc::Subsystem::EfiBootServiceDriver
+                    }
+                    "efi_runtime_driver" | "efi-runtime-driver" => {
+                        badc::Subsystem::EfiRuntimeDriver
+                    }
+                    "efi_rom" | "efi-rom" => badc::Subsystem::EfiRom,
+                    _ => {
+                        eprint_diagnostic(format!(
+                            "badc: error: --subsystem=<kind>: unknown kind `{kind}`; expected \
+                             one of console, windows, native, efi_application, \
+                             efi_boot_service_driver, efi_runtime_driver, efi_rom"
+                        ));
+                        std::process::exit(1);
+                    }
+                });
             }
             // An unrecognised dash-prefixed token is an unknown option, not
             // a source file. Without this guard it falls through to `args`
@@ -946,7 +987,17 @@ fn run() {
             for w in &program.warnings {
                 eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
             }
-            let entry = program.entry_name.clone();
+            // Prefer the literal `#pragma entrypoint(<name>)` over the
+            // in-TU-resolved `entry_name`: in a multi-TU freestanding link
+            // the named entry symbol is often defined in a different TU
+            // than the one carrying the pragma, so `entry_name` is `None`
+            // here while the pragma still fixes the image entry. The
+            // freestanding defined-symbol check below verifies the symbol
+            // exists across all inputs at link time.
+            let entry = program
+                .entry_pragma
+                .clone()
+                .or_else(|| program.entry_name.clone());
             let subsystem = program.subsystem;
             let auto_includes = program.auto_includes.clone();
             match badc::emit_native_with_options(&program, target, reloc_opts) {
@@ -1000,14 +1051,18 @@ fn run() {
         // hosted-environment entry-point name to implementations
         // (5.1.2.2.1), so the standard doesn't pick between
         // multi-TU pragmas.
-        let mut entry_override: Option<String> = None;
+        // A CLI `--entry=` / `--subsystem=` seeds the override and wins
+        // over any per-TU pragma (the loop below only fills a `None`).
+        // This is also the sole source of an entry / subsystem when the
+        // inputs are precompiled `.o` files with no source pragma.
+        let mut entry_override: Option<String> = cli_entry.clone();
         // `#pragma subsystem(<kind>)` selects the Windows PE subsystem.
         // Like the entry pragma it is per-TU; the first TU that names
         // one wins. Captured here from the compiled `Program` because
         // the ET_REL round-trip the native path takes does not carry
         // it (the source-level pragma rides the in-memory `Program`,
         // not a section), then threaded to the PE writer.
-        let mut subsystem_override: Option<badc::Subsystem> = None;
+        let mut subsystem_override: Option<badc::Subsystem> = cli_subsystem;
         let mut source_auto_includes: Vec<Vec<String>> = Vec::with_capacity(sources.len());
         for src_path in &sources {
             let (bytes, entry, subsystem, auto_includes) = compile_one(src_path, &[]);

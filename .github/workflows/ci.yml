@@ -1073,13 +1073,15 @@ jobs:
         run: python demos/python/build.py --target=${{ matrix.target }} ${{ matrix.test_flag }}
 
   nasm:
-    # Build NASM 2.16.03 with badc (no make) on every target and run NASM's own
-    # golden test suite against it -- a self-validating oracle (each case
-    # compares the assembled output to a committed golden), so no reference
-    # build is needed. setup.py fetches the release (which ships the generated
-    # instruction tables and the suite); smoke.py compiles the fixed TU list
-    # directly. The POSIX lanes generate config/config.h with ./configure;
-    # Windows uses NASM's in-tree config/msvc.h and needs no host C toolchain.
+    # Build NASM 2.16.03 with badc (no make) and run NASM's own golden test
+    # suite against it -- a self-validating oracle (each case compares the
+    # assembled output to a committed golden), so no reference build is needed.
+    # setup.py fetches the release (which ships the generated instruction
+    # tables and the suite); smoke.py compiles the fixed TU list directly and
+    # generates config/config.h with ./configure. POSIX lanes only: NASM's
+    # in-tree config/msvc.h is MSVC-compiler-specific and does not match badc's
+    # attribute support, so a badc Windows path needs a badc-tailored config
+    # (TODO).
     name: nasm (${{ matrix.label }})
     strategy:
       fail-fast: false
@@ -1088,8 +1090,6 @@ jobs:
           - { os: macos-latest, label: macos-arm64 }
           - { os: ubuntu-latest, label: ubuntu-x64 }
           - { os: ubuntu-24.04-arm, label: ubuntu-arm64 }
-          - { os: windows-latest, label: windows-x64 }
-          - { os: windows-11-arm, label: windows-arm64 }
     runs-on: ${{ matrix.os }}
     # Two badc builds (-O0 and -O) + two golden-suite runs; warm cache ~5 min.
     timeout-minutes: 30

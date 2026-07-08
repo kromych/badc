@@ -1173,8 +1173,18 @@ impl Preprocessor {
                 // buffer; directive lines never become argument text.
                 let mut join_stack: Vec<CondFrame> = Vec::new();
                 let mut join_active = true;
-                while macro_call_unclosed(&buffer, &self.fn_macros, &self.macros)
-                    && idx + consumed < lines.len()
+                while idx + consumed < lines.len()
+                    && (macro_call_unclosed(&buffer, &self.fn_macros, &self.macros)
+                        // A function-like macro name at the end of a line with
+                        // its `(` on the next line is still an invocation (C99
+                        // 6.10.3: white space, including newlines, may separate
+                        // the name from its `(`). Join when the next line opens
+                        // with `(` so the substitution sees the whole call.
+                        || (buffer_ends_with_pending_fn_macro(
+                            &buffer,
+                            &self.fn_macros,
+                            &self.macros,
+                        ) && lines[idx + consumed].trim_start().starts_with('(')))
                 {
                     let cont = lines[idx + consumed];
                     consumed += 1;
@@ -1515,7 +1525,7 @@ impl Preprocessor {
                 let counts = self.macros.contains_key(ident)
                     || (self.fn_macros.contains_key(ident) && {
                         let mut k = i;
-                        while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                        while k < bytes.len() && bytes[k].is_ascii_whitespace() {
                             k += 1;
                         }
                         k < bytes.len() && bytes[k] == b'('
@@ -1620,7 +1630,7 @@ impl Preprocessor {
                 // paren at *use* sites; we follow that.
                 if let Some(macro_def) = self.fn_macros.get(ident) {
                     let mut j = i;
-                    while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
                         j += 1;
                     }
                     if j < bytes.len()
@@ -1694,7 +1704,7 @@ impl Preprocessor {
                             && let Some(inner_def) = self.fn_macros.get(trimmed)
                         {
                             let mut k = next_src;
-                            while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                            while k < bytes.len() && bytes[k].is_ascii_whitespace() {
                                 k += 1;
                             }
                             if k < bytes.len()
@@ -1788,7 +1798,7 @@ impl Preprocessor {
                             && !nested.contains(trimmed)
                         {
                             let mut j = i;
-                            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
                                 j += 1;
                             }
                             if j < bytes.len()
@@ -4012,6 +4022,43 @@ fn macro_call_unclosed(
     false
 }
 
+/// True if `buffer`'s trailing token is a function-like macro name (directly,
+/// or via a single-word object-like alias) with nothing but white space after
+/// it. Used to decide whether to join the next line: a function-like macro
+/// name whose `(` sits on the following line is still an invocation (C99
+/// 6.10.3), which the byte-at-end-of-buffer check in `macro_call_unclosed`
+/// cannot see on its own.
+fn buffer_ends_with_pending_fn_macro(
+    buffer: &str,
+    fn_macros: &HashMap<String, FnMacro>,
+    obj_macros: &HashMap<String, String>,
+) -> bool {
+    let trimmed = buffer.trim_end();
+    let bytes = trimmed.as_bytes();
+    let mut start = bytes.len();
+    while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+        start -= 1;
+    }
+    // Require a real trailing identifier: non-empty and not a number.
+    if start == bytes.len() || bytes[start].is_ascii_digit() {
+        return false;
+    }
+    let name = &trimmed[start..];
+    if fn_macros.contains_key(name) {
+        return true;
+    }
+    obj_macros
+        .get(name)
+        .map(|body| {
+            let t = body.trim();
+            !t.is_empty()
+                && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                && t.bytes().next().is_some_and(|b| !b.is_ascii_digit())
+                && fn_macros.contains_key(t)
+        })
+        .unwrap_or(false)
+}
+
 /// Substitute `params` for `args` in a function-like macro body.
 /// Whole-word match -- a parameter named `T` replaces only the
 /// identifier `T`, never `T` inside another word like `Tx`.
@@ -5475,6 +5522,16 @@ mod tests {
         // (no parens) stays a plain identifier.
         let out = process("#define NOOP(x)\nNOOP(arg);\nint NOOP;\n");
         assert!(out.contains(";\nint NOOP;"));
+    }
+
+    #[test]
+    fn function_like_macro_fires_with_paren_on_next_line() {
+        // C99 6.10.3: white space, including a newline, may separate a
+        // function-like macro's name from the `(` that invokes it. A name at
+        // the end of a line with its `(` on the following line is still a
+        // call and must expand.
+        let out = process("#define ADD(a, b) ((a) + (b))\nint x = ADD\n    (1, 2);\n");
+        assert!(out.contains("((1) + (2))"), "got: {out:?}");
     }
 
     #[test]

@@ -168,7 +168,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=123
     v109 Imm(0)                                           -> x2
     terminator Jmp(b28)   (exit_acc=v107)
   block 28  start_pc=0
-    v114 Phi { incoming=[b27:v108, b52:v112], kind=I64 }  -> x0
+    v114 Phi { incoming=[b27:v108], kind=I64 }            -> x0
     v115 LoadLocal { off=-119, kind=I64 }                 -> x1
     v116 Imm(0)                                           -> x1
     terminator Bz { cond=v114, target=b48, fall=b29 }   (exit_acc=v114)
@@ -259,15 +259,6 @@ fn ent_pc=0 n_params=0 variadic=false locals=123
     terminator Jmp(b22)
   block 50  start_pc=0
     terminator Jmp(b4)
-  block 51  start_pc=0
-    v92  Imm(11)                                          -> x0
-    terminator Return(v92)   (exit_acc=v92)
-  block 52  start_pc=0
-    v110 LoadLocal { off=-28, kind=I32 }                  -> x0
-    v111 Imm(0)                                           -> x0
-    v112 Imm(0)                                           -> x0
-    v113 Imm(0)                                           -> x1
-    terminator Jmp(b28)   (exit_acc=v112)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

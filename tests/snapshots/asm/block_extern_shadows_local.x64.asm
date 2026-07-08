@@ -60,8 +60,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	movl	$0x1, %eax
-               	retq
-               	movl	$0x3, %eax
-               	retq
                	addb	%al, (%rax)

@@ -22,8 +22,6 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
 
 <main>:
                	str	x19, [sp, #-0x20]!
@@ -43,8 +41,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	b	<addr>
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

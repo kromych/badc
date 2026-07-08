@@ -115,24 +115,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x240
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x240
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x6                // =6
-               	add	sp, sp, #0x240
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x240
-               	ldp	x29, x30, [sp], #0x10
-               	ret

@@ -44,26 +44,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x2, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x3, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x5, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x6, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	ud2
-               	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

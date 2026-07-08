@@ -286,9 +286,5 @@ Disassembly of section .text:
                	addq	$0x230, %rsp            # imm = 0x230
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x230, %rsp            # imm = 0x230
-               	popq	%rbp
-               	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

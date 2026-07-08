@@ -60,11 +60,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	add	x20, x20, #0x1
-               	b	<addr>
-               	mov	x17, #0x869f            // =34463
-               	movk	x17, #0x1, lsl #16
-               	add	x20, x20, x17
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

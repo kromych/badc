@@ -4616,15 +4616,6 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x130]
-               	ldr	x19, [sp, #0x40]
-               	ldp	x26, x27, [sp, #0x30]
-               	ldp	x24, x25, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x140
-               	ret
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

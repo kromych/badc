@@ -65,9 +65,6 @@ Disassembly of section .text:
                	cmpq	$0x30, %rdi
                	je	<addr>
                	jmp	<addr>
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

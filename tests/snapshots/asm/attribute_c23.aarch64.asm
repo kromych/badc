@@ -34,7 +34,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0xa                // =10
                	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -122,18 +121,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
 
 <die>:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	ret

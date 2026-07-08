@@ -24,5 +24,3 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x0, #0x2                // =2
-               	ret

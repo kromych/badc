@@ -33,11 +33,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 8  start_pc=0
     v11  Imm(5)                                           -> x0
     terminator Return(v11)   (exit_acc=v11)
-  block 9  start_pc=0
-    v13  Imm(0)                                           -> x0
-    terminator Return(v13)   (exit_acc=v13)
-  block 10  start_pc=0
-    terminator Jmp(b4)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=u16
 fn ent_pc=1 n_params=1 variadic=false locals=0
@@ -64,11 +59,6 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
   block 5  start_pc=0
     v8   Imm(7)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
-  block 6  start_pc=0
-    v10  Imm(0)                                           -> x0
-    terminator Return(v10)   (exit_acc=v10)
-  block 7  start_pc=0
-    terminator Jmp(b3)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=u8
 fn ent_pc=2 n_params=1 variadic=false locals=0
@@ -95,11 +85,6 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
   block 5  start_pc=0
     v8   Imm(3)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
-  block 6  start_pc=0
-    v10  Imm(0)                                           -> x0
-    terminator Return(v10)   (exit_acc=v10)
-  block 7  start_pc=0
-    terminator Jmp(b3)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=s32
 fn ent_pc=3 n_params=1 variadic=false locals=0
@@ -126,11 +111,6 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
   block 5  start_pc=0
     v8   Imm(200)                                         -> x0
     terminator Return(v8)   (exit_acc=v8)
-  block 6  start_pc=0
-    v10  Imm(0)                                           -> x0
-    terminator Return(v10)   (exit_acc=v10)
-  block 7  start_pc=0
-    terminator Jmp(b3)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
 fn ent_pc=4 n_params=0 variadic=false locals=1

@@ -74,9 +74,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
 
 <main>:
                	str	x20, [sp, #-0x20]!

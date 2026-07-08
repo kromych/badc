@@ -238,8 +238,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x230
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	ldr	x20, [sp]
-               	add	sp, sp, #0x230
-               	ldp	x29, x30, [sp], #0x10
-               	ret

@@ -128,14 +128,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v23  Fneg(v22)                                        -> d0 [f32]
     v24  Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v23)
-  block 19  start_pc=0
-    v47  Imm(0)                                           -> x0 [f32]
-    v48  StoreLocal { off=-7, value=v47, kind=F32 }       -> -
-    terminator Jmp(b14)   (exit_acc=v48)
-  block 20  start_pc=0
-    v56  Imm(1092616192)                                  -> x0 [f32]
-    v57  StoreLocal { off=-8, value=v56, kind=F32 }       -> -
-    terminator Jmp(b13)   (exit_acc=v57)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v10  Imm(0)                                           -> x1
     terminator Jmp(b7)   (exit_acc=v10)
   block 7  start_pc=0
-    v16  Phi { incoming=[b6:v9, b14:v14], kind=I64 }      -> x0
+    v16  Phi { incoming=[b6:v9], kind=I64 }               -> x0
     terminator Jmp(b8)
   block 8  start_pc=0
     v11  Imm(0)                                           -> x1
@@ -51,10 +51,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 13  start_pc=0
     v22  Imm(0)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
-  block 14  start_pc=0
-    v14  Imm(99)                                          -> x0
-    v15  Imm(0)                                           -> x1
-    terminator Jmp(b7)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

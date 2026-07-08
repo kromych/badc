@@ -95,5 +95,3 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ret

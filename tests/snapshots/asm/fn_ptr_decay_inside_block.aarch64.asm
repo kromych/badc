@@ -60,8 +60,3 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x90
-               	ret

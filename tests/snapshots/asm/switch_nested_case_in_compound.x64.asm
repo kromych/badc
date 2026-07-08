@@ -47,21 +47,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	movl	$0x4000, %eax           # imm = 0x4000
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	movl	$0x1064, %eax           # imm = 0x1064
-               	jmp	<addr>
-               	movl	$0x2064, %eax           # imm = 0x2064
-               	jmp	<addr>
-               	movl	$0x4000, %eax           # imm = 0x4000
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	movl	$0x2064, %eax           # imm = 0x2064
-               	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

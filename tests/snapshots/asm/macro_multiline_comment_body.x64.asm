@@ -26,6 +26,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	movl	$0x63, %eax
-               	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -50,23 +50,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0xb, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xc, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xd, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xe, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x15, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
+               	addb	%al, (%rax)

@@ -77,8 +77,3 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0xa0
                	ret
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x90]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0xa0
-               	ret

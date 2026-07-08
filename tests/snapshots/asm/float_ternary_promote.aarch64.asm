@@ -120,13 +120,3 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fneg	s0, s0
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	fmov	s16, w0
-               	sub	x17, x29, #0x38
-               	str	s16, [x17]
-               	b	<addr>
-               	mov	x0, #0x41200000         // =1092616192
-               	fmov	s16, w0
-               	sub	x17, x29, #0x40
-               	str	s16, [x17]
-               	b	<addr>

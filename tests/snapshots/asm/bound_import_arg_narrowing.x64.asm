@@ -97,8 +97,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
-               	addb	%al, (%rax)

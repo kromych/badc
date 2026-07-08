@@ -55,6 +55,20 @@ fn return_42() {
 }
 
 #[test]
+fn dead_branch_call_to_undefined_symbol_is_pruned() {
+    // At -O, `constfold_branch` folds `if (0)` to an unconditional jump
+    // and `prune_unreachable` deletes the orphaned arm, so the
+    // never-taken call to the undefined `u` produces no reference and
+    // the program loads and runs. Without the prune the JIT loader
+    // would fail to resolve `u`.
+    let src = "extern void u(void); int main(void) { if (0) { u(); } return 7; }";
+    assert_eq!(
+        jit_exit_native_optimized(src, &["jit-dead-branch-prune"]),
+        7
+    );
+}
+
+#[test]
 fn return_zero() {
     assert_eq!(jit_exit("int main() { return 0; }", &["jit-ret0"]), 0);
 }

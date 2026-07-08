@@ -47,15 +47,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x19, [sp], #0x70
                	ret
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp], #0x70
-               	ret
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp], #0x70
-               	ret
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp], #0x70
-               	ret

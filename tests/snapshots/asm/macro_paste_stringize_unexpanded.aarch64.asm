@@ -66,7 +66,3 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
-               	mov	x0, #0x4                // =4
-               	ret

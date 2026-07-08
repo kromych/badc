@@ -30,15 +30,3 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x0, #0x2                // =2
-               	b	<addr>
-               	b	<addr>
-               	mov	x0, #0x4                // =4
-               	b	<addr>
-               	b	<addr>
-               	mov	x0, #0x6                // =6
-               	b	<addr>
-               	mov	x0, #0x7                // =7
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

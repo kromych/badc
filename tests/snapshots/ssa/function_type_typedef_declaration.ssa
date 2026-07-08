@@ -119,12 +119,6 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
   block 8  start_pc=0
     v49  Imm(0)                                           -> x0
     terminator Return(v49)   (exit_acc=v49)
-  block 9  start_pc=0
-    v11  Imm(1)                                           -> x0
-    terminator Return(v11)   (exit_acc=v11)
-  block 10  start_pc=0
-    v22  Imm(2)                                           -> x0
-    terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=add1
-fn ent_pc=5 n_params=1 variadic=false locals=0
+fn ent_pc=6 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -11,17 +11,17 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
     v6   Extend { value=v4, kind=I32 }                    -> x0
     terminator Return(v6)   (exit_acc=v6)
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=exported
-fn ent_pc=6 n_params=0 variadic=false locals=0
+fn ent_pc=7 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(3)                                           -> x0
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=7 ---
+; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=halt
-fn ent_pc=7 n_params=0 variadic=false locals=0
+fn ent_pc=8 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -36,9 +36,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v2   Imm(0)                                           -> x0
     terminator Return(v2)   (exit_acc=v2)
-; --- SSA dump (ok=true) ent_pc=8 ---
+; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=main
-fn ent_pc=8 n_params=0 variadic=false locals=1
+fn ent_pc=9 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

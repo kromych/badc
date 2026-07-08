@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=wrap
-fn ent_pc=1 n_params=3 variadic=true locals=8
+fn ent_pc=6 n_params=3 variadic=true locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -17,9 +17,9 @@ fn ent_pc=1 n_params=3 variadic=true locals=8
     v11  Intrinsic { kind=6, args=[v10] }                 -> x1
     v12  Extend { value=v8, kind=I32 }                    -> x0
     terminator Return(v12)   (exit_acc=v12)
-; --- SSA dump (ok=true) ent_pc=2 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=6
+fn ent_pc=7 n_params=0 variadic=false locals=6
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -65,7 +65,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v28  Imm(4)                                           -> x6
     v29  ImmData(52)                                      -> x2
     v30  Imm(987654)                                      -> x1
-    v31  Call { target_pc=1, args=[v27, v28, v29, v30], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v31  Call { target_pc=6, args=[v27, v28, v29, v30], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v32  BinopI { op=ne, lhs=v31, rhs_imm=6 }             -> x0
     terminator Bz { cond=v32, target=b8, fall=b7 }   (exit_acc=v32)
   block 7  start_pc=0

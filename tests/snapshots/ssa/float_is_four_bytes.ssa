@@ -1,7 +1,7 @@
 float_is_four_bytes.c:41: warning: unused variable `fv`
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=passthrough
-fn ent_pc=1 n_params=1 variadic=false locals=1
+fn ent_pc=6 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -9,9 +9,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=2 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=add3
-fn ent_pc=2 n_params=3 variadic=false locals=3
+fn ent_pc=7 n_params=3 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -27,9 +27,9 @@ fn ent_pc=2 n_params=3 variadic=false locals=3
     v10  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
     v11  Binop { op=fadd, lhs=v9, rhs=v5 }                -> d0 [f32]
     terminator Return(v11)   (exit_acc=v11)
-; --- SSA dump (ok=true) ent_pc=3 ---
+; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=13
+fn ent_pc=8 n_params=0 variadic=false locals=13
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

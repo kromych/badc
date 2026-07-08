@@ -595,9 +595,9 @@ large_stack_frame.c:79: warning: unused variable `a595`
 large_stack_frame.c:79: warning: unused variable `a596`
 large_stack_frame.c:79: warning: unused variable `a597`
 large_stack_frame.c:79: warning: unused variable `a598`
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=big
-fn ent_pc=5 n_params=1 variadic=false locals=600
+fn ent_pc=6 n_params=1 variadic=false locals=600
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -617,9 +617,9 @@ fn ent_pc=5 n_params=1 variadic=false locals=600
     v14  Imm(0)                                           -> x1
     v15  LoadLocal { off=-600, kind=I32 }                 -> x1
     terminator Return(v13)   (exit_acc=v13)
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
-fn ent_pc=6 n_params=0 variadic=false locals=2
+fn ent_pc=7 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

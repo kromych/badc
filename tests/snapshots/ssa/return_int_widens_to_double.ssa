@@ -1,24 +1,24 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=get_int_as_double
-fn ent_pc=1 n_params=0 variadic=false locals=0
+fn ent_pc=6 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(505)                                         -> x0
     v2   Imm(4647591670144040960)                         -> x0
     terminator Return(v2)   (exit_acc=v2)
-; --- SSA dump (ok=true) ent_pc=2 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=get_negative
-fn ent_pc=2 n_params=0 variadic=false locals=0
+fn ent_pc=7 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(-1)                                          -> x0
     v2   Imm(-4616189618054758400)                        -> x0
     terminator Return(v2)   (exit_acc=v2)
-; --- SSA dump (ok=true) ent_pc=3 ---
+; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=7
+fn ent_pc=8 n_params=0 variadic=false locals=7
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=31
+fn ent_pc=6 n_params=0 variadic=false locals=31
   spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -93,9 +93,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=31
     terminator Jmp(b8)   (exit_acc=v65)
   block 10  start_pc=0
     terminator Jmp(b4)
-; --- SSA dump (ok=true) ent_pc=2 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=__c5_sys_fcntl
-fn ent_pc=2 n_params=0 variadic=false locals=0
+fn ent_pc=7 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

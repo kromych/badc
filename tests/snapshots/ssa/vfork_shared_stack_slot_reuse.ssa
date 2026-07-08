@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=child_exec
-fn ent_pc=6 n_params=20 variadic=false locals=0
+fn ent_pc=7 n_params=20 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -95,9 +95,9 @@ fn ent_pc=6 n_params=20 variadic=false locals=0
     v89  Extend { value=v87, kind=I32 }                   -> x0
     v90  BinopI { op=and, lhs=v89, rhs_imm=127 }          -> x0
     terminator Return(v90)   (exit_acc=v90)
-; --- SSA dump (ok=true) ent_pc=7 ---
+; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
-fn ent_pc=7 n_params=0 variadic=false locals=57
+fn ent_pc=8 n_params=0 variadic=false locals=57
   spill_count=70 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -797,7 +797,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=57
     v378 LoadLocal { off=-34, kind=I32 }                  -> [spill 67]
     v379 LoadLocal { off=-35, kind=I32 }                  -> [spill 68]
     v380 LoadLocal { off=-36, kind=I32 }                  -> [spill 69]
-    v381 Call { target_pc=6, args=[v167, v177, v187, v197, v207, v217, v229, v239, v249, v259, v269, v279, v289, v299, v309, v319, v329, v339, v349, v359], fixed_args=20, fp_return=false, fp_arg_mask=0x0 } -> x7
+    v381 Call { target_pc=7, args=[v167, v177, v187, v197, v207, v217, v229, v239, v249, v259, v269, v279, v289, v299, v309, v319, v329, v339, v349, v359], fixed_args=20, fp_return=false, fp_arg_mask=0x0 } -> x7
     v382 CallExt { binding_idx=171, args=[v381], fp_arg_mask=0x0 } -> x0
     v383 Imm(3)                                           -> x0
     terminator Return(v383)   (exit_acc=v383)

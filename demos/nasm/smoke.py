@@ -11,12 +11,13 @@ needed.
 
 The NASM release tarball ships the generated instruction tables, `version.h`,
 and `version.mac`; the only file a pristine tree lacks is `config/config.h`,
-produced here by `./configure` where a POSIX shell + host C compiler exist,
-else copied from NASM's in-tree `config/msvc.h` (native Windows -- badc then
-builds it with no host toolchain at all).
+installed here from a frozen per-target config committed under `config/` (no
+`./configure`, so no POSIX shell and no host cc -- native Windows included).
+badc's capability profile is fixed, so the config is a constant: a POSIX form
+and a Windows form (see `ensure_config`).
 
-Runs on both `-O0` and `-O`. Override the badc binary via `$BADC`
-(default: `target/release/badc[.exe]`).
+Runs on both `-O0` and `-O`, on all five supported targets. Override the badc
+binary via `$BADC` (default: `target/release/badc[.exe]`).
 """
 
 from __future__ import annotations
@@ -107,13 +108,6 @@ def badc_target() -> str:
     return "linux-aarch64" if aarch else "linux-x64"
 
 
-def find_sh() -> "str | None":
-    for s in ("sh", "bash"):
-        if shutil.which(s):
-            return s
-    return None
-
-
 def ensure_source() -> None:
     if (SRC / "x86" / "insnsa.c").is_file() and (SRC / "version.mac").is_file():
         return
@@ -121,38 +115,26 @@ def ensure_source() -> None:
     subprocess.run([sys.executable, str(NASM_DEMO / "setup.py")], check=True)
 
 
-def ensure_config() -> None:
-    """Produce src/config/config.h. `./configure` generates a config matching
-    the host compiler's capabilities, which is what badc needs: it accepts GNU
-    `__attribute__`, so the attribute-based macros (safe_malloc, etc.) must be
-    enabled, and any GNU-shaped cc (cc/clang/gcc, incl. clang on Windows) drives
-    the probes correctly. NASM's in-tree config/msvc.h assumes the MSVC
-    *compiler* (no __attribute__) and does not match badc -- last resort only."""
-    cfg = SRC / "config" / "config.h"
-    sh = find_sh()
-    cc = os.environ.get("CC") or next(
-        (c for c in ("cc", "clang", "gcc") if shutil.which(c)), None)
-    if sh and cc:
-        log(f"configure (shell={sh}, CC={cc})")
-        subprocess.run([sh, "./configure", f"CC={cc}"], cwd=SRC, check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    else:
-        msvc = SRC / "config" / "msvc.h"
-        if not msvc.is_file():
-            fail("no shell + C compiler for ./configure and no config/msvc.h")
-        log("no shell + compiler; falling back to config/msvc.h "
-            "(MSVC-shaped; not matched to badc)")
-        shutil.copy2(msvc, cfg)
-    if not cfg.is_file():
-        fail("config/config.h was not produced")
-    # badc accepts but ignores `__attribute__((error))`, so NASM's `-O`
-    # compile-time-assert tripwire would leave a dead call -> undefined symbol.
-    # Disable that feature; the assembler output is unaffected.
-    text = cfg.read_text()
-    patched = text.replace("#define HAVE_FUNC_ATTRIBUTE_ERROR 1",
-                           "/* #undef HAVE_FUNC_ATTRIBUTE_ERROR (badc) */")
-    if patched != text:
-        cfg.write_text(patched)
+def ensure_config(target: str) -> None:
+    """Install src/config/config.h from a frozen per-target config -- no
+    `./configure`, so no POSIX shell and no host cc are needed (native Windows
+    included). `./configure`'s job is capability detection, but badc's profile
+    is fixed, so the answer is a committed constant. Two forms cover the five
+    targets: the POSIX form (macOS / Linux) and the Windows form, which is the
+    POSIX form minus the five POSIX-only libc entries badc's msvcrt binding
+    does not provide (fseeko, ftruncate, getpagesize, mmap, realpath); NASM
+    falls back to its portable paths for those. Both forms also disable
+    `HAVE_FUNC_ATTRIBUTE_ERROR`: badc accepts but ignores attribute(error), so
+    NASM's `-O` compile-time-assert tripwire would otherwise leave a dead call
+    to an undefined symbol."""
+    kind = "windows" if target.startswith("windows") else "posix"
+    frozen = NASM_DEMO / "config" / f"config-{kind}.h"
+    if not frozen.is_file():
+        fail(f"frozen config missing: {frozen}")
+    dst = SRC / "config" / "config.h"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(frozen, dst)
+    log(f"config: frozen {kind} ({target})")
 
 
 def build_nasm(badc: Path, target: str, optimize: bool, workdir: Path) -> Path:
@@ -219,7 +201,7 @@ def main() -> int:
     target = badc_target()
     log(f"badc={badc} target={target}")
     ensure_source()
-    ensure_config()
+    ensure_config(target)
     with tempfile.TemporaryDirectory(prefix="nasm-smoke-") as d:
         work = Path(d)
         for optimize in (False, True):

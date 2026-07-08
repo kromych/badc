@@ -329,6 +329,8 @@ int vsnprintf(char *buf, int size, char *fmt, char *ap);
 #pragma binding(msvcrt::_stat,          "_stat")
 #pragma binding(msvcrt::_stat64,        "_stat64")
 #pragma binding(msvcrt::_fstat64,       "_fstat64")
+#pragma binding(msvcrt::_waccess,       "_waccess")
+#pragma binding(msvcrt::_wfreopen,      "_wfreopen")
 #pragma binding(msvcrt::_wstat,         "_wstat")
 #pragma binding(msvcrt::_wchmod,        "_wchmod")
 #pragma binding(msvcrt::_wmkdir,        "_wmkdir")
@@ -584,6 +586,8 @@ struct __stat64 {
 int   _stat(char *path, struct _stat *buf);
 int   _stat64(char *path, struct _stat64 *buf);
 int   _fstat64(int fd, void *buf);
+int   _waccess(unsigned short *path, int mode);
+FILE *_wfreopen(unsigned short *path, unsigned short *mode, FILE *stream);
 int   _wstat(unsigned short *path, struct _stat *buf);
 int   _wchmod(unsigned short *path, int mode);
 int   _wmkdir(unsigned short *path);

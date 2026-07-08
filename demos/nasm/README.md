@@ -23,13 +23,15 @@ python3 demos/nasm/smoke.py                      # build with badc + test
 Like the python demo, the smoke compiles a fixed translation-unit list
 directly -- there is no `make`. The NASM release tarball ships the generated
 instruction tables, `version.h`, and `version.mac`; the only file a pristine
-tree lacks is `config/config.h`, produced by `./configure`. Any GNU-shaped
-host compiler (`cc`/`clang`/`gcc`, including clang on Windows) drives the
-probes; badc accepts GNU `__attribute__`, so the config must advertise it.
+tree lacks is `config/config.h`, which the smoke installs from a frozen
+per-target config committed under `config/` -- so there is no `./configure`,
+no POSIX shell, and no host cc. badc's capability profile is fixed, so the
+config is a constant: a POSIX form (macOS / Linux) and a Windows form (the
+POSIX form minus the five POSIX-only libc entries badc's msvcrt binding does
+not provide: `fseeko`, `ftruncate`, `getpagesize`, `mmap`, `realpath`).
 
-The demo runs on the POSIX targets. NASM's in-tree `config/msvc.h` is
-MSVC-*compiler*-specific (no `__attribute__`), so it does not match badc; a
-native-Windows path needs a badc-tailored config (TODO).
+The demo runs on all five supported targets -- macOS, Linux (x64/arm64), and
+native Windows (x64/arm64) -- with only badc + python.
 
 ## What the smoke checks
 
@@ -61,5 +63,4 @@ a chosen interpreter directly.
 
 ## Requirements
 
-`python3`, badc, and -- for `./configure`'s feature probes -- a POSIX shell
-and a GNU-shaped host C compiler (`cc`/`clang`/`gcc`).
+`python3` and badc. No `make`, no `./configure`, no host C compiler.

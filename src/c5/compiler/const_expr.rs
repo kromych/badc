@@ -8,8 +8,9 @@
 //! grammar -- literals (integer + floating), identifiers bound to
 //! integer constants (enum values and `#define`d numeric macros
 //! the preprocessor expanded), parenthesised sub-expressions,
-//! casts, `sizeof`, and the GCC-style `offsetof` expansion -- with
-//! the standard operator hierarchy via recursive descent.
+//! casts, `sizeof`, and the address of a constant object designator
+//! (`&((T*)0)->m`) -- with the standard operator hierarchy via
+//! recursive descent.
 //!
 //! Internally each recursive-descent rule returns a [`ConstVal`]
 //! so a floating literal can flow through the chain (e.g.
@@ -38,8 +39,8 @@ use super::types::{
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
-/// literals, identifier-bound integer constants, sizeof, and the
-/// offsetof shape produce [`ConstVal::Int`]; floating literals and
+/// literals, identifier-bound integer constants, sizeof, and a
+/// constant address-of expression produce [`ConstVal::Int`]; floating literals and
 /// casts to floating types produce [`ConstVal::Float`]. Mixed-type
 /// arithmetic promotes to float per C99 6.3.1.8 ("usual arithmetic
 /// conversions"). The integer-typed callers (array sizes, enums,
@@ -57,6 +58,20 @@ use super::types::{
 pub(super) enum ConstVal {
     Int { val: i64, ty: i64 },
     Float(f64),
+}
+
+/// A constant object designation, produced while folding the operand of a
+/// unary `&` in a constant expression. It is either an object lvalue
+/// (`is_lvalue`, and `value` is the object's byte address) or a pointer
+/// rvalue (`value` is the pointer's integer value). `ty` is the object
+/// type or the pointer type. Designators (`->`, `.`, `[]`) fold constant
+/// offsets onto `value`; parentheses recurse, so any nesting works. C99
+/// 6.6p9 permits such address constants in a constant expression.
+#[derive(Copy, Clone)]
+struct ConstDesig {
+    value: i64,
+    ty: i64,
+    is_lvalue: bool,
 }
 
 /// Operator selector for [`Compiler::const_int_binop`], the single
@@ -139,8 +154,8 @@ impl Compiler {
     /// operands convert to their common type and the operation runs
     /// in that type's signedness, renormalized to its width. Shifts
     /// take the promoted left-operand type instead (6.5.7p3).
-    /// Pointer-typed operands (string addresses, offsetof chains)
-    /// fold at full 64-bit width with no conversion. A zero divisor
+    /// Pointer-typed operands (string addresses, constant address-of
+    /// designations) fold at full 64-bit width with no conversion. A zero divisor
     /// in an evaluated operand is a compile error (6.6p4); signed
     /// overflow wraps, matching the runtime lowering.
     fn const_int_binop(
@@ -674,7 +689,7 @@ impl Compiler {
         }
         if self.lex.tk == Token::AndOp {
             // Address constant: full-width, no arithmetic conversion.
-            let v = self.parse_const_offsetof()?;
+            let v = self.parse_const_address_of()?;
             return Ok(ConstVal::Int {
                 val: v,
                 ty: Ty::Ptr as i64,
@@ -715,153 +730,198 @@ impl Compiler {
         }
     }
 
-    /// Recognise the GCC-style `offsetof` expansion in a constant
-    /// expression -- `&((T*)<base>)->field[.field]*[[N]]`. The
-    /// macro typically expands to
-    ///   `((size_t)((char*)&((T*)0)->m - (char*)0))`
-    /// and shows up in C99 source for sized scratch buffers.
-    /// Evaluates to `<base> + offset_of(T, field...)`. The chain
-    /// supports nested `.field` for nested struct values and a
-    /// trailing `[N]` index for an array field. Result is always
-    /// an integer byte offset.
-    fn parse_const_offsetof(&mut self) -> Result<i64, C5Error> {
+    /// Evaluate the operand of a unary `&` in a constant expression to the
+    /// byte address of the designated object (C99 6.6p9). The operand is a
+    /// constant lvalue: a pointer value such as `(T*)0` dereferenced by a
+    /// chain of `->`/`.`/`[]` designators, at any level of parenthesization.
+    /// No expression shape is special-cased -- `((T*)0)->m`, `(((T*)0)->m)`,
+    /// nested `.field` chains, and `((char*)0)[N]` all fold through the same
+    /// recursive designation grammar.
+    fn parse_const_address_of(&mut self) -> Result<i64, C5Error> {
         let line = self.lex.line;
-        // Consume `&`.
-        self.next()?;
-        if self.lex.tk != '(' {
+        self.next()?; // consume `&`
+        let d = self.parse_const_designation()?;
+        if !d.is_lvalue {
             return Err(self.compile_err_at(
                 line,
-                format!(
-                    "`&` in a constant expression must open the offsetof shape \
-                 `&((T*)expr)->field` (got {})",
-                    super::super::token::describe(self.lex.tk)
-                ),
+                "`&` in a constant expression requires an object designator \
+                 such as `((T*)0)->field`",
             ));
         }
-        self.next()?;
-        if self.lex.tk != '(' {
-            return Err(self.compile_err_at(
-                line,
-                format!(
-                    "expected `((T*)...` in offsetof shape (got {})",
-                    super::super::token::describe(self.lex.tk)
-                ),
-            ));
-        }
-        self.next()?;
-        if !self.lex_is_type_start() {
-            return Err(self.compile_err_at(
-                line,
-                format!(
-                    "expected struct type in offsetof cast (got {})",
-                    super::super::token::describe(self.lex.tk)
-                ),
-            ));
-        }
-        let mut t = self.parse_decl_base_type()?;
-        while self.lex.tk == Token::MulOp {
-            self.next()?;
-            t += Ty::Ptr as i64;
-            while self.lex.tk == Token::TypeQual {
-                self.next()?;
-            }
-        }
-        if self.lex.tk != ')' {
-            return Err(
-                self.compile_err_at(line, "close paren expected after type in offsetof cast")
-            );
-        }
-        self.next()?;
-        // Base address (typically `0`).
-        let base = self.parse_const_expr_unary_val()?.as_int();
-        if self.lex.tk != ')' {
-            return Err(
-                self.compile_err_at(line, "close paren expected after base in offsetof shape")
-            );
-        }
-        self.next()?;
-        // Two postfix shapes follow the `&((T*)base)`:
-        //   * `->field[.field]*` -- the standard offsetof shape;
-        //     element type is the struct field, byte offset is
-        //     accumulated through the chain.
-        //   * `[const_expr]` -- pointer indexing into a typed
-        //     base, used for constant-time pointer arithmetic
-        //     like `&((char*)0)[7]` in static initializers.
-        if self.lex.tk == Token::Brak {
-            self.next()?;
-            let n = self.parse_const_expr_cond_val()?.as_int();
-            if self.lex.tk != ']' {
-                return Err(self.compile_err_at(line, "close bracket expected in offsetof index"));
-            }
-            self.next()?;
-            // (T*)base -- the pointee type is `t - Ty::Ptr`. Scale
-            // the index by the pointee's byte size.
-            let pointee_ty = t - Ty::Ptr as i64;
-            return Ok(base + n * self.size_of_type(pointee_ty) as i64);
-        }
-        if self.lex.tk != Token::Arrow {
-            return Err(self.compile_err_at(
-                line,
-                format!(
-                    "`->` expected in offsetof shape (got {})",
-                    super::super::token::describe(self.lex.tk)
-                ),
-            ));
-        }
-        self.next()?;
-        if !is_struct_ty(t) || struct_ptr_depth(t) == 0 {
-            return Err(self.compile_err_at(line, "offsetof requires `(T*)` for some struct T"));
-        }
-        // Drop one level of pointer to reach the struct value type.
-        let mut current_ty = t - Ty::Ptr as i64;
-        let mut total: i64 = base;
+        Ok(d.value)
+    }
+
+    /// Parse and fold a constant designation (see [`ConstDesig`]). Every
+    /// parenthesis and designator recursion passes through here, so this
+    /// bounds the cascade the way the value grammar is bounded.
+    fn parse_const_designation(&mut self) -> Result<ConstDesig, C5Error> {
+        self.with_nesting("expression", |c| c.parse_const_designation_inner())
+    }
+
+    fn parse_const_designation_inner(&mut self) -> Result<ConstDesig, C5Error> {
+        let line = self.lex.line;
+        let mut d = self.parse_const_designation_primary()?;
+        // Postfix designator chain. Each folds a constant offset onto the
+        // running address: `->` dereferences a pointer, `.` selects a
+        // sub-member, `[]` indexes a pointer or array element.
         loop {
-            if !is_struct_ty(current_ty) || struct_ptr_depth(current_ty) != 0 {
-                return Err(
-                    self.compile_err_at(line, "offsetof field chain reaches a non-struct value")
-                );
-            }
-            if self.lex.tk != Token::Id {
-                return Err(self.compile_err_at(line, "field name expected in offsetof chain"));
-            }
-            let sid = struct_id_of(current_ty);
-            let name = self.symbols[self.lex.curr_id_idx].name.clone();
-            let pos = self.structs[sid]
-                .fields
-                .iter()
-                .position(|f| f.name == name)
-                .ok_or_else(|| {
-                    self.compile_err_at(
+            if self.lex.tk == Token::Arrow {
+                self.next()?;
+                if d.is_lvalue {
+                    return Err(self.compile_err_at(
                         line,
-                        format!("struct {} has no field {}", self.structs[sid].name, name),
-                    )
-                })?;
-            total += self.structs[sid].fields[pos].offset as i64;
-            current_ty = self.structs[sid].fields[pos].ty;
-            let field_array_size = self.structs[sid].fields[pos].array_size;
-            self.next()?;
-            // Optional `[N]` -- subscript inside the offsetof field
-            // chain. Multiplies the constant index by the element
-            // size of the field's array type.
-            if self.lex.tk == Token::Brak {
+                        "`->` in a constant expression requires a pointer value",
+                    ));
+                }
+                let struct_ty = d.ty - Ty::Ptr as i64;
+                let (off, fty) = self.const_struct_field(struct_ty, line)?;
+                d = ConstDesig {
+                    value: d.value + off,
+                    ty: fty,
+                    is_lvalue: true,
+                };
+            } else if self.lex.tk == Token::Dot {
+                self.next()?;
+                if !d.is_lvalue {
+                    return Err(self.compile_err_at(
+                        line,
+                        "`.` in a constant expression requires an object of struct type",
+                    ));
+                }
+                let (off, fty) = self.const_struct_field(d.ty, line)?;
+                d = ConstDesig {
+                    value: d.value + off,
+                    ty: fty,
+                    is_lvalue: true,
+                };
+            } else if self.lex.tk == Token::Brak {
                 self.next()?;
                 let n = self.parse_const_expr_cond_val()?.as_int();
                 if self.lex.tk != ']' {
                     return Err(
-                        self.compile_err_at(line, "close bracket expected in offsetof index")
+                        self.compile_err_at(line, "close bracket expected in constant subscript")
                     );
                 }
                 self.next()?;
-                let _ = field_array_size;
-                total += n * self.size_of_type(current_ty) as i64;
+                if d.is_lvalue {
+                    // Array element `a[N]` at `&a + N*sizeof(elem)`. A field's
+                    // `ty` is its element type, so scale by that.
+                    d = ConstDesig {
+                        value: d.value + n * self.size_of_type(d.ty) as i64,
+                        ty: d.ty,
+                        is_lvalue: true,
+                    };
+                } else {
+                    // Pointer index `p[N]` == `*(p+N)`: an lvalue at
+                    // `p + N*sizeof(pointee)`.
+                    let pointee = d.ty - Ty::Ptr as i64;
+                    d = ConstDesig {
+                        value: d.value + n * self.size_of_type(pointee) as i64,
+                        ty: pointee,
+                        is_lvalue: true,
+                    };
+                }
+            } else {
+                break;
             }
-            if self.lex.tk == Token::Dot {
-                self.next()?;
-                continue;
-            }
-            break;
         }
-        Ok(total)
+        Ok(d)
+    }
+
+    fn parse_const_designation_primary(&mut self) -> Result<ConstDesig, C5Error> {
+        let line = self.lex.line;
+        if self.lex.tk == Token::AndOp {
+            // `&lvalue` -- a pointer rvalue whose value is the lvalue address.
+            self.next()?;
+            let inner = self.parse_const_designation()?;
+            if !inner.is_lvalue {
+                return Err(
+                    self.compile_err_at(line, "`&` requires an lvalue in a constant expression")
+                );
+            }
+            return Ok(ConstDesig {
+                value: inner.value,
+                ty: inner.ty + Ty::Ptr as i64,
+                is_lvalue: false,
+            });
+        }
+        if self.lex.tk == '(' {
+            self.next()?;
+            if self.lex_is_type_start() {
+                // Cast `(T ...*) operand` -- a (usually pointer) rvalue.
+                let mut ty = self.parse_decl_base_type()?;
+                while self.lex.tk == Token::MulOp {
+                    self.next()?;
+                    ty += Ty::Ptr as i64;
+                    while self.lex.tk == Token::TypeQual {
+                        self.next()?;
+                    }
+                }
+                while self.lex.tk == Token::TypeQual {
+                    self.next()?;
+                }
+                if self.lex.tk != ')' {
+                    return Err(self.compile_err_at(
+                        line,
+                        "close paren expected after cast type in constant expression",
+                    ));
+                }
+                self.next()?;
+                let operand = self.parse_const_expr_unary_val()?;
+                return Ok(ConstDesig {
+                    value: operand.as_int(),
+                    ty,
+                    is_lvalue: false,
+                });
+            }
+            // Parenthesized designation: parentheses are transparent.
+            let inner = self.parse_const_designation()?;
+            if self.lex.tk != ')' {
+                return Err(
+                    self.compile_err_at(line, "close paren expected in constant expression")
+                );
+            }
+            self.next()?;
+            return Ok(inner);
+        }
+        // Any other primary is a plain constant value -- the integer such as
+        // the `0` in `(T*)0` -- an rvalue that is neither pointer nor lvalue.
+        let v = self.parse_const_expr_unary_val()?;
+        Ok(ConstDesig {
+            value: v.as_int(),
+            ty: v.int_ty(),
+            is_lvalue: false,
+        })
+    }
+
+    /// Resolve the current identifier as a field of `struct_ty` and return
+    /// `(byte offset, field type)`, advancing past the field name.
+    fn const_struct_field(&mut self, struct_ty: i64, line: usize) -> Result<(i64, i64), C5Error> {
+        if !is_struct_ty(struct_ty) || struct_ptr_depth(struct_ty) != 0 {
+            return Err(self.compile_err_at(
+                line,
+                "member access in a constant expression requires a struct value",
+            ));
+        }
+        if self.lex.tk != Token::Id {
+            return Err(self.compile_err_at(line, "field name expected in constant member access"));
+        }
+        let sid = struct_id_of(struct_ty);
+        let name = self.symbols[self.lex.curr_id_idx].name.clone();
+        let pos = self.structs[sid]
+            .fields
+            .iter()
+            .position(|f| f.name == name)
+            .ok_or_else(|| {
+                self.compile_err_at(
+                    line,
+                    format!("struct {} has no field {}", self.structs[sid].name, name),
+                )
+            })?;
+        let off = self.structs[sid].fields[pos].offset as i64;
+        let fty = self.structs[sid].fields[pos].ty;
+        self.next()?;
+        Ok((off, fty))
     }
 
     fn parse_const_expr_primary_val(&mut self) -> Result<ConstVal, C5Error> {

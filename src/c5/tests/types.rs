@@ -4,6 +4,36 @@
 
 use super::{compile_fixture, run_fixture};
 
+/// C99 6.4.4.4p11: a wide character constant (`L'x'`) has type `wchar_t`,
+/// whose width the target fixes -- 2 bytes on Windows (UTF-16) and 4 on
+/// the Unix targets, matching the `<stddef.h>` typedef. A narrow
+/// character constant keeps type `int` (6.4.4.4p10) on every target. The
+/// SSA interpreter is target-independent, so a program compiled for any
+/// target folds its `sizeof` against that target's widths.
+#[test]
+fn wide_char_constant_has_target_wchar_width() {
+    use super::Vm;
+    use crate::Compiler;
+    use crate::Target;
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(Compiler::with_target(src.to_string(), t).compile().unwrap())
+            .run()
+            .unwrap()
+    };
+    let wide = "int main(void){ return (int)sizeof(L'A'); }";
+    assert_eq!(
+        run(wide, Target::WindowsX64),
+        2,
+        "sizeof(L'A') is 2 on Windows"
+    );
+    assert_eq!(run(wide, Target::LinuxX64), 4, "sizeof(L'A') is 4 on Unix");
+    let narrow = "int main(void){ return (int)sizeof('A'); }";
+    assert_eq!(run(narrow, Target::WindowsX64), 4, "sizeof('A') is 4 (int)");
+    // The value is unaffected: `L'A'` is 65 and promotes for arithmetic.
+    let val = "int main(void){ return L'A' == 65 ? 7 : 0; }";
+    assert_eq!(run(val, Target::WindowsX64), 7, "L'A' keeps its value");
+}
+
 #[test]
 fn warn_int_to_pointer_assignment() {
     // `int *p; p = 5;` -- assigning a non-zero integer to a pointer.

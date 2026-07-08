@@ -24,6 +24,12 @@
 #define __builtin_constant_p(x) 0
 #define __builtin_prefetch(...) ((void) 0)
 #define __builtin_assume_aligned(p, ...) (p)
+// `__builtin_choose_expr(c, a, b)` selects `a` or `b` on the compile-time
+// constant `c`. A constant-condition conditional is equivalent for a
+// well-typed pair: C evaluates only the taken branch, and the constant
+// folds to it. Since `__builtin_constant_p` above is always 0, the common
+// `if_constant`-style idioms fold to their second operand, as intended.
+#define __builtin_choose_expr(c, a, b) ((c) ? (a) : (b))
 
 #define __builtin_memcpy memcpy
 #define __builtin_memmove memmove

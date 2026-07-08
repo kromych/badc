@@ -477,6 +477,11 @@ impl Preprocessor {
             "__BYTE_ORDER__".to_string(),
             "__ORDER_LITTLE_ENDIAN__".to_string(),
         );
+        // gcc/clang also define `__LITTLE_ENDIAN__` (to 1) on a
+        // little-endian target; byte-order-detecting code commonly gates on
+        // `#ifdef __LITTLE_ENDIAN__` directly rather than comparing
+        // `__BYTE_ORDER__`. `__BIG_ENDIAN__` stays undefined.
+        macros.insert("__LITTLE_ENDIAN__".to_string(), "1".to_string());
         // C11 6.10.8.3 conditional-feature macros. An implementation that
         // reports `__STDC_VERSION__ == 201112L` defines each of these for an
         // optional feature it does not provide; library code gates on them
@@ -2019,6 +2024,19 @@ impl Preprocessor {
     /// Any other directive is accepted with a warning.
     fn parse_pragma(&mut self, args: &str, line_no: usize, filename: &str) -> Result<(), C5Error> {
         let args = args.trim();
+        // MSVC and others allow whitespace between a pragma keyword and
+        // its argument list -- `#pragma warning ( disable : N )`. Collapse
+        // the gap before the first `(` so the keyword-paren dispatch below
+        // matches regardless of spacing. The keyword is a bare identifier,
+        // so any space there is the keyword/paren boundary.
+        let normalized;
+        let args: &str = match args.find('(') {
+            Some(i) if args[..i].trim_end().len() != i => {
+                normalized = format!("{}{}", args[..i].trim_end(), &args[i..]);
+                &normalized
+            }
+            _ => args,
+        };
         if let Some(inner) = args
             .strip_prefix("dylib(")
             .and_then(|s| s.strip_suffix(')'))
@@ -5371,6 +5389,21 @@ mod tests {
         let out = process("__pragma(warning(disable : 4201))\nint x = 1;\n");
         assert!(!out.contains("__pragma"), "operator leaked: {out:?}");
         assert!(out.contains("int x = 1;"));
+    }
+
+    #[test]
+    fn pragma_warning_tolerates_space_before_paren() {
+        // MSVC allows a space between the keyword and its argument list:
+        // `#pragma warning ( disable : N )`. That must dispatch like the
+        // no-space form, not fall through to the unknown-pragma warning.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.process("#pragma warning ( disable : 4214 )\nint x = 1;\n")
+            .expect("preprocessor failed");
+        assert!(
+            !pp.warnings.iter().any(|w| w.contains("unknown")),
+            "spaced warning pragma warned as unknown: {:?}",
+            pp.warnings
+        );
     }
 
     #[test]

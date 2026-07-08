@@ -1963,6 +1963,28 @@ fn array_initializer_accepts_constant_expressions() {
 }
 
 #[test]
+fn const_address_of_member_folds_through_parens() {
+    // C99 6.6p9: a constant address expression `&((T*)0)->m` folds to a
+    // byte offset regardless of parenthesization -- the recursive
+    // designation grammar treats parens as transparent. The bare form
+    // `&((T*)0)->m`, the once-wrapped `&(((T*)0)->m)`, and a doubly-wrapped
+    // form must all agree, including through a nested `.member` chain.
+    // (This is what makes the `offsetof` macro fold in a static
+    // initializer or enumerator, but no `offsetof` shape is special-cased.)
+    let src = "\
+struct Inner { int p; int q; };\n\
+struct Outer { int a; struct Inner in; };\n\
+enum E {\n\
+  A = (unsigned long) &(((struct Outer*)0)->in.q),\n\
+  B = (unsigned long) &((struct Outer*)0)->in.q,\n\
+  C = (unsigned long) &((((struct Outer*)0)->in.q))\n\
+};\n\
+int main(void){ return (int)A*100 + (int)B*10 + (int)C; }\n";
+    // offsetof(Outer, in.q) == 4 (a) + 4 (in.p) == 8 for all three forms.
+    assert_eq!(super::run_str(src), 888);
+}
+
+#[test]
 fn sizeof_through_null_pointer_cast() {
     // C99 6.5.3.4: `sizeof` does not evaluate its operand, so
     // `sizeof ((T *)0)->m` is a valid way to read the size of a
@@ -1972,6 +1994,71 @@ fn sizeof_through_null_pointer_cast() {
     // macro (the address-of-via-null-cast variant) to keep both
     // sides of the standard idiom locked.
     assert_eq!(run_fixture("sizeof_member_via_null_cast.c"), 0);
+}
+
+#[test]
+fn builtin_choose_expr_selects_on_constant() {
+    // GCC `__builtin_choose_expr(c, a, b)` yields `a` when the compile-time
+    // constant `c` is non-zero, else `b`. badc provides it as a
+    // constant-condition conditional thunk; only the taken branch is
+    // evaluated, and the result folds to that branch (usable in constant
+    // contexts). Guarded by __GNUC__ so the `<_builtins.h>` thunk is in play.
+    let src = "\
+#define __GNUC__ 4\n\
+#include <_builtins.h>\n\
+_Static_assert(__builtin_choose_expr(1, 7, 999) == 7, \"true picks a\");\n\
+_Static_assert(__builtin_choose_expr(0, 999, 3) == 3, \"false picks b\");\n\
+int main(void){\n\
+    int r = 0;\n\
+    r += __builtin_choose_expr(1, 10, 0);\n\
+    r += __builtin_choose_expr(0, 0, 5);\n\
+    return r - 15;\n\
+}\n";
+    assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
+fn block_scope_extern_array_decays_on_subscript() {
+    // C99 6.2.1p4 / 6.7.6.2: a block-scope `extern T a[N];` names an array
+    // object; a subscript inside the block must decay it to a pointer, not
+    // reject it as a scalar. Covers the array declared at function-body top
+    // level, inside a nested block, and a multi-dimensional extern.
+    let top = "\
+static const int tab[4] = { 10, 20, 30, 40 };\n\
+static int f(int i){ extern const int tab[4]; return tab[i]; }\n\
+int main(void){ return f(2); }\n"; // tab[2] == 30
+    assert_eq!(super::run_str(top), 30);
+    let nested = "\
+static const int nb[4] = { 1, 2, 3, 4 };\n\
+static int g(int i){ { extern const int nb[4]; return nb[i] + 5; } }\n\
+int main(void){ return g(1); }\n"; // nb[1] + 5 == 7
+    assert_eq!(super::run_str(nested), 7);
+    let multidim = "\
+static const int m[2][3] = { {1,2,3}, {4,5,6} };\n\
+static int h(int i,int j){ extern const int m[2][3]; return m[i][j]; }\n\
+int main(void){ return h(1,2); }\n"; // m[1][2] == 6
+    assert_eq!(super::run_str(multidim), 6);
+}
+
+#[test]
+fn intn_c_macros_carry_the_wide_type() {
+    // C99 7.18.4.1: `UINT64_C`/`INT64_C`/`INTMAX_C`/`UINTMAX_C` expand to a
+    // constant of the wide (>= 64-bit) type, so a shift past bit 31 keeps its
+    // high bits instead of evaluating in `int`. A bare-token expansion would
+    // silently truncate `UINT64_C(1) << 35` to zero -- the defect that
+    // miscompiled 64-bit flag tables.
+    let src = "\
+#include <stdint.h>\n\
+int main(void){\n\
+    int bad = 0;\n\
+    if ((int)(sizeof(UINT64_C(1))) != 8) bad |= 1;\n\
+    if (((UINT64_C(1) << 35) >> 35) != 1) bad |= 2;\n\
+    if (((INT64_C(1)  << 40) >> 40) != 1) bad |= 4;\n\
+    if (((UINTMAX_C(1) << 60) >> 60) != 1) bad |= 8;\n\
+    if (UINT32_C(0xFFFFFFFF) != 0xFFFFFFFFu) bad |= 16;\n\
+    return bad;\n\
+}\n";
+    assert_eq!(super::run_str(src), 0);
 }
 
 #[test]

@@ -1,7 +1,7 @@
 # edk2 demo
 
 Builds a UEFI application from real [TianoCore EDK II](https://github.com/tianocore/edk2)
-MdePkg sources with badc, and boots it under OVMF/QEMU.
+MdePkg sources with badc, for **X64 and AArch64**, and boots each under OVMF/QEMU.
 
 This is the project's headline target: badc compiles the MdePkg library
 closure and links a **PE32+ EFI application** with its **own linker** -- no

@@ -225,5 +225,4 @@ demos/edk2/*
 !demos/edk2/qemu_efi.py
 !demos/edk2/AutoGenGlue.c
 !demos/edk2/MyApp.c
-!demos/edk2/MyAppArm.c
 !demos/edk2/MiniAutoGen.h

@@ -59,6 +59,17 @@ CLOSURE = [
 # PE32+ subsystem 10 = EFI application.
 IMAGE_SUBSYSTEM_EFI_APPLICATION = 10
 
+# The app is portable C over the MdePkg API, so one closure + one source build
+# for both targets; only the badc target, the arch include dir, the PE machine
+# id, and the QEMU arch differ. EFIAPI is the MS ABI, which badc's windows-*
+# targets emit (MS x64 on X64, AAPCS64 on AArch64).
+ARCHES = [
+    {"label": "X64", "target": "windows-x64", "inc": "X64",
+     "machine": 0x8664, "qemu_arch": "x64", "qemu": "qemu-system-x86_64"},
+    {"label": "AArch64", "target": "windows-arm64", "inc": "AArch64",
+     "machine": 0xAA64, "qemu_arch": "aarch64", "qemu": "qemu-system-aarch64"},
+]
+
 
 def log(m: str) -> None:
     print(f"edk2 smoke: {m}", flush=True)
@@ -88,7 +99,7 @@ def ensure_source() -> None:
     subprocess.run([sys.executable, str(EDK2_DEMO / "setup.py")], check=True)
 
 
-def build_efi(badc: Path, out: Path) -> None:
+def build_efi(badc: Path, arch: dict, out: Path) -> None:
     lib = MDE / "Library"
     sources = [str(EDK2_DEMO / "AutoGenGlue.c"), str(EDK2_DEMO / "MyApp.c")]
     for rel in CLOSURE:
@@ -99,19 +110,20 @@ def build_efi(badc: Path, out: Path) -> None:
         if not p.name.startswith("._")
     ]
     cmd = [
-        str(badc), "--freestanding", "--target=windows-x64",
-        "-I", str(MDE / "Include"), "-I", str(MDE / "Include" / "X64"),
+        str(badc), "--freestanding", f"--target={arch['target']}",
+        "-I", str(MDE / "Include"), "-I", str(MDE / "Include" / arch["inc"]),
         "-D_MSC_EXTENSIONS", "-D_MSC_VER=1900", "-Dstatic_assert=_Static_assert",
         "-include", str(EDK2_DEMO / "MiniAutoGen.h"),
         *sources, "-o", str(out),
     ]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0 or not out.is_file():
-        fail(f"badc failed to build the EFI application:\n{r.stderr.strip()[-1500:]}")
+        fail(f"badc failed to build the {arch['label']} EFI application:\n"
+             f"{r.stderr.strip()[-1500:]}")
 
 
-def check_pe_efi_application(efi: Path) -> None:
-    """Verify the output is a PE32+ image with the EFI-application subsystem."""
+def check_pe_efi_application(efi: Path, arch: dict) -> None:
+    """Verify the output is a PE32+ EFI application for the expected machine."""
     data = efi.read_bytes()
     if data[:2] != b"MZ":
         fail("output is not a PE image (missing MZ)")
@@ -123,30 +135,33 @@ def check_pe_efi_application(efi: Path) -> None:
         fail(f"expected PE32+ optional header magic 0x20B, got {magic:#x}")
     machine = struct.unpack_from("<H", data, pe_off + 4)[0]
     subsystem = struct.unpack_from("<H", data, pe_off + 24 + 68)[0]
-    if machine != 0x8664:
-        fail(f"expected machine x86-64 (0x8664), got {machine:#x}")
+    if machine != arch["machine"]:
+        fail(f"expected machine {arch['machine']:#x}, got {machine:#x}")
     if subsystem != IMAGE_SUBSYSTEM_EFI_APPLICATION:
         fail(f"expected EFI-application subsystem {IMAGE_SUBSYSTEM_EFI_APPLICATION}, "
              f"got {subsystem}")
-    log(f"PE32+ EFI application OK (machine=x64, subsystem=10, {len(data)} bytes)")
+    log(f"[{arch['label']}] PE32+ EFI application OK "
+        f"(machine={arch['machine']:#x}, subsystem=10, {len(data)} bytes)")
 
 
-def try_boot(efi: Path) -> None:
+def try_boot(efi: Path, arch: dict) -> None:
     """Boot under QEMU/OVMF if both are available; otherwise skip."""
-    if not shutil.which("qemu-system-x86_64"):
-        log("QEMU not found; skipping the boot check (build validated the image)")
+    if not shutil.which(arch["qemu"]):
+        log(f"[{arch['label']}] {arch['qemu']} not found; skipping the boot check")
         return
     harness = EDK2_DEMO / "qemu_efi.py"
     r = subprocess.run(
-        [sys.executable, str(harness), str(efi), "--expect", "badc+EDK2"],
+        [sys.executable, str(harness), str(efi), "--expect", "badc+EDK2",
+         "--arch", arch["qemu_arch"]],
         capture_output=True, text=True)
     out = r.stdout + r.stderr
     if "no OVMF" in out.lower():
-        log("OVMF firmware not found; skipping the boot check")
+        log(f"[{arch['label']}] OVMF firmware not found; skipping the boot check")
         return
     if r.returncode != 0 or "PASS" not in out:
-        fail(f"boot under OVMF/QEMU did not produce the expected output:\n{out[-1200:]}")
-    log("booted under OVMF/QEMU; MyApp printed via BasePrintLib")
+        fail(f"[{arch['label']}] boot under OVMF/QEMU did not produce the expected "
+             f"output:\n{out[-1200:]}")
+    log(f"[{arch['label']}] booted under OVMF/QEMU; MyApp printed via BasePrintLib")
 
 
 def main() -> int:
@@ -154,11 +169,13 @@ def main() -> int:
     log(f"badc={badc}")
     ensure_source()
     with tempfile.TemporaryDirectory(prefix="edk2-smoke-") as d:
-        efi = Path(d) / "app.efi"
-        log("building the UEFI application with badc (own-linker, no GenFw)")
-        build_efi(badc, efi)
-        check_pe_efi_application(efi)
-        try_boot(efi)
+        for arch in ARCHES:
+            efi = Path(d) / f"app_{arch['label']}.efi"
+            log(f"[{arch['label']}] building the UEFI application with badc "
+                f"(own-linker, no GenFw)")
+            build_efi(badc, arch, efi)
+            check_pe_efi_application(efi, arch)
+            try_boot(efi, arch)
     log("all lanes green")
     return 0
 

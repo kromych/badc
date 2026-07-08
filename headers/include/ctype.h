@@ -79,3 +79,9 @@ int toupper(int c);
 static inline int isblank(int c) {
     return c == 0x20 || c == 0x09;
 }
+
+// XSI (SVID / X/Open): reduce a value to 7-bit ASCII. A pure computation,
+// so provided inline rather than bound to a libc symbol.
+static inline int toascii(int c) {
+    return c & 0x7f;
+}

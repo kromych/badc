@@ -205,3 +205,11 @@ tests/perf/build/
 badc-*-rsync/
 
 demos/python/.cache
+
+# yasm 1.3.0 assembler -- `setup.py` fetches the release tarball from the
+# vendor-deps mirror into src/; the smoke generates derived sources with the
+# badc-built python. Only the runner scripts + README are committed.
+demos/yasm/*
+!demos/yasm/setup.py
+!demos/yasm/smoke.py
+!demos/yasm/README.md

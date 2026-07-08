@@ -2062,6 +2062,21 @@ int main(void){\n\
 }
 
 #[test]
+fn toascii_masks_to_seven_bits() {
+    // XSI (SVID / X/Open) `toascii(c)` reduces a value to 7-bit ASCII
+    // (`c & 0x7f`), provided as a <ctype.h> inline.
+    let src = "\
+#include <ctype.h>\n\
+int main(void){\n\
+    if (toascii(0xC1) != 0x41) return 1;\n\
+    if (toascii(0x7F) != 0x7F) return 2;\n\
+    if (toascii(0x80) != 0x00) return 3;\n\
+    return 0;\n\
+}\n";
+    assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
 fn extern_declaration_inside_function_body() {
     // C99 6.7.1 paragraph 3: `extern` declarations are valid at
     // any scope. c5 has no separate translation units, so a

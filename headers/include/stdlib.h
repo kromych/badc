@@ -75,6 +75,11 @@
 #pragma binding(libc::ptsname,   "_ptsname")
 #pragma binding(libc::ptsname_r, "_ptsname_r")
 #pragma binding(libc::getloadavg,"_getloadavg")
+// mergesort: BSD stable sort, present in the macOS / BSD libc. glibc has no
+// such symbol, so portable code that reaches for it ships its own fallback
+// (which is what a Linux configure selects).
+int mergesort(char *base, int n, int size, int *cmp);
+#pragma binding(libc::mergesort, "_mergesort")
 #endif
 
 #ifdef __linux__

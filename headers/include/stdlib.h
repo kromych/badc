@@ -462,6 +462,17 @@ void __clear_cache(void *begin, void *end);
 double __trunctfdf2(long double a);
 #endif
 
+// glibc `canonicalize_file_name(path)` is `realpath(path, NULL)` (the
+// allocating form). It is glibc-only, so it is gated to Linux; portable
+// code guards its use on `HAVE_CANONICALIZE_FILE_NAME`, which configure
+// sets only where glibc provides it.
+#ifdef __linux__
+char *realpath(char *path, char *resolved);
+static inline char *canonicalize_file_name(const char *path) {
+    return realpath((char *)path, (char *)0);
+}
+#endif
+
 #ifdef _WIN32
 #pragma binding(kernel32::FlushInstructionCache, "FlushInstructionCache")
 #pragma binding(kernel32::GetCurrentProcess, "GetCurrentProcess")

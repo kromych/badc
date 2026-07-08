@@ -203,3 +203,75 @@ char *_strlwr(char *s);
 char *strupr(char *s);
 char *_strupr(char *s);
 #endif
+
+// POSIX.1-2008 / BSD `<string.h>` helpers that not every target libc
+// exports: msvcrt has none of them, and glibc gained `strlcpy`/`strlcat`
+// only in 2.38. Provided as small `static inline` definitions so portable
+// source that reaches for them (and configures HAVE_* accordingly) builds
+// on every target with no per-platform binding; an unused one costs
+// nothing. `strnlen` is POSIX; `strlcpy`/`strlcat`/`strsep` are BSD;
+// `mempcpy` is the glibc `memcpy`-returning-the-end variant.
+static inline size_t strnlen(const char *s, size_t maxlen) {
+    size_t n = 0;
+    while (n < maxlen && s[n]) {
+        n++;
+    }
+    return n;
+}
+static inline size_t strlcpy(char *dst, const char *src, size_t size) {
+    size_t srclen = 0;
+    while (src[srclen]) {
+        srclen++;
+    }
+    if (size != 0) {
+        size_t n = srclen < size - 1 ? srclen : size - 1;
+        for (size_t i = 0; i < n; i++) {
+            dst[i] = src[i];
+        }
+        dst[n] = 0;
+    }
+    return srclen;
+}
+static inline size_t strlcat(char *dst, const char *src, size_t size) {
+    size_t dstlen = 0;
+    while (dstlen < size && dst[dstlen]) {
+        dstlen++;
+    }
+    size_t srclen = 0;
+    while (src[srclen]) {
+        srclen++;
+    }
+    if (dstlen < size) {
+        size_t n = srclen < size - dstlen - 1 ? srclen : size - dstlen - 1;
+        for (size_t i = 0; i < n; i++) {
+            dst[dstlen + i] = src[i];
+        }
+        dst[dstlen + n] = 0;
+    }
+    return dstlen + srclen;
+}
+static inline char *strsep(char **stringp, const char *delim) {
+    char *start = *stringp;
+    if (start == 0) {
+        return 0;
+    }
+    for (char *p = start; *p; p++) {
+        for (const char *d = delim; *d; d++) {
+            if (*p == *d) {
+                *p = 0;
+                *stringp = p + 1;
+                return start;
+            }
+        }
+    }
+    *stringp = 0;
+    return start;
+}
+static inline void *mempcpy(void *dst, const void *src, size_t n) {
+    char *d = (char *)dst;
+    const char *s = (const char *)src;
+    for (size_t i = 0; i < n; i++) {
+        d[i] = s[i];
+    }
+    return d + n;
+}

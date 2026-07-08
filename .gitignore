@@ -213,3 +213,17 @@ demos/yasm/*
 !demos/yasm/setup.py
 !demos/yasm/smoke.py
 !demos/yasm/README.md
+
+# edk2 -- badc builds a UEFI app from real EDK II MdePkg sources. `setup.py`
+# fetches the MdePkg source subset into src/ from the vendor mirror. Only the
+# hand-written AutoGen glue, the app, the boot harness, runner scripts, and
+# README are committed.
+demos/edk2/*
+!demos/edk2/setup.py
+!demos/edk2/smoke.py
+!demos/edk2/README.md
+!demos/edk2/qemu_efi.py
+!demos/edk2/AutoGenGlue.c
+!demos/edk2/MyApp.c
+!demos/edk2/MyAppArm.c
+!demos/edk2/MiniAutoGen.h

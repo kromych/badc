@@ -117,6 +117,20 @@ def ensure_source() -> None:
     subprocess.run([sys.executable, str(NASM_DEMO / "setup.py")], check=True)
 
 
+def patch_harness() -> None:
+    """nasm-t.py `sys.exit`s (via test_abort) on the first failing case, which
+    hides every later result. Make it report the failure and continue, so the
+    suite runs to completion and the smoke can tell a real regression from a
+    platform-dependent case it skips (SKIP_TESTS). Idempotent."""
+    t = SRC / "travis" / "nasm-t.py"
+    text = t.read_text()
+    patched = text.replace(
+        'test_abort(desc[\'_test-name\'], "Error detected")',
+        'test_fail(desc[\'_test-name\'], "Error detected")')
+    if patched != text:
+        t.write_text(patched)
+
+
 def ensure_config(target: str) -> None:
     """Install src/config/config.h from a frozen per-target config -- no
     `./configure`, so no POSIX shell and no host cc are needed (native Windows
@@ -218,6 +232,7 @@ def main() -> int:
     target = badc_target()
     log(f"badc={badc} target={target}")
     ensure_source()
+    patch_harness()
     ensure_config(target)
     with tempfile.TemporaryDirectory(prefix="nasm-smoke-") as d:
         work = Path(d)

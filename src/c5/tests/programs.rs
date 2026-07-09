@@ -76,6 +76,14 @@ fn compound_literal_pointer_field() {
 }
 
 #[test]
+fn zero_length_local_array() {
+    // GCC zero-length array `T x[0]` as a local (including inside a
+    // statement expression) -- valid and empty, as compile-time-assert
+    // idioms rely on; previously rejected as an incomplete array.
+    assert_eq!(run_fixture("zero_length_local_array.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

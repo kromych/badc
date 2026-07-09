@@ -745,10 +745,18 @@ impl Compiler {
         }
         if declared_array_size == -1 {
             if self.lex.tk != Token::Assign {
-                return Err(self.compile_err(format!(
-                    "array `{}` declared with empty brackets needs an initializer",
-                    self.symbols[loc_idx].name
-                )));
+                // GCC zero-length array `T x[0]`: the declarator folds `[0]`
+                // to the -1 sentinel (it otherwise behaves like a flexible
+                // array member). As a local with no initializer this is a
+                // valid empty array, used by compile-time-assert idioms such
+                // as QEMU's `char offset_must_be_zero[-offsetof(type, f)]` --
+                // a first member gives `[0]` (accepted here), a non-first
+                // member a negative dimension the declarator already rejects.
+                // Reserve a minimal slot; the array holds no elements and is
+                // normally unused.
+                self.symbols[loc_idx].array_size = 1;
+                self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, 1));
+                return Ok(());
             }
             self.next()?;
             // Deferred-size local array of structs: `struct T xs[] = { {...}, ... };`.

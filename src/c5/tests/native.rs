@@ -766,6 +766,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // C99 6.5.2.5 pointer field = array-of-struct compound literal in a
     // static initializer (QEMU VMStateDescription / TypeInfo shape).
     ("compound_literal_pointer_field.c", 0),
+    // GCC zero-length array `T x[0]` as a local (compile-time-assert idiom).
+    ("zero_length_local_array.c", 0),
     // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
     // their post-longjmp value, are re-read through aliases, and
     // unused volatile reads still execute.

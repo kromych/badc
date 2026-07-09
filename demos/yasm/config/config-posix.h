@@ -56,7 +56,7 @@
 #define HAVE_MEMORY_H 1
 
 /* Define to 1 if you have the `mergesort' function. */
-#define HAVE_MERGESORT 1
+/* HAVE_MERGESORT: off -- glibc lacks it; use the portable qsort path on all POSIX targets */
 
 /* Define to 1 if you have the `popen' function. */
 #define HAVE_POPEN 1

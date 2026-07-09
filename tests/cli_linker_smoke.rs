@@ -278,6 +278,62 @@ fn freestanding_entry_from_archive_is_pulled() {
     assert!(bin.exists(), "freestanding image was not produced");
 }
 
+// `--entry=<sym>` / `--subsystem=<kind>` set the image entry and PE
+// subsystem at the link step, so a link of precompiled `.o` inputs (which
+// carry no `#pragma entrypoint` / `#pragma subsystem`) still stamps them.
+// Host-independent: cross-compiles a windows-x64 PE and inspects its
+// header. The link succeeding at all proves `--entry` was honoured -- the
+// object defines only `my_efi_entry`, so a freestanding link that ignored
+// the flag would fail on the missing default `__c5_entry`.
+#[test]
+fn cli_entry_and_subsystem_stamp_a_precompiled_object_link() {
+    let dir = tempdir("cli-entry-subsystem");
+    let src = write_source(
+        &dir,
+        "ent.c",
+        "unsigned long long my_efi_entry(void *h, void *st) { (void)h; (void)st; return 0; }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg("--target=windows-x64")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("ent.o"))
+            .current_dir(&dir),
+        "compile -c windows-x64",
+    );
+    let efi = dir.join("app.efi");
+    run(
+        Command::new(badc())
+            .arg("--freestanding")
+            .arg("--target=windows-x64")
+            .arg("--entry=my_efi_entry")
+            .arg("--subsystem=efi_application")
+            .arg(dir.join("ent.o"))
+            .arg("-o")
+            .arg(&efi)
+            .current_dir(&dir),
+        "link .o with --entry/--subsystem",
+    );
+    let b = std::fs::read(&efi).expect("read app.efi");
+    let pe = u32::from_le_bytes(b[0x3c..0x40].try_into().unwrap()) as usize;
+    assert_eq!(&b[pe..pe + 4], b"PE\0\0", "not a PE image");
+    let opt = pe + 24;
+    let magic = u16::from_le_bytes(b[opt..opt + 2].try_into().unwrap());
+    assert_eq!(magic, 0x020b, "expected PE32+ (0x20b), got {magic:#x}");
+    let subsystem = u16::from_le_bytes(b[opt + 68..opt + 70].try_into().unwrap());
+    assert_eq!(
+        subsystem, 10,
+        "expected IMAGE_SUBSYSTEM_EFI_APPLICATION (10)"
+    );
+    let entry_rva = u32::from_le_bytes(b[opt + 16..opt + 20].try_into().unwrap());
+    assert_ne!(
+        entry_rva, 0,
+        "AddressOfEntryPoint must resolve `my_efi_entry`"
+    );
+}
+
 #[test]
 fn compile_only_warns_when_link_pragmas_are_dropped() {
     // `#pragma subsystem` / `#pragma entrypoint` ride the in-memory

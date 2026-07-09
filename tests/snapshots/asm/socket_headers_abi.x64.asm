@@ -71,49 +71,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x2, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x3, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x4, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x5, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x6, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x7, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x8, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x9, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xa, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xb, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -92,7 +92,3 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
-               	ret

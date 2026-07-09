@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=finder_impl
-fn ent_pc=5 n_params=1 variadic=false locals=0
+fn ent_pc=6 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -8,9 +8,9 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ImmData(8)                                       -> x0
     terminator Return(v3)   (exit_acc=v3)
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
-fn ent_pc=6 n_params=0 variadic=false locals=13
+fn ent_pc=7 n_params=0 variadic=false locals=13
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -46,7 +46,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=13
     v20  Imm(3)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)
   block 6  start_pc=0
-    v21  ImmCode(ent_pc=5)                                -> x12
+    v21  ImmCode(ent_pc=6)                                -> x12
     v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x7
     v24  LoadLocal { off=-6, kind=I64 }                   -> x0

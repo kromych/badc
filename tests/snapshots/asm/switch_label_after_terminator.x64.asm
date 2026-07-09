@@ -32,9 +32,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -70,3 +67,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

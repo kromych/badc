@@ -1152,41 +1152,21 @@ impl Compiler {
             return Ok((addr, InitElemReloc::Data(None)));
         }
         if self.lex.tk == Token::AndOp {
-            // A static initializer leaf that begins with `&` is
-            // either a relocation-bearing pointer (`&global` or
-            // `&func`, equivalent under C99 6.3.2.1p4) or a
-            // constant arithmetic expression whose value is a
-            // byte offset (the canonical case is the C99 7.19 /
-            // GCC `offsetof` macro expansion
-            // `&((T *)0)->field`). Peek past the `&` to decide:
-            // if the next token is an identifier bound to a Glo
-            // or Fun symbol, take the reloc path; otherwise the
-            // integer constant-expression evaluator folds the
-            // whole expression (including the surrounding casts
-            // and pointer-difference of the offsetof macro).
-            let amp_snap = self.lex.snapshot();
-            self.next()?;
-            if self.lex.tk == Token::Id {
-                let target_idx = self.lex.curr_id_idx;
-                let class = self.symbols[target_idx].class;
-                if class == Token::Fun as i64 {
-                    self.symbols[target_idx].was_referenced = true;
-                    let ent_pc = self.symbols[target_idx].val;
-                    self.next()?;
-                    return Ok((ent_pc, InitElemReloc::Code(target_idx)));
-                }
-                if class == Token::Glo as i64 {
-                    let off = self.symbols[target_idx].val;
-                    self.next()?;
-                    return Ok((off, InitElemReloc::Data(Some(target_idx))));
-                }
-            }
-            // Not a relocation-bearing shape -- restore so the
-            // integer evaluator sees the leading `&` and routes
-            // through `parse_const_offsetof`.
-            self.lex.restore(amp_snap);
-            let v = self.parse_constant_int()?;
-            return Ok((v, InitElemReloc::None));
+            // A static initializer leaf that begins with `&` folds to a
+            // constant address (C99 6.6p9): either a relocation-bearing
+            // pointer (`&global` / `&func`, equivalent under C99 6.3.2.1p4)
+            // or a byte offset (the C99 7.19 / GCC `offsetof` expansion
+            // `&((T *)0)->field`). The designation grammar in `const_expr`
+            // recurses through parentheses and casts, so `&foo`, `&(foo)`,
+            // and `&arr[i]` all fold uniformly; a symbol root yields a Code /
+            // Data relocation, and the offsetof form yields a bare offset.
+            let a = self.parse_const_address_of()?;
+            let reloc = match a.sym {
+                Some(idx) if a.sym_code => InitElemReloc::Code(idx),
+                Some(idx) => InitElemReloc::Data(Some(idx)),
+                None => InitElemReloc::None,
+            };
+            return Ok((a.value, reloc));
         }
         if self.lex.tk == Token::Id {
             let idx = self.lex.curr_id_idx;

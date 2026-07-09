@@ -36,9 +36,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x5, %eax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <u16>:
                	movq	%rdi, %rax
@@ -55,9 +52,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x7, %eax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <u8>:
                	movq	%rdi, %rax
@@ -74,9 +68,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <s32>:
                	movslq	%edi, %rdi
@@ -92,9 +83,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0xc8, %eax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

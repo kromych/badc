@@ -57,20 +57,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	b	<addr>
-               	mov	x0, #0x4000             // =16384
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	mov	x0, #0x1064             // =4196
-               	b	<addr>
-               	mov	x0, #0x2064             // =8292
-               	b	<addr>
-               	mov	x0, #0x4000             // =16384
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	mov	x0, #0x2064             // =8292
-               	b	<addr>

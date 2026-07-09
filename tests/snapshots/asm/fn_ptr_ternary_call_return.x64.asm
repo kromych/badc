@@ -84,8 +84,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rax      # <addr>
-               	jmp	<addr>
-               	leaq	-<rip>, %rax      # <addr>
-               	jmp	<addr>
                	addb	%al, 0x41(%rdx)

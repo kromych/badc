@@ -1,7 +1,7 @@
 variadic_union_struct_return.c:22: warning: unused parameter `ignored`
-; --- SSA dump (ok=true) ent_pc=0 ---
+; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=format_first
-fn ent_pc=0 n_params=2 variadic=true locals=8
+fn ent_pc=5 n_params=2 variadic=true locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -48,9 +48,9 @@ fn ent_pc=0 n_params=2 variadic=true locals=8
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x6
     terminator Jmp(b2)   (exit_acc=v23)
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=17
+fn ent_pc=6 n_params=0 variadic=false locals=17
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -60,7 +60,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
     v4   ImmData(13)                                      -> x6
     v5   LoadLocal { off=-1, kind=I64 }                   -> x0
     v6   Imm(100)                                         -> x1
-    v7   Call { target_pc=0, args=[v3, v4, v1, v6], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   Call { target_pc=5, args=[v3, v4, v1, v6], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v8   LocalAddr(-15)                                   -> x0
     v9   LocalAddr(-3)                                    -> x1
     v10  Mcpy { dst=v9, src=v8, size=16 }                 -> x0
@@ -85,7 +85,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
     v21  ImmData(17)                                      -> x6
     v22  ImmData(21)                                      -> x2
     v23  Imm(1)                                           -> x1
-    v24  Call { target_pc=0, args=[v20, v21, v22, v23], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v24  Call { target_pc=5, args=[v20, v21, v22, v23], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v25  LocalAddr(-17)                                   -> x0
     v26  LocalAddr(-7)                                    -> x1
     v27  Mcpy { dst=v26, src=v25, size=16 }               -> x0

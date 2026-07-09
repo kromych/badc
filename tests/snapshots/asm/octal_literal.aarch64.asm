@@ -12,19 +12,3 @@ Disassembly of section .text:
                	brk	#<addr>:
                	mov	x0, #0x2a               // =42
                	ret
-               	mov	x0, #0x1                // =1
-               	ret
-               	mov	x0, #0x2                // =2
-               	ret
-               	mov	x0, #0x3                // =3
-               	ret
-               	mov	x0, #0x4                // =4
-               	ret
-               	mov	x0, #0x5                // =5
-               	ret
-               	mov	x0, #0x6                // =6
-               	ret
-               	mov	x0, #0x7                // =7
-               	ret
-               	mov	x0, #0x8                // =8
-               	ret

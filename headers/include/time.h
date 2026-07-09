@@ -134,6 +134,7 @@ typedef long clock_t;
 #pragma binding(libc::gmtime,        "_gmtime")
 #pragma binding(libc::gmtime_r,      "_gmtime_r")
 #pragma binding(libc::ctime_r,       "_ctime_r")
+#pragma binding(libc::ctime,         "_ctime")
 #pragma binding(libc::strftime,      "_strftime")
 #pragma binding(libc::tzset,         "_tzset")
 // `tzset` outputs, bound as data imports to libSystem (the underscored
@@ -159,6 +160,7 @@ typedef long clock_t;
 #pragma binding(libc::gmtime,        "gmtime")
 #pragma binding(libc::gmtime_r,      "gmtime_r")
 #pragma binding(libc::ctime_r,       "ctime_r")
+#pragma binding(libc::ctime,         "ctime")
 #pragma binding(libc::strftime,      "strftime")
 #pragma binding(libc::tzset,         "tzset")
 // `tzset` writes the zone names / offset / DST flag into these C library
@@ -177,6 +179,7 @@ typedef long clock_t;
 #pragma binding(msvcrt::mktime,   "mktime")
 #pragma binding(msvcrt::localtime,"localtime")
 #pragma binding(msvcrt::gmtime,   "gmtime")
+#pragma binding(msvcrt::ctime,    "ctime")
 #pragma binding(msvcrt::strftime, "strftime")
 #pragma binding(msvcrt::tzset,    "_tzset")
 // msvcrt.dll exports the tzset outputs as data on both x64 and
@@ -222,6 +225,8 @@ struct tm *gmtime_r(time_t *t, struct tm *result);
 // POSIX `ctime_r` -- 26-byte timestamp string written into the
 // caller's buffer; returns the buffer pointer or NULL on error.
 char *ctime_r(time_t *t, char *buf);
+// C89 7.12.3.2: static 26-byte timestamp string; not reentrant.
+char *ctime(time_t *t);
 int strftime(char *buf, int max, char *fmt, struct tm *tm);
 // POSIX 7.24.1: initialize the timezone conversion state from the TZ
 // environment variable (or the system default). No arguments, no result.

@@ -47,8 +47,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

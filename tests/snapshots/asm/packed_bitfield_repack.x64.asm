@@ -222,8 +222,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x70, %rsp
-               	popq	%rbp
-               	retq
-               	addb	%al, (%rax)

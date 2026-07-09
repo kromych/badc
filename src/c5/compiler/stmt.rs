@@ -418,6 +418,14 @@ impl Compiler {
                 if convert_extern {
                     self.symbols[loc_idx].class = Token::Glo as i64;
                     self.symbols[loc_idx].type_ = ty;
+                    // A block-scope `extern T name[N];` names an array object;
+                    // record its dimension so a subscript in the block sees an
+                    // array (6.7.6.2), not a scalar. `inner_array_size` for a
+                    // multi-dimensional extern is already set on the symbol by
+                    // the declarator parse. Only the freshly converted `Glo`
+                    // needs this; an extern naming an existing file-scope
+                    // binding keeps that binding's dimension.
+                    self.symbols[loc_idx].array_size = array_size.max(0);
                     if extern_shadows_binding {
                         // Carry no in-unit offset; the prior binding's
                         // `is_extern_decl` / `linkage` stay untouched so the

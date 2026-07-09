@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=0
+fn ent_pc=6 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

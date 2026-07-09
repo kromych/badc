@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
+; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=user_count
-fn ent_pc=0 n_params=1 variadic=false locals=0
+fn ent_pc=5 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -8,9 +8,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x1
     v3   LoadLocal { off=2, kind=I32 }                    -> x1
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=8
+fn ent_pc=6 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -99,9 +99,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     terminator Jmp(b7)
   block 13  start_pc=0
     terminator Jmp(b5)
-  block 14  start_pc=0
-    v19  Imm(2)                                           -> x0
-    terminator Return(v19)   (exit_acc=v19)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

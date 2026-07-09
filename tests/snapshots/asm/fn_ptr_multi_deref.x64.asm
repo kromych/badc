@@ -73,9 +73,3 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
-               	addb	%al, (%rax)

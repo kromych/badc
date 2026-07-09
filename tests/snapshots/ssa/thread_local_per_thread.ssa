@@ -2,9 +2,9 @@ thread_local_per_thread.c:28: warning: integer assigned to pointer in return (de
 thread_local_per_thread.c:30: warning: integer assigned to pointer in return (declared=int*, returned=int)
 thread_local_per_thread.c:31: warning: integer assigned to pointer in return (declared=int*, returned=int)
 thread_local_per_thread.c:24: warning: unused parameter `arg`
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=thread_main
-fn ent_pc=5 n_params=1 variadic=false locals=0
+fn ent_pc=11 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -31,9 +31,9 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v13  TlsAddr(0)                                       -> x1
     v14  Load { addr=v3, disp=0, kind=I32 }               -> x0
     terminator Return(v14)   (exit_acc=v14)
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=12 ---
 ; name=main
-fn ent_pc=6 n_params=0 variadic=false locals=9
+fn ent_pc=12 n_params=0 variadic=false locals=9
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -42,18 +42,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=9
     v3   Store { addr=v1, disp=0, value=v2, kind=I32 }    -> -
     v4   Imm(0)                                           -> x3
     v5   Imm(2)                                           -> x6
-    v6   CallExt { binding_idx=221, args=[v4, v5], fp_arg_mask=0x0 } -> x13
+    v6   CallExt { binding_idx=222, args=[v4, v5], fp_arg_mask=0x0 } -> x13
     v7   Imm(0)                                           -> x0
     v8   LoadLocal { off=-1, kind=I64 }                   -> x0
     v9   ImmData(48)                                      -> x6
-    v10  CallExt { binding_idx=222, args=[v6, v9], fp_arg_mask=0x0 } -> x14
+    v10  CallExt { binding_idx=223, args=[v6, v9], fp_arg_mask=0x0 } -> x14
     v11  Imm(0)                                           -> x0
     v12  LoadLocal { off=-1, kind=I64 }                   -> x0
     v13  ImmData(63)                                      -> x6
-    v14  CallExt { binding_idx=222, args=[v6, v13], fp_arg_mask=0x0 } -> x13
+    v14  CallExt { binding_idx=223, args=[v6, v13], fp_arg_mask=0x0 } -> x13
     v15  Imm(0)                                           -> x0
     v16  LocalAddr(-4)                                    -> x7
-    v17  ImmCode(ent_pc=5)                                -> x2
+    v17  ImmCode(ent_pc=11)                               -> x2
     v18  LoadLocal { off=-2, kind=I64 }                   -> x0
     v19  CallIndirect { target=v10, args=[v16, v4, v17, v4], callee_variadic=false, fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x1

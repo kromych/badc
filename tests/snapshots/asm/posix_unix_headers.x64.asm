@@ -111,25 +111,9 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x240, %rsp            # imm = 0x240
-               	popq	%rbp
-               	retq
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x240, %rsp            # imm = 0x240
-               	popq	%rbp
-               	retq
-               	movl	$0x6, %eax
-               	addq	$0x240, %rsp            # imm = 0x240
-               	popq	%rbp
-               	retq
-               	movl	$0x7, %eax
-               	addq	$0x240, %rsp            # imm = 0x240
-               	popq	%rbp
-               	retq
                	addb	%al, (%rax)

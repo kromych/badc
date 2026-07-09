@@ -45,12 +45,3 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	b	<addr>
-               	mov	x0, #0x1                // =1
-               	b	<addr>
-               	mov	x0, #0x1                // =1
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>

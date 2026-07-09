@@ -1071,3 +1071,156 @@ jobs:
         run: cargo build --release --locked --features full --bin badc
       - name: cpython no-make build + test slice
         run: python demos/python/build.py --target=${{ matrix.target }} ${{ matrix.test_flag }}
+
+  nasm:
+    # Build NASM 2.16.03 with badc (no make) and run NASM's own golden test
+    # suite against it -- a self-validating oracle (each case compares the
+    # assembled output to a committed golden), so no reference build is needed.
+    # setup.py fetches the release (which ships the generated instruction
+    # tables and the suite); smoke.py compiles the fixed TU list directly and
+    # installs config/config.h from a frozen per-target config (no ./configure,
+    # no make) -- so every target, native Windows included, needs only badc +
+    # python.
+    name: nasm (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, label: macos-arm64 }
+          - { os: ubuntu-latest, label: ubuntu-x64 }
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64 }
+          - { os: windows-latest, label: windows-x64 }
+          - { os: windows-11-arm, label: windows-arm64 }
+    runs-on: ${{ matrix.os }}
+    # Two badc builds (-O0 and -O) + two golden-suite runs; warm cache ~5 min.
+    # The smoke self-limits each golden-suite run with a subprocess timeout, so
+    # this is only a backstop -- a job here must never approach 30 min.
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: nasm-${{ matrix.label }}
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: nasm setup (fetch source)
+        run: python demos/nasm/setup.py
+      - name: nasm smoke (build + golden test suite)
+        run: python demos/nasm/smoke.py
+
+  nasm-selfhost:
+    # Self-hosting cross-check on the POSIX targets: build CPython and nasm
+    # with badc, then run NASM's golden suite with the badc-built Python
+    # interpreter driving the badc-built assembler. Windows is excluded -- the
+    # suite harness needs subprocess (the badc interpreter's _posixsubprocess).
+    name: nasm selfhost (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, label: macos-arm64 }
+          - { os: ubuntu-latest, label: ubuntu-x64 }
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64 }
+    runs-on: ${{ matrix.os }}
+    # Builds CPython (with a cold rust-cache) + nasm + two suite runs.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: nasm-selfhost-${{ matrix.label }}
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: badc-python drives the badc-nasm golden suite
+        run: python demos/nasm/selfhost.py
+
+  yasm:
+    # Build the yasm 1.3.0 assembler with badc (no make, no configure) and
+    # byte-compare its output against a host-cc reference build. yasm's build
+    # derives sources at build time: badc builds the C generators, and the x86
+    # instruction tables come from gen_x86_insn.py run under the badc-built
+    # CPython (a self-hosting cross-check). POSIX lanes: the byte-parity
+    # reference still uses the host cc, so the native-Windows lane needs
+    # committed goldens instead and is tracked separately (TODO).
+    name: yasm (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, label: macos-arm64 }
+          - { os: ubuntu-latest, label: ubuntu-x64 }
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: yasm-${{ matrix.label }}
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: yasm setup (fetch source)
+        run: python demos/yasm/setup.py
+      - name: yasm smoke (badc build + byte-parity, badc-python table-gen)
+        run: python demos/yasm/smoke.py
+
+  edk2:
+    # Build a UEFI application from real EDK II MdePkg sources with badc's own
+    # linker (PE32+ EFI application, no GenFw) for X64 and AArch64. badc
+    # cross-compiles both EFI images from every host, so the build runs on all
+    # five runners. The OVMF/QEMU boot is a distinct dimension: it runs on the
+    # Linux lanes (where QEMU + OVMF/AAVMF come from apt); the macOS / Windows
+    # lanes have no easy QEMU, so smoke.py auto-skips the boot there and stands
+    # on the build + PE-format checks.
+    name: edk2 (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, label: ubuntu-x64, qemu: true }
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, qemu: true }
+          - { os: macos-latest, label: macos-arm64 }
+          - { os: windows-latest, label: windows-x64 }
+          - { os: windows-11-arm, label: windows-arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: edk2-${{ matrix.label }}
+      - name: install QEMU + OVMF/AAVMF firmware (Linux only)
+        if: matrix.qemu
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y qemu-system-x86 qemu-system-arm ovmf qemu-efi-aarch64
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: edk2 setup (fetch the MdePkg subset)
+        run: python demos/edk2/setup.py
+      - name: edk2 smoke (build the UEFI app for X64 + AArch64; boot where QEMU is present)
+        env:
+          OVMF_CODE: /usr/share/OVMF/OVMF_CODE.fd
+          OVMF_VARS: /usr/share/OVMF/OVMF_VARS.fd
+          AAVMF_CODE: /usr/share/AAVMF/AAVMF_CODE.fd
+          AAVMF_VARS: /usr/share/AAVMF/AAVMF_VARS.fd
+          # The build is the hard gate; the OVMF boot is best-effort until the
+          # runner firmware paths + QEMU stability are confirmed.
+          BADC_EDK2_BOOT_OPTIONAL: "1"
+        run: python demos/edk2/smoke.py

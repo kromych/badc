@@ -199,7 +199,3 @@ Disassembly of section .text:
                	sub	x17, x29, #0x38
                	str	d16, [x17]
                	b	<addr>
-               	mov	x0, #0x8                // =8
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
-               	ret

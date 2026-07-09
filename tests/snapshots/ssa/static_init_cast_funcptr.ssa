@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=real_double
-fn ent_pc=6 n_params=1 variadic=false locals=0
+fn ent_pc=7 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -11,9 +11,9 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
     v6   Extend { value=v4, kind=I32 }                    -> x0
     terminator Return(v6)   (exit_acc=v6)
-; --- SSA dump (ok=true) ent_pc=7 ---
+; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=real_negate
-fn ent_pc=7 n_params=1 variadic=false locals=0
+fn ent_pc=8 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -24,9 +24,9 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
     v6   Extend { value=v4, kind=I32 }                    -> x0
     terminator Return(v6)   (exit_acc=v6)
-; --- SSA dump (ok=true) ent_pc=8 ---
+; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=main
-fn ent_pc=8 n_params=0 variadic=false locals=9
+fn ent_pc=9 n_params=0 variadic=false locals=9
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -114,9 +114,9 @@ fn ent_pc=8 n_params=0 variadic=false locals=9
     v58  CallExt { binding_idx=0, args=[v57], fp_arg_mask=0x0 } -> x0
     v59  Imm(0)                                           -> x0
     terminator Return(v59)   (exit_acc=v59)
-; --- SSA dump (ok=true) ent_pc=9 ---
+; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=__c5_sys_atoi
-fn ent_pc=9 n_params=1 variadic=false locals=0
+fn ent_pc=10 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

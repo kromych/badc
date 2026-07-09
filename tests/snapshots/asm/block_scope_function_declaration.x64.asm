@@ -74,12 +74,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x6, %eax
-               	popq	%rbp
-               	retq
 
 <sum3>:
                	leaq	(%rdi,%rsi), %rax
@@ -95,3 +89,4 @@ Disassembly of section .text:
 <label>:
                	leaq	<rip>, %rax
                	retq
+               	addb	%al, (%rax)

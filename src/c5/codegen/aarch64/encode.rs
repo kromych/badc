@@ -1669,6 +1669,11 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::constfold_branch::run (aarch64)", || {
             crate::c5::codegen::passes::constfold_branch::run(&mut ssa_funcs);
         });
+        // Delete blocks the branch fold left unreachable so their calls
+        // and extern references are neither lowered nor relocated.
+        super::ssa::emit_common::time_pass("passes::prune_unreachable::run (aarch64)", || {
+            crate::c5::codegen::passes::prune_unreachable::run(&mut ssa_funcs);
+        });
         super::ssa::emit_common::time_pass("passes::split_crit_edges::run (aarch64)", || {
             crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });

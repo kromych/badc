@@ -20,8 +20,6 @@ Disassembly of section .text:
                	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
-               	xorq	%rax, %rax
-               	retq
 
 <classify>:
                	movslq	%edi, %rdi
@@ -34,9 +32,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movabsq	$-0x1, %rax
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	retq
                	jmp	<addr>
 
 <main>:
@@ -80,4 +75,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

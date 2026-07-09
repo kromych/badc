@@ -56,17 +56,24 @@ typedef uint16_t            uint_fast16_t;
 typedef uint32_t            uint_fast32_t;
 typedef uint64_t            uint_fast64_t;
 
+// C99 7.18.4.1: `INTN_C`/`UINTN_C` expand to an integer constant of type
+// `int_leastN_t`/`uint_leastN_t`. The width suffix is required so the value
+// carries the wide type -- without it `UINT64_C(1) << 35` would evaluate in
+// `int` and lose bits above 31. `LL`/`ULL` are used for the 64-bit and max
+// forms because `long` is 32 bits under LLP64 (Windows); `long long` is at
+// least 64 bits on every target. The 8/16-bit forms promote to `int`, so a
+// bare token is conforming for those.
 #define INT8_C(c)   c
 #define INT16_C(c)  c
 #define INT32_C(c)  c
-#define INT64_C(c)  c
-#define INTMAX_C(c) c
+#define INT64_C(c)  c##LL
+#define INTMAX_C(c) c##LL
 
 #define UINT8_C(c)   c
 #define UINT16_C(c)  c
-#define UINT32_C(c)  c
-#define UINT64_C(c)  c
-#define UINTMAX_C(c) c
+#define UINT32_C(c)  c##U
+#define UINT64_C(c)  c##ULL
+#define UINTMAX_C(c) c##ULL
 
 #define INT8_MIN  (-128)
 #define INT16_MIN (-32768)

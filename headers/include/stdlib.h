@@ -75,6 +75,11 @@
 #pragma binding(libc::ptsname,   "_ptsname")
 #pragma binding(libc::ptsname_r, "_ptsname_r")
 #pragma binding(libc::getloadavg,"_getloadavg")
+// mergesort: BSD stable sort, present in the macOS / BSD libc. glibc has no
+// such symbol, so portable code that reaches for it ships its own fallback
+// (which is what a Linux configure selects).
+int mergesort(char *base, int n, int size, int *cmp);
+#pragma binding(libc::mergesort, "_mergesort")
 #endif
 
 #ifdef __linux__
@@ -372,25 +377,10 @@ unsigned long strtoul(char *s, char **endp, int base);
 unsigned long long strtoull(char *s, char **endp, int base);
 unsigned long long _strtoui64(char *s, char **endp, int base);
 #ifdef _WIN32
-// msvcrt's `_spawn*` family takes a mode argument up front.
-// `P_NOWAIT` returns the child handle immediately; the other
-// modes block until the child exits.
-#define P_WAIT          0
-#define P_NOWAIT        1
-#define P_OVERLAY       2
-#define P_NOWAITO       3
-#define P_DETACH        4
-#pragma binding(msvcrt::_spawnvp,  "_spawnvp")
-#pragma binding(msvcrt::_spawnv,   "_spawnv")
-#pragma binding(msvcrt::_spawnl,   "_spawnl")
-int _spawnvp(int mode, char *cmdname, char **argv);
-int _spawnv(int mode, char *cmdname, char **argv);
-int _spawnl(int mode, char *cmdname, char *arg0, ...);
-// `_cwait` action flag: wait for the supplied child handle.
-#define WAIT_CHILD       0
-#define WAIT_GRANDCHILD  1
-#pragma binding(msvcrt::_cwait, "_cwait")
-int _cwait(int *termstat, int handle, int action);
+// The msvcrt `_spawn*` / `_cwait` family and its mode constants live in
+// <process.h> (matching MSVC), not here: defining `P_WAIT` etc. in <stdlib.h>
+// shadows same-named identifiers in code that includes <stdlib.h> but not
+// <process.h> -- e.g. an assembler's `P_WAIT` instruction-prefix enumerator.
 // msvcrt path-resolution -- analogous to POSIX `realpath`.
 // Resolves a relative path against the current directory and
 // writes the canonical absolute form into `absPath`.
@@ -460,6 +450,17 @@ void __clear_cache(void *begin, void *end);
 ** libgcc_s.so.1 is not pulled in as a `DT_NEEDED`. */
 #pragma binding(libgcc_s::__trunctfdf2, "__trunctfdf2")
 double __trunctfdf2(long double a);
+#endif
+
+// glibc `canonicalize_file_name(path)` is `realpath(path, NULL)` (the
+// allocating form). It is glibc-only, so it is gated to Linux; portable
+// code guards its use on `HAVE_CANONICALIZE_FILE_NAME`, which configure
+// sets only where glibc provides it.
+#ifdef __linux__
+char *realpath(char *path, char *resolved);
+static inline char *canonicalize_file_name(const char *path) {
+    return realpath((char *)path, (char *)0);
+}
 #endif
 
 #ifdef _WIN32

@@ -253,6 +253,14 @@ pub(crate) struct Lexer {
     /// to size the element stride (C99 6.4.5).
     pub str_is_wide: bool,
 
+    /// `true` when the most recent `Token::Num` came from a wide
+    /// character constant (`L'x'`). C99 6.4.4.4p11 gives such a constant
+    /// type `wchar_t`; the expression parser reads this to type it at the
+    /// target's `wchar_t` width instead of `int`, so `sizeof (L'x')` is 2
+    /// on Windows (UTF-16) and 4 on the Unix targets. Reset per token in
+    /// `next`; set only in the wide-character branch of the literal lexer.
+    pub char_is_wide: bool,
+
     /// Byte width of a `wchar_t` element. 4 on the Unix targets (where
     /// `wchar_t` is `int`) and 2 on Windows (UTF-16). The compiler sets
     /// it from the target after construction; wide string and character
@@ -394,6 +402,7 @@ impl Lexer {
             int_is_decimal: true,
             float_suffix_f32: false,
             str_is_wide: false,
+            char_is_wide: false,
             wchar_bytes: 4,
             char_signed: true,
             // Bottom of the stack is the default pack -- c5 already
@@ -668,6 +677,7 @@ impl Lexer {
             if quote != b'"' {
                 self.ival = char_value;
                 self.tk = Tok(Token::Num as i64);
+                self.char_is_wide = true;
                 return Ok(());
             }
             // Absorb adjacent `L"..."` literals so the 16-bit
@@ -1015,6 +1025,7 @@ impl Lexer {
         self.int_suffix_unsigned = false;
         self.int_is_decimal = true;
         self.float_suffix_f32 = false;
+        self.char_is_wide = false;
         loop {
             if self.pos >= self.src.len() {
                 self.tk = Tok::EOF;

@@ -47,13 +47,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xb                // =11
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>
-               	mov	x0, #0xe                // =14
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret

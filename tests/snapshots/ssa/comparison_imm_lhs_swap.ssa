@@ -140,12 +140,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v92  Imm(3)                                           -> x0
     v93  Imm(0)                                           -> x1
     terminator Jmp(b20)   (exit_acc=v92)
-  block 22  start_pc=0
-    v80  Imm(1)                                           -> x0
-    terminator Return(v80)   (exit_acc=v80)
-  block 23  start_pc=0
-    v84  Imm(2)                                           -> x0
-    terminator Return(v84)   (exit_acc=v84)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

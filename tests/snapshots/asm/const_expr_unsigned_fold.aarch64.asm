@@ -72,5 +72,3 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x0, #0x7                // =7
-               	ret

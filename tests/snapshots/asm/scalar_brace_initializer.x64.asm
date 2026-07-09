@@ -52,13 +52,5 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0x5, %eax
-               	retq
-               	movl	$0x2, %eax
-               	retq
-               	movl	$0x4, %eax
-               	retq
-               	movl	$0x6, %eax
-               	retq
                	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

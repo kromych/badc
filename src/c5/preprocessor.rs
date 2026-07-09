@@ -477,6 +477,11 @@ impl Preprocessor {
             "__BYTE_ORDER__".to_string(),
             "__ORDER_LITTLE_ENDIAN__".to_string(),
         );
+        // gcc/clang also define `__LITTLE_ENDIAN__` (to 1) on a
+        // little-endian target; byte-order-detecting code commonly gates on
+        // `#ifdef __LITTLE_ENDIAN__` directly rather than comparing
+        // `__BYTE_ORDER__`. `__BIG_ENDIAN__` stays undefined.
+        macros.insert("__LITTLE_ENDIAN__".to_string(), "1".to_string());
         // C11 6.10.8.3 conditional-feature macros. An implementation that
         // reports `__STDC_VERSION__ == 201112L` defines each of these for an
         // optional feature it does not provide; library code gates on them
@@ -1168,8 +1173,18 @@ impl Preprocessor {
                 // buffer; directive lines never become argument text.
                 let mut join_stack: Vec<CondFrame> = Vec::new();
                 let mut join_active = true;
-                while macro_call_unclosed(&buffer, &self.fn_macros, &self.macros)
-                    && idx + consumed < lines.len()
+                while idx + consumed < lines.len()
+                    && (macro_call_unclosed(&buffer, &self.fn_macros, &self.macros)
+                        // A function-like macro name at the end of a line with
+                        // its `(` on the next line is still an invocation (C99
+                        // 6.10.3: white space, including newlines, may separate
+                        // the name from its `(`). Join when the next line opens
+                        // with `(` so the substitution sees the whole call.
+                        || (buffer_ends_with_pending_fn_macro(
+                            &buffer,
+                            &self.fn_macros,
+                            &self.macros,
+                        ) && lines[idx + consumed].trim_start().starts_with('(')))
                 {
                     let cont = lines[idx + consumed];
                     consumed += 1;
@@ -1510,7 +1525,7 @@ impl Preprocessor {
                 let counts = self.macros.contains_key(ident)
                     || (self.fn_macros.contains_key(ident) && {
                         let mut k = i;
-                        while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                        while k < bytes.len() && bytes[k].is_ascii_whitespace() {
                             k += 1;
                         }
                         k < bytes.len() && bytes[k] == b'('
@@ -1615,7 +1630,7 @@ impl Preprocessor {
                 // paren at *use* sites; we follow that.
                 if let Some(macro_def) = self.fn_macros.get(ident) {
                     let mut j = i;
-                    while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
                         j += 1;
                     }
                     if j < bytes.len()
@@ -1689,7 +1704,7 @@ impl Preprocessor {
                             && let Some(inner_def) = self.fn_macros.get(trimmed)
                         {
                             let mut k = next_src;
-                            while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                            while k < bytes.len() && bytes[k].is_ascii_whitespace() {
                                 k += 1;
                             }
                             if k < bytes.len()
@@ -1783,7 +1798,7 @@ impl Preprocessor {
                             && !nested.contains(trimmed)
                         {
                             let mut j = i;
-                            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
                                 j += 1;
                             }
                             if j < bytes.len()
@@ -2019,6 +2034,19 @@ impl Preprocessor {
     /// Any other directive is accepted with a warning.
     fn parse_pragma(&mut self, args: &str, line_no: usize, filename: &str) -> Result<(), C5Error> {
         let args = args.trim();
+        // MSVC and others allow whitespace between a pragma keyword and
+        // its argument list -- `#pragma warning ( disable : N )`. Collapse
+        // the gap before the first `(` so the keyword-paren dispatch below
+        // matches regardless of spacing. The keyword is a bare identifier,
+        // so any space there is the keyword/paren boundary.
+        let normalized;
+        let args: &str = match args.find('(') {
+            Some(i) if args[..i].trim_end().len() != i => {
+                normalized = format!("{}{}", args[..i].trim_end(), &args[i..]);
+                &normalized
+            }
+            _ => args,
+        };
         if let Some(inner) = args
             .strip_prefix("dylib(")
             .and_then(|s| s.strip_suffix(')'))
@@ -3994,6 +4022,43 @@ fn macro_call_unclosed(
     false
 }
 
+/// True if `buffer`'s trailing token is a function-like macro name (directly,
+/// or via a single-word object-like alias) with nothing but white space after
+/// it. Used to decide whether to join the next line: a function-like macro
+/// name whose `(` sits on the following line is still an invocation (C99
+/// 6.10.3), which the byte-at-end-of-buffer check in `macro_call_unclosed`
+/// cannot see on its own.
+fn buffer_ends_with_pending_fn_macro(
+    buffer: &str,
+    fn_macros: &HashMap<String, FnMacro>,
+    obj_macros: &HashMap<String, String>,
+) -> bool {
+    let trimmed = buffer.trim_end();
+    let bytes = trimmed.as_bytes();
+    let mut start = bytes.len();
+    while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+        start -= 1;
+    }
+    // Require a real trailing identifier: non-empty and not a number.
+    if start == bytes.len() || bytes[start].is_ascii_digit() {
+        return false;
+    }
+    let name = &trimmed[start..];
+    if fn_macros.contains_key(name) {
+        return true;
+    }
+    obj_macros
+        .get(name)
+        .map(|body| {
+            let t = body.trim();
+            !t.is_empty()
+                && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                && t.bytes().next().is_some_and(|b| !b.is_ascii_digit())
+                && fn_macros.contains_key(t)
+        })
+        .unwrap_or(false)
+}
+
 /// Substitute `params` for `args` in a function-like macro body.
 /// Whole-word match -- a parameter named `T` replaces only the
 /// identifier `T`, never `T` inside another word like `Tx`.
@@ -5374,6 +5439,21 @@ mod tests {
     }
 
     #[test]
+    fn pragma_warning_tolerates_space_before_paren() {
+        // MSVC allows a space between the keyword and its argument list:
+        // `#pragma warning ( disable : N )`. That must dispatch like the
+        // no-space form, not fall through to the unknown-pragma warning.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.process("#pragma warning ( disable : 4214 )\nint x = 1;\n")
+            .expect("preprocessor failed");
+        assert!(
+            !pp.warnings.iter().any(|w| w.contains("unknown")),
+            "spaced warning pragma warned as unknown: {:?}",
+            pp.warnings
+        );
+    }
+
+    #[test]
     fn msvc_pragma_operator_pack_emits_inline_directive() {
         // `pack` via `__pragma` re-emits an inline `#pragma pack` like the
         // C99 `_Pragma` path, so the lexer folds it at this position.
@@ -5442,6 +5522,16 @@ mod tests {
         // (no parens) stays a plain identifier.
         let out = process("#define NOOP(x)\nNOOP(arg);\nint NOOP;\n");
         assert!(out.contains(";\nint NOOP;"));
+    }
+
+    #[test]
+    fn function_like_macro_fires_with_paren_on_next_line() {
+        // C99 6.10.3: white space, including a newline, may separate a
+        // function-like macro's name from the `(` that invokes it. A name at
+        // the end of a line with its `(` on the following line is still a
+        // call and must expand.
+        let out = process("#define ADD(a, b) ((a) + (b))\nint x = ADD\n    (1, 2);\n");
+        assert!(out.contains("((1) + (2))"), "got: {out:?}");
     }
 
     #[test]

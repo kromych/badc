@@ -319,54 +319,6 @@ fn ent_pc=3 n_params=0 variadic=false locals=28
   block 26  start_pc=0
     v244 Imm(42)                                          -> x0
     terminator Return(v244)   (exit_acc=v244)
-  block 27  start_pc=0
-    v7   Imm(1)                                           -> x0
-    terminator Return(v7)   (exit_acc=v7)
-  block 28  start_pc=0
-    v10  Imm(2)                                           -> x0
-    terminator Return(v10)   (exit_acc=v10)
-  block 29  start_pc=0
-    v19  Imm(3)                                           -> x0
-    terminator Return(v19)   (exit_acc=v19)
-  block 30  start_pc=0
-    v28  Imm(4)                                           -> x0
-    terminator Return(v28)   (exit_acc=v28)
-  block 31  start_pc=0
-    v36  Imm(5)                                           -> x0
-    terminator Return(v36)   (exit_acc=v36)
-  block 32  start_pc=0
-    v43  Imm(6)                                           -> x0
-    terminator Return(v43)   (exit_acc=v43)
-  block 33  start_pc=0
-    v50  Imm(7)                                           -> x0
-    terminator Return(v50)   (exit_acc=v50)
-  block 34  start_pc=0
-    v60  Imm(8)                                           -> x0
-    terminator Return(v60)   (exit_acc=v60)
-  block 35  start_pc=0
-    v86  Imm(11)                                          -> x0
-    terminator Return(v86)   (exit_acc=v86)
-  block 36  start_pc=0
-    v106 Imm(12)                                          -> x0
-    terminator Return(v106)   (exit_acc=v106)
-  block 37  start_pc=0
-    v121 Imm(13)                                          -> x0
-    terminator Return(v121)   (exit_acc=v121)
-  block 38  start_pc=0
-    v134 Imm(14)                                          -> x0
-    terminator Return(v134)   (exit_acc=v134)
-  block 39  start_pc=0
-    v142 Imm(15)                                          -> x0
-    terminator Return(v142)   (exit_acc=v142)
-  block 40  start_pc=0
-    v147 Imm(16)                                          -> x0
-    terminator Return(v147)   (exit_acc=v147)
-  block 41  start_pc=0
-    v160 Imm(17)                                          -> x0
-    terminator Return(v160)   (exit_acc=v160)
-  block 42  start_pc=0
-    v170 Imm(18)                                          -> x0
-    terminator Return(v170)   (exit_acc=v170)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

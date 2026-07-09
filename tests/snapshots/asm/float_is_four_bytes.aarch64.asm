@@ -272,24 +272,3 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x4                // =4
-               	bl	<addr>
-               	sxtw	x0, w0
-               	mov	x20, #0x1               // =1
-               	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x8                // =8
-               	bl	<addr>
-               	sxtw	x0, w0
-               	mov	x20, #0x2               // =2
-               	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x4                // =4
-               	bl	<addr>
-               	sxtw	x0, w0
-               	mov	x20, #0x3               // =3
-               	b	<addr>

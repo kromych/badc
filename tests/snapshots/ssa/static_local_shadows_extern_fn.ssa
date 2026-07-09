@@ -60,8 +60,6 @@ fn ent_pc=1 n_params=1 variadic=false locals=2
     v18  Extend { value=v16, kind=I32 }                   -> x0
     v19  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v18)
-  block 8  start_pc=0
-    terminator Jmp(b7)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=1

@@ -124,12 +124,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x2, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
-               	retq
                	addb	%al, 0x41(%rdx)

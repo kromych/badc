@@ -190,6 +190,11 @@ impl Compiler {
                 {
                     self.symbols[loc_idx].class = Token::Glo as i64;
                     self.symbols[loc_idx].type_ = ty;
+                    // `extern T name[N];` names an array; record its dimension
+                    // so a subscript decays it to a pointer (6.7.6.2) rather
+                    // than seeing a scalar. The declarator parse has already
+                    // set `inner_array_size` for a multi-dimensional extern.
+                    self.symbols[loc_idx].array_size = array_size.max(0);
                     self.symbols[loc_idx].is_extern_decl = true;
                     // External linkage is what routes `&name` through
                     // `live_glo_addr`'s `GloAddr::Extern` arm to a

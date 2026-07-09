@@ -169,7 +169,11 @@ def generate_sources(badc: Path, python_wrapper: Path, gendir: Path) -> list[str
     """Produce yasm's derived C sources without make: install the frozen config,
     build the generators with badc, run gen_x86_insn.py under the badc-python,
     then run the generators. Returns the frozen translation-unit list."""
+    # Frozen configure outputs: config.h and libyasm-stdint.h (the latter just
+    # includes <stdint.h>, which badc provides, so it is target-independent).
     shutil.copy2(YASM_DEMO / "config" / "config-posix.h", SRC / "config.h")
+    shutil.copy2(YASM_DEMO / "config" / "libyasm-stdint.h",
+                 SRC / "libyasm-stdint.h")
     gendir.mkdir(parents=True, exist_ok=True)
     inc = ["-I.", "-Ilibyasm", "-Itools/genperf", "-Itools/re2c"]
     log("building yasm's generators with badc")

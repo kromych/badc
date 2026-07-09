@@ -1141,14 +1141,13 @@ jobs:
         run: python demos/nasm/selfhost.py
 
   yasm:
-    # Build the yasm 1.3.0 assembler with badc and byte-compare its output
-    # against a host-cc reference build. yasm's build derives sources at build
-    # time: the C generators (host cc) and the x86 instruction tables (Python
-    # gen_x86_insn.py, run under the badc-built CPython -- a self-hosting
-    # cross-check). POSIX lanes: unlike NASM's, yasm's smoke drives the
-    # upstream `make` (which git-bash does not ship) and stages the badc-python
-    # via a symlink (needs Windows developer mode), so the Windows lanes need
-    # extra setup and are tracked separately (TODO).
+    # Build the yasm 1.3.0 assembler with badc (no make, no configure) and
+    # byte-compare its output against a host-cc reference build. yasm's build
+    # derives sources at build time: badc builds the C generators, and the x86
+    # instruction tables come from gen_x86_insn.py run under the badc-built
+    # CPython (a self-hosting cross-check). POSIX lanes: the byte-parity
+    # reference still uses the host cc, so the native-Windows lane needs
+    # committed goldens instead and is tracked separately (TODO).
     name: yasm (${{ matrix.label }})
     strategy:
       fail-fast: false

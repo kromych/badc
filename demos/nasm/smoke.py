@@ -206,8 +206,10 @@ def run_golden_suite(nasm: Path, hexdump: str) -> tuple[int, list[str]]:
     # nasm-t.py prints the test path with the host separator (`\` on Windows).
     failed = re.findall(r"=== Test \./travis[\\/]test[\\/](\S+) (?:FAIL|ABORT) ===", out)
     unexpected = sorted(f for f in set(failed) if f not in SKIP_TESTS)
-    if passes == 0 and not failed:
-        fail(f"golden suite produced no results:\n{out[-800:]}")
+    # A valid run passes hundreds of cases; zero means the harness did not run
+    # them (not a clean sweep). Surface its output so the cause is visible.
+    if passes == 0:
+        fail(f"golden suite produced no passing checks:\n{out[-3000:]}")
     return passes, unexpected
 
 

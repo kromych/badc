@@ -29,7 +29,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=9
   block 3  start_pc=0
     v18  LocalAddr(-3)                                    -> x7
     v19  ImmData(32)                                      -> x6
-    v20  CallExt { binding_idx=74, args=[v18, v19], fp_arg_mask=0x0 } -> x0
+    v20  CallExt { binding_idx=75, args=[v18, v19], fp_arg_mask=0x0 } -> x0
     v21  BinopI { op=ne, lhs=v20, rhs_imm=0 }             -> x0
     v22  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v21)

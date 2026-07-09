@@ -377,29 +377,10 @@ unsigned long strtoul(char *s, char **endp, int base);
 unsigned long long strtoull(char *s, char **endp, int base);
 unsigned long long _strtoui64(char *s, char **endp, int base);
 #ifdef _WIN32
-// msvcrt's `_spawn*` family takes a mode argument up front.
-// `_P_NOWAIT` returns the child handle immediately; the other modes block
-// until the child exits. These are the canonical underscore-prefixed names
-// MSVC's <process.h> defines; the bare `P_WAIT`/... forms are deprecated
-// POSIX-compat aliases MSVC only exposes under an opt-in macro, so they are
-// not defined here (they would shadow same-named identifiers -- e.g. an
-// assembler's `P_WAIT` instruction-prefix enumerator).
-#define _P_WAIT          0
-#define _P_NOWAIT        1
-#define _P_OVERLAY       2
-#define _P_NOWAITO       3
-#define _P_DETACH        4
-#pragma binding(msvcrt::_spawnvp,  "_spawnvp")
-#pragma binding(msvcrt::_spawnv,   "_spawnv")
-#pragma binding(msvcrt::_spawnl,   "_spawnl")
-int _spawnvp(int mode, char *cmdname, char **argv);
-int _spawnv(int mode, char *cmdname, char **argv);
-int _spawnl(int mode, char *cmdname, char *arg0, ...);
-// `_cwait` action flag: wait for the supplied child handle.
-#define _WAIT_CHILD       0
-#define _WAIT_GRANDCHILD  1
-#pragma binding(msvcrt::_cwait, "_cwait")
-int _cwait(int *termstat, int handle, int action);
+// The msvcrt `_spawn*` / `_cwait` family and its mode constants live in
+// <process.h> (matching MSVC), not here: defining `P_WAIT` etc. in <stdlib.h>
+// shadows same-named identifiers in code that includes <stdlib.h> but not
+// <process.h> -- e.g. an assembler's `P_WAIT` instruction-prefix enumerator.
 // msvcrt path-resolution -- analogous to POSIX `realpath`.
 // Resolves a relative path against the current directory and
 // writes the canonical absolute form into `absPath`.

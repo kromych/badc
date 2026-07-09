@@ -1440,6 +1440,33 @@ impl Compiler {
         let sub_bytes = sub_span * elem_size;
         let mut i: i64 = 0;
         while self.lex.tk != '}' {
+            // C99 6.7.8p6 array designator `[N] = ...`: reposition the
+            // write cursor; subsequent positional entries continue from
+            // there. Mirrors the constant path in
+            // `collect_array_initializer`.
+            if self.lex.tk == Token::Brak {
+                self.next()?; // consume `[`
+                let n = self.parse_constant_int()?;
+                if n < 0 {
+                    return Err(self.compile_err(format!(
+                        "array designator index must be non-negative (got {n})"
+                    )));
+                }
+                if self.lex.tk == Token::Ellipsis {
+                    return Err(self.compile_err(
+                        "range designator in a non-constant array initializer is not yet supported",
+                    ));
+                }
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("`]` expected after array designator index"));
+                }
+                self.next()?; // consume `]`
+                if self.lex.tk != Token::Assign {
+                    return Err(self.compile_err("`=` expected after `[N]` designator"));
+                }
+                self.next()?; // consume `=`
+                i = n;
+            }
             if i >= count {
                 return Err(self.compile_err(format!(
                     "too many initializers for array `{}` (> {})",
@@ -1491,43 +1518,6 @@ impl Compiler {
             if k < n && self.lex.tk == ',' {
                 self.next()?;
             }
-        }
-        Ok(())
-    }
-
-    /// Emit one runtime scalar store of an array element:
-    /// `local[off] = expr`. The element value rides the parser vstack
-    /// (lvalue address + rvalue), captured as a `RuntimeInitElement`
-    /// the walker lowers to a single `store_local(off, value)`.
-    fn emit_array_leaf_runtime(
-        &mut self,
-        local_val: i64,
-        off: i64,
-        ty: i64,
-    ) -> Result<(), C5Error> {
-        self.emit_lea(local_val);
-        if off > 0 {
-            self.ast_psh();
-            self.emit_imm(off);
-            self.ast_binop(crate::c5::ir::BinOp::Add);
-        }
-        self.ast_psh();
-        // Assignment precedence: the comma between elements is the
-        // delimiter, not a comma-expression operator.
-        self.expr(Token::Assign as i64)?;
-        // C99 6.7.8p11: an initializer element is converted as in
-        // assignment, so an integer element of a floating member
-        // rounds through IEEE-754 rather than storing the raw bits.
-        self.convert_assign_rhs(ty);
-        let elem_ast = self.ast_acc;
-        self.ast_assign();
-        if let Some(value) = elem_ast {
-            self.pending_local_runtime_elements
-                .push(super::super::ast::RuntimeInitElement {
-                    offset: off,
-                    value,
-                    ty,
-                });
         }
         Ok(())
     }

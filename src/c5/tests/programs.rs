@@ -43,6 +43,14 @@ fn runtime_anon_struct_init() {
 }
 
 #[test]
+fn runtime_array_designator() {
+    // C99 6.7.8p6 `[N] =` array designators interleaved with positional
+    // entries in a runtime (non-constant) array initializer, at parity with
+    // the constant-staging path.
+    assert_eq!(run_fixture("runtime_array_designator.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

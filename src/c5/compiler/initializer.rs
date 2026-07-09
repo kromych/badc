@@ -2466,7 +2466,12 @@ impl Compiler {
     /// initializer position. The `Data` arm folds a constant leaf and
     /// stages its bytes; the `Runtime` arm evaluates the leaf as an
     /// assignment-expression and records a runtime store element.
-    fn init_leaf_scalar(&mut self, target: InitTarget, at: i64, ty: i64) -> Result<(), C5Error> {
+    pub(super) fn init_leaf_scalar(
+        &mut self,
+        target: InitTarget,
+        at: i64,
+        ty: i64,
+    ) -> Result<(), C5Error> {
         match target {
             InitTarget::Data { .. } => {
                 let (value, reloc) = self.parse_constant_init_value()?;
@@ -2502,6 +2507,17 @@ impl Compiler {
                 Ok(())
             }
         }
+    }
+
+    /// Emit one runtime scalar store `local[off] = expr` for an array
+    /// element -- the shared runtime leaf, used by the array filler.
+    pub(super) fn emit_array_leaf_runtime(
+        &mut self,
+        local_val: i64,
+        off: i64,
+        ty: i64,
+    ) -> Result<(), C5Error> {
+        self.init_leaf_scalar(InitTarget::Runtime { local_val, base: 0 }, off, ty)
     }
 
     /// Write `field_size` little-endian bytes of an initializer

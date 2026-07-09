@@ -1093,7 +1093,9 @@ jobs:
           - { os: windows-11-arm, label: windows-arm64 }
     runs-on: ${{ matrix.os }}
     # Two badc builds (-O0 and -O) + two golden-suite runs; warm cache ~5 min.
-    timeout-minutes: 30
+    # The smoke self-limits each golden-suite run with a subprocess timeout, so
+    # this is only a backstop -- a job here must never approach 30 min.
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

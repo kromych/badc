@@ -68,12 +68,12 @@ MAIN = "asm/nasm.c"
 INC_DIRS = [".", "include", "config", "x86", "asm", "disasm", "output"]
 
 # `_version` embeds the assembler's compile date in its output, which a fresh
-# build here does not match the golden of. `_file_` emits `__FILE__` -- the
-# source path as passed to nasm -- so its golden bytes carry the recording
-# host's path separator and do not match on Windows (`\` vs `/`). Neither is a
-# codegen signal. Every other golden case is deterministic once nasm is invoked
-# with the base-dir prefix the goldens were recorded with (`./travis/test/...`).
-SKIP_TESTS = {"_version", "_file_"}
+# build here does not match the golden of; it is not a codegen signal. Other
+# platform-specific cases (e.g. `_file_` on Windows) are removed from the fetched
+# suite by `curate_fixtures` so the harness runs unmodified. Every remaining
+# golden case is deterministic once nasm is invoked with the base-dir prefix the
+# goldens were recorded with (`./travis/test/...`).
+SKIP_TESTS = {"_version"}
 
 IS_WIN = sys.platform == "win32"
 EXE = ".exe" if IS_WIN else ""
@@ -117,18 +117,17 @@ def ensure_source() -> None:
     subprocess.run([sys.executable, str(NASM_DEMO / "setup.py")], check=True)
 
 
-def patch_harness() -> None:
-    """nasm-t.py `sys.exit`s (via test_abort) on the first failing case, which
-    hides every later result. Make it report the failure and continue, so the
-    suite runs to completion and the smoke can tell a real regression from a
-    platform-dependent case it skips (SKIP_TESTS). Idempotent."""
-    t = SRC / "travis" / "nasm-t.py"
-    text = t.read_text()
-    patched = text.replace(
-        'test_abort(desc[\'_test-name\'], "Error detected")',
-        'test_fail(desc[\'_test-name\'], "Error detected")')
-    if patched != text:
-        t.write_text(patched)
+def curate_fixtures(target: str) -> None:
+    """Remove test cases that cannot apply on the target from the fetched suite,
+    so nasm-t.py runs unmodified and its abort-on-failure still gates real bugs.
+    `_file_` emits `__FILE__` (the source path as passed to nasm), whose golden
+    bytes carry the recording host's path separator and cannot match on Windows
+    (`\\` vs `/`)."""
+    inapplicable = ["_file_"] if target.startswith("windows") else []
+    tdir = SRC / "travis" / "test"
+    for stem in inapplicable:
+        for p in tdir.glob(stem + ".*"):
+            p.unlink()
 
 
 def ensure_config(target: str) -> None:
@@ -211,10 +210,18 @@ def run_golden_suite(nasm: Path, hexdump: str) -> tuple[int, list[str]]:
     if home:
         env["PYTHONHOME"] = home
         env["PYTHONPATH"] = str(Path(home) / "Lib")
-    r = subprocess.run(
-        [runner, "travis/nasm-t.py", "--nasm", str(nasm), "--hexdump", hexdump,
-         "-d", "./travis/test", "run"],
-        cwd=SRC, env=env, capture_output=True, text=True)
+    # A defensive timeout so a harness hang fails in minutes with its captured
+    # output, never running out the CI job's wall clock. A full run (~280 cases,
+    # each spawning nasm) is well under this even on Windows; the suite runs
+    # twice (-O0, -O), so 2x300 s + builds stays inside the 12-min job backstop.
+    try:
+        r = subprocess.run(
+            [runner, "travis/nasm-t.py", "--nasm", str(nasm), "--hexdump", hexdump,
+             "-d", "./travis/test", "run"],
+            cwd=SRC, env=env, capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired as e:
+        partial = (e.stdout or "") + (e.stderr or "")
+        fail(f"golden suite timed out after 300s (harness hang):\n{partial[-2000:]}")
     out = r.stdout + r.stderr
     passes = len(re.findall(r"=== Test \S+ PASS ===", out))
     # nasm-t.py prints the test path with the host separator (`\` on Windows).
@@ -232,7 +239,7 @@ def main() -> int:
     target = badc_target()
     log(f"badc={badc} target={target}")
     ensure_source()
-    patch_harness()
+    curate_fixtures(target)
     ensure_config(target)
     with tempfile.TemporaryDirectory(prefix="nasm-smoke-") as d:
         work = Path(d)

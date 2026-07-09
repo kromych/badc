@@ -43,6 +43,27 @@ a codegen defect shows up as a byte mismatch. `_version` is skipped (its
 golden embeds the assembler's compile date, which a fresh build does not
 match); every other check must pass.
 
+## Native Windows
+
+The goldens were recorded on a POSIX host, so two host cosmetics -- neither a
+codegen difference -- would otherwise break the byte comparison on native
+Windows. The demo corrects each at the boundary it owns, leaving `nasm-t.py`
+and its goldens byte-for-byte upstream:
+
+- **Path separator.** `nasm-t.py` joins the source and output paths with
+  `os.sep` (`\`), which nasm echoes into its diagnostics, `%line` directives,
+  and the source-name records inside object output (OMF THEADR, ELF
+  `STT_FILE`). A small badc-built launcher, `nasmw`, rewrites `\` to `/` on the
+  command line before invoking the real nasm, so `/` reaches every artifact --
+  text and binary alike -- and matches the goldens.
+- **Line endings.** nasm's text outputs (stderr/stdout and the text-mode output
+  files: `-E` `.i`, listings, the ASCII object formats) pass through the Windows
+  CRT in text mode, so they carry CRLF; `smoke.py` rewrites the LF text goldens
+  to CRLF before the run.
+
+Both keep full coverage: a real diagnostic, listing, or encoding regression
+still fails the comparison. The suite runs the same set on every target.
+
 ## Self-hosting cross-check
 
 ```sh

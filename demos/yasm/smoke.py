@@ -8,15 +8,16 @@ runs that Python step under the **badc-built CPython** (see the python demo),
 so a badc-built interpreter generates the tables that a badc-built assembler
 is then compiled from -- a self-hosting cross-check.
 
-Flow (POSIX targets):
+Flow (POSIX targets) -- no `make`, no `./configure`:
   1. Build CPython with badc (python demo) and stage it in a temp dir.
-  2. `./configure PYTHON=<badc-python>` and `make` -- the C generators build
-     and run under the host cc, `gen_x86_insn.py` runs under the badc-python,
-     and a reference `yasm` is produced whose object list drives step 3.
-  3. Recompile each of yasm's translation units with badc, archive the
-     library, and link `yasm` with badc's own linker.
-  4. Assemble a mixed-instruction fixture with the badc-built `yasm` and the
-     reference `yasm` in each object format and require byte-identical output.
+  2. Install a frozen config, build yasm's generators with badc, run
+     `gen_x86_insn.py` under the badc-python, and run the generators to derive
+     yasm's C sources (see `generate_sources` / `PIPELINE`).
+  3. Recompile yasm's translation units (a frozen manifest) with badc, archive
+     the library, and link `yasm` with badc's own linker.
+  4. Build a reference `yasm` from the same sources with the host cc, assemble
+     a mixed-instruction fixture with both in each object format, and require
+     byte-identical output.
 
 Override the badc binary via `$BADC` (default: `target/release/badc[.exe]`).
 """
@@ -122,44 +123,82 @@ def stage_badc_python(rundir: Path) -> Path:
     return exe
 
 
-def configure_and_generate(badc_python: Path, rundir: Path) -> list[str]:
-    """Configure + make yasm with the C generators (host cc) and the x86
-    table generator (badc-python), producing the derived sources and a
-    reference binary. Returns yasm's translation-unit list."""
-    # A wrapper so make's `$(PYTHON) gen_x86_insn.py` runs the badc-built
-    # interpreter with its stdlib on PYTHONHOME.
-    wrapper = rundir / "python-badc"
-    wrapper.write_text(
-        "#!/bin/sh\n"
-        f'export PYTHONHOME="{rundir}" PYTHONPATH="{rundir}/Lib"\n'
-        f'exec "{badc_python}" "$@"\n'
-    )
-    wrapper.chmod(0o755)
-    log("configure (badc-python for the x86 tables)")
-    subprocess.run(
-        ["sh", "./configure", f"CC={host_cc()}", f"PYTHON={wrapper}"],
-        cwd=SRC, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    log("make (generate derived sources + reference yasm)")
-    r = subprocess.run(["make", "-j", str(os.cpu_count() or 4)], cwd=SRC,
-                       capture_output=True, text=True)
-    if r.returncode != 0 or not (SRC / ("yasm" + EXE)).is_file():
-        fail(f"reference make failed:\n{r.stderr.strip()[-1200:]}")
-    # Object list from the built tree: yasm's own TUs, excluding the
-    # build-time generators, the alternate frontends, and the CPython
-    # bindings.
-    objs = []
-    for o in SRC.rglob("*.o"):
-        rel = o.relative_to(SRC).as_posix()
-        base = o.name
-        if base.startswith(("gen", "re2c")) and "/" not in rel:
-            continue
-        if rel.startswith(("frontends/tasm/", "frontends/vsyasm/", "tools/")):
-            continue
-        c = o.with_suffix(".c")
-        if c.is_file():
-            objs.append(c.relative_to(SRC).as_posix())
-    return sorted(set(objs))
+# The build-time generators badc compiles, with their exact source lists (the
+# link inputs the upstream Makefile uses). genperf pulls in libyasm's hash and
+# memory helpers; re2c is the specific nine files (the rest of tools/re2c use
+# libyasm internals and are not part of the tool).
+GENERATORS = {
+    "genperf": ["tools/genperf/genperf.c", "tools/genperf/perfect.c",
+                "libyasm/phash.c", "libyasm/xmalloc.c", "libyasm/xstrdup.c"],
+    "genmacro": ["tools/genmacro/genmacro.c"],
+    "genstring": ["genstring.c"],
+    "genversion": ["modules/preprocs/nasm/genversion.c"],
+    "genmodule": ["libyasm/genmodule.c"],
+    "re2c": [f"tools/re2c/{m}.c" for m in
+             ("main", "code", "dfa", "parser", "actions", "scanner",
+              "mbo_getopt", "substr", "translate")],
+}
+
+# The derived-source pipeline (the upstream Makefile's generator invocations,
+# in dependency order). gen_x86_insn.py runs first (writes the .gperf tables
+# genperf consumes). Paths are relative to SRC, the working directory.
+PIPELINE = [
+    ("genversion", ["version.mac"]),
+    ("genperf", ["x86insn_nasm.gperf", "x86insn_nasm.c"]),
+    ("genperf", ["x86insn_gas.gperf", "x86insn_gas.c"]),
+    ("genperf", ["modules/arch/x86/x86cpu.gperf", "x86cpu.c"]),
+    ("genperf", ["modules/arch/x86/x86regtmod.gperf", "x86regtmod.c"]),
+    ("re2c", ["-b", "-o", "gas-token.c", "modules/parsers/gas/gas-token.re"]),
+    ("re2c", ["-b", "-o", "nasm-token.c", "modules/parsers/nasm/nasm-token.re"]),
+    ("re2c", ["-s", "-o", "lc3bid.c", "modules/arch/lc3b/lc3bid.re"]),
+    ("genmacro", ["nasm-macros.c", "nasm_standard_mac",
+                  "modules/parsers/nasm/nasm-std.mac"]),
+    ("genmacro", ["nasm-version.c", "nasm_version_mac", "version.mac"]),
+    ("genmacro", ["win64-nasm.c", "win64_nasm_stdmac",
+                  "modules/objfmts/coff/win64-nasm.mac"]),
+    ("genmacro", ["win64-gas.c", "win64_gas_stdmac",
+                  "modules/objfmts/coff/win64-gas.mac"]),
+    ("genstring", ["license_msg", "license.c", "./COPYING"]),
+    # genmodule reads the module list from Makefile.am (YASM_MODULES += ...),
+    # so no generated Makefile / configure is needed.
+    ("genmodule", ["libyasm/module.in", "Makefile.am"]),
+]
+
+
+def generate_sources(badc: Path, python_wrapper: Path, gendir: Path) -> list[str]:
+    """Produce yasm's derived C sources without make: install the frozen config,
+    build the generators with badc, run gen_x86_insn.py under the badc-python,
+    then run the generators. Returns the frozen translation-unit list."""
+    shutil.copy2(YASM_DEMO / "config" / "config-posix.h", SRC / "config.h")
+    gendir.mkdir(parents=True, exist_ok=True)
+    inc = ["-I.", "-Ilibyasm", "-Itools/genperf", "-Itools/re2c"]
+    log("building yasm's generators with badc")
+    tools = {}
+    for name, srcs in GENERATORS.items():
+        exe = gendir / (name + EXE)
+        r = subprocess.run([str(badc), f"--target={badc_target()}", *inc,
+                            *[str(SRC / s) for s in srcs], "-o", str(exe)],
+                           cwd=SRC, capture_output=True, text=True)
+        if r.returncode != 0 or not exe.is_file():
+            fail(f"badc failed to build generator {name}:\n{r.stderr.strip()[-800:]}")
+        tools[name] = str(exe)
+    log("generating the x86 instruction tables (badc-python gen_x86_insn.py)")
+    r = subprocess.run([str(python_wrapper),
+                        "modules/arch/x86/gen_x86_insn.py"],
+                       cwd=SRC, capture_output=True, text=True)
+    if r.returncode != 0 or not (SRC / "x86insns.c").is_file():
+        fail(f"gen_x86_insn.py (badc-python) failed:\n{r.stdout[-400:]}{r.stderr[-800:]}")
+    log("running the derived-source generators")
+    for name, args in PIPELINE:
+        r = subprocess.run([tools[name], *args], cwd=SRC,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            fail(f"generator {name} {args} failed:\n{r.stderr.strip()[-600:]}")
+    manifest = (YASM_DEMO / "config" / "tu-list.txt").read_text().split()
+    missing = [s for s in manifest if not (SRC / s).is_file()]
+    if missing:
+        fail(f"generated tree is missing translation units: {missing[:10]}")
+    return manifest
 
 
 def build_with_badc(badc: Path, target: str, sources: list[str], workdir: Path) -> Path:
@@ -192,6 +231,40 @@ def build_with_badc(badc: Path, target: str, sources: list[str], workdir: Path) 
     return binp
 
 
+def make_python_wrapper(badc_python: Path, rundir: Path) -> Path:
+    """A wrapper so gen_x86_insn.py runs the badc-built interpreter with its
+    stdlib on PYTHONHOME."""
+    wrapper = rundir / "python-badc"
+    wrapper.write_text(
+        "#!/bin/sh\n"
+        f'export PYTHONHOME="{rundir}" PYTHONPATH="{rundir}/Lib"\n'
+        f'exec "{badc_python}" "$@"\n'
+    )
+    wrapper.chmod(0o755)
+    return wrapper
+
+
+def build_reference_hostcc(target: str, sources: list[str], workdir: Path) -> Path:
+    """Build a reference yasm from the same generated + static sources with the
+    host cc (no make), for the byte-parity check."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    cc = host_cc()
+    inc = [f"-I{SRC / d}" for d in INC]
+    objs = []
+    for rel in sources:
+        out = workdir / (rel.replace("/", "_")[:-2] + ".o")
+        r = subprocess.run([cc, "-c", "-w", *inc, *DEFS, str(SRC / rel),
+                            "-o", str(out)], capture_output=True, text=True)
+        if r.returncode != 0 or not out.is_file():
+            fail(f"host cc failed to compile {rel} (reference):\n{r.stderr.strip()[-600:]}")
+        objs.append(str(out))
+    binp = workdir / ("yasm" + EXE)
+    r = subprocess.run([cc, *objs, "-o", str(binp)], capture_output=True, text=True)
+    if r.returncode != 0 or not binp.is_file():
+        fail(f"host cc failed to link the reference yasm:\n{r.stderr.strip()[-600:]}")
+    return binp
+
+
 def byte_parity(a: Path, b: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="yasm-parity-") as d:
         dp = Path(d)
@@ -208,7 +281,10 @@ def byte_parity(a: Path, b: Path) -> None:
 
 def main() -> int:
     if IS_WIN:
-        fail("POSIX targets only (yasm's build generators assume a Unix shell)")
+        # The generators + gen_x86_insn.py run fine on Windows, but the
+        # byte-parity reference still uses the host cc; the native-Windows lane
+        # needs committed goldens instead (tracked separately).
+        fail("POSIX targets only for now (host-cc byte-parity reference)")
     badc = resolve_badc()
     target = badc_target()
     log(f"badc={badc} target={target}")
@@ -217,15 +293,19 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="yasm-py-") as pyd:
         badc_python = stage_badc_python(Path(pyd))
-        sources = configure_and_generate(badc_python, Path(pyd))
-        log(f"yasm translation units: {len(sources)}")
-        with tempfile.TemporaryDirectory(prefix="yasm-smoke-") as d:
-            yasm = build_with_badc(badc, target, sources, Path(d))
-            ver = subprocess.run([str(yasm), "--version"], capture_output=True, text=True)
-            if "yasm 1.3.0" not in ver.stdout:
-                fail(f"badc-built yasm did not report its version:\n{ver.stdout}{ver.stderr}")
-            log("badc-built yasm --version OK")
-            byte_parity(yasm, SRC / ("yasm" + EXE))
+        wrapper = make_python_wrapper(badc_python, Path(pyd))
+        with tempfile.TemporaryDirectory(prefix="yasm-gen-") as gend:
+            sources = generate_sources(badc, wrapper, Path(gend))
+            log(f"yasm translation units: {len(sources)}")
+            with tempfile.TemporaryDirectory(prefix="yasm-smoke-") as d:
+                yasm = build_with_badc(badc, target, sources, Path(d) / "badc")
+                ver = subprocess.run([str(yasm), "--version"],
+                                     capture_output=True, text=True)
+                if "yasm 1.3.0" not in ver.stdout:
+                    fail(f"badc-built yasm did not report its version:\n{ver.stdout}{ver.stderr}")
+                log("badc-built yasm --version OK")
+                ref = build_reference_hostcc(target, sources, Path(d) / "ref")
+                byte_parity(yasm, ref)
     log("all lanes green")
     return 0
 

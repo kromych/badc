@@ -217,6 +217,9 @@ demos/yasm/*
 !demos/yasm/setup.py
 !demos/yasm/smoke.py
 !demos/yasm/README.md
+!demos/yasm/config
+!demos/yasm/config/config-posix.h
+!demos/yasm/config/tu-list.txt
 
 # edk2 -- badc builds a UEFI app from real EDK II MdePkg sources. `setup.py`
 # fetches the MdePkg source subset into src/ from the vendor mirror. Only the

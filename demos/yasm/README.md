@@ -25,10 +25,12 @@ python3 demos/yasm/smoke.py                      # build with badc + test
 ## What the smoke does (POSIX targets)
 
 1. Build CPython with badc and stage it in a temp directory.
-2. `./configure PYTHON=<badc-python>` + `make`: the C generators build and
-   run under the host cc, `gen_x86_insn.py` runs under the badc-python, and a
-   reference `yasm` is produced whose object list drives step 3.
-3. Recompile each of yasm's translation units with badc, archive the library,
-   and link `yasm` with badc's own linker.
-4. Assemble a mixed-instruction fixture with the badc-built and reference
-   `yasm` in each object format and require byte-identical output.
+2. No `make`, no `./configure`: install a frozen config, build yasm's C
+   generators (genperf/genmacro/genstring/genversion/genmodule + the bundled
+   re2c) with badc, run `gen_x86_insn.py` under the badc-python, and run the
+   generators to derive yasm's C sources.
+3. Recompile yasm's translation units (a frozen manifest, `config/tu-list.txt`)
+   with badc, archive the library, and link `yasm` with badc's own linker.
+4. Build a reference `yasm` from the same sources with the host cc, then
+   assemble a mixed-instruction fixture with both in each object format and
+   require byte-identical output.

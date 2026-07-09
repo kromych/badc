@@ -15,11 +15,11 @@ use super::super::codegen::abi_classify::{FlatField, ScalarKind};
 use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::StructDef;
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, is_type_start_token,
-    pointee_size_no_struct, struct_id_of, struct_ptr_depth,
+    pointee_size_no_struct, struct_id_of, struct_ptr_depth, struct_ty_for,
 };
+use super::{StructDef, StructField};
 
 impl Compiler {
     /// Element size in bytes for a pointer type. Pointer-to-struct
@@ -131,6 +131,55 @@ impl Compiler {
         id
     }
 
+    /// True when the current identifier is a spelling of the GCC 128-bit
+    /// integer type: `__int128`, `__int128_t`, or `__uint128_t`.
+    pub(super) fn is_lex_int128_spelling(&self) -> bool {
+        self.lex.tk == Token::Id
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "__int128" | "__int128_t" | "__uint128_t"
+            )
+    }
+
+    /// Type tag for the GCC 128-bit integer (`__int128` / `__uint128_t`).
+    /// badc models it as a 16-byte aggregate `{ long long; long long; }`:
+    /// declarations, struct / array layout, `sizeof`, and by-value copies
+    /// go through the struct machinery, while 128-bit arithmetic is an
+    /// aggregate-operand error (see `reject_aggregate_binop`) rather than
+    /// a silent truncation. Two `long long` fields make it exactly 16
+    /// bytes on every target (LLP64 `long` would be 8). Registered once,
+    /// on first use. Needed to parse Linux kernel-UAPI headers
+    /// (`asm/sigcontext.h`'s `__uint128_t vregs[32]`).
+    pub(super) fn builtin_int128_tag(&mut self) -> i64 {
+        if let Some(id) = self.structs.iter().position(|s| s.name == "__int128") {
+            return struct_ty_for(id);
+        }
+        let half = |name: &str, offset: usize| StructField {
+            name: name.to_string(),
+            offset,
+            ty: Ty::LongLong as i64,
+            array_size: 0,
+            inner_array_size: 0,
+            array_dims: alloc::vec::Vec::new(),
+            bit_offset: 0,
+            bit_width: 0,
+            bit_unit_size: 0,
+            fn_ptr_indirection: 0,
+            params: alloc::vec::Vec::new(),
+            is_variadic: false,
+            anon_union_group: 0,
+            anon_struct_group: 0,
+        };
+        self.structs.push(StructDef {
+            name: "__int128".to_string(),
+            size: 16,
+            align: 8,
+            fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
+            is_union: false,
+        });
+        struct_ty_for(self.structs.len() - 1)
+    }
+
     /// True when the current lexer position starts a type. The free
     /// function `is_type_start_token` covers the keyword tokens
     /// (`int`, `char`, `const`, ...); this method extends it by
@@ -141,6 +190,7 @@ impl Compiler {
     pub(super) fn lex_is_type_start(&self) -> bool {
         is_type_start_token(self.lex.tk)
             || self.is_lex_typedef_name()
+            || self.is_lex_int128_spelling()
             // A leading C23 `[[ ... ]]` attribute introduces a
             // declaration (`[[noreturn]] void f(void);`).
             || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))

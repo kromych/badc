@@ -645,6 +645,12 @@ impl Compiler {
             Ty::Int as i64
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?
+        } else if self.is_lex_int128_spelling() {
+            // GCC `__int128` / `__int128_t` / `__uint128_t` (and, via the
+            // modifier soup, `unsigned __int128`): a 16-byte integer type,
+            // modeled as a 16-byte aggregate for layout / sizeof / copy.
+            self.next()?;
+            self.builtin_int128_tag()
         } else if !m.saw_int_mod && self.is_lex_typedef_name() {
             // Typedef-name as base type. Resolve to the aliased
             // type and consume the identifier. Guarded by

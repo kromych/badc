@@ -150,6 +150,11 @@ impl Compiler {
                 //   <kw> Name *p;                -- type use, declarators follow
                 //   typedef <kw> Name {...} Name; -- definition + typedef alias
                 bt = self.parse_aggregate_base_type()?;
+            } else if self.is_lex_int128_spelling() {
+                // GCC `__int128` / `__uint128_t` at file scope: a 16-byte
+                // integer type, modeled as a 16-byte aggregate.
+                self.next()?;
+                bt = self.builtin_int128_tag();
             } else if self.is_lex_typedef_name() {
                 // Typedef-name as base type at file scope: `Foo bar;`
                 // where `Foo` was bound by a prior `typedef`.

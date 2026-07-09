@@ -285,6 +285,11 @@ impl Compiler {
                 self.parse_enum_decl()?;
                 field_base_is_enum = true;
                 Ty::Int as i64
+            } else if self.is_lex_int128_spelling() {
+                // GCC `__int128` / `__uint128_t` field: a 16-byte type.
+                // Needed for kernel-UAPI structs (`asm/sigcontext.h`).
+                self.next()?;
+                self.builtin_int128_tag()
             } else if !mods.saw_int_mod && self.is_lex_typedef_name() {
                 // Guarded by `!saw_int_mod`: C99 6.7.2p2 forbids
                 // combining a typedef-name with `unsigned`/`short`/

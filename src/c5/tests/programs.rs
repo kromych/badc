@@ -84,6 +84,15 @@ fn zero_length_local_array() {
 }
 
 #[test]
+fn int128_type_layout() {
+    // GCC `__int128` / `__int128_t` / `__uint128_t` / `unsigned __int128`
+    // as a 16-byte type: sizeof, struct / array layout (the aarch64
+    // asm/sigcontext.h shape), and by-value copy. 128-bit arithmetic is
+    // rejected separately (struct_value_arithmetic_is_rejected).
+    assert_eq!(run_fixture("int128_type_layout.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

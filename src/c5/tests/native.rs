@@ -757,6 +757,9 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("runtime_anon_struct_init.c", 0),
     // C99 6.7.8p6 `[N] =` designators in a runtime array initializer.
     ("runtime_array_designator.c", 0),
+    // C99 6.7.8p7 `.member` designators inside a flattened anonymous-struct
+    // region, constant and runtime store paths.
+    ("anon_struct_designated_init.c", 0),
     // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
     // their post-longjmp value, are re-read through aliases, and
     // unused volatile reads still execute.

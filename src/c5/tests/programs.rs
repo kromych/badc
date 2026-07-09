@@ -51,6 +51,14 @@ fn runtime_array_designator() {
 }
 
 #[test]
+fn anon_struct_designated_init() {
+    // C99 6.7.8p7: `.member` designators inside a brace on a flattened
+    // anonymous-struct region, out of order, in both the constant and the
+    // runtime store paths.
+    assert_eq!(run_fixture("anon_struct_designated_init.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

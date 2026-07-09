@@ -1896,15 +1896,44 @@ impl Compiler {
                 let group = field.anon_struct_group;
                 let mut mem_pos = field_idx;
                 while self.lex.tk != '}' {
-                    while mem_pos < self.structs[struct_id].fields.len()
-                        && self.structs[struct_id].fields[mem_pos].anon_struct_group != group
-                    {
-                        mem_pos += 1;
-                    }
-                    if mem_pos >= self.structs[struct_id].fields.len() {
-                        return Err(self.compile_err("too many initializers for anonymous struct"));
-                    }
-                    let mem = self.structs[struct_id].fields[mem_pos].clone();
+                    // C99 6.7.8p7: a `.member` designator inside the group's
+                    // brace selects one flattened member; a positional entry
+                    // advances to the next group member. Either way the
+                    // cursor continues past the written member.
+                    let mem_idx = if self.lex.tk == Token::Dot {
+                        self.next()?;
+                        if self.lex.tk != Token::Id {
+                            return Err(self.compile_err("field name expected after `.`"));
+                        }
+                        let nm = self.symbols[self.lex.curr_id_idx].name.clone();
+                        self.next()?;
+                        if self.lex.tk != Token::Assign {
+                            return Err(
+                                self.compile_err(format!("`=` expected after `.{nm}` designator"))
+                            );
+                        }
+                        self.next()?;
+                        self.structs[struct_id]
+                            .fields
+                            .iter()
+                            .position(|f| f.anon_struct_group == group && f.name == nm)
+                            .ok_or_else(|| {
+                                self.compile_err(format!("anonymous member {nm} not found"))
+                            })?
+                    } else {
+                        while mem_pos < self.structs[struct_id].fields.len()
+                            && self.structs[struct_id].fields[mem_pos].anon_struct_group != group
+                        {
+                            mem_pos += 1;
+                        }
+                        if mem_pos >= self.structs[struct_id].fields.len() {
+                            return Err(
+                                self.compile_err("too many initializers for anonymous struct")
+                            );
+                        }
+                        mem_pos
+                    };
+                    let mem = self.structs[struct_id].fields[mem_idx].clone();
                     let mem_base = (var_offset as usize) + mem.offset;
                     if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
                         self.collect_struct_initializer_t(
@@ -1914,7 +1943,7 @@ impl Compiler {
                     } else {
                         self.init_leaf_scalar(target, mem_base as i64, mem.ty)?;
                     }
-                    mem_pos += 1;
+                    mem_pos = mem_idx + 1;
                     self.accept(',')?;
                 }
                 self.next()?; // consume `}`

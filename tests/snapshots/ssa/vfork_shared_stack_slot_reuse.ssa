@@ -244,7 +244,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=57
     v133 BinopI { op=shl, lhs=v132, rhs_imm=32 }          -> x1
     v134 Extend { value=v132, kind=I32 }                  -> [spill 7]
     v135 Imm(0)                                           -> x0
-    v136 CallExt { binding_idx=166, args=[], fp_arg_mask=0x0 } -> x0
+    v136 CallExt { binding_idx=167, args=[], fp_arg_mask=0x0 } -> x0
     v137 Imm(0)                                           -> x1
     v138 Extend { value=v136, kind=I32 }                  -> x1
     v139 BinopI { op=lt, lhs=v138, rhs_imm=0 }            -> x2
@@ -263,7 +263,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=57
     v146 StoreLocal { off=-15, value=v145, kind=I32 }     -> -
     v147 Extend { value=v136, kind=I32 }                  -> x7
     v148 LocalAddr(-15)                                   -> x6
-    v149 CallExt { binding_idx=264, args=[v147, v148, v145], fp_arg_mask=0x0 } -> x0
+    v149 CallExt { binding_idx=265, args=[v147, v148, v145], fp_arg_mask=0x0 } -> x0
     v150 Imm(0)                                           -> x0
     v151 LoadLocal { off=-2, kind=I32 }                   -> x0
     v152 ImmData(80)                                      -> x0
@@ -798,7 +798,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=57
     v379 LoadLocal { off=-35, kind=I32 }                  -> [spill 68]
     v380 LoadLocal { off=-36, kind=I32 }                  -> [spill 69]
     v381 Call { target_pc=7, args=[v167, v177, v187, v197, v207, v217, v229, v239, v249, v259, v269, v279, v289, v299, v309, v319, v329, v339, v349, v359], fixed_args=20, fp_return=false, fp_arg_mask=0x0 } -> x7
-    v382 CallExt { binding_idx=171, args=[v381], fp_arg_mask=0x0 } -> x0
+    v382 CallExt { binding_idx=172, args=[v381], fp_arg_mask=0x0 } -> x0
     v383 Imm(3)                                           -> x0
     terminator Return(v383)   (exit_acc=v383)
 ; --- SSA dump (ok=true) ent_pc=0 ---

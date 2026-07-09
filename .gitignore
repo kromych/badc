@@ -151,6 +151,7 @@ demos/nasm/*
 !demos/nasm/selfhost.py
 !demos/nasm/README.md
 !demos/nasm/hexdump.c
+!demos/nasm/nasmw.c
 !demos/nasm/config
 !demos/nasm/config/config-posix.h
 !demos/nasm/config/config-windows.h

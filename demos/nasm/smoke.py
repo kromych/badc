@@ -117,17 +117,42 @@ def ensure_source() -> None:
     subprocess.run([sys.executable, str(NASM_DEMO / "setup.py")], check=True)
 
 
-def curate_fixtures(target: str) -> None:
-    """Remove test cases that cannot apply on the target from the fetched suite,
-    so nasm-t.py runs unmodified and its abort-on-failure still gates real bugs.
-    `_file_` emits `__FILE__` (the source path as passed to nasm), whose golden
-    bytes carry the recording host's path separator and cannot match on Windows
-    (`\\` vs `/`)."""
-    inapplicable = ["_file_"] if target.startswith("windows") else []
+# Output-file extensions nasm writes NF_TEXT (so CRLF on Windows): `-E`
+# preprocessed (`.i`), `-l` listings (`.lst`), and the OFMT_TEXT object formats
+# (Intel-hex, S-records, debug, ieee). Object output (bin/obj/elf/...) is
+# NF_BINARY -- LF on every host -- and must not be touched. Their golden is
+# `<output>.t`; stderr/stdout diagnostics are always text (`<name>.stderr/.stdout`).
+TEXT_OUTPUT_EXTS = ("i", "lst", "ith", "srec", "dbg", "ieee")
+
+
+def adapt_fixtures(target: str) -> None:
+    """Adapt the fetched golden suite to the target so nasm-t.py runs unmodified
+    and its abort-on-failure still gates real bugs. On native Windows the
+    badc-built nasm emits CRLF in its text outputs (the Windows CRT opens
+    text-mode files that way, as for any Windows C program), so a byte comparison
+    against an LF golden fails on line endings alone. This is not a codegen
+    difference, so rewrite the text goldens to CRLF rather than dropping the
+    cases, which keeps full coverage: a real diagnostic or listing regression
+    (wrong message, line, byte, or count) still fails the comparison.
+
+    The other POSIX/Windows divergence, the `/` vs `\\` path separator nasm
+    echoes into both its text and its binary outputs, is corrected upstream of
+    nasm by the `nasmw` launcher (see `build_nasm_wrapper`), so it needs no
+    golden rewrite and needs no per-case removal.
+
+    Idempotent: normalizing CRLF to LF before converting makes a second pass over
+    an already-adapted tree a no-op."""
+    if not target.startswith("windows"):
+        return
     tdir = SRC / "travis" / "test"
-    for stem in inapplicable:
-        for p in tdir.glob(stem + ".*"):
-            p.unlink()
+    goldens = list(tdir.glob("*.stderr")) + list(tdir.glob("*.stdout"))
+    for ext in TEXT_OUTPUT_EXTS:
+        goldens += tdir.glob(f"*.{ext}.t")
+    for p in goldens:
+        data = p.read_bytes()
+        crlf = data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        if crlf != data:
+            p.write_bytes(crlf)
 
 
 def ensure_config(target: str) -> None:
@@ -192,10 +217,28 @@ def build_hexdump(badc: Path, workdir: Path) -> str:
     return str(exe)
 
 
-def run_golden_suite(nasm: Path, hexdump: str) -> tuple[int, list[str]]:
+def build_nasm_wrapper(badc: Path, workdir: Path) -> str:
+    """Build the `nasmw` launcher with badc (Windows only). nasm-t.py joins the
+    source and output paths with `os.sep`; on native Windows that `\\` is echoed
+    into nasm's text and object output and breaks the POSIX-recorded goldens. The
+    launcher rewrites it to `/` before invoking the real nasm (named by
+    $NASM_REAL), so the vendored harness and goldens stay unmodified."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    exe = workdir / ("nasmw" + EXE)
+    r = subprocess.run([str(badc), str(NASM_DEMO / "nasmw.c"), "-o", str(exe)],
+                       capture_output=True, text=True)
+    if r.returncode != 0 or not exe.is_file():
+        fail(f"badc failed to build nasmw:\n{r.stderr.strip()[-800:]}")
+    return str(exe)
+
+
+def run_golden_suite(nasm: Path, hexdump: str,
+                     wrapper: "str | None" = None) -> tuple[int, list[str]]:
     """Run NASM's golden suite against `nasm`. The `./travis/test` base-dir
     matches the source-path prefix the goldens were recorded with. `hexdump` is
-    the `hexdump -C` program nasm-t.py uses to render diffs. Returns
+    the `hexdump -C` program nasm-t.py uses to render diffs. When `wrapper` is
+    given (native Windows), the harness invokes it instead of nasm and it is
+    pointed at the real nasm via $NASM_REAL; see `build_nasm_wrapper`. Returns
     (pass count, failures outside SKIP_TESTS).
 
     `$NASM_TEST_PYTHON` selects the interpreter that runs the suite harness;
@@ -206,6 +249,10 @@ def run_golden_suite(nasm: Path, hexdump: str) -> tuple[int, list[str]]:
     so the outer host python is unaffected."""
     runner = os.environ.get("NASM_TEST_PYTHON") or sys.executable
     env = dict(os.environ)
+    harness_nasm = str(nasm)
+    if wrapper:
+        harness_nasm = wrapper
+        env["NASM_REAL"] = str(nasm)
     home = os.environ.get("NASM_TEST_PYTHONHOME")
     if home:
         env["PYTHONHOME"] = home
@@ -216,7 +263,7 @@ def run_golden_suite(nasm: Path, hexdump: str) -> tuple[int, list[str]]:
     # twice (-O0, -O), so 2x300 s + builds stays inside the 12-min job backstop.
     try:
         r = subprocess.run(
-            [runner, "travis/nasm-t.py", "--nasm", str(nasm), "--hexdump", hexdump,
+            [runner, "travis/nasm-t.py", "--nasm", harness_nasm, "--hexdump", hexdump,
              "-d", "./travis/test", "run"],
             cwd=SRC, env=env, capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired as e:
@@ -239,11 +286,12 @@ def main() -> int:
     target = badc_target()
     log(f"badc={badc} target={target}")
     ensure_source()
-    curate_fixtures(target)
+    adapt_fixtures(target)
     ensure_config(target)
     with tempfile.TemporaryDirectory(prefix="nasm-smoke-") as d:
         work = Path(d)
         hexdump = build_hexdump(badc, work / "hexdump")
+        wrapper = build_nasm_wrapper(badc, work / "nasmw") if IS_WIN else None
         for optimize in (False, True):
             lane = "-O" if optimize else "-O0"
             log(f"building nasm with badc [{lane}]")
@@ -252,7 +300,7 @@ def main() -> int:
             if "NASM version" not in ver.stdout:
                 fail(f"badc-built nasm [{lane}] does not report a version")
             log(f"running NASM's golden test suite [{lane}]")
-            passes, unexpected = run_golden_suite(nasm, hexdump)
+            passes, unexpected = run_golden_suite(nasm, hexdump, wrapper)
             if unexpected:
                 fail(f"golden suite [{lane}]: {len(unexpected)} unexpected "
                      f"failure(s): {unexpected[:20]}")

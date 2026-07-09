@@ -38,7 +38,9 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::const_expr::ConstVal;
-use super::types::{UNSIGNED_BIT, VOLATILE_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{
+    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth,
+};
 
 /// Relocation kind for one initializer-element value. Tracks
 /// whether the bytes need to be patched at link / load time so
@@ -1842,7 +1844,13 @@ impl Compiler {
                         return Err(self.compile_err("`=` expected after nested-designator chain"));
                     }
                     self.next()?;
-                    self.skip_opt_compound_literal_cast()?;
+                    // See the single-level path below: keep the cast for a
+                    // pointer final member (address-of a compound literal).
+                    if is_pointer_ty(final_field.ty) || struct_ptr_depth(final_field.ty) > 0 {
+                        self.pending.compound_lit_close_parens = 0;
+                    } else {
+                        self.skip_opt_compound_literal_cast()?;
+                    }
                     let chain_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
                     self.fill_member_value_t(
                         struct_id,
@@ -1877,12 +1885,18 @@ impl Compiler {
             let field = self.structs[struct_id].fields[field_idx].clone();
             let field_base = (var_offset as usize) + field.offset;
             // A member value written as a compound literal `(Type){ ... }`
-            // (C99 6.5.2.5) names the member's own type; drop the cast so
-            // the brace paths below treat it as a nested `{ ... }`. Capture
-            // the grouping-paren count locally before the dispatch below
-            // recurses into another `fill_struct_fields` (which would take
-            // the shared pending value for its own member).
-            self.skip_opt_compound_literal_cast()?;
+            // (C99 6.5.2.5) that names the member's own type is dropped so
+            // the brace paths below initialize the member in place. A
+            // pointer member instead stores the ADDRESS of the literal
+            // (`.fields = (const T[]){ ... }`, ubiquitous in QEMU's
+            // VMStateDescription / TypeInfo tables); there the cast carries
+            // the literal's type, so leave it for the scalar leaf to consume
+            // via `parse_constant_init_value`.
+            if is_pointer_ty(field.ty) || struct_ptr_depth(field.ty) > 0 {
+                self.pending.compound_lit_close_parens = 0;
+            } else {
+                self.skip_opt_compound_literal_cast()?;
+            }
             let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
             // C11 6.7.2.1: an anonymous struct flattened into the parent may
             // take a brace-enclosed sub-initializer that fills its members in

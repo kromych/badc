@@ -67,6 +67,15 @@ fn wide_string_struct_member() {
 }
 
 #[test]
+fn compound_literal_pointer_field() {
+    // C99 6.5.2.5: a pointer struct field taking the address of an
+    // array-of-struct compound literal in a static initializer (QEMU's
+    // VMStateDescription.fields / TypeInfo.interfaces), including a trailing
+    // empty `{ }` element in a deferred-size literal.
+    assert_eq!(run_fixture("compound_literal_pointer_field.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

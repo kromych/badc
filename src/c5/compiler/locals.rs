@@ -1311,6 +1311,12 @@ impl Compiler {
         let mut prev_was_amp = false;
         while depth > 0 && self.lex.tk != 0 {
             if self.lex.tk == '{' {
+                // A brace-enclosed element (`{ ... }`, possibly empty like
+                // `{ }`) counts even when it holds no scalar token, so mark
+                // the current element non-empty at the top level.
+                if depth == 1 {
+                    saw_any = true;
+                }
                 depth += 1;
             } else if self.lex.tk == '}' {
                 depth -= 1;

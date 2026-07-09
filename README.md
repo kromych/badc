@@ -80,6 +80,7 @@ There are various demo's under [`demos`](./demos/):
 * [`gui_hello`](./demos/gui_hello/) - GUI demos for macOS, Linux and Windows,
 * [`wdm_driver`](./demos/wdm_driver/), [`nt_hello`](./demos/nt_hello/), [`nt_loader`](./demos/nt_loader/) - examples of the Windows native (NT) executable, Windows driver,
 * [`efi_hello`](./demos/efi_hello/) - a UEFI binary,
+* [`edk2`](./demos/edk2/) - a UEFI application from TianoCore EDK II's MdePkg, linked with badc's own linker into a PE32+ EFI image and booted under OVMF ([tianocore/edk2](https://github.com/tianocore/edk2)),
 * [`sqlite3`](./demos/sqlite3/) - the most famous embedded database ([sqlite.org](https://sqlite.org)),
 * [`miniz`](./demos/miniz/) - compression, CRC32, integers, bit twiddling ([richgel999/miniz](https://github.com/richgel999/miniz)),
 * [`kissfft`](./demos/kissfft/) - floating points, Fast Fourier Transform ([mborgerding/kissfft](https://github.com/mborgerding/kissfft)),
@@ -89,6 +90,7 @@ There are various demo's under [`demos`](./demos/):
   It really stresses all of the compiler ([nothings/stb](https://github.com/nothings/stb)),
 * [`chibicc`](./demos/chibicc/) - a small C compiler ([rui314/chibicc](https://github.com/rui314/chibicc)),
 * [`tinycc`](./demos/tinycc/) - a cool and small C toolchain ([TinyCC/tinycc](https://github.com/TinyCC/tinycc)),
+* [`nasm`](./demos/nasm/) ([nasm.us](https://www.nasm.us/)), [`yasm`](./demos/yasm/) ([yasm.tortall.net](https://yasm.tortall.net/)) - x86 assemblers, each built with badc and run against its own test suite,
 * [`TweetNaCl`](./demos/tweetnacl/) ([tweetnacl.cr.yp.to](https://tweetnacl.cr.yp.to/)), [`Monocypher`](./demos/monocypher/) ([monocypher.org](https://monocypher.org/)), [`BearSSL`](./demos/bearssl/) ([bearssl.org](https://bearssl.org/)) - cryptography,
 * [`Lua`](./demos/lua/) - the embeddable scripting language ([lua.org](https://www.lua.org/)),
 * [`quickjs`](./demos/quickjs/) - JavaScript interpreter ([bellard.org/quickjs](https://bellard.org/quickjs/)),
@@ -596,8 +598,9 @@ CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, `windows-latest`, and `windows-11-arm`. Every
 runner additionally runs the demo smokes -- sqlite3, miniz,
 kissfft, bzip2, tweetnacl, monocypher, bearssl, lua, stb,
-chibicc, tinycc, gui_hello, nt_loader -- end-to-end (or
-build-only for the GUI demos, which need a display). See
+chibicc, tinycc, nasm, yasm, edk2, gui_hello, nt_loader --
+end-to-end (or build-only for the GUI demos, which need a
+display; edk2 additionally boots its `.efi` under OVMF). See
 [`demos/`](./demos/) for what each exercises. The PE-via-
 WINE lane is gated on `BADC_RUN_WINE=1`; a bare `cargo test`
 on a developer machine skips it, and CI doesn't currently

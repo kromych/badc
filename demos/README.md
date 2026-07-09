@@ -164,6 +164,25 @@ drives HTTP / HTTPS / `file://` transfers against a hermetic loopback
 server, so it needs no external network. See
 [`curl/README.md`](./curl/README.md).
 
+## nasm/
+
+Builds the NASM 2.16.03 assembler (84 translation units) with badc and
+runs NASM's own `travis/nasm-t.py` golden suite against it: each fixture
+is assembled with the produced `nasm` and its object bytes, listings, and
+diagnostics are compared to committed goldens, so a codegen defect surfaces
+as a byte mismatch -- a self-validating oracle needing no reference build.
+Runs on all five targets, native Windows included, with no `make` or
+`./configure`. See [`nasm/README.md`](./nasm/README.md).
+
+## yasm/
+
+Builds the yasm 1.3.0 modular assembler -- a core library plus pluggable
+arch / parser / preprocessor / object-format modules -- with badc from a
+frozen per-target config. The build first derives several C sources,
+including the x86 instruction tables whose Python generator runs under the
+badc-built CPython: a badc-built interpreter emits the tables a badc-built
+assembler is then compiled from. See [`yasm/README.md`](./yasm/README.md).
+
 ## efi_hello/
 
 UEFI application that prints "Hello, EFI!" through
@@ -173,6 +192,16 @@ invokes `efi_main(EFI_HANDLE, EFI_SYSTEM_TABLE *)` directly,
 with no CRT shim and no msvcrt import. Build-only in CI;
 running needs a UEFI shell (TianoCore's UEFI Shell, OVMF under
 qemu, or a real machine's firmware shell).
+
+## edk2/
+
+Builds a UEFI application from real TianoCore EDK II MdePkg sources with
+badc, for X64 and AArch64, and boots each under OVMF/QEMU in CI. badc
+compiles the MdePkg library closure and links a PE32+ EFI application with
+its own linker -- no external `ld`/`lld`, no `GenFw` -- that the firmware
+loads and runs; the app formats through EDK II's `UnicodeSPrint` and writes
+to `ConOut`, so a correct boot exercises the whole closure end to end. See
+[`edk2/README.md`](./edk2/README.md).
 
 ## nt_hello/
 

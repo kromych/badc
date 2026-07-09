@@ -2112,6 +2112,24 @@ fn run_intrinsic(
             }
             Ok(())
         }
+        Intrinsic::Divq128 => {
+            // Unsigned 128/64 division. args: [q_addr, rem_addr, n0, n1, d].
+            // Dividend = (n1 << 64) | n0; quotient -> *q, remainder -> *r.
+            let q_addr = frame.regs[args[0] as usize] as usize;
+            let rem_addr = frame.regs[args[1] as usize] as usize;
+            let n0 = frame.regs[args[2] as usize] as u64 as u128;
+            let n1 = frame.regs[args[3] as usize] as u64 as u128;
+            let d = frame.regs[args[4] as usize] as u64 as u128;
+            if d == 0 {
+                return Err(C5Error::Runtime("vm_ssa: divq divide by zero".to_string()));
+            }
+            let num = (n1 << 64) | n0;
+            let quot = (num / d) as u64 as i64;
+            let rem = (num % d) as u64 as i64;
+            store_to_memory(mem, q_addr, quot, StoreKind::I64)?;
+            store_to_memory(mem, rem_addr, rem, StoreKind::I64)?;
+            Ok(())
+        }
         Intrinsic::FrameAddress => {
             // The interpreter has no native frame pointer; return this
             // frame's base in the byte arena. It is non-zero, stable

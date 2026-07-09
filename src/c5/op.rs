@@ -206,6 +206,14 @@ pub enum Intrinsic {
     /// has an odd number of set bits, else 0. Lowered as `popcount(x) & 1`.
     Parity = 50,
     Parityll = 51,
+    /// `asm("divq %4" : "=a"(q), "=d"(*r) : "0"(n0), "1"(n1), "rm"(d))` --
+    /// x86-64 unsigned 128/64 division, used by QEMU's host-utils.h
+    /// `udiv_qrnnd`. Five args: the quotient output address, the remainder
+    /// output address, the dividend low (`n0`), the dividend high (`n1`),
+    /// and the divisor (`d`). Computes `(n1:n0) / d` -> quotient and
+    /// `(n1:n0) % d` -> remainder. x86_64 only (the source gates it on
+    /// `__x86_64__`); the interpreter uses 128-bit host arithmetic.
+    Divq128 = 52,
 }
 
 impl Intrinsic {
@@ -262,6 +270,7 @@ impl Intrinsic {
             49 => Some(Intrinsic::Clrsbll),
             50 => Some(Intrinsic::Parity),
             51 => Some(Intrinsic::Parityll),
+            52 => Some(Intrinsic::Divq128),
             _ => None,
         }
     }

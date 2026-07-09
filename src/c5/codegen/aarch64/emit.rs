@@ -3558,6 +3558,12 @@ fn emit_intrinsic(
             bail_msg("cpuid / xgetbv intrinsic is x86-only");
             false
         }
+        I::Divq128 => {
+            // The `divq` 128/64 divide is x86-only; the source gates it on
+            // `__x86_64__`, so AArch64 never reaches it.
+            bail_msg("divq intrinsic is x86-64 only");
+            false
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

@@ -6916,6 +6916,71 @@ fn emit_intrinsic(
             super::encode::emit_pop_r(code, RAX);
             true
         }
+        I::Divq128 => {
+            // Unsigned 128/64 division (`udiv_qrnnd`). The dividend is
+            // rdx:rax = n1:n0, the divisor is `d`; `div` leaves the
+            // quotient in rax and the remainder in rdx. args:
+            // [q_addr, rem_addr, n0, n1, d].
+            const RAX: Reg = Reg(0);
+            const RDX: Reg = Reg(2);
+            const R10: Reg = Reg(10);
+            const R11: Reg = Reg(11);
+            if args.len() != 5 {
+                bail_msg("divq: wrong operand count");
+                return false;
+            }
+            let materialize = |code: &mut Vec<u8>, idx: usize, scratch: Reg| -> Option<Reg> {
+                let place = alloc.places.get(args[idx] as usize).copied()?;
+                let r = materialize_int(code, place, scratch, frame)?;
+                if r.0 != scratch.0 {
+                    super::encode::emit_mov_rr(code, scratch, r);
+                }
+                Some(scratch)
+            };
+            // `div` clobbers rax and rdx.
+            super::encode::emit_push_r(code, RAX);
+            super::encode::emit_push_r(code, RDX);
+            // Push the output addresses (quotient then remainder, so the
+            // remainder address is popped first below).
+            if materialize(code, 0, R10).is_none() {
+                bail_msg("divq: quotient output not an address");
+                return false;
+            }
+            super::encode::emit_push_r(code, R10);
+            if materialize(code, 1, R10).is_none() {
+                bail_msg("divq: remainder output not an address");
+                return false;
+            }
+            super::encode::emit_push_r(code, R10);
+            // Divisor -> r10, dividend high -> r11, then load rax/rdx last
+            // so an input the allocator placed in rax/rdx is read first.
+            if materialize(code, 4, R10).is_none() {
+                bail_msg("divq: divisor operand missing");
+                return false;
+            }
+            if materialize(code, 3, R11).is_none() {
+                bail_msg("divq: dividend-high operand missing");
+                return false;
+            }
+            if materialize(code, 2, RAX).is_none() {
+                bail_msg("divq: dividend-low operand missing");
+                return false;
+            }
+            super::encode::emit_mov_rr(code, RDX, R11); // rdx = n1
+            // div r10  (REX.W + REX.B, F7 /6 -> unsigned divide).
+            code.push(0x49);
+            code.push(0xF7);
+            code.push(0xF2);
+            // Store quotient (rax) and remainder (rdx) to the popped
+            // addresses (remainder is on top of the stack).
+            super::encode::emit_pop_r(code, R11);
+            super::encode::emit_mov_mem_r(code, R11, 0, RDX);
+            super::encode::emit_pop_r(code, R11);
+            super::encode::emit_mov_mem_r(code, R11, 0, RAX);
+            super::encode::emit_pop_r(code, RDX);
+            super::encode::emit_pop_r(code, RAX);
+            true
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

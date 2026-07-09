@@ -93,6 +93,15 @@ fn int128_type_layout() {
 }
 
 #[test]
+fn divq_udiv_qrnnd() {
+    // The x86-64 `divq` inline-asm shape (QEMU host-utils.h `udiv_qrnnd`)
+    // as Intrinsic::Divq128: unsigned 128/64 division. Run under the VM,
+    // which computes it in 128-bit host arithmetic (the native x86-64
+    // backend emits `div r/m64`; other native targets gate it out).
+    assert_eq!(run_fixture("divq_udiv_qrnnd.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

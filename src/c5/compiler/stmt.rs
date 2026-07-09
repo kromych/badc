@@ -792,6 +792,13 @@ impl Compiler {
             self.data.truncate(tstart);
             return self.parse_cpuid_xgetbv_asm(is_cpuid);
         }
+        // `divq %4` -- x86-64 unsigned 128/64 division (QEMU host-utils.h
+        // `udiv_qrnnd`). The register-tied operands are handled specially,
+        // like cpuid.
+        if tmpl_lc == "divq %4" {
+            self.data.truncate(tstart);
+            return self.parse_divq_asm();
+        }
         // An empty template is a compiler barrier: `__asm__("")`, or the
         // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It emits no
         // instruction, so its operands carry no machine effect; consume
@@ -1056,6 +1063,118 @@ impl Compiler {
             Expr::Intrinsic {
                 kind: kind as i64,
                 args,
+                ty: Ty::Int as i64,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        let _ = self.ast_emit_expr_stmt();
+        Ok(())
+    }
+
+    /// Parse `asm("divq %4" : "=a"(q), "=d"(*r) : "0"(n0), "1"(n1),
+    /// "rm"(d))` (QEMU host-utils.h `udiv_qrnnd`) into an
+    /// `Intrinsic::Divq128`. The template mnemonic was already consumed.
+    /// `"=a"` names the quotient output, `"=d"` the remainder output; the
+    /// matching inputs `"0"` / `"1"` are the dividend's low / high halves
+    /// and the remaining input is the divisor.
+    fn parse_divq_asm(&mut self) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, UnOp};
+        let mut q_addr = None;
+        let mut rem_addr = None;
+        let mut n0 = None;
+        let mut n1 = None;
+        let mut divisor = None;
+        let mut section: u8 = 0;
+        let data_base = self.data.len();
+        while self.lex.tk != ')' {
+            if self.lex.tk == ':' {
+                section += 1;
+                self.next()?;
+                continue;
+            }
+            if self.lex.tk == ',' {
+                self.next()?;
+                continue;
+            }
+            if self.lex.tk != '"' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("unsupported divq asm syntax"));
+            }
+            let cstart = self.lex.ival as usize;
+            let (letter, digit) = {
+                let cbytes = &self.data[cstart..];
+                let letter = cbytes
+                    .iter()
+                    .rev()
+                    .find(|b| b.is_ascii_alphabetic())
+                    .copied();
+                let digit = if letter.is_none() {
+                    cbytes
+                        .iter()
+                        .find(|b| b.is_ascii_digit())
+                        .map(|b| (b - b'0') as usize)
+                } else {
+                    None
+                };
+                (letter, digit)
+            };
+            self.next()?; // consume the constraint string
+            self.data.truncate(cstart);
+            if section >= 3 {
+                continue; // clobbers carry no operand
+            }
+            if self.lex.tk != '(' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("divq: `(` expected after constraint"));
+            }
+            self.next()?; // consume `(`
+            self.expr(Token::Assign as i64)?;
+            if section == 1 {
+                // Output: take the destination's address.
+                self.ty += Ty::Ptr as i64;
+                self.ast_apply_unary(UnOp::AddrOf);
+                match letter {
+                    Some(b'a') => q_addr = self.ast_acc.take(),
+                    Some(b'd') => rem_addr = self.ast_acc.take(),
+                    _ => {
+                        self.data.truncate(data_base);
+                        return Err(self.compile_err("divq: outputs must be `=a` and `=d`"));
+                    }
+                }
+            } else {
+                let v = self.ast_acc.take();
+                match digit {
+                    Some(0) => n0 = v, // matches the `=a` (rax) output
+                    Some(1) => n1 = v, // matches the `=d` (rdx) output
+                    _ => divisor = v,  // `rm` / `r` divisor
+                }
+            }
+            if self.lex.tk != ')' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("divq: `)` expected after asm operand"));
+            }
+            self.next()?; // consume the operand's `)`
+        }
+        self.next()?; // consume the outer `)`
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        self.data.truncate(data_base);
+
+        let (q, rem, n0, n1, d) = match (q_addr, rem_addr, n0, n1, divisor) {
+            (Some(q), Some(rem), Some(n0), Some(n1), Some(d)) => (q, rem, n0, n1, d),
+            _ => {
+                return Err(
+                    self.compile_err("divq requires `=a`,`=d` outputs and `0`,`1`,`rm` inputs")
+                );
+            }
+        };
+        self.mark_emit_other();
+        self.ty = Ty::Int as i64;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::Intrinsic {
+                kind: super::super::op::Intrinsic::Divq128 as i64,
+                args: alloc::vec![q, rem, n0, n1, d],
                 ty: Ty::Int as i64,
             },
             pos,

@@ -122,6 +122,12 @@ pub(crate) enum AtomicKind {
     /// GCC `__sync_bool_compare_and_swap(p, old, new)` -- as `SyncCasVal`
     /// but yield 1 on a swap, 0 otherwise.
     SyncCasBool,
+    /// GCC generic `__atomic_load(p, ret, memorder)` -- atomically load
+    /// `*p` and write it through `ret`. `args` are `[p, ret]`; no value.
+    LoadInto,
+    /// GCC generic `__atomic_store(p, val, memorder)` -- atomically store
+    /// `*val` into `*p`. `args` are `[p, val]`; no value.
+    StoreFrom,
 }
 
 /// Storage-unit width + bit position for a bitfield reference. The
@@ -349,6 +355,28 @@ pub(crate) enum Expr {
     /// `Decl::Vla` stored into `size_slot` (C99 6.5.3.4p2: for a VLA
     /// the operand is evaluated and the result is a runtime value).
     VlaSizeof { size_slot: i64 },
+    /// GCC statement expression `({ ... })` (Annex J.5 common
+    /// extension). `block` is the enclosed compound statement (or,
+    /// for a single-item block, the bare statement `ast_wrap_block_items`
+    /// yields). The value and type are those of the last
+    /// expression-statement; `ty` is `Ty::Void` when the trailing
+    /// block-item is not an expression statement.
+    #[allow(clippy::enum_variant_names)]
+    StmtExpr { block: StmtId, ty: i64 },
+    /// GCC checked-arithmetic builtin
+    /// `__builtin_{add,sub,mul}_overflow(a, b, dst)`. `op` is 0 = add,
+    /// 1 = sub, 2 = mul. `dst` is the result pointer; `elem_ty` is its
+    /// pointee type, which drives the operation width and signedness.
+    /// The walker stores the wrapped `a op b` through `dst` and yields
+    /// the `int` overflow flag (`ty`).
+    CheckedArith {
+        op: i64,
+        a: ExprId,
+        b: ExprId,
+        dst: ExprId,
+        elem_ty: i64,
+        ty: i64,
+    },
 }
 
 /// One item inside a compound statement. C99 6.8.2's
@@ -664,6 +692,14 @@ impl Ast {
         &self.exprs[id as usize]
     }
 
+    /// Value type of an expression node, falling back to `Ty::Int`
+    /// for a node the type helper does not classify. Used by the
+    /// statement-expression parser to type `({ ...; expr; })` from
+    /// its last expression-statement.
+    pub(crate) fn expr_value_ty(&self, id: ExprId) -> i64 {
+        walk::expr_ty(self.expr(id)).unwrap_or(crate::c5::token::Ty::Int as i64)
+    }
+
     pub(crate) fn stmt(&self, id: StmtId) -> &Stmt {
         &self.stmts[id as usize]
     }
@@ -904,7 +940,9 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::ShortCircuit { ty, .. }
         | Expr::Intrinsic { ty, .. }
         | Expr::Atomic { ty, .. }
-        | Expr::VlaBase { ty, .. } => f(ty),
+        | Expr::VlaBase { ty, .. }
+        | Expr::StmtExpr { ty, .. }
+        | Expr::CheckedArith { ty, .. } => f(ty),
         Expr::VlaSizeof { .. } => {}
         Expr::Cast { to_ty, .. } => f(to_ty),
         Expr::CompoundLiteral { ty, init, .. } => {

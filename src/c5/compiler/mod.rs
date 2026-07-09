@@ -515,6 +515,14 @@ pub(in crate::c5::compiler) struct Pending {
     pub param_decl_context: bool,
     pub last_array_decay_size: i64,
 
+    /// Set by `parse_typeof_specifier` to true when its operand was an
+    /// array type (a bare array expression or an array-shaped type name).
+    /// `__builtin_types_compatible_p` reads it so `typeof(arr)` compares
+    /// unequal to `typeof(&arr[0])` (C99 6.7.6.2 array vs pointer), which
+    /// the flat type system otherwise collapses through array-to-pointer
+    /// decay. Consumed and reset by each `parse_generic_type_name` reader.
+    pub typeof_operand_was_array: bool,
+
     /// Companion to `last_array_decay_size` for cases where the
     /// row's byte size is known directly but its shape can't be
     /// reduced to a single `count * sizeof(elem_ty)` pair --
@@ -669,6 +677,7 @@ impl Default for Pending {
             parsing_fn_ptr_proto: false,
             param_decl_context: false,
             last_array_decay_size: 0,
+            typeof_operand_was_array: false,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.
@@ -746,6 +755,17 @@ pub struct Compiler {
     /// the alloca-arena save / restore that reclaims VLA storage on
     /// exit. Reset on each new function definition.
     func_vla_decls: usize,
+
+    /// Half-open `self.ast.stmts` ranges owned by statement
+    /// expressions `({ ... })` parsed in the current function. A
+    /// statement expression pushes its block's statements into the
+    /// shared statement arena, but those are sub-statements of the
+    /// expression, not top-level block items; the decl-path capture
+    /// in `parse_block_stmt` / the function-body loop skips any id
+    /// inside one of these ranges so the statements are walked only
+    /// once (through the `Expr::StmtExpr` node). Pruned as each
+    /// enclosing declaration is captured; cleared per function.
+    stmt_expr_arena_ranges: Vec<(usize, usize)>,
 
     /// True when the most recent decl-spec parse consumed an
     /// `inline` / `__inline` / `__inline__` keyword. Captured at
@@ -1365,6 +1385,7 @@ impl Compiler {
             multi_cell_temps: alloc::vec::Vec::new(),
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
+            stmt_expr_arena_ranges: Vec::new(),
             pending_is_inline: false,
             pending_noreturn: false,
             const_unevaluated: 0,

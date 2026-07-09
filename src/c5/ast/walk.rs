@@ -1485,6 +1485,145 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Lower a GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`. Stores
+    /// the wrapped `a op b` through `dst` (pointee `elem_ty`) and yields
+    /// the overflow flag (0 / 1). For widths under 8 bytes the operands
+    /// are already extended in the 64-bit register, so `a op b` is exact
+    /// and overflow is exactly the case where truncation changes it; the
+    /// 64-bit case uses the carry / sign-overflow formulas, with a
+    /// guarded division for the multiply.
+    fn walk_checked_arith(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        op: i64,
+        a_expr: ExprId,
+        b_expr: ExprId,
+        dst_expr: ExprId,
+        elem_ty: i64,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        let store_kind = store_kind_for(elem_ty, self.target);
+        let w = type_size_bytes(elem_ty, self.target);
+        let unsigned = (elem_ty & UNSIGNED_BIT) != 0;
+        let bin = match op {
+            0 => BinOp::Add,
+            1 => BinOp::Sub,
+            _ => BinOp::Mul,
+        };
+        let va = self.walk_expr_rvalue(b, a_expr)?;
+        let vb = self.walk_expr_rvalue(b, b_expr)?;
+        let addr = self.walk_expr_rvalue(b, dst_expr)?;
+
+        if w < 8 {
+            let raw = b.binop(bin, va, vb);
+            let wrapped = self.extend_atomic_result(b, raw, elem_ty);
+            b.store(addr, wrapped, store_kind);
+            return Ok(b.binop(BinOp::Ne, raw, wrapped));
+        }
+
+        let wrapped = b.binop(bin, va, vb);
+        b.store(addr, wrapped, store_kind);
+        let flag = match (op, unsigned) {
+            // Unsigned add carries out iff the sum is below an addend.
+            (0, true) => b.binop(BinOp::Ult, wrapped, va),
+            // Signed add overflows iff both addends share a sign that the
+            // sum does not: `(a ^ s) & (b ^ s)` has its sign bit set.
+            (0, false) => {
+                let ax = b.binop(BinOp::Xor, va, wrapped);
+                let bx = b.binop(BinOp::Xor, vb, wrapped);
+                let m = b.binop(BinOp::And, ax, bx);
+                let zero = b.imm(0);
+                b.binop(BinOp::Lt, m, zero)
+            }
+            // Unsigned subtract borrows iff the minuend is the smaller.
+            (1, true) => b.binop(BinOp::Ult, va, vb),
+            // Signed subtract overflows iff the operands differ in sign
+            // and the result's sign differs from the minuend's.
+            (1, false) => {
+                let ab = b.binop(BinOp::Xor, va, vb);
+                let aw = b.binop(BinOp::Xor, va, wrapped);
+                let m = b.binop(BinOp::And, ab, aw);
+                let zero = b.imm(0);
+                b.binop(BinOp::Lt, m, zero)
+            }
+            // Unsigned multiply overflows iff `a != 0 && product/a != b`.
+            // The divisor is forced non-zero so the unused `a == 0` lane
+            // does not divide by zero.
+            (_, true) => {
+                let zero = b.imm(0);
+                let iszero = b.binop(BinOp::Eq, va, zero);
+                let safe = b.binop(BinOp::Or, va, iszero);
+                let q = b.binop(BinOp::Divu, wrapped, safe);
+                let a_nz = b.binop(BinOp::Ne, va, zero);
+                let mism = b.binop(BinOp::Ne, q, vb);
+                b.binop(BinOp::And, a_nz, mism)
+            }
+            // Signed multiply: same division test, but the divisor is
+            // forced to 1 for `a == 0` and `a == -1` so the `INT_MIN / -1`
+            // trap is avoided; the `a == -1` overflow is `product == INT_MIN`.
+            (_, false) => {
+                let zero = b.imm(0);
+                let neg1 = b.imm(-1);
+                let one = b.imm(1);
+                let iszero = b.binop(BinOp::Eq, va, zero);
+                let isneg1 = b.binop(BinOp::Eq, va, neg1);
+                let special = b.binop(BinOp::Or, iszero, isneg1);
+                let not_special = b.binop(BinOp::Xor, special, one);
+                let scaled = b.binop(BinOp::Mul, va, not_special);
+                let safe = b.binop(BinOp::Add, scaled, special);
+                let q = b.binop(BinOp::Div, wrapped, safe);
+                let mism = b.binop(BinOp::Ne, q, vb);
+                let normal = b.binop(BinOp::And, not_special, mism);
+                let intmin = b.imm(i64::MIN);
+                let is_intmin = b.binop(BinOp::Eq, wrapped, intmin);
+                let neg1_ovf = b.binop(BinOp::And, isneg1, is_intmin);
+                b.binop(BinOp::Or, normal, neg1_ovf)
+            }
+        };
+        Ok(flag)
+    }
+
+    /// Lower a GCC statement expression `({ ... })`. Walks the
+    /// block items exactly as `Stmt::Compound` does -- new-block on
+    /// a closed predecessor, decls through `walk_decl` -- but keeps
+    /// the value of the last expression-statement (GCC: the value
+    /// of the whole construct). `block` is the enclosed compound,
+    /// or the bare statement for a single-item block. Falls back to
+    /// an immediate 0 when no expression-statement is present.
+    fn walk_stmt_expr(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        block: StmtId,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        let items: alloc::vec::Vec<super::BlockItem> = match self.ast.stmt(block) {
+            Stmt::Compound(items) => items.clone(),
+            _ => alloc::vec![super::BlockItem::Stmt(block)],
+        };
+        let mut result: Option<super::super::ir::ValueId> = None;
+        for item in items {
+            if !b.is_block_open() {
+                let dead = b.new_block();
+                b.switch_to(dead);
+            }
+            match item {
+                super::BlockItem::Stmt(s) => {
+                    if let Stmt::Expr(e) = self.ast.stmt(s) {
+                        let e = *e;
+                        result = Some(self.walk_expr_rvalue(b, e)?);
+                    } else {
+                        let _ = self.walk_stmt(b, s)?;
+                    }
+                }
+                super::BlockItem::Decl(d) => {
+                    self.walk_decl(b, d)?;
+                }
+            }
+        }
+        match result {
+            Some(v) => Ok(v),
+            None => Ok(b.imm(0)),
+        }
+    }
+
     /// Walk an expression in rvalue position. Returns the
     /// `ValueId` whose runtime value is the C99 6.5p1 evaluation
     /// of the expression.
@@ -2968,6 +3107,8 @@ impl<'a> Walker<'a> {
                     Expr::Atomic { ty, .. } => *ty,
                     Expr::VlaBase { ty, .. } => *ty,
                     Expr::VlaSizeof { .. } => Ty::Int as i64,
+                    Expr::StmtExpr { ty, .. } => *ty,
+                    Expr::CheckedArith { ty, .. } => *ty,
                     // `&&label` is a `void *` (char-pointer encoding).
                     Expr::LabelAddr(_) => {
                         crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64
@@ -3266,6 +3407,25 @@ impl<'a> Walker<'a> {
                 let _ = self.walk_expr_rvalue(b, *lhs)?;
                 self.walk_expr_rvalue(b, *rhs)
             }
+            // GCC statement expression `({ ... })`: emit the block for
+            // its side effects; the value is that of the last
+            // expression-statement.
+            Expr::StmtExpr { block, .. } => {
+                let block = *block;
+                self.walk_stmt_expr(b, block)
+            }
+            // GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`.
+            Expr::CheckedArith {
+                op,
+                a,
+                b: rhs,
+                dst,
+                elem_ty,
+                ..
+            } => {
+                let (op, a, rhs, dst, elem_ty) = (*op, *a, *rhs, *dst, *elem_ty);
+                self.walk_checked_arith(b, op, a, rhs, dst, elem_ty)
+            }
             // A short-circuit in value position: the result is used, so
             // normalize it to 0/1.
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
@@ -3330,6 +3490,11 @@ impl<'a> Walker<'a> {
                     return Ok(match i {
                         I::Clz | I::Clzll => lower_clz(b, x, w64),
                         I::Ctz | I::Ctzll => lower_ctz(b, x, w64),
+                        I::Clrsb | I::Clrsbll => lower_clrsb(b, x, w64),
+                        I::Parity | I::Parityll => {
+                            let pc = lower_popcount(b, x, w64);
+                            b.binop_imm(BinOp::And, pc, 1)
+                        }
                         _ => lower_popcount(b, x, w64),
                     });
                 }
@@ -3401,6 +3566,21 @@ impl<'a> Walker<'a> {
                 let value = self.walk_expr_rvalue(b, args[1])?;
                 b.store(addr, value, store_kind);
                 // Used in statement position; the value is discarded.
+                Ok(b.imm(0))
+            }
+            // Generic `__atomic_load(p, ret, mo)`: load `*p`, write it
+            // through `ret`. `__atomic_store(p, val, mo)`: load `*val`,
+            // write it to `*p`. Both move the value through a pointer.
+            AtomicKind::LoadInto => {
+                let value = b.load(addr, load_kind);
+                let ret = self.walk_expr_rvalue(b, args[1])?;
+                b.store(ret, value, store_kind);
+                Ok(b.imm(0))
+            }
+            AtomicKind::StoreFrom => {
+                let val_addr = self.walk_expr_rvalue(b, args[1])?;
+                let value = b.load(val_addr, load_kind);
+                b.store(addr, value, store_kind);
                 Ok(b.imm(0))
             }
             AtomicKind::Exchange
@@ -4321,6 +4501,19 @@ fn lower_popcount(b: &mut Bld, x: Val, w64: bool) -> Val {
 /// Count leading zeros: smear the highest set bit down to fill the low
 /// bits, then `width - popcount`. At zero the smear stays zero and the
 /// result is the bit width.
+/// Count leading redundant sign bits: `clz(x ^ (x >> (w-1))) - 1`, with
+/// an arithmetic shift forming the all-sign mask. XORing it clears the
+/// leading run of sign bits to zeros (and always the sign bit itself),
+/// so `clz` of the result is that run length plus one. `x` is sign-
+/// extended into the register, so its high half mirrors the sign in the
+/// 32-bit case and the XOR leaves the upper bits zero.
+fn lower_clrsb(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let sign = b.binop_imm(BinOp::Shr, x, if w64 { 63 } else { 31 });
+    let folded = b.binop(BinOp::Xor, x, sign);
+    let clz = lower_clz(b, folded, w64);
+    b.binop_imm(BinOp::Sub, clz, 1)
+}
+
 fn lower_clz(b: &mut Bld, x: Val, w64: bool) -> Val {
     let su = BinOp::Shru;
     let or = BinOp::Or;
@@ -4381,7 +4574,7 @@ fn lower_bswap(b: &mut Bld, x: Val, n: i64) -> Val {
 /// shapes that don't carry one (`Sizeof` is constant-evaluated
 /// and the walker doesn't peek into the result; intrinsics carry
 /// their own `ty`).
-fn expr_ty(e: &Expr) -> Option<i64> {
+pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
     match e {
         Expr::IntLit { ty, .. }
         | Expr::FloatLit { ty, .. }
@@ -4402,7 +4595,9 @@ fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::ShortCircuit { ty, .. }
         | Expr::Intrinsic { ty, .. }
         | Expr::Atomic { ty, .. }
-        | Expr::VlaBase { ty, .. } => Some(*ty),
+        | Expr::VlaBase { ty, .. }
+        | Expr::StmtExpr { ty, .. }
+        | Expr::CheckedArith { ty, .. } => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
         // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
@@ -4535,6 +4730,8 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::LabelAddr(_) => "LabelAddr",
         Expr::VlaBase { .. } => "VlaBase",
         Expr::VlaSizeof { .. } => "VlaSizeof",
+        Expr::StmtExpr { .. } => "StmtExpr",
+        Expr::CheckedArith { .. } => "CheckedArith",
     }
 }
 

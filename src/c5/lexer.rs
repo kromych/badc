@@ -1838,6 +1838,11 @@ const KEYWORDS: &[(&str, Token)] = &[
     // the expression is zero.
     ("_Static_assert", Token::StaticAssert),
     ("static_assert", Token::StaticAssert),
+    ("_Generic", Token::Generic),
+    (
+        "__builtin_types_compatible_p",
+        Token::BuiltinTypesCompatible,
+    ),
     // Type qualifiers -- consumed everywhere a type qualifier
     // may appear; no semantic effect.
     ("const", Token::TypeQual),

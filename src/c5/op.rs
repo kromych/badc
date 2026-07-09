@@ -196,6 +196,16 @@ pub enum Intrinsic {
     /// prior `AllocaSave` captured. One argument (the saved top);
     /// returns nothing. Reclaims a VLA block's storage on exit.
     AllocaRestore = 47,
+    /// `__builtin_clrsb(x)` / `__builtin_clrsbll(x)` -- count leading
+    /// redundant sign bits of a 32-bit / 64-bit signed value: the number
+    /// of bits after the sign bit that equal it. The result is `int`.
+    /// Lowered in the walker as `clz(x ^ (x >> (w-1))) - 1`.
+    Clrsb = 48,
+    Clrsbll = 49,
+    /// `__builtin_parity(x)` / `__builtin_parityll(x)` -- 1 when the value
+    /// has an odd number of set bits, else 0. Lowered as `popcount(x) & 1`.
+    Parity = 50,
+    Parityll = 51,
 }
 
 impl Intrinsic {
@@ -248,6 +258,10 @@ impl Intrinsic {
             45 => Some(Intrinsic::Xgetbv),
             46 => Some(Intrinsic::AllocaSave),
             47 => Some(Intrinsic::AllocaRestore),
+            48 => Some(Intrinsic::Clrsb),
+            49 => Some(Intrinsic::Clrsbll),
+            50 => Some(Intrinsic::Parity),
+            51 => Some(Intrinsic::Parityll),
             _ => None,
         }
     }
@@ -273,6 +287,10 @@ impl Intrinsic {
                 | Intrinsic::Clzll
                 | Intrinsic::Ctzll
                 | Intrinsic::Popcountll
+                | Intrinsic::Clrsb
+                | Intrinsic::Clrsbll
+                | Intrinsic::Parity
+                | Intrinsic::Parityll
         )
     }
 
@@ -281,8 +299,20 @@ impl Intrinsic {
     pub fn is_bit_unary_64(self) -> bool {
         matches!(
             self,
-            Intrinsic::Clzll | Intrinsic::Ctzll | Intrinsic::Popcountll
+            Intrinsic::Clzll
+                | Intrinsic::Ctzll
+                | Intrinsic::Popcountll
+                | Intrinsic::Clrsbll
+                | Intrinsic::Parityll
         )
+    }
+
+    /// Count-leading-redundant-sign-bits forms. Unlike the other
+    /// bit-count builtins these take a signed operand (the sign bit
+    /// drives the count), so the argument is sign-extended, not zero-
+    /// extended.
+    pub fn is_clrsb(self) -> bool {
+        matches!(self, Intrinsic::Clrsb | Intrinsic::Clrsbll)
     }
 
     /// Unary FP math intrinsics: one floating argument, a floating

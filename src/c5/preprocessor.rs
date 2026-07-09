@@ -396,6 +396,10 @@ impl Preprocessor {
             ("__builtin_bswap16", super::op::Intrinsic::Bswap16),
             ("__builtin_bswap32", super::op::Intrinsic::Bswap32),
             ("__builtin_bswap64", super::op::Intrinsic::Bswap64),
+            ("__builtin_clrsb", super::op::Intrinsic::Clrsb),
+            ("__builtin_clrsbll", super::op::Intrinsic::Clrsbll),
+            ("__builtin_parity", super::op::Intrinsic::Parity),
+            ("__builtin_parityll", super::op::Intrinsic::Parityll),
             ("__builtin_unreachable", super::op::Intrinsic::Trap),
             (
                 "__builtin_frame_address",
@@ -424,6 +428,18 @@ impl Preprocessor {
         intrinsics.insert("__builtin_clzl".to_string(), clzl as i64);
         intrinsics.insert("__builtin_ctzl".to_string(), ctzl as i64);
         intrinsics.insert("__builtin_popcountl".to_string(), popcountl as i64);
+        let clrsbl = if target.long_width_bytes() == 8 {
+            super::op::Intrinsic::Clrsbll
+        } else {
+            super::op::Intrinsic::Clrsb
+        };
+        intrinsics.insert("__builtin_clrsbl".to_string(), clrsbl as i64);
+        let parityl = if target.long_width_bytes() == 8 {
+            super::op::Intrinsic::Parityll
+        } else {
+            super::op::Intrinsic::Parity
+        };
+        intrinsics.insert("__builtin_parityl".to_string(), parityl as i64);
         // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
         // declaration decorators carrying hints the dialect does not act
         // on, except for the `packed` attribute, which changes aggregate
@@ -625,10 +641,12 @@ impl Preprocessor {
             .insert("__VERSION__".to_string(), "\"4.2.1\"".to_string());
         // badc backs the `__`-prefixed GNU extensions but not the ones a
         // GNU dialect gates on `!__STRICT_ANSI__` (`typeof` of an array,
-        // `__builtin_types_compatible_p`, `__int128`). Reporting strict
-        // ISO conformance alongside `__GNUC__` -- exactly `gcc`/`clang
-        // -std=c11` -- routes portable code to the standard path for
-        // those, while keeping the `__`-prefixed surface available.
+        // `__int128`). Reporting strict ISO conformance alongside
+        // `__GNUC__` -- exactly `gcc`/`clang -std=c11` -- routes portable
+        // code to the standard path for those, while keeping the
+        // `__`-prefixed surface available. (`__builtin_types_compatible_p`
+        // is now backed by the compiler, so code gating on it works
+        // regardless of this macro.)
         self.macros
             .insert("__STRICT_ANSI__".to_string(), "1".to_string());
     }
@@ -873,7 +891,8 @@ impl Preprocessor {
                         // function-like.
                         let taken = active
                             && (self.macros.contains_key(name)
-                                || self.fn_macros.contains_key(name));
+                                || self.fn_macros.contains_key(name)
+                                || is_builtin_operator_name(name));
                         cond_stack.push(CondFrame {
                             parent_active: active,
                             this_branch_taken: taken,
@@ -885,7 +904,8 @@ impl Preprocessor {
                     Directive::Ifndef(name) => {
                         let taken = active
                             && !(self.macros.contains_key(name)
-                                || self.fn_macros.contains_key(name));
+                                || self.fn_macros.contains_key(name)
+                                || is_builtin_operator_name(name));
                         cond_stack.push(CondFrame {
                             parent_active: active,
                             this_branch_taken: taken,
@@ -1973,11 +1993,91 @@ impl Preprocessor {
                         // `defined(__has_include)` is true.
                         let v = name == "__has_include"
                             || name == "__has_include_next"
+                            || name == "__has_builtin"
+                            || name == "__has_attribute"
                             || self.macros.contains_key(name)
                             || self.fn_macros.contains_key(name);
                         out.push_str(if v { "1" } else { "0" });
                         i = j;
                         continue;
+                    }
+                }
+            }
+            // `__has_builtin(NAME)` (C23 6.10.1 / universal practice): 1
+            // when the compiler provides builtin NAME, else 0. Resolved
+            // before substitution so the builtin name is not expanded.
+            if bytes[i..].starts_with(b"__has_builtin") {
+                let after = i + b"__has_builtin".len();
+                let prev_is_word =
+                    i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+                let next_is_word = bytes
+                    .get(after)
+                    .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
+                if !prev_is_word && !next_is_word {
+                    let mut j = after;
+                    while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    if bytes.get(j) == Some(&b'(') {
+                        j += 1;
+                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                            j += 1;
+                        }
+                        let name_start = j;
+                        while j < bytes.len()
+                            && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_')
+                        {
+                            j += 1;
+                        }
+                        let name = &expr[name_start..j];
+                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                            j += 1;
+                        }
+                        if bytes.get(j) == Some(&b')') && !name.is_empty() {
+                            j += 1;
+                            out.push_str(if is_known_builtin(name) { "1" } else { "0" });
+                            i = j;
+                            continue;
+                        }
+                    }
+                }
+            }
+            // `__has_attribute(NAME)`: 1 when the compiler recognizes the
+            // GCC/Clang attribute NAME, else 0. glib's g_auto* / g_autofree
+            // gate on `#if g_macro__has_attribute(cleanup)`.
+            if bytes[i..].starts_with(b"__has_attribute") {
+                let after = i + b"__has_attribute".len();
+                let prev_is_word =
+                    i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+                let next_is_word = bytes
+                    .get(after)
+                    .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
+                if !prev_is_word && !next_is_word {
+                    let mut j = after;
+                    while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    if bytes.get(j) == Some(&b'(') {
+                        j += 1;
+                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                            j += 1;
+                        }
+                        let name_start = j;
+                        while j < bytes.len()
+                            && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_')
+                        {
+                            j += 1;
+                        }
+                        let name = &expr[name_start..j];
+                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                            j += 1;
+                        }
+                        if bytes.get(j) == Some(&b')') && !name.is_empty() {
+                            j += 1;
+                            out.push_str(if is_known_attribute(name) { "1" } else { "0" });
+                            i = j;
+                            continue;
+                        }
                     }
                 }
             }
@@ -1991,7 +2091,10 @@ impl Preprocessor {
         // comments that would confuse the expression tokenizer.
         // `strip_c_comments` keeps string and char literals intact.
         let substituted = self.substitute(&out, "<#if>", line_no);
-        strip_c_comments(&substituted)
+        // Resolve any `__has_builtin` / `__has_attribute` that a macro
+        // alias expanded into (glib's `g_macro__has_attribute`); the
+        // pre-pass above already handled the ones written literally.
+        replace_has_operators(&strip_c_comments(&substituted))
     }
 
     fn eval_condition(&self, expr: &str, line_no: usize, filename: &str) -> Result<bool, C5Error> {
@@ -4888,6 +4991,176 @@ fn if_value_lt(a: &IfValue, b: &IfValue) -> bool {
 /// reaches the tail through `rest`).
 fn is_va_token(def: &FnMacro, word: &str) -> bool {
     word == "__VA_ARGS__" || def.va_name.as_deref() == Some(word)
+}
+
+/// True when badc provides the named GCC/Clang compiler builtin (with the
+/// `__builtin_` prefix), so `__has_builtin(NAME)` reports 1. Names not
+/// listed report 0, which routes feature-testing headers to their
+/// portable fallbacks. Only genuine compiler intrinsics and the
+/// always-defined `<_builtins.h>` thunks are listed; forms that a header
+/// must fall back to portable C for (e.g. `__builtin_bitreverse*`,
+/// `__builtin_addcll`, `__builtin_bswap128`) are deliberately absent.
+fn is_known_builtin(name: &str) -> bool {
+    matches!(
+        name,
+        "__builtin_clz"
+            | "__builtin_clzl"
+            | "__builtin_clzll"
+            | "__builtin_ctz"
+            | "__builtin_ctzl"
+            | "__builtin_ctzll"
+            | "__builtin_popcount"
+            | "__builtin_popcountl"
+            | "__builtin_popcountll"
+            | "__builtin_bswap16"
+            | "__builtin_bswap32"
+            | "__builtin_bswap64"
+            | "__builtin_clrsb"
+            | "__builtin_clrsbl"
+            | "__builtin_clrsbll"
+            | "__builtin_parity"
+            | "__builtin_parityl"
+            | "__builtin_parityll"
+            | "__builtin_expect"
+            | "__builtin_unreachable"
+            | "__builtin_trap"
+            | "__builtin_alloca"
+            | "__builtin_frame_address"
+            | "__builtin_constant_p"
+            | "__builtin_choose_expr"
+            | "__builtin_types_compatible_p"
+            | "__builtin_prefetch"
+            | "__builtin_assume_aligned"
+            | "__builtin_add_overflow"
+            | "__builtin_sub_overflow"
+            | "__builtin_mul_overflow"
+    )
+}
+
+/// Replace every `__has_builtin(NAME)` / `__has_attribute(NAME)` in `s`
+/// with `1` or `0`. Run after macro substitution as well as before, so a
+/// header that reaches the operator through a macro alias (glib's
+/// `#define g_macro__has_attribute __has_attribute`) still resolves.
+fn replace_has_operators(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let mut matched = false;
+        for (op, is_known) in [
+            ("__has_builtin", is_known_builtin as fn(&str) -> bool),
+            ("__has_attribute", is_known_attribute as fn(&str) -> bool),
+        ] {
+            if !bytes[i..].starts_with(op.as_bytes()) {
+                continue;
+            }
+            let prev_word = i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let after = i + op.len();
+            let next_word = bytes
+                .get(after)
+                .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
+            if prev_word || next_word {
+                continue;
+            }
+            let mut j = after;
+            while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                j += 1;
+            }
+            if bytes.get(j) != Some(&b'(') {
+                continue;
+            }
+            j += 1;
+            while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                j += 1;
+            }
+            let name_start = j;
+            while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
+                j += 1;
+            }
+            let name = &s[name_start..j];
+            while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                j += 1;
+            }
+            if bytes.get(j) == Some(&b')') && !name.is_empty() {
+                out.push_str(if is_known(name) { "1" } else { "0" });
+                i = j + 1;
+                matched = true;
+                break;
+            }
+        }
+        if !matched {
+            out.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// The built-in feature-test operators badc provides. They are not
+/// macros, but `#ifdef` / `defined(...)` on their names reports true so
+/// headers can guard `#ifdef __has_attribute` before using the operator.
+fn is_builtin_operator_name(name: &str) -> bool {
+    matches!(
+        name,
+        "__has_include" | "__has_include_next" | "__has_builtin" | "__has_attribute"
+    )
+}
+
+/// True when badc recognizes the GCC/Clang attribute NAME, so
+/// `__has_attribute(NAME)` reports 1. The name may be spelled bare or
+/// wrapped in `__` (`cleanup` / `__cleanup__`). badc parses every
+/// `__attribute__((...))` and acts on a subset (`packed`, `aligned`,
+/// `unused`, `noreturn`); the rest are accepted and ignored, so
+/// reporting 1 lets feature-testing headers take their attribute path.
+/// `cleanup` is reported present so glib's `g_auto*` / `g_autofree`
+/// activate (the destructor is not yet run at scope exit -- a resource
+/// managed this way is freed at process exit, not block exit).
+fn is_known_attribute(name: &str) -> bool {
+    let core = name.trim_matches('_');
+    matches!(
+        core,
+        "cleanup"
+            | "packed"
+            | "aligned"
+            | "unused"
+            | "maybe_unused"
+            | "used"
+            | "noreturn"
+            | "deprecated"
+            | "const"
+            | "pure"
+            | "malloc"
+            | "always_inline"
+            | "noinline"
+            | "gnu_inline"
+            | "flatten"
+            | "format"
+            | "format_arg"
+            | "sentinel"
+            | "nonnull"
+            | "returns_nonnull"
+            | "warn_unused_result"
+            | "alloc_size"
+            | "alloc_align"
+            | "assume_aligned"
+            | "cold"
+            | "hot"
+            | "weak"
+            | "visibility"
+            | "section"
+            | "constructor"
+            | "destructor"
+            | "may_alias"
+            | "transparent_union"
+            | "fallthrough"
+            | "nothrow"
+            | "no_instrument_function"
+            | "returns_twice"
+            | "noclone"
+            | "error"
+            | "warning"
+            | "unavailable"
+    )
 }
 
 /// C99 6.10.3p4. A variadic macro's `...` absorbs any surplus, so the

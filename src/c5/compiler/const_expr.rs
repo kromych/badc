@@ -746,6 +746,22 @@ impl Compiler {
                 ty: self.size_t_ty(),
             });
         }
+        if self.lex.tk == Token::Generic {
+            // C11 6.5.1.1: a generic selection is a constant expression
+            // when its selected association is one. Select, then fold the
+            // winning expression as a constant.
+            let after = self.generic_select_to_winner()?;
+            let v = self.parse_const_expr_cond_val()?;
+            self.lex.restore(after);
+            return Ok(v);
+        }
+        if self.lex.tk == Token::BuiltinTypesCompatible {
+            // GCC `__builtin_types_compatible_p(T1, T2)` is an integer
+            // constant expression (0 or 1).
+            self.next()?;
+            let v = self.parse_types_compatible_p()?;
+            return Ok(ConstVal::int(v));
+        }
         self.parse_const_expr_primary_val()
     }
 

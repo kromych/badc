@@ -114,6 +114,15 @@ impl Compiler {
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
         let line = self.lex.line;
+        // C11 6.5.1.1 generic selection as a static initializer element:
+        // select the association, initialize this slot from the winning
+        // expression, then resume past the `_Generic(...)`.
+        if self.lex.tk == Token::Generic {
+            let after = self.generic_select_to_winner()?;
+            self.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)?;
+            self.lex.restore(after);
+            return Ok(());
+        }
         // C99 6.7.8p11 allows a scalar initializer to be enclosed
         // in a single pair of braces: `int x = { 42 };`. Adjacent
         // string-literal concatenation may produce a multi-piece

@@ -2130,6 +2130,10 @@ fn run_intrinsic(
         | Intrinsic::Clzll
         | Intrinsic::Ctzll
         | Intrinsic::Popcountll
+        | Intrinsic::Clrsb
+        | Intrinsic::Clrsbll
+        | Intrinsic::Parity
+        | Intrinsic::Parityll
         | Intrinsic::Bswap16
         | Intrinsic::Bswap32
         | Intrinsic::Bswap64 => Err(C5Error::Runtime(

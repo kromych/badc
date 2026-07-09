@@ -1586,6 +1586,7 @@ impl Compiler {
         }
         let mut pos: usize = 0;
         while self.lex.tk != '}' && (braced || pos < self.structs[sid].fields.len()) {
+            let designated = self.lex.tk == Token::Dot;
             let field_idx = if self.lex.tk == Token::Dot {
                 self.next()?;
                 if self.lex.tk != Token::Id {
@@ -1748,10 +1749,12 @@ impl Compiler {
             // member's offset (C99 6.7.8p13). The recursion handles a
             // union the same way -- its fields share offset 0.
             self.skip_opt_compound_literal_cast()?;
-            // C11 6.7.2.1: a flattened anonymous union/struct member taking a
-            // brace-enclosed sub-initializer (`{ .member = v }`). The brace
-            // selects one group member; emit it and advance past the group.
-            if field.anon_union_group != 0 && self.lex.tk == '{' {
+            // C11 6.7.2.1: a positional brace on a flattened anonymous
+            // union/struct region (`{ .member = v }` or `{ v }`) selects one
+            // group member. When the field was reached by an explicit `.name`
+            // designator the brace initializes that member's own type instead,
+            // so fall through to the nested-struct recursion below.
+            if !designated && field.anon_union_group != 0 && self.lex.tk == '{' {
                 self.next()?; // consume `{`
                 let group = field.anon_union_group;
                 while self.lex.tk != '}' {

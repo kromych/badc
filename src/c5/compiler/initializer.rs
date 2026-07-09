@@ -824,6 +824,15 @@ impl Compiler {
     }
 
     pub(super) fn parse_constant_init_value(&mut self) -> Result<(i64, InitElemReloc), C5Error> {
+        // C11 6.5.1.1 generic selection as an aggregate initializer
+        // element: select the association, then evaluate the winning
+        // expression as a constant (which may itself be an address).
+        if self.lex.tk == Token::Generic {
+            let after = self.generic_select_to_winner()?;
+            let result = self.parse_constant_init_value()?;
+            self.lex.restore(after);
+            return Ok(result);
+        }
         // A constant address of a global's sub-object: `&g.field`,
         // `g.array_field`, `(&buf[i])->field`. Takes priority over the
         // integer / `&global` leaves below, which only handle a whole
@@ -1699,6 +1708,7 @@ impl Compiler {
         let mut pos: usize = 0;
         while self.lex.tk != '}' && (braced || pos < self.structs[struct_id].fields.len()) {
             // Designator?
+            let designated = self.lex.tk == Token::Dot;
             let field_idx = if self.lex.tk == Token::Dot {
                 self.next()?;
                 if self.lex.tk != Token::Id {
@@ -1774,8 +1784,10 @@ impl Compiler {
             // take a brace-enclosed sub-initializer that fills its members in
             // order (`union { struct { int a, b; }; ... } x = { { 1, 2 } }`).
             // The grouped members are contiguous; fill each from the brace,
-            // then advance past the whole group.
-            if field.anon_struct_group != 0 && self.lex.tk == '{' {
+            // then advance past the whole group. Skipped for a field reached
+            // by an explicit `.name` designator: the brace then initializes
+            // that member's own type (handled by the recursion below).
+            if !designated && field.anon_struct_group != 0 && self.lex.tk == '{' {
                 self.next()?; // consume `{`
                 let group = field.anon_struct_group;
                 let mut mem_pos = field_idx;
@@ -1817,8 +1829,10 @@ impl Compiler {
             // flattened into the parent (shared anon_union_group) may take a
             // brace-enclosed sub-initializer (`{ .member = v }` or `{ v }`).
             // The brace selects one group member rather than a nested object;
-            // fill it, then advance past the whole group.
-            if field.anon_union_group != 0 && self.lex.tk == '{' {
+            // fill it, then advance past the whole group. Skipped for a field
+            // reached by an explicit `.name` designator: the brace then
+            // initializes that member's own type (handled below).
+            if !designated && field.anon_union_group != 0 && self.lex.tk == '{' {
                 self.next()?; // consume `{`
                 let group = field.anon_union_group;
                 while self.lex.tk != '}' {

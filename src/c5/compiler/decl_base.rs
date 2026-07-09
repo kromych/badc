@@ -247,14 +247,18 @@ impl Compiler {
         self.next()?; // (
         let ty = if self.lex_is_type_start() {
             let mut inner = self.parse_decl_base_type()?;
-            core::mem::take(&mut self.pending.typedef_base_array_size);
+            let base_arr = core::mem::take(&mut self.pending.typedef_base_array_size);
+            let mut had_ptr = false;
             while self.lex.tk == Token::MulOp {
                 self.next()?;
                 inner += Ty::Ptr as i64;
+                had_ptr = true;
                 while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
             }
+            // `typeof(T[N])` is an array type; `typeof(T *)` is not.
+            self.pending.typeof_operand_was_array = base_arr != 0 && !had_ptr;
             inner
         } else {
             // Unevaluated expression operand: parse it to learn the
@@ -264,8 +268,25 @@ impl Compiler {
             let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
             let saved_ast_acc = self.ast_acc;
             let saved_vstack = self.ast_vstack.len();
-            self.expr(Token::Inc as i64)?;
+            // The array-decay hint records the dimension when a bare array
+            // expression decays; capture it so an array operand types
+            // distinctly from a pointer, then restore it so it does not
+            // leak into a surrounding `sizeof`.
+            let saved_decay = self.pending.last_array_decay_size;
+            self.pending.last_array_decay_size = 0;
+            // The operand is a full expression (C99 6.7.6.2 / the GCC
+            // extension): parse at assignment precedence so binary,
+            // conditional, and assignment operators are consumed, then a
+            // trailing comma operator whose last term gives the type.
+            self.expr(Token::Assign as i64)?;
+            while self.lex.tk == ',' {
+                self.next()?;
+                self.pending.last_array_decay_size = 0;
+                self.expr(Token::Assign as i64)?;
+            }
             let expr_ty = self.ty;
+            self.pending.typeof_operand_was_array = self.pending.last_array_decay_size > 0;
+            self.pending.last_array_decay_size = saved_decay;
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);

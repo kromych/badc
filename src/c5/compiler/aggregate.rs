@@ -571,10 +571,16 @@ impl Compiler {
                 let field_is_variadic = !field_params.is_empty()
                     && matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
-                if is_aggregate_value
-                    && field_array_size == 0
-                    && self.structs[struct_id_of(field_ty)].fields.is_empty()
-                {
+                if is_aggregate_value && field_array_size == 0 && {
+                    let sd = &self.structs[struct_id_of(field_ty)];
+                    // C99 6.7.2.1: a member must have complete type. A
+                    // forward-declared struct is incomplete: it has no fields
+                    // and its size is still 0. A fully-defined struct is
+                    // complete and accepted -- including an empty `struct {}`
+                    // (a GCC extension, size 1) and a struct whose only member
+                    // is a flexible / zero-length array (has a field, size 0).
+                    sd.fields.is_empty() && sd.size == 0
+                } {
                     return Err(self.compile_err("aggregate-value field of incomplete type"));
                 }
                 let field_name = self.symbols[id_idx].name.clone();
@@ -675,7 +681,16 @@ impl Compiler {
                     // as before.
                     let pack = if packed { 1 } else { self.lex.current_pack() };
                     let elem_size = self.size_of_type(field_ty);
-                    let field_storage = if field_array_size > 0 {
+                    // A complete but empty `struct {}` member contributes no
+                    // storage and no alignment (GCC): the following member
+                    // shares its offset, which is what the `__DECLARE_FLEX_ARRAY`
+                    // idiom (`struct {} __empty; T arr[];`) relies on.
+                    let is_empty_aggregate = is_struct_ty(field_ty)
+                        && struct_ptr_depth(field_ty) == 0
+                        && self.structs[struct_id_of(field_ty)].fields.is_empty();
+                    let field_storage = if is_empty_aggregate {
+                        0
+                    } else if field_array_size > 0 {
                         elem_size * field_array_size as usize
                     } else if field_array_size < 0 {
                         // Flexible array member (`T v[]`, C99
@@ -686,7 +701,11 @@ impl Compiler {
                     } else {
                         elem_size
                     };
-                    let field_align = self.align_of_type(field_ty).min(pack);
+                    let field_align = if is_empty_aggregate {
+                        1
+                    } else {
+                        self.align_of_type(field_ty).min(pack)
+                    };
                     if field_align > struct_align {
                         struct_align = field_align;
                     }

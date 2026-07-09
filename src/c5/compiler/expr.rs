@@ -257,6 +257,63 @@ impl Compiler {
     /// `memory_order` arguments and the compare-exchange forms a `weak`
     /// flag; badc parses and discards them (it always emits seq_cst).
     /// The `__sync_*` forms are seq_cst with no order argument.
+    /// Parse a GCC checked-arithmetic builtin
+    /// `__builtin_{add,sub,mul}_overflow(a, b, dst)`. The third operand
+    /// is the result pointer; its pointee type drives the operation
+    /// width and signedness. Builds an `Expr::CheckedArith` node whose
+    /// value is the `int` overflow flag.
+    fn parse_overflow_builtin(&mut self, name: &str) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, ExprId};
+        let op = match name {
+            "__builtin_add_overflow" => 0i64,
+            "__builtin_sub_overflow" => 1,
+            _ => 2,
+        };
+        let mut args: Vec<ExprId> = Vec::new();
+        let mut dst_ty = 0i64;
+        if self.lex.tk != ')' {
+            loop {
+                self.expr(Token::Assign as i64)?;
+                if let Some(a) = self.ast_acc {
+                    args.push(a);
+                }
+                dst_ty = self.ty;
+                if self.lex.tk == ',' {
+                    self.next()?;
+                    continue;
+                }
+                break;
+            }
+        }
+        if self.lex.tk != ')' || args.len() != 3 {
+            return Err(self.compile_err(format!("`{name}` expects (a, b, result pointer)")));
+        }
+        self.next()?; // consume ')'
+        if !is_pointer_ty(dst_ty) {
+            return Err(
+                self.compile_err(format!("`{name}` third argument must be a result pointer"))
+            );
+        }
+        let elem_ty = dst_ty - Ty::Ptr as i64;
+        self.mark_emit_other();
+        let ty = Ty::Int as i64;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::CheckedArith {
+                op,
+                a: args[0],
+                b: args[1],
+                dst: args[2],
+                elem_ty,
+                ty,
+            },
+            pos,
+        );
+        self.ty = ty;
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
     fn parse_gcc_atomic_builtin(&mut self, name: &str, id_idx: usize) -> Result<(), C5Error> {
         use super::super::ast::{AtomicKind, Expr, ExprId};
         let _ = id_idx;
@@ -337,6 +394,16 @@ impl Compiler {
             "__atomic_store_n" => {
                 let v = self.require_gcc_arg(val1, name)?;
                 (AtomicKind::Store, alloc::vec![ptr, v], int_ty)
+            }
+            // Generic forms: the value moves through a pointer rather than
+            // by value, so they work for any-size objects.
+            "__atomic_load" => {
+                let ret = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::LoadInto, alloc::vec![ptr, ret], int_ty)
+            }
+            "__atomic_store" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                (AtomicKind::StoreFrom, alloc::vec![ptr, v], int_ty)
             }
             "__atomic_exchange_n" | "__sync_lock_test_and_set" => {
                 let v = self.require_gcc_arg(val1, name)?;
@@ -540,6 +607,17 @@ impl Compiler {
             self.emit_imm(align);
             self.ty = Ty::Int as i64;
             self.ast_emit_int_lit(align, self.ty);
+        } else if self.lex.tk == Token::Generic {
+            // C11 6.5.1.1 generic selection `_Generic(expr, T1: e1, ...)`.
+            self.parse_generic_selection()?;
+        } else if self.lex.tk == Token::BuiltinTypesCompatible {
+            // GCC `__builtin_types_compatible_p(T1, T2)`: an integer
+            // constant, emitted like the `sizeof` / `_Alignof` results.
+            self.next()?;
+            let v = self.parse_types_compatible_p()?;
+            self.emit_imm(v);
+            self.ty = Ty::Int as i64;
+            self.ast_emit_int_lit(v, self.ty);
         } else if self.is_func_name_ident() {
             // C99 6.4.2.2: __func__ is implicitly declared as
             // `static const char __func__[] = "function-name";` at the
@@ -604,7 +682,19 @@ impl Compiler {
                 let is_gcc_atomic = not_real_fn
                     && (self.symbols[id_idx].name.starts_with("__atomic_")
                         || self.symbols[id_idx].name.starts_with("__sync_"));
-                if is_gcc_atomic {
+                // GCC checked-arithmetic builtins, lowered at the call
+                // site to a wrapped store plus an overflow test.
+                let is_overflow = not_real_fn
+                    && matches!(
+                        self.symbols[id_idx].name.as_str(),
+                        "__builtin_add_overflow"
+                            | "__builtin_sub_overflow"
+                            | "__builtin_mul_overflow"
+                    );
+                if is_overflow {
+                    let name = self.symbols[id_idx].name.clone();
+                    self.parse_overflow_builtin(&name)?;
+                } else if is_gcc_atomic {
                     let name = self.symbols[id_idx].name.clone();
                     self.parse_gcc_atomic_builtin(&name, id_idx)?;
                 } else if let Some(akind) = atomic_kind {
@@ -704,6 +794,7 @@ impl Compiler {
                         // the value reaches the walker zero-extended (clz /
                         // popcount count over the full width; bswap reverses
                         // exactly that many bytes).
+                        let is_clrsb = intr_kind.is_some_and(|i| i.is_clrsb());
                         let elem_ty = if is_bswap {
                             let base = match intr_kind {
                                 Some(crate::c5::op::Intrinsic::Bswap16) => Ty::Short as i64,
@@ -711,6 +802,14 @@ impl Compiler {
                                 _ => Ty::Int as i64,
                             };
                             base | super::types::UNSIGNED_BIT
+                        } else if is_clrsb {
+                            // clrsb counts sign bits: the operand is signed,
+                            // so sign-extend into the register.
+                            if is_bit_unary_64 {
+                                Ty::LongLong as i64
+                            } else {
+                                Ty::Int as i64
+                            }
                         } else if is_bit_unary_64 {
                             Ty::LongLong as i64 | super::types::UNSIGNED_BIT
                         } else {
@@ -1522,7 +1621,12 @@ impl Compiler {
             }
         } else if self.lex.tk == '(' {
             self.next()?;
-            if self.lex_is_type_start() {
+            if self.lex.tk == '{' {
+                // GCC statement expression `({ ... })`: the value is
+                // that of the enclosed compound's last
+                // expression-statement.
+                self.parse_stmt_expr_body()?;
+            } else if self.lex_is_type_start() {
                 // C-style cast: `(<type>)expr`. Accepts int, char,
                 // float, double, or struct base, with any number of
                 // `*` markers and pointer-level qualifiers.
@@ -3708,6 +3812,169 @@ impl Compiler {
             self.pending.index_strides_tail.extend_from_slice(tail);
         }
     }
+
+    /// C11 6.5.1.1 generic selection
+    /// `_Generic(controlling-expr, T1: e1, ..., default: eN)`. The
+    /// controlling expression is unevaluated; its type selects the
+    /// association with a compatible type name, or the `default`
+    /// association when none matches. The value and type of the whole
+    /// construct are those of the selected expression; the non-selected
+    /// expressions are not evaluated.
+    ///
+    /// The controlling expression is parsed only for its type (its
+    /// emitted state is rewound). The association list is scanned by
+    /// bracket depth without parsing the expressions, so only the
+    /// selected one is parsed live -- via a lexer snapshot taken at its
+    /// start and restored once the winner is known.
+    pub(super) fn parse_generic_selection(&mut self) -> Result<(), C5Error> {
+        let after = self.generic_select_to_winner()?;
+        // Parse the selected expression live; it is the result.
+        self.expr(Token::Assign as i64)?;
+        self.lex.restore(after);
+        Ok(())
+    }
+
+    /// Shared front half of `_Generic` for the runtime and constant
+    /// paths. Consumes `_Generic ( controlling , assoc-list )`, selects
+    /// the association, and leaves the lexer positioned at the selected
+    /// expression's first token so the caller can parse it with either
+    /// the runtime or the constant grammar. Returns the lexer snapshot
+    /// just past the closing `)`, to restore after parsing the winner.
+    pub(super) fn generic_select_to_winner(
+        &mut self,
+    ) -> Result<super::super::lexer::LexerSnapshot, C5Error> {
+        self.next()?; // _Generic
+        self.consume(b'(', "`(` expected after `_Generic`")?;
+
+        // The lexer appends string-literal bytes to the data section as
+        // it tokenizes; scanning the non-selected associations therefore
+        // pollutes the data section. Record the length so it can be
+        // rewound before the selected expression is parsed live.
+        let data_start = self.data.len();
+
+        // Controlling expression: recover its type, discard everything
+        // the parse pushed (unevaluated per 6.5.1.1p2).
+        let saved_text_len = self.next_ent_pc;
+        let saved_reloc = self.code_reloc_sym_idx.len();
+        let saved_ast_acc = self.ast_acc;
+        let saved_vstack = self.ast_vstack.len();
+        self.expr(Token::Assign as i64)?;
+        let ctrl_ty = self.ty;
+        self.next_ent_pc = saved_text_len;
+        self.clear_recent_emits();
+        self.code_reloc_sym_idx.truncate(saved_reloc);
+        self.ast_acc = saved_ast_acc;
+        self.ast_vstack.truncate(saved_vstack);
+        self.consume(b',', "`,` expected after `_Generic` controlling expression")?;
+
+        // Scan the association list. A type match wins over `default`
+        // regardless of order (6.5.1.1p3: at most one type may match).
+        // The snapshot is taken at the `:`, before the expression's
+        // first token is lexed, so restoring and re-lexing appends its
+        // string data cleanly after the rewind below.
+        let mut winner = None;
+        let mut default_assoc = None;
+        loop {
+            if self.lex.tk == Token::Default {
+                self.next()?; // default
+                if default_assoc.is_none() {
+                    default_assoc = Some(self.lex.snapshot());
+                }
+                self.consume(b':', "`:` expected after `default`")?;
+            } else {
+                let assoc_ty = self.parse_generic_type_name()?;
+                let is_match = winner.is_none() && generic_type_match(ctrl_ty, assoc_ty);
+                if is_match {
+                    winner = Some(self.lex.snapshot());
+                }
+                self.consume(b':', "`:` expected after generic association type")?;
+            }
+            self.skip_generic_assoc_expr()?;
+            if self.lex.tk == ',' {
+                self.next()?;
+                continue;
+            }
+            break;
+        }
+        self.consume(b')', "`)` expected to close `_Generic`")?;
+        let after = self.lex.snapshot();
+
+        let Some(chosen) = winner.or(default_assoc) else {
+            return Err(self.compile_err("no `_Generic` association matches the controlling type"));
+        };
+        // Drop the data the scan appended, then position at the selected
+        // association's `:`; the following `next` re-lexes its first
+        // token, appending any string data at `data_start`.
+        self.data.truncate(data_start);
+        self.lex.restore(chosen);
+        self.next()?; // the `:` -> the expression's first token
+        Ok(after)
+    }
+
+    /// Parse `__builtin_types_compatible_p ( type-name , type-name )`
+    /// (GCC) and return 1 when the two type names are compatible (flat
+    /// tags equal after dropping top-level qualifiers), else 0. The
+    /// leading keyword has been consumed.
+    pub(super) fn parse_types_compatible_p(&mut self) -> Result<i64, C5Error> {
+        self.consume(b'(', "`(` expected after `__builtin_types_compatible_p`")?;
+        self.pending.typeof_operand_was_array = false;
+        let a = self.parse_generic_type_name()?;
+        let a_array = self.pending.typeof_operand_was_array;
+        self.consume(b',', "`,` expected between type names")?;
+        self.pending.typeof_operand_was_array = false;
+        let b = self.parse_generic_type_name()?;
+        let b_array = self.pending.typeof_operand_was_array;
+        self.consume(b')', "`)` expected after `__builtin_types_compatible_p`")?;
+        // C99 6.7.6.2: an array type and a pointer type are never
+        // compatible, even when the element / pointee coincide -- the flat
+        // type collapses both to the element pointer, so distinguish them
+        // by the array flag `typeof` recorded (this is what QEMU_IS_ARRAY
+        // and ARRAY_SIZE rely on).
+        Ok((generic_type_match(a, b) && a_array == b_array) as i64)
+    }
+
+    /// Parse a `_Generic` association type name: a base type plus any
+    /// abstract pointer decoration, matching the `typeof(type-name)`
+    /// surface. Returns the flat type tag.
+    fn parse_generic_type_name(&mut self) -> Result<i64, C5Error> {
+        let mut ty = self.parse_decl_base_type()?;
+        core::mem::take(&mut self.pending.typedef_base_array_size);
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+            ty += Ty::Ptr as i64;
+            while self.lex.tk == Token::TypeQual {
+                self.next()?;
+            }
+        }
+        Ok(ty)
+    }
+
+    /// Advance the lexer past one generic association's expression to
+    /// the terminating top-level `,` or `)`, tracking bracket depth so
+    /// commas and parens inside the expression do not end the scan.
+    fn skip_generic_assoc_expr(&mut self) -> Result<(), C5Error> {
+        let mut depth = 0i32;
+        loop {
+            let tk = self.lex.tk;
+            if depth == 0 && (tk == ',' || tk == ')') {
+                return Ok(());
+            }
+            if tk == '(' || tk == '[' || tk == '{' {
+                depth += 1;
+            } else if tk == ')' || tk == ']' || tk == '}' {
+                depth -= 1;
+            }
+            self.next()?;
+        }
+    }
+}
+
+/// C11 6.5.1.1p2 type match for a generic association: compare the flat
+/// type tags after dropping the qualifier bits. `unsigned`-ness and the
+/// pointer level / aggregate identity stay significant so
+/// `unsigned int` and `T *` select distinct associations.
+fn generic_type_match(ctrl: i64, assoc: i64) -> bool {
+    (ctrl & !super::types::VOLATILE_BIT) == (assoc & !super::types::VOLATILE_BIT)
 }
 
 /// Map an atomic-operation [`Intrinsic`](crate::c5::op::Intrinsic)

@@ -999,6 +999,7 @@ impl Compiler {
                     // frame, or parses a statement.
                     let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> =
                         alloc::vec::Vec::new();
+                    self.stmt_expr_arena_ranges.clear();
                     // C99 6.2.1: a tag declared in a function body has
                     // block scope. Push a tag scope so a struct / union /
                     // enum defined at the body top level is local to this
@@ -1043,9 +1044,17 @@ impl Compiler {
                             let item_before = self.ast_stmts_snapshot();
                             self.parse_function_body_local_decl(leading_maybe_unused)?;
                             let item_after = self.ast.stmts.len();
+                            // Skip any statement-expression sub-statements
+                            // interleaved by an initializer; they are
+                            // reached through the Decl's `Expr::StmtExpr`.
                             for id in item_before..item_after {
+                                if self.in_stmt_expr_range(id) {
+                                    continue;
+                                }
                                 top_level_ids.push(id as super::super::ast::StmtId);
                             }
+                            self.stmt_expr_arena_ranges
+                                .retain(|&(s, _)| s < item_before);
                         } else {
                             let item_before = self.ast_stmts_snapshot();
                             self.stmt()?;

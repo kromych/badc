@@ -492,7 +492,7 @@ impl Compiler {
     /// statement may. Each declaration's bindings shadow outer
     /// symbols for the duration of the block and are restored on
     /// exit.
-    fn parse_block_stmt(&mut self) -> Result<(), C5Error> {
+    fn parse_block_stmt(&mut self) -> Result<super::super::ast::StmtId, C5Error> {
         self.next()?;
         // C99 6.2.1: a block introduces a new scope for struct,
         // union, and enum tags. Tag bindings declared in this block
@@ -546,10 +546,18 @@ impl Compiler {
                 let item_after = self.ast.stmts.len();
                 // A local decl pushes one stmt-id-wrapping Decl
                 // per declarator; capture every one as a top-
-                // level item.
+                // level item. A statement-expression initializer
+                // interleaves its own sub-statements here -- skip
+                // those; they are reached through the Decl's
+                // `Expr::StmtExpr` node.
                 for id in item_before..item_after {
+                    if self.in_stmt_expr_range(id) {
+                        continue;
+                    }
                     top_level_ids.push(id as super::super::ast::StmtId);
                 }
+                self.stmt_expr_arena_ranges
+                    .retain(|&(s, _)| s < item_before);
             } else {
                 let item_before = self.ast_stmts_snapshot();
                 self.stmt()?;
@@ -591,7 +599,7 @@ impl Compiler {
         // that the walker never visits (it iterates the
         // Compound's items, which point at the canonical top-
         // level ids).
-        let _ = self.ast_wrap_block_items(&top_level_ids);
+        let block_id = self.ast_wrap_block_items(&top_level_ids);
         self.next()?;
 
         // Emit the unused-variable / unused-value diagnostics for
@@ -673,7 +681,64 @@ impl Compiler {
         // `self.structs` stays reachable by id for any reference the
         // outer scope already holds.
         self.tag_scopes.pop();
+        Ok(block_id)
+    }
+
+    /// Parse the body of a GCC statement expression `({ ... })`. On
+    /// entry the leading `(` has been consumed and the lexer is at
+    /// `{`; `parse_block_stmt` handles the C99 6.2.1 block scope.
+    /// The value type is that of the last expression-statement
+    /// (`Ty::Int` fallback for an empty or non-expression tail);
+    /// records the node as the current expression accumulator.
+    pub(super) fn parse_stmt_expr_body(&mut self) -> Result<(), C5Error> {
+        let arena_before = self.ast.stmts.len();
+        let block = self.parse_block_stmt()?;
+        let arena_after = self.ast.stmts.len();
+        // The block's statements are sub-statements of this
+        // expression, not top-level items of the enclosing block;
+        // record the range so the decl-path capture skips them.
+        self.stmt_expr_arena_ranges
+            .push((arena_before, arena_after));
+        self.consume(b')', "`)` expected to close statement expression")?;
+        let ty = self.stmt_expr_result_ty(block);
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_expr(super::super::ast::Expr::StmtExpr { block, ty }, pos);
+        self.ast_acc = Some(id);
+        self.ty = ty;
         Ok(())
+    }
+
+    /// The value type of a statement expression: the type of its
+    /// last expression-statement, or `Ty::Int` when the trailing
+    /// block-item is not an expression statement.
+    fn stmt_expr_result_ty(&self, block: super::super::ast::StmtId) -> i64 {
+        use super::super::ast::{BlockItem, Stmt};
+        let last = match self.ast.stmt(block) {
+            // A single-item block yields the bare statement (see
+            // `ast_wrap_block_items`); a multi-item block yields a
+            // `Stmt::Compound` whose last item carries the value.
+            Stmt::Compound(items) => match items.last() {
+                Some(BlockItem::Stmt(s)) => *s,
+                _ => return super::super::token::Ty::Int as i64,
+            },
+            _ => block,
+        };
+        if let Stmt::Expr(e) = self.ast.stmt(last) {
+            return self.ast.expr_value_ty(*e);
+        }
+        super::super::token::Ty::Int as i64
+    }
+
+    /// True when statement-arena entry `id` belongs to a statement
+    /// expression parsed in the current function -- i.e. it is a
+    /// sub-statement reachable through an `Expr::StmtExpr`, not a
+    /// top-level block item.
+    pub(super) fn in_stmt_expr_range(&self, id: usize) -> bool {
+        self.stmt_expr_arena_ranges
+            .iter()
+            .any(|&(s, e)| id >= s && id < e)
     }
 
     /// Parse a GCC inline-asm statement. c5 supports the operand-free
@@ -772,7 +837,14 @@ impl Compiler {
             .trim_end_matches(';')
             .trim()
             .to_ascii_lowercase();
-        if t == "pause" || t == "yield" {
+        // The spin-loop hint appears as `pause` / `yield` (x86 / arm) or
+        // the `rep; nop` byte encoding of PAUSE on x86; normalize away the
+        // whitespace and `;` so every spelling maps to the relax hint.
+        let compact: alloc::string::String = t
+            .chars()
+            .filter(|c| !c.is_whitespace() && *c != ';')
+            .collect();
+        if compact == "pause" || compact == "yield" || compact == "repnop" {
             self.mark_emit_other();
             self.ty = Ty::Int as i64;
             let pos = self.ast_src_pos();
@@ -856,6 +928,9 @@ impl Compiler {
         // Indexed by register letter: a=0, b=1, c=2, d=3.
         let mut out: [Option<super::super::ast::ExprId>; 4] = [None; 4];
         let mut inp: [Option<super::super::ast::ExprId>; 4] = [None; 4];
+        // Register slot of each output operand in declaration order, so a
+        // matching constraint (`"0"` -> output operand 0's register) resolves.
+        let mut out_order: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
         // The asm grammar is `template : outputs : inputs : clobbers`, so a
         // colon precedes each section: section 1 is outputs, 2 is inputs.
         let mut section: u8 = 0;
@@ -878,11 +953,26 @@ impl Compiler {
             // letter (`=a` -> a). The lexer appended its bytes to the data
             // segment; read the letter, then drop them.
             let cstart = self.lex.ival as usize;
-            let letter = self.data[cstart..]
-                .iter()
-                .rev()
-                .find(|b| b.is_ascii_alphabetic())
-                .copied();
+            let (letter, match_digit) = {
+                let cbytes = &self.data[cstart..];
+                let letter = cbytes
+                    .iter()
+                    .rev()
+                    .find(|b| b.is_ascii_alphabetic())
+                    .copied();
+                // A digit-only constraint (`"0"` .. `"9"`) is a matching
+                // constraint: the operand shares that output operand's
+                // register.
+                let digit = if letter.is_none() {
+                    cbytes
+                        .iter()
+                        .find(|b| b.is_ascii_digit())
+                        .map(|b| (b - b'0') as usize)
+                } else {
+                    None
+                };
+                (letter, digit)
+            };
             self.next()?; // consume the constraint string
             self.data.truncate(cstart);
             // A clobber (the fourth section on) is a bare string with no
@@ -895,11 +985,17 @@ impl Compiler {
                 Some(b'b') => 1,
                 Some(b'c') => 2,
                 Some(b'd') => 3,
-                _ => {
-                    self.data.truncate(data_base);
-                    return Err(self.compile_err("cpuid / xgetbv: unsupported asm constraint"));
-                }
+                _ => match match_digit.and_then(|d| out_order.get(d).copied()) {
+                    Some(s) => s,
+                    None => {
+                        self.data.truncate(data_base);
+                        return Err(self.compile_err("cpuid / xgetbv: unsupported asm constraint"));
+                    }
+                },
             };
+            if section == 1 {
+                out_order.push(slot);
+            }
             if self.lex.tk != '(' {
                 self.data.truncate(data_base);
                 return Err(self.compile_err("cpuid / xgetbv: `(` expected after constraint"));

@@ -371,6 +371,16 @@ pub(crate) enum Token {
     /// The lexer skips it, so it never reaches the parser. Added at the
     /// end so the operator ordinals are unchanged.
     Extension,
+    /// `_Generic` (C11 6.5.1.1): a primary expression selecting one of
+    /// several generic associations by the type of a controlling
+    /// expression. Added at the end so the operator ordinals are
+    /// unchanged.
+    Generic,
+    /// GCC `__builtin_types_compatible_p ( type-name , type-name )`: a
+    /// primary expression yielding the integer constant 1 when the two
+    /// type names are compatible (top-level qualifiers ignored), else 0.
+    /// Added at the end so the operator ordinals are unchanged.
+    BuiltinTypesCompatible,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a
@@ -464,6 +474,8 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::Double as i64 => "`double`",
         x if x == Token::FloatNum as i64 => "floating-point literal",
         x if x == Token::StaticAssert as i64 => "`static_assert` / `_Static_assert`",
+        x if x == Token::Generic as i64 => "`_Generic`",
+        x if x == Token::BuiltinTypesCompatible as i64 => "`__builtin_types_compatible_p`",
         x if x == Token::Void as i64 => "`void`",
         _ => return format!("token id {tk}"),
     };

@@ -129,6 +129,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("fts.h", include_str!("../../headers/include/fts.h")),
     ("pwd.h", include_str!("../../headers/include/pwd.h")),
     ("unistd.h", include_str!("../../headers/include/unistd.h")),
+    ("getopt.h", include_str!("../../headers/include/getopt.h")),
     ("fcntl.h", include_str!("../../headers/include/fcntl.h")),
     ("syslog.h", include_str!("../../headers/include/syslog.h")),
     (
@@ -140,6 +141,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/sys/types.h"),
     ),
     ("sys/uio.h", include_str!("../../headers/include/sys/uio.h")),
+    ("sys/shm.h", include_str!("../../headers/include/sys/shm.h")),
     ("sys/un.h", include_str!("../../headers/include/sys/un.h")),
     ("net/if.h", include_str!("../../headers/include/net/if.h")),
     (

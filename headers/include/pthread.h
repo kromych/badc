@@ -283,6 +283,9 @@ unsigned long pthread_get_stacksize_np(pthread_t thread);
 int pthread_cond_timedwait_relative_np(pthread_cond_t *cond,
                                        pthread_mutex_t *mutex,
                                        const struct timespec *reltime);
+// Apple Silicon MAP_JIT write/execute toggle for the calling thread.
+#pragma binding(libc::pthread_jit_write_protect_np, "_pthread_jit_write_protect_np")
+void pthread_jit_write_protect_np(int enabled);
 #endif
 
 #ifdef __linux__

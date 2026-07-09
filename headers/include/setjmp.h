@@ -114,3 +114,13 @@ _Noreturn void longjmp(jmp_buf env, int val);
         (val))
 #endif
 #endif
+
+// POSIX sigsetjmp / siglongjmp / sigjmp_buf. The `savemask` argument
+// selects whether the signal mask is saved and restored; callers that
+// pass 0 (the common case, e.g. an emulator's execution-loop unwind) get
+// the plain non-local jump the per-target setjmp / longjmp above already
+// provide. The buffer aliases jmp_buf, which is sized with slack; on the
+// hosts whose libc setjmp saves the mask, the pair stays self-consistent.
+typedef jmp_buf sigjmp_buf;
+#define sigsetjmp(env, savemask) setjmp(env)
+#define siglongjmp(env, val) longjmp(env, val)

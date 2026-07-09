@@ -2604,6 +2604,67 @@ fn compound_literal_paren_init_resolve() {
 }
 
 #[test]
+fn struct_value_arithmetic_is_rejected() {
+    // C99 6.5: a struct / union value is not a valid operand of an
+    // arithmetic / bitwise / shift / relational / equality / logical
+    // operator. Each must be a compile error rather than silently
+    // operating on the operand's address. A pointer to a struct is a
+    // scalar and stays valid.
+    use crate::c5::Compiler;
+    let cases = [
+        (
+            "struct P{int x,y;}; int f(struct P a,struct P b){return (int)(a+b);}",
+            "+ (lhs)",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return (int)(a+b);}",
+            "+ (rhs)",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return (int)(a*b);}",
+            "*",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return a<b;}",
+            "<",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return a==b;}",
+            "==",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return (int)(a&b);}",
+            "&",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return (int)(a<<b);}",
+            "<<",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return a&&b;}",
+            "&&",
+        ),
+    ];
+    for (src, label) in cases {
+        let err = Compiler::new(src.to_string()).compile().expect_err(label);
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("invalid operands"),
+            "struct-value arithmetic ({label}) expected an invalid-operands diagnostic, got {msg:?}"
+        );
+    }
+    // Valid uses still compile: pointer arithmetic, member arithmetic.
+    for ok in [
+        "struct P{int x;}; struct P a[4]; int main(void){struct P*p=a; return (p+2)-a;}",
+        "struct P{int x,y;}; int main(void){struct P a={2,3}; return a.x*a.y-6;}",
+    ] {
+        Compiler::new(ok.to_string())
+            .compile()
+            .expect("valid struct pointer / member arithmetic must compile");
+    }
+}
+
+#[test]
 fn atomic_ops_require_stdatomic_header() {
     // The C11 7.17 atomic operations are recognized only when declared
     // via `#pragma intrinsic` (which `<stdatomic.h>` does); a call with

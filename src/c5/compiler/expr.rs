@@ -499,6 +499,21 @@ impl Compiler {
         Ok(())
     }
 
+    /// C99 6.5.5-6.5.14: the arithmetic, bitwise, shift, relational,
+    /// equality, and logical operators require scalar operands. Reject a
+    /// struct / union *value* operand (a pointer to one is a scalar and
+    /// is fine) so `struct + struct` and 128-bit `__int128` arithmetic
+    /// surface an error instead of silently operating on the operand's
+    /// address. Called by each value-computing binary branch after both
+    /// operand types are known.
+    fn reject_aggregate_binop(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Result<(), C5Error> {
+        let is_aggregate_value = |ty: i64| is_struct_ty(ty) && struct_ptr_depth(ty) == 0;
+        if is_aggregate_value(lhs_ty) || is_aggregate_value(rhs_ty) {
+            return Err(self.compile_err(format!("invalid operands to binary `{op}`")));
+        }
+        Ok(())
+    }
+
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
         self.with_nesting("expression", |c| c.expr_inner(lev))
     }
@@ -2287,6 +2302,20 @@ impl Compiler {
             // leak into a sizeof of an unrelated subexpression.
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
+            // C99 6.5: a struct / union value is not a valid operand of an
+            // arithmetic / bitwise / shift / relational / equality / logical
+            // operator (the contiguous token range `Lor..=ModOp`). Reject the
+            // LHS here; each value-computing branch checks its RHS below. A
+            // pointer to a struct is a scalar and is allowed through.
+            if is_struct_ty(t)
+                && struct_ptr_depth(t) == 0
+                && self.lex.tk >= Token::Lor as i64
+                && self.lex.tk <= Token::ModOp as i64
+            {
+                return Err(
+                    self.compile_err("invalid operands to binary operator (aggregate type)")
+                );
+            }
             if self.lex.tk == '(' {
                 // Snapshot the callee AST + vstack depth before
                 // any of the call's per-arg emit sites perturb
@@ -2855,6 +2884,7 @@ impl Compiler {
                 self.next()?;
                 self.flush_pending_stores();
                 self.expr(Token::Lan as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "||")?;
                 let rhs_ast = self.ast_acc;
                 self.ty = Ty::Int as i64;
                 if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
@@ -2870,6 +2900,7 @@ impl Compiler {
                 self.next()?;
                 self.flush_pending_stores();
                 self.expr(Token::OrOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "&&")?;
                 let rhs_ast = self.ast_acc;
                 self.ty = Ty::Int as i64;
                 if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
@@ -2893,6 +2924,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::XorOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "|")?;
                 // Set the result type before building the AST binop node
                 // so its `ty` is the C99 6.5.12 common type, not the
                 // rhs's pre-conversion tag. The walker reads this node
@@ -2907,6 +2939,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AndOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "^")?;
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
                 self.ast_binop(crate::c5::ir::BinOp::Xor);
             } else if self.lex.tk == Token::AndOp {
@@ -2915,6 +2948,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::EqOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "&")?;
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
                 self.ast_binop(crate::c5::ir::BinOp::And);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
@@ -2931,6 +2965,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::LtOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, name)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
                     self.ast_binop(fp_op);
@@ -2945,6 +2980,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::ShlOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, name)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
                     self.ast_binop(fp_op);
@@ -2958,6 +2994,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "<<")?;
                 // C99 6.5.7: `E1 << E2` has the type of `E1` after
                 // integer promotion, not `E2` (the shift count).
                 // `char` / `short` (signed or unsigned, size 1 or 2)
@@ -2983,6 +3020,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, ">>")?;
                 // Pick logical (Shru) for unsigned LHS, arithmetic (Shr)
                 // otherwise; the RHS is the shift count and does not
                 // participate. C99 6.5.7p3: the result has the promoted
@@ -3006,6 +3044,7 @@ impl Compiler {
                 let mut carry_stride: i64 = 0;
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "+")?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "+")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fadd);
@@ -3134,6 +3173,7 @@ impl Compiler {
                 let mut carry_stride: i64 = 0;
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "-")?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "-")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fsub);
@@ -3182,6 +3222,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::Inc as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "*")?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "*")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fmul);
@@ -3202,6 +3243,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::Inc as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "/")?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "/")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fdiv);
@@ -3266,6 +3308,7 @@ impl Compiler {
                 }
                 self.ast_psh();
                 self.expr(Token::Inc as i64)?;
+                self.reject_aggregate_binop(t, self.ty, "%")?;
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }

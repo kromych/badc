@@ -183,8 +183,16 @@ def run_golden_suite(nasm: Path) -> tuple[int, list[str]]:
     if home:
         env["PYTHONHOME"] = home
         env["PYTHONPATH"] = str(Path(home) / "Lib")
+    # nasm-t.py shells out to `hexdump -C` to render a byte diff on a failing
+    # test. Windows has no hexdump; point the harness at a portable shim so it
+    # completes and reports (the shim is display-only, not part of the verdict).
+    hexdump = "hexdump"
+    if IS_WIN:
+        wrapper = SRC / "travis" / "hexdump.cmd"
+        wrapper.write_text(f'@"{sys.executable}" "{NASM_DEMO / "hexdump.py"}" %*\r\n')
+        hexdump = str(wrapper)
     r = subprocess.run(
-        [runner, "travis/nasm-t.py", "--nasm", str(nasm),
+        [runner, "travis/nasm-t.py", "--nasm", str(nasm), "--hexdump", hexdump,
          "-d", "./travis/test", "run"],
         cwd=SRC, env=env, capture_output=True, text=True)
     out = r.stdout + r.stderr

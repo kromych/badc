@@ -68,10 +68,12 @@ MAIN = "asm/nasm.c"
 INC_DIRS = [".", "include", "config", "x86", "asm", "disasm", "output"]
 
 # `_version` embeds the assembler's compile date in its output, which a fresh
-# build here does not match the golden of; it is not a codegen signal. Every
-# other golden case is deterministic once nasm is invoked with the base-dir
-# prefix the goldens were recorded with (`./travis/test/...`).
-SKIP_TESTS = {"_version"}
+# build here does not match the golden of. `_file_` emits `__FILE__` -- the
+# source path as passed to nasm -- so its golden bytes carry the recording
+# host's path separator and do not match on Windows (`\` vs `/`). Neither is a
+# codegen signal. Every other golden case is deterministic once nasm is invoked
+# with the base-dir prefix the goldens were recorded with (`./travis/test/...`).
+SKIP_TESTS = {"_version", "_file_"}
 
 IS_WIN = sys.platform == "win32"
 EXE = ".exe" if IS_WIN else ""
@@ -166,9 +168,21 @@ def build_nasm(badc: Path, target: str, optimize: bool, workdir: Path) -> Path:
     return binp
 
 
-def run_golden_suite(nasm: Path) -> tuple[int, list[str]]:
+def build_hexdump(badc: Path, workdir: Path) -> str:
+    """Build the `hexdump -C` shim with badc. nasm-t.py `Popen`s the hexdump to
+    render byte diffs on a failing test; native Windows ships no hexdump, and a
+    batch wrapper is not directly `Popen`-able, so compile a real executable."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    exe = workdir / ("hexdump" + EXE)
+    subprocess.run([str(badc), str(NASM_DEMO / "hexdump.c"), "-o", str(exe)],
+                   check=True, capture_output=True)
+    return str(exe)
+
+
+def run_golden_suite(nasm: Path, hexdump: str) -> tuple[int, list[str]]:
     """Run NASM's golden suite against `nasm`. The `./travis/test` base-dir
-    matches the source-path prefix the goldens were recorded with. Returns
+    matches the source-path prefix the goldens were recorded with. `hexdump` is
+    the `hexdump -C` program nasm-t.py uses to render diffs. Returns
     (pass count, failures outside SKIP_TESTS).
 
     `$NASM_TEST_PYTHON` selects the interpreter that runs the suite harness;
@@ -183,21 +197,14 @@ def run_golden_suite(nasm: Path) -> tuple[int, list[str]]:
     if home:
         env["PYTHONHOME"] = home
         env["PYTHONPATH"] = str(Path(home) / "Lib")
-    # nasm-t.py shells out to `hexdump -C` to render a byte diff on a failing
-    # test. Windows has no hexdump; point the harness at a portable shim so it
-    # completes and reports (the shim is display-only, not part of the verdict).
-    hexdump = "hexdump"
-    if IS_WIN:
-        wrapper = SRC / "travis" / "hexdump.cmd"
-        wrapper.write_text(f'@"{sys.executable}" "{NASM_DEMO / "hexdump.py"}" %*\r\n')
-        hexdump = str(wrapper)
     r = subprocess.run(
         [runner, "travis/nasm-t.py", "--nasm", str(nasm), "--hexdump", hexdump,
          "-d", "./travis/test", "run"],
         cwd=SRC, env=env, capture_output=True, text=True)
     out = r.stdout + r.stderr
     passes = len(re.findall(r"=== Test \S+ PASS ===", out))
-    failed = re.findall(r"=== Test \./travis/test/(\S+) (?:FAIL|ABORT) ===", out)
+    # nasm-t.py prints the test path with the host separator (`\` on Windows).
+    failed = re.findall(r"=== Test \./travis[\\/]test[\\/](\S+) (?:FAIL|ABORT) ===", out)
     unexpected = sorted(f for f in set(failed) if f not in SKIP_TESTS)
     if passes == 0 and not failed:
         fail(f"golden suite produced no results:\n{out[-800:]}")
@@ -212,6 +219,7 @@ def main() -> int:
     ensure_config(target)
     with tempfile.TemporaryDirectory(prefix="nasm-smoke-") as d:
         work = Path(d)
+        hexdump = build_hexdump(badc, work / "hexdump")
         for optimize in (False, True):
             lane = "-O" if optimize else "-O0"
             log(f"building nasm with badc [{lane}]")
@@ -220,7 +228,7 @@ def main() -> int:
             if "NASM version" not in ver.stdout:
                 fail(f"badc-built nasm [{lane}] does not report a version")
             log(f"running NASM's golden test suite [{lane}]")
-            passes, unexpected = run_golden_suite(nasm)
+            passes, unexpected = run_golden_suite(nasm, hexdump)
             if unexpected:
                 fail(f"golden suite [{lane}]: {len(unexpected)} unexpected "
                      f"failure(s): {unexpected[:20]}")

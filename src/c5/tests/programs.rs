@@ -59,6 +59,14 @@ fn anon_struct_designated_init() {
 }
 
 #[test]
+fn wide_string_struct_member() {
+    // C99 6.7.8p15: a wide string literal initializes a wchar_t-width array
+    // member; constant (file-scope + local) and runtime store paths, with
+    // tail zero-fill and exact-fit NUL drop.
+    assert_eq!(run_fixture("wide_string_struct_member.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

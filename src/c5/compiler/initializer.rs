@@ -2204,6 +2204,36 @@ impl Compiler {
                 }
                 self.next()?;
             }
+        } else if field.array_size > 0
+            && field.inner_array_size == 0
+            && self.lex.tk == '"'
+            && self.lex.str_is_wide
+        {
+            // `struct S { wchar_t w[N]; } = { L"..." }`: store each wide
+            // code point at its element stride, NUL-padding the tail.
+            // Mirrors the bare wide-array path; a narrow-width element
+            // cannot hold a wide code point (C99 6.7.8p15). Without this
+            // branch the leaf falls to the single-value path and stores
+            // the string's pointer.
+            let w = self.lex.wchar_bytes;
+            if self.size_of_type(field.ty) != w {
+                return Err(self
+                    .compile_err("wide string initializer requires a wchar_t-width array member"));
+            }
+            let start_addr = self.take_concat_string_literal()?;
+            for _ in 0..w {
+                self.data.push(0); // terminator slot
+            }
+            for idx in 0..field.array_size as usize {
+                let base = start_addr + idx * w;
+                let mut v: i64 = 0;
+                if base + w <= self.data.len() {
+                    for b in 0..w {
+                        v |= (self.data[base + b] as i64) << (b * 8);
+                    }
+                }
+                self.write_init_value(field_base + idx * w, w, v, InitElemReloc::None, field.ty);
+            }
         } else if field.array_size > 0 && self.lex.tk == '{' {
             self.next()?;
             let elem_size = self.size_of_type(field.ty);
@@ -2415,6 +2445,38 @@ impl Compiler {
                             offset: field_base + k as i64,
                             value,
                             ty: Ty::Char as i64,
+                        },
+                    );
+                }
+                return Ok(false);
+            }
+            // Wide string into a wchar_t-width member (C99 6.7.8p15): a
+            // per-element constant store at the element's stride.
+            if self.lex.tk == '"' && self.lex.str_is_wide && field.inner_array_size == 0 {
+                let w = self.lex.wchar_bytes;
+                if self.size_of_type(field.ty) != w {
+                    return Err(self.compile_err(
+                        "wide string initializer requires a wchar_t-width array member",
+                    ));
+                }
+                let start_addr = self.take_concat_string_literal()?;
+                for _ in 0..w {
+                    self.data.push(0); // terminator slot
+                }
+                for k in 0..field.array_size as usize {
+                    let base = start_addr + k * w;
+                    let mut v: i64 = 0;
+                    if base + w <= self.data.len() {
+                        for b in 0..w {
+                            v |= (self.data[base + b] as i64) << (b * 8);
+                        }
+                    }
+                    let value = self.ast_emit_int_lit(v, field.ty);
+                    self.pending_local_runtime_elements.push(
+                        super::super::ast::RuntimeInitElement {
+                            offset: field_base + (k * w) as i64,
+                            value,
+                            ty: field.ty,
                         },
                     );
                 }

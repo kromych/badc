@@ -743,6 +743,15 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // expansions in the codegen replace the missing CRT
     // surface.
     ("setjmp_longjmp_roundtrip.c", 0),
+    // POSIX sigsetjmp / siglongjmp (savemask 0) mapped onto the same
+    // per-target setjmp / longjmp machinery.
+    ("sigsetjmp_roundtrip.c", 0),
+    // QEMU's struct-based Int128 fallback: 16-byte struct-by-value
+    // returns / params and carry arithmetic across the two halves.
+    ("int128_struct_fallback.c", 0),
+    // C11 6.7.2.1: a designated initializer for a named aggregate member
+    // inside an anonymous union/struct fills the member's own type.
+    ("anon_member_designated_init.c", 0),
     // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
     // their post-longjmp value, are re-read through aliases, and
     // unused volatile reads still execute.

@@ -27,6 +27,113 @@ fn compound_literal_block() {
 }
 
 #[test]
+fn anon_member_designated_init() {
+    // C11 6.7.2.1: `.member = { ... }` designating a named aggregate member
+    // inside an anonymous union/struct initializes that member's own type,
+    // distinct from a positional brace selecting a group member.
+    assert_eq!(run_fixture("anon_member_designated_init.c"), 0);
+}
+
+#[test]
+fn stmt_expr() {
+    // GCC statement expressions `({ ... })`: value from the last
+    // expression-statement, single-evaluation side effects, own block
+    // scope, comma declarators, and nesting.
+    assert_eq!(run_fixture("stmt_expr.c"), 0);
+}
+
+#[test]
+fn generic_selection() {
+    // C11 6.5.1.1 `_Generic`: type dispatch, `default`, the
+    // unevaluated-non-selected rule, pointer-to-struct dispatch, and use
+    // in integer and address static initializers.
+    assert_eq!(run_fixture("generic_selection.c"), 0);
+}
+
+#[test]
+fn builtin_types_compatible() {
+    // GCC `__builtin_types_compatible_p`: constant and runtime contexts,
+    // qualifier/signedness rules, and composition with `typeof` as in
+    // QEMU's `typeof_strip_qual`.
+    assert_eq!(run_fixture("builtin_types_compatible.c"), 0);
+}
+
+#[test]
+fn has_builtin_clrsb() {
+    // `__has_builtin(NAME)` preprocessor operator routes supported vs
+    // unsupported builtins, and `__builtin_clrsb` / `__builtin_clrsbll`
+    // count leading redundant sign bits.
+    assert_eq!(run_fixture("has_builtin_clrsb.c"), 0);
+}
+
+#[test]
+fn builtin_overflow() {
+    // GCC `__builtin_{add,sub,mul}_overflow`: signed / unsigned at 32 and
+    // 64 bits, wrapped result and overflow flag, at the boundaries QEMU's
+    // host-utils.h relies on.
+    assert_eq!(run_fixture("builtin_overflow.c"), 0);
+}
+
+#[test]
+fn builtin_parity() {
+    // GCC `__builtin_parity` / `__builtin_parityll`: odd-set-bit predicate
+    // (`popcount(x) & 1`), constant and runtime, used by QEMU's bitops.h.
+    assert_eq!(run_fixture("builtin_parity.c"), 0);
+}
+
+#[test]
+fn has_attribute() {
+    // `__has_attribute` operator: recognized-attribute predicate, the
+    // `#ifdef` guard, `__`-wrapped names, and resolution through a macro
+    // alias (glib's `g_macro__has_attribute`).
+    assert_eq!(run_fixture("has_attribute.c"), 0);
+}
+
+#[test]
+fn typeof_array_compatible() {
+    // C99 6.7.6.2: `typeof(arr)` and `typeof(&arr[0])` are an array and a
+    // pointer, never compatible. Drives QEMU's QEMU_IS_ARRAY / ARRAY_SIZE.
+    assert_eq!(run_fixture("typeof_array_compatible.c"), 0);
+}
+
+#[test]
+fn typeof_expression() {
+    // `typeof(expr)` over a full expression: binary, shift, conditional
+    // (QEMU's MIN/MAX `typeof(1 ? (a) : (b))`), and comma operators.
+    assert_eq!(run_fixture("typeof_expression.c"), 0);
+}
+
+#[test]
+fn atomic_generic() {
+    // GCC generic `__atomic_load(p, ret, mo)` / `__atomic_store(p, val, mo)`
+    // move the value through a pointer; 32/64-bit and pointer widths.
+    assert_eq!(run_fixture("atomic_generic.c"), 0);
+}
+
+#[test]
+fn cpu_relax_hint() {
+    // The CPU spin-loop hint spelled `rep; nop` (x86 PAUSE), `pause`, and
+    // `yield` (arm) all normalize to the relax hint.
+    assert_eq!(run_fixture("cpu_relax_hint.c"), 0);
+}
+
+#[test]
+fn empty_struct_member() {
+    // A complete empty `struct {}` member contributes zero storage (GCC),
+    // so the `__DECLARE_FLEX_ARRAY` idiom lays a flexible array over a
+    // union's first member. Forward-declared members stay rejected.
+    assert_eq!(run_fixture("empty_struct_member.c"), 0);
+}
+
+#[test]
+fn int128_struct_fallback() {
+    // QEMU's struct-based 128-bit integer (used when the compiler lacks
+    // __int128): 16-byte struct-by-value returns / params, designated
+    // compound literals, and carry / borrow arithmetic across the halves.
+    assert_eq!(run_fixture("int128_struct_fallback.c"), 0);
+}
+
+#[test]
 fn cast_fn_ptr_call() {
     // C99 6.5.4 cast to an abstract function-pointer type.
     assert_eq!(run_fixture("cast_fn_ptr_call.c"), 0);

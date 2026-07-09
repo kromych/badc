@@ -1753,6 +1753,39 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
 }
 
 #[test]
+fn cpuid_matching_constraint_x86_64() {
+    // QEMU's `host_cpuid` ties the eax input to output operand 0 with the
+    // matching constraint `"0"(function)` rather than `"a"(function)`.
+    // The digit constraint resolves to that output's register (eax) and
+    // lowers to the same `cpuid` (0F A2) intrinsic.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(
+        "void host_cpuid(unsigned function, unsigned count,\n\
+         unsigned *eax, unsigned *ebx, unsigned *ecx, unsigned *edx) {\n\
+         unsigned vec[4];\n\
+         __asm__ __volatile__(\"cpuid\"\n\
+         : \"=a\"(vec[0]),\"=b\"(vec[1]),\"=c\"(vec[2]),\"=d\"(vec[3])\n\
+         : \"0\"(function),\"c\"(count) : \"cc\");\n\
+         if (eax) *eax = vec[0]; if (ebx) *ebx = vec[1];\n\
+         if (ecx) *ecx = vec[2]; if (edx) *edx = vec[3];\n\
+         }\n\
+         int main(void){ unsigned a,b,c,d; host_cpuid(0,0,&a,&b,&c,&d); return (int)a; }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(2).any(|w| w == [0x0F, 0xA2]),
+        "cpuid opcode (0F A2) must be emitted for the `\"0\"` matching constraint"
+    );
+}
+
+#[test]
 fn same_named_statics_keep_their_own_prologue_anchor() {
     // The post-prologue anchor map is keyed by the function's merged
     // entry offset. Name-keying handed a later unit's same-named

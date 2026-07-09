@@ -73,6 +73,55 @@ pub(super) enum InitElemReloc {
     Float64Bits,
 }
 
+/// Where an initializer engine writes its leaves. The aggregate
+/// walk (field / element traversal, designators, brace elision,
+/// anonymous-group descent) is identical for both; only the leaf
+/// store and value parse differ, so the walk is written once and
+/// parameterized by this target.
+///
+/// `base` is the aggregate's own start: an absolute `self.data`
+/// index for `Data`, a byte offset relative to `local_val` for
+/// `Runtime`. A leaf at `base + field.offset` is therefore a data
+/// index or a local-relative offset respectively.
+#[derive(Clone, Copy)]
+pub(super) enum InitTarget {
+    /// Stage constant bytes into `self.data` (file-scope, `static`,
+    /// and the constant-local fast path that later `Mcpy`s the blob).
+    Data { base: usize },
+    /// Emit runtime store elements at `local_val + offset` for a
+    /// stack local whose initializer is not all compile-time constant.
+    Runtime { local_val: i64, base: i64 },
+}
+
+impl InitTarget {
+    /// The aggregate's start offset (data index for `Data`,
+    /// local-relative for `Runtime`).
+    fn base(self) -> i64 {
+        match self {
+            InitTarget::Data { base } => base as i64,
+            InitTarget::Runtime { base, .. } => base,
+        }
+    }
+
+    /// Same kind, re-based to `new_base` for descent into a member /
+    /// element sub-object at that offset.
+    fn rebased(self, new_base: i64) -> InitTarget {
+        match self {
+            InitTarget::Data { .. } => InitTarget::Data {
+                base: new_base as usize,
+            },
+            InitTarget::Runtime { local_val, .. } => InitTarget::Runtime {
+                local_val,
+                base: new_base,
+            },
+        }
+    }
+
+    fn is_runtime(self) -> bool {
+        matches!(self, InitTarget::Runtime { .. })
+    }
+}
+
 impl Compiler {
     /// Push the relocation entry that an initializer element needs
     /// at byte offset `here` within `self.data`.
@@ -1518,21 +1567,54 @@ impl Compiler {
         struct_id: usize,
         var_offset: i64,
     ) -> Result<(), C5Error> {
+        self.collect_struct_initializer_t(
+            struct_id,
+            InitTarget::Data {
+                base: var_offset as usize,
+            },
+        )
+    }
+
+    pub(super) fn collect_struct_initializer_t(
+        &mut self,
+        struct_id: usize,
+        target: InitTarget,
+    ) -> Result<(), C5Error> {
         self.with_nesting("initializer", |c| {
-            c.collect_struct_initializer_inner(struct_id, var_offset)
+            c.collect_struct_initializer_inner_t(struct_id, target)
         })
     }
 
-    fn collect_struct_initializer_inner(
+    /// Runtime struct initialization at `local_val + base`. With
+    /// `braced` true an explicit `{ ... }` is consumed; with `braced`
+    /// false the struct's fields are filled from a brace-elided flat
+    /// list (C99 6.7.8p20). The single entry point for a local struct
+    /// / struct-array element whose initializer isn't all constant.
+    pub(super) fn emit_struct_runtime_at(
+        &mut self,
+        local_val: i64,
+        base: i64,
+        sid: usize,
+        braced: bool,
+    ) -> Result<(), C5Error> {
+        let target = InitTarget::Runtime { local_val, base };
+        if braced {
+            self.collect_struct_initializer_t(sid, target)
+        } else {
+            self.fill_struct_fields_t(sid, target, false)
+        }
+    }
+
+    fn collect_struct_initializer_inner_t(
         &mut self,
         struct_id: usize,
-        var_offset: i64,
+        target: InitTarget,
     ) -> Result<(), C5Error> {
         if self.lex.tk != '{' {
             return Err(self.compile_err("struct initializer must start with `{{`"));
         }
         self.next()?;
-        self.fill_struct_fields(struct_id, var_offset, true)?;
+        self.fill_struct_fields_t(struct_id, target, true)?;
         self.next()?; // consume `}`
         Ok(())
     }
@@ -1705,6 +1787,22 @@ impl Compiler {
         var_offset: i64,
         braced: bool,
     ) -> Result<(), C5Error> {
+        self.fill_struct_fields_t(
+            struct_id,
+            InitTarget::Data {
+                base: var_offset as usize,
+            },
+            braced,
+        )
+    }
+
+    pub(super) fn fill_struct_fields_t(
+        &mut self,
+        struct_id: usize,
+        target: InitTarget,
+        braced: bool,
+    ) -> Result<(), C5Error> {
+        let var_offset = target.base();
         let mut pos: usize = 0;
         while self.lex.tk != '}' && (braced || pos < self.structs[struct_id].fields.len()) {
             // Designator?
@@ -1746,7 +1844,13 @@ impl Compiler {
                     self.next()?;
                     self.skip_opt_compound_literal_cast()?;
                     let chain_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-                    self.fill_member_value(struct_id, &final_field, final_offset as usize)?;
+                    self.fill_member_value_t(
+                        struct_id,
+                        &final_field,
+                        target,
+                        final_offset as usize,
+                        false,
+                    )?;
                     for _ in 0..chain_parens {
                         self.accept(')')?;
                     }
@@ -1803,11 +1907,12 @@ impl Compiler {
                     let mem = self.structs[struct_id].fields[mem_pos].clone();
                     let mem_base = (var_offset as usize) + mem.offset;
                     if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
-                        self.collect_struct_initializer(struct_id_of(mem.ty), mem_base as i64)?;
+                        self.collect_struct_initializer_t(
+                            struct_id_of(mem.ty),
+                            target.rebased(mem_base as i64),
+                        )?;
                     } else {
-                        let (value, reloc) = self.parse_constant_init_value()?;
-                        let size = self.size_of_type(mem.ty);
-                        self.write_init_value(mem_base, size, value, reloc, mem.ty);
+                        self.init_leaf_scalar(target, mem_base as i64, mem.ty)?;
                     }
                     mem_pos += 1;
                     self.accept(',')?;
@@ -1862,11 +1967,12 @@ impl Compiler {
                     let mem = self.structs[struct_id].fields[mem_idx].clone();
                     let mem_base = (var_offset as usize) + mem.offset;
                     if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
-                        self.collect_struct_initializer(struct_id_of(mem.ty), mem_base as i64)?;
+                        self.collect_struct_initializer_t(
+                            struct_id_of(mem.ty),
+                            target.rebased(mem_base as i64),
+                        )?;
                     } else {
-                        let (value, reloc) = self.parse_constant_init_value()?;
-                        let size = self.size_of_type(mem.ty);
-                        self.write_init_value(mem_base, size, value, reloc, mem.ty);
+                        self.init_leaf_scalar(target, mem_base as i64, mem.ty)?;
                     }
                     self.accept(',')?;
                 }
@@ -1894,17 +2000,29 @@ impl Compiler {
             // struct size reserved by the caller, so grow `self.data` as
             // each element is written.
             if field.array_size < 0 {
+                if target.is_runtime() {
+                    return Err(self.compile_err(
+                        "non-constant flexible array member initializer not yet supported",
+                    ));
+                }
                 self.fill_flexible_array_member(field_base, field.ty)?;
                 pos = field_idx + 1;
                 self.accept(',')?;
                 continue;
             }
-            self.fill_member_value(struct_id, &field, field_base)?;
+            // A brace-elided first field may take a whole struct value
+            // by copy (Runtime only); when it does, the object is filled.
+            let first_elided = !braced && field_idx == 0 && field.offset == 0;
+            let whole_object_done =
+                self.fill_member_value_t(struct_id, &field, target, field_base, first_elided)?;
             // Consume the grouping `)` that wrapped a parenthesized
             // compound literal element (`((T){...})`), counted while the
             // cast was stripped above.
             for _ in 0..close_parens {
                 self.accept(')')?;
+            }
+            if whole_object_done {
+                return Ok(());
             }
             // A positional initializer fills the first member of an
             // anonymous union (C99 6.7.8); the remaining members share
@@ -1943,12 +2061,28 @@ impl Compiler {
     /// nested-designator path, so `.outer.inner = value` takes the
     /// same shapes as a directly named member. `struct_id` is the
     /// containing aggregate (error text only).
-    fn fill_member_value(
+    /// Initialize one member. Returns `true` when a whole-object copy
+    /// (a brace-elided struct value filling the first field) consumed
+    /// the entire enclosing object, so the field walk must stop.
+    /// `first_elided` marks the position where such a copy is legal
+    /// (`!braced && field_idx == 0`); it only matters for `Runtime`.
+    fn fill_member_value_t(
         &mut self,
         struct_id: usize,
         field: &super::StructField,
+        target: InitTarget,
         field_base: usize,
-    ) -> Result<(), C5Error> {
+        first_elided: bool,
+    ) -> Result<bool, C5Error> {
+        if let InitTarget::Runtime { local_val, .. } = target {
+            return self.fill_member_value_runtime(
+                struct_id,
+                field,
+                local_val,
+                field_base as i64,
+                first_elided,
+            );
+        }
         let mut char_array_brace_string = false;
         if field.array_size > 0
             && field.inner_array_size == 0
@@ -2209,7 +2343,165 @@ impl Compiler {
                 self.next()?; // consume `}`
             }
         }
-        Ok(())
+        Ok(false)
+    }
+
+    /// Runtime leaf for one struct member: evaluates the initializer
+    /// as an assignment-expression and records the store element(s).
+    /// Handles a narrow-string char-array member, a braced nested
+    /// aggregate (via the shared traversal), a whole-object struct
+    /// copy at a brace-elided first field (returns `true`), and the
+    /// scalar / pointer leaf. Wide strings, non-char arrays, flexible
+    /// array members, and bitfields aren't modeled yet.
+    fn fill_member_value_runtime(
+        &mut self,
+        struct_id: usize,
+        field: &super::StructField,
+        local_val: i64,
+        field_base: i64,
+        first_elided: bool,
+    ) -> Result<bool, C5Error> {
+        if field.bit_width > 0 {
+            return Err(self.compile_err("non-constant bitfield initializer not yet supported"));
+        }
+        if field.array_size > 0 {
+            // C99 6.7.8p14 char array from a narrow string literal:
+            // emit a per-byte constant store, remainder zero-filled.
+            if self.lex.tk == '"'
+                && !self.lex.str_is_wide
+                && (field.ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
+            {
+                let start_addr = self.take_concat_string_literal()?;
+                self.data.push(0); // ensure NUL terminator
+                let max = field.array_size as usize;
+                for k in 0..max {
+                    let b = if start_addr + k < self.data.len() {
+                        self.data[start_addr + k] as i64
+                    } else {
+                        0
+                    };
+                    let value = self.ast_emit_int_lit(b, Ty::Char as i64);
+                    self.pending_local_runtime_elements.push(
+                        super::super::ast::RuntimeInitElement {
+                            offset: field_base + k as i64,
+                            value,
+                            ty: Ty::Char as i64,
+                        },
+                    );
+                }
+                return Ok(false);
+            }
+            return Err(self.compile_err("non-constant array-field initializer not yet supported"));
+        }
+        // A nested aggregate member initialized by a brace list (or a
+        // compound literal naming its type) recurses through the shared
+        // traversal at the member's offset (C99 6.7.8p13).
+        if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 && self.lex.tk == '{' {
+            self.collect_struct_initializer_t(
+                struct_id_of(field.ty),
+                InitTarget::Runtime {
+                    local_val,
+                    base: field_base,
+                },
+            )?;
+            return Ok(false);
+        }
+        // Scalar / pointer leaf, or a whole-object struct copy.
+        self.emit_lea(local_val);
+        if field_base > 0 {
+            self.ast_psh();
+            self.emit_imm(field_base);
+            self.ast_binop(crate::c5::ir::BinOp::Add);
+        }
+        self.ast_psh();
+        self.expr(Token::Assign as i64)?;
+        // C99 6.7.9p13: a brace-elided first field taking an expression
+        // of the enclosing struct's own type is a whole-object copy, not
+        // elision into the first scalar field. Copy the bytes and stop.
+        if first_elided
+            && is_struct_ty(self.ty)
+            && struct_ptr_depth(self.ty) == 0
+            && struct_id_of(self.ty) == struct_id
+        {
+            let value = self.ast_acc;
+            let elem_ty = self.ty;
+            self.ast_assign();
+            if let Some(value) = value {
+                self.pending_local_runtime_elements
+                    .push(super::super::ast::RuntimeInitElement {
+                        offset: field_base,
+                        value,
+                        ty: elem_ty,
+                    });
+            }
+            return Ok(true);
+        }
+        // C99 6.7.8p13: a struct member may be initialized by a single
+        // compatible struct expression (copied); a scalar value would be
+        // brace elision into its sub-fields, which this path can't model.
+        if is_struct_ty(field.ty)
+            && struct_ptr_depth(field.ty) == 0
+            && !(is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0)
+        {
+            return Err(self
+                .compile_err("brace elision into a non-constant struct member is not supported"));
+        }
+        self.convert_assign_rhs(field.ty);
+        let field_ast = self.ast_acc;
+        self.ast_assign();
+        if let Some(value) = field_ast {
+            self.pending_local_runtime_elements
+                .push(super::super::ast::RuntimeInitElement {
+                    offset: field_base,
+                    value,
+                    ty: field.ty,
+                });
+        }
+        Ok(false)
+    }
+
+    /// Initialize one scalar / pointer leaf of type `ty` at target
+    /// offset `at` (an absolute `self.data` index for `Data`, a byte
+    /// offset relative to `local_val` for `Runtime`) from the current
+    /// initializer position. The `Data` arm folds a constant leaf and
+    /// stages its bytes; the `Runtime` arm evaluates the leaf as an
+    /// assignment-expression and records a runtime store element.
+    fn init_leaf_scalar(&mut self, target: InitTarget, at: i64, ty: i64) -> Result<(), C5Error> {
+        match target {
+            InitTarget::Data { .. } => {
+                let (value, reloc) = self.parse_constant_init_value()?;
+                let size = self.size_of_type(ty);
+                self.write_init_value(at as usize, size, value, reloc, ty);
+                Ok(())
+            }
+            InitTarget::Runtime { local_val, .. } => {
+                self.emit_lea(local_val);
+                if at > 0 {
+                    self.ast_psh();
+                    self.emit_imm(at);
+                    self.ast_binop(crate::c5::ir::BinOp::Add);
+                }
+                self.ast_psh();
+                // Assignment precedence: a `,` between entries is the
+                // list delimiter, not a comma operator.
+                self.expr(Token::Assign as i64)?;
+                // C99 6.7.9p11: convert as in assignment (integer leaf
+                // of a floating member rounds through IEEE-754).
+                self.convert_assign_rhs(ty);
+                let v = self.ast_acc;
+                self.ast_assign();
+                if let Some(value) = v {
+                    self.pending_local_runtime_elements.push(
+                        super::super::ast::RuntimeInitElement {
+                            offset: at,
+                            value,
+                            ty,
+                        },
+                    );
+                }
+                Ok(())
+            }
+        }
     }
 
     /// Write `field_size` little-endian bytes of an initializer

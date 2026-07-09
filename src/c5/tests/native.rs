@@ -752,6 +752,9 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // C11 6.7.2.1: a designated initializer for a named aggregate member
     // inside an anonymous union/struct fills the member's own type.
     ("anon_member_designated_init.c", 0),
+    // The runtime (non-constant) initializer path shares the constant
+    // path's anonymous-struct / union / nested-aggregate handling.
+    ("runtime_anon_struct_init.c", 0),
     // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
     // their post-longjmp value, are re-read through aliases, and
     // unused volatile reads still execute.

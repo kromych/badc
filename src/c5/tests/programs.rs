@@ -35,6 +35,14 @@ fn anon_member_designated_init() {
 }
 
 #[test]
+fn runtime_anon_struct_init() {
+    // The unified initializer engine gives the runtime (non-constant) store
+    // path the same anonymous-struct / anonymous-union / nested-aggregate
+    // handling the constant-staging path has.
+    assert_eq!(run_fixture("runtime_anon_struct_init.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

@@ -261,6 +261,11 @@ pub enum Intrinsic {
     Atomic128Store = 66,
     Atomic128LoadEx = 67,
     Atomic128StoreEx = 68,
+    /// `__builtin_return_address(0)` -- the current function's return
+    /// address, read from the saved slot just above the frame pointer
+    /// (`[fp + 8]` under both the AAPCS64 and SysV prologues). Only level
+    /// 0 is supported. The interpreter returns a stable per-frame proxy.
+    ReturnAddress = 69,
 }
 
 impl Intrinsic {
@@ -334,6 +339,7 @@ impl Intrinsic {
             66 => Some(Intrinsic::Atomic128Store),
             67 => Some(Intrinsic::Atomic128LoadEx),
             68 => Some(Intrinsic::Atomic128StoreEx),
+            69 => Some(Intrinsic::ReturnAddress),
             _ => None,
         }
     }

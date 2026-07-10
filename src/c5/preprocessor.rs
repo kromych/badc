@@ -407,6 +407,10 @@ impl Preprocessor {
                 "__builtin_frame_address",
                 super::op::Intrinsic::FrameAddress,
             ),
+            (
+                "__builtin_return_address",
+                super::op::Intrinsic::ReturnAddress,
+            ),
         ] {
             intrinsics.insert(name.to_string(), kind as i64);
         }
@@ -5067,6 +5071,7 @@ fn is_known_builtin(name: &str) -> bool {
             | "__builtin_trap"
             | "__builtin_alloca"
             | "__builtin_frame_address"
+            | "__builtin_return_address"
             | "__builtin_constant_p"
             | "__builtin_choose_expr"
             | "__builtin_types_compatible_p"

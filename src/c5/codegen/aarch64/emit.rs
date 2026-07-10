@@ -3706,6 +3706,22 @@ fn emit_intrinsic(
             spill_local_addr_to_dst(code, dst, rd, frame);
             true
         }
+        I::ReturnAddress => {
+            // __builtin_return_address(0): the saved return address the
+            // AAPCS64 prologue stored at [x29 + 8]. Only level 0 (args[0]
+            // ignored) is supported.
+            let rd = match dst {
+                Place::IntReg(r) => Reg(r),
+                Place::Spill(_) => Reg(16),
+                _ => {
+                    bail_msg("ReturnAddress: dst not int reg / spill");
+                    return false;
+                }
+            };
+            emit(code, enc_ldr_imm(rd, Reg(29), 8));
+            spill_local_addr_to_dst(code, dst, rd, frame);
+            true
+        }
         I::Clz
         | I::Ctz
         | I::Popcount

@@ -7051,6 +7051,17 @@ fn emit_intrinsic(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
+        I::ReturnAddress => {
+            // __builtin_return_address(0): the return address the call
+            // pushed, at [rbp + 8] above the saved rbp. Level 0 only.
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("ReturnAddress: dst not int reg / spill");
+                return false;
+            };
+            emit_mov_r_mem(code, rd, Reg::RBP, 8);
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
+        }
         I::Clz
         | I::Ctz
         | I::Popcount

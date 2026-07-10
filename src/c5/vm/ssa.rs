@@ -2233,6 +2233,13 @@ fn run_intrinsic(
             frame.regs[v as usize] = frame.stack_base as i64;
             Ok(())
         }
+        Intrinsic::ReturnAddress => {
+            // No native return address in the interpreter; return a stable
+            // non-zero per-frame proxy, enough for callers that only store
+            // or compare it.
+            frame.regs[v as usize] = frame.stack_base as i64;
+            Ok(())
+        }
         // The integer bit-count builtins are lowered to a portable
         // shift / mask sequence in the walker; they never reach the VM
         // as an `Inst::Intrinsic`.

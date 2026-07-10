@@ -141,6 +141,14 @@ fn atomic128_ldst() {
 }
 
 #[test]
+fn builtin_return_address() {
+    // __builtin_return_address(0) is the caller's return address; native
+    // reads the saved slot at [fp+8], the VM returns a non-zero per-frame
+    // proxy. The fixture returns 0 only when it is non-null.
+    assert_eq!(run_fixture("builtin_return_address.c"), 0);
+}
+
+#[test]
 fn atomic_op_fetch() {
     // C11 __atomic_*_fetch builtins (add/sub/and/or/xor) return the updated
     // value, unlike the __atomic_fetch_* family; the older __sync_*_and_fetch

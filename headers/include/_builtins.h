@@ -24,6 +24,10 @@
 #define __builtin_constant_p(x) 0
 #define __builtin_prefetch(...) ((void) 0)
 #define __builtin_assume_aligned(p, ...) (p)
+// Convert between the raw and "real" return address. The supported
+// targets carry no flag bits in the return address, so both are identity.
+#define __builtin_extract_return_addr(a) (a)
+#define __builtin_frob_return_addr(a) (a)
 // `__builtin_choose_expr(c, a, b)` selects `a` or `b` on the compile-time
 // constant `c`. A constant-condition conditional is equivalent for a
 // well-typed pair: C evaluates only the taken branch, and the constant

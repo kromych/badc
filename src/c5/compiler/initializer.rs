@@ -2496,7 +2496,38 @@ impl Compiler {
                 }
                 return Ok(false);
             }
-            return Err(self.compile_err("non-constant array-field initializer not yet supported"));
+            // C99 6.7.8p13: an array member initialized by a brace list of
+            // non-constant elements, or that same list with the member's
+            // braces elided into the enclosing struct's list (6.7.8p20).
+            // The struct slot is already zero-seeded, so positions left
+            // unwritten stay zero (6.7.8p21). Route through the runtime
+            // local-array filler at the member's byte offset.
+            let elem_size = self.size_of_type(field.ty) as i64;
+            let inner_dim = field.inner_array_size;
+            if self.lex.tk == '{' {
+                let inner: &[i64] = if inner_dim > 0 {
+                    core::slice::from_ref(&inner_dim)
+                } else {
+                    &[]
+                };
+                self.emit_local_array_init_runtime(
+                    local_val,
+                    field_base,
+                    field.ty,
+                    field.array_size,
+                    inner,
+                    "<array member>",
+                )?;
+            } else {
+                self.fill_array_leaves_runtime(
+                    local_val,
+                    field_base,
+                    field.array_size,
+                    field.ty,
+                    elem_size,
+                )?;
+            }
+            return Ok(false);
         }
         // A nested aggregate member initialized by a brace list (or a
         // compound literal naming its type) recurses through the shared

@@ -865,7 +865,7 @@ impl Compiler {
                     let var_name = self.symbols[loc_idx].name.clone();
                     let inner = self.inner_dims_of(loc_idx);
                     self.emit_local_array_init_runtime(
-                        local_val, ty, final_size, &inner, &var_name,
+                        local_val, 0, ty, final_size, &inner, &var_name,
                     )?;
                     return Ok(());
                 }
@@ -1030,6 +1030,7 @@ impl Compiler {
                     let inner = self.inner_dims_of(loc_idx);
                     self.emit_local_array_init_runtime(
                         local_val,
+                        0,
                         ty,
                         declared_array_size,
                         &inner,
@@ -1150,6 +1151,7 @@ impl Compiler {
                     self.emit_local_array_init(slot, zero_off, full);
                     self.emit_local_array_init_runtime(
                         slot,
+                        0,
                         elem_ty,
                         count,
                         &[],
@@ -1173,6 +1175,7 @@ impl Compiler {
                     self.emit_local_array_init(slot, zero_off, full);
                     self.emit_local_array_init_runtime(
                         slot,
+                        0,
                         elem_ty,
                         count,
                         &[],
@@ -1408,6 +1411,7 @@ impl Compiler {
     pub(super) fn emit_local_array_init_runtime(
         &mut self,
         local_val: i64,
+        base: i64,
         ty: i64,
         total_count: i64,
         inner_dims: &[i64],
@@ -1427,7 +1431,7 @@ impl Compiler {
         let mut dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
         dims.push(outer.max(0));
         dims.extend_from_slice(inner_dims);
-        self.fill_array_init_runtime(local_val, 0, &dims, ty, elem_size, var_name)
+        self.fill_array_init_runtime(local_val, base, &dims, ty, elem_size, var_name)
     }
 
     /// Parse one brace level of a runtime array initializer at byte
@@ -1514,7 +1518,7 @@ impl Compiler {
     /// Fill up to `n` scalar leaves at consecutive offsets from `base`
     /// (a brace-elided sub-array). Stops early at `}` -- the omitted
     /// trailing positions keep the caller's zero seed (C99 6.7.8p21).
-    fn fill_array_leaves_runtime(
+    pub(super) fn fill_array_leaves_runtime(
         &mut self,
         local_val: i64,
         base: i64,

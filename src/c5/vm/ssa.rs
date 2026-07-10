@@ -2139,6 +2139,24 @@ fn run_intrinsic(
             }
             Ok(())
         }
+        Intrinsic::AArch64DsbIsh | Intrinsic::AArch64Isb => {
+            // Barriers have no observable effect in the single-threaded
+            // interpreter.
+            Ok(())
+        }
+        Intrinsic::AArch64DcCvau | Intrinsic::AArch64IcIvau => {
+            // Cache maintenance is a no-op against the interpreter's flat
+            // memory; the pointer argument is evaluated but unused.
+            Ok(())
+        }
+        Intrinsic::AArch64ReadCacheType => {
+            // No host CTR_EL0; return a fixed value with 64-byte data and
+            // instruction cache lines (D/IminLine = 4) so a caller
+            // computing line sizes gets a sane, non-zero result.
+            let addr = frame.regs[args[0] as usize] as usize;
+            store_to_memory(mem, addr, 0x8444_C004, StoreKind::I64)?;
+            Ok(())
+        }
         Intrinsic::FrameAddress => {
             // The interpreter has no native frame pointer; return this
             // frame's base in the byte arena. It is non-zero, stable

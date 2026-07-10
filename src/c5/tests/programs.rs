@@ -110,6 +110,15 @@ fn rdtsc_host_ticks() {
 }
 
 #[test]
+fn cacheflush_asm() {
+    // AArch64 `mrs ctr_el0` / `dc cvau` / `ic ivau` / `dsb ish` / `isb`
+    // (QEMU util/cacheflush.c) as fixed-encoding intrinsics. Run under the
+    // VM (native aarch64 emits the real instructions, which need EL0
+    // cache-op permission; x86-64 gates them out).
+    assert_eq!(run_fixture("cacheflush_asm.c"), 0);
+}
+
+#[test]
 fn case_range() {
     // GNU case ranges `case lo ... hi:` -- boundaries, interior, stacked
     // ranges sharing a body, mixed with single labels, and fall-through

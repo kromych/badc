@@ -7085,6 +7085,16 @@ fn emit_intrinsic(
             bail_msg("intrinsic: atomic op reached codegen");
             false
         }
+        I::AArch64ReadCacheType
+        | I::AArch64DcCvau
+        | I::AArch64IcIvau
+        | I::AArch64DsbIsh
+        | I::AArch64Isb => {
+            // AArch64 cache maintenance and barriers; the source gates them
+            // on `__aarch64__`, so x86-64 never reaches them.
+            bail_msg("aarch64 cache / barrier intrinsic is aarch64-only");
+            false
+        }
     }
 }
 

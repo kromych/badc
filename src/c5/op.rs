@@ -219,6 +219,18 @@ pub enum Intrinsic {
     /// low (eax) and high (edx) 32-bit output addresses. x86_64 only; the
     /// interpreter zeroes the outputs (no host clock).
     Rdtsc = 53,
+    /// AArch64 cache maintenance and barriers (QEMU util/cacheflush.c),
+    /// each a fixed-encoding instruction. `ReadCacheType` = `mrs %0,
+    /// ctr_el0` (one output address); `DcCvau` = `dc cvau, %0` and
+    /// `IcIvau` = `ic ivau, %0` (one pointer input each); `DsbIsh` =
+    /// `dsb ish` and `Isb` = `isb` (no operands). AArch64 only; the
+    /// interpreter treats the barriers and cache ops as no-ops and
+    /// returns a fixed CTR_EL0 for the read.
+    AArch64ReadCacheType = 54,
+    AArch64DcCvau = 55,
+    AArch64IcIvau = 56,
+    AArch64DsbIsh = 57,
+    AArch64Isb = 58,
 }
 
 impl Intrinsic {
@@ -277,6 +289,11 @@ impl Intrinsic {
             51 => Some(Intrinsic::Parityll),
             52 => Some(Intrinsic::Divq128),
             53 => Some(Intrinsic::Rdtsc),
+            54 => Some(Intrinsic::AArch64ReadCacheType),
+            55 => Some(Intrinsic::AArch64DcCvau),
+            56 => Some(Intrinsic::AArch64IcIvau),
+            57 => Some(Intrinsic::AArch64DsbIsh),
+            58 => Some(Intrinsic::AArch64Isb),
             _ => None,
         }
     }

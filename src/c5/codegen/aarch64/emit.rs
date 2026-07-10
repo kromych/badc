@@ -3570,6 +3570,68 @@ fn emit_intrinsic(
             bail_msg("rdtsc intrinsic is x86-64 only");
             false
         }
+        I::AArch64DsbIsh => {
+            // `dsb ish` (0xD5033B9F): data synchronisation barrier over the
+            // inner shareable domain. No operand, no result.
+            emit(code, 0xD503_3B9Fu32);
+            true
+        }
+        I::AArch64Isb => {
+            // `isb` (0xD5033FDF): instruction synchronisation barrier. No
+            // operand, no result.
+            emit(code, 0xD503_3FDFu32);
+            true
+        }
+        I::AArch64DcCvau | I::AArch64IcIvau => {
+            // `dc cvau, Xt` (0xD50B7B20|Rt) / `ic ivau, Xt` (0xD50B7520|Rt):
+            // clean the data cache / invalidate the instruction cache to the
+            // point of unification for the address in Xt. One pointer input.
+            if args.len() != 1 {
+                bail_msg("dc/ic cache op: expected 1 arg");
+                return false;
+            }
+            let place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let rt = match materialize_int(code, place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            let base = if matches!(intrinsic, I::AArch64DcCvau) {
+                0xD50B_7B20u32
+            } else {
+                0xD50B_7520u32
+            };
+            emit(code, base | (rt.0 as u32));
+            true
+        }
+        I::AArch64ReadCacheType => {
+            // `mrs Xt, ctr_el0` (0xD53B0020|Rt) reads the cache type
+            // register; store it to the output operand's address (arg 0).
+            if args.len() != 1 {
+                bail_msg("mrs ctr_el0: expected 1 arg");
+                return false;
+            }
+            let place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let addr = match materialize_int(code, place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            let tmp = if addr.0 == scratch.secondary.0 {
+                scratch.primary
+            } else {
+                scratch.secondary
+            };
+            emit(code, 0xD53B_0020u32 | (tmp.0 as u32));
+            emit(code, enc_str_imm(tmp, addr, 0));
+            true
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

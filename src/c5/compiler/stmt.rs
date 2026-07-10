@@ -805,6 +805,33 @@ impl Compiler {
             self.data.truncate(tstart);
             return self.parse_rdtsc_asm();
         }
+        // AArch64 cache maintenance + barriers (QEMU util/cacheflush.c).
+        // Match the whitespace-free template so tabs / spaces are
+        // irrelevant; each maps to a fixed-encoding intrinsic.
+        {
+            use super::super::op::Intrinsic as I;
+            let tmpl_ws: alloc::string::String =
+                tmpl_lc.chars().filter(|c| !c.is_whitespace()).collect();
+            let reg_op = match tmpl_ws.as_str() {
+                "mrs%0,ctr_el0" => Some((I::AArch64ReadCacheType, true)),
+                "dccvau,%0" => Some((I::AArch64DcCvau, false)),
+                "icivau,%0" => Some((I::AArch64IcIvau, false)),
+                _ => None,
+            };
+            if let Some((kind, is_output)) = reg_op {
+                self.data.truncate(tstart);
+                return self.parse_aarch64_reg_asm(kind, is_output);
+            }
+            let barrier = match tmpl_ws.as_str() {
+                "dsbish" => Some(I::AArch64DsbIsh),
+                "isb" => Some(I::AArch64Isb),
+                _ => None,
+            };
+            if let Some(kind) = barrier {
+                self.data.truncate(tstart);
+                return self.parse_aarch64_barrier_asm(kind);
+            }
+        }
         // An empty template is a compiler barrier: `__asm__("")`, or the
         // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It emits no
         // instruction, so its operands carry no machine effect; consume
@@ -1265,6 +1292,96 @@ impl Compiler {
             Expr::Intrinsic {
                 kind: super::super::op::Intrinsic::Rdtsc as i64,
                 args: alloc::vec![low, high],
+                ty: Ty::Int as i64,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        let _ = self.ast_emit_expr_stmt();
+        Ok(())
+    }
+
+    /// `asm volatile("mrs %0, ctr_el0" : "=r"(out))`, `asm volatile("dc
+    /// cvau, %0" :: "r"(p) : "memory")`, or the `ic ivau` form -- one
+    /// register operand. An output (`is_output`) contributes the
+    /// destination's address (the read is stored through it); an input
+    /// contributes its value. The template was consumed; the cursor is at
+    /// the first `:`.
+    fn parse_aarch64_reg_asm(
+        &mut self,
+        kind: super::super::op::Intrinsic,
+        is_output: bool,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, UnOp};
+        // Skip the colons and constraint strings up to the `(operand)`.
+        while self.lex.tk != '(' as i64 && self.lex.tk != ')' as i64 {
+            if self.lex.tk == ':' as i64 || self.lex.tk == ',' as i64 || self.lex.tk == '"' as i64 {
+                self.next()?;
+            } else {
+                return Err(self.compile_err("unsupported aarch64 asm operand"));
+            }
+        }
+        if self.lex.tk != '(' as i64 {
+            return Err(self.compile_err("aarch64 asm expects one register operand"));
+        }
+        self.next()?; // consume '('
+        self.expr(Token::Assign as i64)?;
+        if is_output {
+            // The read is stored through the output operand's address.
+            self.ty += Ty::Ptr as i64;
+            self.ast_apply_unary(UnOp::AddrOf);
+        }
+        let arg_id = self.ast_acc.take();
+        self.consume(b')', "`)` expected after aarch64 asm operand")?;
+        // Consume any remaining `: inputs : clobbers` up to the close.
+        while self.lex.tk != ')' {
+            self.next()?;
+        }
+        self.next()?; // consume ')'
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        let Some(arg) = arg_id else {
+            return Err(self.compile_err("aarch64 asm operand missing"));
+        };
+        self.mark_emit_other();
+        self.ty = Ty::Int as i64;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::Intrinsic {
+                kind: kind as i64,
+                args: alloc::vec![arg],
+                ty: Ty::Int as i64,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        let _ = self.ast_emit_expr_stmt();
+        Ok(())
+    }
+
+    /// `asm volatile("dsb ish" ::: "memory")` / `asm volatile("isb" :::
+    /// "memory")` -- a barrier with clobbers but no in/out operands. Consume
+    /// the operand region and emit the fixed intrinsic. The template was
+    /// consumed; the cursor is at the first `:` (or `)`).
+    fn parse_aarch64_barrier_asm(
+        &mut self,
+        kind: super::super::op::Intrinsic,
+    ) -> Result<(), C5Error> {
+        // A barrier carries no in/out operand; a `(` would introduce one.
+        while self.lex.tk != ')' {
+            if self.lex.tk == '(' {
+                return Err(self.compile_err("aarch64 barrier asm takes no operands"));
+            }
+            self.next()?;
+        }
+        self.next()?; // consume ')'
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        self.mark_emit_other();
+        self.ty = Ty::Int as i64;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            super::super::ast::Expr::Intrinsic {
+                kind: kind as i64,
+                args: alloc::vec::Vec::new(),
                 ty: Ty::Int as i64,
             },
             pos,

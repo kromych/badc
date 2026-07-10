@@ -799,6 +799,12 @@ impl Compiler {
             self.data.truncate(tstart);
             return self.parse_divq_asm();
         }
+        // `rdtsc` -- x86-64 read timestamp counter (QEMU timer.h
+        // `cpu_get_host_ticks`): two register-tied outputs, no inputs.
+        if tmpl_lc == "rdtsc" {
+            self.data.truncate(tstart);
+            return self.parse_rdtsc_asm();
+        }
         // An empty template is a compiler barrier: `__asm__("")`, or the
         // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It emits no
         // instruction, so its operands carry no machine effect; consume
@@ -1175,6 +1181,90 @@ impl Compiler {
             Expr::Intrinsic {
                 kind: super::super::op::Intrinsic::Divq128 as i64,
                 args: alloc::vec![q, rem, n0, n1, d],
+                ty: Ty::Int as i64,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        let _ = self.ast_emit_expr_stmt();
+        Ok(())
+    }
+
+    /// Parse `asm volatile("rdtsc" : "=a"(low), "=d"(high))` (QEMU timer.h
+    /// `cpu_get_host_ticks`) into an `Intrinsic::Rdtsc`. The template was
+    /// already consumed. `"=a"` names the low 32 bits, `"=d"` the high.
+    fn parse_rdtsc_asm(&mut self) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, UnOp};
+        let mut low_addr = None;
+        let mut high_addr = None;
+        let mut section: u8 = 0;
+        let data_base = self.data.len();
+        while self.lex.tk != ')' {
+            if self.lex.tk == ':' {
+                section += 1;
+                self.next()?;
+                continue;
+            }
+            if self.lex.tk == ',' {
+                self.next()?;
+                continue;
+            }
+            if self.lex.tk != '"' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("unsupported rdtsc asm syntax"));
+            }
+            let cstart = self.lex.ival as usize;
+            let letter = self.data[cstart..]
+                .iter()
+                .rev()
+                .find(|b| b.is_ascii_alphabetic())
+                .copied();
+            self.next()?; // consume the constraint string
+            self.data.truncate(cstart);
+            if section >= 3 {
+                continue; // clobbers
+            }
+            if section != 1 {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("rdtsc takes no input operands"));
+            }
+            if self.lex.tk != '(' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("rdtsc: `(` expected after constraint"));
+            }
+            self.next()?; // consume `(`
+            self.expr(Token::Assign as i64)?;
+            self.ty += Ty::Ptr as i64;
+            self.ast_apply_unary(UnOp::AddrOf);
+            match letter {
+                Some(b'a') => low_addr = self.ast_acc.take(),
+                Some(b'd') => high_addr = self.ast_acc.take(),
+                _ => {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("rdtsc: outputs must be `=a` and `=d`"));
+                }
+            }
+            if self.lex.tk != ')' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("rdtsc: `)` expected after asm operand"));
+            }
+            self.next()?; // consume the operand's `)`
+        }
+        self.next()?; // consume the outer `)`
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        self.data.truncate(data_base);
+
+        let (low, high) = match (low_addr, high_addr) {
+            (Some(l), Some(h)) => (l, h),
+            _ => return Err(self.compile_err("rdtsc requires `=a` and `=d` outputs")),
+        };
+        self.mark_emit_other();
+        self.ty = Ty::Int as i64;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::Intrinsic {
+                kind: super::super::op::Intrinsic::Rdtsc as i64,
+                args: alloc::vec![low, high],
                 ty: Ty::Int as i64,
             },
             pos,

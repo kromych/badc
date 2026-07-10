@@ -6981,6 +6981,49 @@ fn emit_intrinsic(
             super::encode::emit_pop_r(code, RAX);
             true
         }
+        I::Rdtsc => {
+            // Read timestamp counter into edx:eax (high:low). args:
+            // [low_addr, high_addr]. rdtsc zeroes the upper 32 bits of
+            // rax/rdx, so the 32-bit stores are complete.
+            const RAX: Reg = Reg(0);
+            const RDX: Reg = Reg(2);
+            const R10: Reg = Reg(10);
+            if args.len() != 2 {
+                bail_msg("rdtsc: wrong operand count");
+                return false;
+            }
+            let materialize = |code: &mut Vec<u8>, idx: usize, scratch: Reg| -> Option<Reg> {
+                let place = alloc.places.get(args[idx] as usize).copied()?;
+                let r = materialize_int(code, place, scratch, frame)?;
+                if r.0 != scratch.0 {
+                    super::encode::emit_mov_rr(code, scratch, r);
+                }
+                Some(scratch)
+            };
+            super::encode::emit_push_r(code, RAX);
+            super::encode::emit_push_r(code, RDX);
+            if materialize(code, 0, R10).is_none() {
+                bail_msg("rdtsc: low output not an address");
+                return false;
+            }
+            super::encode::emit_push_r(code, R10);
+            if materialize(code, 1, R10).is_none() {
+                bail_msg("rdtsc: high output not an address");
+                return false;
+            }
+            super::encode::emit_push_r(code, R10);
+            // rdtsc (0F 31).
+            code.push(0x0F);
+            code.push(0x31);
+            // Store edx -> *high (top of stack), eax -> *low.
+            super::encode::emit_pop_r(code, R10);
+            super::encode::emit_mov_mem_r32(code, R10, 0, RDX);
+            super::encode::emit_pop_r(code, R10);
+            super::encode::emit_mov_mem_r32(code, R10, 0, RAX);
+            super::encode::emit_pop_r(code, RDX);
+            super::encode::emit_pop_r(code, RAX);
+            true
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

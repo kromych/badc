@@ -102,6 +102,14 @@ fn divq_udiv_qrnnd() {
 }
 
 #[test]
+fn rdtsc_host_ticks() {
+    // The x86-64 `rdtsc` inline-asm shape (QEMU timer.h `cpu_get_host_ticks`)
+    // as Intrinsic::Rdtsc: two register-tied outputs, no inputs. The VM
+    // zeroes the counter (no host clock); native x86-64 emits `rdtsc`.
+    assert_eq!(run_fixture("rdtsc_host_ticks.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

@@ -214,6 +214,11 @@ pub enum Intrinsic {
     /// `(n1:n0) % d` -> remainder. x86_64 only (the source gates it on
     /// `__x86_64__`); the interpreter uses 128-bit host arithmetic.
     Divq128 = 52,
+    /// `asm volatile("rdtsc" : "=a"(low), "=d"(high))` -- x86-64 read the
+    /// timestamp counter (QEMU timer.h `cpu_get_host_ticks`). Two args: the
+    /// low (eax) and high (edx) 32-bit output addresses. x86_64 only; the
+    /// interpreter zeroes the outputs (no host clock).
+    Rdtsc = 53,
 }
 
 impl Intrinsic {
@@ -271,6 +276,7 @@ impl Intrinsic {
             50 => Some(Intrinsic::Parity),
             51 => Some(Intrinsic::Parityll),
             52 => Some(Intrinsic::Divq128),
+            53 => Some(Intrinsic::Rdtsc),
             _ => None,
         }
     }

@@ -2131,14 +2131,12 @@ impl Compiler {
                     };
                     let mem = self.structs[struct_id].fields[mem_idx].clone();
                     let mem_base = (var_offset as usize) + mem.offset;
-                    if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
-                        self.collect_struct_initializer_t(
-                            struct_id_of(mem.ty),
-                            target.rebased(mem_base as i64),
-                        )?;
-                    } else {
-                        self.init_leaf_scalar(target, mem_base as i64, mem.ty)?;
-                    }
+                    // The selected union member may be a struct, an array
+                    // (`unsigned char data[16]` in QEMU's QemuUUID), a scalar,
+                    // or a bitfield; the shared member dispatch handles each,
+                    // including a `{ ... }` sub-initializer for the aggregate
+                    // members that the scalar leaf could not.
+                    self.fill_member_value_t(struct_id, &mem, target, mem_base, false)?;
                     self.accept(',')?;
                 }
                 self.next()?; // consume `}`

@@ -149,6 +149,14 @@ fn typedef_pointer_array() {
 }
 
 #[test]
+fn anon_union_nested_init() {
+    // A struct with an anonymous union whose selected member is an aggregate
+    // may be brace-initialized with an explicit union sub-brace
+    // (`{ { { bytes } } }`, QEMU's QemuUUID test tables).
+    assert_eq!(run_fixture("anon_union_nested_init.c"), 0);
+}
+
+#[test]
 fn math_compare_macros() {
     // C99 7.12.14 relational macros (isgreater/isless/isunordered/...), used
     // by QEMU fpu/softfloat.c; NaN operands compare false and are unordered.

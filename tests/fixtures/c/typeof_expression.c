@@ -33,9 +33,9 @@ int main(void) {
         return 3;
     }
     // typeof of a comma expression yields the last operand's type.
-    long lv = 100;
-    typeof(a, lv) cm = 0x1122334455L;
-    if (cm != 0x1122334455L) {
+    long long lv = 100;
+    typeof(a, lv) cm = 0x1122334455LL;
+    if (cm != 0x1122334455LL) {
         return 4;
     }
 

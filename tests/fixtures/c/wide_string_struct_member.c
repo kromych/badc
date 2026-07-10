@@ -1,15 +1,18 @@
-/* C99 6.7.8p15: a wide string literal initializes a wchar_t-compatible
-   array member (wchar_t is int-width on every badc target). The member
-   path handled only narrow char[] members, so a wide-string member was a
-   silent miscompile on the constant path (it stored the string pointer)
-   and a rejection on the runtime path. Both now store the code points at
-   the element stride. */
+/* C99 6.7.8p15: a wide string literal initializes a wchar_t-typed array
+   member at the target's wchar_t stride (4 bytes on Linux/macOS, 2 on
+   Windows). The member path handled only narrow char[] members, so a
+   wide-string member was a silent miscompile on the constant path (it
+   stored the string pointer) and a rejection on the runtime path. Both
+   now store the code points at the element stride. The checks compare
+   code points, which hold at either width. */
 
-struct WS { int a; int w[4]; };
+#include <stddef.h>
+
+struct WS { int a; wchar_t w[4]; };
 static struct WS g = { 5, L"hi" };            /* file-scope constant */
 
 static int check_runtime(int tag) {           /* runtime: non-const tag */
-    struct { int tag; int w[4]; } s = { tag, L"hi" };
+    struct { int tag; wchar_t w[4]; } s = { tag, L"hi" };
     return (s.tag == tag && s.w[0] == 'h' && s.w[1] == 'i'
             && s.w[2] == 0 && s.w[3] == 0)
         ? 0
@@ -24,7 +27,7 @@ int main(void) {
     if (!(c.a == 6 && c.w[0] == 'a' && c.w[1] == 'b' && c.w[2] == 0 && c.w[3] == 0))
         return 3;
 
-    struct { int w[2]; } exact = { L"hi" };    /* exact fit, NUL dropped */
+    struct { wchar_t w[2]; } exact = { L"hi" };    /* exact fit, NUL dropped */
     if (!(exact.w[0] == 'h' && exact.w[1] == 'i'))
         return 4;
 

@@ -40,12 +40,12 @@ int main(void) {
     if ((zero ?: five ?: 99) != 5) return 8;
 
     // Result type is the usual-arithmetic-conversions common type:
-    // `int ?: long` is long-width.
-    long big = 0x100000000L;
-    long w = five ?: big;
+    // `int ?: long long` is long-long-width.
+    long long big = 0x100000000LL;
+    long long w = five ?: big;
     if (w != 5) return 9;
-    long w2 = zero ?: big;
-    if (w2 != 0x100000000L) return 10;
+    long long w2 = zero ?: big;
+    if (w2 != 0x100000000LL) return 10;
 
     // Constant-context results.
     if (EA != 5) return 11;

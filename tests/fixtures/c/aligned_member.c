@@ -13,8 +13,8 @@ struct A {
 
 // A 16-byte struct member forced to 16-byte alignment.
 struct Int128 {
-    unsigned long lo;
-    long hi;
+    unsigned long long lo;
+    long long hi;
 };
 struct B {
     char pad;
@@ -23,8 +23,8 @@ struct B {
 
 // aligned attribute before the declarator applies to the field.
 struct C {
-    long x;
-    __attribute__((aligned(16))) long y;
+    long long x;
+    __attribute__((aligned(16))) long long y;
 };
 
 // Byte offset of a member, via runtime pointer arithmetic (avoids the
@@ -49,9 +49,9 @@ int main(void) {
         return 4;
     }
     // Values through a 16-aligned member round-trip.
-    s.v.lo = 0x1122334455667788UL;
+    s.v.lo = 0x1122334455667788ULL;
     s.v.hi = -3;
-    if (s.v.lo != 0x1122334455667788UL || s.v.hi != -3) {
+    if (s.v.lo != 0x1122334455667788ULL || s.v.hi != -3) {
         return 5;
     }
     return 0;

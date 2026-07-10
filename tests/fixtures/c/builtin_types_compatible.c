@@ -34,9 +34,9 @@ int main(void) {
         return 3;
     }
     // A wide type flows through the `(expr)+0` fallback with its width.
-    long wide = 0x1122334455L;
+    long long wide = 0x1122334455LL;
     strip(wide) w = wide;
-    if (w != 0x1122334455L) {
+    if (w != 0x1122334455LL) {
         return 4;
     }
     return 0;

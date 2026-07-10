@@ -5,16 +5,16 @@
 
 int main(void) {
     // 64-bit load / store.
-    long src = 0x1122334455667788L;
-    long dst = 0;
+    long long src = 0x1122334455667788LL;
+    long long dst = 0;
     __atomic_load(&src, &dst, __ATOMIC_SEQ_CST);
-    if (dst != 0x1122334455667788L) {
+    if (dst != 0x1122334455667788LL) {
         return 1;
     }
-    long p = 0;
-    long v = 0xdeadbeefcafeL;
+    long long p = 0;
+    long long v = 0xdeadbeefcafeLL;
     __atomic_store(&p, &v, __ATOMIC_SEQ_CST);
-    if (p != 0xdeadbeefcafeL) {
+    if (p != 0xdeadbeefcafeLL) {
         return 2;
     }
 

@@ -211,6 +211,10 @@ pub(crate) struct LexerSnapshot {
 pub(crate) struct Lexer {
     src: Vec<u8>,
     pos: usize,
+    /// Byte offset in `src` where the most recent token began (after
+    /// whitespace / line-marker skipping). Used to recover the source
+    /// line for a diagnostic, since `pos` reads ahead of the token.
+    tok_start: usize,
     pub line: usize,
     /// Name of the file `self.line` is counting within. Updated
     /// when the lexer crosses a GNU-style line marker (`# N "file"
@@ -392,6 +396,7 @@ impl Lexer {
         Self {
             src: source.into_bytes(),
             pos: 0,
+            tok_start: 0,
             line: 1,
             file: String::from("<source>"),
             tk: Tok::EOF,
@@ -1011,6 +1016,31 @@ impl Lexer {
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.
+    /// The source line containing the current token, taken from the
+    /// preprocessed buffer the lexer scans, with trailing whitespace
+    /// trimmed. `None` for an empty buffer. Used to echo the offending
+    /// line beneath a diagnostic.
+    pub(crate) fn current_line_text(&self) -> Option<&str> {
+        let n = self.src.len();
+        if n == 0 {
+            return None;
+        }
+        let p = self.tok_start.min(n - 1);
+        let start = self.src[..p]
+            .iter()
+            .rposition(|&b| b == b'\n')
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let end = self.src[p..]
+            .iter()
+            .position(|&b| b == b'\n')
+            .map(|i| p + i)
+            .unwrap_or(n);
+        core::str::from_utf8(&self.src[start..end])
+            .ok()
+            .map(|s| s.trim_end())
+    }
+
     pub fn next(
         &mut self,
         symbols: &mut Vec<Symbol>,
@@ -1034,6 +1064,10 @@ impl Lexer {
 
             let c = self.src[self.pos] as char;
             self.pos += 1;
+            // Records where this token started; whitespace / newline /
+            // line-marker iterations re-set it, so it ends on the real
+            // token the branches below emit.
+            self.tok_start = self.pos - 1;
 
             if c == '\n' {
                 self.line += 1;

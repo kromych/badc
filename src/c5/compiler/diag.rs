@@ -182,9 +182,14 @@ impl Compiler {
     /// so jump-to-error in editors works out of the box, and the CLI
     /// can color the `warning:` word when stderr is a TTY.
     pub(super) fn warn_at(&mut self, line: usize, message: alloc::string::String) {
-        let file = &self.lex.file;
-        self.warnings
-            .push(alloc::format!("{file}:{line}: warning: {message}"));
+        let mut s = alloc::format!("{}:{line}: warning: {message}", self.lex.file);
+        if let Some(src) = self.lex.current_line_text()
+            && !src.is_empty()
+        {
+            s.push('\n');
+            s.push_str(src);
+        }
+        self.warnings.push(s);
     }
 
     /// Whether the lexer's current file matches the primary
@@ -325,11 +330,15 @@ impl Compiler {
     /// Pulls `<file>` / `<line>` out of `self.lex` so call sites
     /// don't have to thread them through every `format!`.
     pub(super) fn compile_err(&self, message: impl AsRef<str>) -> C5Error {
-        C5Error::Compile(super::super::error::fmt_compile_err(
-            &self.lex.file,
-            self.lex.line,
-            message.as_ref(),
-        ))
+        let mut s =
+            super::super::error::fmt_compile_err(&self.lex.file, self.lex.line, message.as_ref());
+        if let Some(src) = self.lex.current_line_text()
+            && !src.is_empty()
+        {
+            s.push('\n');
+            s.push_str(src);
+        }
+        C5Error::Compile(s)
     }
 
     /// Same shape as [`Self::compile_err`] but lets the caller pin

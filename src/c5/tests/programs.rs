@@ -2899,6 +2899,35 @@ fn struct_value_arithmetic_is_rejected() {
 }
 
 #[test]
+fn diagnostic_echoes_the_source_line() {
+    use crate::c5::Compiler;
+    // A compile error echoes the offending source line beneath the
+    // `<file>:<line>: error: ...` message (plain line, no caret).
+    let src = "int main(void) {\n    int x = 5;\n    x = y + 1;\n    return x;\n}\n";
+    let err = Compiler::new(src.to_string())
+        .compile()
+        .expect_err("undeclared y is an error");
+    let msg = format!("{err}");
+    assert!(msg.contains("undefined variable y"), "message: {msg:?}");
+    assert!(
+        msg.contains("x = y + 1;"),
+        "expected the source line echoed under the error, got {msg:?}"
+    );
+
+    // A warning does the same via `Program.warnings`.
+    let wsrc = "int add(int a, int b);\nint main(void) {\n    return add(1);\n}\n";
+    let prog = Compiler::new(wsrc.to_string())
+        .compile()
+        .expect("too-few-arguments is a warning, not an error");
+    let warns = prog.warnings.join("\n");
+    assert!(warns.contains("too few arguments"), "warnings: {warns:?}");
+    assert!(
+        warns.contains("return add(1);"),
+        "expected the source line echoed under the warning, got {warns:?}"
+    );
+}
+
+#[test]
 fn atomic_ops_require_stdatomic_header() {
     // The C11 7.17 atomic operations are recognized only when declared
     // via `#pragma intrinsic` (which `<stdatomic.h>` does); a call with

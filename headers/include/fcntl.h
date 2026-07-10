@@ -45,6 +45,10 @@
 #define O_NOFOLLOW   0400000
 #define O_ACCMODE    0003
 #define O_NOATIME    01000000
+// Synchronous I/O (asm-generic/fcntl.h): O_SYNC = __O_SYNC | O_DSYNC,
+// with __O_SYNC = 04000000. __O_SYNC is never used on its own.
+#define O_DSYNC      010000
+#define O_SYNC       04010000
 #endif
 #ifdef _WIN32
 #define O_CREAT      0x0100

@@ -14,6 +14,7 @@
 #if defined(__aarch64__)
 #define __NR_getdents64      61
 #define __NR_futex           98
+#define __NR_tgkill         131
 #define __NR_getcpu         168
 #define __NR_gettid         178
 #define __NR_prlimit64      261
@@ -30,6 +31,7 @@
 #define __NR_gettid         186
 #define __NR_getdents64     217
 #define __NR_futex          202
+#define __NR_tgkill         234
 #define __NR_prlimit64      302
 #define __NR_getcpu         309
 #define __NR_renameat2      316
@@ -47,6 +49,7 @@
 #define SYS_futex           __NR_futex
 #define SYS_getcpu          __NR_getcpu
 #define SYS_gettid          __NR_gettid
+#define SYS_tgkill          __NR_tgkill
 #define SYS_prlimit64       __NR_prlimit64
 #define SYS_renameat2       __NR_renameat2
 #define SYS_getrandom       __NR_getrandom

@@ -3,6 +3,7 @@
 #pragma once
 
 #define IF_NAMESIZE 16
+#define IFNAMSIZ    16
 
 struct if_nameindex {
     unsigned int if_index;

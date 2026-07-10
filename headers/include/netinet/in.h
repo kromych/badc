@@ -24,6 +24,9 @@
 // Port number in network byte order.
 typedef unsigned short in_port_t;
 
+// IPv4 address in host byte order.
+typedef unsigned int in_addr_t;
+
 // Well-known IPv4 addresses in host byte order (uniform across targets).
 #define INADDR_ANY             0x00000000U
 #define INADDR_BROADCAST       0xffffffffU
@@ -33,6 +36,16 @@ typedef unsigned short in_port_t;
 #define INADDR_ALLHOSTS_GROUP  0xe0000001U
 #define INADDR_ALLRTRS_GROUP   0xe0000002U
 #define INADDR_MAX_LOCAL_GROUP 0xe00000ffU
+
+// Address-class predicates on a host-order IPv4 address (uniform across
+// targets); IN_MULTICAST tests the class-D 224.0.0.0/4 range.
+#define IN_CLASSA(a)       ((((in_addr_t)(a)) & 0x80000000) == 0)
+#define IN_CLASSB(a)       ((((in_addr_t)(a)) & 0xc0000000) == 0x80000000)
+#define IN_CLASSC(a)       ((((in_addr_t)(a)) & 0xe0000000) == 0xc0000000)
+#define IN_CLASSD(a)       ((((in_addr_t)(a)) & 0xf0000000) == 0xe0000000)
+#define IN_MULTICAST(a)    IN_CLASSD(a)
+#define IN_EXPERIMENTAL(a) ((((in_addr_t)(a)) & 0xe0000000) == 0xe0000000)
+#define IN_BADCLASS(a)     ((((in_addr_t)(a)) & 0xf0000000) == 0xf0000000)
 
 // Buffer sizes for the textual forms of an address (POSIX).
 #define INET_ADDRSTRLEN  16

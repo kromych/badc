@@ -70,6 +70,10 @@ struct hostent {
     int h_length;
     char **h_addr_list;
 };
+// BSD/POSIX alias for the first resolved address.
+#ifndef h_addr
+#define h_addr h_addr_list[0]
+#endif
 
 // getaddrinfo hints / getnameinfo flags. AI_PASSIVE, NI_MAXHOST and
 // NI_MAXSERV match across targets; the rest differ.

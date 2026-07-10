@@ -23,6 +23,8 @@ struct winsize {
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::ioctl, "ioctl")
+// _IO/_IOR/_IOW/_IOWR request-encoding macros.
+#include <linux/ioctl.h>
 #define TIOCGWINSZ 0x5413
 #endif
 

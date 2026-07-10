@@ -201,6 +201,7 @@ extern char **environ;
 #pragma binding(libc::getegid,   "getegid")
 #pragma binding(libc::getppid,   "getppid")
 #pragma binding(libc::getpid,    "getpid")
+#pragma binding(libc::gettid,    "gettid")
 #pragma binding(libc::gethostname, "gethostname")
 #pragma binding(libc::sethostname, "sethostname")
 #pragma binding(libc::sleep,     "sleep")
@@ -386,6 +387,10 @@ int getgid();
 int getegid();
 int getppid();
 int getpid();
+#ifdef __linux__
+// Linux thread id of the calling thread (glibc >= 2.30).
+pid_t gettid(void);
+#endif
 int gethostname(char *name, unsigned long len);
 int sethostname(const char *name, unsigned long len);
 int sleep(int seconds);

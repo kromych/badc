@@ -162,6 +162,9 @@
 #pragma binding(libm::remainder, "remainder")
 #pragma binding(libm::sqrt,  "sqrt")
 #pragma binding(libm::fabs,  "fabs")
+// c5 aliases long double to double; bind fabsl to the double `fabs`
+// symbol so its ABI matches (as ldexpl binds to ldexp).
+#pragma binding(libm::fabsl, "fabs")
 #pragma binding(libm::floor, "floor")
 #pragma binding(libm::ceil,  "ceil")
 #pragma binding(libm::trunc, "trunc")
@@ -472,6 +475,11 @@ double log1p(double x);
 double expm1(double x);
 double remainder(double x, double y);
 double fabs(double x);
+// C99 7.12.7.2 long-double form. c5 aliases long double to double, so
+// the prototype and binding reduce to the double `fabs` ABI (cf. ldexpl).
+#ifdef __linux__
+double fabsl(double x);
+#endif
 double fmod(double x, double y);
 // C99 7.12.7.3: hypot(x, y) = sqrt(x*x + y*y) without overflow for
 // representable results. C99 7.12.12.2 / 7.12.12.1: fmin / fmax return

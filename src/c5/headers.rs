@@ -103,6 +103,31 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/sys/utime.h"),
     ),
     ("netdb.h", include_str!("../../headers/include/netdb.h")),
+    ("err.h", include_str!("../../headers/include/err.h")),
+    (
+        "ucontext.h",
+        include_str!("../../headers/include/ucontext.h"),
+    ),
+    (
+        "sys/prctl.h",
+        include_str!("../../headers/include/sys/prctl.h"),
+    ),
+    (
+        "sys/epoll.h",
+        include_str!("../../headers/include/sys/epoll.h"),
+    ),
+    (
+        "sys/signalfd.h",
+        include_str!("../../headers/include/sys/signalfd.h"),
+    ),
+    (
+        "sys/reboot.h",
+        include_str!("../../headers/include/sys/reboot.h"),
+    ),
+    (
+        "sys/inotify.h",
+        include_str!("../../headers/include/sys/inotify.h"),
+    ),
     (
         "sys/utsname.h",
         include_str!("../../headers/include/sys/utsname.h"),

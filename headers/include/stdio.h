@@ -180,6 +180,11 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::scanf,     "scanf")
 #pragma binding(libc::fscanf,    "fscanf")
 #pragma binding(libc::sscanf,    "sscanf")
+// va_list input scan + GNU allocating printf variants. Bound directly
+// like vsnprintf / vprintf; the va_list forms need no prototype.
+#pragma binding(libc::vsscanf,   "vsscanf")
+#pragma binding(libc::asprintf,  "asprintf")
+#pragma binding(libc::vasprintf, "vasprintf")
 #pragma binding(libc::fopen,     "fopen")
 #pragma binding(libc::freopen,   "freopen")
 #pragma binding(libc::fclose,    "fclose")
@@ -452,6 +457,12 @@ int _vsnprintf(char *buf, int size, char *fmt, char *ap);
 int scanf(char *fmt, ...);
 int fscanf(FILE *stream, char *fmt, ...);
 int sscanf(char *src, char *fmt, ...);
+#ifdef __linux__
+// GNU asprintf: allocate a buffer for the formatted result and store its
+// address through `strp`. The va_list siblings vsscanf / vasprintf bind
+// directly (like vsnprintf), so they need no prototype here.
+int asprintf(char **strp, char *fmt, ...);
+#endif
 FILE *fopen(char *path, char *mode);
 // C99 7.19.5.4: reopen a stream with a new file. Used by
 // programs that re-route stdin / stdout / stderr to a file.

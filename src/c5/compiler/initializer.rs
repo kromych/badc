@@ -39,7 +39,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth,
+    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, is_unsigned_ty, struct_id_of,
+    struct_ptr_depth,
 };
 
 /// Relocation kind for one initializer-element value. Tracks
@@ -2434,9 +2435,10 @@ impl Compiler {
         field_base: i64,
         first_elided: bool,
     ) -> Result<bool, C5Error> {
-        if field.bit_width > 0 {
-            return Err(self.compile_err("non-constant bitfield initializer not yet supported"));
-        }
+        // A bitfield member falls through to the scalar leaf below (its
+        // value parses like any scalar); the element it records is tagged
+        // with the bitfield descriptor so the walker emits a
+        // read-modify-write of the storage unit instead of a full store.
         if field.array_size > 0 {
             // C99 6.7.8p14 char array from a narrow string literal:
             // emit a per-byte constant store, remainder zero-filled.
@@ -2459,6 +2461,7 @@ impl Compiler {
                             offset: field_base + k as i64,
                             value,
                             ty: Ty::Char as i64,
+                            bitfield: None,
                         },
                     );
                 }
@@ -2491,6 +2494,7 @@ impl Compiler {
                             offset: field_base + (k * w) as i64,
                             value,
                             ty: field.ty,
+                            bitfield: None,
                         },
                     );
                 }
@@ -2568,6 +2572,7 @@ impl Compiler {
                         offset: field_base,
                         value,
                         ty: elem_ty,
+                        bitfield: None,
                     });
             }
             return Ok(true);
@@ -2586,11 +2591,25 @@ impl Compiler {
         let field_ast = self.ast_acc;
         self.ast_assign();
         if let Some(value) = field_ast {
+            // A bitfield member records its storage-unit descriptor so the
+            // walker read-modify-writes the unit; a regular scalar stores
+            // full-width.
+            let bitfield = if field.bit_width > 0 {
+                Some(super::super::ast::BitfieldDesc {
+                    bit_offset: field.bit_offset as u8,
+                    bit_width: field.bit_width as u8,
+                    unit_size: field.bit_unit_size,
+                    signed: !is_unsigned_ty(field.ty),
+                })
+            } else {
+                None
+            };
             self.pending_local_runtime_elements
                 .push(super::super::ast::RuntimeInitElement {
                     offset: field_base,
                     value,
                     ty: field.ty,
+                    bitfield,
                 });
         }
         Ok(false)
@@ -2637,6 +2656,7 @@ impl Compiler {
                             offset: at,
                             value,
                             ty,
+                            bitfield: None,
                         },
                     );
                 }

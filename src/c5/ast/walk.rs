@@ -1303,6 +1303,14 @@ impl<'a> Walker<'a> {
                     } else {
                         b.binop_imm(BinOp::Add, base, elem.offset)
                     };
+                    // A bitfield member: read-modify-write the storage unit
+                    // rather than a full-width store, so adjacent bitfields
+                    // in the same unit are preserved (the slot was
+                    // zero-seeded, so the field's own bits start clear).
+                    if let Some(bf) = elem.bitfield {
+                        self.store_into_bitfield(b, addr, bf, v, is_volatile_ty(elem.ty));
+                        continue;
+                    }
                     // C99 6.7.8p13: a struct/union member initialized by a
                     // single expression of compatible type copies the
                     // source's bytes. `v` is the source address (the
@@ -1319,6 +1327,53 @@ impl<'a> Walker<'a> {
                 Ok(())
             }
         }
+    }
+
+    /// Store `value`'s low `bf.bit_width` bits into the bitfield at
+    /// `addr` (C99 6.7.2.1): load the storage unit, clear the field's
+    /// slice, shift + mask the value into place, OR, and store back.
+    fn store_into_bitfield(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        addr: super::super::ir::ValueId,
+        bf: super::super::ast::BitfieldDesc,
+        value: super::super::ir::ValueId,
+        vol: bool,
+    ) {
+        let (load_kind, store_kind) = match bf.unit_size {
+            1 => (
+                super::super::ir::LoadKind::U8,
+                super::super::ir::StoreKind::I8,
+            ),
+            2 => (
+                super::super::ir::LoadKind::U16,
+                super::super::ir::StoreKind::I16,
+            ),
+            4 => (
+                super::super::ir::LoadKind::U32,
+                super::super::ir::StoreKind::I32,
+            ),
+            _ => (
+                super::super::ir::LoadKind::I64,
+                super::super::ir::StoreKind::I64,
+            ),
+        };
+        let mask: i64 = if bf.bit_width >= 64 {
+            -1
+        } else {
+            (1i64 << bf.bit_width) - 1
+        };
+        let clear_mask: i64 = !(mask << bf.bit_offset);
+        let masked = b.binop_imm(BinOp::And, value, mask);
+        let old = b.load_vol(addr, load_kind, vol);
+        let cleared = b.binop_imm(BinOp::And, old, clear_mask);
+        let shifted = if bf.bit_offset > 0 {
+            b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
+        } else {
+            masked
+        };
+        let combined = b.binop(BinOp::Or, cleared, shifted);
+        b.store_vol(addr, combined, store_kind, vol);
     }
 
     /// Allocate or reuse the SSA block reserved for the given AST

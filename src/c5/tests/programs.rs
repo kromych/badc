@@ -127,6 +127,14 @@ fn case_range() {
 }
 
 #[test]
+fn bitfield_runtime_init() {
+    // A bitfield struct member initialized at block scope by a non-constant
+    // value: the walker read-modify-writes the storage unit. Signedness,
+    // packing across units, and interleaving with regular fields.
+    assert_eq!(run_fixture("bitfield_runtime_init.c"), 0);
+}
+
+#[test]
 fn aligned_member() {
     // `__attribute__((aligned(16)))` on a struct member / its type raises the
     // member and aggregate alignment to 16 (QEMU exec/ Int128Aligned,

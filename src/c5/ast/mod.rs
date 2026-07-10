@@ -467,12 +467,16 @@ pub(crate) enum Stmt {
 /// One stored element in a runtime aggregate initializer.
 /// `offset` is the byte offset into the local; `value` is the
 /// element's expression; `ty` is the destination type that
-/// drives the walker's `store_kind_for` pick.
+/// drives the walker's `store_kind_for` pick. `bitfield`, when set,
+/// makes the walker emit a load-clear-shift-or-store into the
+/// storage unit at `offset` instead of a full-width store (a
+/// bitfield member with a non-constant initializer).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeInitElement {
     pub offset: i64,
     pub value: ExprId,
     pub ty: i64,
+    pub bitfield: Option<BitfieldDesc>,
 }
 
 /// Initializer shape on a `Decl::Local`. C99 6.7.8 admits four

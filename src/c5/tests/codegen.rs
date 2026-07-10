@@ -1530,6 +1530,45 @@ fn atomic_rmw_emits_ldaxr_stlxr_aarch64() {
     );
 }
 
+/// The 128-bit atomic asm shape lowers to an LDAXP / STLXP exclusive-pair
+/// loop. Match the opcode words by the fixed bits independent of the
+/// register fields: LDAXP is `11001000_0111_1111_1_Rt2_Rn_Rt` and STLXP is
+/// `11001000_001_Rs_1_Rt2_Rn_Rt`.
+#[test]
+fn atomic128_emits_ldaxp_stlxp_aarch64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned long long lo, hi; } u128;\n\
+         void x(u128 *p, unsigned long long nl, unsigned long long nh,\n\
+                unsigned long long *ol, unsigned long long *oh){\n\
+           unsigned long long rl, rh; unsigned t;\n\
+           __asm__(\"0: ldaxp %[oldl], %[oldh], %[mem]\\n\\t\"\n\
+                   \"stlxp %w[tmp], %[newl], %[newh], %[mem]\\n\\t\"\n\
+                   \"cbnz %w[tmp], 0b\"\n\
+                   : [mem] \"+m\"(*p), [tmp] \"=&r\"(t), [oldl] \"=&r\"(rl), [oldh] \"=&r\"(rh)\n\
+                   : [newl] \"r\"(nl), [newh] \"r\"(nh) : \"memory\");\n\
+           *ol = rl; *oh = rh; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    let any_ldaxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_8000);
+    let any_stlxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_8000);
+    assert!(
+        any_ldaxp,
+        "expected an LDAXP opcode word in the aarch64 image"
+    );
+    assert!(
+        any_stlxp,
+        "expected an STLXP opcode word in the aarch64 image"
+    );
+}
+
 /// Bytes of the section named `name` in an ELF64 little-endian
 /// object, or `None` when absent. Reads only the section header
 /// table and the section-name string table.

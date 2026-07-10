@@ -238,6 +238,18 @@ pub enum Intrinsic {
     /// `(x != 0)` factor forces the zero case (ctz(0) is the bit width).
     Ffs = 59,
     Ffsll = 60,
+    /// 128-bit atomic read-modify-write via the AArch64 `ldaxp`/`stlxp`
+    /// exclusive-pair retry loop (the shape GCC/clang inline asm emits for
+    /// `Int128` atomics, since aarch64 has no native 128-bit CAS through
+    /// gcc 10). Each takes a pointer to the 128-bit object, the addresses
+    /// of the two 64-bit halves of the prior value (written back), and the
+    /// operand halves as inputs: `CmpXchg` compares against `cmp{l,h}` and
+    /// stores `new{l,h}` on a match; `Xchg` stores unconditionally;
+    /// `FetchAnd`/`FetchOr` store `old & new` / `old | new`. AArch64 only.
+    Atomic128CmpXchg = 61,
+    Atomic128Xchg = 62,
+    Atomic128FetchAnd = 63,
+    Atomic128FetchOr = 64,
 }
 
 impl Intrinsic {
@@ -303,6 +315,10 @@ impl Intrinsic {
             58 => Some(Intrinsic::AArch64Isb),
             59 => Some(Intrinsic::Ffs),
             60 => Some(Intrinsic::Ffsll),
+            61 => Some(Intrinsic::Atomic128CmpXchg),
+            62 => Some(Intrinsic::Atomic128Xchg),
+            63 => Some(Intrinsic::Atomic128FetchAnd),
+            64 => Some(Intrinsic::Atomic128FetchOr),
             _ => None,
         }
     }

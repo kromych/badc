@@ -2130,6 +2130,51 @@ fn run_intrinsic(
             store_to_memory(mem, rem_addr, rem, StoreKind::I64)?;
             Ok(())
         }
+        Intrinsic::Atomic128CmpXchg
+        | Intrinsic::Atomic128Xchg
+        | Intrinsic::Atomic128FetchAnd
+        | Intrinsic::Atomic128FetchOr => {
+            // args: [ptr, &oldl, &oldh, in...]. Load the current 128-bit
+            // value, publish it through &oldl / &oldh, then store the
+            // computed value. Single-threaded, so the exclusive access is
+            // an ordinary load / store pair.
+            let ptr = frame.regs[args[0] as usize] as usize;
+            let oldl_addr = frame.regs[args[1] as usize] as usize;
+            let oldh_addr = frame.regs[args[2] as usize] as usize;
+            let cur_l = load_from_memory(mem, ptr, LoadKind::I64)?;
+            let cur_h = load_from_memory(mem, ptr + 8, LoadKind::I64)?;
+            store_to_memory(mem, oldl_addr, cur_l, StoreKind::I64)?;
+            store_to_memory(mem, oldh_addr, cur_h, StoreKind::I64)?;
+            let (store, new_l, new_h) = match intr {
+                Intrinsic::Atomic128CmpXchg => {
+                    let cmpl = frame.regs[args[3] as usize];
+                    let cmph = frame.regs[args[4] as usize];
+                    let newl = frame.regs[args[5] as usize];
+                    let newh = frame.regs[args[6] as usize];
+                    (cur_l == cmpl && cur_h == cmph, newl, newh)
+                }
+                Intrinsic::Atomic128Xchg => (
+                    true,
+                    frame.regs[args[3] as usize],
+                    frame.regs[args[4] as usize],
+                ),
+                Intrinsic::Atomic128FetchAnd => (
+                    true,
+                    cur_l & frame.regs[args[3] as usize],
+                    cur_h & frame.regs[args[4] as usize],
+                ),
+                _ => (
+                    true,
+                    cur_l | frame.regs[args[3] as usize],
+                    cur_h | frame.regs[args[4] as usize],
+                ),
+            };
+            if store {
+                store_to_memory(mem, ptr, new_l, StoreKind::I64)?;
+                store_to_memory(mem, ptr + 8, new_h, StoreKind::I64)?;
+            }
+            Ok(())
+        }
         Intrinsic::Rdtsc => {
             // No host clock; zero the low/high output words so a caller
             // reads a defined result rather than uninitialized data.

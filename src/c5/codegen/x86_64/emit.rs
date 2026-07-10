@@ -7097,6 +7097,13 @@ fn emit_intrinsic(
             bail_msg("aarch64 cache / barrier intrinsic is aarch64-only");
             false
         }
+        I::Atomic128CmpXchg | I::Atomic128Xchg | I::Atomic128FetchAnd | I::Atomic128FetchOr => {
+            // The `ldaxp`/`stlxp` 128-bit atomic shape is aarch64-only; the
+            // source selects it via the aarch64 host-include path, so x86-64
+            // (which has native `cmpxchg16b`) never reaches it.
+            bail_msg("128-bit atomic asm shape is aarch64-only");
+            false
+        }
     }
 }
 

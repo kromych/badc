@@ -119,6 +119,17 @@ fn cacheflush_asm() {
 }
 
 #[test]
+fn atomic128_ldaxp_stlxp() {
+    // AArch64 128-bit atomic RMW via the ldaxp/stlxp exclusive pair: the
+    // compare-exchange (match + mismatch), exchange, fetch-and and fetch-or
+    // shapes. Under the VM the sequence runs as an ordinary load / modify /
+    // store; native aarch64 emits the exclusive-pair loop (x86-64 gates the
+    // shape out). The fixture returns 0 only when every prior value and
+    // stored result is correct.
+    assert_eq!(run_fixture("atomic128_ldaxp_stlxp.c"), 0);
+}
+
+#[test]
 fn case_range() {
     // GNU case ranges `case lo ... hi:` -- boundaries, interior, stacked
     // ranges sharing a body, mixed with single labels, and fall-through

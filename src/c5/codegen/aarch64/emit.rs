@@ -3632,6 +3632,9 @@ fn emit_intrinsic(
             emit(code, enc_str_imm(tmp, addr, 0));
             true
         }
+        I::Atomic128CmpXchg | I::Atomic128Xchg | I::Atomic128FetchAnd | I::Atomic128FetchOr => {
+            emit_atomic128(code, intrinsic, args, alloc, frame, scratch)
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs
@@ -4631,6 +4634,175 @@ fn emit_atomic_cas(
     code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
     atomic_restore_working(code);
     write_atomic_result(code, dst, cur, frame);
+    true
+}
+
+/// x9..x15 save area for the 128-bit atomic sequence (7 borrowed working
+/// registers, padded to a 16-byte multiple).
+const ATOMIC128_SAVE_BYTES: u32 = 64;
+
+/// Save x9..x15 so any value the allocator parked there survives the
+/// sequence. Layout: `[sp+0]=x9 .. [sp+48]=x15`. sp moves down by
+/// [`ATOMIC128_SAVE_BYTES`].
+fn atomic128_save_working(code: &mut Vec<u8>) {
+    use super::encode::{enc_stp_off, enc_stp_pre};
+    emit(
+        code,
+        enc_stp_pre(Reg(9), Reg(10), Reg(31), -(ATOMIC128_SAVE_BYTES as i32)),
+    );
+    emit(code, enc_stp_off(Reg(11), Reg(12), Reg(31), 16));
+    emit(code, enc_stp_off(Reg(13), Reg(14), Reg(31), 32));
+    emit(code, enc_str_imm(Reg(15), Reg(31), 48));
+}
+
+/// Restore x9..x15 saved by [`atomic128_save_working`]. Run after the
+/// prior value has been written back through its output addresses.
+fn atomic128_restore_working(code: &mut Vec<u8>) {
+    use super::encode::{enc_ldp_off, enc_ldp_post};
+    emit(code, enc_ldr_imm(Reg(15), Reg(31), 48));
+    emit(code, enc_ldp_off(Reg(13), Reg(14), Reg(31), 32));
+    emit(code, enc_ldp_off(Reg(11), Reg(12), Reg(31), 16));
+    emit(
+        code,
+        enc_ldp_post(Reg(9), Reg(10), Reg(31), ATOMIC128_SAVE_BYTES as i32),
+    );
+}
+
+/// Materialise an operand into `target`, reading the saved copy when the
+/// allocator placed it in a borrowed working register (x9..x15) that an
+/// earlier operand move may already have clobbered.
+fn atomic128_operand_into(
+    code: &mut Vec<u8>,
+    value: super::super::ir::ValueId,
+    target: Reg,
+    frame: Frame,
+    alloc: &Allocation,
+) -> bool {
+    let place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    if let Place::IntReg(r) = place
+        && (9..=15).contains(&r)
+    {
+        emit_sp_ldr_x(code, target, (r as u32 - 9) * 8);
+        return true;
+    }
+    match materialize_int_shifted(code, place, target, frame, ATOMIC128_SAVE_BYTES) {
+        Some(r) => {
+            if r.0 != target.0 {
+                emit_mov_reg(code, target, r);
+            }
+            true
+        }
+        None => false,
+    }
+}
+
+/// C11-style 128-bit atomic read-modify-write via an LDAXP / STLXP
+/// exclusive-pair retry loop (ARM ARM B2.9), recognised from the GCC
+/// inline-asm shape aarch64 code uses for `Int128` atomics. `args` is
+/// `[ptr, &oldl, &oldh, in...]`: the inputs are `(cmpl, cmph, newl, newh)`
+/// for `CmpXchg` and `(newl, newh)` otherwise. The prior 128-bit value is
+/// written back through `&oldl` / `&oldh` (the caller reads it); there is
+/// no register result.
+fn emit_atomic128(
+    code: &mut Vec<u8>,
+    kind: super::super::op::Intrinsic,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use super::super::op::Intrinsic as I;
+    use super::encode::{Cond, enc_ccmp, enc_ldaxp, enc_orr_reg, enc_stlxp};
+    let n_in = if matches!(kind, I::Atomic128CmpXchg) {
+        4
+    } else {
+        2
+    };
+    if args.len() != 3 + n_in {
+        bail_msg("atomic128: wrong operand count");
+        return false;
+    }
+    let ptr = Reg(9);
+    let oldl = Reg(10);
+    let oldh = Reg(11);
+    let status = scratch.secondary; // x17
+    atomic128_save_working(code);
+    if !atomic128_operand_into(code, args[0], ptr, frame, alloc) {
+        bail_msg("atomic128: ptr operand not int reg / spill");
+        return false;
+    }
+    // Inputs land in x12.. in declaration order: (cmpl,cmph,newl,newh) or
+    // (newl,newh). Reads route through the save area if the allocator had
+    // parked an input in a register a prior move already overwrote.
+    for (k, &a) in args[3..].iter().enumerate() {
+        if !atomic128_operand_into(code, a, Reg(12 + k as u8), frame, alloc) {
+            bail_msg("atomic128: input operand not int reg / spill");
+            return false;
+        }
+    }
+    let loop_start = code.len();
+    emit(code, enc_ldaxp(oldl, oldh, ptr));
+    let (src_l, src_h, to_done) = match kind {
+        I::Atomic128CmpXchg => {
+            // Two-word equality: compare low, then high only when low matched.
+            emit(code, enc_cmp_reg(oldl, Reg(12)));
+            emit(code, enc_ccmp(oldh, Reg(13), 0, Cond::Eq));
+            emit(code, enc_b_cond(Cond::Ne, 0));
+            (Reg(14), Reg(15), Some(code.len() - 4))
+        }
+        I::Atomic128Xchg => (Reg(12), Reg(13), None),
+        I::Atomic128FetchAnd => {
+            emit(code, enc_and_reg(Reg(14), oldl, Reg(12)));
+            emit(code, enc_and_reg(Reg(15), oldh, Reg(13)));
+            (Reg(14), Reg(15), None)
+        }
+        I::Atomic128FetchOr => {
+            emit(code, enc_orr_reg(Reg(14), oldl, Reg(12)));
+            emit(code, enc_orr_reg(Reg(15), oldh, Reg(13)));
+            (Reg(14), Reg(15), None)
+        }
+        _ => {
+            bail_msg("atomic128: unexpected kind");
+            return false;
+        }
+    };
+    emit(code, enc_stlxp(status, src_l, src_h, ptr));
+    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(code, enc_cbnz(status, back as i32));
+    // CmpXchg's mismatch branch lands here, past the store/retry.
+    if let Some(to_done) = to_done {
+        let delta = ((code.len() - to_done) / 4) as i32;
+        code[to_done..to_done + 4].copy_from_slice(&enc_b_cond(Cond::Ne, delta).to_le_bytes());
+    }
+    // Write the prior value back through &oldl / &oldh.
+    if !atomic128_writeback(code, args[1], oldl, frame, alloc, scratch.primary)
+        || !atomic128_writeback(code, args[2], oldh, frame, alloc, scratch.primary)
+    {
+        return false;
+    }
+    atomic128_restore_working(code);
+    true
+}
+
+/// Store `src` (a loaded old half) through the output address operand
+/// `addr_val`, materialised into `addr_tmp`.
+fn atomic128_writeback(
+    code: &mut Vec<u8>,
+    addr_val: super::super::ir::ValueId,
+    src: Reg,
+    frame: Frame,
+    alloc: &Allocation,
+    addr_tmp: Reg,
+) -> bool {
+    if !atomic128_operand_into(code, addr_val, addr_tmp, frame, alloc) {
+        bail_msg("atomic128: output address not int reg / spill");
+        return false;
+    }
+    emit(code, enc_str_imm(src, addr_tmp, 0));
     true
 }
 

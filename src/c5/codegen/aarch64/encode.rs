@@ -1214,6 +1214,34 @@ pub(crate) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
         | (rt.0 as u32)
 }
 
+/// `LDAXP <Xt1>, <Xt2>, [<Xn|SP>]` -- load-acquire exclusive pair of
+/// 64-bit registers, the load half of a 128-bit exclusive access.
+pub(crate) fn enc_ldaxp(rt: Reg, rt2: Reg, rn: Reg) -> u32 {
+    0xC87F_8000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STLXP <Ws>, <Xt1>, <Xt2>, [<Xn|SP>]` -- store-release exclusive
+/// pair of 64-bit registers. `rs` receives 0 on success and 1 when the
+/// monitor was lost.
+pub(crate) fn enc_stlxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> u32 {
+    0xC820_8000
+        | ((rs.0 as u32) << 16)
+        | ((rt2.0 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
+/// `CCMP <Xn>, <Xm>, #<nzcv>, <cond>` -- conditional compare (register),
+/// 64-bit. When `cond` holds, compare `Xn` with `Xm`; otherwise set the
+/// flags directly from `nzcv`. Used to fuse a two-word equality test.
+pub(crate) fn enc_ccmp(rn: Reg, rm: Reg, nzcv: u8, cond: Cond) -> u32 {
+    0xFA40_0000
+        | ((rm.0 as u32) << 16)
+        | ((cond as u32) << 12)
+        | ((rn.0 as u32) << 5)
+        | (nzcv as u32 & 0xF)
+}
+
 // ---- Loads / stores (unscaled 9-bit signed offset). Used for negative
 //      stack-frame offsets (locals at fp - N*8).
 
@@ -2615,5 +2643,18 @@ mod tests {
         assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 4), 0x8800_FC41);
         assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 2), 0x4800_FC41);
         assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 1), 0x0800_FC41);
+    }
+
+    // Cross-checked against `clang -c` + `otool -t` (aarch64):
+    //   ldaxp x1,x2,[x3]=c87f8861  ldaxp x5,x6,[x7]=c87f98e5
+    //   stlxp w0,x1,x2,[x3]=c8208861  stlxp w4,x5,x6,[x7]=c82498e5
+    //   ccmp x11,x13,#0,eq=fa4d0160
+    #[test]
+    fn ldaxp_stlxp_ccmp() {
+        assert_eq!(enc_ldaxp(Reg(1), Reg(2), Reg(3)), 0xC87F_8861);
+        assert_eq!(enc_ldaxp(Reg(5), Reg(6), Reg(7)), 0xC87F_98E5);
+        assert_eq!(enc_stlxp(Reg(0), Reg(1), Reg(2), Reg(3)), 0xC820_8861);
+        assert_eq!(enc_stlxp(Reg(4), Reg(5), Reg(6), Reg(7)), 0xC824_98E5);
+        assert_eq!(enc_ccmp(Reg(11), Reg(13), 0, Cond::Eq), 0xFA4D_0160);
     }
 }

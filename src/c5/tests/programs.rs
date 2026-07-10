@@ -213,6 +213,14 @@ fn typeof_array_compatible() {
 }
 
 #[test]
+fn typeof_array_row() {
+    // A subscripted row of a multi-dim array, a `*p` pointer-to-array deref,
+    // and a string literal all have array type. Drives QEMU throttle.c's
+    // `ARRAY_SIZE(to_check[THROTTLE_READ])` over a 2-D table.
+    assert_eq!(run_fixture("typeof_array_row.c"), 0);
+}
+
+#[test]
 fn typeof_expression() {
     // `typeof(expr)` over a full expression: binary, shift, conditional
     // (QEMU's MIN/MAX `typeof(1 ? (a) : (b))`), and comma operators.

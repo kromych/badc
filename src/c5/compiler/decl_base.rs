@@ -268,12 +268,17 @@ impl Compiler {
             let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
             let saved_ast_acc = self.ast_acc;
             let saved_vstack = self.ast_vstack.len();
-            // The array-decay hint records the dimension when a bare array
-            // expression decays; capture it so an array operand types
-            // distinctly from a pointer, then restore it so it does not
-            // leak into a surrounding `sizeof`.
+            // Array-decay hints record that the operand's value came
+            // from an array: `last_array_decay_size` (element count) for
+            // a 1D bare array, `last_array_decay_bytes` (byte width) for
+            // a multi-dim subscript row, a `*p` pointer-to-array row
+            // deref, or a string literal. Capture both so an array
+            // operand types distinctly from a pointer, then restore them
+            // so they do not leak into a surrounding `sizeof`.
             let saved_decay = self.pending.last_array_decay_size;
+            let saved_decay_bytes = self.pending.last_array_decay_bytes;
             self.pending.last_array_decay_size = 0;
+            self.pending.last_array_decay_bytes = 0;
             // The operand is a full expression (C99 6.7.6.2 / the GCC
             // extension): parse at assignment precedence so binary,
             // conditional, and assignment operators are consumed, then a
@@ -282,11 +287,20 @@ impl Compiler {
             while self.lex.tk == ',' {
                 self.next()?;
                 self.pending.last_array_decay_size = 0;
+                self.pending.last_array_decay_bytes = 0;
                 self.expr(Token::Assign as i64)?;
             }
             let expr_ty = self.ty;
-            self.pending.typeof_operand_was_array = self.pending.last_array_decay_size > 0;
+            // Either marker firing means the operand decayed from an
+            // array, so `typeof(x)` is an array type and
+            // `__builtin_types_compatible_p(typeof(x), typeof(&(x)[0]))`
+            // must report it as distinct from a pointer -- including a
+            // subscripted row of a multi-dim array (`arr2d[i]`), which
+            // sets only the byte marker.
+            self.pending.typeof_operand_was_array =
+                self.pending.last_array_decay_size > 0 || self.pending.last_array_decay_bytes > 0;
             self.pending.last_array_decay_size = saved_decay;
+            self.pending.last_array_decay_bytes = saved_decay_bytes;
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);

@@ -1517,8 +1517,14 @@ impl Compiler {
         &mut self,
         mut cur_offset: i64,
         mut cur_ty: i64,
+        entry_field: Option<super::StructField>,
     ) -> Result<(i64, super::StructField), C5Error> {
-        let mut last: Option<super::StructField> = None;
+        // `entry_field` seeds the current object so a leading `[N]` step can
+        // index an array member the caller already consumed (`.member[i]`,
+        // where `.member` was read before this call). A `.member` step
+        // overwrites it.
+        let mut last: Option<super::StructField> = entry_field;
+        let mut took_step = false;
         while self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
             if self.lex.tk == Token::Dot {
                 if !is_struct_ty(cur_ty) || struct_ptr_depth(cur_ty) != 0 {
@@ -1548,10 +1554,42 @@ impl Compiler {
                 cur_ty = sub.ty;
                 last = Some(sub);
             } else {
-                return Err(self.compile_err(
-                    "`[N]` sub-designator inside a struct chain is not yet supported",
-                ));
+                // C99 6.7.8p7 `.member[i]`: index the current array member.
+                // Its element type is `cur_ty`; its dimension is on the
+                // field record (`array_size`, with the element type stored
+                // separately, so the stride is `sizeof(element)`).
+                let arr = match &last {
+                    Some(f) if f.array_size > 0 => f.clone(),
+                    _ => return Err(self.compile_err("`[N]` designator on a non-array field")),
+                };
+                if arr.inner_array_size != 0 {
+                    return Err(self.compile_err(
+                        "multi-dimensional `[N]` sub-designator is not yet supported",
+                    ));
+                }
+                self.next()?;
+                let m = self.parse_constant_int()?;
+                if m < 0 || m >= arr.array_size {
+                    return Err(self.compile_err(format!(
+                        "array designator index {m} out of bounds [0, {})",
+                        arr.array_size
+                    )));
+                }
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("`]` expected after sub-designator index"));
+                }
+                self.next()?;
+                cur_offset += m * self.size_of_type(cur_ty) as i64;
+                // The indexed element is one `cur_ty`; strip the array so the
+                // leaf initializes a single element.
+                let mut elem = arr;
+                elem.array_size = 0;
+                last = Some(elem);
             }
+            took_step = true;
+        }
+        if !took_step {
+            return Err(self.compile_err("empty designator chain after `.field`"));
         }
         let field =
             last.ok_or_else(|| self.compile_err("empty designator chain after `.field`"))?;
@@ -1571,7 +1609,7 @@ impl Compiler {
         elem_base: i64,
     ) -> Result<(), C5Error> {
         let (final_offset, final_field) =
-            self.resolve_nested_designator_chain(elem_base, elem_ty)?;
+            self.resolve_nested_designator_chain(elem_base, elem_ty, None)?;
         if self.lex.tk != Token::Assign {
             return Err(self.compile_err("`=` expected after `[N].field` designator"));
         }
@@ -1919,8 +1957,11 @@ impl Compiler {
                 if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
                     let outer = self.structs[struct_id].fields[outer_idx].clone();
                     let chain_base = (var_offset as usize) + outer.offset;
-                    let (final_offset, final_field) =
-                        self.resolve_nested_designator_chain(chain_base as i64, outer.ty)?;
+                    let (final_offset, final_field) = self.resolve_nested_designator_chain(
+                        chain_base as i64,
+                        outer.ty,
+                        Some(outer.clone()),
+                    )?;
                     if self.lex.tk != Token::Assign {
                         return Err(self.compile_err("`=` expected after nested-designator chain"));
                     }

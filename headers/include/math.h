@@ -410,6 +410,16 @@ static inline int signbit(double x) {
     a.d = x;
     return (int)(a.u >> 63);
 }
+// C99 7.12.14 relational macros. The standard forms avoid the "invalid"
+// FP exception on a NaN operand; the emitted code does not raise that
+// exception, so the plain relational operators yield the same result
+// value (a NaN comparison is false), which is what callers observe.
+#define isgreater(x, y) ((x) > (y))
+#define isgreaterequal(x, y) ((x) >= (y))
+#define isless(x, y) ((x) < (y))
+#define islessequal(x, y) ((x) <= (y))
+#define islessgreater(x, y) ((x) < (y) || (x) > (y))
+#define isunordered(x, y) (isnan(x) || isnan(y))
 static inline double copysign(double x, double y) {
     union {
         double d;

@@ -127,6 +127,13 @@ fn case_range() {
 }
 
 #[test]
+fn math_compare_macros() {
+    // C99 7.12.14 relational macros (isgreater/isless/isunordered/...), used
+    // by QEMU fpu/softfloat.c; NaN operands compare false and are unordered.
+    assert_eq!(run_fixture("math_compare_macros.c"), 0);
+}
+
+#[test]
 fn function_type_param() {
     // C99 6.7.5.3p8: an abstract function-type parameter `RET(types)` decays
     // to a function pointer (QEMU's berkeley-testfloat drivers), without

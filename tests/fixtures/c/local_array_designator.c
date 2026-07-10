@@ -37,8 +37,31 @@ static int use_auto(int seed) {
     return 0;
 }
 
+static int use_fixed(int seed) {
+    // Fixed-size (`[4]`) static local with designators (the nvme/ns.c
+    // `NvmeLBAF defaults[16]` shape).
+    static const struct E sd[4] = {
+        [0] = { .a = 9 },
+        [2] = { .a = 9, .b = 8 },
+    };
+    if (sd[0].a != 9 || sd[0].b != 0) return 20;
+    if (sd[2].a != 9 || sd[2].b != 8) return 21;
+    if (sd[1].a != 0 || sd[3].a != 0) return 22;      // gaps zeroed
+    // Fixed-size automatic local with designators + runtime values.
+    struct E ad[4] = {
+        [3] = { seed, seed + 1, 0 },
+        [1] = { 4, 5, 6 },
+    };
+    if (ad[1].a != 4 || ad[1].c != 6) return 23;
+    if (ad[3].a != seed || ad[3].b != seed + 1) return 24;
+    if (ad[0].a != 0 || ad[2].a != 0) return 25;      // gaps zeroed
+    return 0;
+}
+
 int main(void) {
     int rc = use_static();
     if (rc) return rc;
-    return use_auto(5);
+    rc = use_auto(5);
+    if (rc) return rc;
+    return use_fixed(7);
 }

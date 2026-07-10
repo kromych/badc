@@ -439,6 +439,10 @@ impl Compiler {
                 self.next()?;
                 let mut i: i64 = 0;
                 while self.lex.tk != '}' {
+                    // C99 6.7.8p7 `[N] =` designator jumps the cursor.
+                    if let Some(idx) = self.take_array_element_designator(group_count)? {
+                        i = idx;
+                    }
                     if i >= group_count {
                         return Err(self.compile_err(format!(
                             "too many initializers for `{}`",
@@ -980,6 +984,12 @@ impl Compiler {
                         self.next()?; // consume outer `{`
                         let mut i: i64 = 0;
                         while self.lex.tk != '}' {
+                            // C99 6.7.8p7 `[N] =` designator jumps the cursor.
+                            if let Some(idx) =
+                                self.take_array_element_designator(declared_array_size)?
+                            {
+                                i = idx;
+                            }
                             if i >= declared_array_size {
                                 return Err(self.compile_err(format!(
                                     "too many initializers for array `{}` ({} > {})",
@@ -1015,6 +1025,10 @@ impl Compiler {
                     self.next()?; // consume outer `{`
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {
+                        // C99 6.7.8p7 `[N] =` designator jumps the cursor.
+                        if let Some(idx) = self.take_array_element_designator(group_count)? {
+                            i = idx;
+                        }
                         if i >= group_count {
                             return Err(self.compile_err(format!(
                                 "too many initializers for array `{}` ({} > {})",

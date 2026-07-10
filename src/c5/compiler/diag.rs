@@ -299,14 +299,16 @@ impl Compiler {
     /// initializer lists, statements) passes through an entry wrapped
     /// in this helper, so one counter bounds them all and
     /// pathological nesting gets a diagnostic instead of exhausting
-    /// the native stack. C99 5.2.4.1 requires 63 nesting levels; the
-    /// bound stays well above any real source.
+    /// the native stack. C99 5.2.4.1 requires 63 nesting levels for
+    /// expressions / declarators and 127 for blocks; 512 stays well
+    /// above any real source (and above Clang's default of 256) while
+    /// capping the worst-case native stack the driver must reserve.
     pub(super) fn with_nesting<T>(
         &mut self,
         construct: &'static str,
         f: impl FnOnce(&mut Self) -> Result<T, C5Error>,
     ) -> Result<T, C5Error> {
-        const MAX_NEST_DEPTH: usize = 1024;
+        const MAX_NEST_DEPTH: usize = 512;
         if self.nest_depth >= MAX_NEST_DEPTH {
             return Err(self.compile_err(alloc::format!("{construct} nesting too deep")));
         }

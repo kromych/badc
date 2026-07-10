@@ -509,3 +509,83 @@ fn unrecognized_input_extension_is_rejected() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// `--jobs` must not change emitted bytes. A source compiled alone (one
+// TU, sequential) and the same source compiled inside a parallel `-c`
+// batch produce identical objects, and a parallel batch is stable
+// across runs. The reloc byte-stability gate pins per-TU determinism;
+// this drives it through the CLI's worker pool.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn jobs_object_bytes_match_sequential_and_are_stable() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-jobs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let srcs: [(&str, &str); 6] = [
+        ("a.c", "int a(int x){ return x*x + 1; }"),
+        (
+            "b.c",
+            "long b(long x,long y){ long s=0; for(long i=0;i<y;i++) s+=x; return s; }",
+        ),
+        ("c.c", "double c(double p,double q){ return p*q - p/q; }"),
+        (
+            "d.c",
+            "int d(int*p,int n){ int s=0; for(int i=0;i<n;i++) s+=p[i]; return s; }",
+        ),
+        (
+            "e.c",
+            "struct S{int a;int b;}; int e(struct S s){ return s.a - s.b; }",
+        ),
+        ("f.c", "float f(float a,float b){ return a<b ? a : b; }"),
+    ];
+    let seq = root.join("seq");
+    let par1 = root.join("par1");
+    let par2 = root.join("par2");
+    for d in [&seq, &par1, &par2] {
+        std::fs::create_dir_all(d).expect("mkdir");
+        for (name, body) in &srcs {
+            std::fs::write(d.join(name), body).expect("write src");
+        }
+    }
+    let target = "linux-x64";
+    // Sequential baseline: each source in its own single-input
+    // invocation (one TU -> one worker -> inline, no threads).
+    for (name, _) in &srcs {
+        let ok = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .arg("-c")
+            .arg(name)
+            .current_dir(&seq)
+            .status()
+            .expect("run badc")
+            .success();
+        assert!(ok, "sequential compile of {name} failed");
+    }
+    // Parallel batch: every source in one `-j8 -c` invocation. The same
+    // relative labels keep the (debug-info-off) bytes path-independent.
+    let run_batch = |dir: &std::path::Path| {
+        let mut cmd = Command::new(badc);
+        cmd.arg(format!("--target={target}"))
+            .arg("-j8")
+            .arg("-c")
+            .current_dir(dir);
+        for (name, _) in &srcs {
+            cmd.arg(name);
+        }
+        assert!(
+            cmd.status().expect("run badc").success(),
+            "parallel `-j8 -c` batch failed"
+        );
+    };
+    run_batch(&par1);
+    run_batch(&par2);
+    for (name, _) in &srcs {
+        let o = name.replace(".c", ".o");
+        let s = std::fs::read(seq.join(&o)).expect("read seq .o");
+        let p1 = std::fs::read(par1.join(&o)).expect("read par1 .o");
+        let p2 = std::fs::read(par2.join(&o)).expect("read par2 .o");
+        assert_eq!(s, p1, "`-j8` object for {name} differs from sequential");
+        assert_eq!(p1, p2, "`-j8` object for {name} not stable across runs");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}

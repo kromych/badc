@@ -53,6 +53,13 @@ Multi-TU knobs:
                            Repeatable; probed in declared order.
   -l <name>                Pull `lib<name>.a` in as a static
                            library. Members are pulled in on demand.
+  --jobs N, -jN            Compile independent `.c` sources
+                           concurrently in up to 2*N worker threads
+                           (capped at the source count). Output is
+                           byte-identical to a sequential build and
+                           diagnostics stay grouped per source in
+                           source order. Defaults to the host's
+                           available parallelism.
 
 Compile knobs:
   -O, --optimize           Run the SSA optimization passes (mem2reg,
@@ -200,14 +207,22 @@ impl Mode {
     }
 }
 
+/// Native-stack reservation shared by the driver thread and every
+/// `--jobs` compile worker. The parser caps nesting at `MAX_NEST_DEPTH`
+/// (512); at a measured ~33 KiB/level a debug build's deepest
+/// diagnosable unit needs ~24 MiB, so 64 MiB holds a cross-ISA margin.
+/// A worker must match the driver, else a deep unit overflows only
+/// under `--jobs`; the reservation is lazily committed, so resident
+/// stack stays at what the compile touches.
+const DRIVER_STACK_SIZE: usize = 64 * 1024 * 1024;
+
 fn main() {
-    // The recursive-descent parser bounds its nesting depth with a
-    // diagnostic, but debug builds spend tens of KiB of native stack
-    // per level, more than the platform default provides at the
-    // bound. Run the driver on a thread with an explicit reservation
-    // so the diagnostic always fires before the stack runs out.
+    // Run the driver on a thread with an explicit stack reservation:
+    // the parser bounds nesting with a diagnostic, but a debug build
+    // would overflow the platform-default stack before reaching the
+    // bound.
     let driver = std::thread::Builder::new()
-        .stack_size(256 * 1024 * 1024)
+        .stack_size(DRIVER_STACK_SIZE)
         .spawn(run)
         .expect("spawn driver thread");
     if let Err(e) = driver.join() {
@@ -291,6 +306,11 @@ fn run() {
     let mut compile_only = false;
     let mut lib_names: Vec<String> = Vec::new();
     let mut library_paths: Vec<String> = Vec::new();
+    // `--jobs N` / `-jN` sets the compile-parallelism factor N: the
+    // driver compiles independent `.c` sources in up to 2*N worker
+    // threads (capped at the source count). `None` leaves N at the host
+    // parallelism default, resolved once the source count is known.
+    let mut jobs: Option<usize> = None;
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -470,6 +490,24 @@ fn run() {
             // explicit -o path (when one source is named) or
             // `<stem>.o` next to each input.
             "-c" | "--compile-only" => compile_only = true,
+            // Build parallelism. `--jobs N` / `--jobs=N` / `-j N` /
+            // `-jN` set N; the driver runs up to 2*N compile workers.
+            // The attached `-jN` form only matches an all-digit suffix
+            // so an unknown `-jXXX` flag still reports as unknown below.
+            "--jobs" | "-j" => match iter.next() {
+                Some(n) => jobs = Some(parse_jobs(&n)),
+                None => {
+                    eprint_diagnostic("badc: error: --jobs (-j) requires a positive integer N");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("--jobs=") => jobs = Some(parse_jobs(&s["--jobs=".len()..])),
+            s if s.starts_with("-j")
+                && s.len() > 2
+                && s[2..].bytes().all(|b| b.is_ascii_digit()) =>
+            {
+                jobs = Some(parse_jobs(&s[2..]));
+            }
             "-l" => match iter.next() {
                 Some(name) => lib_names.push(name),
                 None => {
@@ -934,79 +972,31 @@ fn run() {
         // dead-store) to stderr.
         let stderr_is_tty = std::io::stderr().is_terminal();
         let multi_tu = sources.len() > 1;
-        // `.c` -> in-memory native ELF64 ET_REL: the source compiles
+        // `.c` -> in-memory native ELF64 ET_REL: each source compiles
         // straight to ET_REL bytes that `parse_native_elf` reads back,
-        // so no intermediate `.o` is written to disk.
-        type CompiledUnit = (
-            Vec<u8>,
-            Option<String>,
-            Option<badc::Subsystem>,
-            Vec<String>,
-        );
-        let compile_one = |src_path: &str, implicit_externs: &[String]| -> CompiledUnit {
-            if multi_tu && !quiet && implicit_externs.is_empty() {
-                eprint_diagnostic(format!("info: compiling {src_path}"));
-            }
-            let src_bytes = if src_path == "-" {
-                read_stdin_source()
-            } else {
-                match std::fs::read_to_string(src_path) {
-                    Ok(b) => b,
-                    Err(e) => {
-                        eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
-                        std::process::exit(1);
-                    }
-                }
-            };
-            let copts = badc::CompileOptions::default()
-                .with_gnu(gnu)
-                .with_defines(defines.clone())
-                .with_undefines(undefines.clone())
-                .with_include_paths(include_paths.clone())
-                .with_force_includes(force_includes.clone())
-                .with_source_label(src_path.to_string())
-                .with_show_includes(show_includes)
-                .with_warn_dead_store(warn_dead_store)
-                .with_optimize(optimize_flag)
-                .with_export_all_functions(export_all)
-                .with_implicit_extern_fns(implicit_externs.to_vec())
-                .with_no_entry_point(true);
-            let mut compiler = Compiler::with_options(src_bytes, target, copts);
-            if show_includes {
-                for line in compiler.take_include_trace() {
-                    eprintln!("{line}");
-                }
-            }
-            let program = match compiler.compile() {
-                Ok(p) => p,
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            };
-            for w in &program.warnings {
-                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
-            }
-            // Prefer the literal `#pragma entrypoint(<name>)` over the
-            // in-TU-resolved `entry_name`: in a multi-TU freestanding link
-            // the named entry symbol is often defined in a different TU
-            // than the one carrying the pragma, so `entry_name` is `None`
-            // here while the pragma still fixes the image entry. The
-            // freestanding defined-symbol check below verifies the symbol
-            // exists across all inputs at link time.
-            let entry = program
-                .entry_pragma
-                .clone()
-                .or_else(|| program.entry_name.clone());
-            let subsystem = program.subsystem;
-            let auto_includes = program.auto_includes.clone();
-            match badc::emit_native_with_options(&program, target, reloc_opts) {
-                Ok(b) => (b, entry, subsystem, auto_includes),
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            }
+        // so no intermediate `.o` is written to disk. Stdin is read once
+        // here so a `--jobs` worker never touches the process stream.
+        let stdin_src = if sources.iter().any(|s| s == "-") {
+            Some(read_stdin_source())
+        } else {
+            None
+        };
+        let cfg = CompileCfg {
+            target,
+            reloc_opts,
+            gnu,
+            optimize_flag,
+            export_all,
+            show_includes,
+            warn_dead_store,
+            multi_tu,
+            quiet,
+            stderr_is_tty,
+            defines: &defines,
+            undefines: &undefines,
+            include_paths: &include_paths,
+            force_includes: &force_includes,
+            stdin_src: stdin_src.as_deref(),
         };
         // In-memory variant for the embedded runtime sources
         // below: same compile + emit chain, no filesystem read.
@@ -1064,22 +1054,22 @@ fn run() {
         // not a section), then threaded to the PE writer.
         let mut subsystem_override: Option<badc::Subsystem> = cli_subsystem;
         let mut source_auto_includes: Vec<Vec<String>> = Vec::with_capacity(sources.len());
-        for src_path in &sources {
-            let (bytes, entry, subsystem, auto_includes) = compile_one(src_path, &[]);
+        // Compile every source (concurrently under `--jobs`), then fold
+        // the per-unit facts in source order so entry / subsystem
+        // resolution and object order stay scheduling-independent.
+        let workers = worker_count(jobs, sources.len());
+        let tus = compile_units(&sources, workers, |_, src| {
+            compile_native_tu(src, &[], &cfg)
+        });
+        for tu in tus {
             if entry_override.is_none() {
-                entry_override = entry;
+                entry_override = tu.entry;
             }
             if subsystem_override.is_none() {
-                subsystem_override = subsystem;
+                subsystem_override = tu.subsystem;
             }
-            source_auto_includes.push(auto_includes);
-            match badc::parse_native_elf(&bytes) {
-                Ok(o) => native_objs.push(o),
-                Err(e) => {
-                    eprint_diagnostic(format!("badc: {src_path}: {e}"));
-                    std::process::exit(1);
-                }
-            }
+            source_auto_includes.push(tu.auto_includes);
+            native_objs.push(tu.obj);
         }
         // `--freestanding` drops the embedded startup runtime: the
         // program's own entry becomes the image entry and the entry
@@ -1285,13 +1275,13 @@ fn run() {
                         ));
                     }
                 }
-                let (bytes, _, _, _) = compile_one(&sources[i], &redirect);
-                match badc::parse_native_elf(&bytes) {
-                    Ok(o) => native_objs[i] = o,
-                    Err(e) => {
-                        eprint_diagnostic(format!("badc: {}: {e}", sources[i]));
-                        std::process::exit(1);
-                    }
+                // The retry is sequential (rare, and only for sources
+                // the link redefines); flush its log inline.
+                let (log, res) = compile_native_tu(&sources[i], &redirect, &cfg);
+                log.flush();
+                match res {
+                    Ok(tu) => native_objs[i] = tu.obj,
+                    Err(()) => std::process::exit(1),
                 }
             }
         }
@@ -1486,7 +1476,7 @@ fn run() {
         let source_count = sources.len();
         // Relocatable `-c` builds do not require `main`; the linker
         // picks the entry once it merges every TU.
-        use badc::{Compiler, OutputKind};
+        use badc::OutputKind;
         let mut reloc_opts = badc::NativeOptions::new()
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
@@ -1499,52 +1489,22 @@ fn run() {
         reloc_opts.output_kind = OutputKind::Relocatable;
         let stderr_is_tty = std::io::stderr().is_terminal();
         let multi_tu = source_count > 1;
-        let compile_one = |src_path: &str| -> Vec<u8> {
-            if multi_tu && !quiet {
-                eprint_diagnostic(format!("info: compiling {src_path}"));
-            }
-            let src_bytes = match std::fs::read_to_string(src_path) {
-                Ok(b) => b,
-                Err(e) => {
-                    eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
-                    std::process::exit(1);
-                }
-            };
-            let copts = badc::CompileOptions::default()
-                .with_gnu(gnu)
-                .with_defines(defines.clone())
-                .with_undefines(undefines.clone())
-                .with_include_paths(include_paths.clone())
-                .with_force_includes(force_includes.clone())
-                .with_source_label(src_path.to_string())
-                .with_show_includes(show_includes)
-                .with_warn_dead_store(warn_dead_store)
-                .with_optimize(optimize_flag)
-                .with_no_entry_point(true);
-            let mut compiler = Compiler::with_options(src_bytes, target, copts);
-            if show_includes {
-                for line in compiler.take_include_trace() {
-                    eprintln!("{line}");
-                }
-            }
-            let program = match compiler.compile() {
-                Ok(p) => p,
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            };
-            for w in &program.warnings {
-                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
-            }
-            warn_dropped_link_pragmas(&program, src_path);
-            match badc::emit_native_with_options(&program, target, reloc_opts) {
-                Ok(b) => b,
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            }
+        let cfg = CompileCfg {
+            target,
+            reloc_opts,
+            gnu,
+            optimize_flag,
+            export_all: false,
+            show_includes,
+            warn_dead_store,
+            multi_tu,
+            quiet,
+            stderr_is_tty,
+            defines: &defines,
+            undefines: &undefines,
+            include_paths: &include_paths,
+            force_includes: &force_includes,
+            stdin_src: None,
         };
         if let Some(out) = output_path.as_deref() {
             if source_count != 1 {
@@ -1555,15 +1515,48 @@ fn run() {
                 );
                 std::process::exit(1);
             }
-            let bytes = compile_one(&sources[0]);
+            let (log, res) = compile_object_tu(&sources[0], &cfg);
+            log.flush();
+            let bytes = match res {
+                Ok(b) => b,
+                Err(()) => std::process::exit(1),
+            };
             write_output(out, &bytes, target, quiet);
         } else {
-            for src_path in sources.iter().take(source_count) {
-                let p = std::path::Path::new(src_path);
-                let out = p.with_extension("o");
-                let bytes = compile_one(src_path);
-                write_output(&out, &bytes, target, quiet);
-            }
+            // Each worker writes its own `<stem>.o`, so write I/O runs in
+            // the pool and each `info: wrote file` line stays grouped
+            // with its source's diagnostics.
+            let workers = worker_count(jobs, source_count);
+            compile_units(&sources, workers, |_, src| {
+                let (mut log, res) = compile_object_tu(src, &cfg);
+                let bytes = match res {
+                    Ok(b) => b,
+                    Err(()) => return (log, Err(())),
+                };
+                let out = std::path::Path::new(src).with_extension("o");
+                match std::fs::write(&out, &bytes) {
+                    Ok(()) => {
+                        if !cfg.quiet {
+                            log.diag(
+                                cfg.stderr_is_tty,
+                                format!(
+                                    "info: wrote file {} for target {}",
+                                    out.display(),
+                                    cfg.target.id_str()
+                                ),
+                            );
+                        }
+                        (log, Ok(()))
+                    }
+                    Err(e) => {
+                        log.diag(
+                            cfg.stderr_is_tty,
+                            format!("badc: error: failed to write {}: {e}", out.display()),
+                        );
+                        (log, Err(()))
+                    }
+                }
+            });
         }
         return;
     }
@@ -1592,7 +1585,7 @@ fn run() {
             eprint_diagnostic("badc: error: --ar requires at least one input");
             std::process::exit(1);
         }
-        use badc::{Compiler, OutputKind};
+        use badc::OutputKind;
         let mut reloc_opts = badc::NativeOptions::new()
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
@@ -1605,65 +1598,47 @@ fn run() {
         reloc_opts.output_kind = OutputKind::Relocatable;
         let stderr_is_tty = std::io::stderr().is_terminal();
         let multi_tu = sources.len() > 1;
-        let compile_one = |src_path: &str| -> Vec<u8> {
-            if multi_tu && !quiet {
-                eprint_diagnostic(format!("info: compiling {src_path}"));
-            }
-            let src_bytes = match std::fs::read_to_string(src_path) {
-                Ok(b) => b,
-                Err(e) => {
-                    eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
-                    std::process::exit(1);
-                }
-            };
-            let copts = badc::CompileOptions::default()
-                .with_gnu(gnu)
-                .with_defines(defines.clone())
-                .with_undefines(undefines.clone())
-                .with_include_paths(include_paths.clone())
-                .with_force_includes(force_includes.clone())
-                .with_source_label(src_path.to_string())
-                .with_show_includes(show_includes)
-                .with_warn_dead_store(warn_dead_store)
-                .with_optimize(optimize_flag)
-                .with_no_entry_point(true);
-            let mut compiler = Compiler::with_options(src_bytes, target, copts);
-            if show_includes {
-                for line in compiler.take_include_trace() {
-                    eprintln!("{line}");
-                }
-            }
-            let program = match compiler.compile() {
-                Ok(p) => p,
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            };
-            for w in &program.warnings {
-                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
-            }
-            warn_dropped_link_pragmas(&program, src_path);
-            match badc::emit_native_with_options(&program, target, reloc_opts) {
-                Ok(b) => b,
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            }
+        let cfg = CompileCfg {
+            target,
+            reloc_opts,
+            gnu,
+            optimize_flag,
+            export_all: false,
+            show_includes,
+            warn_dead_store,
+            multi_tu,
+            quiet,
+            stderr_is_tty,
+            defines: &defines,
+            undefines: &undefines,
+            include_paths: &include_paths,
+            force_includes: &force_includes,
+            stdin_src: None,
         };
         let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(total_inputs);
         let mut sym_index: Vec<(usize, Vec<String>)> = Vec::with_capacity(total_inputs);
-        // Member name comes from the input path's file stem
-        // with a `.o` suffix -- mirrors how a regular `-c`
-        // invocation would name the per-source output.
-        for (i, src_path) in sources.iter().enumerate() {
-            let base = std::path::Path::new(src_path)
+        // Compile every source (concurrently under `--jobs`), folding the
+        // member bytes + defined-symbol index in source order. The member
+        // name is the input's file stem with a `.o` suffix, matching a
+        // plain `-c` per-source output.
+        let workers = worker_count(jobs, sources.len());
+        let compiled = compile_units(&sources, workers, |_, src| {
+            let (mut log, res) = compile_object_tu(src, &cfg);
+            match res {
+                Ok(bytes) => {
+                    match native_defined_globals_logged(&bytes, src, &mut log, cfg.stderr_is_tty) {
+                        Ok(defined) => (log, Ok((bytes, defined))),
+                        Err(()) => (log, Err(())),
+                    }
+                }
+                Err(()) => (log, Err(())),
+            }
+        });
+        for (i, (bytes, defined)) in compiled.into_iter().enumerate() {
+            let base = std::path::Path::new(&sources[i])
                 .file_stem()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| format!("tu{i}"));
-            let bytes = compile_one(src_path);
-            let defined = native_defined_globals(&bytes, src_path);
             sym_index.push((members.len(), defined));
             members.push(badc::ArchiveMember {
                 name: format!("{base}.o"),
@@ -1708,6 +1683,342 @@ fn run() {
     unreachable!("every CLI mode is handled and returns above");
 }
 
+/// Parse a `--jobs` / `-j` value: a positive integer. Exits with a
+/// diagnostic on a non-integer or non-positive value.
+fn parse_jobs(s: &str) -> usize {
+    match s.parse::<usize>() {
+        Ok(n) if n >= 1 => n,
+        _ => {
+            eprint_diagnostic(format!(
+                "badc: error: --jobs (-j) requires a positive integer, got `{s}`"
+            ));
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Worker-thread count for `count` independent units: `2*N` capped at
+/// the unit count, where N is `--jobs` or, absent it, the host's
+/// available parallelism. C99 leaves build parallelism to the
+/// implementation.
+fn worker_count(jobs: Option<usize>, count: usize) -> usize {
+    let n = jobs.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(1)
+    });
+    n.saturating_mul(2).min(count).max(1)
+}
+
+/// Per-translation-unit diagnostic buffer. Under `--jobs` workers
+/// finish out of order, so each records its `info:` / warning / error
+/// lines here and the driver replays them in source order: stderr stays
+/// grouped per source and byte-identical to a sequential build. Lines
+/// are stored pre-formatted (colorized where the sequential path
+/// colorized) and replayed verbatim.
+#[derive(Default)]
+struct TuLog {
+    lines: Vec<String>,
+}
+
+impl TuLog {
+    /// Record a diagnostic line, colorized for a TTY exactly as
+    /// `eprint_diagnostic` prints it.
+    fn diag(&mut self, tty: bool, msg: impl core::fmt::Display) {
+        self.lines
+            .push(colorize_diagnostic(&msg.to_string(), tty).into_owned());
+    }
+    /// Record a line verbatim (the include trace prints uncolored).
+    fn raw(&mut self, line: String) {
+        self.lines.push(line);
+    }
+    /// Replay every recorded line to stderr.
+    fn flush(&self) {
+        for l in &self.lines {
+            eprintln!("{l}");
+        }
+    }
+}
+
+/// Read-only per-invocation compile inputs shared across `--jobs`
+/// workers by reference. Every field is fixed during argument parsing
+/// and never mutated during compilation.
+struct CompileCfg<'a> {
+    target: Target,
+    reloc_opts: NativeOptions,
+    gnu: bool,
+    optimize_flag: bool,
+    export_all: bool,
+    show_includes: bool,
+    warn_dead_store: bool,
+    multi_tu: bool,
+    quiet: bool,
+    stderr_is_tty: bool,
+    defines: &'a [(String, String)],
+    undefines: &'a [String],
+    include_paths: &'a [String],
+    force_includes: &'a [String],
+    /// Pre-read stdin bytes for a `-` source; `None` when no input is
+    /// stdin. Keeps a worker off the process stdin stream.
+    stdin_src: Option<&'a str>,
+}
+
+/// One compiled native-link translation unit: the parsed object plus
+/// the entry / subsystem / auto-include facts the driver folds across
+/// units in source order.
+struct NativeTu {
+    obj: badc::NativeObject,
+    entry: Option<String>,
+    subsystem: Option<badc::Subsystem>,
+    auto_includes: Vec<String>,
+}
+
+/// Compile `units` and return each payload in unit order. `compile`
+/// yields a per-unit log and either a payload or an error marker (its
+/// message already in the log). `workers <= 1` runs inline and stops at
+/// the first failing unit, matching the sequential driver exactly.
+/// `workers > 1` runs a bounded pool -- each worker on the driver's
+/// stack reservation -- pulling units off a shared cursor and replaying
+/// logs in unit order, so the first failure in source order fails the
+/// build with identical stderr regardless of scheduling.
+fn compile_units<U, P>(
+    units: &[U],
+    workers: usize,
+    compile: impl Fn(usize, &U) -> (TuLog, Result<P, ()>) + Sync,
+) -> Vec<P>
+where
+    U: Sync,
+    P: Send,
+{
+    if workers <= 1 {
+        let mut out = Vec::with_capacity(units.len());
+        for (i, u) in units.iter().enumerate() {
+            let (log, res) = compile(i, u);
+            log.flush();
+            match res {
+                Ok(p) => out.push(p),
+                Err(()) => std::process::exit(1),
+            }
+        }
+        return out;
+    }
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    // Workers pull units off a monotonic cursor. `failed` stops new
+    // pickups once any unit errors so a doomed build stops early; the
+    // cursor guarantees a filled slot implies every lower slot was
+    // handed out (and thus fills), so the first error in source order is
+    // still the one reported.
+    let next = AtomicUsize::new(0);
+    let failed = AtomicBool::new(false);
+    let (tx, rx) = std::sync::mpsc::channel::<(usize, TuLog, Result<P, ()>)>();
+    let mut slots: Vec<Option<(TuLog, Result<P, ()>)>> = (0..units.len()).map(|_| None).collect();
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            let tx = tx.clone();
+            let next = &next;
+            let failed = &failed;
+            let compile = &compile;
+            std::thread::Builder::new()
+                .stack_size(DRIVER_STACK_SIZE)
+                .spawn_scoped(scope, move || {
+                    while !failed.load(Ordering::Relaxed) {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        if i >= units.len() {
+                            break;
+                        }
+                        let (log, res) = compile(i, &units[i]);
+                        let is_err = res.is_err();
+                        if tx.send((i, log, res)).is_err() {
+                            break;
+                        }
+                        if is_err {
+                            failed.store(true, Ordering::Relaxed);
+                        }
+                    }
+                })
+                .expect("spawn compile worker");
+        }
+        drop(tx);
+        for (i, log, res) in rx {
+            slots[i] = Some((log, res));
+        }
+    });
+    // Replay logs in source order; exit at the first failing unit. A
+    // `None` occurs only past that unit (workers stopped early), so it
+    // is never reached before the exit.
+    let mut out = Vec::with_capacity(units.len());
+    for slot in slots {
+        match slot {
+            Some((log, res)) => {
+                log.flush();
+                match res {
+                    Ok(p) => out.push(p),
+                    Err(()) => std::process::exit(1),
+                }
+            }
+            None => break,
+        }
+    }
+    out
+}
+
+/// Read a translation unit's source: the pre-read stdin bytes for `-`,
+/// else the file. Records a read error in `log`.
+fn read_tu_source(src_path: &str, cfg: &CompileCfg, log: &mut TuLog) -> Result<String, ()> {
+    if src_path == "-" {
+        return match cfg.stdin_src {
+            Some(s) => Ok(s.to_string()),
+            None => {
+                log.diag(cfg.stderr_is_tty, "badc: error: cannot read `-`: no stdin");
+                Err(())
+            }
+        };
+    }
+    match std::fs::read_to_string(src_path) {
+        Ok(b) => Ok(b),
+        Err(e) => {
+            log.diag(
+                cfg.stderr_is_tty,
+                format!("badc: error: cannot read `{src_path}`: {e}"),
+            );
+            Err(())
+        }
+    }
+}
+
+/// Compile one `.c` source to an in-memory relocatable object for the
+/// native-link path, capturing every diagnostic in the returned log.
+/// `implicit_externs` is empty on the first pass; the auto-include
+/// retry passes the names to rebind (and stays quiet about "compiling").
+fn compile_native_tu(
+    src_path: &str,
+    implicit_externs: &[String],
+    cfg: &CompileCfg,
+) -> (TuLog, Result<NativeTu, ()>) {
+    let mut log = TuLog::default();
+    if cfg.multi_tu && !cfg.quiet && implicit_externs.is_empty() {
+        log.diag(cfg.stderr_is_tty, format!("info: compiling {src_path}"));
+    }
+    let src_bytes = match read_tu_source(src_path, cfg, &mut log) {
+        Ok(b) => b,
+        Err(()) => return (log, Err(())),
+    };
+    let copts = badc::CompileOptions::default()
+        .with_gnu(cfg.gnu)
+        .with_defines(cfg.defines.to_vec())
+        .with_undefines(cfg.undefines.to_vec())
+        .with_include_paths(cfg.include_paths.to_vec())
+        .with_force_includes(cfg.force_includes.to_vec())
+        .with_source_label(src_path.to_string())
+        .with_show_includes(cfg.show_includes)
+        .with_warn_dead_store(cfg.warn_dead_store)
+        .with_optimize(cfg.optimize_flag)
+        .with_export_all_functions(cfg.export_all)
+        .with_implicit_extern_fns(implicit_externs.to_vec())
+        .with_no_entry_point(true);
+    let mut compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
+    if cfg.show_includes {
+        for line in compiler.take_include_trace() {
+            log.raw(line);
+        }
+    }
+    let program = match compiler.compile() {
+        Ok(p) => p,
+        Err(e) => {
+            log.diag(cfg.stderr_is_tty, e);
+            return (log, Err(()));
+        }
+    };
+    for w in &program.warnings {
+        log.diag(cfg.stderr_is_tty, w);
+    }
+    // Prefer the literal `#pragma entrypoint(<name>)` over the
+    // in-TU-resolved `entry_name`: in a multi-TU freestanding link the
+    // named entry is often defined in a different TU, so `entry_name` is
+    // `None` here while the pragma still fixes the image entry.
+    let entry = program
+        .entry_pragma
+        .clone()
+        .or_else(|| program.entry_name.clone());
+    let subsystem = program.subsystem;
+    let auto_includes = program.auto_includes.clone();
+    match badc::emit_native_with_options(&program, cfg.target, cfg.reloc_opts) {
+        Ok(bytes) => match badc::parse_native_elf(&bytes) {
+            Ok(obj) => (
+                log,
+                Ok(NativeTu {
+                    obj,
+                    entry,
+                    subsystem,
+                    auto_includes,
+                }),
+            ),
+            Err(e) => {
+                log.diag(cfg.stderr_is_tty, format!("badc: {src_path}: {e}"));
+                (log, Err(()))
+            }
+        },
+        Err(e) => {
+            log.diag(cfg.stderr_is_tty, e);
+            (log, Err(()))
+        }
+    }
+}
+
+/// Compile one `.c` source to relocatable object bytes for the `-c` /
+/// `--ar` paths, capturing every diagnostic in the returned log.
+fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Result<Vec<u8>, ()>) {
+    let mut log = TuLog::default();
+    if cfg.multi_tu && !cfg.quiet {
+        log.diag(cfg.stderr_is_tty, format!("info: compiling {src_path}"));
+    }
+    let src_bytes = match std::fs::read_to_string(src_path) {
+        Ok(b) => b,
+        Err(e) => {
+            log.diag(
+                cfg.stderr_is_tty,
+                format!("badc: error: cannot read `{src_path}`: {e}"),
+            );
+            return (log, Err(()));
+        }
+    };
+    let copts = badc::CompileOptions::default()
+        .with_gnu(cfg.gnu)
+        .with_defines(cfg.defines.to_vec())
+        .with_undefines(cfg.undefines.to_vec())
+        .with_include_paths(cfg.include_paths.to_vec())
+        .with_force_includes(cfg.force_includes.to_vec())
+        .with_source_label(src_path.to_string())
+        .with_show_includes(cfg.show_includes)
+        .with_warn_dead_store(cfg.warn_dead_store)
+        .with_optimize(cfg.optimize_flag)
+        .with_no_entry_point(true);
+    let mut compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
+    if cfg.show_includes {
+        for line in compiler.take_include_trace() {
+            log.raw(line);
+        }
+    }
+    let program = match compiler.compile() {
+        Ok(p) => p,
+        Err(e) => {
+            log.diag(cfg.stderr_is_tty, e);
+            return (log, Err(()));
+        }
+    };
+    for w in &program.warnings {
+        log.diag(cfg.stderr_is_tty, w);
+    }
+    warn_dropped_link_pragmas(&program, src_path, &mut log, cfg.stderr_is_tty);
+    match badc::emit_native_with_options(&program, cfg.target, cfg.reloc_opts) {
+        Ok(bytes) => (log, Ok(bytes)),
+        Err(e) => {
+            log.diag(cfg.stderr_is_tty, e);
+            (log, Err(()))
+        }
+    }
+}
+
 /// Print `msg` to stderr through `colorize_diagnostic`, deciding
 /// once whether stderr is a TTY. Use for any user-visible error or
 /// warning the CLI emits -- it's a no-op for messages that don't
@@ -1747,7 +2058,7 @@ fn native_defined_globals(bytes: &[u8], path: &str) -> Vec<String> {
 /// neither. Warn when a relocatable emit drops them so the TU is
 /// recompiled in the link invocation instead of silently producing a
 /// console-subsystem / default-entry image.
-fn warn_dropped_link_pragmas(program: &badc::Program, src_path: &str) {
+fn warn_dropped_link_pragmas(program: &badc::Program, src_path: &str, log: &mut TuLog, tty: bool) {
     let mut dropped: Vec<&str> = Vec::new();
     if program.entry_pragma.is_some() {
         dropped.push("entrypoint");
@@ -1756,10 +2067,43 @@ fn warn_dropped_link_pragmas(program: &badc::Program, src_path: &str) {
         dropped.push("subsystem");
     }
     for p in dropped {
-        eprint_diagnostic(format!(
-            "{src_path}: warning: `#pragma {p}(...)` is not carried by an object \
-             file; compile this source in the link invocation for it to take effect"
-        ));
+        log.diag(
+            tty,
+            format!(
+                "{src_path}: warning: `#pragma {p}(...)` is not carried by an object \
+                 file; compile this source in the link invocation for it to take effect"
+            ),
+        );
+    }
+}
+
+/// Like [`native_defined_globals`] but records a parse error in `log`
+/// and returns `Err` instead of exiting, for the `--ar` compile
+/// workers. STB_GLOBAL section-resident names only (archive-pull-in
+/// visibility).
+fn native_defined_globals_logged(
+    bytes: &[u8],
+    path: &str,
+    log: &mut TuLog,
+    tty: bool,
+) -> Result<Vec<String>, ()> {
+    match badc::parse_native_elf(bytes) {
+        Ok(obj) => Ok(obj
+            .symbols
+            .into_iter()
+            .filter(|s| {
+                s.binding == 1
+                    && !matches!(
+                        s.section,
+                        badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
+                    )
+            })
+            .map(|s| s.name)
+            .collect()),
+        Err(e) => {
+            log.diag(tty, format!("badc: {path}: {e}"));
+            Err(())
+        }
     }
 }
 

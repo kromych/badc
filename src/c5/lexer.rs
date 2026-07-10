@@ -8,15 +8,15 @@ use super::symbol::Symbol;
 use super::token::{Tok, Token, Ty};
 
 /// Default struct-alignment cap when no `#pragma pack(N)` is
-/// active. Mirrors the existing aggregate-layout cap at 8 bytes
-/// (c5's IR slot width); explicit pack pragmas can lower it.
-const DEFAULT_PACK: usize = 8;
+/// active. Matches the aggregate-layout cap of 16 bytes; no natural
+/// type exceeds 8, so this only lets an explicit
+/// `__attribute__((aligned(16)))` survive, and explicit pack pragmas
+/// can lower it.
+const DEFAULT_PACK: usize = 16;
 
 /// Clamp a user-supplied pack value to `[1, DEFAULT_PACK]`. C99
-/// permits 1, 2, 4, 8, 16; we don't expose 16 because c5's
-/// struct-alignment cap is 8 and a stricter request would just
-/// inflate the alignment with no payoff. `0` is treated as
-/// "default" (matching `#pragma pack()` with no arg).
+/// permits 1, 2, 4, 8, 16. `0` is treated as "default" (matching
+/// `#pragma pack()` with no arg).
 fn clamp_pack(n: usize) -> usize {
     if n == 0 || n > DEFAULT_PACK {
         DEFAULT_PACK

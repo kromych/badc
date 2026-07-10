@@ -2159,17 +2159,28 @@ fn alignas_sixteen_places_objects_and_raises_data_align() {
             sym.value
         );
     }
-    // Diagnostics: above 16, automatic objects above 8, members above 8.
+    // Diagnostics: alignment above 16, and automatic objects above 8.
     for src in [
         "_Alignas(64) static char big[8];\nint main(void) { return 0; }\n",
         "int main(void) { _Alignas(16) char buf[8]; return buf[0]; }\n",
-        "struct S { _Alignas(16) int f; };\nint main(void) { struct S s; s.f = 0; return s.f; }\n",
     ] {
         assert!(
             Compiler::new(src.to_string()).compile().is_err(),
             "must be diagnosed: {src}"
         );
     }
+    // A struct member's 16-byte alignment is honored, not diagnosed (the
+    // member and the aggregate both align to 16; the aligned_member fixture
+    // checks the resulting layout against gcc/clang).
+    assert!(
+        Compiler::new(
+            "struct S { _Alignas(16) int f; };\nint main(void) { struct S s; s.f = 0; return s.f; }\n"
+                .to_string()
+        )
+        .compile()
+        .is_ok(),
+        "a struct member's aligned(16) request must be honored"
+    );
 }
 
 #[test]

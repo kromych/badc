@@ -127,6 +127,14 @@ fn case_range() {
 }
 
 #[test]
+fn aligned_member() {
+    // `__attribute__((aligned(16)))` on a struct member / its type raises the
+    // member and aggregate alignment to 16 (QEMU exec/ Int128Aligned,
+    // CPUTLBDescFast). Layout, size, alignment, and value round-trip.
+    assert_eq!(run_fixture("aligned_member.c"), 0);
+}
+
+#[test]
 fn packed_enum() {
     // `enum __attribute__((packed))` uses the smallest integer type holding
     // its values, changing the layout of an embedding struct (QEMU softfloat

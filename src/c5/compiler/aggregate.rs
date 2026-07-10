@@ -162,17 +162,23 @@ impl Compiler {
             // synthesised tag stays a regular nested-struct type.
             let mut anon_aggregate_inner_id: Option<usize> = None;
             let mut atomic_field_base: Option<i64> = None;
+            // `__attribute__((aligned(N)))` before the declarator raises the
+            // alignment of every field in the group; a per-declarator one
+            // (below) adds to it. Applied at field placement, not dropped.
+            let mut group_align: usize = 0;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
-                    // Member layout uses 8-byte alignment at most; a
-                    // larger request would change the struct layout
-                    // silently, so it is a diagnostic.
+                    // Member alignment is honored up to 16 (the aggregate's
+                    // own alignment); a larger request is a diagnostic.
                     let m_align = core::mem::take(&mut self.pending.attr_align);
-                    if m_align > 8 {
+                    if m_align > 16 {
                         return Err(self.compile_err(format!(
-                            "member alignment {m_align} is not supported (at most 8)"
+                            "member alignment {m_align} is not supported (at most 16)"
                         )));
+                    }
+                    if m_align > 0 {
+                        group_align = group_align.max(m_align as usize);
                     }
                     continue;
                 }
@@ -531,14 +537,18 @@ impl Compiler {
                 let (id_idx, mut field_ty, mut field_array_size) =
                     self.parse_declarator(field_base)?;
                 // A member may carry a trailing attribute
-                // (`int x __attribute__((deprecated));`).
+                // (`int x __attribute__((aligned(16)));`,
+                // `int x __attribute__((deprecated));`).
                 self.skip_attribute_specifiers()?;
                 let m_align = core::mem::take(&mut self.pending.attr_align);
-                if m_align > 8 {
+                if m_align > 16 {
                     return Err(self.compile_err(format!(
-                        "member alignment {m_align} is not supported (at most 8)"
+                        "member alignment {m_align} is not supported (at most 16)"
                     )));
                 }
+                // Alignment for this declarator only (a comma-list peer
+                // without its own attribute keeps the group alignment).
+                let decl_align = if m_align > 0 { m_align as usize } else { 0 };
                 // A typedef whose alias is an array contributes
                 // its dimension when the declarator stayed at the
                 // typedef's element type (`jmp_buf b;` ->
@@ -707,11 +717,14 @@ impl Compiler {
                     } else {
                         elem_size
                     };
-                    let field_align = if is_empty_aggregate {
+                    let mut field_align = if is_empty_aggregate {
                         1
                     } else {
                         self.align_of_type(field_ty).min(pack)
                     };
+                    // `aligned(N)` raises the field's alignment above its
+                    // natural alignment and above `#pragma pack`.
+                    field_align = field_align.max(group_align).max(decl_align);
                     if field_align > struct_align {
                         struct_align = field_align;
                     }
@@ -763,23 +776,17 @@ impl Compiler {
         self.next()?; // consume `}`
         self.pending.typedef_base_array_size = saved_typedef_base_array_size;
 
-        // Cap struct alignment at 8 -- the rest of the IR slots
-        // 8-wide and never asks for stricter alignment, so going
-        // above 8 buys nothing (and would force structurally
-        // identical code to handle 16-byte SIMD-style aligns).
-        // `#pragma pack(N)` further clamps the cap; field-level
-        // clamping above already prevents struct_align from
-        // exceeding pack, but cap here too so an empty struct
-        // under `pack(1)` still ends up with align=1.
-        // TODO: honor `_Alignas(N)` / `__attribute__((aligned(N)))`
-        // for N > 8. The attribute specifiers are parsed and consumed
-        // (`skip_attribute_specifiers`) but the requested alignment is
-        // dropped here; supporting it requires over-aligned stack
-        // slots and global placement, which the 8-wide slot model does
-        // not yet represent.
+        // Struct alignment tops out at 16 -- the widest the data section
+        // and static-object placement honor. `#pragma pack(N)` further
+        // clamps the cap; field-level clamping above already prevents
+        // struct_align from exceeding pack, but cap here too so an empty
+        // struct under `pack(1)` still ends up with align=1.
+        // NOTE: an automatic (stack) object of a 16-aligned type is still
+        // rejected at its declaration -- the frame uses 8-byte slots.
+        // Struct layout, static locals, and globals honor 16.
         let struct_align =
             struct_align
-                .min(8)
+                .min(16)
                 .min(if packed { 1 } else { self.lex.current_pack() });
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural

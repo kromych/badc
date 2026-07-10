@@ -127,6 +127,13 @@ fn case_range() {
 }
 
 #[test]
+fn deferred_array_designator() {
+    // A deferred-size array's size is max designated index + 1 (C99 6.7.8p22),
+    // via array designators with gaps (QEMU hw/arm/virt.c base_memmap[]).
+    assert_eq!(run_fixture("deferred_array_designator.c"), 0);
+}
+
+#[test]
 fn math_compare_macros() {
     // C99 7.12.14 relational macros (isgreater/isless/isunordered/...), used
     // by QEMU fpu/softfloat.c; NaN operands compare false and are unordered.

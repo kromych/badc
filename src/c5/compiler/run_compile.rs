@@ -30,6 +30,75 @@ use super::types::{
 };
 
 impl Compiler {
+    /// Size of a deferred-size struct array (`struct T xs[] = { ... }`) that
+    /// may use array designators (`[N] = { ... }`). C99 6.7.8p22: the size is
+    /// one greater than the largest index initialized, whether reached
+    /// positionally or by a designator. The positional group count
+    /// (`fallback`) misses a designator that jumps past it, so peek the
+    /// element list -- evaluating each `[expr]` designator -- and track the
+    /// running index the same way the fill loop does. Snapshot-restored, with
+    /// any data / PC the constant-fold touched rewound, so the real fill
+    /// re-parses from a clean state.
+    fn designated_array_count(&mut self, fallback: i64) -> Result<i64, C5Error> {
+        let snap = self.lex.snapshot();
+        let saved_data = self.data.len();
+        let saved_pc = self.next_ent_pc;
+        let result = self.designated_array_count_inner(fallback);
+        self.lex.restore(snap);
+        self.data.truncate(saved_data);
+        self.next_ent_pc = saved_pc;
+        // A non-constant designator (invalid, or a shape this peek can't
+        // fold) falls back to the positional count; the real fill re-parses
+        // and reports any genuine error.
+        Ok(result.unwrap_or(fallback))
+    }
+
+    fn designated_array_count_inner(&mut self, fallback: i64) -> Result<i64, C5Error> {
+        self.next()?; // consume `{`
+        let mut i: i64 = 0;
+        let mut max_count = fallback;
+        while self.lex.tk != '}' && self.lex.tk != 0 {
+            if self.lex.tk == Token::Brak {
+                self.next()?;
+                i = self.parse_constant_int()?;
+                if self.lex.tk == ']' {
+                    self.next()?;
+                }
+                if self.lex.tk == Token::Assign {
+                    self.next()?;
+                }
+            }
+            self.skip_init_element_value()?;
+            if i + 1 > max_count {
+                max_count = i + 1;
+            }
+            i += 1;
+            if self.lex.tk == ',' {
+                self.next()?;
+            }
+        }
+        Ok(max_count)
+    }
+
+    /// Advance past one initializer element's value to the next top-level `,`
+    /// or the closing `}`, tracking bracket depth so a comma nested inside a
+    /// brace / paren / bracket group does not end the element early.
+    fn skip_init_element_value(&mut self) -> Result<(), C5Error> {
+        let mut depth: i32 = 0;
+        while self.lex.tk != 0 {
+            if depth == 0 && (self.lex.tk == ',' || self.lex.tk == '}') {
+                break;
+            }
+            if self.lex.tk == '{' || self.lex.tk == '(' || self.lex.tk == Token::Brak {
+                depth += 1;
+            } else if self.lex.tk == '}' || self.lex.tk == ')' || self.lex.tk == ']' {
+                depth -= 1;
+            }
+            self.next()?;
+        }
+        Ok(())
+    }
+
     pub(super) fn run_compile(&mut self) -> Result<(), C5Error> {
         self.next()?;
         while self.lex.tk != 0 {
@@ -1489,8 +1558,15 @@ impl Compiler {
                             // consuming the struct's scalar slot count.
                             let groups = self.lex.count_top_level_groups_in_array();
                             let count = if groups > 0 {
-                                groups as i64
+                                // Braced elements: one `{ ... }` (or `[N] = {
+                                // ... }`) per element. A `[N]` designator may
+                                // raise the size past the positional count
+                                // (C99 6.7.8p22), so peek the designators.
+                                self.designated_array_count(groups as i64)?
                             } else {
+                                // Brace-elided: the flat value list fills
+                                // consecutive elements, each consuming the
+                                // struct's scalar slot count.
                                 let items = self.lex.count_top_level_items_in_array();
                                 let slots = self.struct_flat_init_slots(sid).max(1);
                                 items.div_ceil(slots) as i64

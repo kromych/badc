@@ -1401,25 +1401,50 @@ impl Compiler {
             // negated literal, parenthesised literal, enum / `#define`d
             // constant. The C99 grammar allows the full conditional-
             // expression chain (`a ? b : c`), so we go in at the top.
-            let val = self.parse_constant_int()?;
+            let lo = self.parse_constant_int()?;
+            // GNU case range `case lo ... hi:` (C extension): the label
+            // covers every value in [lo, hi]. `hi == lo` for a single label.
+            let hi = if self.lex.tk == Token::Ellipsis {
+                self.next()?;
+                self.parse_constant_int()?
+            } else {
+                lo
+            };
             self.consume(b':', "expected colon after case")?;
+            if hi < lo {
+                return Err(self.compile_err(format!(
+                    "case range `{lo} ... {hi}` is empty (low bound exceeds high)"
+                )));
+            }
+            // The dispatcher stores one entry per value, so bound the
+            // expansion. Real code uses small character / enum ranges.
+            let span = (hi as i128) - (lo as i128) + 1;
+            if span > 4096 {
+                return Err(self.compile_err(format!(
+                    "case range `{lo} ... {hi}` spans {span} values (limit 4096)"
+                )));
+            }
             // C99 6.8.4.2p3: the case constant expressions in one switch
             // must be distinct (constraint). Reject a duplicate rather
             // than dedup it into the first case's block, which would
             // re-terminate that block in the walker.
-            let dup_case = match self.switch_cases.last_mut() {
+            match self.switch_cases.last_mut() {
                 Some(cases) => {
-                    if cases.contains(&val) {
-                        true
-                    } else {
-                        cases.push(val);
-                        false
+                    let mut v = lo;
+                    loop {
+                        if cases.contains(&v) {
+                            return Err(
+                                self.compile_err(format!("duplicate case value {v} in switch"))
+                            );
+                        }
+                        cases.push(v);
+                        if v == hi {
+                            break;
+                        }
+                        v += 1;
                     }
                 }
                 None => return Err(self.compile_err("case outside switch")),
-            };
-            if dup_case {
-                return Err(self.compile_err(format!("duplicate case value {val} in switch")));
             }
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a label may precede a declaration. badc parses
@@ -1434,7 +1459,7 @@ impl Compiler {
                 self.stmt()?;
             }
             let body_s = self.ast_wrap_stmts_since(body_before);
-            self.ast_emit_case(val, body_s);
+            self.ast_emit_case(lo, hi, body_s);
         } else if self.lex.tk == Token::Default {
             self.next()?;
             self.consume(b':', "expected colon after default")?;

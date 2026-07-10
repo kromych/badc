@@ -110,6 +110,14 @@ fn rdtsc_host_ticks() {
 }
 
 #[test]
+fn case_range() {
+    // GNU case ranges `case lo ... hi:` -- boundaries, interior, stacked
+    // ranges sharing a body, mixed with single labels, and fall-through
+    // out of a range into the next label.
+    assert_eq!(run_fixture("case_range.c"), 0);
+}
+
+#[test]
 fn elvis_operator() {
     // GNU conditional with omitted middle operand `a ?: b`: single
     // evaluation of the condition, truthy/falsy selection, pointer and

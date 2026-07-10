@@ -1120,7 +1120,7 @@ impl<'a> Walker<'a> {
             // dispatcher can target it and a preceding statement falls
             // through into it. Outside any switch (a parser bug) it is a
             // transparent wrapper around its body.
-            Stmt::Case { val, body } => {
+            Stmt::Case { val, body, .. } => {
                 let val = *val;
                 let body_id = *body;
                 let blk = self
@@ -1440,12 +1440,22 @@ impl<'a> Walker<'a> {
         default_blk: &mut Option<super::super::ir::BlockId>,
     ) {
         match self.ast.stmt(stmt_id) {
-            Stmt::Case { val, body } => {
+            Stmt::Case { val, hi, body } => {
                 let val = *val;
+                let hi = *hi;
                 let body = *body;
-                if !cases.iter().any(|(v, _)| *v == val) {
-                    let blk = b.new_block();
-                    cases.push((val, blk));
+                // A `case lo ... hi` range maps every value in [lo, hi] to
+                // one block; the body walker looks the block up by `lo`.
+                let blk = b.new_block();
+                let mut v = val;
+                loop {
+                    if !cases.iter().any(|(cv, _)| *cv == v) {
+                        cases.push((v, blk));
+                    }
+                    if v == hi {
+                        break;
+                    }
+                    v += 1;
                 }
                 self.collect_switch_cases(b, body, cases, default_blk);
             }

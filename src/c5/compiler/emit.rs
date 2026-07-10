@@ -1271,11 +1271,12 @@ impl Compiler {
     pub(super) fn ast_emit_case(
         &mut self,
         val: i64,
+        hi: i64,
         body: super::super::ast::StmtId,
     ) -> super::super::ast::StmtId {
         let pos = self.ast_src_pos();
         self.ast
-            .push_stmt(super::super::ast::Stmt::Case { val, body }, pos)
+            .push_stmt(super::super::ast::Stmt::Case { val, hi, body }, pos)
     }
 
     /// Push a `Stmt::Default { body }`.

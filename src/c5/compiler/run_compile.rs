@@ -25,8 +25,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty,
-    struct_id_of, struct_ptr_depth,
+    UNSIGNED_BIT, VOLATILE_BIT, format_signature, is_decl_modifier, is_struct_ty, struct_id_of,
+    struct_ptr_depth,
 };
 
 impl Compiler {
@@ -368,7 +368,10 @@ impl Compiler {
                 // the declarator (C99 6.7.7p3 + 6.7.6.1). Skip
                 // the carrier in that case.
                 let typedef_dim = self.pending.typedef_base_array_size;
-                if typedef_dim > 0 && array_size == 0 && !is_pointer_ty(ty) {
+                if typedef_dim > 0
+                    && array_size == 0
+                    && self.pending.declarator_leading_ptr_count == 0
+                {
                     array_size = typedef_dim;
                 }
                 self.ty = ty;

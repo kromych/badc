@@ -27,7 +27,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
-use super::types::{is_pointer_ty, is_struct_ty, struct_ptr_depth};
+use super::types::{is_struct_ty, struct_ptr_depth};
 
 impl Compiler {
     /// `for (init; cond; step) body`. The body is emitted between the
@@ -379,7 +379,8 @@ impl Compiler {
             // dimension; the carrier is reset on the next
             // declaration.
             let typedef_dim = self.pending.typedef_base_array_size;
-            if typedef_dim > 0 && array_size == 0 && !is_pointer_ty(ty) {
+            if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
+            {
                 array_size = typedef_dim;
             }
             self.ty = ty;

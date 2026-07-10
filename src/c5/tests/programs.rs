@@ -141,6 +141,14 @@ fn member_array_designator() {
 }
 
 #[test]
+fn typedef_pointer_array() {
+    // A `typedef T *Name[N]` array-of-pointer typedef folds its dimension onto
+    // an object like any array typedef (QEMU USB `USBDescStrings`), while a
+    // declarator that adds a pointer stays pointer-to-array.
+    assert_eq!(run_fixture("typedef_pointer_array.c"), 0);
+}
+
+#[test]
 fn math_compare_macros() {
     // C99 7.12.14 relational macros (isgreater/isless/isunordered/...), used
     // by QEMU fpu/softfloat.c; NaN operands compare false and are unordered.

@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     /// Drain the three pending local-initializer carriers into a single
@@ -172,7 +172,8 @@ impl Compiler {
             // parse_block / decl-loop resets it on the next
             // declaration.
             let typedef_dim = self.pending.typedef_base_array_size;
-            if typedef_dim > 0 && array_size == 0 && !is_pointer_ty(ty) {
+            if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
+            {
                 array_size = typedef_dim;
             }
             self.ty = ty;

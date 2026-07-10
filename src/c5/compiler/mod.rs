@@ -443,6 +443,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array length. Cleared by every base-type parse
     /// (`0` means "not from an array typedef").
     pub typedef_base_array_size: i64,
+    /// Count of leading `*` levels the most recent declarator added.
+    /// A use of an array typedef folds the typedef's dimension onto the
+    /// object (`typedef T A[N]; A x;` -> `x` is `T[N]`) unless the
+    /// declarator turned it into a pointer (`A *p` -> pointer to `T[N]`);
+    /// that is `> 0` here, distinct from the typedef's own element type
+    /// being a pointer (`typedef T *A[N]; A x;` still folds).
+    pub declarator_leading_ptr_count: i64,
     /// Set true while parsing a block-scope object declarator, where
     /// a non-constant array dimension is a C99 6.7.6.2 variable-length
     /// array. Elsewhere (file scope, struct member, typedef, cast,
@@ -666,6 +673,7 @@ impl Default for Pending {
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
+            declarator_leading_ptr_count: 0,
             vla_allowed: false,
             vla_dim_expr: None,
             sizeof_vla_size_slot: None,

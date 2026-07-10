@@ -250,6 +250,11 @@ impl Compiler {
                 }
             }
         }
+        // Record the leading `*` count so a use of an array typedef can
+        // tell `A x` (fold the dimension onto `x`) from `A *p` (pointer to
+        // the array) even when the typedef's element type is itself a
+        // pointer.
+        self.pending.declarator_leading_ptr_count = leading_ptr_count;
         // Fn-pointer lineage propagation: if the caller pre-seeded
         // `pending_fn_ptr_indirection` from a typedef-of-fn-ptr
         // base type, the leading `*`s here add directly to the

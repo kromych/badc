@@ -20,8 +20,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_ty, round_up, struct_id_of,
-    struct_ptr_depth, struct_ty_for,
+    UNSIGNED_BIT, is_decl_modifier, is_struct_ty, round_up, struct_id_of, struct_ptr_depth,
+    struct_ty_for,
 };
 use super::{Compiler, StructDef, StructField};
 
@@ -561,7 +561,10 @@ impl Compiler {
                 // carrier is reset when the next field's base
                 // type is parsed.
                 let typedef_dim = self.pending.typedef_base_array_size;
-                if typedef_dim > 0 && field_array_size == 0 && !is_pointer_ty(field_ty) {
+                if typedef_dim > 0
+                    && field_array_size == 0
+                    && self.pending.declarator_leading_ptr_count == 0
+                {
                     field_array_size = typedef_dim;
                 }
                 // Capture the fn-pointer lineage tag from the

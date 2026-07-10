@@ -249,6 +249,12 @@ impl Compiler {
             self.accept(',')?;
         }
         self.next()?;
+        // A parameter whose type is an array typedef (`va_list` is
+        // `__va_list_tag[1]` on the SysV/AAPCS ABIs) leaves the typedef-array
+        // carrier set; it describes the parameter, not the enclosing object
+        // (a function / function pointer, which cannot be an array), so clear
+        // it before the enclosing declarator binds.
+        self.pending.typedef_base_array_size = 0;
         Ok(ParsedParams {
             indices: args,
             types,

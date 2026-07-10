@@ -553,6 +553,36 @@ impl Preprocessor {
             }
             Target::WindowsX64 | Target::WindowsAarch64 => {}
         }
+        // GCC/Clang predefine the underlying type of size_t / ptrdiff_t /
+        // intptr_t so headers can `typedef __SIZE_TYPE__ size_t;` without
+        // knowing the data model. Spelling follows LP64 vs LLP64.
+        let (size_ty, ptrdiff_ty) = match target {
+            Target::WindowsX64 | Target::WindowsAarch64 => ("unsigned long long", "long long"),
+            _ => ("unsigned long", "long"),
+        };
+        macros.insert("__SIZE_TYPE__".to_string(), size_ty.to_string());
+        macros.insert("__PTRDIFF_TYPE__".to_string(), ptrdiff_ty.to_string());
+        macros.insert("__INTPTR_TYPE__".to_string(), ptrdiff_ty.to_string());
+        macros.insert("__UINTPTR_TYPE__".to_string(), size_ty.to_string());
+        // GCC/Clang predefine each type's byte size so portable code can
+        // select widths without <limits.h> (QEMU's HOST_LONG_BITS is
+        // `__SIZEOF_POINTER__ * 8`). All badc targets are 64-bit, so the
+        // pointer / size_t / ptrdiff_t sizes are 8; `long` and `wchar_t`
+        // follow the data model (LLP64 Windows narrows both).
+        macros.insert("__SIZEOF_SHORT__".to_string(), "2".to_string());
+        macros.insert("__SIZEOF_INT__".to_string(), "4".to_string());
+        macros.insert("__SIZEOF_LONG_LONG__".to_string(), "8".to_string());
+        macros.insert("__SIZEOF_POINTER__".to_string(), "8".to_string());
+        macros.insert("__SIZEOF_SIZE_T__".to_string(), "8".to_string());
+        macros.insert("__SIZEOF_PTRDIFF_T__".to_string(), "8".to_string());
+        macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
+        macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
+        let (long_bytes, wchar_bytes) = match target {
+            Target::WindowsX64 | Target::WindowsAarch64 => ("4", "2"),
+            _ => ("8", "4"),
+        };
+        macros.insert("__SIZEOF_LONG__".to_string(), long_bytes.to_string());
+        macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar_bytes.to_string());
         match target {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());

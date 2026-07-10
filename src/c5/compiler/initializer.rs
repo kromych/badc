@@ -186,6 +186,38 @@ impl Compiler {
         }
     }
 
+    /// Drop any initializer relocation already recorded in the byte range
+    /// `[lo, hi)`. A later designator for the same subobject (`[N].p = q`
+    /// after a range fill already wrote `[N].p`) overwrites the bytes; the
+    /// stale relocation must go too, or both apply and corrupt the slot.
+    fn clear_init_relocs_in(&mut self, lo: usize, hi: usize) {
+        let (lo, hi) = (lo as u64, hi as u64);
+        let hit = |off: u64| off >= lo && off < hi;
+        if self.code_relocs.iter().any(|r| hit(r.data_offset)) {
+            let keep: alloc::vec::Vec<bool> = self
+                .code_relocs
+                .iter()
+                .map(|r| !hit(r.data_offset))
+                .collect();
+            let mut it = keep.iter();
+            self.code_relocs.retain(|_| *it.next().unwrap());
+            let mut it = keep.iter();
+            self.code_reloc_sym_idx.retain(|_| *it.next().unwrap());
+        }
+        if self.data_relocs.iter().any(|r| hit(r.data_offset)) {
+            let keep: alloc::vec::Vec<bool> = self
+                .data_relocs
+                .iter()
+                .map(|r| !hit(r.data_offset))
+                .collect();
+            let mut it = keep.iter();
+            self.data_relocs.retain(|_| *it.next().unwrap());
+            let mut it = keep.iter();
+            self.data_reloc_sym_idx.retain(|_| *it.next().unwrap());
+        }
+        self.extern_data_relocs.retain(|r| !hit(r.data_offset));
+    }
+
     /// C99 6.4.2.2 predefined identifier `__func__` (with the GCC
     /// `__FUNCTION__` / `__PRETTY_FUNCTION__` aliases), valid only inside a
     /// function body. The cursor must be on the identifier token.
@@ -1524,6 +1556,54 @@ impl Compiler {
         let field =
             last.ok_or_else(|| self.compile_err("empty designator chain after `.field`"))?;
         Ok((cur_offset, field))
+    }
+
+    /// A compound array-element designator `[N].field... = v` in a const
+    /// struct array, entered with the cursor just past `[N]` on the leading
+    /// `.`/`[`. Resolves the field chain from the element's base and writes
+    /// one value there, overriding only that field. QEMU's MemoryRegionOps
+    /// tables fill every element with `[lo ... hi] = { ... }`, then override
+    /// `[k].endianness = ...` per element.
+    pub(super) fn fill_element_field_designator(
+        &mut self,
+        struct_id: usize,
+        elem_ty: i64,
+        elem_base: i64,
+    ) -> Result<(), C5Error> {
+        let (final_offset, final_field) =
+            self.resolve_nested_designator_chain(elem_base, elem_ty)?;
+        if self.lex.tk != Token::Assign {
+            return Err(self.compile_err("`=` expected after `[N].field` designator"));
+        }
+        self.next()?;
+        // A pointer final member stores the address of a compound literal, so
+        // keep the cast for the scalar leaf; a value member drops it.
+        if is_pointer_ty(final_field.ty) || struct_ptr_depth(final_field.ty) > 0 {
+            self.pending.compound_lit_close_parens = 0;
+        } else {
+            self.skip_opt_compound_literal_cast()?;
+        }
+        let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+        let elem = self.size_of_type(final_field.ty);
+        let span = if final_field.array_size > 0 {
+            final_field.array_size as usize * elem
+        } else {
+            elem
+        };
+        self.clear_init_relocs_in(final_offset as usize, final_offset as usize + span);
+        self.fill_member_value_t(
+            struct_id,
+            &final_field,
+            InitTarget::Data {
+                base: elem_base as usize,
+            },
+            final_offset as usize,
+            false,
+        )?;
+        for _ in 0..close_parens {
+            self.accept(')')?;
+        }
+        Ok(())
     }
 
     /// Collect a `{ ... }` struct initializer. Each entry can be

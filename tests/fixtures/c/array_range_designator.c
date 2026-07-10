@@ -32,6 +32,22 @@ static int check_struct(void) {
     return 0;
 }
 
+// C99 6.7.8p7 compound designator `[N].field = v` overrides one field of an
+// element already filled by the range -- QEMU's MemoryRegionOps per-endianness
+// override shape. Covers a scalar field (.id) and a pointer field (.read),
+// each keeping the range template's other fields.
+static const struct Ops ops2[2] = {
+    [0 ... 1] = { .read = op_read, .write = op_write, .id = 5 },
+    [0].id = 100,
+    [1].read = op_write,
+};
+
+static int check_override(void) {
+    if (ops2[0].read() != 11 || ops2[0].write() != 22 || ops2[0].id != 100) return 30;
+    if (ops2[1].read() != 22 || ops2[1].write() != 22 || ops2[1].id != 5) return 31;
+    return 0;
+}
+
 static int check_const(void) {
     if (ct[0] != 1) return 1;
     if (ct[1] != 2) return 2;        // positional after [0]
@@ -57,6 +73,8 @@ int main(void) {
     int rc = check_const();
     if (rc) return rc;
     rc = check_struct();
+    if (rc) return rc;
+    rc = check_override();
     if (rc) return rc;
     if (dispatch(0) != 100) return 10;
     if (dispatch(1) != 200) return 11;

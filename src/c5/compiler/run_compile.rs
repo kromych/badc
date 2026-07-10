@@ -1857,6 +1857,21 @@ impl Compiler {
                                             ));
                                         }
                                         self.next()?;
+                                        if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                                            // C99 6.7.8p7 compound designator
+                                            // `[N].field... = v`: override one
+                                            // field of an already-filled element.
+                                            if range_hi.is_some() {
+                                                return Err(self.compile_err(
+                                                    "`[lo ... hi]` range cannot combine with a `.field` sub-designator",
+                                                ));
+                                            }
+                                            let here = var_offset + desig * group_stride;
+                                            self.fill_element_field_designator(sid, ty, here)?;
+                                            idx = desig + 1;
+                                            self.accept(',')?;
+                                            continue;
+                                        }
                                         if self.lex.tk != Token::Assign {
                                             return Err(self.compile_err(
                                                 "`=` expected after `[N]` designator",

@@ -76,6 +76,10 @@
 #pragma binding(libc::vfork,     "_vfork")
 #pragma binding(libc::execvp,    "_execvp")
 #pragma binding(libc::execve,    "_execve")
+#pragma binding(libc::execl,     "_execl")
+#pragma binding(libc::execlp,    "_execlp")
+#pragma binding(libc::execle,    "_execle")
+#pragma binding(libc::daemon,    "_daemon")
 #pragma binding(libc::setgid,    "_setgid")
 #pragma binding(libc::setuid,    "_setuid")
 #pragma binding(libc::_exit,     "__exit")
@@ -227,6 +231,10 @@ extern char **environ;
 #pragma binding(libc::vfork,     "vfork")
 #pragma binding(libc::execvp,    "execvp")
 #pragma binding(libc::execve,    "execve")
+#pragma binding(libc::execl,     "execl")
+#pragma binding(libc::execlp,    "execlp")
+#pragma binding(libc::execle,    "execle")
+#pragma binding(libc::daemon,    "daemon")
 #pragma binding(libc::setgid,    "setgid")
 #pragma binding(libc::setuid,    "setuid")
 #pragma binding(libc::_exit,     "_exit")
@@ -424,6 +432,14 @@ int fork();
 int vfork();
 int execvp(char *file, char **argv);
 int execve(char *path, char **argv, char **envp);
+// List-form exec (variadic argv terminated by a NULL char*; execle takes a
+// trailing char **envp after the NULL).
+int execl(char *path, char *arg, ...);
+int execlp(char *file, char *arg, ...);
+int execle(char *path, char *arg, ...);
+// Detach into the background (BSD/glibc); nochdir/noclose suppress the
+// chdir("/") and stdio redirection.
+int daemon(int nochdir, int noclose);
 int setgid(int gid);
 int setuid(int uid);
 // `_exit` skips the libc atexit / fflush chain. Programs use it

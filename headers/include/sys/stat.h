@@ -273,28 +273,36 @@ struct statfs {
     unsigned int       f_flags_ext;        /* 2136 */
     unsigned int       f_reserved[7];      /* 2140; total 2168 */
 };
-#else
-// Generic superset for the remaining targets: oversized so any field a
-// source names exists, with a trailing pad covering the real struct.
+#elif defined(__linux__)
+// glibc Linux layout (LP64: aarch64/x86_64), sizeof 120. The kernel fills
+// this, so member order and widths are read by offset; f_fsid carries an
+// __val[2] pair (unlike the macOS fsid_t whose member is .val).
 struct statfs {
+    long          f_type;    /* 0   */
+    long          f_bsize;   /* 8   */
+    unsigned long f_blocks;  /* 16  */
+    unsigned long f_bfree;   /* 24  */
+    unsigned long f_bavail;  /* 32  */
+    unsigned long f_files;   /* 40  */
+    unsigned long f_ffree;   /* 48  */
+    struct { int __val[2]; } f_fsid;  /* 56  */
+    long          f_namelen; /* 64  */
+    long          f_frsize;  /* 72  */
+    long          f_flags;   /* 80  */
+    long          f_spare[4];/* 88; total 120 */
+};
+#else
+// Windows and other non-POSIX targets have no statfs(2); the name is
+// defined only so references resolve.
+struct statfs {
+    long f_type;
     long f_bsize;
-    long f_iosize;
     long f_blocks;
     long f_bfree;
     long f_bavail;
     long f_files;
     long f_ffree;
-    long f_fsid_a;
-    long f_fsid_b;
-    long f_owner;
-    long f_type;
     long f_flags;
-    long f_fssubtype;
-    char f_fstypename[16];
-    char f_mntonname[1024];
-    char f_mntfromname[1024];
-    long f_flags_ext;
-    char __pad[2048];
 };
 #endif
 
@@ -325,7 +333,7 @@ struct statvfs {
 #endif
 
 #ifndef _WIN32
-int statfs(char *path, struct statfs *buf);
+int statfs(const char *path, struct statfs *buf);
 int fstatfs(int fd, struct statfs *buf);
 #endif
 

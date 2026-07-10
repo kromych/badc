@@ -107,6 +107,8 @@
 #pragma binding(libc::pthread_setschedparam,    "pthread_setschedparam")
 #pragma binding(libc::pthread_getschedparam,    "pthread_getschedparam")
 #pragma binding(libc::pthread_setschedprio,     "pthread_setschedprio")
+#pragma binding(libc::pthread_setaffinity_np,   "pthread_setaffinity_np")
+#pragma binding(libc::pthread_getaffinity_np,   "pthread_getaffinity_np")
 #pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
 #pragma binding(libc::pthread_mutex_lock,       "pthread_mutex_lock")
 #pragma binding(libc::pthread_mutex_trylock,    "pthread_mutex_trylock")
@@ -252,6 +254,28 @@ int pthread_equal(pthread_t t1, pthread_t t2);
 int pthread_kill(pthread_t thread, int sig);
 // Cancel a thread; query / set a running thread's scheduling parameters.
 int pthread_cancel(pthread_t thread);
+
+// Cancellation cleanup handlers (POSIX). pthread_cleanup_push registers a
+// routine that runs when the enclosing scope exits with __do_it set;
+// pthread_cleanup_pop(execute) sets that flag before the scope closes. The
+// frame uses the cleanup attribute, mirroring glibc's non-C++ definition.
+struct __pthread_cleanup_frame {
+    void (*__cancel_routine)(void *);
+    void *__cancel_arg;
+    int __do_it;
+};
+static inline void __pthread_cleanup_routine(struct __pthread_cleanup_frame *f) {
+    if (f->__do_it)
+        f->__cancel_routine(f->__cancel_arg);
+}
+#define pthread_cleanup_push(routine, arg) \
+    do { \
+        struct __pthread_cleanup_frame __clframe \
+            __attribute__((cleanup(__pthread_cleanup_routine))) = \
+            { (routine), (arg), 1 };
+#define pthread_cleanup_pop(execute) \
+        __clframe.__do_it = (execute); \
+    } while (0)
 int pthread_setschedparam(pthread_t thread, int policy,
                           const struct sched_param *param);
 int pthread_getschedparam(pthread_t thread, int *policy,
@@ -268,6 +292,12 @@ static inline int pthread_setschedprio(pthread_t thread, int prio) {
 }
 #else
 int pthread_setschedprio(pthread_t thread, int prio);
+#endif
+#ifdef __linux__
+// Thread CPU affinity (Linux). cpu_set_t comes from <sched.h>; it is passed by
+// address as an opaque buffer whose byte length is cpusetsize.
+int pthread_setaffinity_np(pthread_t thread, unsigned long cpusetsize, char *cpuset);
+int pthread_getaffinity_np(pthread_t thread, unsigned long cpusetsize, char *cpuset);
 #endif
 #ifdef __APPLE__
 // Darwin sets only the calling thread's name (no pthread_t parameter).

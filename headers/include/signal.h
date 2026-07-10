@@ -211,7 +211,8 @@ typedef struct {
     int          si_pid;
     unsigned int si_uid;
     int          si_status;
-    unsigned char __pad[104 - 24];
+    void         *si_addr; // faulting address (offset 24 on 64-bit)
+    unsigned char __pad[104 - 32];
 } siginfo_t;
 #else
 typedef struct {
@@ -232,9 +233,27 @@ typedef struct {
             long         si_band;
             int          si_fd;
         };
+        // SIGSEGV / SIGBUS / SIGILL / SIGFPE carry the faulting address at
+        // offset 16.
+        struct {
+            void        *si_addr;
+        };
         unsigned char __pad[128 - 16];
     };
 } siginfo_t;
+#endif
+
+// siginfo_t.si_code origin codes (Linux asm-generic values). SI_USER and
+// SI_KERNEL are non-negative; the queued / timer sources are negative.
+#ifdef __linux__
+#define SI_USER    0
+#define SI_KERNEL  0x80
+#define SI_QUEUE   (-1)
+#define SI_TIMER   (-2)
+#define SI_MESGQ   (-3)
+#define SI_ASYNCIO (-4)
+#define SI_SIGIO   (-5)
+#define SI_TKILL   (-6)
 #endif
 
 // Pending-signal query, blocking waits, and the BSD interrupt toggle

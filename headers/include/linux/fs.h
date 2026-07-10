@@ -7,6 +7,8 @@
 
 #ifdef __linux__
 #include <stdint.h>
+#include <stddef.h>
+#include <linux/ioctl.h>
 
 struct file_clone_range {
     int64_t src_fd;
@@ -19,4 +21,30 @@ struct file_clone_range {
 #define FICLONE 0x40049409
 // _IOW(0x94, 13, struct file_clone_range)
 #define FICLONERANGE 0x4020940d
+
+// Block-device ioctls (uapi type 0x12), encoded via the shared _IO macros.
+#define BLKROSET     _IO(0x12, 93)
+#define BLKROGET     _IO(0x12, 94)
+#define BLKRRPART    _IO(0x12, 95)
+#define BLKGETSIZE   _IO(0x12, 96)
+#define BLKFLSBUF    _IO(0x12, 97)
+#define BLKRASET     _IO(0x12, 98)
+#define BLKRAGET     _IO(0x12, 99)
+#define BLKFRASET    _IO(0x12, 100)
+#define BLKFRAGET    _IO(0x12, 101)
+#define BLKSECTSET   _IO(0x12, 102)
+#define BLKSECTGET   _IO(0x12, 103)
+#define BLKSSZGET    _IO(0x12, 104)
+#define BLKBSZGET    _IOR(0x12, 112, size_t)
+#define BLKBSZSET    _IOW(0x12, 113, size_t)
+#define BLKGETSIZE64 _IOR(0x12, 114, size_t)
+#define BLKDISCARD   _IO(0x12, 119)
+#define BLKIOMIN     _IO(0x12, 120)
+#define BLKIOOPT     _IO(0x12, 121)
+#define BLKALIGNOFF  _IO(0x12, 122)
+#define BLKPBSZGET   _IO(0x12, 123)
+#define BLKDISCARDZEROES _IO(0x12, 124)
+#define BLKSECDISCARD _IO(0x12, 125)
+#define BLKROTATIONAL _IO(0x12, 126)
+#define BLKZEROOUT   _IO(0x12, 127)
 #endif

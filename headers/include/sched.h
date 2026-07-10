@@ -49,6 +49,7 @@ struct sched_param {
 #pragma binding(libc::sched_getaffinity, "sched_getaffinity")
 #pragma binding(libc::setns,    "setns")
 #pragma binding(libc::unshare,  "unshare")
+#pragma binding(libc::clone,    "clone")
 #endif
 
 int sched_yield(void);
@@ -68,4 +69,61 @@ int sched_getaffinity(int pid, unsigned long cpusetsize, char *mask);
 // Namespace control (Linux).
 int setns(int fd, int nstype);
 int unshare(int flags);
+
+// clone()/unshare() flags (linux/sched.h).
+#define CLONE_VM       0x00000100
+#define CLONE_FS       0x00000200
+#define CLONE_FILES    0x00000400
+#define CLONE_SIGHAND  0x00000800
+#define CLONE_VFORK    0x00004000
+#define CLONE_THREAD   0x00010000
+#define CLONE_NEWNS    0x00020000
+#define CLONE_SYSVSEM  0x00040000
+#define CLONE_SETTLS   0x00080000
+#define CLONE_UNTRACED 0x00800000
+#define CLONE_NEWUTS   0x04000000
+#define CLONE_NEWIPC   0x08000000
+#define CLONE_NEWUSER  0x10000000
+#define CLONE_NEWPID   0x20000000
+#define CLONE_NEWNET   0x40000000
+#define CLONE_IO       0x80000000
+
+// clone(2) glibc wrapper; the variadic tail carries the optional
+// parent-tid / tls / child-tid arguments.
+int clone(int (*fn)(void *), void *stack, int flags, void *arg, ...);
+
+// CPU affinity sets (Linux). cpu_set_t is a fixed 1024-bit mask; the *_S
+// macros operate on a caller-sized buffer so larger masks are reachable via
+// CPU_ALLOC. malloc/free/memset back the dynamic form.
+#include <stdlib.h>
+#include <string.h>
+#define CPU_SETSIZE 1024
+#define __NCPUBITS  (8 * sizeof(unsigned long))
+typedef struct {
+    unsigned long __bits[CPU_SETSIZE / (8 * sizeof(unsigned long))];
+} cpu_set_t;
+
+#define CPU_ALLOC_SIZE(count) \
+    ((((count) + __NCPUBITS - 1) / __NCPUBITS) * sizeof(unsigned long))
+#define CPU_ALLOC(count) ((cpu_set_t *)malloc(CPU_ALLOC_SIZE(count)))
+#define CPU_FREE(set)    free((char *)(set))
+
+#define CPU_ZERO_S(setsize, set) memset((char *)(set), 0, setsize)
+#define CPU_SET_S(cpu, setsize, set) \
+    ((void)((unsigned long)(cpu) < (unsigned long)(setsize) * 8 \
+        ? (((unsigned long *)(set))[(cpu) / __NCPUBITS] |= 1UL << ((cpu) % __NCPUBITS)) \
+        : 0UL))
+#define CPU_CLR_S(cpu, setsize, set) \
+    ((void)((unsigned long)(cpu) < (unsigned long)(setsize) * 8 \
+        ? (((unsigned long *)(set))[(cpu) / __NCPUBITS] &= ~(1UL << ((cpu) % __NCPUBITS))) \
+        : 0UL))
+#define CPU_ISSET_S(cpu, setsize, set) \
+    ((unsigned long)(cpu) < (unsigned long)(setsize) * 8 \
+        ? ((((unsigned long *)(set))[(cpu) / __NCPUBITS] >> ((cpu) % __NCPUBITS)) & 1UL) \
+        : 0UL)
+
+#define CPU_ZERO(set)       CPU_ZERO_S(sizeof(cpu_set_t), set)
+#define CPU_SET(cpu, set)   CPU_SET_S(cpu, sizeof(cpu_set_t), set)
+#define CPU_CLR(cpu, set)   CPU_CLR_S(cpu, sizeof(cpu_set_t), set)
+#define CPU_ISSET(cpu, set) CPU_ISSET_S(cpu, sizeof(cpu_set_t), set)
 #endif

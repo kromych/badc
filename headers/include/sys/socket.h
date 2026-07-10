@@ -81,10 +81,16 @@ typedef unsigned short sa_family_t;
 #elif defined(__linux__)
 #define SOL_SOCKET    1
 #define SO_REUSEADDR  2
-#define SO_KEEPALIVE  9
+#define SO_TYPE       3
+#define SO_ERROR      4
 #define SO_SNDBUF     7
 #define SO_RCVBUF     8
-#define SO_ERROR      4
+#define SO_KEEPALIVE  9
+#define SO_REUSEPORT  15
+// Receive/send timeout option names. aarch64 and x86_64 have a natively
+// 64-bit time_t, so glibc selects the timeval-based "_OLD" numbers.
+#define SO_RCVTIMEO   20
+#define SO_SNDTIMEO   21
 #endif
 
 // `struct sockaddr` is the address header passed by reference to bind /

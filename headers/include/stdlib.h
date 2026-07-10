@@ -34,6 +34,9 @@
 #pragma binding(libc::calloc,  "_calloc")
 #pragma binding(libc::realloc, "_realloc")
 #pragma binding(libc::free,    "_free")
+#pragma binding(libc::posix_memalign, "_posix_memalign")
+#pragma binding(libc::aligned_alloc,  "_aligned_alloc")
+#pragma binding(libc::valloc,         "_valloc")
 #pragma binding(libc::atoi,    "_atoi")
 #pragma binding(libc::atol,    "_atol")
 #pragma binding(libc::atoll,   "_atoll")
@@ -88,6 +91,10 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::calloc,  "calloc")
 #pragma binding(libc::realloc, "realloc")
 #pragma binding(libc::free,    "free")
+#pragma binding(libc::posix_memalign, "posix_memalign")
+#pragma binding(libc::aligned_alloc,  "aligned_alloc")
+#pragma binding(libc::valloc,         "valloc")
+#pragma binding(libc::memalign,       "memalign")
 #pragma binding(libc::atoi,    "atoi")
 #pragma binding(libc::atol,    "atol")
 #pragma binding(libc::atoll,   "atoll")
@@ -259,6 +266,15 @@ char *malloc(int size);
 char *calloc(int n, int size);
 char *realloc(char *ptr, int size);
 int free(char *ptr);
+// Aligned allocation. Alignment/size are size_t (unsigned long on the LP64
+// POSIX targets). posix_memalign stores the block through memptr and returns
+// 0 or an errno value; memalign is a glibc extension.
+int posix_memalign(char **memptr, unsigned long alignment, unsigned long size);
+char *aligned_alloc(unsigned long alignment, unsigned long size);
+char *valloc(unsigned long size);
+#ifdef __linux__
+char *memalign(unsigned long alignment, unsigned long size);
+#endif
 int atoi(char *s);
 // C99 7.20.1.2: atol returns long. A libc return wider than the
 // declared type is truncated to that type, so declaring it `int`

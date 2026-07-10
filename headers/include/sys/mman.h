@@ -26,6 +26,14 @@
 #define MS_SYNC       4
 #define MS_INVALIDATE 2
 
+// mlockall() flags. MCL_CURRENT / MCL_FUTURE share values across the POSIX
+// targets; MCL_ONFAULT is Linux-only.
+#define MCL_CURRENT 1
+#define MCL_FUTURE  2
+#ifdef __linux__
+#define MCL_ONFAULT 4
+#endif
+
 // madvise advice values shared by the POSIX targets; the caller guards each
 // on #ifdef. MADV_FREE diverges (macOS 5, Linux 8).
 #define MADV_NORMAL     0
@@ -49,6 +57,8 @@
 #pragma binding(libc::madvise,    "_madvise")
 #pragma binding(libc::shm_open,   "_shm_open")
 #pragma binding(libc::shm_unlink, "_shm_unlink")
+#pragma binding(libc::mlockall,   "_mlockall")
+#pragma binding(libc::munlockall, "_munlockall")
 #endif
 
 #ifdef __linux__
@@ -65,6 +75,8 @@
 #pragma binding(libc::madvise,    "madvise")
 #pragma binding(libc::shm_open,   "shm_open")
 #pragma binding(libc::shm_unlink, "shm_unlink")
+#pragma binding(libc::mlockall,   "mlockall")
+#pragma binding(libc::munlockall, "munlockall")
 #pragma binding(libc::memfd_create, "memfd_create")
 // The MFD_* flags live in their canonical kernel header.
 #include <linux/memfd.h>
@@ -91,3 +103,6 @@ int shm_open(const char *name, int oflag, ...);
 int shm_open(const char *name, int oflag, int mode);
 #endif
 int shm_unlink(const char *name);
+// Lock/unlock the whole address space (POSIX); flags are the MCL_* set.
+int mlockall(int flags);
+int munlockall(void);

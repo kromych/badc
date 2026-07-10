@@ -21,6 +21,21 @@
 #define IPV6_TCLASS 36
 #endif
 
+// Multicast setsockopt option names. Linux values; the BSD/macOS numbering
+// differs and is added when a macOS target needs it.
+#ifdef __linux__
+#define IP_MULTICAST_IF     32
+#define IP_MULTICAST_TTL    33
+#define IP_MULTICAST_LOOP   34
+#define IP_ADD_MEMBERSHIP   35
+#define IP_DROP_MEMBERSHIP  36
+#define IPV6_MULTICAST_IF   17
+#define IPV6_MULTICAST_HOPS 18
+#define IPV6_MULTICAST_LOOP 19
+#define IPV6_JOIN_GROUP     20
+#define IPV6_LEAVE_GROUP    21
+#endif
+
 // Port number in network byte order.
 typedef unsigned short in_port_t;
 
@@ -100,6 +115,25 @@ struct sockaddr_in6 {
     unsigned int sin6_scope_id;
 };
 #endif
+
+// Multicast group membership requests for setsockopt (IP_ADD_MEMBERSHIP /
+// IPV6_JOIN_GROUP and their drop counterparts). Layouts are uniform across
+// targets: struct in_addr / in6_addr already carry the address bytes.
+struct ip_mreq {
+    struct in_addr imr_multiaddr; // group address
+    struct in_addr imr_interface; // local interface address
+};
+
+struct ip_mreqn {
+    struct in_addr imr_multiaddr;
+    struct in_addr imr_address;   // local interface address
+    int imr_ifindex;              // interface index
+};
+
+struct ipv6_mreq {
+    struct in6_addr ipv6mr_multiaddr;
+    unsigned int ipv6mr_interface; // interface index
+};
 
 
 // IN6_ARE_ADDR_EQUAL compares two in6_addr by their 16 bytes. in6addr_any is

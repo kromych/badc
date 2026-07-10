@@ -26,6 +26,7 @@ typedef unsigned long nfds_t;
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::poll, "poll")
+#pragma binding(libc::ppoll, "ppoll")
 #endif
 
 #ifdef _WIN32
@@ -33,3 +34,12 @@ typedef unsigned long nfds_t;
 #endif
 
 int poll(struct pollfd *fds, nfds_t nfds, int timeout);
+
+#ifdef __linux__
+// ppoll: poll with a nanosecond timeout and an optional signal mask (Linux).
+// struct timespec comes from <time.h> at the call site; the mask is passed by
+// address (sigset_t *, or NULL).
+struct timespec;
+int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo,
+          const void *sigmask);
+#endif

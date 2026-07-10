@@ -342,6 +342,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "sys/statvfs.h",
         include_str!("../../headers/include/sys/statvfs.h"),
     ),
+    ("sys/vfs.h", include_str!("../../headers/include/sys/vfs.h")),
     (
         "sys/socket.h",
         include_str!("../../headers/include/sys/socket.h"),
@@ -485,6 +486,11 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     // shaped C against the Windows backend opt in via
     // `badc -include msvc_compat.h ...`. Internally guarded by
     // `#ifdef _WIN32` so the same command line stays valid on
+    ("scsi/sg.h", include_str!("../../headers/include/scsi/sg.h")),
+    (
+        "linux/magic.h",
+        include_str!("../../headers/include/linux/magic.h"),
+    ),
     // every host.
     (
         "msvc_compat.h",

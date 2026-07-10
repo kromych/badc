@@ -65,6 +65,8 @@ struct dirent {
 #pragma binding(libc::rewinddir,"_rewinddir")
 #pragma binding(libc::fdopendir,"_fdopendir")
 #pragma binding(libc::dirfd,    "_dirfd")
+#pragma binding(libc::telldir,  "_telldir")
+#pragma binding(libc::seekdir,  "_seekdir")
 #endif
 
 #ifdef __linux__
@@ -75,6 +77,8 @@ struct dirent {
 #pragma binding(libc::rewinddir,"rewinddir")
 #pragma binding(libc::fdopendir,"fdopendir")
 #pragma binding(libc::dirfd,    "dirfd")
+#pragma binding(libc::telldir,  "telldir")
+#pragma binding(libc::seekdir,  "seekdir")
 #endif
 
 DIR *opendir(char *path);
@@ -85,5 +89,9 @@ int closedir(DIR *dir);
 int rewinddir(DIR *dir);
 // POSIX: the file descriptor backing an open directory stream.
 int dirfd(DIR *dir);
+// POSIX: the current position of a directory stream, and a seek back to
+// a position a prior telldir returned.
+long telldir(DIR *dir);
+void seekdir(DIR *dir, long loc);
 
 #endif /* !_WIN32 */

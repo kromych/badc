@@ -31,6 +31,17 @@ typedef long ptrdiff_t;
 typedef int wchar_t;
 #endif
 
+// C11 6.2.8: a type whose alignment is the greatest fundamental
+// alignment. A long long / long double pair carries the platform's
+// widest scalar alignment (16 on aarch64 / x86-64, 8 under LLP64).
+#ifndef __max_align_t_defined
+typedef struct {
+    long long __max_align_ll;
+    long double __max_align_ld;
+} max_align_t;
+#define __max_align_t_defined 1
+#endif
+
 #ifndef NULL
 #define NULL ((void*)0)
 #endif

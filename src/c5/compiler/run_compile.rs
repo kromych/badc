@@ -1828,11 +1828,24 @@ impl Compiler {
                                 while self.lex.tk != '}' {
                                     // C99 6.7.8p7 array designator on a
                                     // struct-array element: `[N] = {field, ...}`
-                                    // jumps the cursor and writes the
-                                    // brace list there.
+                                    // jumps the cursor and writes the brace list
+                                    // there. The GCC range form `[lo ... hi] = v`
+                                    // writes the same value to every element in
+                                    // [lo, hi].
+                                    let mut range_hi: Option<i64> = None;
                                     if self.lex.tk == Token::Brak {
                                         self.next()?;
                                         let desig = self.parse_constant_int()?;
+                                        if self.lex.tk == Token::Ellipsis {
+                                            self.next()?;
+                                            let hi = self.parse_constant_int()?;
+                                            if hi < desig || hi >= array_size {
+                                                return Err(self.compile_err(format!(
+                                                    "array designator range [{desig} ... {hi}] out of bounds [0, {array_size})"
+                                                )));
+                                            }
+                                            range_hi = Some(hi);
+                                        }
                                         if desig < 0 || desig >= array_size {
                                             return Err(self.compile_err(format!(
                                                 "array designator index {desig} out of bounds [0, {array_size})"
@@ -1852,30 +1865,47 @@ impl Compiler {
                                         self.next()?;
                                         idx = desig;
                                     }
-                                    if idx >= group_count {
+                                    let last = range_hi.unwrap_or(idx);
+                                    if last >= group_count {
                                         return Err(self.compile_err(format!(
                                             "too many initializers for `{}`",
                                             self.symbols[id_idx].name
                                         )));
                                     }
-                                    let here = var_offset + idx * group_stride;
-                                    // C99 6.7.8p20: the braces around each struct
-                                    // element may be elided. A multi-dimensional
-                                    // array's element is itself an array of
-                                    // structs -- recurse into the inner dimensions.
-                                    if !inner_dims.is_empty() {
-                                        self.collect_struct_array_data(
-                                            sid,
-                                            here,
-                                            &inner_dims,
-                                            elem_size as i64,
-                                        )?;
-                                    } else if self.lex.tk == '{' {
-                                        self.collect_struct_initializer(sid, here)?;
-                                    } else {
-                                        self.fill_struct_fields(sid, here, false)?;
+                                    // A range re-parses the value for each element
+                                    // (from a snapshot at its start) so the value's
+                                    // own relocations register at each element's
+                                    // offset. The last element leaves the cursor
+                                    // past the value for the next designator.
+                                    let value_snap = range_hi.map(|_| self.lex.snapshot());
+                                    let mut k = idx;
+                                    loop {
+                                        if let Some(snap) = value_snap {
+                                            self.lex.restore(snap);
+                                        }
+                                        let here = var_offset + k * group_stride;
+                                        // C99 6.7.8p20: the braces around each
+                                        // struct element may be elided; a
+                                        // multi-dimensional element is itself an
+                                        // array of structs.
+                                        if !inner_dims.is_empty() {
+                                            self.collect_struct_array_data(
+                                                sid,
+                                                here,
+                                                &inner_dims,
+                                                elem_size as i64,
+                                            )?;
+                                        } else if self.lex.tk == '{' {
+                                            self.collect_struct_initializer(sid, here)?;
+                                        } else {
+                                            self.fill_struct_fields(sid, here, false)?;
+                                        }
+                                        if k >= last {
+                                            break;
+                                        }
+                                        k += 1;
                                     }
-                                    idx += 1;
+                                    idx = last + 1;
                                     self.accept(',')?;
                                 }
                                 self.next()?; // consume `}`

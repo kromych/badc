@@ -171,6 +171,14 @@ fn deferred_array_typedef() {
 }
 
 #[test]
+fn local_array_designator() {
+    // A block-scope struct array (static or automatic) may use `[N] =`
+    // designators and take its deferred size from the largest index
+    // (QEMU tests/unit/test-qdist.c).
+    assert_eq!(run_fixture("local_array_designator.c"), 0);
+}
+
+#[test]
 fn math_compare_macros() {
     // C99 7.12.14 relational macros (isgreater/isless/isunordered/...), used
     // by QEMU fpu/softfloat.c; NaN operands compare false and are unordered.

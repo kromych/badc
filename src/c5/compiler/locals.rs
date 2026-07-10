@@ -366,7 +366,9 @@ impl Compiler {
                     // elements, each consuming the struct's slot count.
                     let groups = self.lex.count_top_level_groups_in_array();
                     let count = if groups > 0 {
-                        groups as i64
+                        // `[N]` designators can push the size past the
+                        // positional group count (C99 6.7.8p22).
+                        self.designated_array_count(groups as i64)?
                     } else {
                         let items = self.lex.count_top_level_items_in_array();
                         let slots = self.struct_flat_init_slots(sid).max(1);
@@ -381,6 +383,10 @@ impl Compiler {
                     }
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {
+                        // C99 6.7.8p7 `[N] =` designator jumps the cursor.
+                        if let Some(idx) = self.take_array_element_designator(count)? {
+                            i = idx;
+                        }
                         let here = off + i * elem_size as i64;
                         if self.lex.tk == '{' {
                             self.collect_struct_initializer(sid, here)?;
@@ -726,6 +732,32 @@ impl Compiler {
         Ok(())
     }
 
+    /// If the next brace-list entry is an array designator `[N] =`, consume
+    /// it and return the index; otherwise leave the cursor and return None.
+    /// Shared by the deferred-local struct-array fill loops -- the file-scope
+    /// path carries the same logic inline.
+    fn take_array_element_designator(&mut self, count: i64) -> Result<Option<i64>, C5Error> {
+        if self.lex.tk != Token::Brak {
+            return Ok(None);
+        }
+        self.next()?; // `[`
+        let idx = self.parse_constant_int()?;
+        if idx < 0 || idx >= count {
+            return Err(self.compile_err(format!(
+                "array designator index {idx} out of bounds [0, {count})"
+            )));
+        }
+        if self.lex.tk != ']' {
+            return Err(self.compile_err("`]` expected after array designator index"));
+        }
+        self.next()?; // `]`
+        if self.lex.tk != Token::Assign {
+            return Err(self.compile_err("`=` expected after `[N]` designator"));
+        }
+        self.next()?; // `=`
+        Ok(Some(idx))
+    }
+
     pub(super) fn allocate_local_with_init(
         &mut self,
         loc_idx: usize,
@@ -778,7 +810,10 @@ impl Compiler {
                 // each consuming the struct's slot count.
                 let groups = self.lex.count_top_level_groups_in_array();
                 let count = if groups > 0 {
-                    groups as i64
+                    // `[N]` designators can push the size past the positional
+                    // group count (C99 6.7.8p22); the file-scope path uses the
+                    // same pre-scan.
+                    self.designated_array_count(groups as i64)?
                 } else {
                     let items = self.lex.count_top_level_items_in_array();
                     let slots = self.struct_flat_init_slots(sid).max(1);
@@ -806,6 +841,10 @@ impl Compiler {
                     self.next()?; // consume outer `{`
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {
+                        // C99 6.7.8p7 `[N] =` designator jumps the cursor.
+                        if let Some(idx) = self.take_array_element_designator(count)? {
+                            i = idx;
+                        }
                         if i >= count {
                             return Err(self.compile_err(format!(
                                 "too many initializers for array `{}` ({} > {})",
@@ -832,6 +871,10 @@ impl Compiler {
                 }
                 let mut i: i64 = 0;
                 while self.lex.tk != '}' {
+                    // C99 6.7.8p7 `[N] =` designator jumps the cursor.
+                    if let Some(idx) = self.take_array_element_designator(count)? {
+                        i = idx;
+                    }
                     let here = staged_off as i64 + i * elem_size as i64;
                     if self.lex.tk == '{' {
                         self.collect_struct_initializer(sid, here)?;

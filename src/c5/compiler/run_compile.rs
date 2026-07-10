@@ -39,7 +39,7 @@ impl Compiler {
     /// running index the same way the fill loop does. Snapshot-restored, with
     /// any data / PC the constant-fold touched rewound, so the real fill
     /// re-parses from a clean state.
-    fn designated_array_count(&mut self, fallback: i64) -> Result<i64, C5Error> {
+    pub(super) fn designated_array_count(&mut self, fallback: i64) -> Result<i64, C5Error> {
         let snap = self.lex.snapshot();
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;

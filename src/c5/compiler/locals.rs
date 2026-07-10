@@ -787,7 +787,7 @@ impl Compiler {
                 // to the -1 sentinel (it otherwise behaves like a flexible
                 // array member). As a local with no initializer this is a
                 // valid empty array, used by compile-time-assert idioms such
-                // as QEMU's `char offset_must_be_zero[-offsetof(type, f)]` --
+                // as `char offset_must_be_zero[-offsetof(type, f)]` --
                 // a first member gives `[0]` (accepted here), a non-first
                 // member a negative dimension the declarator already rejects.
                 // Reserve a minimal slot; the array holds no elements and is

@@ -1,5 +1,5 @@
-/* x86-64 unsigned 128/64 division via the `divq` inline-asm shape QEMU's
-   host-utils.h `udiv_qrnnd` uses. Recognized as Intrinsic::Divq128:
+/* x86-64 unsigned 128/64 division via the `divq` inline-asm shape a
+   real-world `udiv_qrnnd` uses. Recognized as Intrinsic::Divq128:
    native x86-64 emits `div r/m64`; the VM computes it in 128-bit host
    arithmetic. (On non-x86-64 native targets the source gates it out.) */
 

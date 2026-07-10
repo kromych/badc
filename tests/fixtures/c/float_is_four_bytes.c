@@ -92,7 +92,7 @@ int main(void) {
     // exactly 1.5f. Before the param-rebind step at function entry,
     // the callee's `Op::Lf` would read the low 4 bytes of the
     // caller-pushed `f64::to_bits(1.5f)` slot (= 0x00000000 = +0.0f)
-    // and stb_perlin's float math collapsed to a constant.
+    // and downstream float math collapsed to a constant.
     if (passthrough(1.5f) != 1.5f) {
         printf("FAIL passthrough(1.5)\n");
         rc = 11;

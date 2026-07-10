@@ -1,7 +1,7 @@
 // C99 6.5.2.2: every host-arg-register parameter value must remain
 // readable once function execution reaches the body. Surfaced on
-// Linux x86_64 in sqlite3's yy_reduce, whose signature mirrors
-// `(yyParser*, uint, int, Token, Parse*)`: the c5 walker emitted
+// Linux x86_64 for a signature with a struct-by-value parameter
+// followed by a trailing pointer parameter: the c5 walker emitted
 // the struct-by-value mcpy before the ParamRef capture stores, so
 // the mcpy's dst-place propagation landed in the trailing
 // pointer's host arg register and overwrote it before the walker

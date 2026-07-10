@@ -1,7 +1,7 @@
 // GCC generic atomic builtins `__atomic_load(p, ret, memorder)` and
 // `__atomic_store(p, val, memorder)`, which move the value through a
 // pointer (usable for any-size object) rather than by value like the `_n`
-// forms. QEMU uses these. Returns 0 on success; distinct non-zero per fail.
+// forms. Returns 0 on success; distinct non-zero per fail.
 
 int main(void) {
     // 64-bit load / store.

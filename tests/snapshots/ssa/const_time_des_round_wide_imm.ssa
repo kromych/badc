@@ -20,7 +20,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v14  Binop { op=or, lhs=v8, rhs=v13 }                 -> x0
     terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=1 ---
-; name=Fconf
+; name=des_round
 fn ent_pc=1 n_params=2 variadic=false locals=40
   spill_count=24 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0

@@ -299,8 +299,8 @@ impl Compiler {
         // pointer-to-function. Distinguished from a parenthesized
         // declarator (`RET (name)` / `RET (*name)`) by a type-start --
         // including a typedef-name -- or an empty / `void` list after the
-        // paren, which names a type rather than a declarator. testfloat's
-        // drivers use this shape (`void test_a(float32_t(uint32_t), ...)`).
+        // paren, which names a type rather than a declarator. Test-harness
+        // prototypes use this shape (`void test_a(float32_t(uint32_t), ...)`).
         if self.lex.tk == '(' && self.paren_opens_param_type_list() {
             self.next()?; // consume `(`
             self.parse_function_params()?; // consumes the matching `)`

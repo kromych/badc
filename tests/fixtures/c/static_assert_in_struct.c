@@ -1,8 +1,7 @@
 // C11 6.7.2.1: a static_assert-declaration may appear in a
 // struct-declaration-list. It declares no member and emits no code;
 // the assertion is checked at parse time. The anonymous-struct form
-// inside a sizeof operand is the shape CPython's Py_BUILD_ASSERT_EXPR
-// uses.
+// inside a sizeof operand is a common build-time-assertion shape.
 
 #include <stdio.h>
 

@@ -1,8 +1,8 @@
 // C99 6.7.8p22: a deferred-size array's size is one greater than the largest
 // index initialized, whether reached positionally or by a `[N]` designator.
-// QEMU's hw/arm/virt.c base_memmap[] uses enum-indexed designators with gaps.
-// Sizes, designated values, positional-after-designator, backward
-// designators, and zeroed gaps match GCC/clang. Returns 0 on success.
+// A real-world shape uses enum-indexed designators with gaps. Sizes,
+// designated values, positional-after-designator, backward designators, and
+// zeroed gaps match GCC/clang. Returns 0 on success.
 
 enum { A = 0, B = 5, C = 28, D = 2 };
 struct P {

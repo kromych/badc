@@ -2,8 +2,8 @@
 // max(member size). Member access reuses the struct field path
 // (each field's `offset` is just 0 for a union).
 //
-// SQLite's VDBE leans on tagged unions for instruction operands;
-// this fixture covers the typical shape.
+// Tagged unions -- a discriminator field beside a union payload --
+// are a common shape; this fixture covers it.
 
 union Value {
     int i;
@@ -37,7 +37,7 @@ int main() {
     // sizeof(union Value) = max(int=8, char*=8, double=8) = 8.
     if (sizeof(union Value) != 8) return 6;
 
-    // Embed a union in a struct (the VDBE pattern). The tagged
+    // Embed a union in a struct (the tagged-union pattern). The tagged
     // struct's first field is the discriminator; the second is
     // the union payload.
     t.tag = 1;

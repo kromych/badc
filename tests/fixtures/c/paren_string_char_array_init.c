@@ -1,9 +1,8 @@
 // C99 6.7.9p14 + 6.5.1: a character array may be initialized by a string
 // literal, and a parenthesized string literal has the same value, so
 // `char a[N] = ("str")` copies the bytes -- it must not store the
-// literal's pointer. Surfaced by CPython, whose `_PyASCIIObject_INIT`
-// macro expands the static string singletons' data array as
-// `._data = (LITERAL)`.
+// literal's pointer. A real-world shape is a macro that expands a
+// character-array member initializer as `._data = (LITERAL)`.
 
 struct Entry {
     long len;

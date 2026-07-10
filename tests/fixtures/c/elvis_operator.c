@@ -1,6 +1,6 @@
 // GNU conditional with omitted middle operand `a ?: b` (GCC extension):
 // equivalent to `a ? a : b` but `a` is evaluated exactly once. Ubiquitous
-// in QEMU (`x ?: "default"`) and the Linux kernel.
+// in real-world C (`x ?: "default"`) such as the Linux kernel.
 
 static int calls = 0;
 static int side_effect(int v) {
@@ -29,7 +29,7 @@ int main(void) {
     int r2 = side_effect(0) ?: 100;
     if (r2 != 100 || calls != 1) return 4;
 
-    // Pointer form (the common QEMU shape).
+    // Pointer form (a common real-world shape).
     char *p = 0;
     const char *name = "x";
     if ((name ?: "unnamed")[0] != 'x') return 5;

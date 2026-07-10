@@ -1,9 +1,9 @@
 // C99 6.5.16.1: simple assignment of a function-call result to a struct-field
 // lvalue must write the rvalue to the field, not the field's own address.
-// Surfaced as a SIGABRT in lua-O on Linux x86_64 (new_varkind ->
-// luaM_growvector -> luaM_growaux_): the SSA allocator placed both the
-// call return value and the spilled lvalue address in r11 with overlapping
-// live ranges, so the post-call store-back emitted `mov %r11,(%r11)`.
+// Surfaced as a SIGABRT at -O on Linux x86_64: the SSA allocator placed
+// both the call return value and the spilled lvalue address in r11 with
+// overlapping live ranges, so the post-call store-back emitted
+// `mov %r11,(%r11)`.
 
 #include <stdio.h>
 

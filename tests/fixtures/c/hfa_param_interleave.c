@@ -7,7 +7,7 @@
 // cannot express, so the callee prologue spills each parameter into its
 // own position's cell. The scalar all-integer fallback does not apply:
 // an aggregate cannot be re-routed through the integer bank by clearing
-// the FP mask. raylib's DrawSplineSegment* functions have this shape.
+// the FP mask. This is a real-world drawing-API parameter shape.
 
 typedef struct {
     float x, y;

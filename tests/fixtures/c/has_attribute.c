@@ -1,14 +1,14 @@
 // `__has_attribute(NAME)` feature-test operator: 1 for attributes the
 // compiler recognizes, else 0; `#ifdef __has_attribute` is true. Names may
 // be spelled bare or `__`-wrapped. Also resolves when reached through a
-// macro alias, as glib's `#define g_macro__has_attribute __has_attribute`
-// does. Returns 0 on success; a distinct non-zero code per failure.
+// macro alias, e.g. `#define HAS_ATTR __has_attribute`. Returns 0 on
+// success; a distinct non-zero code per failure.
 
 #ifndef __has_attribute
 #error "__has_attribute should be defined"
 #endif
 
-// glib-style alias: the operator is reached only after macro substitution.
+// Macro-alias: the operator is reached only after macro substitution.
 #define has_attr __has_attribute
 
 #if __has_attribute(cleanup)
@@ -37,7 +37,7 @@
 
 int main(void) {
     if (A != 1) {
-        return 1; // cleanup recognized -> glib g_auto* activate
+        return 1; // cleanup recognized -> the cleanup attribute activates
     }
     if (B != 1) {
         return 2; // __packed__ normalizes to packed

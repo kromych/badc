@@ -1,7 +1,8 @@
 /* A pointer struct field initialized with the address of an array-of-struct
-   compound literal in a static initializer -- QEMU's ubiquitous
-   VMStateDescription.fields / TypeInfo.interfaces shape. The `(const T[])`
-   cast names the literal's type, not the pointer field's, so it must reach
+   compound literal in a static initializer -- a common table-descriptor
+   shape (a struct holding a pointer to an array of entry descriptors).
+   The `(const T[])` cast names the literal's type, not the pointer
+   field's, so it must reach
    the leaf (which stores the anonymous array's address); it must not be
    stripped as an in-place member initializer. Includes an empty `{ }`
    trailing element (all-zero), which the deferred-size element count must

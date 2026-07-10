@@ -1,4 +1,4 @@
-// The pthread surface quickjs reaches for: a thread-attribute lifecycle
+// A common pthread surface: a thread-attribute lifecycle
 // (init / setdetachstate / destroy) and a timed condition wait. A
 // pthread_cond_timedwait whose absolute deadline has already passed returns
 // ETIMEDOUT per POSIX, so the call is deterministic and needs no second

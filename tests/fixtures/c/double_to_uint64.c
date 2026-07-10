@@ -30,7 +30,7 @@ int main(void) {
     if ((unsigned int)sm != 100u) {
         return 6;
     }
-    // Round-trip the sqlite3AtoF pattern: (u64)(double)v for v >= 2^63.
+    // Round-trip a real-world (u64)(double)v pattern for v >= 2^63.
     unsigned long long v = 10000000000000000000ULL;
     if ((unsigned long long)(double)v != v) {
         return 7;

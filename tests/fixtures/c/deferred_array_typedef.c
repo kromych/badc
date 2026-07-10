@@ -1,9 +1,9 @@
 // A deferred-size array typedef (`typedef T X[]`) used to declare an object
 // makes the object a deferred array sized by its initializer, the same as a
-// direct `T x[]`. QEMU's `typedef struct ClockPortInitElem ClockPortInitArray[]`
-// is initialized with designated-struct elements from the QDEV_CLOCK_IN macro.
-// A fixed-size array typedef (`X[N]`) and a scalar struct typedef are the
-// regressions. Returns 0 on success.
+// direct `T x[]`. A real-world shape declares such a typedef and initializes
+// it with designated-struct elements from a macro. A fixed-size array typedef
+// (`X[N]`) and a scalar struct typedef are the regressions. Returns 0 on
+// success.
 
 struct Elem {
     const char *name;
@@ -31,8 +31,8 @@ typedef struct Elem OneElem;
 static const OneElem one = { .name = "solo", .offset = 99 };
 
 // C99 6.7.5.3p7: a parameter of the deferred array typedef adjusts to a
-// pointer to the element, so `clocks[i]` indexes it -- QEMU's
-// `void qdev_init_clocks(DeviceState *, const ClockPortInitArray)`.
+// pointer to the element, so `clocks[i]` indexes it -- as in a function
+// taking `const ElemArray` as a parameter.
 static int total_offset(const ElemArray clocks, int n) {
     int sum = 0;
     for (int i = 0; i < n; i++) {

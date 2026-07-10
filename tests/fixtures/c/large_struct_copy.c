@@ -8,12 +8,11 @@
 // to its low 9 bits and copied from / stored to the wrong byte
 // of the struct.
 //
-// Concrete repro: stb_vorbis's internal `stb_vorbis` struct is
-// ~1.9 KB. `stb_vorbis_open_memory` finishes by `*f = p;` --
-// a struct copy. The wrap silently zeroed every field past
-// offset 256, including `next_seg` which is supposed to be -1
-// after setup; the first frame decode then took the wrong
-// branch in `maybe_start_packet` and produced zero samples.
+// Concrete repro: a large internal struct (~1.9 KB) copied
+// by value via `*f = p;`. The wrap silently zeroed every
+// field past offset 256, including a sentinel field expected
+// to be -1 after setup; a later read then took the wrong
+// branch and produced no output.
 //
 // The fix swaps `ldur/stur` for the scaled-12-bit `ldr/str`
 // pair (byte offset range [0, 32760] when 8-byte aligned).

@@ -1,8 +1,8 @@
-// The struct-based 128-bit integer QEMU's int128.h uses when the compiler
-// has no __int128 (CONFIG_INT128 unset / the TCG interpreter build). It
-// exercises 16-byte struct-by-value returns and parameters, designated
-// compound literals, and carry / borrow arithmetic across the 64-bit
-// halves. Returns 0 on success; a distinct non-zero code per failure.
+// A struct-based 128-bit integer, the fallback shape used when the compiler
+// has no __int128. It exercises 16-byte struct-by-value returns and
+// parameters, designated compound literals, and carry / borrow arithmetic
+// across the 64-bit halves. Returns 0 on success; a distinct non-zero code
+// per failure.
 
 #include <stdint.h>
 #include <stdbool.h>

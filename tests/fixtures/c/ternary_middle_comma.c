@@ -5,13 +5,12 @@
 // and each comma's lhs must run for its side effects before the
 // rhs's value flows into the ternary.
 //
-// sqlite's `putVarint32(A, B)` macro relies on this:
-//   ((u32)(B) < 0x80) ? (*A = (u8)B), 1 : sqlite3PutVarint(A, B)
+// A common macro shape relies on this:
+//   ((unsigned)(B) < 0x80) ? (*A = (unsigned char)B), 1 : slow_path(A, B)
 // The fast path stores the byte AND yields 1 in a single comma
 // expression sitting in the ternary middle. Walker used to drop
-// the comma's lhs (the `*A = ...` store), so sqlite's cell
-// header byte was never written and CREATE TABLE corrupted the
-// btree image on the very first row.
+// the comma's lhs (the `*A = ...` store), so the store never ran
+// and the byte was never written -- a silent data-corruption bug.
 //
 // The pin covers three flavours of comma in the ternary middle:
 // flat-comma, parens-around-assign, parens-around-whole.

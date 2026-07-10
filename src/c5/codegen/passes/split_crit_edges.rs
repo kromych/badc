@@ -5,8 +5,8 @@
 //! per-arch emit places phi-moves for `succ`'s phis at the end of
 //! `pred`, before the conditional branch. Along the alternate
 //! successor's edge, those moves still execute and clobber any
-//! register that is live on the alternate path -- the
-//! tdefl_flush_output_buffer shape under PHI_PROMOTE.
+//! register that is live on the alternate path, a clobber that
+//! surfaces under PHI_PROMOTE.
 //!
 //! The fix: for every critical edge, insert a synthetic empty block
 //! that lives only on that edge. It holds the phi-moves and an

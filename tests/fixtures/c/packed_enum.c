@@ -1,6 +1,6 @@
 // A GCC `enum __attribute__((packed))` uses the smallest integer type that
 // holds its enumerators (per-enum -fshort-enums), which changes the layout of
-// any struct that embeds it. QEMU's softfloat float_status interleaves several
+// any struct that embeds it. A real-world shape interleaves several
 // packed-enum fields with uint16/uint8, so honoring the size is required for a
 // correct layout -- not just parsing the attribute. Sizes and offsets here
 // match GCC/clang exactly. Returns 0 on success; distinct non-zero per fail.
@@ -11,7 +11,7 @@ typedef enum __attribute__((packed)) { S_n = -1, S_p = 1 } E8s;   // signed char
 typedef enum __attribute__((packed)) { X_n = -1, X_big = 70000 } E32s; // int
 typedef enum { P0 = 0, P7 = 7 } EPlain;                           // int (unpacked)
 
-// The float_status shape: packed enums interleaved with narrower fields.
+// A real-world shape: packed enums interleaved with narrower fields.
 struct layout {
     unsigned short flags;
     E8u round_mode;

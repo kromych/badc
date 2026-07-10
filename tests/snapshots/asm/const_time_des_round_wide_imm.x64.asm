@@ -1,5 +1,5 @@
 
-des_ct_fconf_wide_imm_scratch.x64:	file format elf64-x86-64
+const_time_des_round_wide_imm.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
@@ -26,7 +26,7 @@ Disassembly of section .text:
                	orq	%rdx, %rax
                	retq
 
-<Fconf>:
+<des_round>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xf0, %rsp

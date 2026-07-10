@@ -1,7 +1,7 @@
 /* Designated initializer for a named aggregate member inside an anonymous
    union/struct (C11 6.7.2.1). `.iov = { ... }` initializes the member's own
    type, distinct from a positional brace on the anonymous region which
-   selects a group member. QEMU's scatter-gather structs use this shape. */
+   selects a group member. A common scatter-gather struct uses this shape. */
 
 struct iovec {
     void *iov_base;

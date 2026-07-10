@@ -1,7 +1,7 @@
 // C99 6.7.5.3p8: a parameter declared with function type is adjusted to
 // pointer-to-function. An abstract (unnamed) function-type parameter --
-// `RET ( param-types )` -- is what QEMU's berkeley-testfloat drivers use
-// (`void test_a(float32_t(uint32_t), float32_t(uint32_t))`). It must be
+// `RET ( param-types )` -- appears in real-world code as
+// `void test_a(float32_t(uint32_t), float32_t(uint32_t))`. It must be
 // distinguished from a parenthesized declarator `RET (name)` by a
 // type-start after the paren. Returns 0 on success; non-zero per fail.
 

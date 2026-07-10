@@ -3,7 +3,7 @@
 // returns a distinct non-zero code on failure; success returns 0.
 
 // __has_builtin routes to the builtin for supported names and to a
-// fallback for unsupported ones (the shape QEMU's host-utils.h uses).
+// fallback for unsupported ones (a common portability-header shape).
 #if __has_builtin(__builtin_clz)
 #define HAVE_CLZ 1
 #else
@@ -16,7 +16,7 @@
 #define HAVE_BITREV 0
 #endif
 
-// The forced-on form host-utils.h uses for clrsb.
+// The forced-on form portability headers use for clrsb.
 #if __has_builtin(__builtin_clrsb) || !defined(__clang__)
 #define HAVE_CLRSB 1
 #else

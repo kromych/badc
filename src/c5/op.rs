@@ -207,20 +207,20 @@ pub enum Intrinsic {
     Parity = 50,
     Parityll = 51,
     /// `asm("divq %4" : "=a"(q), "=d"(*r) : "0"(n0), "1"(n1), "rm"(d))` --
-    /// x86-64 unsigned 128/64 division, used by QEMU's host-utils.h
-    /// `udiv_qrnnd`. Five args: the quotient output address, the remainder
+    /// x86-64 unsigned 128/64 division (the `udiv_qrnnd` assembly-macro
+    /// shape). Five args: the quotient output address, the remainder
     /// output address, the dividend low (`n0`), the dividend high (`n1`),
     /// and the divisor (`d`). Computes `(n1:n0) / d` -> quotient and
     /// `(n1:n0) % d` -> remainder. x86_64 only (the source gates it on
     /// `__x86_64__`); the interpreter uses 128-bit host arithmetic.
     Divq128 = 52,
     /// `asm volatile("rdtsc" : "=a"(low), "=d"(high))` -- x86-64 read the
-    /// timestamp counter (QEMU timer.h `cpu_get_host_ticks`). Two args: the
+    /// timestamp counter. Two args: the
     /// low (eax) and high (edx) 32-bit output addresses. x86_64 only; the
     /// interpreter zeroes the outputs (no host clock).
     Rdtsc = 53,
-    /// AArch64 cache maintenance and barriers (QEMU util/cacheflush.c),
-    /// each a fixed-encoding instruction. `ReadCacheType` = `mrs %0,
+    /// AArch64 cache maintenance and barriers, each a fixed-encoding
+    /// instruction. `ReadCacheType` = `mrs %0,
     /// ctr_el0` (one output address); `DcCvau` = `dc cvau, %0` and
     /// `IcIvau` = `ic ivau, %0` (one pointer input each); `DsbIsh` =
     /// `dsb ish` and `Isb` = `isb` (no operands). AArch64 only; the

@@ -1553,8 +1553,8 @@ impl Compiler {
         // For a `--shared` build, export every non-static function
         // defined in this unit, matching the default visibility a
         // system toolchain gives a shared library: a runtime `dlopen`
-        // consumer resolves an entry point (e.g. quickjs's
-        // `js_init_module`) by name without a source-level pragma.
+        // consumer resolves an entry point (e.g. a module init
+        // function) by name without a source-level pragma.
         // Functions named by `#pragma export` above are skipped here to
         // avoid duplicate export entries.
         if self.export_all_functions {

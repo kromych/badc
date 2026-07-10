@@ -28,8 +28,8 @@ int main(void) {
     p = p - 1;
     if (p >= 0) return 8;
 
-    // Each __SIZEOF_*__ equals the corresponding sizeof (QEMU's
-    // HOST_LONG_BITS is __SIZEOF_POINTER__ * 8).
+    // Each __SIZEOF_*__ equals the corresponding sizeof (a common macro
+    // shape derives host word width as __SIZEOF_POINTER__ * 8).
     if (__SIZEOF_SHORT__ != (int)sizeof(short)) return 9;
     if (__SIZEOF_INT__ != (int)sizeof(int)) return 10;
     if (__SIZEOF_LONG__ != (int)sizeof(long)) return 11;

@@ -1,6 +1,6 @@
 // C99 7.12.14 relational macros (isgreater / isgreaterequal / isless /
-// islessequal / islessgreater / isunordered). QEMU's fpu/softfloat.c uses
-// them. A NaN operand compares false and is unordered. Returns 0 on success.
+// islessequal / islessgreater / isunordered). A NaN operand compares false
+// and is unordered. Returns 0 on success.
 
 #include <math.h>
 

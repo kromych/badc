@@ -4,8 +4,8 @@
 // callee reads arguments with `va_arg(*pva, T)`. The macro expands the
 // first operand to the va_list's address; relying on array-to-pointer
 // decay of `*pva` instead read the list's first eightbyte (the gp/fp
-// offsets) as the address, so va_arg returned garbage. CPython's
-// Py_BuildValue passes the va_list this way through do_mkvalue.
+// offsets) as the address, so va_arg returned garbage. A real-world
+// shape forwards the va_list by address through a helper.
 
 #include <stdarg.h>
 

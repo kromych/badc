@@ -1,7 +1,7 @@
 // A typedef of an array-of-pointer type (`typedef T *Name[N]`) must fold its
 // dimension onto an object declared with it, the same as any array typedef --
-// the element being a pointer does not make the object a scalar. QEMU's USB
-// device models use it: `typedef const char *USBDescStrings[N]` initialized
+// the element being a pointer does not make the object a scalar. A real-world
+// shape is `typedef const char *Strings[N]` initialized
 // with `[INDEX] = "string"` designators. Regressions guard that a declarator
 // which DOES add a pointer (`A *p`) still yields pointer-to-array, and that a
 // scalar-element array typedef still folds. Global, local, and struct-member
@@ -10,7 +10,7 @@
 enum { STR_A, STR_B, STR_C, STR_D, STR_MAX };
 typedef const char *Strs[STR_MAX];
 
-// Global, designated (the USBDescStrings shape).
+// Global, designated (the array-of-string-pointer shape).
 static const Strs g = {
     [STR_A] = "aa",
     [STR_C] = "cc",
@@ -39,7 +39,7 @@ static int backing[3] = { 100, 200, 300 };
 // Regression: a function-pointer typedef whose parameter is an array typedef
 // (`va_list` is `__va_list_tag[1]` on the SysV/AAPCS ABIs) must NOT pick up
 // the parameter's dimension and become an array -- it stays a scalar
-// function pointer. This is the raylib TraceLogCallback shape.
+// function pointer. This is a common logging-callback shape.
 typedef int ArrParam[2];
 typedef void (*Callback)(ArrParam);
 static Callback cb = 0;

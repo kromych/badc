@@ -206,9 +206,9 @@ fn recursion_factorial() {
 }
 
 /// Regression for the dead-phi predecessor-exit move collision under
-/// phi promotion. This is the reduced shape of sqlite's
-/// `local_getline`: a loop with several loop-carried scalars (`zLine`
-/// pointer, `nLine`, `n`) and multiple exit edges, so the
+/// phi promotion. This is a reduced getline-style shape: a loop with
+/// several loop-carried scalars (`zLine` pointer, `nLine`, `n`) and
+/// multiple exit edges, so the
 /// function-exit block is a join carrying a phi for every scalar.
 /// Only `zLine` is returned; the phis for `nLine` and `n` at the join
 /// are dead. A naive allocator reuses one register across those dead
@@ -506,9 +506,9 @@ fn paramref_pointer_arg_survives_shared_register_packing() {
     // `ParamRef`'s write then clobbers the later parameter's argument
     // value before it is read; on System V the fourth integer argument
     // is rcx, which the allocator readily reuses for earlier params.
-    // This mirrors sqlite3's codeApplyAffinity(Parse*, int base, int n,
-    // char *zAff): base and n are stored, then zAff is dereferenced,
-    // and the corrupted zAff (a small integer) faulted on deref. The
+    // This mirrors a real-world shape where two int parameters (`base`,
+    // `n`) are stored, then a pointer parameter (`zAff`) is dereferenced,
+    // and the corrupted `zAff` (a small integer) faulted on deref. The
     // first parameter is kept live so the allocator packs parameters
     // 1, 2 and 3 into the second integer register, which on System V
     // is rcx -- the incoming register of the fourth argument. The
@@ -559,7 +559,7 @@ fn division_with_call_result_divisor_and_spilled_dst_under_pressure() {
     // SCRATCH_R10; when the destination is itself a spill, rd resolves
     // to SCRATCH_R10 and the spilled dividend is staged there, so the
     // divisor copy and the dividend collide and the function bailed out
-    // of the implemented subset (sqlite3_db_status64). The divisor must
+    // of the implemented subset. The divisor must
     // go to a second reserved scratch (r13) in that case.
     //
     // Reproducing the exact place triple (dividend Spill, divisor in the
@@ -627,8 +627,8 @@ fn and_with_low_32_bit_mask_lowers_without_scratch() {
     // lowering must emit a 32-bit `mov rd, rn`, which clears the upper
     // half with no scratch. Capping the integer bank to one register
     // spills the masked result and removes any free scratch, reproducing
-    // the bail (this is the shape monocypher's little-endian load
-    // helpers hit at -O on x86_64).
+    // the bail (a real-world little-endian load-helper shape hits it at
+    // -O on x86_64).
     let src = r#"
         unsigned long g[8];
         int main() {
@@ -665,8 +665,8 @@ fn long_lived_base_pointer_survives_shift_count_and_store_scratch() {
     // through r13 (reserved outside both allocator banks) instead of rcx,
     // so the rcx-preserving push / pop in the shift arm covers the move.
     // This is the BLAKE2b compress shape (a 16-word work vector plus the
-    // `input` pointer, all live across an unrolled mixing round) that
-    // monocypher hits at -O once the rotate helper is inlined.
+    // `input` pointer, all live across an unrolled mixing round) reached
+    // at -O once the rotate helper is inlined.
     let src = r#"
         static unsigned long rotr64(unsigned long x, unsigned long n) {
             return (x >> n) ^ (x << (64 - n));
@@ -719,9 +719,8 @@ fn large_stack_frame_is_page_probed() {
     // System V Linux grows the stack on demand. The large local arrays
     // force a multi-page frame; the loops touch the high and low ends so
     // an unprobed frame faults on the first write. (Heavily-spilled -O
-    // functions reach this frame size on their own -- monocypher's
-    // BLAKE2b compress allocates tens of kilobytes after the rotate
-    // helper inlines.)
+    // functions reach this frame size on their own -- a BLAKE2b compress
+    // allocates tens of kilobytes after the rotate helper inlines.)
     let src = r#"
         int main() {
             volatile int a[3000];
@@ -815,8 +814,8 @@ fn fp_store_f32_preserves_live_numerator() {
     // register per AAPCS64, so narrowing over a pooled d-register
     // would destroy the still-live numerator before the second store.
     // The narrow must land in a scratch register outside the allocator
-    // pool (mirrors the stb_image_write JPEG quantization-table build,
-    // where the second `1 / (table[..] * a * a)` came out zero).
+    // pool (mirrors a real-world JPEG quantization-table build, where the
+    // second `1 / (table[..] * a * a)` came out zero).
     let src = r#"
         int main() {
             float a[2];
@@ -858,8 +857,8 @@ fn fp_load_into_spill_preserves_live_operand_under_pressure() {
     // through d0 (inside the allocator's d0..d15 pool) overwrites the
     // still-live first product. The staging register must be a reserved
     // scratch (d16/d17) outside the pool. With the FP bank capped to one
-    // register the second operand spills, reproducing the clobber (this
-    // is the kissfft C_MUL butterfly `(a).r*(b).r - (a).i*(b).i`).
+    // register the second operand spills, reproducing the clobber (a
+    // real-world complex-multiply butterfly `(a).r*(b).r - (a).i*(b).i`).
     let src = r#"
         float mul_sub(float a, float b, float c, float d) {
             return a * b - c * d;
@@ -899,9 +898,9 @@ fn mcpy_src_scratch_preserves_live_pointer_under_pressure() {
     // later call argument. Using rcx as the source scratch overwrote that
     // pointer, so the callee saw the `ImmData` blob address instead.
     // The source scratch must be SCRATCH_R13, outside both pools. This is
-    // the stb_image_write `stbi_write_jpg_to_func` shape: the `context`
-    // passed to `stbi__start_write_callbacks` came out as the quant-table
-    // blob address, so every JPEG byte was written to the wrong buffer.
+    // a real-world JPEG-writer shape: the `context` passed to the
+    // write-callback setup came out as the quant-table blob address, so
+    // every JPEG byte was written to the wrong buffer.
     let src = r#"
         struct ctx { long *buf; int len; int cap; };
         typedef struct { void *func; void *context; unsigned char buf[64]; int used; } swc;
@@ -974,7 +973,7 @@ fn fp_inttofp_cast_into_spill_preserves_live_operand_under_pressure() {
     // negated constant before the final multiply. The staging register
     // must be a reserved scratch (d16) outside the pool. With the FP
     // bank capped to one register the second cast spills, reproducing
-    // the clobber (this is the kissfft super-twiddle phase build
+    // the clobber (a real-world twiddle-phase build
     // `-PI * ((double)(i+1)/nfft + .5)`).
     let src = r#"
         double g_phase[4];
@@ -1731,9 +1730,9 @@ fn original_c4_compiles_and_runs_hello_jit_native_optimized() {
 }
 
 #[test]
-fn des_ct_fconf_wide_imm_scratch_native_optimized() {
-    // BearSSL's DES round function (des_ct.c `Fconf`), extracted as
-    // tests/fixtures/c/des_ct_fconf_wide_imm_scratch.c. At -O the
+fn const_time_des_round_wide_imm_native_optimized() {
+    // A constant-time DES round-function shape,
+    // tests/fixtures/c/const_time_des_round_wide_imm.c. At -O the
     // optimizer folds each `y = const ^ (x & mask)` line into a
     // `BinopI{Xor}` against a 32-bit constant outside i32 range; the
     // ~30 `y` temporaries are all live at once, saturating the
@@ -1747,13 +1746,13 @@ fn des_ct_fconf_wide_imm_scratch_native_optimized() {
     path.push("tests");
     path.push("fixtures");
     path.push("c");
-    path.push("des_ct_fconf_wide_imm_scratch.c");
+    path.push("const_time_des_round_wide_imm.c");
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    let opt = jit_exit_native_optimized(&src, &["fconf-O"]);
-    assert_eq!(opt, 24, "des_ct Fconf miscompiled at -O (wide-imm scratch)");
-    let noopt = jit_exit(&src, &["fconf-noO"]);
-    assert_eq!(noopt, 24, "des_ct Fconf diverged between -O and default");
+    let opt = jit_exit_native_optimized(&src, &["round-O"]);
+    assert_eq!(opt, 24, "DES round miscompiled at -O (wide-imm scratch)");
+    let noopt = jit_exit(&src, &["round-noO"]);
+    assert_eq!(noopt, 24, "DES round diverged between -O and default");
 }
 
 #[test]

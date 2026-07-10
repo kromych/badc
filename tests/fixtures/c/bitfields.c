@@ -2,8 +2,8 @@
 // emit a `Li; Shr; And` extraction; writes emit a load-clear-shift-
 // or-store sequence that preserves the other bits in the unit.
 //
-// SQLite uses bitfields heavily in Vdbe / Pager flag fields; this
-// fixture exercises the patterns that show up there.
+// Bitfields are common in flag fields; this fixture exercises the
+// patterns that show up there.
 
 #include <stdlib.h>
 

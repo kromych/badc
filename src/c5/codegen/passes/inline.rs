@@ -20,9 +20,9 @@
 //!   read-only helper. Any other `LocalAddr` stays rejected.
 //!
 //! Those constraints cover the small leaf helpers (R / Ch / Maj /
-//! Sigma / sigma in SHA-512, `stb__perlin_lerp` / `fastfloor` /
-//! `grad` in Perlin noise) whose call overhead dominates the
-//! crypto / stb perf rows.
+//! Sigma / sigma in SHA-512, `lerp` / `fastfloor` / `grad` in
+//! Perlin noise) whose call overhead dominates the crypto and
+//! noise-generation perf rows.
 //!
 //! Substitution rewrites each callee `Inst` into the caller's value
 //! space, mapping `ParamRef(i)` to the i-th call argument and other

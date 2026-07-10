@@ -2,9 +2,8 @@
 // width, not an over-wide catch-all.
 //
 // These types appear inside structs whose layout a program reads back
-// (CPython wraps pthread_key_t in Py_tss_t inside _PyRuntime, and a
-// dlopen'd extension computes field offsets against the host struct).
-// An over-wide slot shifts every later field. macOS uses 8-byte
+// (a separately-compiled module computes field offsets against the host
+// struct). An over-wide slot shifts every later field. macOS uses 8-byte
 // (unsigned long / long); Linux uses 4-byte (unsigned int / int).
 
 #include <pthread.h>

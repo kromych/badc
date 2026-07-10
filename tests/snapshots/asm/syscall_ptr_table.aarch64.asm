@@ -1,5 +1,5 @@
 
-sqlite_min.aarch64:	file format elf64-littleaarch64
+syscall_ptr_table.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 

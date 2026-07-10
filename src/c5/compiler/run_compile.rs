@@ -370,8 +370,7 @@ impl Compiler {
                 let typedef_dim = self.pending.typedef_base_array_size;
                 // A fixed dimension (`> 0`) sizes the object; a deferred array
                 // typedef (`typedef T X[]`, carried as `-1`) makes the object
-                // a deferred array whose size the initializer fixes -- QEMU's
-                // `typedef struct ClockPortInitElem ClockPortInitArray[]`.
+                // a deferred array whose size the initializer fixes.
                 if typedef_dim != 0
                     && array_size == 0
                     && self.pending.declarator_leading_ptr_count == 0

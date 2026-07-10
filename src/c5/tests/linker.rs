@@ -892,7 +892,7 @@ fn export_data_exposes_data_globals_in_dynsym() {
     // `--export-data` adds an executable's defined data globals to
     // `.dynsym` (as STT_OBJECT) so a `dlopen`'d module resolves them --
     // the data half of `-rdynamic`, which `--export-all` (functions
-    // only) cannot reach. A `PyTypeObject`-style global is the motivating
+    // only) cannot reach. An exported data-object global is the motivating
     // case. An executable without the flag exports no data symbol.
     use crate::c5::linker::object::read_dynamic_symbol_names;
     use crate::c5::linker::{
@@ -1713,7 +1713,7 @@ fn inline_linkage_follows_c99_6_7_4p7() {
 
 #[test]
 fn cpuid_xgetbv_asm_emit_for_x86_64() {
-    // The GCC `cpuid` / `xgetbv` inline-asm forms (miniaudio's CPU feature
+    // The GCC `cpuid` / `xgetbv` inline-asm forms (a common CPU feature
     // probe) lower to dedicated intrinsics on x86_64: the `cpuid` (0F A2)
     // and `xgetbv` (0F 01 D0) opcodes appear, bracketed by a save of the
     // fixed registers they clobber (push rbx = 0x53, ebx being callee-saved).
@@ -1754,8 +1754,8 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
 
 #[test]
 fn cpuid_matching_constraint_x86_64() {
-    // QEMU's `host_cpuid` ties the eax input to output operand 0 with the
-    // matching constraint `"0"(function)` rather than `"a"(function)`.
+    // A common `host_cpuid` shape ties the eax input to output operand 0
+    // with the matching constraint `"0"(function)` rather than `"a"(function)`.
     // The digit constraint resolves to that output's register (eax) and
     // lowers to the same `cpuid` (0F A2) intrinsic.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};

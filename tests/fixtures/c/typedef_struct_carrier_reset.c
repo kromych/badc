@@ -3,7 +3,7 @@
 // ... } NAME;`, the array-typedef carrier must not leak from
 // the inner field into the outer declarator binding of `NAME`.
 //
-// Surface shape from MonoCypher:
+// A real-world shape:
 //
 //     typedef int fe[10];
 //     typedef struct { fe X; fe Y; fe Z; fe T; } ge;

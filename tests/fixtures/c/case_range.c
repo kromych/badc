@@ -1,6 +1,6 @@
 // GNU case ranges `case lo ... hi:` (GCC extension): a single label
 // covering every value in [lo, hi]. Ubiquitous in character classifiers
-// (QEMU util/readline.c uses `case '0' ... '9':`).
+// such as `case '0' ... '9':`.
 
 static int classify(int c) {
     switch (c) {

@@ -1,4 +1,4 @@
-/* x86-64 `rdtsc` inline-asm shape (QEMU timer.h `cpu_get_host_ticks`) as
+/* x86-64 `rdtsc` inline-asm shape (a common host-tick counter) as
    Intrinsic::Rdtsc: two 32-bit register-tied outputs, no inputs. Native
    x86-64 emits `rdtsc`; the VM zeroes the outputs (no host clock), so the
    assembled 64-bit value is 0 here. Other native targets gate it out. */

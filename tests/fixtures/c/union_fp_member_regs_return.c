@@ -3,8 +3,7 @@
 // (System V AMD64 rax/rdx, AAPCS64 x0/x1), not through an out-pointer: the
 // eightbyte classifies as INTEGER because not every overlapping field is
 // floating-point. The double bits ride the integer register and the caller
-// reads them back bit-for-bit. This is the JSValue shape used pervasively
-// by quickjs.
+// reads them back bit-for-bit. This is a common tagged-value shape.
 
 #include <string.h>
 

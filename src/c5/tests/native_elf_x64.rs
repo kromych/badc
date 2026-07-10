@@ -1178,7 +1178,7 @@ fn foreign_caller_r13_preserved() {
     use crate::{CompileOptions, OutputKind};
 
     // Locate a system C driver; without one the ABI boundary can't be
-    // built, so skip rather than fail (the demos / CPython lane cover it
+    // built, so skip rather than fail (the demo lanes cover it
     // where a compiler is present).
     let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
         Command::new(c)

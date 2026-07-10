@@ -4,13 +4,13 @@
    linker's post-merge resolver pairs Inst::ImmData entries with
    the wrong Op::Imm operands.
 
-   The bearssl test_crypto HMAC_DRBG KAT crashed on
-       br_hmac_drbg_vtable.init(&ctx.vtable, &br_sha256_vtable, seed, len);
+   A real-world vtable-init call crashed on
+       vtable.init(&ctx.vtable, &base_vtable, seed, len);
    because the walker walked the callee AFTER the args while the
    parser had emitted bytecode for the callee FIRST. The resolver's
    order-zip then patched the v_arg ImmData with the dispatch base's
    merged offset and vice versa; the indirect call loaded its function
-   pointer from `&br_sha256_vtable + 8` (the desc word) and jumped to
+   pointer from `&base_vtable + 8` (the desc word) and jumped to
    wild data.
 
    This fixture mirrors the same shape with two distinct global vtables

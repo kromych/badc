@@ -1,9 +1,9 @@
 // A GCC `case lo ... hi` range is dispatched by a `lo <= disc <= hi` bounds
-// comparison rather than one label per value, so a wide range works -- QEMU's
-// register-decode and page-table switches span millions of values. Covers a
-// large unsigned range, the top-of-u32 range, a signed range, ranges mixed
-// with single labels and fall-through, boundary values just inside/outside,
-// and gaps. Returns 0 on success.
+// comparison rather than one label per value, so a wide range works --
+// real-world register-decode and page-table switches span millions of
+// values. Covers a large unsigned range, the top-of-u32 range, a signed
+// range, ranges mixed with single labels and fall-through, boundary values
+// just inside/outside, and gaps. Returns 0 on success.
 
 #include <stdint.h>
 

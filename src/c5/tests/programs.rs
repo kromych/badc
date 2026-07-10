@@ -69,8 +69,8 @@ fn wide_string_struct_member() {
 #[test]
 fn compound_literal_pointer_field() {
     // C99 6.5.2.5: a pointer struct field taking the address of an
-    // array-of-struct compound literal in a static initializer (QEMU's
-    // VMStateDescription.fields / TypeInfo.interfaces), including a trailing
+    // array-of-struct compound literal in a static initializer (a
+    // real-world descriptor-table shape), including a trailing
     // empty `{ }` element in a deferred-size literal.
     assert_eq!(run_fixture("compound_literal_pointer_field.c"), 0);
 }
@@ -94,16 +94,16 @@ fn int128_type_layout() {
 
 #[test]
 fn divq_udiv_qrnnd() {
-    // The x86-64 `divq` inline-asm shape (QEMU host-utils.h `udiv_qrnnd`)
-    // as Intrinsic::Divq128: unsigned 128/64 division. Run under the VM,
-    // which computes it in 128-bit host arithmetic (the native x86-64
-    // backend emits `div r/m64`; other native targets gate it out).
+    // The x86-64 `divq` inline-asm shape (a common `udiv_qrnnd` 128/64
+    // divide) as Intrinsic::Divq128: unsigned 128/64 division. Run under
+    // the VM, which computes it in 128-bit host arithmetic (the native
+    // x86-64 backend emits `div r/m64`; other native targets gate it out).
     assert_eq!(run_fixture("divq_udiv_qrnnd.c"), 0);
 }
 
 #[test]
 fn rdtsc_host_ticks() {
-    // The x86-64 `rdtsc` inline-asm shape (QEMU timer.h `cpu_get_host_ticks`)
+    // The x86-64 `rdtsc` inline-asm shape (a common host-tick counter)
     // as Intrinsic::Rdtsc: two register-tied outputs, no inputs. The VM
     // zeroes the counter (no host clock); native x86-64 emits `rdtsc`.
     assert_eq!(run_fixture("rdtsc_host_ticks.c"), 0);
@@ -112,9 +112,9 @@ fn rdtsc_host_ticks() {
 #[test]
 fn cacheflush_asm() {
     // AArch64 `mrs ctr_el0` / `dc cvau` / `ic ivau` / `dsb ish` / `isb`
-    // (QEMU util/cacheflush.c) as fixed-encoding intrinsics. Run under the
-    // VM (native aarch64 emits the real instructions, which need EL0
-    // cache-op permission; x86-64 gates them out).
+    // (a common cache-flush sequence) as fixed-encoding intrinsics. Run
+    // under the VM (native aarch64 emits the real instructions, which
+    // need EL0 cache-op permission; x86-64 gates them out).
     assert_eq!(run_fixture("cacheflush_asm.c"), 0);
 }
 
@@ -129,30 +129,30 @@ fn case_range() {
 #[test]
 fn case_range_wide() {
     // A wide `case lo ... hi` is dispatched by a bounds comparison, so a
-    // range spanning millions of values (QEMU register-decode / page-table
-    // switches) needs no per-value expansion; signed and unsigned.
+    // range spanning millions of values (a real-world register-decode /
+    // page-table switch) needs no per-value expansion; signed and unsigned.
     assert_eq!(run_fixture("case_range_wide.c"), 0);
 }
 
 #[test]
 fn deferred_array_designator() {
     // A deferred-size array's size is max designated index + 1 (C99 6.7.8p22),
-    // via array designators with gaps (QEMU hw/arm/virt.c base_memmap[]).
+    // via array designators with gaps (a real-world sparse memory-map table).
     assert_eq!(run_fixture("deferred_array_designator.c"), 0);
 }
 
 #[test]
 fn member_array_designator() {
     // C99 6.7.8p7 `.member[i] = value` designator chain into an array-typed
-    // struct member (QEMU xlnx-versal cfu/cframe, cxl device tables).
+    // struct member (a real-world device-register table shape).
     assert_eq!(run_fixture("member_array_designator.c"), 0);
 }
 
 #[test]
 fn typedef_pointer_array() {
     // A `typedef T *Name[N]` array-of-pointer typedef folds its dimension onto
-    // an object like any array typedef (QEMU USB `USBDescStrings`), while a
-    // declarator that adds a pointer stays pointer-to-array.
+    // an object like any array typedef (a real-world string-table shape), while
+    // a declarator that adds a pointer stays pointer-to-array.
     assert_eq!(run_fixture("typedef_pointer_array.c"), 0);
 }
 
@@ -160,14 +160,14 @@ fn typedef_pointer_array() {
 fn anon_union_nested_init() {
     // A struct with an anonymous union whose selected member is an aggregate
     // may be brace-initialized with an explicit union sub-brace
-    // (`{ { { bytes } } }`, QEMU's QemuUUID test tables).
+    // (`{ { { bytes } } }`, a real-world UUID table shape).
     assert_eq!(run_fixture("anon_union_nested_init.c"), 0);
 }
 
 #[test]
 fn compound_literal_addr_init() {
     // The address of a compound literal `&(T){...}` as an aggregate element /
-    // member value, including nested (QEMU config-struct tables).
+    // member value, including nested (a real-world config-struct table).
     assert_eq!(run_fixture("compound_literal_addr_init.c"), 0);
 }
 
@@ -181,29 +181,28 @@ fn compound_literal_array_element() {
 #[test]
 fn deferred_array_typedef() {
     // A deferred-size array typedef (`typedef T X[]`) binds an object as a
-    // deferred array sized by its initializer (QEMU ClockPortInitArray).
+    // deferred array sized by its initializer (a real-world init-array shape).
     assert_eq!(run_fixture("deferred_array_typedef.c"), 0);
 }
 
 #[test]
 fn local_array_designator() {
     // A block-scope struct array (static or automatic) may use `[N] =`
-    // designators and take its deferred size from the largest index
-    // (QEMU tests/unit/test-qdist.c).
+    // designators and take its deferred size from the largest index.
     assert_eq!(run_fixture("local_array_designator.c"), 0);
 }
 
 #[test]
 fn math_compare_macros() {
-    // C99 7.12.14 relational macros (isgreater/isless/isunordered/...), used
-    // by QEMU fpu/softfloat.c; NaN operands compare false and are unordered.
+    // C99 7.12.14 relational macros (isgreater/isless/isunordered/...);
+    // NaN operands compare false and are unordered.
     assert_eq!(run_fixture("math_compare_macros.c"), 0);
 }
 
 #[test]
 fn function_type_param() {
     // C99 6.7.5.3p8: an abstract function-type parameter `RET(types)` decays
-    // to a function pointer (QEMU's berkeley-testfloat drivers), without
+    // to a function pointer (a real-world test-driver shape), without
     // breaking parenthesized declarators or `(*fp)` parameters.
     assert_eq!(run_fixture("function_type_param.c"), 0);
 }
@@ -219,16 +218,16 @@ fn bitfield_runtime_init() {
 #[test]
 fn aligned_member() {
     // `__attribute__((aligned(16)))` on a struct member / its type raises the
-    // member and aggregate alignment to 16 (QEMU exec/ Int128Aligned,
-    // CPUTLBDescFast). Layout, size, alignment, and value round-trip.
+    // member and aggregate alignment to 16 (a real-world aligned-struct
+    // shape). Layout, size, alignment, and value round-trip.
     assert_eq!(run_fixture("aligned_member.c"), 0);
 }
 
 #[test]
 fn packed_enum() {
     // `enum __attribute__((packed))` uses the smallest integer type holding
-    // its values, changing the layout of an embedding struct (QEMU softfloat
-    // float_status). Sizes, interleaved-field offsets, and sign-extension.
+    // its values, changing the layout of an embedding struct (a real-world
+    // status-field shape). Sizes, interleaved-field offsets, and sign-extension.
     assert_eq!(run_fixture("packed_enum.c"), 0);
 }
 
@@ -283,8 +282,8 @@ fn generic_selection() {
 #[test]
 fn builtin_types_compatible() {
     // GCC `__builtin_types_compatible_p`: constant and runtime contexts,
-    // qualifier/signedness rules, and composition with `typeof` as in
-    // QEMU's `typeof_strip_qual`.
+    // qualifier/signedness rules, and composition with `typeof` as in a
+    // common qualifier-stripping macro.
     assert_eq!(run_fixture("builtin_types_compatible.c"), 0);
 }
 
@@ -299,15 +298,14 @@ fn has_builtin_clrsb() {
 #[test]
 fn builtin_overflow() {
     // GCC `__builtin_{add,sub,mul}_overflow`: signed / unsigned at 32 and
-    // 64 bits, wrapped result and overflow flag, at the boundaries QEMU's
-    // host-utils.h relies on.
+    // 64 bits, wrapped result and overflow flag, at the type boundaries.
     assert_eq!(run_fixture("builtin_overflow.c"), 0);
 }
 
 #[test]
 fn builtin_parity() {
     // GCC `__builtin_parity` / `__builtin_parityll`: odd-set-bit predicate
-    // (`popcount(x) & 1`), constant and runtime, used by QEMU's bitops.h.
+    // (`popcount(x) & 1`), constant and runtime.
     assert_eq!(run_fixture("builtin_parity.c"), 0);
 }
 
@@ -315,29 +313,30 @@ fn builtin_parity() {
 fn has_attribute() {
     // `__has_attribute` operator: recognized-attribute predicate, the
     // `#ifdef` guard, `__`-wrapped names, and resolution through a macro
-    // alias (glib's `g_macro__has_attribute`).
+    // alias (a common `__has_attribute` wrapper).
     assert_eq!(run_fixture("has_attribute.c"), 0);
 }
 
 #[test]
 fn typeof_array_compatible() {
     // C99 6.7.6.2: `typeof(arr)` and `typeof(&arr[0])` are an array and a
-    // pointer, never compatible. Drives QEMU's QEMU_IS_ARRAY / ARRAY_SIZE.
+    // pointer, never compatible. Drives the common array-length / is-array
+    // macros built on `typeof`.
     assert_eq!(run_fixture("typeof_array_compatible.c"), 0);
 }
 
 #[test]
 fn typeof_array_row() {
     // A subscripted row of a multi-dim array, a `*p` pointer-to-array deref,
-    // and a string literal all have array type. Drives QEMU throttle.c's
-    // `ARRAY_SIZE(to_check[THROTTLE_READ])` over a 2-D table.
+    // and a string literal all have array type. Drives a common
+    // array-length macro over a row of a 2-D table.
     assert_eq!(run_fixture("typeof_array_row.c"), 0);
 }
 
 #[test]
 fn typeof_expression() {
     // `typeof(expr)` over a full expression: binary, shift, conditional
-    // (QEMU's MIN/MAX `typeof(1 ? (a) : (b))`), and comma operators.
+    // (the common MIN/MAX `typeof(1 ? (a) : (b))` shape), and comma operators.
     assert_eq!(run_fixture("typeof_expression.c"), 0);
 }
 
@@ -358,14 +357,14 @@ fn cpu_relax_hint() {
 #[test]
 fn empty_struct_member() {
     // A complete empty `struct {}` member contributes zero storage (GCC),
-    // so the `__DECLARE_FLEX_ARRAY` idiom lays a flexible array over a
-    // union's first member. Forward-declared members stay rejected.
+    // so the common flexible-array-in-union idiom lays a flexible array
+    // over a union's first member. Forward-declared members stay rejected.
     assert_eq!(run_fixture("empty_struct_member.c"), 0);
 }
 
 #[test]
 fn int128_struct_fallback() {
-    // QEMU's struct-based 128-bit integer (used when the compiler lacks
+    // A struct-based 128-bit integer (used when the compiler lacks
     // __int128): 16-byte struct-by-value returns / params, designated
     // compound literals, and carry / borrow arithmetic across the halves.
     assert_eq!(run_fixture("int128_struct_fallback.c"), 0);
@@ -891,15 +890,15 @@ fn function_typed_parameter() {
 #[test]
 fn static_init_braced_scalar() {
     // A scalar member's initializer may be brace-enclosed (C99 6.7.9p11),
-    // including nested aggregates (the PyVarObject_HEAD_INIT shape).
+    // including nested aggregates (a real-world object-header init shape).
     assert_eq!(run_fixture("static_init_braced_scalar.c"), 0);
 }
 
 #[test]
 fn paren_string_char_array_init() {
     // C99 6.7.9p14 + 6.5.1: a parenthesized string literal initializes a
-    // char array by copying its bytes (the `_PyASCIIObject_INIT` macro
-    // shape `._data = (LITERAL)`), not by storing the literal's pointer.
+    // char array by copying its bytes (a common `._data = (LITERAL)` macro
+    // shape), not by storing the literal's pointer.
     assert_eq!(run_fixture("paren_string_char_array_init.c"), 0);
 }
 
@@ -914,7 +913,7 @@ fn static_init_paren_relocation() {
 fn const_conditional_address_init() {
     // C99 6.6: a constant-condition conditional whose arms are address
     // constants selects one arm; its relocation must reach the static
-    // initializer (the `_Py_LATIN1_CHR` clinic-table idiom).
+    // initializer (a real-world character-table idiom).
     assert_eq!(run_fixture("const_conditional_address_init.c"), 0);
 }
 
@@ -929,7 +928,7 @@ fn do_while_zero_returns() {
 fn self_referential_macro() {
     // A self-referential function-like macro expands once and the
     // recurring name becomes the function, while an argument macro still
-    // expands (C99 6.10.3.4) -- the Py_TYPE / Py_SIZE idiom.
+    // expands (C99 6.10.3.4) -- a common accessor-macro idiom.
     assert_eq!(run_fixture("self_referential_macro.c"), 0);
 }
 

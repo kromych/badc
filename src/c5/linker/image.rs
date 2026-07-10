@@ -402,7 +402,7 @@ fn x86_64_start_stub(
     // alignment intact for the `call entry` below. Without this
     // contract any SSE-aligned spill inside main's libc calls
     // (movaps / movdqa / ...) faults on real Intel hardware
-    // (QEMU emulation tolerates the misalignment).
+    // (some emulators tolerate the misalignment).
     let mut buf: Vec<u8> = Vec::with_capacity(28);
     buf.extend_from_slice(&[0x31, 0xed]); // xor ebp, ebp
     buf.extend_from_slice(&[0x48, 0x8b, 0x3c, 0x24]); // mov rdi, [rsp]

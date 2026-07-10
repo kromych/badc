@@ -1,5 +1,5 @@
 
-des_ct_fconf_wide_imm_scratch.aarch64:	file format elf64-littleaarch64
+const_time_des_round_wide_imm.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
@@ -21,7 +21,7 @@ Disassembly of section .text:
                	orr	x0, x2, x0
                	ret
 
-<Fconf>:
+<des_round>:
                	stp	x20, x21, [sp, #-0xc0]!
                	stp	x22, x23, [sp, #0x10]
                	stp	x24, x25, [sp, #0x20]

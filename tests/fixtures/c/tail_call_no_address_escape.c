@@ -2,10 +2,10 @@
 // parameter and passes it to a same-block-tail call must NOT be
 // rewritten to `jmp callee`. The tail-call lowering tears down the
 // caller's frame before the jump, and the param cell holding the
-// address would be overwritten by the callee's prologue. The
-// `mz_uncompress` -> `mz_uncompress2` shape in miniz hit exactly
-// this when only negative-slot LocalAddr was excluded; widening
-// the exclusion to every LocalAddr fixes it.
+// address would be overwritten by the callee's prologue. A real-world
+// wrapper -> worker tail-call shape hit exactly this when only
+// negative-slot LocalAddr was excluded; widening the exclusion to
+// every LocalAddr fixes it.
 
 #include <stdio.h>
 

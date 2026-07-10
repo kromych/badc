@@ -565,7 +565,7 @@ impl Preprocessor {
         macros.insert("__INTPTR_TYPE__".to_string(), ptrdiff_ty.to_string());
         macros.insert("__UINTPTR_TYPE__".to_string(), size_ty.to_string());
         // GCC/Clang predefine each type's byte size so portable code can
-        // select widths without <limits.h> (QEMU's HOST_LONG_BITS is
+        // select widths without <limits.h> (e.g. a pointer's bit width is
         // `__SIZEOF_POINTER__ * 8`). All badc targets are 64-bit, so the
         // pointer / size_t / ptrdiff_t sizes are 8; `long` and `wchar_t`
         // follow the data model (LLP64 Windows narrows both).
@@ -729,7 +729,7 @@ impl Preprocessor {
     /// `-D NAME` (no `=`) reaches here with body `"1"` per cpp's
     /// convention; `-D NAME=` (with `=`, empty value) reaches here
     /// with an empty body and must stay empty, matching the `#define
-    /// NAME` directive -- e.g. `-DSQLITE_PRIVATE=` expands to nothing,
+    /// NAME` directive -- e.g. `-DPRIVATE=` expands to nothing,
     /// not `1`. Late definitions in source still win, so a `-D X=0`
     /// followed by `#define X 1` in source ends up with `X = 1`.
     pub fn define(&mut self, name: &str, body: &str) {
@@ -2073,8 +2073,8 @@ impl Preprocessor {
                 }
             }
             // `__has_attribute(NAME)`: 1 when the compiler recognizes the
-            // GCC/Clang attribute NAME, else 0. glib's g_auto* / g_autofree
-            // gate on `#if g_macro__has_attribute(cleanup)`.
+            // GCC/Clang attribute NAME, else 0. A header may gate a
+            // `cleanup`-attribute helper on `#if <alias>(cleanup)`.
             if bytes[i..].starts_with(b"__has_attribute") {
                 let after = i + b"__has_attribute".len();
                 let prev_is_word =
@@ -2122,8 +2122,8 @@ impl Preprocessor {
         // `strip_c_comments` keeps string and char literals intact.
         let substituted = self.substitute(&out, "<#if>", line_no);
         // Resolve any `__has_builtin` / `__has_attribute` that a macro
-        // alias expanded into (glib's `g_macro__has_attribute`); the
-        // pre-pass above already handled the ones written literally.
+        // alias expanded into; the pre-pass above already handled the
+        // ones written literally.
         replace_has_operators(&strip_c_comments(&substituted))
     }
 
@@ -5069,8 +5069,8 @@ fn is_known_builtin(name: &str) -> bool {
 
 /// Replace every `__has_builtin(NAME)` / `__has_attribute(NAME)` in `s`
 /// with `1` or `0`. Run after macro substitution as well as before, so a
-/// header that reaches the operator through a macro alias (glib's
-/// `#define g_macro__has_attribute __has_attribute`) still resolves.
+/// header that reaches the operator through a macro alias
+/// (`#define ALIAS __has_attribute`) still resolves.
 fn replace_has_operators(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = String::with_capacity(s.len());
@@ -5142,7 +5142,7 @@ fn is_builtin_operator_name(name: &str) -> bool {
 /// `__attribute__((...))` and acts on a subset (`packed`, `aligned`,
 /// `unused`, `noreturn`); the rest are accepted and ignored, so
 /// reporting 1 lets feature-testing headers take their attribute path.
-/// `cleanup` is reported present so glib's `g_auto*` / `g_autofree`
+/// `cleanup` is reported present so `cleanup`-attribute helpers
 /// activate (the destructor is not yet run at scope exit -- a resource
 /// managed this way is freed at process exit, not block exit).
 fn is_known_attribute(name: &str) -> bool {
@@ -5561,17 +5561,17 @@ mod tests {
         // is not re-expanded, while `inner` in an argument still expands.
         // The blue-paint carries the painted `M(` through a nested call.
         let out = process(
-            "#define _Py_CAST(t, e) ((t)(e))\n\
-             #define _PyObject_CAST(op) _Py_CAST(void*, (op))\n\
-             #define GET(m) GET(_PyObject_CAST(m))\n\
-             #define DECREF(o) DECREF(_PyObject_CAST(o))\n\
+            "#define TO_CAST(t, e) ((t)(e))\n\
+             #define OBJ_CAST(op) TO_CAST(void*, (op))\n\
+             #define GET(m) GET(OBJ_CAST(m))\n\
+             #define DECREF(o) DECREF(OBJ_CAST(o))\n\
              void f(void *self) { DECREF(GET(self)); }\n",
         );
         assert!(
             out.contains("DECREF(((void*)((GET(((void*)((self))))))))"),
             "self-referential macros expanded wrong: {out}"
         );
-        assert!(!out.contains("_PyObject_CAST"), "leftover macro: {out}");
+        assert!(!out.contains("OBJ_CAST"), "leftover macro: {out}");
     }
 
     #[test]
@@ -5675,7 +5675,7 @@ mod tests {
     fn cli_empty_define_expands_to_nothing() {
         // `-D NAME` (no `=`) is `1`; `-D NAME=` (with `=`, empty) stays
         // empty and expands to nothing -- the cpp convention, e.g.
-        // `-DSQLITE_PRIVATE=` so `SQLITE_PRIVATE void f();` is `void f();`.
+        // `-DPRIVATE=` so `PRIVATE void f();` is `void f();`.
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         pp.define("EMPTY", "");
         pp.define("ONE", "1");

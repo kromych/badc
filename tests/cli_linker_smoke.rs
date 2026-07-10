@@ -539,12 +539,11 @@ fn static_inline_helper_in_shared_header_links_across_tus() {
 /// emit's return path only staged `Place::IntReg` returns into rcx
 /// before the GPR restore, so spill-resident returns left rax with
 /// whatever the body parked there (typically the last libc call's
-/// `int` return). Surfaced as lua's `io` global being `nil` after
-/// `luaL_openlibs`: `luaopen_io` runs to completion, but its
-/// `return 1` -- the C-function-result count `lua_call` reads --
-/// reached the caller as zero, so the registered module was
-/// silently the empty stack tail (nil) instead of the `iolib`
-/// table.
+/// `int` return). Surfaced as a module-registration function whose
+/// `return 1` -- a result count the caller reads to know how many
+/// values were produced -- reached the caller as zero, so the
+/// registration saw an empty result and recorded nothing instead
+/// of the intended table.
 #[cfg(target_arch = "x86_64")]
 #[test]
 fn int_literal_return_survives_libc_call_in_body() {
@@ -2447,9 +2446,9 @@ fn debug_info_is_off_by_default_and_enabled_by_g() {
 /// preprocessor. A prior CLI build seeded the per-TU compile
 /// with `CompileOptions::default()`, dropping every flag --
 /// the preprocessor then never expanded `#include` directives
-/// nor saw the user's `-D` macros, and a typedef chain like
-/// miniz's `sizeof(uint16_t) == 2 ? 1 : -1` array probe
-/// folded against an undefined typedef. C99 6.10.2 requires
+/// nor saw the user's `-D` macros, and a typedef chain like a
+/// `sizeof(uint16_t) == 2 ? 1 : -1` array probe folded against
+/// an undefined typedef. C99 6.10.2 requires
 /// the include search path to be the implementation-defined
 /// set the driver was invoked with.
 #[test]

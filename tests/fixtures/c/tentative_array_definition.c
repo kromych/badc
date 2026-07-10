@@ -1,9 +1,9 @@
 // A file-scope array declared with empty brackets and no initializer is
 // a tentative definition (C99 6.9.2): if the type is still incomplete at
 // the end of the translation unit it is completed to one element;
-// otherwise a later declaration supplies the size. CPython's
-// PyDoc_VAR(name) expands to `static const char name[];`, often without
-// a later PyDoc_STRVAR to complete it.
+// otherwise a later declaration supplies the size. A real-world shape is
+// a macro that expands to `static const char name[];`, often with no
+// later declaration to complete it.
 
 #include <stdio.h>
 

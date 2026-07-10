@@ -1817,8 +1817,8 @@ pub(crate) fn emit_start_stub(
     //                              Using `pop` instead would shift
     //                              rsp by 8 and misalign every
     //                              SSE-aligned spill in glibc on
-    //                              real Intel hardware (QEMU
-    //                              tolerates the misalignment).
+    //                              real Intel hardware (some
+    //                              emulators tolerate the misalignment).
     emit_mov_r_mem(code, argc_reg, Reg::RSP, 0);
     // lea <argv>, [rsp + 8]     -- argv array starts one slot up.
     emit_lea_r_mem(code, argv_reg, Reg::RSP, 8);

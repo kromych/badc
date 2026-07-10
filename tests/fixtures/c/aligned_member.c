@@ -1,17 +1,17 @@
 // `__attribute__((aligned(N)))` on a struct member (or before its
 // declarator, or on the member's type) raises the member's alignment and
-// the aggregate's own alignment up to 16. QEMU's exec/ headers use this
-// (Int128Aligned, CPUTLBDescFast, cpu-defs.h neg_align). Layout, size, and
-// alignment match GCC/clang. Returns 0 on success; distinct non-zero per fail.
+// the aggregate's own alignment up to 16, a real-world shape in low-level
+// headers. Layout, size, and alignment match GCC/clang. Returns 0 on
+// success; distinct non-zero per fail.
 
-// Interleaved 16-aligned member (the cpu-defs.h neg_align shape).
+// Interleaved 16-aligned member.
 struct A {
     int a;
     char b __attribute__((aligned(16)));
     int c;
 };
 
-// A 16-byte struct member forced to 16-byte alignment (Int128Aligned shape).
+// A 16-byte struct member forced to 16-byte alignment.
 struct Int128 {
     unsigned long lo;
     long hi;

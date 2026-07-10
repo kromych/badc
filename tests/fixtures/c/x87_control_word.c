@@ -1,8 +1,8 @@
 // GCC inline asm with a memory operand for the two x87 FPU control-word
-// forms CPython's pymath uses on x86: `fnstcw %0` stores the control word
-// to a 16-bit memory operand and `fldcw %0` loads it. The reserved high
-// bits of the word are runtime-defined, so the test only requires that
-// the store/load round-trips and that the default word is read.
+// forms used on x86: `fnstcw %0` stores the control word to a 16-bit
+// memory operand and `fldcw %0` loads it. The reserved high bits of the
+// word are runtime-defined, so the test only requires that the store/load
+// round-trips and that the default word is read.
 //
 // The x87 control word is an x86 register; the asm has no meaning on
 // other ISAs, so it is gated to x86 and the fixture is a trivial success

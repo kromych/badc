@@ -357,7 +357,7 @@ impl Compiler {
             // the variable's loaded value and the function pointer itself
             // so the unary-`*` handler can recognise the decay. The
             // function-body-top path picks this up in `parse_function_body_local_decl`;
-            // an inside-block decl (`else { lua_KFunction kf = ...; }`) reaches
+            // an inside-block decl (`else { fn_ptr_t kf = ...; }`) reaches
             // here and the lineage must propagate equivalently or downstream
             // `(*kf)(...)` is lowered as `Load { kind = result_tag }` and
             // dereferences the function pointer's bit pattern.
@@ -793,21 +793,21 @@ impl Compiler {
             self.data.truncate(tstart);
             return self.parse_cpuid_xgetbv_asm(is_cpuid);
         }
-        // `divq %4` -- x86-64 unsigned 128/64 division (QEMU host-utils.h
-        // `udiv_qrnnd`). The register-tied operands are handled specially,
-        // like cpuid.
+        // `divq %4` -- x86-64 unsigned 128/64 division (the `udiv_qrnnd`
+        // assembly-macro shape). The register-tied operands are handled
+        // specially, like cpuid.
         if tmpl_lc == "divq %4" {
             self.data.truncate(tstart);
             return self.parse_divq_asm();
         }
-        // `rdtsc` -- x86-64 read timestamp counter (QEMU timer.h
-        // `cpu_get_host_ticks`): two register-tied outputs, no inputs.
+        // `rdtsc` -- x86-64 read timestamp counter: two register-tied
+        // outputs, no inputs.
         if tmpl_lc == "rdtsc" {
             self.data.truncate(tstart);
             return self.parse_rdtsc_asm();
         }
-        // AArch64 cache maintenance + barriers (QEMU util/cacheflush.c).
-        // Match the whitespace-free template so tabs / spaces are
+        // AArch64 cache maintenance + barriers. Match the
+        // whitespace-free template so tabs / spaces are
         // irrelevant; each maps to a fixed-encoding intrinsic.
         {
             use super::super::op::Intrinsic as I;
@@ -905,7 +905,7 @@ impl Compiler {
     }
 
     /// `asm("fnstcw %0":"=m"(cw))` / `asm("fldcw %0"::"m"(cw))` -- the two
-    /// x87 control-word forms CPython's pymath reaches for. Parse the
+    /// x87 control-word forms floating-point code reaches for. Parse the
     /// single memory operand, take its address, and emit the matching
     /// intrinsic. The constraint text is ignored: both forms reach the
     /// op as the operand's address.
@@ -1107,7 +1107,7 @@ impl Compiler {
     }
 
     /// Parse `asm("divq %4" : "=a"(q), "=d"(*r) : "0"(n0), "1"(n1),
-    /// "rm"(d))` (QEMU host-utils.h `udiv_qrnnd`) into an
+    /// "rm"(d))` (the `udiv_qrnnd` assembly-macro shape) into an
     /// `Intrinsic::Divq128`. The template mnemonic was already consumed.
     /// `"=a"` names the quotient output, `"=d"` the remainder output; the
     /// matching inputs `"0"` / `"1"` are the dividend's low / high halves
@@ -1218,8 +1218,8 @@ impl Compiler {
         Ok(())
     }
 
-    /// Parse `asm volatile("rdtsc" : "=a"(low), "=d"(high))` (QEMU timer.h
-    /// `cpu_get_host_ticks`) into an `Intrinsic::Rdtsc`. The template was
+    /// Parse `asm volatile("rdtsc" : "=a"(low), "=d"(high))` into an
+    /// `Intrinsic::Rdtsc`. The template was
     /// already consumed. `"=a"` names the low 32 bits, `"=d"` the high.
     fn parse_rdtsc_asm(&mut self) -> Result<(), C5Error> {
         use super::super::ast::{Expr, UnOp};

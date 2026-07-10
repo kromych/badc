@@ -3,8 +3,7 @@
 // A wchar_t array requires wchar_t alignment (4 bytes on the Unix
 // targets). glibc's vectorized wcschr / wcslen read elements with
 // aligned loads and return wrong results on a misaligned literal -- a
-// 2-aligned L"..." made wcschr report a present character as absent,
-// which broke CPython's command-line option parser (SHORT_OPTS).
+// 2-aligned L"..." makes wcschr report a present character as absent.
 //
 // A narrow literal interned just before the wide one leaves the data
 // cursor at an odd offset, so without alignment the wide literal lands

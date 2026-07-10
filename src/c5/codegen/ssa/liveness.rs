@@ -371,10 +371,10 @@ impl Liveness {
     /// The pc interval disagrees with the true live range whenever a
     /// value is live across a call only on a branch or back-edge path
     /// -- the call then falls outside `[def, last_use]` and the value
-    /// is wrongly judged not to cross it. `luaV_execute`'s dispatch
-    /// loop is exactly that shape: a value defined in the loop body and
-    /// used again after the back-edge crosses the body's calls without
-    /// the linear interval covering them.
+    /// is wrongly judged not to cross it. A computed-dispatch loop is
+    /// exactly that shape: a value defined in the loop body and used
+    /// again after the back-edge crosses the body's calls without the
+    /// linear interval covering them.
     pub(crate) fn values_live_across_calls(
         &self,
         func: &FunctionSsa,

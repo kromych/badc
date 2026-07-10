@@ -1,8 +1,8 @@
 // A block-scope array of structs may use `[N] =` designators and take its
 // deferred size from the largest index (C99 6.7.8p22), the same as a
 // file-scope object -- for both a `static` local (laid out in .data) and an
-// automatic local (staged then copied). QEMU's tests/unit/test-qdist.c uses a
-// `static const struct entry_desc desc[] = { [0] = {...}, [1] = {...} }`.
+// automatic local (staged then copied). A real-world shape is a
+// `static const` array written `{ [0] = {...}, [1] = {...} }`.
 // Returns 0 on success.
 
 struct E {
@@ -38,8 +38,8 @@ static int use_auto(int seed) {
 }
 
 static int use_fixed(int seed) {
-    // Fixed-size (`[4]`) static local with designators (the nvme/ns.c
-    // `NvmeLBAF defaults[16]` shape).
+    // Fixed-size (`[4]`) static local with designators (a real-world
+    // fixed-size designated-array shape).
     static const struct E sd[4] = {
         [0] = { .a = 9 },
         [2] = { .a = 9, .b = 8 },

@@ -1,15 +1,15 @@
 // C99 6.7.6.2: an array type and a pointer type are never compatible, even
 // with the same element type. `__builtin_types_compatible_p(typeof(arr),
-// typeof(&arr[0]))` must therefore be 0, which is what QEMU's QEMU_IS_ARRAY
-// and ARRAY_SIZE rely on. Returns 0 on success; distinct non-zero per fail.
+// typeof(&arr[0]))` must therefore be 0, which is what the array-guard
+// macros below rely on. Returns 0 on success; distinct non-zero per fail.
 
-#define QEMU_IS_ARRAY(x) (!__builtin_types_compatible_p(typeof(x), typeof(&(x)[0])))
+#define IS_ARRAY(x) (!__builtin_types_compatible_p(typeof(x), typeof(&(x)[0])))
 #define BUG_STRUCT(x)                                                          \
     struct {                                                                   \
         int : (x) ? -1 : 1;                                                    \
     }
 #define BUG_ON_ZERO(x) (int)(sizeof(BUG_STRUCT(x)) - sizeof(BUG_STRUCT(x)))
-#define ARRAY_SIZE(x) ((sizeof(x) / sizeof((x)[0])) + BUG_ON_ZERO(!QEMU_IS_ARRAY(x)))
+#define ARRAY_SIZE(x) ((sizeof(x) / sizeof((x)[0])) + BUG_ON_ZERO(!IS_ARRAY(x)))
 
 int main(void) {
     int nums[10];
@@ -35,7 +35,7 @@ int main(void) {
         return 4;
     }
 
-    if (QEMU_IS_ARRAY(nums) != 1 || QEMU_IS_ARRAY(&nums[0]) != 0) {
+    if (IS_ARRAY(nums) != 1 || IS_ARRAY(&nums[0]) != 0) {
         return 5;
     }
     if (ARRAY_SIZE(nums) != 10) {

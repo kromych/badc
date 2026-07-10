@@ -5,7 +5,7 @@
 // trailing NUL is omitted and the array holds the characters
 // alone.
 //
-// Surface shape from tweetnacl.c:
+// A real-world surface shape:
 //
 //     static const u8 sigma[16] = "expand 32-byte k";
 //

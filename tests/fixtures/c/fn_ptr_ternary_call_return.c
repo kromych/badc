@@ -3,8 +3,8 @@
 // functions -- must use the callee's real return type. A bare function
 // name decays to a pointer whose result type is the function's return
 // type (C99 6.3.2.1p4); a non-`int` return must not narrow to `int`.
-// Surfaced by CPython's `(field_present ? f : g)(&spec)` returning a
-// truncated `PyObject *`.
+// A real-world shape is `(cond ? f : g)(&spec)` returning a pointer that
+// must keep all its bits.
 
 #include <stdio.h>
 

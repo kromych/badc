@@ -1,11 +1,10 @@
 // C99 6.7.8p7 designator chain mixing a `.member` step with an `[index]`
 // step: `.member[i] = value` initializes one element of an array-typed
-// struct member. QEMU uses it in device init tables (xlnx-versal cfu/cframe
-// `.data[k] = ...`, cxl `.entry[0] = ...`, `.active_vcs_bitmask[0] = ...`).
-// Covers a const-global and a runtime-local struct, an array-of-struct
-// member with a further `.field` step, and -- as a regression -- the plain
-// `.a.b` nested-designator chain that shares the resolver. Returns 0 on
-// success.
+// struct member. A common shape in device init tables (`.data[k] = ...`,
+// `.entry[0] = ...`). Covers a const-global and a runtime-local struct, an
+// array-of-struct member with a further `.field` step, and -- as a
+// regression -- the plain `.a.b` nested-designator chain that shares the
+// resolver. Returns 0 on success.
 
 struct Regs {
     int head;
@@ -61,8 +60,8 @@ static int check_global(void) {
 }
 
 static int check_runtime(int x, int y) {
-    // Runtime values into an array-member designator (the xlnx cfu shape:
-    // `.data[k] = wfifo[k]`).
+    // Runtime values into an array-member designator
+    // (`.data[k] = expr` shape).
     struct Regs r = {
         .head = x,
         .data[1] = y,

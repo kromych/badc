@@ -1,9 +1,9 @@
 // A floating value used as a controlling expression is compared against
 // 0.0 (C99 6.8.4.1 / 6.8.5 / 6.5.13 / 6.5.14): `-0.0` is false because
 // `-0.0 == 0.0`. Testing the register bits directly would read the
-// sign bit and treat `-0.0` as true, hanging `while (-0.0)`. Surfaced
-// by CPython's `_Py_HashDouble`, whose `while (m)` over a `-0.0`
-// constant never terminated and hung the bytecode compiler.
+// sign bit and treat `-0.0` as true, hanging `while (-0.0)`. A real-world
+// shape is a `while (m)` loop over a `-0.0` constant, which must
+// terminate on the first test.
 
 #include <stdio.h>
 

@@ -918,8 +918,8 @@ impl Compiler {
             return Ok(result);
         }
         // `&(T){...}` -- the address of a compound literal as an aggregate
-        // element / member value (C99 6.5.2.5; QEMU config-struct tables
-        // nest them, `.field = &(T){ .sub = &(U){...} }`). Emit the literal
+        // element / member value (C99 6.5.2.5; config-struct tables nest
+        // them, `.field = &(T){ .sub = &(U){...} }`). Emit the literal
         // as an anonymous static object and store its address here. Guarded
         // by a snapshot so a plain `&(expr)` / `&global` falls through to the
         // address path below.
@@ -1650,9 +1650,9 @@ impl Compiler {
     /// A compound array-element designator `[N].field... = v` in a const
     /// struct array, entered with the cursor just past `[N]` on the leading
     /// `.`/`[`. Resolves the field chain from the element's base and writes
-    /// one value there, overriding only that field. QEMU's MemoryRegionOps
-    /// tables fill every element with `[lo ... hi] = { ... }`, then override
-    /// `[k].endianness = ...` per element.
+    /// one value there, overriding only that field -- the shape that fills
+    /// every element with `[lo ... hi] = { ... }`, then overrides one field
+    /// per element (`[k].field = ...`).
     pub(super) fn fill_element_field_designator(
         &mut self,
         struct_id: usize,
@@ -2061,8 +2061,8 @@ impl Compiler {
             // (C99 6.5.2.5) that names the member's own type is dropped so
             // the brace paths below initialize the member in place. A
             // pointer member instead stores the ADDRESS of the literal
-            // (`.fields = (const T[]){ ... }`, ubiquitous in QEMU's
-            // VMStateDescription / TypeInfo tables); there the cast carries
+            // (`.fields = (const T[]){ ... }`, a common table-descriptor
+            // shape); there the cast carries
             // the literal's type, so leave it for the scalar leaf to consume
             // via `parse_constant_init_value`.
             if is_pointer_ty(field.ty) || struct_ptr_depth(field.ty) > 0 {
@@ -2183,7 +2183,7 @@ impl Compiler {
                     let mem = self.structs[struct_id].fields[mem_idx].clone();
                     let mem_base = (var_offset as usize) + mem.offset;
                     // The selected union member may be a struct, an array
-                    // (`unsigned char data[16]` in QEMU's QemuUUID), a scalar,
+                    // (`unsigned char data[16]`), a scalar,
                     // or a bitfield; the shared member dispatch handles each,
                     // including a `{ ... }` sub-initializer for the aggregate
                     // members that the scalar leaf could not.

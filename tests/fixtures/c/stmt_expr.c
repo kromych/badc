@@ -60,8 +60,8 @@ int main(void) {
         return 6;
     }
 
-    // The `({ __typeof__(a) _a = (a); ... })` shape QEMU's qatomic macros
-    // and MIN/MAX expand to.
+    // The `({ __typeof__(a) _a = (a); ... })` shape that atomic-access
+    // and MIN/MAX macros expand to.
     int lo = 8, hi = 20;
     int mx = ({ __typeof__(lo) _l = (lo); __typeof__(hi) _h = (hi); _l > _h ? _l : _h; });
     if (mx != 20) {

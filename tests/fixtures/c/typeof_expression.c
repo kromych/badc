@@ -1,7 +1,7 @@
 // `typeof(expr)` accepts a full expression operand, not just a bare name:
-// binary, conditional, shift, assignment, and comma operators. QEMU's MIN /
-// MAX expand to `typeof(1 ? (a) : (b))`. The type is used to declare a
-// temporary; success returns 0.
+// binary, conditional, shift, assignment, and comma operators. A common
+// MIN / MAX macro shape expands to `typeof(1 ? (a) : (b))`. The type is
+// used to declare a temporary; success returns 0.
 
 #define MIN(a, b)                                                              \
     ({                                                                         \

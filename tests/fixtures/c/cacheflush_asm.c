@@ -1,9 +1,9 @@
-// AArch64 cache maintenance + barriers (QEMU util/cacheflush.c) recognized
-// as fixed-encoding intrinsics: `mrs %0, ctr_el0`, `dc cvau, %0`,
-// `ic ivau, %0`, `dsb ish`, `isb`. Runs under the interpreter -- the native
-// aarch64 backend emits the real instructions (which need EL0 cache-op
-// permission; x86-64 gates them out), and the interpreter returns a fixed
-// CTR_EL0 (64-byte lines) and treats the cache ops / barriers as no-ops.
+// AArch64 cache maintenance + barriers recognized as fixed-encoding
+// intrinsics: `mrs %0, ctr_el0`, `dc cvau, %0`, `ic ivau, %0`, `dsb ish`,
+// `isb`. Runs under the interpreter -- the native aarch64 backend emits the
+// real instructions (which need EL0 cache-op permission; x86-64 gates them
+// out), and the interpreter returns a fixed CTR_EL0 (64-byte lines) and
+// treats the cache ops / barriers as no-ops.
 
 static int flush_idcache_range(char *start, char *end) {
     unsigned long ctr;

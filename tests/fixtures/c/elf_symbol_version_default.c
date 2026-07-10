@@ -6,8 +6,8 @@
 // The old stub returns EINVAL when the condition-variable attribute
 // selects a non-default clock (CLOCK_MONOTONIC); the default accepts
 // it. An import emitted without a `.gnu.version_r` requirement binds
-// the old stub, so this sequence -- the one CPython runs to create its
-// GIL -- fails with EINVAL. Exit 0 only when the default version bound.
+// the old stub, so this sequence fails with EINVAL. Exit 0 only when
+// the default version bound.
 
 #include <pthread.h>
 #include <time.h>

@@ -17,8 +17,8 @@ int main(void) {
     if (NSIG != 23) return 4;
 #endif
     // A table sized by NSIG must place a trailing field at the host's
-    // offset, not 512 bytes off (the symptom that desynchronized the
-    // CPython runtime's static-object layout).
+    // offset, not 512 bytes off (a wrong NSIG desynchronizes the layout
+    // of any struct that embeds such a table).
     struct { int slot[NSIG]; long after; } t;
     if ((char *) &t.after - (char *) &t < (long) (NSIG * sizeof(int)))
         return 5;

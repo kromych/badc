@@ -1,4 +1,4 @@
-/* fcntl(fd, F_SETLK, &fl) through a sqlite-style dispatch table: the
+/* fcntl(fd, F_SETLK, &fl) through a real-world dispatch table: the
    cast supplies the variadic prototype, so the struct-address tail
    must reach libc per the host variadic convention. Verified by the
    kernel's return codes. */
@@ -9,7 +9,7 @@
 
 typedef void (*syscall_ptr)(void);
 static syscall_ptr table[1] = { (syscall_ptr)fcntl };
-#define osFcntl ((int (*)(int, int, ...))table[0])
+#define fcntl_fn ((int (*)(int, int, ...))table[0])
 
 int main(void) {
     char path[64];
@@ -26,7 +26,7 @@ int main(void) {
     fl.l_type = F_UNLCK;
     int unlock = fcntl(fd, F_SETLK, &fl);
     fl.l_type = F_WRLCK;
-    int viaptr = osFcntl(fd, F_SETLK, &fl);
+    int viaptr = fcntl_fn(fd, F_SETLK, &fl);
     close(fd);
     unlink(path);
     if (direct != 0 || unlock != 0) {

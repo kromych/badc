@@ -1,10 +1,9 @@
 // C99 6.5.2.5: the address of a compound literal `&(T){ ... }` may be a
 // pointer's initializer, including as an array element, a struct member, and
-// nested (`&(T){ .p = &(U){...} }`). QEMU's config-struct tables use the
-// nested form (`.u.udp.data = &(ChardevUdp){ .remote = &(SocketAddressLegacy)
-// {...} }`). badc handled it only for a top-level scalar pointer; here it is
-// exercised inside aggregates and nested, at file scope and block scope.
-// Returns 0 on success.
+// nested (`&(T){ .p = &(U){...} }`). A real-world shape uses the nested form
+// in config-struct tables (`.p = &(T){ .q = &(U){...} }`). badc handled it
+// only for a top-level scalar pointer; here it is exercised inside aggregates
+// and nested, at file scope and block scope. Returns 0 on success.
 
 struct Leaf { int v; int w; };
 struct Mid { struct Leaf *leaf; int m; };

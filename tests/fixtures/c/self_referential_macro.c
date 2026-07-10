@@ -1,8 +1,8 @@
 // A self-referential function-like macro -- `#define f(x) f(cast(x))` --
 // expands once; the recurring name becomes the real function, while a
-// macro in its argument still expands (C99 6.10.3.4). This is the shape
-// Python uses for Py_TYPE / Py_SIZE / Py_DECREF: the function is defined
-// first, then a shadowing macro that wraps the argument in a cast.
+// macro in its argument still expands (C99 6.10.3.4). A common shape
+// defines the function first, then a shadowing macro that wraps the
+// argument in a cast.
 
 struct box { int value; };
 

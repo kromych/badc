@@ -1,5 +1,5 @@
 
-sqlite_min.x64:	file format elf64-x86-64
+syscall_ptr_table.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 

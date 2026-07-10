@@ -746,7 +746,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // POSIX sigsetjmp / siglongjmp (savemask 0) mapped onto the same
     // per-target setjmp / longjmp machinery.
     ("sigsetjmp_roundtrip.c", 0),
-    // QEMU's struct-based Int128 fallback: 16-byte struct-by-value
+    // A struct-based 128-bit integer fallback: 16-byte struct-by-value
     // returns / params and carry arithmetic across the two halves.
     ("int128_struct_fallback.c", 0),
     // C11 6.7.2.1: a designated initializer for a named aggregate member
@@ -764,7 +764,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // member, constant and runtime store paths.
     ("wide_string_struct_member.c", 0),
     // C99 6.5.2.5 pointer field = array-of-struct compound literal in a
-    // static initializer (QEMU VMStateDescription / TypeInfo shape).
+    // static initializer (a real-world descriptor-table shape).
     ("compound_literal_pointer_field.c", 0),
     // GCC zero-length array `T x[0]` as a local (compile-time-assert idiom).
     ("zero_length_local_array.c", 0),

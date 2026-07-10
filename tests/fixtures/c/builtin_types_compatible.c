@@ -1,8 +1,8 @@
 // GCC `__builtin_types_compatible_p(T1, T2)`: an integer constant, 1 when
 // the two type names are compatible (top-level qualifiers ignored), else 0.
 // Also exercises composition with `typeof` and the `__builtin_choose_expr`
-// thunk, as QEMU's `typeof_strip_qual` uses it. Each check returns a
-// distinct non-zero code on failure; success returns 0.
+// thunk, a common shape for stripping qualifiers off a type. Each check
+// returns a distinct non-zero code on failure; success returns 0.
 
 // Constant-expression contexts.
 _Static_assert(__builtin_types_compatible_p(int, int) == 1, "int == int");

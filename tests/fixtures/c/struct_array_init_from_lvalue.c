@@ -3,7 +3,7 @@
 // elided into the first scalar field. The runtime-init path treated a
 // struct-typed element as brace elision and stored the source's address into
 // the first field, leaving the rest zero. The shape arises in
-// `JSValueConst args[3] = { element, make(i), source };`-style code. Scalar
+// `T args[3] = { element, make(i), source };`-style code. Scalar
 // brace elision (`{a, b, c, d}` filling consecutive fields) must still fill
 // fields in order. Asserted by return code.
 

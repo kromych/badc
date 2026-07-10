@@ -3,8 +3,8 @@
 // a unary minus on a parenthesized float expression; the constant
 // evaluator must fold it in f64, not coerce the infinite result to an
 // integer first (which stored -(2^63)). Covers a scalar global, a struct
-// member, and a union member (the shape a property table such as
-// quickjs's Number.NEGATIVE_INFINITY uses). Asserted by return code.
+// member, and a union member (the shape a real-world property table with
+// a negative-infinity constant uses). Asserted by return code.
 
 #include <math.h>
 

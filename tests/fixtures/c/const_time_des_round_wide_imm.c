@@ -1,5 +1,5 @@
-/* BearSSL des_ct.c `Fconf` (the DES round function), extracted as a
- * self-contained regression. At -O on x86_64 the optimizer folds each
+/* A constant-time DES round function used as a self-contained
+ * regression. At -O on x86_64 the optimizer folds each
  *
  *     y = const ^ (x & mask)
  *
@@ -9,10 +9,9 @@
  * no free scratch and bailed ("op outside the implemented subset") at
  * ent_pc 113. The reserved r13 scratch closes that hole.
  *
- * The body is byte-for-byte the upstream function (BearSSL 0.6,
- * src/symcipher/des_ct.c) with `rotl` inlined; only the driver is
- * added. argv[1] selects between a self-check (exit 0 on the known
- * answer) and printing the checksum.
+ * `rotl` is inlined; the driver runs a fixed set of inputs and folds
+ * the 32-bit accumulator into one byte, observable through the process
+ * exit status.
  */
 
 typedef unsigned int uint32_t;
@@ -21,7 +20,7 @@ static uint32_t rotl(uint32_t x, int n) {
     return (x << n) | (x >> (32 - n));
 }
 
-static uint32_t Fconf(uint32_t r0, const uint32_t *sk) {
+static uint32_t des_round(uint32_t r0, const uint32_t *sk) {
     uint32_t x0, x1, x2, x3, x4, x5, z0;
     uint32_t y0, y1, y2, y3, y4, y5, y6, y7, y8, y9;
     uint32_t y10, y11, y12, y13, y14, y15, y16, y17, y18, y19;
@@ -146,7 +145,7 @@ int main(void) {
     uint32_t r = 0xA5A5A5A5u;
     int i;
     for (i = 0; i < 16; i++) {
-        acc ^= Fconf(r, sk);
+        acc ^= des_round(r, sk);
         r = (r * 1664525u) + 1013904223u; /* LCG to vary the input */
     }
     /* Fold the 32-bit accumulator into one byte so the value is

@@ -1,9 +1,9 @@
 /* GCC zero-length array `T x[0]` as a local. The declarator folds `[0]`
    to the same sentinel as a flexible array member, so a local one was
    wrongly rejected ("declared with empty brackets needs an initializer").
-   It is valid and empty; compile-time-assert idioms (e.g. QEMU's
-   `char offset_must_be_zero[-offsetof(type, first_field)]`, which is `[0]`
-   for a first member) rely on it. */
+   It is valid and empty; compile-time-assert idioms (e.g. a
+   `char c[-offsetof(type, first_field)]` array, which is `[0]` for a
+   first member) rely on it. */
 
 static int in_stmt_expr(void) {
     /* zero-length array inside a statement expression, as the macro uses */

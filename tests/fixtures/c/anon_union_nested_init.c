@@ -1,10 +1,11 @@
 // A struct with an anonymous union whose selected member is an aggregate
 // (array or struct) may be brace-initialized with an explicit sub-brace for
-// the union: `{ { { bytes } } }` = struct -> anon union -> array. QEMU's
-// QemuUUID (`struct { union { unsigned char data[16]; struct {...} fields; } }`)
-// is initialized this way in test tables. Covers a const global, an array of
-// such structs, a runtime-local, a designator selecting a non-first union
-// member, and -- as a regression -- a named (non-anonymous) union. Returns 0.
+// the union: `{ { { bytes } } }` = struct -> anon union -> array. A
+// real-world UUID shape (`struct { union { unsigned char data[16];
+// struct {...} fields; } }`) is initialized this way in test tables. Covers
+// a const global, an array of such structs, a runtime-local, a designator
+// selecting a non-first union member, and -- as a regression -- a named
+// (non-anonymous) union. Returns 0.
 
 typedef struct {
     union {
@@ -22,7 +23,7 @@ static const UUID g = { { {
     0x9e, 0x74, 0xe9, 0x01, 0x31, 0x7e, 0x9d, 0x42,
 } } };
 
-// Array of struct with the anon-union member (the test-uuid.c shape).
+// Array of struct with the anon-union member.
 static const struct {
     const char *name;
     UUID u;

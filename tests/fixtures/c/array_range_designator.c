@@ -4,7 +4,7 @@
 // and positional entries, a label-address range (the computed-goto
 // dispatch-table shape, which fills the slots with runtime stores), and a
 // struct-array range whose value carries relocations (function pointers) --
-// the QEMU MemoryRegionOps table shape. Asserted by return code.
+// a real-world I/O-dispatch table shape. Asserted by return code.
 
 static const int ct[16] = { [0] = 1, 2, [4 ... 9] = 7, [12 ... 15] = 9 };
 
@@ -33,9 +33,9 @@ static int check_struct(void) {
 }
 
 // C99 6.7.8p7 compound designator `[N].field = v` overrides one field of an
-// element already filled by the range -- QEMU's MemoryRegionOps per-endianness
-// override shape. Covers a scalar field (.id) and a pointer field (.read),
-// each keeping the range template's other fields.
+// element already filled by the range -- a real-world per-variant override
+// shape. Covers a scalar field (.id) and a pointer field (.read), each
+// keeping the range template's other fields.
 static const struct Ops ops2[2] = {
     [0 ... 1] = { .read = op_read, .write = op_write, .id = 5 },
     [0].id = 100,

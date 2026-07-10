@@ -1,8 +1,7 @@
 // localtime() fills `struct tm`, and a program reads the BSD extension
 // members back, so they must sit at the host's offsets. On macOS and
 // glibc `tm_gmtoff` is a `long` (8-aligned), placing `tm_zone` at offset
-// 48; an `int tm_gmtoff` would put it at 40 and read a garbage pointer
-// (which crashes in CPython's time-module timezone setup).
+// 48; an `int tm_gmtoff` would put it at 40 and read a garbage pointer.
 
 #include <time.h>
 #include <stddef.h>

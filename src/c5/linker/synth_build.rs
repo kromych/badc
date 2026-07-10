@@ -1078,14 +1078,14 @@ mod tests {
         // on Mach-O, gains the leading underscore the loader matches
         // against the host's exported name. ELF keeps the name verbatim.
         let mut merged = tiny_aarch64_main();
-        merged.imports = alloc::vec!["JS_ToIndex".to_string()];
-        merged.flat_imports.insert("JS_ToIndex".to_string());
+        merged.imports = alloc::vec!["ext_to_index".to_string()];
+        merged.flat_imports.insert("ext_to_index".to_string());
         let mac = synth_imports(&merged, Target::MacOSAarch64).expect("synth");
         assert!(mac.imports[0].flat_lookup, "must be flat-lookup on macOS");
-        assert_eq!(mac.imports[0].real_symbol, "_JS_ToIndex");
+        assert_eq!(mac.imports[0].real_symbol, "_ext_to_index");
         let elf = synth_imports(&merged, Target::LinuxAarch64).expect("synth");
         assert!(elf.imports[0].flat_lookup, "must be flat-lookup on ELF");
-        assert_eq!(elf.imports[0].real_symbol, "JS_ToIndex");
+        assert_eq!(elf.imports[0].real_symbol, "ext_to_index");
     }
 
     /// A non-flat import missing from the routing map is defaulted to

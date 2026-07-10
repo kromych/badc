@@ -1,8 +1,8 @@
 // GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`: store the wrapped
 // `a op b` through `dst` and return whether the true result overflowed
 // `dst`'s type. Covers signed / unsigned at 32 and 64 bits and the
-// boundary cases QEMU's host-utils.h relies on. Each check returns a
-// distinct non-zero code on failure; success returns 0.
+// boundary cases. Each check returns a distinct non-zero code on
+// failure; success returns 0.
 
 #include <stdint.h>
 

@@ -1,9 +1,9 @@
 // A GCC case range whose bounds are hex integers written without spaces
 // around `...` (`case 0x10...0x20:`) must lex as `0x10`, `...`, `0x20` --
-// the `.` beginning the ellipsis is not a hex-float fractional part. QEMU's
-// register-decode switches hit this after macro expansion
-// (`case STM32_RCC_AHB1_RSTR...STM32_RCC_APB2_RSTR:`). A real hex float
-// (`0x1.8p3`) must still lex as a float. Returns 0 on success.
+// the `.` beginning the ellipsis is not a hex-float fractional part.
+// Register-decode switches hit this after macro expansion
+// (`case LO...HI:` where LO and HI expand to hex constants). A real hex
+// float (`0x1.8p3`) must still lex as a float. Returns 0 on success.
 
 #define LO 0x10
 #define HI 0x20

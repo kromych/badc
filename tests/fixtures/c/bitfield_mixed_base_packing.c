@@ -5,13 +5,13 @@
 // shares the bits left in a larger neighbour's unit rather than opening
 // a new unit -- the layout gcc and clang produce. The earlier code
 // opened a new unit on every base-type change, which shifted every
-// field after a mixed-base bitfield run (it mislaid the quickjs
-// JSString header, whose `uint32_t len:31; uint8_t is_wide_char:1;`
-// pair must share one 4-byte unit).
+// field after a mixed-base bitfield run (it mislaid a real-world
+// header whose `uint32_t len:31; uint8_t is_wide:1;` pair must share
+// one 4-byte unit).
 
 #include <stdint.h>
 
-// Mirrors the JSString header shape.
+// A mixed-base bitfield header shape.
 struct Hdr {
     uint32_t len : 31;
     uint8_t is_wide : 1;

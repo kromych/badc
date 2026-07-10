@@ -1,6 +1,6 @@
 // GCC `__builtin_parity` / `__builtin_parityll`: 1 when the operand has an
-// odd number of set bits, else 0 (used by QEMU's bitops.h). Returns 0 on
-// success; a distinct non-zero code per failure.
+// odd number of set bits, else 0 (a common bit-manipulation helper).
+// Returns 0 on success; a distinct non-zero code per failure.
 
 int main(void) {
     if (__builtin_parity(0) != 0) {

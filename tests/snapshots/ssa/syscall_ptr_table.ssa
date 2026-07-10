@@ -1,4 +1,4 @@
-sqlite_min.c:18: warning: unused variable `osStat`
+syscall_ptr_table.c:18: warning: unused variable `stat_fn`
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=28

@@ -231,6 +231,13 @@ pub enum Intrinsic {
     AArch64IcIvau = 56,
     AArch64DsbIsh = 57,
     AArch64Isb = 58,
+    /// `__builtin_ffs(x)` / `__builtin_ffsll(x)` -- one plus the index of
+    /// the least-significant set bit, or 0 when `x` is 0 (POSIX `ffs`, GCC
+    /// builtin). The result is `int`. Lowered in the walker as
+    /// `(ctz(x) + 1) * (x != 0)`, reusing the portable ctz sequence; the
+    /// `(x != 0)` factor forces the zero case (ctz(0) is the bit width).
+    Ffs = 59,
+    Ffsll = 60,
 }
 
 impl Intrinsic {
@@ -294,6 +301,8 @@ impl Intrinsic {
             56 => Some(Intrinsic::AArch64IcIvau),
             57 => Some(Intrinsic::AArch64DsbIsh),
             58 => Some(Intrinsic::AArch64Isb),
+            59 => Some(Intrinsic::Ffs),
+            60 => Some(Intrinsic::Ffsll),
             _ => None,
         }
     }
@@ -323,6 +332,8 @@ impl Intrinsic {
                 | Intrinsic::Clrsbll
                 | Intrinsic::Parity
                 | Intrinsic::Parityll
+                | Intrinsic::Ffs
+                | Intrinsic::Ffsll
         )
     }
 
@@ -336,6 +347,7 @@ impl Intrinsic {
                 | Intrinsic::Popcountll
                 | Intrinsic::Clrsbll
                 | Intrinsic::Parityll
+                | Intrinsic::Ffsll
         )
     }
 

@@ -1341,6 +1341,14 @@ fn builtin_bit_count() {
 }
 
 #[test]
+fn builtin_ffs() {
+    // GCC / POSIX __builtin_ffs / ffsl / ffsll: one plus the index of the
+    // least-significant set bit, 0 for a zero argument (the zero case is
+    // defined, unlike ctz). Lowered as `(ctz(x) + 1) * (x != 0)`.
+    assert_eq!(run_fixture("builtin_ffs.c"), 0);
+}
+
+#[test]
 fn scanf_fscanf_binding() {
     // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared and bound
     // from <stdio.h>; the calls are guarded so the interp lane never

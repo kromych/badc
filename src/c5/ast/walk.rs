@@ -3524,6 +3524,7 @@ impl<'a> Walker<'a> {
                         I::Clz | I::Clzll => lower_clz(b, x, w64),
                         I::Ctz | I::Ctzll => lower_ctz(b, x, w64),
                         I::Clrsb | I::Clrsbll => lower_clrsb(b, x, w64),
+                        I::Ffs | I::Ffsll => lower_ffs(b, x, w64),
                         I::Parity | I::Parityll => {
                             let pc = lower_popcount(b, x, w64);
                             b.binop_imm(BinOp::And, pc, 1)
@@ -4662,6 +4663,16 @@ fn lower_ctz(b: &mut Bld, x: Val, w64: bool) -> Val {
     let notx = b.binop_imm(BinOp::Xor, x, -1);
     let m = b.binop(BinOp::And, xm1, notx);
     lower_popcount(b, m, w64)
+}
+
+// POSIX / GCC `ffs`: one plus the index of the least-significant set bit,
+// 0 for a zero input. `lower_ctz` returns the bit width at zero, so the
+// `(x != 0)` factor forces the zero case to 0.
+fn lower_ffs(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let ctz = lower_ctz(b, x, w64);
+    let cp1 = b.binop_imm(BinOp::Add, ctz, 1);
+    let nz = b.binop_imm(BinOp::Ne, x, 0);
+    b.binop(BinOp::Mul, cp1, nz)
 }
 
 /// Reverse the low `n` bytes of `x`: extract each byte with a logical

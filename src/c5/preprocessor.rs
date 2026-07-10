@@ -400,6 +400,8 @@ impl Preprocessor {
             ("__builtin_clrsbll", super::op::Intrinsic::Clrsbll),
             ("__builtin_parity", super::op::Intrinsic::Parity),
             ("__builtin_parityll", super::op::Intrinsic::Parityll),
+            ("__builtin_ffs", super::op::Intrinsic::Ffs),
+            ("__builtin_ffsll", super::op::Intrinsic::Ffsll),
             ("__builtin_unreachable", super::op::Intrinsic::Trap),
             (
                 "__builtin_frame_address",
@@ -440,6 +442,12 @@ impl Preprocessor {
             super::op::Intrinsic::Parity
         };
         intrinsics.insert("__builtin_parityl".to_string(), parityl as i64);
+        let ffsl = if target.long_width_bytes() == 8 {
+            super::op::Intrinsic::Ffsll
+        } else {
+            super::op::Intrinsic::Ffs
+        };
+        intrinsics.insert("__builtin_ffsl".to_string(), ffsl as i64);
         // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
         // declaration decorators carrying hints the dialect does not act
         // on, except for the `packed` attribute, which changes aggregate
@@ -5051,6 +5059,9 @@ fn is_known_builtin(name: &str) -> bool {
             | "__builtin_parity"
             | "__builtin_parityl"
             | "__builtin_parityll"
+            | "__builtin_ffs"
+            | "__builtin_ffsl"
+            | "__builtin_ffsll"
             | "__builtin_expect"
             | "__builtin_unreachable"
             | "__builtin_trap"

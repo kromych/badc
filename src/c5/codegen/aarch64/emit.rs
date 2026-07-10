@@ -3710,6 +3710,8 @@ fn emit_intrinsic(
         | I::Clrsbll
         | I::Parity
         | I::Parityll
+        | I::Ffs
+        | I::Ffsll
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64 => {

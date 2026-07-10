@@ -30,6 +30,17 @@ static const ElemArray2 pair = {
 typedef struct Elem OneElem;
 static const OneElem one = { .name = "solo", .offset = 99 };
 
+// C99 6.7.5.3p7: a parameter of the deferred array typedef adjusts to a
+// pointer to the element, so `clocks[i]` indexes it -- QEMU's
+// `void qdev_init_clocks(DeviceState *, const ClockPortInitArray)`.
+static int total_offset(const ElemArray clocks, int n) {
+    int sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += clocks[i].offset;
+    }
+    return sum;
+}
+
 int main(void) {
     if (sizeof(clocks) / sizeof(clocks[0]) != 3) return 1;
     if (clocks[0].name[0] != 'h' || clocks[0].offset != 4) return 2;
@@ -38,5 +49,6 @@ int main(void) {
     if (sizeof(pair) / sizeof(pair[0]) != 2) return 5;
     if (pair[0].offset != 1 || pair[1].offset != 2) return 6;
     if (one.name[0] != 's' || one.offset != 99) return 7;
+    if (total_offset(clocks, 3) != 24) return 8;   // 4 + 8 + 12
     return 0;
 }

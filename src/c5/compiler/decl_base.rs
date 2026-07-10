@@ -704,7 +704,10 @@ impl Compiler {
             // paragraph 3). `typedef long jmp_buf[64]; jmp_buf b;`
             // must bind `b` as `long b[64]`, not as a scalar.
             let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
-            if typedef_array > 0 {
+            // Non-zero covers a fixed dimension and the `-1` deferred-array
+            // marker (`typedef T X[]`); a parameter of the latter still decays
+            // to a pointer to the element (C99 6.7.5.3p7).
+            if typedef_array != 0 {
                 self.pending.typedef_base_array_size = typedef_array;
             }
             self.next()?;

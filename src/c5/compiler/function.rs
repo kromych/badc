@@ -145,7 +145,7 @@ impl Compiler {
                     }
                     ty += Ty::Ptr as i64;
                 }
-                if self.pending.typedef_base_array_size > 0 {
+                if self.pending.typedef_base_array_size != 0 {
                     ty += Ty::Ptr as i64;
                 }
                 self.ty = ty;
@@ -181,7 +181,7 @@ impl Compiler {
             // when parse_declarator did not already absorb it
             // into `array_size` (i.e., the declarator carried no
             // explicit brackets).
-            if array_size == 0 && self.pending.typedef_base_array_size > 0 {
+            if array_size == 0 && self.pending.typedef_base_array_size != 0 {
                 full_ty += Ty::Ptr as i64;
             }
             // Fn-pointer lineage: pick up the side-channel that

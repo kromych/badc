@@ -429,23 +429,27 @@ impl Compiler {
                 let v = self.require_gcc_arg(val1, name)?;
                 (AtomicKind::FetchXor, alloc::vec![ptr, v], elem_ty)
             }
-            "__sync_add_and_fetch" => {
+            // The C11 `__atomic_*_fetch` forms return the new (post-op)
+            // value and take a memory-order argument; the `__sync_*_and_fetch`
+            // forms are the older two-argument spelling. Both map to the same
+            // read-modify-write returning the updated value.
+            "__atomic_add_fetch" | "__sync_add_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
                 (AtomicKind::AddFetch, alloc::vec![ptr, v], elem_ty)
             }
-            "__sync_sub_and_fetch" => {
+            "__atomic_sub_fetch" | "__sync_sub_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
                 (AtomicKind::SubFetch, alloc::vec![ptr, v], elem_ty)
             }
-            "__sync_and_and_fetch" => {
+            "__atomic_and_fetch" | "__sync_and_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
                 (AtomicKind::AndFetch, alloc::vec![ptr, v], elem_ty)
             }
-            "__sync_or_and_fetch" => {
+            "__atomic_or_fetch" | "__sync_or_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
                 (AtomicKind::OrFetch, alloc::vec![ptr, v], elem_ty)
             }
-            "__sync_xor_and_fetch" => {
+            "__atomic_xor_fetch" | "__sync_xor_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
                 (AtomicKind::XorFetch, alloc::vec![ptr, v], elem_ty)
             }

@@ -130,6 +130,14 @@ fn atomic128_ldaxp_stlxp() {
 }
 
 #[test]
+fn atomic_op_fetch() {
+    // C11 __atomic_*_fetch builtins (add/sub/and/or/xor) return the updated
+    // value, unlike the __atomic_fetch_* family; the older __sync_*_and_fetch
+    // spelling does too. The fixture checks the return value and the store.
+    assert_eq!(run_fixture("atomic_op_fetch.c"), 0);
+}
+
+#[test]
 fn case_range() {
     // GNU case ranges `case lo ... hi:` -- boundaries, interior, stacked
     // ranges sharing a body, mixed with single labels, and fall-through

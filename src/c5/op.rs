@@ -250,6 +250,17 @@ pub enum Intrinsic {
     Atomic128Xchg = 62,
     Atomic128FetchAnd = 63,
     Atomic128FetchOr = 64,
+    /// 128-bit atomic load / store, the AArch64 inline-asm idiom for a
+    /// 16-byte access with no native LSE2 support. `Load`/`Store` are the
+    /// plain `LDP`/`STP` forms; `LoadEx`/`StoreEx` are the pre-LSE2 forms
+    /// built from an `LDXP`/`STXP` exclusive-pair retry loop. Loads take a
+    /// pointer to the object and the addresses of the two 64-bit result
+    /// halves (written back); stores take the pointer and the two halves as
+    /// inputs. AArch64 only.
+    Atomic128Load = 65,
+    Atomic128Store = 66,
+    Atomic128LoadEx = 67,
+    Atomic128StoreEx = 68,
 }
 
 impl Intrinsic {
@@ -319,6 +330,10 @@ impl Intrinsic {
             62 => Some(Intrinsic::Atomic128Xchg),
             63 => Some(Intrinsic::Atomic128FetchAnd),
             64 => Some(Intrinsic::Atomic128FetchOr),
+            65 => Some(Intrinsic::Atomic128Load),
+            66 => Some(Intrinsic::Atomic128Store),
+            67 => Some(Intrinsic::Atomic128LoadEx),
+            68 => Some(Intrinsic::Atomic128StoreEx),
             _ => None,
         }
     }

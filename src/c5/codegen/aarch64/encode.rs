@@ -1231,6 +1231,23 @@ pub(crate) fn enc_stlxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> u32 {
         | (rt.0 as u32)
 }
 
+/// `LDXP <Xt1>, <Xt2>, [<Xn|SP>]` -- load exclusive pair, the non-acquire
+/// counterpart of [`enc_ldaxp`] (the acquire `o0` bit 15 cleared).
+pub(crate) fn enc_ldxp(rt: Reg, rt2: Reg, rn: Reg) -> u32 {
+    0xC87F_0000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STXP <Ws>, <Xt1>, <Xt2>, [<Xn|SP>]` -- store exclusive pair, the
+/// non-release counterpart of [`enc_stlxp`] (the release `o0` bit 15
+/// cleared). `rs` receives 0 on success and 1 when the monitor was lost.
+pub(crate) fn enc_stxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> u32 {
+    0xC820_0000
+        | ((rs.0 as u32) << 16)
+        | ((rt2.0 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
 /// `CCMP <Xn>, <Xm>, #<nzcv>, <cond>` -- conditional compare (register),
 /// 64-bit. When `cond` holds, compare `Xn` with `Xm`; otherwise set the
 /// flags directly from `nzcv`. Used to fuse a two-word equality test.
@@ -2656,5 +2673,18 @@ mod tests {
         assert_eq!(enc_stlxp(Reg(0), Reg(1), Reg(2), Reg(3)), 0xC820_8861);
         assert_eq!(enc_stlxp(Reg(4), Reg(5), Reg(6), Reg(7)), 0xC824_98E5);
         assert_eq!(enc_ccmp(Reg(11), Reg(13), 0, Cond::Eq), 0xFA4D_0160);
+    }
+
+    // Cross-checked against `clang -c` + `otool -t` (aarch64). The plain
+    // LDP / STP forms are the same fixed encodings [`enc_ldp_off`] /
+    // [`enc_stp_off`] produce at a zero offset:
+    //   ldxp x1,x2,[x3]=c87f0861  stxp w0,x1,x2,[x3]=c8200861
+    //   ldp x1,x2,[x3]=a9400861   stp x1,x2,[x3]=a9000861
+    #[test]
+    fn ldxp_stxp_ldp_stp() {
+        assert_eq!(enc_ldxp(Reg(1), Reg(2), Reg(3)), 0xC87F_0861);
+        assert_eq!(enc_stxp(Reg(0), Reg(1), Reg(2), Reg(3)), 0xC820_0861);
+        assert_eq!(enc_ldp_off(Reg(1), Reg(2), Reg(3), 0), 0xA940_0861);
+        assert_eq!(enc_stp_off(Reg(1), Reg(2), Reg(3), 0), 0xA900_0861);
     }
 }

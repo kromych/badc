@@ -860,6 +860,31 @@ impl Compiler {
                 self.data.truncate(tstart);
                 return self.parse_atomic128_asm(kind);
             }
+            // AArch64 128-bit atomic load / store: the plain `ldp`/`stp`
+            // forms and the pre-LSE2 `ldxp`/`stxp` exclusive-pair loops used
+            // when there is no native 16-byte atomic access. Same operand
+            // grammar as the RMW shapes; the template selects the kind.
+            let ldst_kind = if tmpl_ws == "ldp%[l],%[h],%[mem]" {
+                Some(I::Atomic128Load)
+            } else if tmpl_ws == "stp%[l],%[h],%[mem]" {
+                Some(I::Atomic128Store)
+            } else if tmpl_ws.starts_with("0:ldxp%[l],%[h],%[mem]")
+                && tmpl_ws.contains("stxp%w[tmp],%[l],%[h],%[mem]")
+                && tmpl_ws.contains("cbnz%w[tmp],0b")
+            {
+                Some(I::Atomic128LoadEx)
+            } else if tmpl_ws.starts_with("0:ldxp%[t1],%[t2],%[mem]")
+                && tmpl_ws.contains("stxp%w[t1],%[l],%[h],%[mem]")
+                && tmpl_ws.contains("cbnz%w[t1],0b")
+            {
+                Some(I::Atomic128StoreEx)
+            } else {
+                None
+            };
+            if let Some(kind) = ldst_kind {
+                self.data.truncate(tstart);
+                return self.parse_atomic128_asm(kind);
+            }
         }
         // An empty template is a compiler barrier: `__asm__("")`, or the
         // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It emits no
@@ -1246,23 +1271,29 @@ impl Compiler {
         Ok(())
     }
 
-    /// Parse the operand lists of the AArch64 128-bit atomic RMW inline asm
-    /// (the `ldaxp`/`stlxp` shape). GCC named operands appear in a fixed
-    /// order per `kind`: outputs `[mem] [tmp] [oldl] [oldh]` (and, for the
-    /// fetch forms, `[tmpl] [tmph]`), then inputs -- `[cmpl] [cmph] [newl]
-    /// [newh]` for CmpXchg, `[newl] [newh]` otherwise. `mem`'s `"+m"(*ptr)`
-    /// yields the object pointer; `oldl`/`oldh` are the prior-value output
-    /// addresses; `tmp`/`tmpl`/`tmph` are asm scratch with no C effect. The
-    /// intrinsic args are `[ptr, &oldl, &oldh, in...]`. On entry the
+    /// Parse the operand lists of the AArch64 128-bit atomic inline asm --
+    /// the `ldaxp`/`stlxp` RMW shapes and the `ldp`/`stp`, `ldxp`/`stxp`
+    /// load / store shapes. GCC named operands (`[name] "constraint"(expr)`)
+    /// are mapped by name and section, not position, since the layout
+    /// differs across shapes: `mem`'s memory operand yields the object
+    /// pointer; a register operand in the output section is a result lvalue
+    /// (its address is taken), one in the input section is a value;
+    /// `tmp`/`tmpl`/`tmph`/`t1`/`t2` are asm scratch with no C effect. The
+    /// intrinsic args are `[ptr, out-addrs..., in-values...]`. On entry the
     /// template is consumed and the cursor is at the first `:`.
     fn parse_atomic128_asm(&mut self, kind: super::super::op::Intrinsic) -> Result<(), C5Error> {
         use super::super::ast::{Expr, UnOp};
+        use super::super::op::Intrinsic as I;
+        // Role of a named operand, decided from its `[name]` spelling.
+        enum Role {
+            Mem,     // the 128-bit object, via a memory constraint
+            Scratch, // asm-only temporary, no C effect
+            Reg,     // register operand: address if output, value if input
+        }
         let mut ptr = None;
-        let mut oldl_addr = None;
-        let mut oldh_addr = None;
-        let mut inputs: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
+        let mut out_addrs: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
+        let mut in_vals: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut section: u8 = 0;
-        let mut out_idx = 0usize;
         let data_base = self.data.len();
         while self.lex.tk != ')' {
             if self.lex.tk == ':' {
@@ -1274,10 +1305,20 @@ impl Compiler {
                 self.next()?;
                 continue;
             }
-            // GCC named operand: `[name]` precedes the constraint. The name
-            // is positional here, so consume it without interning.
+            // GCC named operand: `[name]` precedes the constraint. Classify
+            // by the identifier spelling before advancing past it.
+            let mut role = Role::Reg;
             if self.lex.tk == Token::Brak {
                 self.next()?; // `[`
+                if self.lex.tk != Token::Id {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("128-bit atomic asm: operand name expected"));
+                }
+                role = match self.symbols[self.lex.curr_id_idx].name.as_str() {
+                    "mem" => Role::Mem,
+                    "tmp" | "tmpl" | "tmph" | "t1" | "t2" => Role::Scratch,
+                    _ => Role::Reg,
+                };
                 self.next()?; // name
                 self.consume(b']', "`]` expected after asm operand name")?;
             }
@@ -1298,38 +1339,38 @@ impl Compiler {
             }
             self.next()?; // `(`
             self.expr(Token::Assign as i64)?;
-            if section == 1 {
-                match out_idx {
-                    // [mem] "+m"(*ptr) -> &*ptr = the object pointer.
-                    0 => {
-                        self.ty += Ty::Ptr as i64;
-                        self.ast_apply_unary(UnOp::AddrOf);
-                        ptr = self.ast_acc.take();
-                    }
-                    2 => {
-                        self.ty += Ty::Ptr as i64;
-                        self.ast_apply_unary(UnOp::AddrOf);
-                        oldl_addr = self.ast_acc.take();
-                    }
-                    3 => {
-                        self.ty += Ty::Ptr as i64;
-                        self.ast_apply_unary(UnOp::AddrOf);
-                        oldh_addr = self.ast_acc.take();
-                    }
-                    // [tmp]/[tmpl]/[tmph]: asm scratch, no machine effect.
-                    _ => {
-                        let _ = self.ast_acc.take();
+            match role {
+                // `"m"(*ptr)` / `"+m"(*ptr)`: &*ptr is the object pointer.
+                Role::Mem => {
+                    self.ty += Ty::Ptr as i64;
+                    self.ast_apply_unary(UnOp::AddrOf);
+                    ptr = self.ast_acc.take();
+                }
+                Role::Scratch => {
+                    let _ = self.ast_acc.take();
+                }
+                // Output register: the loaded half is stored to this lvalue.
+                Role::Reg if section == 1 => {
+                    self.ty += Ty::Ptr as i64;
+                    self.ast_apply_unary(UnOp::AddrOf);
+                    match self.ast_acc.take() {
+                        Some(id) => out_addrs.push(id),
+                        None => {
+                            self.data.truncate(data_base);
+                            return Err(
+                                self.compile_err("128-bit atomic asm: empty output operand")
+                            );
+                        }
                     }
                 }
-                out_idx += 1;
-            } else {
-                match self.ast_acc.take() {
-                    Some(id) => inputs.push(id),
+                // Input register: its value feeds the sequence.
+                Role::Reg => match self.ast_acc.take() {
+                    Some(id) => in_vals.push(id),
                     None => {
                         self.data.truncate(data_base);
                         return Err(self.compile_err("128-bit atomic asm: empty input operand"));
                     }
-                }
+                },
             }
             if self.lex.tk != ')' {
                 self.data.truncate(data_base);
@@ -1341,27 +1382,25 @@ impl Compiler {
         self.consume(b';', "`;` expected after `asm(...)`")?;
         self.data.truncate(data_base);
 
-        let n_in = if matches!(kind, super::super::op::Intrinsic::Atomic128CmpXchg) {
-            4
-        } else {
-            2
+        // Expected result-address and input-value counts per shape.
+        let (want_out, want_in) = match kind {
+            I::Atomic128CmpXchg => (2, 4),
+            I::Atomic128Xchg | I::Atomic128FetchAnd | I::Atomic128FetchOr => (2, 2),
+            I::Atomic128Load | I::Atomic128LoadEx => (2, 0),
+            I::Atomic128Store | I::Atomic128StoreEx => (0, 2),
+            _ => (0, 0),
         };
-        let (ptr, oldl_addr, oldh_addr) = match (ptr, oldl_addr, oldh_addr) {
-            (Some(p), Some(l), Some(h)) => (p, l, h),
-            _ => {
-                return Err(
-                    self.compile_err("128-bit atomic asm: missing mem / oldl / oldh operands")
-                );
-            }
+        let ptr = match ptr {
+            Some(p) => p,
+            None => return Err(self.compile_err("128-bit atomic asm: missing mem operand")),
         };
-        if inputs.len() != n_in {
-            return Err(self.compile_err("128-bit atomic asm: unexpected input operand count"));
+        if out_addrs.len() != want_out || in_vals.len() != want_in {
+            return Err(self.compile_err("128-bit atomic asm: unexpected operand count"));
         }
-        let mut args = alloc::vec::Vec::with_capacity(3 + n_in);
+        let mut args = alloc::vec::Vec::with_capacity(1 + want_out + want_in);
         args.push(ptr);
-        args.push(oldl_addr);
-        args.push(oldh_addr);
-        args.extend_from_slice(&inputs);
+        args.extend_from_slice(&out_addrs);
+        args.extend_from_slice(&in_vals);
 
         self.mark_emit_other();
         self.ty = Ty::Int as i64;

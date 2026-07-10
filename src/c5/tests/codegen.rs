@@ -1569,6 +1569,72 @@ fn atomic128_emits_ldaxp_stlxp_aarch64() {
     );
 }
 
+/// The 128-bit atomic load / store shapes lower to plain LDP / STP and
+/// exclusive-pair LDXP / STXP. LDXP / STXP are matched by their fixed bits
+/// (bit 15, the acquire/release `o0`, is 0, distinguishing them from
+/// LDAXP / STLXP); the plain LDP / STP are matched by the exact
+/// register-specific words the lowering emits (x10/x11 or x12/x13 over
+/// base x9), which the frame-save LDP/STP pairs (base x31/sp) never alias.
+#[test]
+fn atomic128_emits_ldp_stp_ldxp_stxp_aarch64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned long long lo, hi; } u128;\n\
+         void ld(const u128 *p, unsigned long long *ol, unsigned long long *oh){\n\
+           unsigned long long l, h;\n\
+           __asm__(\"ldp %[l], %[h], %[mem]\"\n\
+                   : [l] \"=r\"(l), [h] \"=r\"(h) : [mem] \"m\"(*p));\n\
+           *ol = l; *oh = h; }\n\
+         void st(u128 *p, unsigned long long l, unsigned long long h){\n\
+           __asm__(\"stp %[l], %[h], %[mem]\"\n\
+                   : [mem] \"=m\"(*p) : [l] \"r\"(l), [h] \"r\"(h)); }\n\
+         void ldx(u128 *p, unsigned long long *ol, unsigned long long *oh){\n\
+           unsigned long long l, h; unsigned t;\n\
+           __asm__(\"0: ldxp %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"stxp %w[tmp], %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"cbnz %w[tmp], 0b\"\n\
+                   : [mem] \"+m\"(*p), [tmp] \"=&r\"(t), [l] \"=&r\"(l), [h] \"=&r\"(h)\n\
+                   :: \"memory\");\n\
+           *ol = l; *oh = h; }\n\
+         void stx(u128 *p, unsigned long long l, unsigned long long h){\n\
+           unsigned long long a, b;\n\
+           __asm__(\"0: ldxp %[t1], %[t2], %[mem]\\n\\t\"\n\
+                   \"stxp %w[t1], %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"cbnz %w[t1], 0b\"\n\
+                   : [mem] \"+m\"(*p), [t1] \"=&r\"(a), [t2] \"=&r\"(b)\n\
+                   : [l] \"r\"(l), [h] \"r\"(h) : \"memory\"); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    let any_ldxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_0000);
+    let any_stxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_0000);
+    // enc_ldp_off(x10,x11,x9,0) and enc_stp_off(x12,x13,x9,0).
+    let any_ldp = words().any(|w| w == 0xA940_2D2A);
+    let any_stp = words().any(|w| w == 0xA900_352C);
+    assert!(
+        any_ldxp,
+        "expected an LDXP opcode word in the aarch64 image"
+    );
+    assert!(
+        any_stxp,
+        "expected an STXP opcode word in the aarch64 image"
+    );
+    assert!(
+        any_ldp,
+        "expected the plain 128-bit-load LDP opcode word in the aarch64 image"
+    );
+    assert!(
+        any_stp,
+        "expected the plain 128-bit-store STP opcode word in the aarch64 image"
+    );
+}
+
 /// Bytes of the section named `name` in an ELF64 little-endian
 /// object, or `None` when absent. Reads only the section header
 /// table and the section-name string table.

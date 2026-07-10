@@ -130,6 +130,17 @@ fn atomic128_ldaxp_stlxp() {
 }
 
 #[test]
+fn atomic128_ldst() {
+    // AArch64 128-bit atomic load / store via the ldp/stp and ldxp/stxp
+    // idioms: the plain and exclusive forms, cross-checked so a value stored
+    // by one form reads back through the other, plus a plain load from a
+    // read-only object. Under the VM each runs as an ordinary load / store;
+    // native aarch64 emits the real sequence (x86-64 gates the shape out).
+    // The fixture returns 0 only when every round-trip is correct.
+    assert_eq!(run_fixture("atomic128_ldst.c"), 0);
+}
+
+#[test]
 fn atomic_op_fetch() {
     // C11 __atomic_*_fetch builtins (add/sub/and/or/xor) return the updated
     // value, unlike the __atomic_fetch_* family; the older __sync_*_and_fetch

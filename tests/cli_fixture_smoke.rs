@@ -64,6 +64,7 @@ const COMPILE_SKIPLIST: &[&str] = &[
 const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("cacheflush_asm.c", "linux-x64"), // aarch64 cache-ops / barriers
     ("atomic128_ldaxp_stlxp.c", "linux-x64"), // aarch64 128-bit ldaxp/stlxp
+    ("atomic128_ldst.c", "linux-x64"), // aarch64 128-bit ldp/stp, ldxp/stxp
     ("divq_udiv_qrnnd.c", "linux-aarch64"), // x86-64 128/64 divq
     ("rdtsc_host_ticks.c", "linux-aarch64"), // x86-64 rdtsc
 ];

@@ -2175,6 +2175,28 @@ fn run_intrinsic(
             }
             Ok(())
         }
+        Intrinsic::Atomic128Load | Intrinsic::Atomic128LoadEx => {
+            // args: [ptr, &l, &h]. Read the 128-bit object and publish its
+            // two halves. Single-threaded, so the exclusive form is a plain
+            // load.
+            let ptr = frame.regs[args[0] as usize] as usize;
+            let l_addr = frame.regs[args[1] as usize] as usize;
+            let h_addr = frame.regs[args[2] as usize] as usize;
+            let cur_l = load_from_memory(mem, ptr, LoadKind::I64)?;
+            let cur_h = load_from_memory(mem, ptr + 8, LoadKind::I64)?;
+            store_to_memory(mem, l_addr, cur_l, StoreKind::I64)?;
+            store_to_memory(mem, h_addr, cur_h, StoreKind::I64)?;
+            Ok(())
+        }
+        Intrinsic::Atomic128Store | Intrinsic::Atomic128StoreEx => {
+            // args: [ptr, l, h]. Store the 128-bit value.
+            let ptr = frame.regs[args[0] as usize] as usize;
+            let l = frame.regs[args[1] as usize];
+            let h = frame.regs[args[2] as usize];
+            store_to_memory(mem, ptr, l, StoreKind::I64)?;
+            store_to_memory(mem, ptr + 8, h, StoreKind::I64)?;
+            Ok(())
+        }
         Intrinsic::Rdtsc => {
             // No host clock; zero the low/high output words so a caller
             // reads a defined result rather than uninitialized data.

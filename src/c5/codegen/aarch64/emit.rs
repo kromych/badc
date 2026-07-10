@@ -3635,6 +3635,9 @@ fn emit_intrinsic(
         I::Atomic128CmpXchg | I::Atomic128Xchg | I::Atomic128FetchAnd | I::Atomic128FetchOr => {
             emit_atomic128(code, intrinsic, args, alloc, frame, scratch)
         }
+        I::Atomic128Load | I::Atomic128Store | I::Atomic128LoadEx | I::Atomic128StoreEx => {
+            emit_atomic128_ldst(code, intrinsic, args, alloc, frame, scratch)
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs
@@ -4803,6 +4806,92 @@ fn atomic128_writeback(
         return false;
     }
     emit(code, enc_str_imm(src, addr_tmp, 0));
+    true
+}
+
+/// AArch64 128-bit atomic load / store, recognised from the inline-asm
+/// idiom used for a 16-byte access without native LSE2. `Load`/`Store` are
+/// the plain `LDP`/`STP` forms; `LoadEx`/`StoreEx` are the pre-LSE2 forms
+/// built from an `LDXP`/`STXP` exclusive-pair retry loop (ARM ARM B2.9).
+/// `args` is `[ptr, &l, &h]` for the loads (the value read from `ptr` is
+/// written back through `&l` / `&h`) and `[ptr, l, h]` for the stores.
+/// There is no register result. Borrowed working registers x9..x15 are
+/// saved / restored so spilled operands can route through the save area.
+fn emit_atomic128_ldst(
+    code: &mut Vec<u8>,
+    kind: super::super::op::Intrinsic,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use super::super::op::Intrinsic as I;
+    use super::encode::{enc_ldxp, enc_stxp};
+    if args.len() != 3 {
+        bail_msg("atomic128 ldst: wrong operand count");
+        return false;
+    }
+    let ptr = Reg(9);
+    let lo = Reg(10);
+    let hi = Reg(11);
+    let status = scratch.secondary; // x17
+    atomic128_save_working(code);
+    if !atomic128_operand_into(code, args[0], ptr, frame, alloc) {
+        bail_msg("atomic128 ldst: ptr operand not int reg / spill");
+        return false;
+    }
+    let is_load = matches!(kind, I::Atomic128Load | I::Atomic128LoadEx);
+    match kind {
+        // Plain LDP: a single non-exclusive 128-bit load. No store, so it
+        // never faults on a read-only mapping.
+        I::Atomic128Load => emit(code, enc_ldp_off(lo, hi, ptr, 0)),
+        // Pre-LSE2 load: an LDXP/STXP loop storing the value it read back
+        // unchanged, retried until the monitor holds. Leaves it in lo / hi.
+        I::Atomic128LoadEx => {
+            let loop_start = code.len();
+            emit(code, enc_ldxp(lo, hi, ptr));
+            emit(code, enc_stxp(status, lo, hi, ptr));
+            let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+            emit(code, enc_cbnz(status, back as i32));
+        }
+        // Plain STP: materialise the two halves and store the pair.
+        I::Atomic128Store => {
+            if !atomic128_operand_into(code, args[1], Reg(12), frame, alloc)
+                || !atomic128_operand_into(code, args[2], Reg(13), frame, alloc)
+            {
+                bail_msg("atomic128 ldst: store value not int reg / spill");
+                return false;
+            }
+            emit(code, enc_stp_off(Reg(12), Reg(13), ptr, 0));
+        }
+        // Pre-LSE2 store: an LDXP (result discarded) / STXP loop. The new
+        // value sits in x12 / x13, clear of the LDXP scratch lo / hi.
+        I::Atomic128StoreEx => {
+            if !atomic128_operand_into(code, args[1], Reg(12), frame, alloc)
+                || !atomic128_operand_into(code, args[2], Reg(13), frame, alloc)
+            {
+                bail_msg("atomic128 ldst: store value not int reg / spill");
+                return false;
+            }
+            let loop_start = code.len();
+            emit(code, enc_ldxp(lo, hi, ptr));
+            emit(code, enc_stxp(status, Reg(12), Reg(13), ptr));
+            let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+            emit(code, enc_cbnz(status, back as i32));
+        }
+        _ => {
+            bail_msg("atomic128 ldst: unexpected kind");
+            return false;
+        }
+    }
+    // Loads publish the read value through &l / &h.
+    if is_load
+        && (!atomic128_writeback(code, args[1], lo, frame, alloc, scratch.primary)
+            || !atomic128_writeback(code, args[2], hi, frame, alloc, scratch.primary))
+    {
+        return false;
+    }
+    atomic128_restore_working(code);
     true
 }
 

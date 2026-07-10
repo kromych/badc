@@ -30,6 +30,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::types::is_decl_modifier;
 
 impl Compiler {
     /// Speculatively parse a block-scope function prototype
@@ -95,6 +96,28 @@ impl Compiler {
         }
         self.lex.restore(proto_snap);
         Ok(false)
+    }
+
+    /// At `(` in a declarator, peek whether the parenthesized content
+    /// opens a parameter-type list -- an abstract function type
+    /// `T ( types )` (C99 6.7.5.3p8) -- rather than a parenthesized
+    /// declarator (`T (name)` / `T (*name)`). A type-start (including a
+    /// typedef-name) or an empty list marks the function-type form. The
+    /// lexer snapshot keeps the peek from consuming the paren.
+    fn paren_opens_param_type_list(&mut self) -> bool {
+        let snap = self.lex.snapshot();
+        let mut ok = self.next().is_ok(); // past `(`
+        // A parenthesized declarator may lead with calling-convention /
+        // qualifier tokens (`(__stdcall *fp)`, `(__cdecl name)`), which also
+        // start a type. Skip them; a `*` after them is a declarator, while a
+        // type-start or `)` is a parameter-type list.
+        while ok && is_decl_modifier(self.lex.tk) {
+            ok = self.next().is_ok();
+        }
+        let is_param_list =
+            ok && self.lex.tk != Token::MulOp && (self.lex.tk == ')' || self.lex_is_type_start());
+        self.lex.restore(snap);
+        is_param_list
     }
 
     /// Parse an abstract parenthesized declarator tail that follows a
@@ -264,6 +287,22 @@ impl Compiler {
                 leading_ptr_count
             };
             self.pending.fn_ptr_indirection = Some(fpi + added);
+        }
+
+        // Abstract function-type parameter `RET ( param-types )` (C99
+        // 6.7.5.3p8): a parameter of function type is adjusted to
+        // pointer-to-function. Distinguished from a parenthesized
+        // declarator (`RET (name)` / `RET (*name)`) by a type-start --
+        // including a typedef-name -- or an empty / `void` list after the
+        // paren, which names a type rather than a declarator. testfloat's
+        // drivers use this shape (`void test_a(float32_t(uint32_t), ...)`).
+        if self.lex.tk == '(' && self.paren_opens_param_type_list() {
+            self.next()?; // consume `(`
+            self.parse_function_params()?; // consumes the matching `)`
+            ty += Ty::Ptr as i64;
+            self.pending.fn_ptr_indirection = Some(1);
+            // An abstract parameter binds no name.
+            return Ok((usize::MAX, ty, 0));
         }
 
         // Function-pointer declarator: `RET (*Name)(args)`, possibly

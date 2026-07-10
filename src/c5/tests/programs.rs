@@ -127,6 +127,14 @@ fn case_range() {
 }
 
 #[test]
+fn function_type_param() {
+    // C99 6.7.5.3p8: an abstract function-type parameter `RET(types)` decays
+    // to a function pointer (QEMU's berkeley-testfloat drivers), without
+    // breaking parenthesized declarators or `(*fp)` parameters.
+    assert_eq!(run_fixture("function_type_param.c"), 0);
+}
+
+#[test]
 fn bitfield_runtime_init() {
     // A bitfield struct member initialized at block scope by a non-constant
     // value: the walker read-modify-writes the storage unit. Signedness,

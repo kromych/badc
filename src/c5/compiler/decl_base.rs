@@ -653,10 +653,10 @@ impl Compiler {
         let mut bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
             scalar
         } else if self.lex.tk == Token::Enum {
-            // `enum [Tag] [{ ... }]` collapses to `int`; the shared
+            // `enum [Tag] [{ ... }]` is `int`, or the packed underlying
+            // type for `enum __attribute__((packed))`; the shared
             // parse_enum_decl captures the tag + body for DWARF.
-            self.parse_enum_decl()?;
-            Ty::Int as i64
+            self.parse_enum_decl()?
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?
         } else if self.is_lex_int128_spelling() {

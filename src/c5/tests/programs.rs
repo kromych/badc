@@ -127,6 +127,14 @@ fn case_range() {
 }
 
 #[test]
+fn packed_enum() {
+    // `enum __attribute__((packed))` uses the smallest integer type holding
+    // its values, changing the layout of an embedding struct (QEMU softfloat
+    // float_status). Sizes, interleaved-field offsets, and sign-extension.
+    assert_eq!(run_fixture("packed_enum.c"), 0);
+}
+
+#[test]
 fn hex_case_range() {
     // `case 0x10...0x20:` (no spaces around `...`, common after macro
     // expansion) must lex the hex integer + ellipsis, not a hex float; a

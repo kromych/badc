@@ -278,13 +278,14 @@ impl Compiler {
                 };
                 struct_ty_for(inner_id)
             } else if self.lex.tk == Token::Enum {
-                // C99 6.7.2.2: an `enum X` field collapses to `int`; the
-                // shared parse_enum_decl captures the tag + body for
-                // DWARF. An enum bitfield reads unsigned, so
-                // field_base_is_enum drives the zero-extend.
-                self.parse_enum_decl()?;
+                // C99 6.7.2.2: an `enum X` field is `int`, or the packed
+                // underlying type for `enum __attribute__((packed))`; the
+                // shared parse_enum_decl captures the tag + body for DWARF.
+                // An enum bitfield reads unsigned, so field_base_is_enum
+                // drives the zero-extend.
+                let enum_field_ty = self.parse_enum_decl()?;
                 field_base_is_enum = true;
-                Ty::Int as i64
+                enum_field_ty
             } else if self.is_lex_int128_spelling() {
                 // GCC `__int128` / `__uint128_t` field: a 16-byte type.
                 // Needed for kernel-UAPI structs (`asm/sigcontext.h`).

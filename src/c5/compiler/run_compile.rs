@@ -140,7 +140,7 @@ impl Compiler {
             } else if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
                 bt = scalar;
             } else if self.lex.tk == Token::Enum {
-                self.parse_enum_decl()?;
+                bt = self.parse_enum_decl()?;
                 base_is_enum = true;
             } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
                 // Aggregate (struct or union) declaration. Three

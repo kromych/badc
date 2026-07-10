@@ -110,6 +110,30 @@ fn rdtsc_host_ticks() {
 }
 
 #[test]
+fn elvis_operator() {
+    // GNU conditional with omitted middle operand `a ?: b`: single
+    // evaluation of the condition, truthy/falsy selection, pointer and
+    // nested forms, int->long result widening, and constant contexts.
+    assert_eq!(run_fixture("elvis_operator.c"), 0);
+}
+
+#[test]
+fn runtime_array_member() {
+    // C99 6.7.8p13: an array member of a local struct initialized by a
+    // brace list with non-constant elements -- full, partial (zero-filled
+    // tail), 2D, brace-elided, and designated forms. Previously rejected.
+    assert_eq!(run_fixture("runtime_array_member.c"), 0);
+}
+
+#[test]
+fn builtin_type_macros() {
+    // GCC/Clang predefined `__SIZE_TYPE__` / `__PTRDIFF_TYPE__` /
+    // `__INTPTR_TYPE__` / `__UINTPTR_TYPE__`: width tracks the pointer
+    // size and signedness is correct, as headers rely on for typedefs.
+    assert_eq!(run_fixture("builtin_type_macros.c"), 0);
+}
+
+#[test]
 fn stmt_expr() {
     // GCC statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block

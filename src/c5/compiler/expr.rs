@@ -2780,9 +2780,19 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::Cond {
                 let cond_ast = self.ast_acc;
-                self.next()?;
+                self.next()?; // consume `?`
                 self.flush_pending_stores();
-                self.expr(Token::Assign as i64)?;
+                // GNU conditional with omitted middle operand `a ?: b`: the
+                // condition's own value is the result when nonzero. The
+                // walker (`Ternary { elvis: true }`) evaluates `a` once and
+                // reuses its value; the then-arm mirrors the condition so the
+                // common-type conversions below apply unchanged.
+                let elvis = self.lex.tk == ':';
+                let mut then_ast = cond_ast;
+                if !elvis {
+                    self.expr(Token::Assign as i64)?;
+                    then_ast = self.ast_acc;
+                }
                 // Comma operator in the middle of a ternary:
                 // `cond ? (side_effect, value) : alt`. C99 6.5.15
                 // makes the middle slot an `expression`, not an
@@ -2796,7 +2806,6 @@ impl Compiler {
                 // the chain, only the rhs reaches the Ternary AST
                 // and the lhs's stores / calls disappear at the
                 // walker tier.
-                let mut then_ast = self.ast_acc;
                 while self.lex.tk == ',' {
                     self.next()?;
                     let lhs_ast = then_ast;
@@ -2873,6 +2882,7 @@ impl Compiler {
                             then_e,
                             else_e,
                             ty: result_ty,
+                            elvis,
                         },
                         pos,
                     );

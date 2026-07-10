@@ -416,7 +416,13 @@ impl Compiler {
             // but the not-taken arm is unevaluated per C99 6.5.15,
             // so a zero divisor there must not diagnose.
             let taken = cond.is_truthy();
-            let then_val = self.parse_const_unevaluated(!taken, Self::parse_const_expr_or_val)?;
+            // GNU `a ?: b`: the middle operand may be omitted, and the
+            // condition's own value is the result when truthy.
+            let then_val = if self.lex.tk == ':' {
+                cond
+            } else {
+                self.parse_const_unevaluated(!taken, Self::parse_const_expr_or_val)?
+            };
             if self.lex.tk != ':' {
                 return Err(self.compile_err("`:` expected in conditional constant expression"));
             }

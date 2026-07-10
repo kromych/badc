@@ -667,6 +667,7 @@ impl Compiler {
                     then_e: zero,
                     else_e: chain,
                     ty: Ty::Int as i64,
+                    elvis: false,
                 },
                 pos,
             );

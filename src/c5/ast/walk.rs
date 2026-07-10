@@ -2081,6 +2081,7 @@ impl<'a> Walker<'a> {
                 then_e,
                 else_e,
                 ty,
+                elvis,
             } => {
                 // C99 6.5.15: evaluate cond; depending on the
                 // value, evaluate exactly one of then_e / else_e
@@ -2094,7 +2095,17 @@ impl<'a> Walker<'a> {
                 // through the FP register class; everything else
                 // stays on the I64 `StoreLocal` / `LoadLocal` fast
                 // path the emit lowers in a single `stur` / `ldur`.
-                let cond_v = self.walk_cond_value(b, *cond)?;
+                //
+                // The GNU `a ?: b` form evaluates the condition once and
+                // reuses its value as the then-arm (converted to the result
+                // type). The plain form evaluates the condition for its
+                // truthiness only and evaluates a separate then-arm.
+                let (cond_v, elvis_val) = if *elvis {
+                    let v = self.walk_expr_rvalue(b, *cond)?;
+                    (self.cond_truthy(b, v, *cond), Some(v))
+                } else {
+                    (self.walk_cond_value(b, *cond)?, None)
+                };
                 let then_blk = b.new_block();
                 let else_blk = b.new_block();
                 let after_blk = b.new_block();
@@ -2122,7 +2133,14 @@ impl<'a> Walker<'a> {
                     b.store_local(slot, v, kind);
                 };
                 b.switch_to(then_blk);
-                let then_v = self.walk_expr_rvalue(b, *then_e)?;
+                let then_v = if let Some(v) = elvis_val {
+                    // Reuse the condition's value, converted from its own
+                    // type to the conditional's result type.
+                    let cond_ty = expr_ty(self.ast.expr(*cond)).unwrap_or(*ty);
+                    self.convert_scalar_value(b, v, cond_ty, *ty)
+                } else {
+                    self.walk_expr_rvalue(b, *then_e)?
+                };
                 arm_store(b, then_v);
                 b.jmp(after_blk);
                 b.switch_to(else_blk);
@@ -3114,95 +3132,7 @@ impl<'a> Walker<'a> {
                         crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64
                     }
                 };
-                let target_is_fp = is_floating_scalar(*to_ty);
-                let source_is_fp = is_floating_scalar(src_ty);
-                // C99 6.3.1.2: a conversion to `_Bool` yields 0 when
-                // the source compares equal to 0, else 1. This holds
-                // for every scalar source, so it precedes the
-                // width/fp-ness conversions below.
-                if is_bool_scalar(*to_ty) {
-                    if source_is_fp {
-                        let d = b.fp_widen_to_f64(v);
-                        let zero = b.imm(0);
-                        return Ok(b.binop(BinOp::Fne, d, zero));
-                    }
-                    return Ok(b.binop_imm(BinOp::Ne, v, 0));
-                }
-                if target_is_fp && !source_is_fp {
-                    // Integer -> FP (C99 6.3.1.4), one rounding to the
-                    // target type. An unsigned 64-bit source (`unsigned
-                    // long` / `unsigned long long`) can exceed the signed
-                    // range, where the signed convert yields a negative
-                    // result, so it takes the unsigned converter. Narrower
-                    // unsigned types fit the signed range zero-extended.
-                    let stripped = src_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
-                    let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
-                        && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
-                    let to_float = is_float_ty(*to_ty);
-                    // Fold a constant operand to the converted FP constant
-                    // (the conversion of a constant is itself a constant).
-                    if let Some(k) = b.peek_imm(v) {
-                        if to_float {
-                            let f = if unsigned_64 {
-                                k as u64 as f32
-                            } else {
-                                k as f32
-                            };
-                            return Ok(b.imm_f32(f.to_bits()));
-                        }
-                        let d = if unsigned_64 {
-                            k as u64 as f64
-                        } else {
-                            k as f64
-                        };
-                        return Ok(b.imm(d.to_bits() as i64));
-                    }
-                    let kind = if unsigned_64 {
-                        super::super::ir::FpCastKind::UIntToFp
-                    } else {
-                        super::super::ir::FpCastKind::IntToFp
-                    };
-                    // A `float` target converts directly to single
-                    // precision; a `double` target stays f64.
-                    if to_float {
-                        return Ok(b.fp_cast_to_f32(kind, v));
-                    }
-                    return Ok(b.fp_cast(kind, v));
-                } else if !target_is_fp && source_is_fp {
-                    // FP -> integer (C99 6.3.1.4) truncates toward zero.
-                    // An unsigned 64-bit target can hold a value in
-                    // [2^63, 2^64), which the signed truncate would
-                    // saturate, so it takes the unsigned converter whose
-                    // lowering compares against 2^63 in double precision --
-                    // a `float` source widens to f64 for it. The signed
-                    // converter truncates a `float` source directly.
-                    let stripped_to = *to_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
-                    let target_unsigned_64 = (*to_ty & UNSIGNED_BIT) != 0
-                        && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
-                    if target_unsigned_64 {
-                        let d = b.fp_widen_to_f64(v);
-                        return Ok(b.fp_cast(super::super::ir::FpCastKind::UFpToInt, d));
-                    }
-                    return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, v));
-                }
-                // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens,
-                // `(float)d` narrows. The conversion is a no-op only when
-                // the source already has the target precision.
-                if target_is_fp && source_is_fp {
-                    if is_float_ty(*to_ty) {
-                        return Ok(b.fp_narrow_to_f32(v));
-                    }
-                    return Ok(b.fp_widen_to_f64(v));
-                }
-                // Integer-to-integer cast. C99 6.3.1.3:
-                //   * narrowing -> unsigned target: mask to the
-                //     target storage width.
-                //   * narrowing -> signed target (or same-width
-                //     signed conversion of an unsigned source):
-                //     shift-pair Shl K; Shr K to sign-extend the
-                //     truncated value (clang / gcc-compatible UB
-                //     handling).
-                Ok(self.narrow_int_to_ty(b, v, src_ty, *to_ty))
+                Ok(self.convert_scalar_value(b, v, src_ty, *to_ty))
             }
             Expr::CompoundAssign { op, lhs, rhs, ty } => {
                 // C99 6.5.16.2p3: `E1 op= E2` is `E1 = E1 op E2`
@@ -3890,6 +3820,94 @@ impl<'a> Walker<'a> {
             return false;
         }
         expr_ty(e).is_some_and(is_floating_scalar)
+    }
+
+    /// Convert an already-evaluated scalar value from `src_ty` to
+    /// `to_ty` (C99 6.3.1). Shared by the `Cast` lowering and the GNU
+    /// `?:` then-arm, which reuses the condition's value.
+    fn convert_scalar_value(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        v: super::super::ir::ValueId,
+        src_ty: i64,
+        to_ty: i64,
+    ) -> super::super::ir::ValueId {
+        let target_is_fp = is_floating_scalar(to_ty);
+        let source_is_fp = is_floating_scalar(src_ty);
+        // C99 6.3.1.2: a conversion to `_Bool` yields 0 when the source
+        // compares equal to 0, else 1. This holds for every scalar
+        // source, so it precedes the width/fp-ness conversions below.
+        if is_bool_scalar(to_ty) {
+            if source_is_fp {
+                let d = b.fp_widen_to_f64(v);
+                let zero = b.imm(0);
+                return b.binop(BinOp::Fne, d, zero);
+            }
+            return b.binop_imm(BinOp::Ne, v, 0);
+        }
+        if target_is_fp && !source_is_fp {
+            // Integer -> FP (C99 6.3.1.4), one rounding to the target
+            // type. An unsigned 64-bit source can exceed the signed
+            // range, where the signed convert yields a negative result,
+            // so it takes the unsigned converter. Narrower unsigned
+            // types fit the signed range zero-extended.
+            let stripped = src_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+            let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
+                && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
+            let to_float = is_float_ty(to_ty);
+            // Fold a constant operand to the converted FP constant.
+            if let Some(k) = b.peek_imm(v) {
+                if to_float {
+                    let f = if unsigned_64 {
+                        k as u64 as f32
+                    } else {
+                        k as f32
+                    };
+                    return b.imm_f32(f.to_bits());
+                }
+                let d = if unsigned_64 {
+                    k as u64 as f64
+                } else {
+                    k as f64
+                };
+                return b.imm(d.to_bits() as i64);
+            }
+            let kind = if unsigned_64 {
+                super::super::ir::FpCastKind::UIntToFp
+            } else {
+                super::super::ir::FpCastKind::IntToFp
+            };
+            // A `float` target converts directly to single precision; a
+            // `double` target stays f64.
+            if to_float {
+                return b.fp_cast_to_f32(kind, v);
+            }
+            return b.fp_cast(kind, v);
+        } else if !target_is_fp && source_is_fp {
+            // FP -> integer (C99 6.3.1.4) truncates toward zero. An
+            // unsigned 64-bit target can hold a value in [2^63, 2^64),
+            // which the signed truncate would saturate, so it takes the
+            // unsigned converter (a `float` source widens to f64 for it).
+            let stripped_to = to_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+            let target_unsigned_64 = (to_ty & UNSIGNED_BIT) != 0
+                && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
+            if target_unsigned_64 {
+                let d = b.fp_widen_to_f64(v);
+                return b.fp_cast(super::super::ir::FpCastKind::UFpToInt, d);
+            }
+            return b.fp_cast(super::super::ir::FpCastKind::FpToInt, v);
+        }
+        // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens, `(float)d`
+        // narrows; a no-op when the source already has the target width.
+        if target_is_fp && source_is_fp {
+            if is_float_ty(to_ty) {
+                return b.fp_narrow_to_f32(v);
+            }
+            return b.fp_widen_to_f64(v);
+        }
+        // Integer-to-integer cast (C99 6.3.1.3): narrow to the target
+        // storage width, sign- or zero-extending per the target's sign.
+        self.narrow_int_to_ty(b, v, src_ty, to_ty)
     }
 
     /// Value to test against zero for `cond`'s truthiness. A floating

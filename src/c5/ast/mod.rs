@@ -210,12 +210,15 @@ pub(crate) enum Expr {
         rhs: ExprId,
         ty: i64,
     },
-    /// `cond ? then_e : else_e` (C99 6.5.15).
+    /// `cond ? then_e : else_e` (C99 6.5.15). `elvis` marks the GNU
+    /// `cond ?: else_e` form (omitted middle operand): the walker
+    /// evaluates `cond` once and reuses its value as `then_e`.
     Ternary {
         cond: ExprId,
         then_e: ExprId,
         else_e: ExprId,
         ty: i64,
+        elvis: bool,
     },
     /// `callee(args...)`. Variadic calls go through the same
     /// variant; the parser records the variadic boundary by the

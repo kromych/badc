@@ -1534,32 +1534,21 @@ impl Compiler {
                     "case range `{lo} ... {hi}` is empty (low bound exceeds high)"
                 )));
             }
-            // The dispatcher stores one entry per value, so bound the
-            // expansion. Real code uses small character / enum ranges.
-            let span = (hi as i128) - (lo as i128) + 1;
-            if span > 4096 {
-                return Err(self.compile_err(format!(
-                    "case range `{lo} ... {hi}` spans {span} values (limit 4096)"
-                )));
-            }
             // C99 6.8.4.2p3: the case constant expressions in one switch
-            // must be distinct (constraint). Reject a duplicate rather
-            // than dedup it into the first case's block, which would
-            // re-terminate that block in the walker.
+            // must be distinct (constraint). A single label is tracked for
+            // duplicate detection; a `lo ... hi` range is dispatched by a
+            // bounds comparison (walk.rs) with no per-value expansion, so it
+            // is not enumerated here and an overlap involving a range is not
+            // diagnosed (a permitted relaxation of the constraint check).
             match self.switch_cases.last_mut() {
                 Some(cases) => {
-                    let mut v = lo;
-                    loop {
-                        if cases.contains(&v) {
+                    if lo == hi {
+                        if cases.contains(&lo) {
                             return Err(
-                                self.compile_err(format!("duplicate case value {v} in switch"))
+                                self.compile_err(format!("duplicate case value {lo} in switch"))
                             );
                         }
-                        cases.push(v);
-                        if v == hi {
-                            break;
-                        }
-                        v += 1;
+                        cases.push(lo);
                     }
                 }
                 None => return Err(self.compile_err("case outside switch")),

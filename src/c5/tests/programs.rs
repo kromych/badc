@@ -127,6 +127,14 @@ fn case_range() {
 }
 
 #[test]
+fn case_range_wide() {
+    // A wide `case lo ... hi` is dispatched by a bounds comparison, so a
+    // range spanning millions of values (QEMU register-decode / page-table
+    // switches) needs no per-value expansion; signed and unsigned.
+    assert_eq!(run_fixture("case_range_wide.c"), 0);
+}
+
+#[test]
 fn deferred_array_designator() {
     // A deferred-size array's size is max designated index + 1 (C99 6.7.8p22),
     // via array designators with gaps (QEMU hw/arm/virt.c base_memmap[]).

@@ -490,6 +490,7 @@ struct Walker<'a> {
     #[allow(clippy::type_complexity)]
     switch_dispatch: alloc::vec::Vec<(
         alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
+        alloc::vec::Vec<(i64, i64, super::super::ir::BlockId)>,
         Option<super::super::ir::BlockId>,
     )>,
     /// True when the function's declared return type is a struct
@@ -1042,8 +1043,10 @@ impl<'a> Walker<'a> {
                 // loop is still reachable from the dispatcher.
                 let mut cases: alloc::vec::Vec<(i64, super::super::ir::BlockId)> =
                     alloc::vec::Vec::new();
+                let mut ranges: alloc::vec::Vec<(i64, i64, super::super::ir::BlockId)> =
+                    alloc::vec::Vec::new();
                 let mut default_blk: Option<super::super::ir::BlockId> = None;
-                self.collect_switch_cases(b, body_id, &mut cases, &mut default_blk);
+                self.collect_switch_cases(b, body_id, &mut cases, &mut ranges, &mut default_blk);
 
                 // Dispatcher: a balanced binary search over the sorted
                 // case values. Each internal node branches on `<` (one
@@ -1090,6 +1093,36 @@ impl<'a> Walker<'a> {
                     }
                     sorted.sort_by_key(|p| p.0);
                 }
+                // Range cases (`case lo ... hi`): each is dispatched by an
+                // explicit `lo <= disc <= hi` test before the single-value
+                // search, so a wide range needs no per-value expansion. The
+                // bounds convert to the promoted type exactly like the
+                // single-value labels above.
+                let (ge_op, le_op) = if disc_unsigned {
+                    (BinOp::Uge, BinOp::Ule)
+                } else {
+                    (BinOp::Ge, BinOp::Le)
+                };
+                let disc_bytes = type_size_bytes(disc_ty, self.target);
+                for &(mut lo, mut hi, blk) in &ranges {
+                    if disc_unsigned {
+                        if disc_bytes == 4 {
+                            lo = (lo as u32) as i64;
+                            hi = (hi as u32) as i64;
+                        }
+                    } else if disc_bytes <= 4 {
+                        lo = (lo as i32) as i64;
+                        hi = (hi as i32) as i64;
+                    }
+                    let ge_lo = b.binop_imm(ge_op, disc_val, lo);
+                    let hi_chk = b.new_block();
+                    let next = b.new_block();
+                    b.branch_nonzero(ge_lo, hi_chk, next);
+                    b.switch_to(hi_chk);
+                    let le_hi = b.binop_imm(le_op, disc_val, hi);
+                    b.branch_nonzero(le_hi, blk, next);
+                    b.switch_to(next);
+                }
                 let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
                 if !self.emit_switch_table(b, disc_val, &sorted, deflt) {
                     self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
@@ -1105,7 +1138,7 @@ impl<'a> Walker<'a> {
                 // bare switch, so propagate the enclosing loop's target.
                 let prev_continue = self.loop_ctx.last().map(|&(_, c)| c).unwrap_or(after_blk);
                 self.loop_ctx.push((after_blk, prev_continue));
-                self.switch_dispatch.push((cases, default_blk));
+                self.switch_dispatch.push((cases, ranges, default_blk));
                 let terminated = self.walk_stmt(b, body_id)?;
                 self.switch_dispatch.pop();
                 self.loop_ctx.pop();
@@ -1123,10 +1156,12 @@ impl<'a> Walker<'a> {
             Stmt::Case { val, body, .. } => {
                 let val = *val;
                 let body_id = *body;
-                let blk = self
-                    .switch_dispatch
-                    .last()
-                    .and_then(|d| d.0.iter().find(|(v, _)| *v == val).map(|&(_, b)| b));
+                let blk = self.switch_dispatch.last().and_then(|d| {
+                    d.0.iter()
+                        .find(|(v, _)| *v == val)
+                        .map(|&(_, b)| b)
+                        .or_else(|| d.1.iter().find(|(lo, _, _)| *lo == val).map(|&(_, _, b)| b))
+                });
                 if let Some(blk) = blk {
                     if b.is_block_open() {
                         b.jmp(blk);
@@ -1137,7 +1172,7 @@ impl<'a> Walker<'a> {
             }
             Stmt::Default { body } => {
                 let body_id = *body;
-                let blk = self.switch_dispatch.last().and_then(|d| d.1);
+                let blk = self.switch_dispatch.last().and_then(|d| d.2);
                 if let Some(blk) = blk {
                     if b.is_block_open() {
                         b.jmp(blk);
@@ -1487,11 +1522,13 @@ impl<'a> Walker<'a> {
     /// nested switch (whose labels belong to it, C99 6.8.4.2). A
     /// duplicate case value keeps the first block; the parser already
     /// rejects duplicates.
+    #[allow(clippy::type_complexity)]
     fn collect_switch_cases(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         stmt_id: super::super::ast::StmtId,
         cases: &mut alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
+        ranges: &mut alloc::vec::Vec<(i64, i64, super::super::ir::BlockId)>,
         default_blk: &mut Option<super::super::ir::BlockId>,
     ) {
         match self.ast.stmt(stmt_id) {
@@ -1499,42 +1536,43 @@ impl<'a> Walker<'a> {
                 let val = *val;
                 let hi = *hi;
                 let body = *body;
-                // A `case lo ... hi` range maps every value in [lo, hi] to
-                // one block; the body walker looks the block up by `lo`.
+                // Both a single `case v` and a range `case lo ... hi` reserve
+                // one block; the body walker looks it up by `lo`. A single
+                // value joins the sorted-dispatch list; a range is dispatched
+                // by an explicit `lo <= disc <= hi` comparison so a wide range
+                // (register-decode switches span millions of values) needs no
+                // per-value expansion.
                 let blk = b.new_block();
-                let mut v = val;
-                loop {
-                    if !cases.iter().any(|(cv, _)| *cv == v) {
-                        cases.push((v, blk));
+                if val == hi {
+                    if !cases.iter().any(|(cv, _)| *cv == val) {
+                        cases.push((val, blk));
                     }
-                    if v == hi {
-                        break;
-                    }
-                    v += 1;
+                } else {
+                    ranges.push((val, hi, blk));
                 }
-                self.collect_switch_cases(b, body, cases, default_blk);
+                self.collect_switch_cases(b, body, cases, ranges, default_blk);
             }
             Stmt::Default { body } => {
                 let body = *body;
                 if default_blk.is_none() {
                     *default_blk = Some(b.new_block());
                 }
-                self.collect_switch_cases(b, body, cases, default_blk);
+                self.collect_switch_cases(b, body, cases, ranges, default_blk);
             }
             Stmt::Compound(items) => {
                 let items = items.clone();
                 for item in items {
                     if let super::BlockItem::Stmt(s) = item {
-                        self.collect_switch_cases(b, s, cases, default_blk);
+                        self.collect_switch_cases(b, s, cases, ranges, default_blk);
                     }
                 }
             }
             Stmt::If { then_s, else_s, .. } => {
                 let then_s = *then_s;
                 let else_s = *else_s;
-                self.collect_switch_cases(b, then_s, cases, default_blk);
+                self.collect_switch_cases(b, then_s, cases, ranges, default_blk);
                 if let Some(e) = else_s {
-                    self.collect_switch_cases(b, e, cases, default_blk);
+                    self.collect_switch_cases(b, e, cases, ranges, default_blk);
                 }
             }
             Stmt::While { body, .. }
@@ -1542,7 +1580,7 @@ impl<'a> Walker<'a> {
             | Stmt::For { body, .. }
             | Stmt::Labeled { body, .. } => {
                 let body = *body;
-                self.collect_switch_cases(b, body, cases, default_blk);
+                self.collect_switch_cases(b, body, cases, ranges, default_blk);
             }
             // A nested switch owns its own case labels; every other
             // statement carries none.

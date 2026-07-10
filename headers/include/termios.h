@@ -149,6 +149,18 @@ struct termios {
 #define ECHO   0000010
 #define ECHONL 0000100
 #define IEXTEN 0100000
+// Modem-control lines (<sys/ioctl.h>): the get/set request numbers and the
+// TIOCM_* status bits a serial chardev reads and drives.
+#define TIOCMGET  0x5415
+#define TIOCMSET  0x5418
+#define TIOCM_DTR 0x002
+#define TIOCM_RTS 0x004
+#define TIOCM_CTS 0x020
+#define TIOCM_CAR 0x040
+#define TIOCM_CD  TIOCM_CAR
+#define TIOCM_RNG 0x080
+#define TIOCM_RI  TIOCM_RNG
+#define TIOCM_DSR 0x100
 #endif
 
 #ifdef _WIN32

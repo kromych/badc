@@ -26,6 +26,7 @@
 #define O_DIRECTORY  0x100000
 #define O_CLOEXEC    0x1000000
 #define O_NOFOLLOW   0x0100
+#define O_ACCMODE    0x0003
 #endif
 #ifdef __linux__
 // splice() flags.
@@ -42,6 +43,8 @@
 #define O_DIRECTORY  0200000
 #define O_CLOEXEC    02000000
 #define O_NOFOLLOW   0400000
+#define O_ACCMODE    0003
+#define O_NOATIME    01000000
 #endif
 #ifdef _WIN32
 #define O_CREAT      0x0100

@@ -1635,6 +1635,13 @@ impl Compiler {
                                     return Err(self.compile_err(format!("struct array element count miscount (parser scanned {count}, parsed past)")));
                                 }
                                 let here = off + i * elem_size as i64;
+                                // A struct-array element may be written as a
+                                // compound literal `(T){ ... }` naming the
+                                // element type (C99 6.5.2.5); drop the
+                                // redundant cast and fill the brace list.
+                                self.skip_opt_compound_literal_cast()?;
+                                let cl_parens =
+                                    core::mem::take(&mut self.pending.compound_lit_close_parens);
                                 if self.lex.tk == '{' {
                                     self.collect_struct_initializer(sid, here)?;
                                 } else {
@@ -1643,6 +1650,9 @@ impl Compiler {
                                     // until it is full, leaving the rest
                                     // for the next element.
                                     self.fill_struct_fields(sid, here, false)?;
+                                }
+                                for _ in 0..cl_parens {
+                                    self.accept(')')?;
                                 }
                                 i += 1;
                                 self.accept(',')?;
@@ -1910,6 +1920,20 @@ impl Compiler {
                                         // struct element may be elided; a
                                         // multi-dimensional element is itself an
                                         // array of structs.
+                                        // A compound-literal element `(T){...}`
+                                        // naming the element type: drop the
+                                        // redundant cast (a multi-dim element
+                                        // is an array, never a compound
+                                        // literal, so skip only the scalar
+                                        // case).
+                                        let cl_parens = if inner_dims.is_empty() {
+                                            self.skip_opt_compound_literal_cast()?;
+                                            core::mem::take(
+                                                &mut self.pending.compound_lit_close_parens,
+                                            )
+                                        } else {
+                                            0
+                                        };
                                         if !inner_dims.is_empty() {
                                             self.collect_struct_array_data(
                                                 sid,
@@ -1921,6 +1945,9 @@ impl Compiler {
                                             self.collect_struct_initializer(sid, here)?;
                                         } else {
                                             self.fill_struct_fields(sid, here, false)?;
+                                        }
+                                        for _ in 0..cl_parens {
+                                            self.accept(')')?;
                                         }
                                         if k >= last {
                                             break;

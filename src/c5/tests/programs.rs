@@ -172,6 +172,13 @@ fn compound_literal_addr_init() {
 }
 
 #[test]
+fn compound_literal_array_element() {
+    // An array-of-struct element written as a compound literal `(T){...}`
+    // naming the element type (C99 6.5.2.5).
+    assert_eq!(run_fixture("compound_literal_array_element.c"), 0);
+}
+
+#[test]
 fn deferred_array_typedef() {
     // A deferred-size array typedef (`typedef T X[]`) binds an object as a
     // deferred array sized by its initializer (QEMU ClockPortInitArray).

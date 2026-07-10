@@ -164,6 +164,13 @@ fn compound_literal_addr_init() {
 }
 
 #[test]
+fn deferred_array_typedef() {
+    // A deferred-size array typedef (`typedef T X[]`) binds an object as a
+    // deferred array sized by its initializer (QEMU ClockPortInitArray).
+    assert_eq!(run_fixture("deferred_array_typedef.c"), 0);
+}
+
+#[test]
 fn math_compare_macros() {
     // C99 7.12.14 relational macros (isgreater/isless/isunordered/...), used
     // by QEMU fpu/softfloat.c; NaN operands compare false and are unordered.

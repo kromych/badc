@@ -255,7 +255,7 @@ impl Compiler {
                 // an array contributes its dimension to the
                 // bound declarator.
                 let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
-                if typedef_array > 0 {
+                if typedef_array != 0 {
                     self.pending.typedef_base_array_size = typedef_array;
                 }
                 self.next()?;
@@ -368,7 +368,11 @@ impl Compiler {
                 // the declarator (C99 6.7.7p3 + 6.7.6.1). Skip
                 // the carrier in that case.
                 let typedef_dim = self.pending.typedef_base_array_size;
-                if typedef_dim > 0
+                // A fixed dimension (`> 0`) sizes the object; a deferred array
+                // typedef (`typedef T X[]`, carried as `-1`) makes the object
+                // a deferred array whose size the initializer fixes -- QEMU's
+                // `typedef struct ClockPortInitElem ClockPortInitArray[]`.
+                if typedef_dim != 0
                     && array_size == 0
                     && self.pending.declarator_leading_ptr_count == 0
                 {

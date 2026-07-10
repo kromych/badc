@@ -127,6 +127,14 @@ fn case_range() {
 }
 
 #[test]
+fn hex_case_range() {
+    // `case 0x10...0x20:` (no spaces around `...`, common after macro
+    // expansion) must lex the hex integer + ellipsis, not a hex float; a
+    // real hex float `0x1.8p3` must still lex as a float.
+    assert_eq!(run_fixture("hex_case_range.c"), 0);
+}
+
+#[test]
 fn elvis_operator() {
     // GNU conditional with omitted middle operand `a ?: b`: single
     // evaluation of the condition, truthy/falsy selection, pointer and

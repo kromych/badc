@@ -1199,8 +1199,14 @@ impl Lexer {
                     // hex digits are followed by a `.` and/or the
                     // mandatory binary-exponent part `p`/`P`. Detect
                     // either marker here; a plain `0x...` with neither
-                    // stays an integer constant.
-                    let next_is_dot = self.pos < self.src.len() && self.src[self.pos] == b'.';
+                    // stays an integer constant. A `.` that begins `..`
+                    // is the ellipsis token, not a fractional part
+                    // (`case 0x10...0x20:` after macro expansion), so a
+                    // hex integer immediately followed by `...` stays an
+                    // integer -- a hex float's `.` never precedes a `.`.
+                    let next_is_dot = self.pos < self.src.len()
+                        && self.src[self.pos] == b'.'
+                        && !(self.pos + 1 < self.src.len() && self.src[self.pos + 1] == b'.');
                     let next_is_bexp = self.pos < self.src.len()
                         && (self.src[self.pos] == b'p' || self.src[self.pos] == b'P');
                     if next_is_dot || next_is_bexp {

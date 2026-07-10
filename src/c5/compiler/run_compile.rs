@@ -53,6 +53,19 @@ impl Compiler {
         Ok(result.unwrap_or(fallback))
     }
 
+    /// Peek whether the first element of the array initializer at the
+    /// current `{` is an `[N]` designator, without consuming input.
+    fn array_first_element_is_designator(&mut self) -> bool {
+        let snap = self.lex.snapshot();
+        let saved_data = self.data.len();
+        let saved_pc = self.next_ent_pc;
+        let is_desig = self.next().is_ok() && self.lex.tk == Token::Brak;
+        self.lex.restore(snap);
+        self.data.truncate(saved_data);
+        self.next_ent_pc = saved_pc;
+        is_desig
+    }
+
     fn designated_array_count_inner(&mut self, fallback: i64) -> Result<i64, C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
@@ -1575,7 +1588,16 @@ impl Compiler {
                                 // struct's scalar slot count.
                                 let items = self.lex.count_top_level_items_in_array();
                                 let slots = self.struct_flat_init_slots(sid).max(1);
-                                items.div_ceil(slots) as i64
+                                let positional = items.div_ceil(slots) as i64;
+                                // A `[N].field = v` designated element list (no
+                                // braces, one element per item) raises the size
+                                // to the highest designated index + 1 (C99
+                                // 6.7.8p22), which the positional count misses.
+                                if self.array_first_element_is_designator() {
+                                    self.designated_array_count(positional)?
+                                } else {
+                                    positional
+                                }
                             };
                             self.next()?;
                             // C99 6.9.2: a prior tentative definition already
@@ -1622,6 +1644,16 @@ impl Compiler {
                                         ));
                                     }
                                     self.next()?;
+                                    if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                                        // C99 6.7.8p7 compound designator
+                                        // `[N].field... = v`: override one field
+                                        // of a (zero-initialized) element.
+                                        let here = off + idx * elem_size as i64;
+                                        self.fill_element_field_designator(sid, ty, here)?;
+                                        i = idx + 1;
+                                        self.accept(',')?;
+                                        continue;
+                                    }
                                     if self.lex.tk != Token::Assign {
                                         return Err(
                                             self.compile_err("`=` expected after `[N]` designator")

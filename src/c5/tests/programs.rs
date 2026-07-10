@@ -149,6 +149,14 @@ fn member_array_designator() {
 }
 
 #[test]
+fn designator_array_field_compound() {
+    // C99 6.7.8p7 compound designator `[N].field = value` on a deferred-size
+    // struct-array element in a file-scope initializer (a dispatch-table
+    // shape). The size is set by the highest designated index.
+    assert_eq!(run_fixture("designator_array_field_compound.c"), 0);
+}
+
+#[test]
 fn typedef_pointer_array() {
     // A `typedef T *Name[N]` array-of-pointer typedef folds its dimension onto
     // an object like any array typedef (a real-world string-table shape), while

@@ -157,6 +157,13 @@ fn anon_union_nested_init() {
 }
 
 #[test]
+fn compound_literal_addr_init() {
+    // The address of a compound literal `&(T){...}` as an aggregate element /
+    // member value, including nested (QEMU config-struct tables).
+    assert_eq!(run_fixture("compound_literal_addr_init.c"), 0);
+}
+
+#[test]
 fn math_compare_macros() {
     // C99 7.12.14 relational macros (isgreater/isless/isunordered/...), used
     // by QEMU fpu/softfloat.c; NaN operands compare false and are unordered.

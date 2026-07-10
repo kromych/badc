@@ -376,15 +376,7 @@ impl Compiler {
                         "compound literal of non-struct type is not yet supported in global init",
                     ));
                 }
-                self.align_data_to_8();
-                let size = self.size_of_type(cl_ty);
-                let aligned = size.div_ceil(8) * 8;
-                let off = self.data.len() as i64;
-                for _ in 0..aligned {
-                    self.data.push(0);
-                }
-                let new_idx = self.intern_compound_literal_symbol(off, cl_ty);
-                self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
+                let (off, new_idx) = self.emit_compound_literal_body(cl_ty)?;
                 let bytes = (off as u64).to_le_bytes();
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.data_relocs.push(crate::c5::program::DataReloc {

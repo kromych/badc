@@ -917,6 +917,34 @@ impl Compiler {
             self.lex.restore(after);
             return Ok(result);
         }
+        // `&(T){...}` -- the address of a compound literal as an aggregate
+        // element / member value (C99 6.5.2.5; QEMU config-struct tables
+        // nest them, `.field = &(T){ .sub = &(U){...} }`). Emit the literal
+        // as an anonymous static object and store its address here. Guarded
+        // by a snapshot so a plain `&(expr)` / `&global` falls through to the
+        // address path below.
+        if self.lex.tk == Token::AndOp {
+            let snap = self.lex.snapshot();
+            self.next()?; // `&`
+            if self.lex.tk == '(' {
+                self.next()?; // `(`
+                if self.lex_is_type_start() {
+                    let mut cl_ty = self.parse_decl_base_type()?;
+                    while self.lex.tk == Token::MulOp {
+                        self.next()?;
+                        cl_ty += Ty::Ptr as i64;
+                    }
+                    if self.lex.tk == ')' {
+                        self.next()?;
+                        if self.lex.tk == '{' && is_struct_ty(cl_ty) {
+                            let (off, sym_idx) = self.emit_compound_literal_body(cl_ty)?;
+                            return Ok((off, InitElemReloc::Data(Some(sym_idx))));
+                        }
+                    }
+                }
+            }
+            self.lex.restore(snap);
+        }
         // A constant address of a global's sub-object: `&g.field`,
         // `g.array_field`, `(&buf[i])->field`. Takes priority over the
         // integer / `&global` leaves below, which only handle a whole
@@ -1503,6 +1531,29 @@ impl Compiler {
         self.symbols.push(sym);
         self.symbol_index.record(hash);
         new_idx
+    }
+
+    /// Emit a `(T){ ... }` compound-literal body -- entered with `tk` on the
+    /// opening `{` and `cl_ty` the (struct) type. Reserve aligned storage in
+    /// the data segment, intern an anonymous internal-linkage symbol for it,
+    /// fill its bytes through the shared struct-initializer path, and return
+    /// (its data offset, its symbol index) so the caller stores its address.
+    /// Used by `&(T){...}` at file scope and as an aggregate element / member
+    /// value; a nested `&(T){...}` inside recurses through the same path.
+    pub(super) fn emit_compound_literal_body(
+        &mut self,
+        cl_ty: i64,
+    ) -> Result<(i64, usize), C5Error> {
+        self.align_data_to_8();
+        let size = self.size_of_type(cl_ty);
+        let aligned = size.div_ceil(8) * 8;
+        let off = self.data.len() as i64;
+        for _ in 0..aligned {
+            self.data.push(0);
+        }
+        let sym_idx = self.intern_compound_literal_symbol(off, cl_ty);
+        self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
+        Ok((off, sym_idx))
     }
 
     /// Walk a C99 6.7.8p7 designator-chain tail (the part after the

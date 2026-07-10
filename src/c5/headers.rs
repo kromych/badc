@@ -264,6 +264,18 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/linux/memfd.h"),
     ),
     (
+        "linux/futex.h",
+        include_str!("../../headers/include/linux/futex.h"),
+    ),
+    (
+        "linux/ioctl.h",
+        include_str!("../../headers/include/linux/ioctl.h"),
+    ),
+    (
+        "linux/types.h",
+        include_str!("../../headers/include/linux/types.h"),
+    ),
+    (
         "linux/limits.h",
         include_str!("../../headers/include/linux/limits.h"),
     ),

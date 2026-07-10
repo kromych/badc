@@ -59,6 +59,15 @@ typedef unsigned char u_int8_t;
 typedef unsigned short u_int16_t;
 typedef unsigned int u_int32_t;
 typedef unsigned long long u_int64_t;
+// Classic BSD unsigned aliases (glibc exposes these under _DEFAULT_SOURCE,
+// which _GNU_SOURCE enables). Used by network headers (net/eth.h's tcp/udp
+// header structs spell fields `u_short`, `u_char`).
+typedef unsigned char u_char;
+typedef unsigned short u_short;
+typedef unsigned int u_int;
+typedef unsigned long u_long;
+typedef long long quad_t;
+typedef unsigned long long u_quad_t;
 #ifdef __BADC_WINDOWS__
 typedef long long ino_t;
 typedef long long ino64_t;

@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     /// Drain the three pending local-initializer carriers into a single
@@ -233,7 +233,14 @@ impl Compiler {
                     "requested alignment {req_align} is not a power of two"
                 )));
             }
-            if (req_align > 8 && !is_static) || req_align > super::MAX_STATIC_ALIGN as i64 {
+            // An over-alignment attribute in the type-specifier position
+            // (`struct {...} __attribute__((aligned(16))) *p`) raises the
+            // pointee type's alignment; a pointer object holds its own
+            // pointer-aligned value, so the request does not apply to it.
+            let obj_is_pointer = is_pointer_ty(ty);
+            if (req_align > 8 && !is_static && !obj_is_pointer)
+                || req_align > super::MAX_STATIC_ALIGN as i64
+            {
                 return Err(self.compile_err(format!(
                     "requested alignment {req_align} is not supported here \
                      (automatic objects align to 8, static objects to at most {})",

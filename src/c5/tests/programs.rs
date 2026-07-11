@@ -2686,6 +2686,14 @@ fn static_over_alignment() {
 }
 
 #[test]
+fn pointer_local_ignores_type_alignment() {
+    // A type-position `aligned` attribute appertains to the pointee type, so
+    // an automatic pointer object is not rejected for it (the pointer keeps
+    // pointer alignment) -- `struct {...} aligned(16) *p`.
+    assert_eq!(run_fixture("pointer_local_ignores_type_alignment.c"), 0);
+}
+
+#[test]
 fn func_name_predeclared_identifier() {
     // C99 6.4.2.2 makes `__func__` an implicitly declared string
     // literal carrying the enclosing function's name. c5 mirrors

@@ -2855,33 +2855,55 @@ impl Compiler {
                 let mut result_ty = self.ty;
                 let arith = |t: i64| !is_pointer_ty(t) && !is_struct_ty(t);
                 let arms_fp = is_floating_scalar(then_ty) || is_floating_scalar(else_ty);
+                let then_ptr = is_pointer_ty(then_ty);
+                let else_ptr = is_pointer_ty(else_ty);
                 if (arms_fp || then_ty != else_ty) && arith(then_ty) && arith(else_ty) {
-                    let common = if arms_fp {
+                    result_ty = if arms_fp {
                         fp_result_ty(then_ty, else_ty)
                     } else {
                         usual_arith_common_ty(then_ty, else_ty, self.target)
                     };
-                    result_ty = common;
-                    if then_ty != common && then_ast.is_some() {
-                        let pos = self.ast_src_pos();
-                        then_ast = Some(self.ast.push_expr(
-                            super::super::ast::Expr::Cast {
-                                child: then_ast.unwrap(),
-                                to_ty: common,
-                            },
-                            pos,
-                        ));
-                    }
-                    if else_ty != common && else_ast.is_some() {
-                        let pos = self.ast_src_pos();
-                        else_ast = Some(self.ast.push_expr(
-                            super::super::ast::Expr::Cast {
-                                child: else_ast.unwrap(),
-                                to_ty: common,
-                            },
-                            pos,
-                        ));
-                    }
+                } else if then_ptr || else_ptr {
+                    // C99 6.5.15p6: with a pointer arm, a null pointer
+                    // constant (`0` / `(void*)0`) or a `void*` arm takes the
+                    // other arm's pointer type. A struct object pointer
+                    // therefore wins over a generic-pointer / integer arm so
+                    // `c ? (T*)x : (void*)0` and `c ? (T*)x : 0` keep `T*`.
+                    let then_sp = is_struct_ty(then_ty) && struct_ptr_depth(then_ty) > 0;
+                    let else_sp = is_struct_ty(else_ty) && struct_ptr_depth(else_ty) > 0;
+                    result_ty = if then_sp && !else_sp {
+                        then_ty
+                    } else if else_sp && !then_sp {
+                        else_ty
+                    } else if then_ptr && !else_ptr {
+                        then_ty
+                    } else {
+                        else_ty
+                    };
+                }
+                // Convert each arm to the conditional's result type so the
+                // branch join stores both through the same width and
+                // signedness (a null-constant integer arm widens to the
+                // pointer result, an int arm to the common arithmetic type).
+                if then_ty != result_ty && then_ast.is_some() {
+                    let pos = self.ast_src_pos();
+                    then_ast = Some(self.ast.push_expr(
+                        super::super::ast::Expr::Cast {
+                            child: then_ast.unwrap(),
+                            to_ty: result_ty,
+                        },
+                        pos,
+                    ));
+                }
+                if else_ty != result_ty && else_ast.is_some() {
+                    let pos = self.ast_src_pos();
+                    else_ast = Some(self.ast.push_expr(
+                        super::super::ast::Expr::Cast {
+                            child: else_ast.unwrap(),
+                            to_ty: result_ty,
+                        },
+                        pos,
+                    ));
                 }
                 // Build Expr::Ternary so the walker lowers the three
                 // sub-expressions with a branch + phi-like join.

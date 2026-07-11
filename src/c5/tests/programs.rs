@@ -1469,6 +1469,13 @@ fn conditional_constant_initializer() {
 }
 
 #[test]
+fn conditional_pointer_null_constant_type() {
+    // C99 6.5.15p6: `c ? (T*)p : (void*)0` (or `: 0`) has type `T*`, so the
+    // conditional and `typeof` of it keep the struct pointer for a `->`.
+    assert_eq!(run_fixture("conditional_pointer_null_constant_type.c"), 0);
+}
+
+#[test]
 fn empty_array_init() {
     // A file-scope `T x[] = {}` has zero elements but keeps its element
     // type: it decays to a pointer, `sizeof` is 0, and `typeof(x)` differs

@@ -259,8 +259,25 @@ impl Compiler {
             return Err(self.compile_err("`(` expected after `_Alignof`"));
         }
         self.next()?;
+        // C11 6.5.3.4 takes a type-name; GCC's `__alignof__` also accepts a
+        // parenthesized expression, whose alignment is that of its type. The
+        // operand is unevaluated, so parse it, read the type, and discard
+        // everything the parse pushed (mirroring `sizeof`'s expression path).
         if !self.lex_is_type_start() {
-            return Err(self.compile_err("type name expected in `_Alignof`"));
+            let saved_ty = self.ty;
+            let saved_text_len = self.next_ent_pc;
+            let saved_reloc = self.code_reloc_sym_idx.len();
+            self.expr(Token::Assign as i64)?;
+            let expr_ty = self.ty;
+            self.next_ent_pc = saved_text_len;
+            self.clear_recent_emits();
+            self.code_reloc_sym_idx.truncate(saved_reloc);
+            self.ty = saved_ty;
+            if self.lex.tk != ')' {
+                return Err(self.compile_err("`)` expected to close `_Alignof`"));
+            }
+            self.next()?;
+            return Ok(self.align_of_type(expr_ty) as i64);
         }
         let saved_ty = self.ty;
         self.ty = self.parse_decl_base_type()?;

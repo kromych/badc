@@ -141,6 +141,14 @@ fn atomic128_ldst() {
 }
 
 #[test]
+fn alignof_expression() {
+    // GCC `__alignof__` accepts an expression operand (C11 `_Alignof` is
+    // type-only); the alignment is that of the operand's unevaluated type,
+    // and the type-name form still works.
+    assert_eq!(run_fixture("alignof_expression.c"), 0);
+}
+
+#[test]
 fn builtin_return_address() {
     // __builtin_return_address(0) is the caller's return address; native
     // reads the saved slot at [fp+8], the VM returns a non-zero per-frame

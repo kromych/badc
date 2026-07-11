@@ -126,16 +126,18 @@ impl<H: Host> Vm<H> {
         // access checks. The starting offset is captured before
         // the TLS bytes are appended.
         let mut data = program.data;
-        // Apply CodeReloc entries: function-pointer initializers in
-        // the data segment store `CODE_BASE + ent_pc` so the
-        // indirect-call dispatch recognises the slot's value as a
-        // code address. The
-        // compiler can't bake this in directly because the VM's
-        // CODE_BASE constant lives in this crate; we patch each
+        // Apply CodeReloc entries: a function-pointer initializer in
+        // the data segment is patched to `CODE_ADDR_TAG | ent_pc` --
+        // the same encoding an `Inst::ImmCode` materializes and a
+        // runtime store of a function reference writes -- so a value
+        // loaded from the slot compares equal to the function symbol
+        // and the indirect-call dispatch recognises it as a code
+        // address. The compiler emits a placeholder plus a CodeReloc
+        // because the tag constant lives in this crate; we patch each
         // slot here at VM construction time.
         for r in &program.code_relocs {
             let off = r.data_offset as usize;
-            let runtime = (super::CODE_BASE as u64).wrapping_add(r.target_ent_pc);
+            let runtime = ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc;
             data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
         }
         let tls_base = data.len();

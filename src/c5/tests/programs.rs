@@ -535,6 +535,16 @@ fn variadic_fn_ptr_init() {
 }
 
 #[test]
+fn static_function_pointer_identity() {
+    // C99 6.5.9p6: a function pointer held in static storage and initialized
+    // with a function name compares equal to that function's address, and is
+    // callable. Regression for the SSA interpreter, which patched a
+    // static-initializer code slot with a different tag than a symbol
+    // reference, so the two compared unequal.
+    assert_eq!(run_fixture("static_function_pointer_identity.c"), 0);
+}
+
+#[test]
 fn variadic_struct_return() {
     // A variadic function returning a struct by value: the call must
     // recover the result registers into the caller's temp.

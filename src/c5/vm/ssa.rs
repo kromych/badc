@@ -23,7 +23,10 @@ use super::eval::{self, round_if_f32};
 /// `Inst::CallIndirect` can distinguish a function pointer from
 /// a real memory address. The low bits hold the callee's
 /// `ent_pc`; the tag is cleared before `Program::lookup`.
-const CODE_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
+/// `Vm::with_host` patches static-initializer function pointers in
+/// the data image with the same tag so a value loaded from data
+/// compares equal to one materialized from an `Inst::ImmCode`.
+pub(super) const CODE_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
 const CODE_ADDR_MASK: i64 = 0x4000_0000_0000_0000;
 
 /// `Inst::ImmExtCode` results carry this bit so `Inst::CallIndirect`

@@ -1940,7 +1940,85 @@ impl Compiler {
                                             ));
                                         }
                                         self.next()?;
-                                        if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                                        if self.lex.tk == Token::Brak {
+                                            // C99 6.7.8p6 multi-dimensional element
+                                            // designator `[i][j]... = { ... }`:
+                                            // index every dimension down to a
+                                            // single element. Each subscript scales
+                                            // by the product of the dimensions below
+                                            // it (the outer `desig` by
+                                            // `inner_product`).
+                                            if range_hi.is_some() {
+                                                return Err(self.compile_err(
+                                                    "`[lo ... hi]` range cannot combine with a multi-dimensional designator",
+                                                ));
+                                            }
+                                            if desig >= group_count {
+                                                return Err(self.compile_err(format!(
+                                                    "array designator index {desig} out of bounds [0, {group_count})"
+                                                )));
+                                            }
+                                            let mut elem = desig * inner_product;
+                                            let mut d = 0usize;
+                                            while self.lex.tk == Token::Brak {
+                                                self.next()?; // `[`
+                                                let n = self.parse_constant_int()?;
+                                                if self.lex.tk != ']' {
+                                                    return Err(self.compile_err(
+                                                        "`]` expected after array designator index",
+                                                    ));
+                                                }
+                                                self.next()?; // `]`
+                                                if d >= inner_dims.len()
+                                                    || n < 0
+                                                    || n >= inner_dims[d]
+                                                {
+                                                    return Err(self.compile_err(format!(
+                                                        "array designator index {n} out of bounds"
+                                                    )));
+                                                }
+                                                let scale: i64 = inner_dims
+                                                    .iter()
+                                                    .skip(d + 1)
+                                                    .product::<i64>()
+                                                    .max(1);
+                                                elem += n * scale;
+                                                d += 1;
+                                            }
+                                            if d != inner_dims.len() {
+                                                return Err(self.compile_err(
+                                                    "multi-dimensional `[i][j]` designator must index every dimension",
+                                                ));
+                                            }
+                                            let here = var_offset + elem * elem_size as i64;
+                                            if self.lex.tk == Token::Dot {
+                                                // `[i][j].field = v` field override.
+                                                self.fill_element_field_designator(sid, ty, here)?;
+                                            } else {
+                                                if self.lex.tk != Token::Assign {
+                                                    return Err(self.compile_err(
+                                                        "`=` expected after `[i][j]` designator",
+                                                    ));
+                                                }
+                                                self.next()?;
+                                                self.skip_opt_compound_literal_cast()?;
+                                                let cl_parens = core::mem::take(
+                                                    &mut self.pending.compound_lit_close_parens,
+                                                );
+                                                if self.lex.tk == '{' {
+                                                    self.collect_struct_initializer(sid, here)?;
+                                                } else {
+                                                    self.fill_struct_fields(sid, here, false)?;
+                                                }
+                                                for _ in 0..cl_parens {
+                                                    self.accept(')')?;
+                                                }
+                                            }
+                                            idx = desig + 1;
+                                            self.accept(',')?;
+                                            continue;
+                                        }
+                                        if self.lex.tk == Token::Dot {
                                             // C99 6.7.8p7 compound designator
                                             // `[N].field... = v`: override one
                                             // field of an already-filled element.

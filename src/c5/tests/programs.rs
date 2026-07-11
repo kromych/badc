@@ -2703,6 +2703,14 @@ fn flexible_array_member_typeof_is_array() {
 }
 
 #[test]
+fn multidim_struct_array_designator() {
+    // C99 6.7.8p6: `arr[i][j] = { ... }` indexes every dimension of a
+    // multi-dimensional array of structs to a single element (row-major flat
+    // offset), with `[i][j].field` overrides and whole-row designators.
+    assert_eq!(run_fixture("multidim_struct_array_designator.c"), 0);
+}
+
+#[test]
 fn func_name_predeclared_identifier() {
     // C99 6.4.2.2 makes `__func__` an implicitly declared string
     // literal carrying the enclosing function's name. c5 mirrors

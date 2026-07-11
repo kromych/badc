@@ -1495,6 +1495,35 @@ fn linux_vsock_errqueue_socket_constants() {
 }
 
 #[test]
+fn linux_can_socket_and_block_headers() {
+    use crate::{CompileOptions, Compiler, Target};
+    // AF_CAN / SOCK_RAW / SIOCGIFINDEX and the bundled linux/can.h,
+    // linux/can/raw.h and linux/blkzoned.h uapi headers: constants match
+    // (arch independent) and the CAN frame / address structs define.
+    let compiles = |src: &str| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .is_ok()
+    };
+    let src = "#include <sys/socket.h>\n#include <net/if.h>\n\
+               #include <linux/can.h>\n#include <linux/can/raw.h>\n\
+               #include <linux/blkzoned.h>\n\
+               int ck[(AF_CAN==29 && PF_CAN==29 && SOCK_RAW==3 && SOCK_SEQPACKET==5 \
+               && SIOCGIFINDEX==0x8933 && CAN_RAW==1 && CAN_MAX_DLEN==8 \
+               && CANFD_MAX_DLEN==64 && SOL_CAN_RAW==101 && CAN_RAW_FD_FRAMES==5 \
+               && BLK_ZONE_COND_FULL==0xE)?1:-1];\n\
+               int sz(void){ struct can_frame f; struct sockaddr_can a; struct blk_zone_range r; \
+               return sizeof(f)+sizeof(a)+sizeof(r); }\n";
+    assert!(
+        compiles(src),
+        "can/block uapi headers + constants must compile"
+    );
+    let wrong = "#include <sys/socket.h>\nint ck[(SOCK_RAW==0)?1:-1];\n";
+    assert!(!compiles(wrong), "a wrong constant should fail to compile");
+}
+
+#[test]
 fn utf16_utf32_string_literals() {
     // C11 `u"..."` (char16_t, 2-byte) and `U"..."` (char32_t, 4-byte)
     // string literals initialize a matching-width array; `L"..."` is

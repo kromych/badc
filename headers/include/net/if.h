@@ -58,6 +58,23 @@ struct ifreq {
 #define ifr_ifindex   ifr_ifru.ifru_ivalue
 #define ifr_data      ifr_ifru.ifru_data
 #define ifr_newname   ifr_ifru.ifru_newname
+// Socket interface-configuration ioctls (linux/sockios.h). Arch independent.
+#define SIOCGIFNAME    0x8910
+#define SIOCGIFCONF    0x8912
+#define SIOCGIFFLAGS   0x8913
+#define SIOCSIFFLAGS   0x8914
+#define SIOCGIFADDR    0x8915
+#define SIOCSIFADDR    0x8916
+#define SIOCGIFDSTADDR 0x8917
+#define SIOCGIFBRDADDR 0x8919
+#define SIOCGIFNETMASK 0x891b
+#define SIOCSIFNETMASK 0x891c
+#define SIOCGIFMTU     0x8921
+#define SIOCSIFMTU     0x8922
+#define SIOCSIFHWADDR  0x8924
+#define SIOCGIFHWADDR  0x8927
+#define SIOCGIFINDEX   0x8933
+#define SIOCGIFTXQLEN  0x8942
 #endif
 
 #ifdef __APPLE__

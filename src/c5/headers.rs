@@ -515,6 +515,18 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "linux/errqueue.h",
         include_str!("../../headers/include/linux/errqueue.h"),
     ),
+    (
+        "linux/blkzoned.h",
+        include_str!("../../headers/include/linux/blkzoned.h"),
+    ),
+    (
+        "linux/can.h",
+        include_str!("../../headers/include/linux/can.h"),
+    ),
+    (
+        "linux/can/raw.h",
+        include_str!("../../headers/include/linux/can/raw.h"),
+    ),
     // every host.
     (
         "msvc_compat.h",

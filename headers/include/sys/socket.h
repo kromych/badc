@@ -41,10 +41,14 @@
 #define AF_INET6    23
 #elif defined(__linux__)
 #define AF_INET6    10
+#define AF_CAN      29
 #define AF_VSOCK    40
 #endif
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
+#define SOCK_RAW    3
+#define SOCK_RDM    4
+#define SOCK_SEQPACKET 5
 #define SHUT_RD     0
 #define SHUT_WR     1
 #define SHUT_RDWR   2
@@ -61,6 +65,7 @@
 #define PF_INET   AF_INET
 #define PF_INET6  AF_INET6
 #ifdef __linux__
+#define PF_CAN    AF_CAN
 #define PF_VSOCK  AF_VSOCK
 #endif
 

@@ -72,4 +72,43 @@ cbor_item_t *cbor_array_get(const cbor_item_t *item, size_t index);
 size_t cbor_map_size(const cbor_item_t *item);
 struct cbor_pair *cbor_map_handle(const cbor_item_t *item);
 
+typedef const unsigned char *cbor_data;
+typedef unsigned char *cbor_mutable_data;
+
+/* More type predicates / accessors. */
+bool cbor_isa_bytestring(const cbor_item_t *item);
+bool cbor_is_null(const cbor_item_t *item);
+size_t cbor_bytestring_length(const cbor_item_t *item);
+cbor_mutable_data cbor_bytestring_handle(const cbor_item_t *item);
+
+/* Reference counting: cbor_incref/cbor_decref adjust the count;
+ * cbor_move transfers ownership without changing it. */
+cbor_item_t *cbor_incref(cbor_item_t *item);
+cbor_item_t *cbor_move(cbor_item_t *item);
+
+/* Builders: allocate a new item the caller owns (release with cbor_decref).
+ * The definite array/map reserve `size` slots. */
+cbor_item_t *cbor_new_definite_array(size_t size);
+cbor_item_t *cbor_new_definite_map(size_t size);
+cbor_item_t *cbor_new_int8(void);
+cbor_item_t *cbor_new_null(void);
+cbor_item_t *cbor_build_bool(bool value);
+cbor_item_t *cbor_build_uint8(uint8_t value);
+cbor_item_t *cbor_build_uint64(uint64_t value);
+cbor_item_t *cbor_build_string(const char *val);
+cbor_item_t *cbor_build_bytestring(cbor_data handle, size_t length);
+
+/* Integer sign / value mutators. */
+void cbor_mark_negint(cbor_item_t *item);
+void cbor_set_uint8(cbor_item_t *item, uint8_t value);
+
+/* Container population: append to an array / add a key-value pair to a map. */
+bool cbor_array_push(cbor_item_t *array, cbor_item_t *pushee);
+bool cbor_map_add(cbor_item_t *map, struct cbor_pair pair);
+
+/* Serialize the item tree into `buffer`; returns the byte count written
+ * (0 on failure / insufficient space). */
+size_t cbor_serialize(const cbor_item_t *item, cbor_mutable_data buffer,
+                      size_t buffer_size);
+
 #endif /* LIBCBOR_CBOR_H */

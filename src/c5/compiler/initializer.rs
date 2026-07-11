@@ -983,6 +983,36 @@ impl Compiler {
             }
             self.lex.restore(snap);
         }
+        // An unparenthesized constant conditional `cond ? A : B` whose arms
+        // may be address constants -- a dispatch table's
+        // `.fn = COND ? impl : NULL`. The integer/float const-expr evaluator
+        // below handles only arithmetic arms, so fold the constant condition
+        // here and take the selected arm as a full init value (which may be a
+        // function pointer, `&global`, or an integer). The parenthesized form
+        // `( cond ? A : B )` is handled by the paren path below.
+        {
+            let snap = self.lex.snapshot();
+            let data_snap = self.data.len();
+            let mut selected: Option<(i64, InitElemReloc)> = None;
+            if let Ok(cond) = self.parse_const_expr_or()
+                && self.lex.tk == Token::Cond
+            {
+                self.next()?; // `?`
+                if let Ok(then_arm) = self.parse_constant_init_value()
+                    && self.lex.tk == ':'
+                {
+                    self.next()?; // `:`
+                    if let Ok(else_arm) = self.parse_constant_init_value() {
+                        selected = Some(if cond != 0 { then_arm } else { else_arm });
+                    }
+                }
+            }
+            if let Some(v) = selected {
+                return Ok(v);
+            }
+            self.lex.restore(snap);
+            self.data.truncate(data_snap);
+        }
         // Float literal -- store the f64 bit pattern. The element
         // type drives the runtime interpretation; the on-disk
         // image is just bytes.

@@ -1461,6 +1461,14 @@ fn large_aggregate_copy() {
 }
 
 #[test]
+fn conditional_constant_initializer() {
+    // `cond ? A : B` with a constant condition is a constant initializer:
+    // a file-scope scalar, and an aggregate element whose arms may be
+    // address constants (function pointer, `&global`, null).
+    assert_eq!(run_fixture("conditional_constant_initializer.c"), 0);
+}
+
+#[test]
 fn empty_array_init() {
     // A file-scope `T x[] = {}` has zero elements but keeps its element
     // type: it decays to a pointer, `sizeof` is 0, and `typeof(x)` differs

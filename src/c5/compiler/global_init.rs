@@ -578,8 +578,9 @@ impl Compiler {
         // Constant expression, evaluated at compile time. Handles
         // integer literals, unary `+`/`-`, casts (`(size_t)expr`),
         // arithmetic, parens, identifiers bound as `Token::Num`
-        // (enum / `#define`d constants), and the offsetof shape.
-        let cv = self.parse_const_expr_or_val()?;
+        // (enum / `#define`d constants), the conditional operator
+        // (`static int n = A > B ? A : B;`), and the offsetof shape.
+        let cv = self.parse_const_expr_cond_val()?;
 
         // C99 6.7.8p11 / 6.3.1.4: a constant initializing a floating
         // object takes the floating value. Coerce the ConstVal to f64

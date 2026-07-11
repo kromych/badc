@@ -2852,6 +2852,15 @@ fn multidim_struct_array_designator() {
 }
 
 #[test]
+fn local_multidim_struct_array_designator() {
+    // C99 6.7.8p6 at block scope: `arr[i][j] = { ... }` indexes every
+    // dimension of a multi-dimensional array of structs to one element, for
+    // automatic and `static` locals and past two dimensions -- parity with a
+    // file-scope initializer.
+    assert_eq!(run_fixture("local_multidim_struct_array_designator.c"), 0);
+}
+
+#[test]
 fn func_name_predeclared_identifier() {
     // C99 6.4.2.2 makes `__func__` an implicitly declared string
     // literal carrying the enclosing function's name. c5 mirrors

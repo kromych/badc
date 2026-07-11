@@ -541,9 +541,75 @@ impl Compiler {
                 self.next()?;
                 let mut i: i64 = 0;
                 while self.lex.tk != '}' {
-                    // C99 6.7.8p7 `[N] =` designator jumps the cursor.
-                    if let Some(idx) = self.take_array_element_designator(group_count)? {
-                        i = idx;
+                    // C99 6.7.8p6/p7 array designator. A single `[N] =`
+                    // jumps the outer cursor and fills a whole row; a
+                    // multi-dimensional `[i][j]... = { ... }` indexes every
+                    // dimension down to a single struct element.
+                    if self.lex.tk == Token::Brak {
+                        self.next()?; // `[`
+                        let desig = self.parse_constant_int()?;
+                        if self.lex.tk != ']' {
+                            return Err(
+                                self.compile_err("`]` expected after array designator index")
+                            );
+                        }
+                        self.next()?; // `]`
+                        if desig < 0 || desig >= group_count {
+                            return Err(self.compile_err(format!(
+                                "array designator index {desig} out of bounds [0, {group_count})"
+                            )));
+                        }
+                        if self.lex.tk == Token::Brak {
+                            // Multi-dimensional element designator: each inner
+                            // subscript scales by the product of the dimensions
+                            // below it; the outer `desig` scales by the whole
+                            // inner product.
+                            let mut elem = desig * inner_product;
+                            let mut d = 0usize;
+                            while self.lex.tk == Token::Brak {
+                                self.next()?; // `[`
+                                let n = self.parse_constant_int()?;
+                                if self.lex.tk != ']' {
+                                    return Err(self
+                                        .compile_err("`]` expected after array designator index"));
+                                }
+                                self.next()?; // `]`
+                                if d >= inner_dims.len() || n < 0 || n >= inner_dims[d] {
+                                    return Err(self.compile_err(format!(
+                                        "array designator index {n} out of bounds"
+                                    )));
+                                }
+                                let scale: i64 =
+                                    inner_dims.iter().skip(d + 1).product::<i64>().max(1);
+                                elem += n * scale;
+                                d += 1;
+                            }
+                            if d != inner_dims.len() {
+                                return Err(self.compile_err(
+                                    "multi-dimensional `[i][j]` designator must index every dimension",
+                                ));
+                            }
+                            if self.lex.tk != Token::Assign {
+                                return Err(
+                                    self.compile_err("`=` expected after `[i][j]` designator")
+                                );
+                            }
+                            self.next()?; // `=`
+                            let here = var_offset + elem * elem_size as i64;
+                            if self.lex.tk == '{' {
+                                self.collect_struct_initializer(sid, here)?;
+                            } else {
+                                self.fill_struct_fields(sid, here, false)?;
+                            }
+                            i = desig + 1;
+                            self.accept(',')?;
+                            continue;
+                        }
+                        if self.lex.tk != Token::Assign {
+                            return Err(self.compile_err("`=` expected after `[N]` designator"));
+                        }
+                        self.next()?; // `=`
+                        i = desig;
                     }
                     if i >= group_count {
                         return Err(self.compile_err(format!(
@@ -1127,9 +1193,75 @@ impl Compiler {
                     self.next()?; // consume outer `{`
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {
-                        // C99 6.7.8p7 `[N] =` designator jumps the cursor.
-                        if let Some(idx) = self.take_array_element_designator(group_count)? {
-                            i = idx;
+                        // C99 6.7.8p6/p7 array designator. A single `[N] =`
+                        // jumps the outer cursor and fills a whole row; a
+                        // multi-dimensional `[i][j]... = { ... }` indexes every
+                        // dimension down to a single struct element.
+                        if self.lex.tk == Token::Brak {
+                            self.next()?; // `[`
+                            let desig = self.parse_constant_int()?;
+                            if self.lex.tk != ']' {
+                                return Err(
+                                    self.compile_err("`]` expected after array designator index")
+                                );
+                            }
+                            self.next()?; // `]`
+                            if desig < 0 || desig >= group_count {
+                                return Err(self.compile_err(format!(
+                                    "array designator index {desig} out of bounds [0, {group_count})"
+                                )));
+                            }
+                            if self.lex.tk == Token::Brak {
+                                // Each inner subscript scales by the product of
+                                // the dimensions below it; the outer `desig`
+                                // scales by the whole inner product.
+                                let mut elem = desig * inner_product;
+                                let mut d = 0usize;
+                                while self.lex.tk == Token::Brak {
+                                    self.next()?; // `[`
+                                    let n = self.parse_constant_int()?;
+                                    if self.lex.tk != ']' {
+                                        return Err(self.compile_err(
+                                            "`]` expected after array designator index",
+                                        ));
+                                    }
+                                    self.next()?; // `]`
+                                    if d >= inner_dims.len() || n < 0 || n >= inner_dims[d] {
+                                        return Err(self.compile_err(format!(
+                                            "array designator index {n} out of bounds"
+                                        )));
+                                    }
+                                    let scale: i64 =
+                                        inner_dims.iter().skip(d + 1).product::<i64>().max(1);
+                                    elem += n * scale;
+                                    d += 1;
+                                }
+                                if d != inner_dims.len() {
+                                    return Err(self.compile_err(
+                                        "multi-dimensional `[i][j]` designator must index every dimension",
+                                    ));
+                                }
+                                if self.lex.tk != Token::Assign {
+                                    return Err(
+                                        self.compile_err("`=` expected after `[i][j]` designator")
+                                    );
+                                }
+                                self.next()?; // `=`
+                                let here = staged_off as i64 + elem * elem_size as i64;
+                                if self.lex.tk == '{' {
+                                    self.collect_struct_initializer(sid, here)?;
+                                } else {
+                                    self.fill_struct_fields(sid, here, false)?;
+                                }
+                                i = desig + 1;
+                                self.accept(',')?;
+                                continue;
+                            }
+                            if self.lex.tk != Token::Assign {
+                                return Err(self.compile_err("`=` expected after `[N]` designator"));
+                            }
+                            self.next()?; // `=`
+                            i = desig;
                         }
                         if i >= group_count {
                             return Err(self.compile_err(format!(

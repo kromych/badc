@@ -637,6 +637,14 @@ impl Compiler {
             self.emit_imm(v);
             self.ty = Ty::Int as i64;
             self.ast_emit_int_lit(v, self.ty);
+        } else if self.lex.tk == Token::BuiltinOffsetof {
+            // GCC `__builtin_offsetof(T, member)`: the member's byte offset,
+            // a `size_t`-typed integer constant.
+            self.next()?;
+            let v = self.parse_builtin_offsetof()?;
+            self.emit_imm(v);
+            self.ty = self.size_t_ty();
+            self.ast_emit_int_lit(v, self.ty);
         } else if self.is_func_name_ident() {
             // C99 6.4.2.2: __func__ is implicitly declared as
             // `static const char __func__[] = "function-name";` at the
@@ -4023,6 +4031,91 @@ impl Compiler {
         // by the array flag `typeof` recorded (this is what QEMU_IS_ARRAY
         // and ARRAY_SIZE rely on).
         Ok((generic_type_match(a, b) && a_array == b_array) as i64)
+    }
+
+    /// Parse `__builtin_offsetof ( type-name , member-designator )` (GCC /
+    /// C11, what `offsetof` may expand to) and return the member's byte
+    /// offset. The leading keyword has been consumed. The member designator
+    /// is an identifier followed by a chain of `.field` and `[constant]`
+    /// steps (C11 7.19). The offset is a compile-time constant.
+    pub(super) fn parse_builtin_offsetof(&mut self) -> Result<i64, C5Error> {
+        self.consume(b'(', "`(` expected after `__builtin_offsetof`")?;
+        let ty = self.parse_generic_type_name()?;
+        if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
+            return Err(self.compile_err("`__builtin_offsetof` requires a struct or union type"));
+        }
+        self.consume(b',', "`,` expected after the `__builtin_offsetof` type")?;
+        // Resolve the leading member and then each `.field` / `[index]` step,
+        // accumulating the byte offset. `cur_ty` / `cur_dims` track the
+        // element type and remaining array dimensions of the current member.
+        let field_dims = |f: &super::StructField| -> alloc::vec::Vec<i64> {
+            if !f.array_dims.is_empty() {
+                f.array_dims.clone()
+            } else if f.array_size > 0 {
+                alloc::vec![f.array_size]
+            } else {
+                alloc::vec![]
+            }
+        };
+        let mut offset: i64 = 0;
+        let mut sid = struct_id_of(ty);
+        let f = self.offsetof_member(sid)?;
+        offset += f.offset as i64;
+        let mut cur_ty = f.ty;
+        let mut cur_dims = field_dims(&f);
+        loop {
+            if self.lex.tk == Token::Dot {
+                self.next()?;
+                if !cur_dims.is_empty() || !is_struct_ty(cur_ty) || struct_ptr_depth(cur_ty) != 0 {
+                    return Err(
+                        self.compile_err("`.` in `__builtin_offsetof` on a non-struct member")
+                    );
+                }
+                sid = struct_id_of(cur_ty);
+                let f = self.offsetof_member(sid)?;
+                offset += f.offset as i64;
+                cur_ty = f.ty;
+                cur_dims = field_dims(&f);
+            } else if self.lex.tk == Token::Brak {
+                self.next()?;
+                let idx = self.parse_constant_int()?;
+                self.consume(b']', "`]` expected after `__builtin_offsetof` subscript")?;
+                if cur_dims.is_empty() {
+                    return Err(
+                        self.compile_err("`[...]` in `__builtin_offsetof` on a non-array member")
+                    );
+                }
+                // Row stride: the product of the dimensions below this one
+                // times the element size.
+                let inner: i64 = cur_dims[1..].iter().product::<i64>().max(1);
+                offset += idx * inner * self.size_of_type(cur_ty) as i64;
+                cur_dims.remove(0);
+            } else {
+                break;
+            }
+        }
+        self.consume(b')', "`)` expected after `__builtin_offsetof`")?;
+        Ok(offset)
+    }
+
+    /// Consume one member name and return its `StructField` in struct `sid`.
+    fn offsetof_member(&mut self, sid: usize) -> Result<super::StructField, C5Error> {
+        if self.lex.tk != Token::Id {
+            return Err(self.compile_err("member name expected in `__builtin_offsetof`"));
+        }
+        let name = self.symbols[self.lex.curr_id_idx].name.clone();
+        self.next()?;
+        self.structs[sid]
+            .fields
+            .iter()
+            .find(|f| f.name == name)
+            .cloned()
+            .ok_or_else(|| {
+                self.compile_err(format!(
+                    "struct {} has no member {name}",
+                    self.structs[sid].name
+                ))
+            })
     }
 
     /// Parse a `_Generic` association type name: a base type plus any

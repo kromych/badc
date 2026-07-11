@@ -768,12 +768,22 @@ impl Compiler {
             let v = self.parse_types_compatible_p()?;
             return Ok(ConstVal::int(v));
         }
+        if self.lex.tk == Token::BuiltinOffsetof {
+            // GCC `__builtin_offsetof(T, member)` is an integer constant
+            // expression (the member's byte offset).
+            self.next()?;
+            let v = self.parse_builtin_offsetof()?;
+            return Ok(ConstVal::Int {
+                val: v,
+                ty: self.size_t_ty(),
+            });
+        }
         self.parse_const_expr_primary_val()
     }
 
     /// The `size_t` type tag: `unsigned long` on LP64,
     /// `unsigned long long` on LLP64.
-    fn size_t_ty(&self) -> i64 {
+    pub(super) fn size_t_ty(&self) -> i64 {
         if self.target.is_windows() {
             Ty::LongLong as i64 | UNSIGNED_BIT
         } else {

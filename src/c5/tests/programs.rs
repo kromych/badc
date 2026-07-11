@@ -1575,6 +1575,14 @@ fn block_scope_thread_local() {
 }
 
 #[test]
+fn builtin_offsetof() {
+    // GCC / C11 `__builtin_offsetof(type, member)` folds to the member's byte
+    // offset -- struct tag / typedef, `.field` chains, `[index]` subscripts
+    // (incl. multi-dim and array-of-struct), and constant contexts.
+    assert_eq!(run_fixture("builtin_offsetof.c"), 0);
+}
+
+#[test]
 fn large_aggregate_copy() {
     // A large aggregate init / struct copy (> 4 KB) keeps load/store offsets
     // in the scaled-immediate range by advancing the base pointer.

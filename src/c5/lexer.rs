@@ -1910,6 +1910,7 @@ const KEYWORDS: &[(&str, Token)] = &[
         "__builtin_types_compatible_p",
         Token::BuiltinTypesCompatible,
     ),
+    ("__builtin_offsetof", Token::BuiltinOffsetof),
     // Type qualifiers -- consumed everywhere a type qualifier
     // may appear; no semantic effect.
     ("const", Token::TypeQual),

@@ -3553,6 +3553,16 @@ impl Compiler {
                 self.next()?;
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
+                // GCC vector extension: `v[i]` indexes lane `i` as an
+                // element-typed lvalue. The vector value carries its address on
+                // the accumulator like a decayed array, so reinterpret the base
+                // as a pointer to the element type and reuse the pointer-
+                // subscript machinery below.
+                if is_vector_ty(&self.structs, t) {
+                    let elem_ty = self.structs[struct_id_of(t)].fields[0].ty;
+                    t = elem_ty + Ty::Ptr as i64;
+                    self.ty = t;
+                }
                 let array_ast = self.ast_acc;
                 // Read-and-park the multi-dim stride queue. The
                 // identifier / param / field-decay branches seed

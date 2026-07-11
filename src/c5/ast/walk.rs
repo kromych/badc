@@ -3891,6 +3891,18 @@ impl<'a> Walker<'a> {
                     Ok(base)
                 }
             }
+            // C99 6.5.2.5p4: a compound literal is an lvalue naming an
+            // unnamed object. In lvalue position (`&(T){...}`) emit the
+            // initializer into the reserved slot and yield the slot's
+            // address. The rvalue path handles the value-position case,
+            // where a scalar literal loads the slot instead.
+            Expr::CompoundLiteral {
+                slot_off, ty, init, ..
+            } => {
+                let (slot, ty, init) = (*slot_off, *ty, init.clone());
+                self.emit_local_init(b, slot, ty, &init)?;
+                Ok(b.local_addr(slot))
+            }
             other => Err(WalkError::UnsupportedExpr {
                 id,
                 kind: lvalue_shape_label(other),

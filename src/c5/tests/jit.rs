@@ -1355,6 +1355,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("hex_float_literal.c", 0),
     ("bool_normalize_c99.c", 0),
     ("compound_literal_block.c", 0),
+    ("scalar_compound_literal_lvalue.c", 0),
     ("struct_arg_in_registers.c", 0),
     ("struct_arg_by_stack.c", 0),
     ("wide_char_utf8.c", 0),

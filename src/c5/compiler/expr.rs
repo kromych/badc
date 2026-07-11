@@ -2103,6 +2103,21 @@ impl Compiler {
                 // its rvalue (no Li was emitted), so `&` is a no-op
                 // at the IR level; the type bump below tracks the
                 // extra pointer level.
+            } else if matches!(
+                self.ast_acc,
+                Some(id) if matches!(
+                    self.ast.expr(id),
+                    super::super::ast::Expr::CompoundLiteral { .. }
+                )
+            ) {
+                // C99 6.5.2.5p4: a compound literal is an lvalue -- an
+                // unnamed object with automatic storage. A scalar literal's
+                // value was materialized without a trailing load, so there
+                // was nothing for `pop_trailing_scalar_load` to drop; wrap
+                // the literal in `AddrOf` and let the walker's lvalue path
+                // emit the init and yield the slot address. Struct / array
+                // literals reach `&` through the branches above.
+                self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
             } else {
                 return Err(self.compile_err("bad address-of"));
             }

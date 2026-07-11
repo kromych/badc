@@ -233,6 +233,13 @@ fn compound_literal_addr_init() {
 }
 
 #[test]
+fn scalar_compound_literal_lvalue() {
+    // C99 6.5.2.5p4: a compound literal is an lvalue. Taking the address of a
+    // scalar literal `&(int){5}` must work, not only the struct / array forms.
+    assert_eq!(run_fixture("scalar_compound_literal_lvalue.c"), 0);
+}
+
+#[test]
 fn compound_literal_array_element() {
     // An array-of-struct element written as a compound literal `(T){...}`
     // naming the element type (C99 6.5.2.5).

@@ -59,6 +59,41 @@ impl Compiler {
         }
     }
 
+    /// Save the three pending local-initializer carriers and reset them to
+    /// empty, returning the saved values. A declaration nested inside an
+    /// enclosing aggregate's element initializer -- reached when an element
+    /// is a statement expression that declares a local -- must not drain the
+    /// outer aggregate's accumulated runtime elements when its own
+    /// `finalize_local_init` runs; wrapping the inner declaration in
+    /// take/restore keeps the carriers reentrant.
+    #[allow(clippy::type_complexity)]
+    pub(super) fn take_pending_local_carriers(
+        &mut self,
+    ) -> (
+        Option<super::super::ast::ExprId>,
+        Option<(i64, i64)>,
+        alloc::vec::Vec<super::super::ast::RuntimeInitElement>,
+    ) {
+        (
+            self.pending_local_init_ast.take(),
+            self.pending_local_aggregate_ast.take(),
+            core::mem::take(&mut self.pending_local_runtime_elements),
+        )
+    }
+
+    pub(super) fn restore_pending_local_carriers(
+        &mut self,
+        saved: (
+            Option<super::super::ast::ExprId>,
+            Option<(i64, i64)>,
+            alloc::vec::Vec<super::super::ast::RuntimeInitElement>,
+        ),
+    ) {
+        self.pending_local_init_ast = saved.0;
+        self.pending_local_aggregate_ast = saved.1;
+        self.pending_local_runtime_elements = saved.2;
+    }
+
     /// Assemble the pending initializer for a just-parsed declarator and
     /// emit its local declaration. A non-`Loc` binding (a redeclaration
     /// that resolved elsewhere) discards the carriers without emitting.
@@ -1414,7 +1449,13 @@ impl Compiler {
         // a global read in `&global` is a constant address.
         let mut prev_was_amp = false;
         while depth > 0 && self.lex.tk != 0 {
-            if self.lex.tk == '{' {
+            if self.lex.tk == '(' && self.lex.peek_after_whitespace(b'{') {
+                // A GNU statement expression `({ ... })` element is not a
+                // constant expression (C99 6.6); its `{`/`}` still balance
+                // the depth counter on the following iterations.
+                needs_runtime = true;
+                saw_any = true;
+            } else if self.lex.tk == '{' {
                 // A brace-enclosed element (`{ ... }`, possibly empty like
                 // `{ }`) counts even when it holds no scalar token, so mark
                 // the current element non-empty at the top level.
@@ -1719,7 +1760,14 @@ impl Compiler {
                 value_has_bitop = false;
                 continue;
             }
-            if self.lex.tk == '{' {
+            if self.lex.tk == '(' && self.lex.peek_after_whitespace(b'{') {
+                // A GNU statement expression `({ ... })` element is not a
+                // constant expression (C99 6.6), so the aggregate fills at
+                // runtime. Its `{`/`}` still balance the depth counter on the
+                // following iterations.
+                needs_runtime = true;
+                at_entry_start = false;
+            } else if self.lex.tk == '{' {
                 depth += 1;
                 at_entry_start = true;
             } else if self.lex.tk == '}' {

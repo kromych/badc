@@ -1623,6 +1623,18 @@ fn runtime_struct_array_member_init() {
 }
 
 #[test]
+fn aggregate_init_statement_expression_element() {
+    // A local aggregate element that is a GNU statement expression (C99 6.6,
+    // not constant) initializes at runtime; when it declares its own local,
+    // the inner declaration must not drain the enclosing aggregate's
+    // accumulated runtime elements, so an earlier field/element survives.
+    assert_eq!(
+        run_fixture("aggregate_init_statement_expression_element.c"),
+        0
+    );
+}
+
+#[test]
 fn builtin_frame_address() {
     // __builtin_frame_address(0): non-null, stable within a frame,
     // distinct between a function and its callee.

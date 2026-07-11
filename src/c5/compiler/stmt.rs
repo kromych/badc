@@ -464,11 +464,19 @@ impl Compiler {
                 let decl_file = self.intern_source_file() as u32;
                 self.symbols[loc_idx].decl_file = decl_file;
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
-                self.pending_local_init_ast = None;
-                self.pending_local_aggregate_ast = None;
-                self.pending_local_runtime_elements.clear();
-                self.allocate_local_with_init(loc_idx, ty, array_size)?;
-                self.finalize_local_init(loc_idx);
+                // Save any enclosing aggregate's in-progress initializer
+                // carriers -- this declaration can be nested inside one when
+                // an aggregate element is a statement expression that
+                // declares a local -- so this declaration's finalize does not
+                // drain the outer aggregate's runtime elements. `take_*`
+                // leaves the carriers empty for this declaration.
+                let saved = self.take_pending_local_carriers();
+                let r = self.allocate_local_with_init(loc_idx, ty, array_size);
+                if r.is_ok() {
+                    self.finalize_local_init(loc_idx);
+                }
+                self.restore_pending_local_carriers(saved);
+                r?;
             }
             // Write the lineage tag after `allocate_local_with_init`
             // (which may have parsed an initializer) so it can't be

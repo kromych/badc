@@ -4398,17 +4398,57 @@ fn emit_mcpy(
     };
     let bytes = size as u32;
     emit(code, enc_str_pre(temp, Reg(31), -16));
-    let words = bytes / 8;
-    for w in 0..words {
-        let off = w * 8;
-        emit(code, enc_ldr_imm(temp, src_r, off));
-        emit(code, enc_str_imm(temp, dst_r, off));
-    }
-    let tail_start = words * 8;
-    for i in 0..(bytes - tail_start) {
-        let off = tail_start + i;
-        emit(code, enc_ldrb_imm(temp, src_r, off));
-        emit(code, enc_strb_imm(temp, dst_r, off));
+    // The scaled load/store immediate reaches 32760 for 8-byte accesses
+    // but only 4095 for the byte tail, so a copy whose byte offset would
+    // exceed that must advance the base pointers. `WINDOW` is 8-aligned and
+    // below 4096, keeping every word and tail offset in range and letting a
+    // single `add` (12-bit immediate) step both bases between windows.
+    const WINDOW: u32 = 4088;
+    let copy_run = |code: &mut Vec<u8>, sbase: Reg, dbase: Reg, run: u32| {
+        let words = run / 8;
+        for w in 0..words {
+            let off = w * 8;
+            emit(code, enc_ldr_imm(temp, sbase, off));
+            emit(code, enc_str_imm(temp, dbase, off));
+        }
+        let tail_start = words * 8;
+        for i in 0..(run - tail_start) {
+            let off = tail_start + i;
+            emit(code, enc_ldrb_imm(temp, sbase, off));
+            emit(code, enc_strb_imm(temp, dbase, off));
+        }
+    };
+    if bytes <= WINDOW {
+        copy_run(code, src_r, dst_r, bytes);
+    } else {
+        // Advance working copies so `dst_r` (the memcpy return value) and
+        // `src_r` are left unchanged. Pick two scratch registers distinct
+        // from the bases and the data temp; save and restore them.
+        let mut picks = [Reg(9), Reg(9)];
+        let mut n = 0;
+        for cand in [9u8, 13, 14, 15, 12, 11] {
+            if cand != dst_r.0 && cand != src_r.0 && cand != temp.0 && n < 2 {
+                picks[n] = Reg(cand);
+                n += 1;
+            }
+        }
+        let (wsrc, wdst) = (picks[0], picks[1]);
+        emit(code, enc_str_pre(wsrc, Reg(31), -16));
+        emit(code, enc_str_pre(wdst, Reg(31), -16));
+        emit_mov_reg(code, wsrc, src_r);
+        emit_mov_reg(code, wdst, dst_r);
+        let mut pos = 0u32;
+        while pos < bytes {
+            let run = (bytes - pos).min(WINDOW);
+            copy_run(code, wsrc, wdst, run);
+            pos += run;
+            if pos < bytes {
+                emit(code, super::encode::enc_add_imm(wsrc, wsrc, run));
+                emit(code, super::encode::enc_add_imm(wdst, wdst, run));
+            }
+        }
+        emit(code, enc_ldr_post(wdst, Reg(31), 16));
+        emit(code, enc_ldr_post(wsrc, Reg(31), 16));
     }
     emit(code, enc_ldr_post(temp, Reg(31), 16));
     // memcpy returns dst -- propagate into the Inst's `dst_place`.

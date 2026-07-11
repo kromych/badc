@@ -1432,6 +1432,13 @@ fn const_object_array_bound() {
 }
 
 #[test]
+fn large_aggregate_copy() {
+    // A large aggregate init / struct copy (> 4 KB) keeps load/store offsets
+    // in the scaled-immediate range by advancing the base pointer.
+    assert_eq!(run_fixture("large_aggregate_copy.c"), 0);
+}
+
+#[test]
 fn empty_array_init() {
     // A file-scope `T x[] = {}` has zero elements but keeps its element
     // type: it decays to a pointer, `sizeof` is 0, and `typeof(x)` differs

@@ -22,6 +22,23 @@ struct file_clone_range {
 // _IOW(0x94, 13, struct file_clone_range)
 #define FICLONERANGE 0x4020940d
 
+// Inode attribute ioctls (the FS_*_FL flag bits below carry the values).
+#define FS_IOC_GETFLAGS   _IOR('f', 1, long)
+#define FS_IOC_SETFLAGS   _IOW('f', 2, long)
+#define FS_IOC_GETVERSION _IOR('v', 1, long)
+#define FS_IOC_SETVERSION _IOW('v', 2, long)
+
+#define FS_SECRM_FL        0x00000001 // secure deletion
+#define FS_UNRM_FL         0x00000002 // undelete
+#define FS_COMPR_FL        0x00000004 // compress file
+#define FS_SYNC_FL         0x00000008 // synchronous updates
+#define FS_IMMUTABLE_FL    0x00000010 // immutable file
+#define FS_APPEND_FL       0x00000020 // append-only
+#define FS_NODUMP_FL       0x00000040 // do not dump
+#define FS_NOATIME_FL      0x00000080 // do not update atime
+#define FS_JOURNAL_DATA_FL 0x00004000 // journal file data
+#define FS_NOCOW_FL        0x00800000 // do not copy-on-write
+
 // Block-device ioctls (uapi type 0x12), encoded via the shared _IO macros.
 #define BLKROSET     _IO(0x12, 93)
 #define BLKROGET     _IO(0x12, 94)

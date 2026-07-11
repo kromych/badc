@@ -1524,6 +1524,33 @@ fn linux_can_socket_and_block_headers() {
 }
 
 #[test]
+fn linux_block_device_and_file_headers() {
+    use crate::{CompileOptions, Compiler, Target};
+    // The bundled linux/cdrom.h, dm-ioctl.h, hdreg.h, fd.h, the FS_IOC_* /
+    // FS_*_FL additions to linux/fs.h, the POSIX_FADV_* advice, and the
+    // mincore binding -- everything block/file drivers pull in. Constant
+    // values are arch independent; a successful compile is the check.
+    let compiles = |src: &str| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .is_ok()
+    };
+    let src = "#include <fcntl.h>\n#include <sys/mman.h>\n#include <linux/cdrom.h>\n\
+               #include <linux/dm-ioctl.h>\n#include <linux/hdreg.h>\n\
+               #include <linux/fd.h>\n#include <linux/fs.h>\n\
+               int ck[(CDROMEJECT==0x5309 && CDS_DISC_OK==4 && HDIO_GETGEO==0x0301 \
+               && POSIX_FADV_DONTNEED==4 && FS_APPEND_FL==0x20 && FS_NOCOW_FL==0x00800000 \
+               && DM_IOCTL==0xfd && DM_MPATH_PROBE_PATHS_CMD==18)?1:-1];\n\
+               int use_fs(int fd){ return FS_IOC_GETFLAGS != 0 ? fd : 0; }\n\
+               int use_mincore(char *a){ unsigned char v; return mincore(a, 4096, &v); }\n\
+               int use_geo(void){ struct hd_geometry g; return sizeof(g); }\n";
+    assert!(compiles(src), "block/file uapi headers must compile");
+    let wrong = "#include <linux/cdrom.h>\nint ck[(CDROMEJECT==0)?1:-1];\n";
+    assert!(!compiles(wrong), "a wrong constant should fail to compile");
+}
+
+#[test]
 fn utf16_utf32_string_literals() {
     // C11 `u"..."` (char16_t, 2-byte) and `U"..."` (char32_t, 4-byte)
     // string literals initialize a matching-width array; `L"..."` is

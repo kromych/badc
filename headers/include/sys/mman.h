@@ -55,6 +55,7 @@
 #pragma binding(libc::msync,    "_msync")
 #pragma binding(libc::mprotect, "_mprotect")
 #pragma binding(libc::madvise,    "_madvise")
+#pragma binding(libc::mincore,    "_mincore")
 #pragma binding(libc::shm_open,   "_shm_open")
 #pragma binding(libc::shm_unlink, "_shm_unlink")
 #pragma binding(libc::mlockall,   "_mlockall")
@@ -73,6 +74,7 @@
 #pragma binding(libc::msync,    "msync")
 #pragma binding(libc::mprotect, "mprotect")
 #pragma binding(libc::madvise,    "madvise")
+#pragma binding(libc::mincore,    "mincore")
 #pragma binding(libc::shm_open,   "shm_open")
 #pragma binding(libc::shm_unlink, "shm_unlink")
 #pragma binding(libc::mlockall,   "mlockall")
@@ -89,6 +91,8 @@ int memfd_create(const char *name, unsigned int flags);
 // POSIX targets).
 char *mmap(char *addr, unsigned long len, int prot, int flags, int fd, long offset);
 int munmap(char *addr, unsigned long len);
+// Report which pages of a mapping are resident; `vec` gets one byte per page.
+int mincore(char *addr, unsigned long len, unsigned char *vec);
 char *mremap(char *old, unsigned long old_size, unsigned long new_size, int flags);
 int msync(char *addr, unsigned long len, int flags);
 int mprotect(char *addr, unsigned long len, int prot);

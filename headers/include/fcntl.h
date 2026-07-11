@@ -236,7 +236,14 @@ int openat(int dirfd, const char *path, int flags, ...);
 long splice(int fd_in, long *off_in, int fd_out, long *off_out,
             unsigned long len, unsigned int flags);
 // Advise the kernel about a file region's expected access pattern, and
-// reserve backing store for a region (POSIX).
+// reserve backing store for a region (POSIX). The advice values are shared
+// by the LP64 targets (aarch64 / x86-64 do not renumber DONTNEED/NOREUSE).
+#define POSIX_FADV_NORMAL     0
+#define POSIX_FADV_RANDOM     1
+#define POSIX_FADV_SEQUENTIAL 2
+#define POSIX_FADV_WILLNEED   3
+#define POSIX_FADV_DONTNEED   4
+#define POSIX_FADV_NOREUSE    5
 int posix_fadvise(int fd, long offset, long len, int advice);
 int posix_fallocate(int fd, long offset, long len);
 // Manipulate a file's allocated disk space (Linux); `mode` selects the

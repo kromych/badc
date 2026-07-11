@@ -520,6 +520,22 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/linux/blkzoned.h"),
     ),
     (
+        "linux/cdrom.h",
+        include_str!("../../headers/include/linux/cdrom.h"),
+    ),
+    (
+        "linux/dm-ioctl.h",
+        include_str!("../../headers/include/linux/dm-ioctl.h"),
+    ),
+    (
+        "linux/hdreg.h",
+        include_str!("../../headers/include/linux/hdreg.h"),
+    ),
+    (
+        "linux/fd.h",
+        include_str!("../../headers/include/linux/fd.h"),
+    ),
+    (
         "linux/can.h",
         include_str!("../../headers/include/linux/can.h"),
     ),

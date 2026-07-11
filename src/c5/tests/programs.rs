@@ -1381,6 +1381,41 @@ fn zero_length_array() {
 }
 
 #[test]
+fn fcntl_stat_constants_match_the_target_libc() {
+    use crate::{CompileOptions, Compiler, Target};
+    // A negative-size array declaration is a compile error unless every
+    // constant matches, so a successful compile IS the assertion.
+    let compiles = |src: &str, target: Target| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    // aarch64 and x86-64 rearrange O_DIRECT / O_DIRECTORY / O_NOFOLLOW;
+    // O_LARGEFILE is 0 on both 64-bit targets. S_ISVTX and the UTIME_*
+    // values are arch-independent. Values verified against gcc.
+    let common = "&& O_ASYNC==020000 && FASYNC==020000 && O_LARGEFILE==0 \
+                  && S_ISVTX==01000 && UTIME_NOW==((1L<<30)-1L) \
+                  && UTIME_OMIT==((1L<<30)-2L)";
+    let aarch64 = format!(
+        "#include <fcntl.h>\n#include <sys/stat.h>\nint ck[(O_DIRECT==0200000 \
+         && O_DIRECTORY==040000 && O_NOFOLLOW==0100000 {common})?1:-1];\n"
+    );
+    let x86_64 = format!(
+        "#include <fcntl.h>\n#include <sys/stat.h>\nint ck[(O_DIRECT==040000 \
+         && O_DIRECTORY==0200000 && O_NOFOLLOW==0400000 {common})?1:-1];\n"
+    );
+    assert!(compiles(&aarch64, Target::LinuxAarch64), "aarch64 values");
+    assert!(compiles(&x86_64, Target::LinuxX64), "x86-64 values");
+    // A wrong value must fail, proving the assertion actually bites.
+    let wrong = "#include <fcntl.h>\nint ck[(O_DIRECT==0)?1:-1];\n";
+    assert!(
+        !compiles(wrong, Target::LinuxAarch64),
+        "a wrong constant should fail to compile"
+    );
+}
+
+#[test]
 fn empty_array_init() {
     // A file-scope `T x[] = {}` has zero elements but keeps its element
     // type: it decays to a pointer, `sizeof` is 0, and `typeof(x)` differs

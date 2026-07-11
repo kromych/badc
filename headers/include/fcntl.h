@@ -40,11 +40,25 @@
 #define O_TRUNC      01000
 #define O_APPEND     02000
 #define O_NONBLOCK   04000
-#define O_DIRECTORY  0200000
+#define O_ASYNC      020000
+#define FASYNC       O_ASYNC
 #define O_CLOEXEC    02000000
-#define O_NOFOLLOW   0400000
 #define O_ACCMODE    0003
 #define O_NOATIME    01000000
+// O_DIRECT / O_DIRECTORY / O_NOFOLLOW use different bits per Linux
+// architecture (the aarch64 uapi rearranges them relative to the
+// asm-generic values x86-64 keeps). O_LARGEFILE is 0 on both 64-bit
+// targets (large offsets are native).
+#define O_LARGEFILE  0
+#if defined(__aarch64__)
+#define O_DIRECT     0200000
+#define O_DIRECTORY  040000
+#define O_NOFOLLOW   0100000
+#else
+#define O_DIRECT     040000
+#define O_DIRECTORY  0200000
+#define O_NOFOLLOW   0400000
+#endif
 // Synchronous I/O (asm-generic/fcntl.h): O_SYNC = __O_SYNC | O_DSYNC,
 // with __O_SYNC = 04000000. __O_SYNC is never used on its own.
 #define O_DSYNC      010000

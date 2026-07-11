@@ -233,6 +233,11 @@ struct stat {
 #define S_IRWXO 07
 #define S_ISUID 04000
 #define S_ISGID 02000
+#define S_ISVTX 01000
+
+// utimensat(2) special nanosecond values (C11 / POSIX.1-2008).
+#define UTIME_NOW  ((1L << 30) - 1L)
+#define UTIME_OMIT ((1L << 30) - 2L)
 
 // statfs / statvfs -- filesystem-level metadata. The real layout
 // differs across platforms; this opaque buffer is wide enough for

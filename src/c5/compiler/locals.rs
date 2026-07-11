@@ -269,6 +269,14 @@ impl Compiler {
                 // time, not in the function's frame.
                 self.finalize_local_init(loc_idx);
             }
+            // A deferred-size local (`T x[]`, `array_size == -1`) whose
+            // initializer resolved to zero elements is a zero-length array:
+            // keep the array-ness the `array_size == 0` scalar encoding
+            // would drop, so it still decays to a pointer and `sizeof` is 0.
+            // Assigned (not just set) so a reused symbol slot does not leak
+            // a stale flag from an outer binding of the same name.
+            self.symbols[loc_idx].is_zero_len_array =
+                array_size == -1 && self.symbols[loc_idx].array_size == 0;
             // Unconditional write: a stale fn-ptr lineage from a
             // prior binding of this name must not leak into a
             // plain scalar/pointer rebind, or the unary `*` handler

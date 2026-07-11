@@ -165,7 +165,12 @@ impl Compiler {
                 self.pending.sizeof_vla_size_slot = Some(self.symbols[idx].vla_size_slot);
             }
             self.next()?;
-            if arr > 0 {
+            if self.symbols[idx].is_zero_len_array {
+                // `T x[] = {}`: zero elements, so the whole object is
+                // 0 bytes (the `array_size == 0` scalar encoding would
+                // otherwise report `sizeof(T)`).
+                0
+            } else if arr > 0 {
                 arr * self.size_of_type(var_ty) as i64
             } else {
                 self.size_of_type(var_ty) as i64
@@ -231,6 +236,11 @@ impl Compiler {
                 // want `N * sizeof(T)`.
                 let elem_ty = expr_ty - Ty::Ptr as i64;
                 array_count * self.size_of_type(elem_ty) as i64
+            } else if array_count < 0 {
+                // Decayed zero-length array (`T x[] = {}`): the `-1`
+                // sentinel marks a genuine zero element count, so the
+                // whole object is 0 bytes.
+                0
             } else {
                 self.size_of_type(expr_ty) as i64
             }

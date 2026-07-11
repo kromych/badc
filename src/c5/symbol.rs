@@ -112,6 +112,17 @@ pub(crate) struct Symbol {
     pub h_vla_ptr_slot: i64,
     pub h_vla_size_slot: i64,
 
+    /// True for a deferred-size array whose initializer resolved to zero
+    /// elements (`T x[] = {}`, e.g. an element list left empty after all
+    /// members are `#if`'d out). The element type is in `type_` but the
+    /// count is 0, which collides with the `array_size == 0` scalar
+    /// encoding. This flag keeps the array-ness so the symbol still decays
+    /// to a pointer, `sizeof` reports 0, and `typeof(x)` stays distinct
+    /// from `typeof(&x[0])` (C99 6.7.6.2 array vs pointer).
+    pub is_zero_len_array: bool,
+    /// Shadow slot for `is_zero_len_array`. See `h_array_size`.
+    pub h_is_zero_len_array: bool,
+
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition
     /// merges (C11 6.9.2): a forward `static T x;` (or the same

@@ -298,7 +298,7 @@ impl Compiler {
             // subscripted row of a multi-dim array (`arr2d[i]`), which
             // sets only the byte marker.
             self.pending.typeof_operand_was_array =
-                self.pending.last_array_decay_size > 0 || self.pending.last_array_decay_bytes > 0;
+                self.pending.last_array_decay_size != 0 || self.pending.last_array_decay_bytes > 0;
             self.pending.last_array_decay_size = saved_decay;
             self.pending.last_array_decay_bytes = saved_decay_bytes;
             self.next_ent_pc = saved_text_len;

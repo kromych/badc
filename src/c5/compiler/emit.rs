@@ -564,6 +564,7 @@ impl Compiler {
         s.h_is_vla = s.is_vla;
         s.h_vla_ptr_slot = s.vla_ptr_slot;
         s.h_vla_size_slot = s.vla_size_slot;
+        s.h_is_zero_len_array = s.is_zero_len_array;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -582,6 +583,7 @@ impl Compiler {
         sym.is_vla = sym.h_is_vla;
         sym.vla_ptr_slot = sym.h_vla_ptr_slot;
         sym.vla_size_slot = sym.h_vla_size_slot;
+        sym.is_zero_len_array = sym.h_is_zero_len_array;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
     }

@@ -1453,7 +1453,8 @@ impl Compiler {
                 }
                 self.ty = self.symbols[id_idx].type_;
                 let is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
-                let is_array_var = self.symbols[id_idx].array_size != 0;
+                let is_array_var =
+                    self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
                 let is_vla_var = self.symbols[id_idx].is_vla;
                 // A function-pointer variable carries its callee parameter
                 // types so the dereferenced-call shape `(*fp)(args)` (which
@@ -1520,6 +1521,12 @@ impl Compiler {
                     // standard's incomplete-type rule.
                     if self.symbols[id_idx].array_size > 0 {
                         self.pending.last_array_decay_size = self.symbols[id_idx].array_size;
+                    } else if self.symbols[id_idx].is_zero_len_array {
+                        // Zero-length array: signal the array-ness to a
+                        // surrounding `sizeof` / `typeof` with the `-1`
+                        // sentinel (element count is genuinely 0, which the
+                        // `> 0` recovery paths read as "no array hint").
+                        self.pending.last_array_decay_size = -1;
                     }
                     // N-dim-array decay: seed strides for each of
                     // the N-1 levels of multi-dim subscript. The

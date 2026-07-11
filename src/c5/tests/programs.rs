@@ -1381,6 +1381,15 @@ fn zero_length_array() {
 }
 
 #[test]
+fn empty_array_init() {
+    // A file-scope `T x[] = {}` has zero elements but keeps its element
+    // type: it decays to a pointer, `sizeof` is 0, and `typeof(x)` differs
+    // from `typeof(&x[0])`, so an `ARRAY_SIZE` macro reports 0 (and N for a
+    // sized array).
+    assert_eq!(run_fixture("empty_array_init.c"), 0);
+}
+
+#[test]
 fn builtin_frame_address() {
     // __builtin_frame_address(0): non-null, stable within a frame,
     // distinct between a function and its callee.

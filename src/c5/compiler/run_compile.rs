@@ -1690,6 +1690,10 @@ impl Compiler {
                             }
                             self.next()?; // consume `}`
                             self.symbols[id_idx].array_size = count;
+                            // `struct T xs[] = {}` resolves to zero elements.
+                            // Keep the array-ness (the `array_size == 0`
+                            // scalar encoding would otherwise lose it).
+                            self.symbols[id_idx].is_zero_len_array = count == 0;
                             // Pad data to 8-byte alignment so the next
                             // global doesn't land on an odd offset.
                             while !self.data.len().is_multiple_of(8) {
@@ -1704,6 +1708,10 @@ impl Compiler {
                         let elements = self.collect_array_initializer(ty)?;
                         let final_size = elements.len() as i64;
                         self.symbols[id_idx].array_size = final_size;
+                        // `T xs[] = {}` resolves to zero elements; keep the
+                        // array-ness that the scalar `array_size == 0`
+                        // encoding would otherwise drop.
+                        self.symbols[id_idx].is_zero_len_array = final_size == 0;
                         // Patch the deferred-outer placeholder in
                         // `array_dims[0]` to the resolved row count.
                         // Layout: total elements = outer * inner-dims-product,

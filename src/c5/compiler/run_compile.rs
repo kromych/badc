@@ -175,6 +175,7 @@ impl Compiler {
             self.pending.attr_thread_local = false;
             self.pending.attr_dllexport = false;
             self.pending.attr_align = 0;
+            self.pending.attr_vector_size = 0;
             self.pending_is_inline = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
@@ -327,6 +328,12 @@ impl Compiler {
                 qual_bits |= self.lex_volatile_bit();
                 self.pending.base_is_const |= self.lex_is_const_qual();
                 self.next()?;
+            }
+            // `__attribute__((vector_size(N)))` rebuilds the base type into a
+            // GCC vector of N bytes (C extension) before qualifiers apply.
+            if self.pending.attr_vector_size > 0 {
+                let n = core::mem::take(&mut self.pending.attr_vector_size);
+                bt = self.make_vector_type(bt, n);
             }
             bt |= qual_bits;
 

@@ -368,6 +368,7 @@ impl Compiler {
         let mut noreturn = false;
         let mut dllexport = false;
         let mut align: i64 = 0;
+        let mut vector_size: i64 = 0;
         loop {
             if self.lex.tk == Token::Attribute {
                 // `__attribute__((...))`, `__declspec(...)`,
@@ -419,6 +420,13 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err("unterminated attribute specifier"));
                     } else {
+                        // Capture whether this is `vector_size` before the
+                        // `&mut self` calls below release the symbol borrow.
+                        let is_vector_size = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "vector_size" | "__vector_size__"
+                            );
                         let mut saw_aligned = false;
                         self.note_attribute_name(
                             &mut packed,
@@ -446,6 +454,18 @@ impl Compiler {
                                 // supported targets).
                                 align = align.max(16);
                             }
+                        } else if is_vector_size && self.lex.tk == '(' {
+                            // GCC `vector_size(N)`: the declared type becomes a
+                            // vector N bytes wide. Captured here; the base-type
+                            // parse rebuilds the element type into the vector.
+                            self.next()?;
+                            vector_size = self.parse_constant_int()?;
+                            if self.lex.tk != ')' {
+                                return Err(
+                                    self.compile_err("`)` expected after `vector_size` operand")
+                                );
+                            }
+                            self.next()?;
                         }
                     }
                 }
@@ -518,6 +538,9 @@ impl Compiler {
         }
         if align > 0 {
             self.pending.attr_align = self.pending.attr_align.max(align);
+        }
+        if vector_size > 0 {
+            self.pending.attr_vector_size = vector_size;
         }
         Ok(packed)
     }
@@ -749,6 +772,14 @@ impl Compiler {
             } else if base_tok == Token::Double && m.saw_long() {
                 self.pending.base_was_long_double = true;
             }
+        }
+
+        // `__attribute__((vector_size(N)))` rebuilds the base type into a GCC
+        // vector of N bytes before qualifiers apply, matching the file-scope
+        // path in `run_compile.rs`.
+        if self.pending.attr_vector_size > 0 {
+            let n = core::mem::take(&mut self.pending.attr_vector_size);
+            bt = self.make_vector_type(bt, n);
         }
 
         Ok(bt | qual_bits)

@@ -123,6 +123,7 @@ impl Compiler {
             align: 1,
             fields: Vec::new(),
             is_union: false,
+            is_vector: false,
         });
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
@@ -176,6 +177,45 @@ impl Compiler {
             align: 8,
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
             is_union: false,
+            is_vector: false,
+        });
+        struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
+    /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
+    /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the
+    /// struct machinery; the cast and binary-operator paths read the flag.
+    pub(super) fn make_vector_type(&mut self, elem_ty: i64, n_bytes: i64) -> i64 {
+        let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
+        let lanes = (n_bytes / elem_size).max(1);
+        let name = alloc::format!("__vector_{}_{}", n_bytes, elem_ty);
+        if let Some(id) = self.structs.iter().position(|s| s.name == name) {
+            return struct_ty_for(id);
+        }
+        let field = StructField {
+            name: alloc::string::String::new(),
+            offset: 0,
+            ty: elem_ty,
+            array_size: lanes,
+            inner_array_size: 0,
+            array_dims: alloc::vec::Vec::new(),
+            bit_offset: 0,
+            bit_width: 0,
+            bit_unit_size: 0,
+            fn_ptr_indirection: 0,
+            params: alloc::vec::Vec::new(),
+            is_variadic: false,
+            anon_union_group: 0,
+            anon_struct_group: 0,
+        };
+        self.structs.push(StructDef {
+            name,
+            size: n_bytes as usize,
+            align: (n_bytes as usize).min(8),
+            fields: alloc::vec![field],
+            is_union: false,
+            is_vector: true,
         });
         struct_ty_for(self.structs.len() - 1)
     }

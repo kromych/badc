@@ -74,6 +74,12 @@ pub struct StructDef {
     /// size is `max(field size)` instead of the sum. Member
     /// access otherwise reuses the struct path verbatim.
     pub is_union: bool,
+    /// `true` for the synthesized aggregate that models a GCC vector type
+    /// (`__attribute__((vector_size(N)))`). It has one array field of the
+    /// element type; the flag lets the cast and binary-operator paths treat it
+    /// as a vector (reinterpret casts, element-wise operators) rather than a
+    /// plain struct.
+    pub is_vector: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -662,6 +668,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// honor up to 16, anything larger (or an automatic object above
     /// the 8-byte slot alignment) is a diagnostic, never silent.
     pub attr_align: i64,
+    /// `__attribute__((vector_size(N)))` byte width, 0 when absent. The base
+    /// type of the declaration is rebuilt into a GCC vector type of `N /
+    /// sizeof(element)` lanes (modeled as an N-byte aggregate).
+    pub attr_vector_size: i64,
     /// A consumed `__declspec(thread)`. Read by the declaration parse to mark
     /// the declared object thread-local (the storage class `_Thread_local`
     /// reaches the same flag through the keyword path).
@@ -715,6 +725,7 @@ impl Default for Pending {
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
             attr_align: 0,
+            attr_vector_size: 0,
             attr_thread_local: false,
             attr_dllexport: false,
         }

@@ -88,6 +88,7 @@ impl Compiler {
                     align: 1,
                     fields: Vec::new(),
                     is_union,
+                    is_vector: false,
                 });
                 let id = self.structs.len() - 1;
                 if let Some(scope) = self.tag_scopes.last_mut() {

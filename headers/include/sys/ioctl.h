@@ -15,8 +15,22 @@ struct winsize {
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::ioctl, "_ioctl")
-// BSD encodes the request number with the argument size in the high
-// bits; TIOCGWINSZ reads an 8-byte struct winsize.
+// BSD request encoding (sys/ioccom.h): the direction bits, the argument
+// size, the command group, and the number. `_IOR`/`_IOW`/`_IOWR` take a
+// type whose `sizeof` fills the size field, so the argument must be a
+// type name, not an expression.
+#define IOCPARM_MASK 0x1fff
+#define IOC_VOID 0x20000000U
+#define IOC_OUT 0x40000000U
+#define IOC_IN 0x80000000U
+#define IOC_INOUT (IOC_IN | IOC_OUT)
+#define _IOC(inout, group, num, len) \
+    ((inout) | (((len) & IOCPARM_MASK) << 16) | ((group) << 8) | (num))
+#define _IO(g, n) _IOC(IOC_VOID, (g), (n), 0)
+#define _IOR(g, n, t) _IOC(IOC_OUT, (g), (n), sizeof(t))
+#define _IOW(g, n, t) _IOC(IOC_IN, (g), (n), sizeof(t))
+#define _IOWR(g, n, t) _IOC(IOC_INOUT, (g), (n), sizeof(t))
+// TIOCGWINSZ reads an 8-byte struct winsize: _IOR('t', 104, struct winsize).
 #define TIOCGWINSZ 0x40087468
 #endif
 

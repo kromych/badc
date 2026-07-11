@@ -549,6 +549,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("gcc_vector_size_attribute.c", 0),
     ("gcc_vector_bitwise_ops.c", 0),
     ("gcc_vector_subscript.c", 0),
+    ("ioctl_request_encoding.c", 0),
     ("computed_goto.c", 0),
     ("label_addr_array_init.c", 0),
     ("static_init_once_guard.c", 0),

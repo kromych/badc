@@ -319,16 +319,30 @@ impl Compiler {
         // local storage.
         let mut is_static = false;
         let mut is_extern = false;
+        // Block-scope `_Thread_local` / `__thread` gives a `static` object
+        // thread storage duration (C11 6.7.1); an automatic thread-local is
+        // ill-formed, so it always pairs with `static`.
+        let mut is_thread_local = false;
         // Reset the const carrier for this declaration; `parse_decl_base_type`
         // below records `const` as it consumes the base specifiers.
         self.pending.base_is_const = false;
-        while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
+        while self.lex.tk == Token::Extern
+            || self.lex.tk == Token::Static
+            || self.lex.tk == Token::ThreadLocal
+        {
             if self.lex.tk == Token::Static {
                 is_static = true;
-            } else {
+            } else if self.lex.tk == Token::Extern {
                 is_extern = true;
+            } else {
+                is_thread_local = true;
             }
             self.next()?;
+        }
+        // A block-scope thread-local has static storage duration (C11 6.7.1):
+        // `__thread T x;` behaves as `static __thread T x;`.
+        if is_thread_local && !is_extern {
+            is_static = true;
         }
         let lbt = self.parse_decl_base_type()?;
         // A function-pointer typedef base type contributes its lineage to
@@ -449,6 +463,7 @@ impl Compiler {
             } else if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
+                self.symbols[loc_idx].is_thread_local = is_thread_local;
                 // A nested-block `static const` integer folds its value in
                 // later constant expressions (read from `.data`).
                 self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const

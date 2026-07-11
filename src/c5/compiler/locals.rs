@@ -119,6 +119,9 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
+        // Block-scope `_Thread_local` / `__thread` gives a `static` object
+        // thread storage duration (C11 6.7.1).
+        let mut is_thread_local = false;
         let mut saw_specifier = false;
         let mut qual_bits: i64 = 0;
         // Reset the const carrier for this declaration; the leading
@@ -127,6 +130,7 @@ impl Compiler {
         self.pending.base_is_const = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
+            || self.lex.tk == Token::ThreadLocal
             || self.lex.tk == Token::FuncSpec
             || self.lex.tk == Token::TypeQual
         {
@@ -136,12 +140,19 @@ impl Compiler {
             if self.lex.tk == Token::Extern {
                 is_extern = true;
             }
+            if self.lex.tk == Token::ThreadLocal {
+                is_thread_local = true;
+            }
             // `volatile` qualifies the declared type (C99 6.7.3); `const`
             // is recorded out-of-band for value folding.
             qual_bits |= self.lex_volatile_bit();
             self.pending.base_is_const |= self.lex_is_const_qual();
             saw_specifier = true;
             self.next()?;
+        }
+        // A block-scope thread-local has static storage duration.
+        if is_thread_local && !is_extern {
+            is_static = true;
         }
         // C89 / K&R implicit int (`register n = ...;`): a declaration
         // that carries a storage-class or qualifier but no type names an
@@ -286,6 +297,7 @@ impl Compiler {
             if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
+                self.symbols[loc_idx].is_thread_local = is_thread_local;
                 // Block scope with static storage (C99 6.2.4p3): the
                 // symbol carries `Glo` class for its `.data` slot but
                 // must be unbound at function exit so a file-scope
@@ -397,17 +409,38 @@ impl Compiler {
             self.slots_of_type(ty) * 8
         };
         self.symbols[loc_idx].array_size = array_size.max(0);
+        // A `static _Thread_local` local lives in the TLS block (`.tdata` /
+        // `.tbss`), like a file-scope thread-local, not in `.data`.
+        let is_tls = self.symbols[loc_idx].is_thread_local;
         if array_size != -1 {
-            if self.size_of_type(ty) > 1 {
-                self.align_data_to_8();
-            }
-            let off = self.data.len() as i64;
-            self.symbols[loc_idx].val = off;
-            for _ in 0..bytes {
-                self.data.push(0);
+            if is_tls {
+                let off = self.tls_data.len() as i64;
+                self.symbols[loc_idx].val = off;
+                for _ in 0..bytes {
+                    self.tls_data.push(0);
+                }
+            } else {
+                if self.size_of_type(ty) > 1 {
+                    self.align_data_to_8();
+                }
+                let off = self.data.len() as i64;
+                self.symbols[loc_idx].val = off;
+                for _ in 0..bytes {
+                    self.data.push(0);
+                }
             }
         }
 
+        // The initializer path below writes into `.data`; a thread-local's
+        // slot is in `tls_data`, so an initialized block-scope thread-local
+        // would land in the wrong segment. It is not needed by current
+        // consumers (which declare uninitialized `static __thread` objects),
+        // so reject it rather than mis-place the bytes.
+        if is_tls && self.lex.tk == Token::Assign {
+            return Err(self.compile_err(
+                "an initializer on a block-scope `_Thread_local` object is not yet supported",
+            ));
+        }
         if self.lex.tk == Token::Assign {
             self.next()?;
             // A `&&label` element (GCC labels as values) is a block address

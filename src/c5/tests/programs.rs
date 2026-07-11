@@ -1567,6 +1567,14 @@ fn const_object_array_bound() {
 }
 
 #[test]
+fn block_scope_thread_local() {
+    // C11 6.7.1: a block-scope `static _Thread_local` / `static __thread`
+    // object has thread storage duration -- placed in the TLS block, one per
+    // thread, persisting across calls (single-threaded: accumulates).
+    assert_eq!(run_fixture("block_scope_thread_local.c"), 0);
+}
+
+#[test]
 fn large_aggregate_copy() {
     // A large aggregate init / struct copy (> 4 KB) keeps load/store offsets
     // in the scaled-immediate range by advancing the base pointer.

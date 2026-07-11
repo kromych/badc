@@ -424,7 +424,7 @@ impl Compiler {
             // `wchar_t`-shaped array. The lexer stored one code point
             // per element plus a terminator at the target's `wchar_t`
             // width; read them back at that stride.
-            let w = self.lex.wchar_bytes;
+            let w = self.lex.str_elem_bytes;
             let start_addr = self.take_concat_string_literal()?;
             let byte_count = self.data.len() - start_addr;
             let mut elem_count = byte_count / w;
@@ -2419,7 +2419,7 @@ impl Compiler {
             // cannot hold a wide code point (C99 6.7.8p15). Without this
             // branch the leaf falls to the single-value path and stores
             // the string's pointer.
-            let w = self.lex.wchar_bytes;
+            let w = self.lex.str_elem_bytes;
             if self.size_of_type(field.ty) != w {
                 return Err(self
                     .compile_err("wide string initializer requires a wchar_t-width array member"));
@@ -2689,7 +2689,7 @@ impl Compiler {
             // Wide string into a wchar_t-width member (C99 6.7.8p15): a
             // per-element constant store at the element's stride.
             if self.lex.tk == '"' && self.lex.str_is_wide && field.inner_array_size == 0 {
-                let w = self.lex.wchar_bytes;
+                let w = self.lex.str_elem_bytes;
                 if self.size_of_type(field.ty) != w {
                     return Err(self.compile_err(
                         "wide string initializer requires a wchar_t-width array member",

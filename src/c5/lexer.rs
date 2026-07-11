@@ -248,10 +248,15 @@ pub(crate) struct Lexer {
     pub float_suffix_f32: bool,
 
     /// `true` when the most recent `'"'` string-literal token came from
-    /// a wide (`L"..."`) literal. The element width follows
-    /// `wchar_bytes`; the initializer and expression parsers read this
-    /// to size the element stride (C99 6.4.5).
+    /// a wide (`L"..."`, `u"..."`, `U"..."`) literal. The element width is
+    /// in `str_elem_bytes`; the initializer and expression parsers read
+    /// this to size the element stride (C99 6.4.5 / C11 6.4.5).
     pub str_is_wide: bool,
+
+    /// Byte width of one element of the most recent wide string literal:
+    /// `wchar_bytes` for `L"..."`, 2 for `u"..."` (char16_t), 4 for
+    /// `U"..."` (char32_t). Only meaningful when `str_is_wide` is set.
+    pub str_elem_bytes: usize,
 
     /// `true` when the most recent `Token::Num` came from a wide
     /// character constant (`L'x'`). C99 6.4.4.4p11 gives such a constant
@@ -402,6 +407,7 @@ impl Lexer {
             int_is_decimal: true,
             float_suffix_f32: false,
             str_is_wide: false,
+            str_elem_bytes: 4,
             char_is_wide: false,
             wchar_bytes: 4,
             char_signed: true,
@@ -526,7 +532,12 @@ impl Lexer {
         Ok(mant)
     }
 
-    fn lex_wide_literal(&mut self, data: &mut Vec<u8>) -> Result<(), C5Error> {
+    fn lex_wide_literal(
+        &mut self,
+        data: &mut Vec<u8>,
+        elem_bytes: usize,
+        prefix_byte: u8,
+    ) -> Result<(), C5Error> {
         let quote = self.src[self.pos];
         self.pos += 1;
         // A `wchar_t` array requires `wchar_t` alignment (4 bytes on the
@@ -534,7 +545,7 @@ impl Lexer {
         // routines (glibc's `wcschr` / `wcslen`) read elements with
         // aligned loads and return wrong results on a misaligned literal,
         // so pad `.data` to a `wchar_t` boundary before interning.
-        while !data.len().is_multiple_of(self.wchar_bytes) {
+        while !data.len().is_multiple_of(elem_bytes) {
             data.push(0);
         }
         let start_data = data.len() as i64;
@@ -651,7 +662,7 @@ impl Lexer {
                     // Windows / UTF-16). A UTF-16 element cannot hold a
                     // code point above U+FFFF; C99 6.4.5 requires the
                     // surrogate-pair encoding (Unicode 3.9 D91).
-                    if self.wchar_bytes == 2 && (0x10000..=0x10FFFF).contains(&val) {
+                    if elem_bytes == 2 && (0x10000..=0x10FFFF).contains(&val) {
                         let v = val - 0x10000;
                         let hi = 0xD800 + (v >> 10);
                         let lo = 0xDC00 + (v & 0x3FF);
@@ -660,7 +671,7 @@ impl Lexer {
                         data.push(lo as u8);
                         data.push((lo >> 8) as u8);
                     } else {
-                        for k in 0..self.wchar_bytes {
+                        for k in 0..elem_bytes {
                             data.push((val >> (k * 8)) as u8);
                         }
                     }
@@ -697,7 +708,7 @@ impl Lexer {
                 }
             }
             if self.pos + 1 < self.src.len()
-                && self.src[self.pos] == b'L'
+                && self.src[self.pos] == prefix_byte
                 && self.src[self.pos + 1] == b'"'
             {
                 self.pos += 2;
@@ -706,12 +717,13 @@ impl Lexer {
             self.pos = saved_pos;
             self.line = saved_line;
             // `wchar_t`-width NUL terminator.
-            for _ in 0..self.wchar_bytes {
+            for _ in 0..elem_bytes {
                 data.push(0);
             }
             self.ival = start_data;
             self.tk = Tok('"' as i64);
             self.str_is_wide = true;
+            self.str_elem_bytes = elem_bytes;
             return Ok(());
         }
     }
@@ -1123,17 +1135,26 @@ impl Lexer {
                     hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
                     self.pos += 1;
                 }
-                // C99 wide-literal prefix: a lone `L` directly
-                // followed by `"` or `'` is the start of a wide
-                // string / wide char literal rather than an
-                // identifier. `u` / `U` / `u8` follow the same
-                // pattern but aren't yet wired up.
+                // C11 6.4.5 wide / UTF literal prefix: a lone `L`, `u`, or
+                // `U` directly before `"` or `'` starts a wide literal
+                // rather than an identifier. `L` uses the target's
+                // `wchar_t` width, `u` is char16_t (2 bytes), `U` is
+                // char32_t (4 bytes). `u8"..."` (narrow UTF-8) is not yet
+                // wired up and falls through to an identifier.
                 if self.pos - start == 1
-                    && self.src[start] == b'L'
                     && self.pos < self.src.len()
                     && (self.src[self.pos] == b'"' || self.src[self.pos] == b'\'')
                 {
-                    return self.lex_wide_literal(data);
+                    let prefix = self.src[start];
+                    let elem_bytes = match prefix {
+                        b'L' => self.wchar_bytes,
+                        b'u' => 2,
+                        b'U' => 4,
+                        _ => 0,
+                    };
+                    if elem_bytes != 0 {
+                        return self.lex_wide_literal(data, elem_bytes, prefix);
+                    }
                 }
                 let name_slice = &self.src[start..self.pos];
                 self.curr_id_idx = resolve_symbol(symbols, index, name_slice, hash);

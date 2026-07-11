@@ -1416,6 +1416,14 @@ fn fcntl_stat_constants_match_the_target_libc() {
 }
 
 #[test]
+fn utf16_utf32_string_literals() {
+    // C11 `u"..."` (char16_t, 2-byte) and `U"..."` (char32_t, 4-byte)
+    // string literals initialize a matching-width array; `L"..."` is
+    // unaffected.
+    assert_eq!(run_fixture("utf16_utf32_string_literals.c"), 0);
+}
+
+#[test]
 fn empty_array_init() {
     // A file-scope `T x[] = {}` has zero elements but keeps its element
     // type: it decays to a pointer, `sizeof` is 0, and `typeof(x)` differs

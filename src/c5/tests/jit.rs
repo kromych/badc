@@ -1459,6 +1459,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("scanf_fscanf_binding.c", 0),
     ("builtin_bit_count.c", 0),
     ("typeof_operator.c", 0),
+    ("file_scope_typeof.c", 0),
     ("attribute_packed.c", 0),
     ("attribute_positions.c", 0),
     ("attribute_declspec.c", 0),

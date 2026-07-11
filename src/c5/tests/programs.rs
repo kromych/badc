@@ -402,6 +402,14 @@ fn typeof_expression() {
 }
 
 #[test]
+fn file_scope_typeof() {
+    // `typeof` / `__typeof__` as a file-scope declaration specifier, over a
+    // type-name or an expression operand. The block-scope path already
+    // handled it; the file-scope declaration loop lacked the branch.
+    assert_eq!(run_fixture("file_scope_typeof.c"), 0);
+}
+
+#[test]
 fn atomic_generic() {
     // GCC generic `__atomic_load(p, ret, mo)` / `__atomic_store(p, val, mo)`
     // move the value through a pointer; 32/64-bit and pointer widths.

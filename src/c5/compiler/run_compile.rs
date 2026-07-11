@@ -224,6 +224,13 @@ impl Compiler {
             }
             if let Some(inner) = atomic_base {
                 bt = inner;
+            } else if self.lex.tk == Token::Typeof {
+                // `typeof` / `__typeof__` (C23 6.7.2.5, long a GCC
+                // extension) names the type of a parenthesized type-name or
+                // unevaluated expression. The block-scope declaration path
+                // (parse_decl_base_type) already routes through the same
+                // helper; handle it identically at file scope.
+                bt = self.parse_typeof_specifier()?;
             } else if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
                 bt = scalar;
             } else if self.lex.tk == Token::Enum {

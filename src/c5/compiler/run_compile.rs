@@ -143,6 +143,9 @@ impl Compiler {
             // leak its array count into this iteration's
             // declarator binding.
             self.pending.typedef_base_array_size = 0;
+            // Reset the const carrier so a prior declaration's `const`
+            // base does not leak onto this iteration's declarators.
+            self.pending.base_is_const = false;
             // Storage-class prefixes -- can appear in any order
             // and any combination before the type. C lets you
             // mix `static extern` (silly but legal in some
@@ -210,8 +213,10 @@ impl Compiler {
                     if self.lex.tk == Token::Noreturn {
                         self.pending_noreturn = true;
                     }
-                    // `volatile` qualifies the declared type (C99 6.7.3).
+                    // `volatile` qualifies the declared type (C99 6.7.3);
+                    // `const` is recorded out-of-band for value folding.
                     qual_bits |= self.lex_volatile_bit();
+                    self.pending.base_is_const |= self.lex_is_const_qual();
                     self.next()?;
                 } else {
                     break;
@@ -313,6 +318,7 @@ impl Compiler {
                     continue;
                 }
                 qual_bits |= self.lex_volatile_bit();
+                self.pending.base_is_const |= self.lex_is_const_qual();
                 self.next()?;
             }
             bt |= qual_bits;
@@ -397,6 +403,11 @@ impl Compiler {
                 self.ty = ty;
                 let prior_array_size = self.symbols[id_idx].array_size;
                 self.symbols[id_idx].array_size = array_size;
+                // A `const`-qualified plain integer scalar folds its value
+                // in later constant expressions (read back from `.data`).
+                self.symbols[id_idx].is_const_qualified = self.pending.base_is_const
+                    && array_size == 0
+                    && super::types::is_integer_scalar_ty(ty);
                 if fn_ptr_indirection > 0 {
                     self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
                 }

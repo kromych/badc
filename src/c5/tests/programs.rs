@@ -1424,6 +1424,14 @@ fn utf16_utf32_string_literals() {
 }
 
 #[test]
+fn const_object_array_bound() {
+    // A static `const` integer object folds its value in a later constant
+    // expression, so it works as an array bound (a fixed array, not a VLA)
+    // and may carry an initializer.
+    assert_eq!(run_fixture("const_object_array_bound.c"), 0);
+}
+
+#[test]
 fn empty_array_init() {
     // A file-scope `T x[] = {}` has zero elements but keeps its element
     // type: it decays to a pointer, `sizeof` is 0, and `typeof(x)` differs

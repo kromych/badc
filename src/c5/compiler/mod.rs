@@ -329,6 +329,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// declarator added no leading `*`s.
     pub base_was_void: bool,
 
+    /// Side channel from `parse_decl_base_type`: the base specifiers
+    /// included a `const` qualifier. The declaration path reads it to mark
+    /// a plain integer-scalar object `const`-qualified so a later constant
+    /// expression can fold its value (C99 6.6 leaves this to the
+    /// implementation; GCC and common practice fold `const int N = ...`).
+    pub base_is_const: bool,
+
     /// Side channel from `parse_decl_base_type` to the function-
     /// prototype path: the base type was spelled `long double`,
     /// not bare `double`. Cleared at the start of every base-type
@@ -661,6 +668,7 @@ impl Default for Pending {
     fn default() -> Self {
         Self {
             base_was_void: false,
+            base_is_const: false,
             base_was_long_double: false,
             fn_params: None,
             fn_ptr_indirection: None,

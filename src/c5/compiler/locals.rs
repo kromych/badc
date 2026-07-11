@@ -86,6 +86,10 @@ impl Compiler {
         let mut is_extern = false;
         let mut saw_specifier = false;
         let mut qual_bits: i64 = 0;
+        // Reset the const carrier for this declaration; the leading
+        // qualifier loop here consumes `const` (a TypeQual) before the
+        // base-type parse, so record it as we go.
+        self.pending.base_is_const = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::FuncSpec
@@ -97,8 +101,10 @@ impl Compiler {
             if self.lex.tk == Token::Extern {
                 is_extern = true;
             }
-            // `volatile` qualifies the declared type (C99 6.7.3).
+            // `volatile` qualifies the declared type (C99 6.7.3); `const`
+            // is recorded out-of-band for value folding.
             qual_bits |= self.lex_volatile_bit();
+            self.pending.base_is_const |= self.lex_is_const_qual();
             saw_specifier = true;
             self.next()?;
         }
@@ -237,6 +243,12 @@ impl Compiler {
                 // object of the same name reappears. The `Loc`-gated
                 // cleanup would skip it, so mark it for restore.
                 self.symbols[loc_idx].is_scope_static = true;
+                // A block-scope `static const` integer folds its value in
+                // later constant expressions (read from `.data`), so
+                // `char buf[N * 2 + 1]` is a fixed array, not a VLA.
+                self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const
+                    && array_size == 0
+                    && super::types::is_integer_scalar_ty(ty);
                 if req_align > 8 {
                     self.align_data_to(req_align as usize);
                     self.data_align = 16;

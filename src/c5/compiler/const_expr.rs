@@ -1153,6 +1153,34 @@ impl Compiler {
             };
             return Ok(ConstVal::Int { val: v, ty });
         }
+        // C99 6.6 leaves it implementation-defined, but GCC and common
+        // practice fold a `const`-qualified integer object with static
+        // storage: its initializer has already written the value into the
+        // object's `.data` slot, so read it back and treat it as a
+        // constant (`static const int N = 8; char buf[N * 2 + 1];`).
+        if self.lex.tk == Token::Id {
+            let idx = self.lex.curr_id_idx;
+            let sym = &self.symbols[idx];
+            if sym.is_const_qualified && sym.class == Token::Glo as i64 && !sym.is_extern_decl {
+                let ty = sym.type_;
+                let off = sym.val as usize;
+                let size = self.size_of_type(ty);
+                if (1..=8).contains(&size) && off + size <= self.data.len() {
+                    let mut v: i64 = 0;
+                    for k in 0..size {
+                        v |= (self.data[off + k] as i64) << (k * 8);
+                    }
+                    // Sign-extend a signed type narrower than 8 bytes.
+                    if !is_unsigned_ty(ty) && size < 8 {
+                        let sign = 1i64 << (size * 8 - 1);
+                        v = (v ^ sign).wrapping_sub(sign);
+                    }
+                    self.symbols[idx].was_referenced = true;
+                    self.next()?;
+                    return Ok(ConstVal::Int { val: v, ty });
+                }
+            }
+        }
         let id_suffix = if self.lex.tk == Token::Id {
             format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
         } else {

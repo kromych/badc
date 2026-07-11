@@ -456,6 +456,14 @@ pub(super) fn is_floating_scalar(ty: i64) -> bool {
     ty == Ty::Float as i64 || ty == Ty::Double as i64
 }
 
+/// True for a scalar integer type (`char` / `short` / `int` / `long` /
+/// `long long` / `_Bool`, signed or unsigned) with no pointer level --
+/// i.e. a value that folds to an `i64`. Excludes pointers, structs, and
+/// floating types. Used to gate `const`-object value folding.
+pub(crate) fn is_integer_scalar_ty(ty: i64) -> bool {
+    !is_pointer_ty(ty) && !is_struct_ty(ty) && !is_floating_scalar(ty)
+}
+
 pub(super) fn fp_ptr_depth(ty: i64) -> i64 {
     let ty = strip_unsigned(ty);
     if is_float_ty(ty) {

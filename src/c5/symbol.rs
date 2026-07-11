@@ -123,6 +123,14 @@ pub(crate) struct Symbol {
     /// Shadow slot for `is_zero_len_array`. See `h_array_size`.
     pub h_is_zero_len_array: bool,
 
+    /// True for a `const`-qualified plain integer object with static
+    /// storage (`static const int N = ...`, a file-scope `const`). C99 6.6
+    /// does not make it a constant expression, but GCC and common practice
+    /// fold its value; the constant-expression evaluator reads the value
+    /// back from the object's `.data` storage when this is set, so
+    /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
+    pub is_const_qualified: bool,
+
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition
     /// merges (C11 6.9.2): a forward `static T x;` (or the same

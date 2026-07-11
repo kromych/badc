@@ -319,6 +319,9 @@ impl Compiler {
         // local storage.
         let mut is_static = false;
         let mut is_extern = false;
+        // Reset the const carrier for this declaration; `parse_decl_base_type`
+        // below records `const` as it consumes the base specifiers.
+        self.pending.base_is_const = false;
         while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
             if self.lex.tk == Token::Static {
                 is_static = true;
@@ -446,6 +449,11 @@ impl Compiler {
             } else if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
+                // A nested-block `static const` integer folds its value in
+                // later constant expressions (read from `.data`).
+                self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const
+                    && array_size == 0
+                    && super::types::is_integer_scalar_ty(ty);
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.ast_emit_static_local_decl(loc_idx as u32);
             } else {

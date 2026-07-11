@@ -580,6 +580,15 @@ impl Compiler {
         }
     }
 
+    /// True when the current token is the `const` type qualifier.
+    pub(super) fn lex_is_const_qual(&self) -> bool {
+        self.lex.tk == Token::TypeQual
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "const" | "__const" | "__const__"
+            )
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -635,8 +644,10 @@ impl Compiler {
             }
             if !self.try_consume_int_modifier(&mut m)? {
                 // `volatile` sets the tag's qualifier bit (C99 6.7.3);
-                // const / restrict / _Atomic / etc. are no-ops.
+                // `const` is recorded out-of-band for value folding;
+                // restrict / _Atomic / etc. are no-ops.
                 qual_bits |= self.lex_volatile_bit();
+                self.pending.base_is_const |= self.lex_is_const_qual();
                 self.next()?;
             }
         }

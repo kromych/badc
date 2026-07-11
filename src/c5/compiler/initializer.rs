@@ -495,48 +495,67 @@ impl Compiler {
         // one-past-the-last scalar index the next value fills.
         let mut desig_range_end: Option<usize> = None;
         while self.lex.tk != '}' {
-            // Array designator `[N] = ...`. Single-level only --
-            // nested designators (`[N].field = ...`) aren't
-            // supported yet; a constraint violation falls through
-            // to `parse_constant_init_value` and surfaces as a
-            // parse error.
+            // Array designator `[N] = ...`, optionally a GCC range
+            // `[a ... b] = ...`, and optionally chained for a
+            // multi-dimensional array (`[i][j] = value`, C99 6.7.8p6).
+            // Each subscript at chained depth `d` scales by the product
+            // of the dimensions below it (`child_span` at `d == 0`, 1 at
+            // the innermost). A `.field` step is still unsupported and
+            // falls through to a parse error.
             if self.lex.tk == Token::Brak {
-                self.next()?;
-                let n = self.parse_constant_int()?;
-                if n < 0 {
-                    return Err(self.compile_err(format!(
-                        "array designator index must be non-negative (got {n})"
-                    )));
-                }
-                // GCC range designator `[a ... b] = value`: fill every
-                // sub-array in `[a, b]` with the value.
-                let mut hi = n;
-                if self.lex.tk == Token::Ellipsis {
-                    self.next()?;
-                    hi = self.parse_constant_int()?;
-                    if hi < n {
+                let mut base: usize = 0;
+                let mut range_end: usize = 0;
+                let mut depth: usize = 0;
+                loop {
+                    self.next()?; // consume `[`
+                    let n = self.parse_constant_int()?;
+                    if n < 0 {
                         return Err(self.compile_err(format!(
-                            "array range designator high {hi} below low {n}"
+                            "array designator index must be non-negative (got {n})"
                         )));
                     }
+                    let scale = inner_dims
+                        .iter()
+                        .skip(depth)
+                        .map(|&d| d as usize)
+                        .product::<usize>()
+                        .max(1);
+                    // GCC range designator `[a ... b] = value`.
+                    let mut hi = n;
+                    if self.lex.tk == Token::Ellipsis {
+                        self.next()?;
+                        hi = self.parse_constant_int()?;
+                        if hi < n {
+                            return Err(self.compile_err(format!(
+                                "array range designator high {hi} below low {n}"
+                            )));
+                        }
+                    }
+                    if self.lex.tk != ']' {
+                        return Err(self.compile_err("`]` expected after array designator index"));
+                    }
+                    self.next()?; // consume `]`
+                    base += n as usize * scale;
+                    if hi > n {
+                        range_end = base + (hi - n) as usize * scale + scale;
+                    }
+                    depth += 1;
+                    if self.lex.tk == Token::Brak {
+                        if range_end > 0 {
+                            return Err(
+                                self.compile_err("range designator must be the last subscript")
+                            );
+                        }
+                        continue;
+                    }
+                    break;
                 }
-                if self.lex.tk != ']' {
-                    return Err(self.compile_err("`]` expected after array designator index"));
-                }
-                self.next()?;
                 if self.lex.tk != Token::Assign {
                     return Err(self.compile_err("`=` expected after `[N]` designator"));
                 }
                 self.next()?;
-                // A designator names the N-th sub-array at this level,
-                // which spans `child_span` scalars (1 at the innermost
-                // level).
-                cursor = n as usize * child_span.max(1);
-                desig_range_end = if hi > n {
-                    Some((hi as usize + 1) * child_span.max(1))
-                } else {
-                    None
-                };
+                cursor = base;
+                desig_range_end = if range_end > 0 { Some(range_end) } else { None };
             }
             // Nested brace list (multi-dim array): `{ {1,2}, {3,4}, ... }`.
             // c5's array-symbol storage carries a single flat

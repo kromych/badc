@@ -1390,6 +1390,14 @@ fn empty_array_init() {
 }
 
 #[test]
+fn multidim_array_designator() {
+    // A chained `[i][j] = v` designator selects one scalar of a
+    // multi-dimensional array; single `[i] = { row }` designators and the
+    // zero seed for untouched positions still hold.
+    assert_eq!(run_fixture("multidim_array_designator.c"), 0);
+}
+
+#[test]
 fn struct_member_array_range_designator() {
     // A struct's array member accepts a GNU range designator
     // `[a ... b] = v` (the top-level array path already did); mixed with

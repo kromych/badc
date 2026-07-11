@@ -2099,12 +2099,12 @@ fn extern_redeclaration_keeps_the_tentative_definition() {
 }
 
 #[test]
-fn alignas_sixteen_places_objects_and_raises_data_align() {
-    // C11 6.7.5: a 16-byte alignment request on a file-scope object
-    // is honored -- the object's section offset is 16-aligned through
-    // compaction and the unit records `data_align = 16` so the linker
-    // and the image writers keep the base congruent. Larger requests
-    // and unsupported positions are diagnostics, never silent drops.
+fn alignas_places_objects_at_requested_alignment() {
+    // C11 6.7.5: an alignment request on a file-scope object is honored --
+    // the object's section offset is aligned through compaction and the
+    // unit records `data_align` so the linker and image writers keep the
+    // base congruent. Static objects honor power-of-two requests up to a
+    // page; automatic objects and non-power-of-two requests are diagnostics.
     use crate::c5::linker::{NativeSymSection, link_native_objects, parse_native_elf};
     use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
     let compile = |src: &str| {
@@ -2159,10 +2159,31 @@ fn alignas_sixteen_places_objects_and_raises_data_align() {
             sym.value
         );
     }
-    // Diagnostics: alignment above 16, and automatic objects above 8.
+    // A static object over-aligns past 16: `aligned(64)` places it at 64
+    // and raises the unit's data alignment to match.
+    let over = compile(
+        "__attribute__((aligned(64))) unsigned char big[64] = { 1 };\n\
+         int use_big(void) { return big[0]; }\n",
+    );
+    assert_eq!(
+        over.data_align, 64,
+        "aligned(64) must raise unit data alignment to 64"
+    );
+    let big = over
+        .symbols
+        .iter()
+        .find(|s| s.name == "big")
+        .expect("big missing");
+    assert!(
+        big.section != NativeSymSection::Undef && big.value.is_multiple_of(64),
+        "big at {:?}+0x{:x} must be 64-aligned",
+        big.section,
+        big.value
+    );
+    // Diagnostics: automatic objects above 8, and non-power-of-two requests.
     for src in [
-        "_Alignas(64) static char big[8];\nint main(void) { return 0; }\n",
         "int main(void) { _Alignas(16) char buf[8]; return buf[0]; }\n",
+        "__attribute__((aligned(24))) static char weird[8];\nint main(void) { return 0; }\n",
     ] {
         assert!(
             Compiler::new(src.to_string()).compile().is_err(),

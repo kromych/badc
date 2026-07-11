@@ -222,15 +222,22 @@ impl Compiler {
 
             self.shadow_symbol(loc_idx);
 
-            // C11 6.7.5 on block-scope objects: a static local's
-            // `.data` slot honors up to 16 like a file-scope object;
-            // an automatic object lives in 8-byte frame slots, so a
-            // larger request is a diagnostic, never a silent drop.
+            // C11 6.7.5 on block-scope objects: a static local's `.data`
+            // slot honors the requested alignment like a file-scope object;
+            // an automatic object lives in 8-byte frame slots (no stack
+            // realignment), so a larger request there is a diagnostic. The
+            // attribute requires a power of two.
             let req_align = core::mem::take(&mut self.pending.attr_align);
-            if req_align > 16 || (req_align > 8 && !is_static) {
+            if req_align > 8 && !(req_align as usize).is_power_of_two() {
+                return Err(self.compile_err(format!(
+                    "requested alignment {req_align} is not a power of two"
+                )));
+            }
+            if (req_align > 8 && !is_static) || req_align > super::MAX_STATIC_ALIGN as i64 {
                 return Err(self.compile_err(format!(
                     "requested alignment {req_align} is not supported here \
-                     (automatic objects align to 8, static objects to at most 16)"
+                     (automatic objects align to 8, static objects to at most {})",
+                    super::MAX_STATIC_ALIGN
                 )));
             }
 
@@ -251,7 +258,7 @@ impl Compiler {
                     && super::types::is_integer_scalar_ty(ty);
                 if req_align > 8 {
                     self.align_data_to(req_align as usize);
-                    self.data_align = 16;
+                    self.data_align = self.data_align.max(req_align as usize);
                 }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.ast_emit_static_local_decl(loc_idx as u32);

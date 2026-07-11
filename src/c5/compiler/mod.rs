@@ -33,6 +33,13 @@ mod type_layout;
 pub(crate) use type_layout::{StructReturnAbi, host_abi_agg_desc, struct_return_abi};
 pub(crate) mod types;
 
+/// Largest alignment (in bytes) honored on a static object via C11
+/// `_Alignas` / the GCC `aligned` attribute. Static objects are placed at
+/// this alignment in `.data`; automatic objects stay capped lower because
+/// stack-frame realignment is not implemented. A page covers the common
+/// cache-line (64) and page-aligned requests.
+pub(crate) const MAX_STATIC_ALIGN: usize = 4096;
+
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
 /// enums collapse to `int` in c5 -- the tag carries no semantic
 /// weight at the type level -- but preserving the (name, value)

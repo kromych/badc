@@ -2678,6 +2678,14 @@ fn macro_paste_empty_arg_placemarker() {
 }
 
 #[test]
+fn static_over_alignment() {
+    // C11 6.7.5 / GCC `aligned`: static objects (file-scope and block-scope
+    // static) are placed at the requested power-of-two alignment, up to a
+    // page -- verified at runtime via the object address modulo alignment.
+    assert_eq!(run_fixture("static_over_alignment.c"), 0);
+}
+
+#[test]
 fn func_name_predeclared_identifier() {
     // C99 6.4.2.2 makes `__func__` an implicitly declared string
     // literal carrying the enclosing function's name. c5 mirrors

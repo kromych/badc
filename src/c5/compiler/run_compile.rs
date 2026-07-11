@@ -1453,14 +1453,23 @@ impl Compiler {
                     } else if self.symbols[id_idx].linkage != crate::c5::symbol::Linkage::Internal {
                         self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
                     }
-                    // C11 6.7.5: a requested alignment up to 16 is
-                    // honored on file-scope objects (the writers place
-                    // `.data` at `Program::data_align`); anything
-                    // larger is a diagnostic, never a silent drop.
+                    // C11 6.7.5: a requested alignment is honored on
+                    // file-scope objects -- the object writer aligns the
+                    // section to `Program::data_align` and the object's
+                    // offset within it via `align_data_to`. The attribute
+                    // requires a power of two (C11 6.7.5p3); anything past
+                    // the supported maximum is a diagnostic, never a silent
+                    // drop.
                     let req_align = core::mem::take(&mut self.pending.attr_align);
-                    if req_align > 16 {
+                    if req_align > 8 && !(req_align as usize).is_power_of_two() {
                         return Err(self.compile_err(format!(
-                            "requested alignment {req_align} exceeds the supported maximum of 16"
+                            "requested alignment {req_align} is not a power of two"
+                        )));
+                    }
+                    if req_align > super::MAX_STATIC_ALIGN as i64 {
+                        return Err(self.compile_err(format!(
+                            "requested alignment {req_align} exceeds the supported maximum of {}",
+                            super::MAX_STATIC_ALIGN
                         )));
                     }
                     let decl_align: usize = if req_align > 8 {
@@ -1469,8 +1478,8 @@ impl Compiler {
                                 "alignment above 8 is not supported for `_Thread_local` objects",
                             ));
                         }
-                        self.data_align = 16;
-                        16
+                        self.data_align = self.data_align.max(req_align as usize);
+                        req_align as usize
                     } else {
                         8
                     };

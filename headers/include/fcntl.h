@@ -227,6 +227,7 @@ int openat(int dirfd, const char *path, int flags, ...);
 #pragma binding(libc::splice, "splice")
 #pragma binding(libc::posix_fadvise, "posix_fadvise")
 #pragma binding(libc::posix_fallocate, "posix_fallocate")
+#pragma binding(libc::fallocate, "fallocate")
 #pragma binding(libc::sync_file_range, "sync_file_range")
 int fcntl(int fd, int cmd, ...);
 int openat(int dirfd, const char *path, int flags, ...);
@@ -238,6 +239,9 @@ long splice(int fd_in, long *off_in, int fd_out, long *off_out,
 // reserve backing store for a region (POSIX).
 int posix_fadvise(int fd, long offset, long len, int advice);
 int posix_fallocate(int fd, long offset, long len);
+// Manipulate a file's allocated disk space (Linux); `mode` selects the
+// FALLOC_FL_* operation from <linux/falloc.h>.
+int fallocate(int fd, int mode, long offset, long len);
 // Flush a file range to disk (Linux). The flag bits select the
 // wait-before / write / wait-after phases.
 #define SYNC_FILE_RANGE_WAIT_BEFORE 1

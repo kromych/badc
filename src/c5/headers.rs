@@ -491,6 +491,18 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "linux/magic.h",
         include_str!("../../headers/include/linux/magic.h"),
     ),
+    (
+        "linux/falloc.h",
+        include_str!("../../headers/include/linux/falloc.h"),
+    ),
+    (
+        "linux/ppdev.h",
+        include_str!("../../headers/include/linux/ppdev.h"),
+    ),
+    (
+        "linux/parport.h",
+        include_str!("../../headers/include/linux/parport.h"),
+    ),
     // every host.
     (
         "msvc_compat.h",

@@ -1438,6 +1438,35 @@ fn fcntl_stat_constants_match_the_target_libc() {
 }
 
 #[test]
+fn linux_falloc_parport_uapi_headers() {
+    use crate::{CompileOptions, Compiler, Target};
+    // The bundled linux/falloc.h, linux/ppdev.h and linux/parport.h uapi
+    // headers plus the fcntl.h `fallocate` binding: a successful compile of
+    // the negative-size-array assertion IS the check (values are arch
+    // independent). The ppdev ioctls and the fallocate call must also parse.
+    let compiles = |src: &str| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .is_ok()
+    };
+    let src = "#include <fcntl.h>\n#include <linux/falloc.h>\n\
+               #include <linux/ppdev.h>\n#include <linux/parport.h>\n\
+               int ck[(FALLOC_FL_KEEP_SIZE==0x01 && FALLOC_FL_PUNCH_HOLE==0x02 \
+               && FALLOC_FL_ZERO_RANGE==0x10 && FALLOC_FL_INSERT_RANGE==0x20 \
+               && PARPORT_CONTROL_STROBE==0x1 && PARPORT_STATUS_BUSY==0x80 \
+               && IEEE1284_MODE_ECP==0x10 && PARPORT_CLASS_PRINTER==1 \
+               && PPCLAIM!=0 && PPRELEASE!=0)?1:-1];\n\
+               int use_fallocate(int fd){ return fallocate(fd, FALLOC_FL_PUNCH_HOLE, 0, 4096); }\n";
+    assert!(
+        compiles(src),
+        "bundled uapi headers + fallocate must compile"
+    );
+    let wrong = "#include <linux/falloc.h>\nint ck[(FALLOC_FL_PUNCH_HOLE==0)?1:-1];\n";
+    assert!(!compiles(wrong), "a wrong constant should fail to compile");
+}
+
+#[test]
 fn utf16_utf32_string_literals() {
     // C11 `u"..."` (char16_t, 2-byte) and `U"..."` (char32_t, 4-byte)
     // string literals initialize a matching-width array; `L"..."` is

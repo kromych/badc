@@ -40,7 +40,7 @@ use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_float_ty, is_floating_scalar,
-    is_pointer_ty, is_struct_ty, is_unsigned_ty, struct_id_of, struct_ptr_depth,
+    is_pointer_ty, is_struct_ty, is_unsigned_ty, is_vector_ty, struct_id_of, struct_ptr_depth,
     usual_arith_common_ty,
 };
 
@@ -511,6 +511,17 @@ impl Compiler {
     /// address. Called by each value-computing binary branch after both
     /// operand types are known.
     fn reject_aggregate_binop(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Result<(), C5Error> {
+        // GCC vector extension: a bitwise operator on two same-width vector
+        // values is element-wise (no inter-lane carry, so the walker lowers it
+        // as wide chunks). Mixed vector/scalar, mismatched widths, and the
+        // arithmetic / shift / relational operators still reject here.
+        if matches!(op, "^" | "&" | "|")
+            && is_vector_ty(&self.structs, lhs_ty)
+            && is_vector_ty(&self.structs, rhs_ty)
+            && self.structs[struct_id_of(lhs_ty)].size == self.structs[struct_id_of(rhs_ty)].size
+        {
+            return Ok(());
+        }
         let is_aggregate_value = |ty: i64| is_struct_ty(ty) && struct_ptr_depth(ty) == 0;
         if is_aggregate_value(lhs_ty) || is_aggregate_value(rhs_ty) {
             return Err(self.compile_err(format!("invalid operands to binary `{op}`")));
@@ -2345,6 +2356,16 @@ impl Compiler {
                 && struct_ptr_depth(t) == 0
                 && self.lex.tk >= Token::Lor as i64
                 && self.lex.tk <= Token::ModOp as i64
+                // GCC vector extension: a vector LHS with a bitwise operator is
+                // element-wise; let it reach the per-operator branch, which
+                // does the same-width check. Other operators still reject.
+                && !(is_vector_ty(&self.structs, t)
+                    && matches!(
+                        self.lex.tk,
+                        x if x == Token::XorOp as i64
+                            || x == Token::AndOp as i64
+                            || x == Token::OrOp as i64
+                    ))
             {
                 return Err(
                     self.compile_err("invalid operands to binary operator (aggregate type)")
@@ -2646,6 +2667,60 @@ impl Compiler {
                 // in c5.
                 let binop = self.lex.ival;
                 let compound_lhs_ast = self.ast_acc;
+                // GCC vector extension: `v OP= w` for a bitwise OP on same-width
+                // vectors is `v = v OP w`. Build that node pair directly (the
+                // scalar compound path below handles only scalar / pointer
+                // lvalues). The lhs is a side-effect-free operand reused as both
+                // the store target and the binop's left operand.
+                if is_vector_ty(&self.structs, t)
+                    && (binop == Token::XorOp as i64
+                        || binop == Token::AndOp as i64
+                        || binop == Token::OrOp as i64)
+                {
+                    let vec_ty = t;
+                    let lhs_node = compound_lhs_ast
+                        .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
+                    let pos = self.ast_src_pos();
+                    self.next()?; // consume `OP=`
+                    self.expr(Token::Assign as i64)?; // parse the rhs
+                    let rhs_node = self
+                        .ast_acc
+                        .ok_or_else(|| self.compile_err("bad operand in compound assignment"))?;
+                    if !(is_vector_ty(&self.structs, self.ty)
+                        && self.structs[struct_id_of(self.ty)].size
+                            == self.structs[struct_id_of(vec_ty)].size)
+                    {
+                        return Err(self.compile_err("invalid operands to vector compound `^=`"));
+                    }
+                    use super::super::ir::BinOp as B;
+                    let bop = if binop == Token::XorOp as i64 {
+                        B::Xor
+                    } else if binop == Token::AndOp as i64 {
+                        B::And
+                    } else {
+                        B::Or
+                    };
+                    let bin = self.ast.push_expr(
+                        super::super::ast::Expr::Binary {
+                            op: bop,
+                            lhs: lhs_node,
+                            rhs: rhs_node,
+                            ty: vec_ty,
+                        },
+                        pos,
+                    );
+                    let asg = self.ast.push_expr(
+                        super::super::ast::Expr::Assign {
+                            lhs: lhs_node,
+                            rhs: bin,
+                            ty: vec_ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(asg);
+                    self.ty = vec_ty;
+                    continue;
+                }
                 self.next()?;
                 // Rewrite the trailing load into a Psh so the
                 // address sits on the c5 stack across the compound
@@ -2997,7 +3072,11 @@ impl Compiler {
                 // `ty` as the cast source type, so an order-dependent tag
                 // breaks `(int)(unsigned | int)` sign extension. Mirrors
                 // the additive path.
-                self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+                self.ty = if is_vector_ty(&self.structs, lhs_ty) {
+                    lhs_ty
+                } else {
+                    usual_arith_common_ty(lhs_ty, self.ty, self.target)
+                };
                 self.ast_binop(crate::c5::ir::BinOp::Or);
             } else if self.lex.tk == Token::XorOp {
                 // C99 6.5.11: same common-type rule as `|`.
@@ -3006,7 +3085,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::AndOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "^")?;
-                self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+                self.ty = if is_vector_ty(&self.structs, lhs_ty) {
+                    lhs_ty
+                } else {
+                    usual_arith_common_ty(lhs_ty, self.ty, self.target)
+                };
                 self.ast_binop(crate::c5::ir::BinOp::Xor);
             } else if self.lex.tk == Token::AndOp {
                 // C99 6.5.10: same common-type rule as `|`.
@@ -3015,7 +3098,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::EqOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "&")?;
-                self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+                self.ty = if is_vector_ty(&self.structs, lhs_ty) {
+                    lhs_ty
+                } else {
+                    usual_arith_common_ty(lhs_ty, self.ty, self.target)
+                };
                 self.ast_binop(crate::c5::ir::BinOp::And);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
                 // `==` and `!=` share emit shape -- only the FP

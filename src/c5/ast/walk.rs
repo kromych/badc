@@ -13,7 +13,7 @@ use alloc::string::String;
 use super::super::codegen::Target;
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
-    is_volatile_ty, load_kind, strip_unsigned, struct_ptr_depth,
+    is_vector_ty, is_volatile_ty, load_kind, strip_unsigned, struct_ptr_depth,
 };
 use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind};
 use super::super::symbol::Symbol;
@@ -722,6 +722,65 @@ impl<'a> Walker<'a> {
     /// qualifier (C99 6.7.3); `false` for node shapes without a type.
     fn expr_is_volatile(&self, id: ExprId) -> bool {
         expr_ty(self.ast.expr(id)).is_some_and(is_volatile_ty)
+    }
+
+    /// Lower a bitwise operator (`^`/`&`/`|`) on two same-width GCC vector
+    /// values into a result temporary. Bitwise ops carry no value between
+    /// lanes, so the byte block is combined in the widest chunks that fit
+    /// (8/4/2/1) regardless of the element width. Both operands are aggregate
+    /// rvalues (their address lands on the accumulator); the result is a fresh
+    /// synthetic aggregate whose address is returned, matching how a struct
+    /// rvalue is produced.
+    fn walk_vector_bitwise(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        let lhs_addr = self.walk_expr_rvalue(b, lhs)?;
+        let rhs_addr = self.walk_expr_rvalue(b, rhs)?;
+        let size = self.struct_size(ty);
+        let slot = b.alloc_synthetic_struct(size);
+        let dst = b.local_addr(slot);
+        // Widest-chunk cover: (width, load kind, store kind).
+        const CHUNKS: [(i64, LoadKind, StoreKind); 4] = [
+            (8, LoadKind::I64, StoreKind::I64),
+            (4, LoadKind::U32, StoreKind::I32),
+            (2, LoadKind::U16, StoreKind::I16),
+            (1, LoadKind::U8, StoreKind::I8),
+        ];
+        let mut off = 0;
+        while off < size {
+            let remaining = size - off;
+            let (w, lk, sk) = CHUNKS
+                .iter()
+                .find(|(w, ..)| *w <= remaining)
+                .copied()
+                .unwrap();
+            let la = if off == 0 {
+                lhs_addr
+            } else {
+                b.binop_imm(BinOp::Add, lhs_addr, off)
+            };
+            let ra = if off == 0 {
+                rhs_addr
+            } else {
+                b.binop_imm(BinOp::Add, rhs_addr, off)
+            };
+            let da = if off == 0 {
+                dst
+            } else {
+                b.binop_imm(BinOp::Add, dst, off)
+            };
+            let a = b.load(la, lk);
+            let c = b.load(ra, lk);
+            let r = b.binop(op, a, c);
+            b.store(da, r, sk);
+            off += w;
+        }
+        Ok(dst)
     }
 
     /// Walk a statement. Returns `true` when the statement
@@ -1771,6 +1830,13 @@ impl<'a> Walker<'a> {
             ),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
+                // GCC vector extension: a bitwise operator on same-width vector
+                // values is element-wise. The parser only tags a Binary node
+                // with a vector type for `^`/`&`/`|`; lower it as wide chunks
+                // into a result temporary (no inter-lane carry for bitwise ops).
+                if is_vector_ty(self.structs, *ty) {
+                    return self.walk_vector_bitwise(b, *op, *lhs, *rhs, *ty);
+                }
                 // A comparison whose operand is a floating-point value must
                 // use the FP comparison. The parser tags the op from the
                 // operand types; when that tracking is clouded by the

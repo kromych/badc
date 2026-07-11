@@ -225,6 +225,16 @@ pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }
 
+/// `true` when `ty` is a GCC vector type: an aggregate *value* (not a
+/// pointer to one) whose synthesized `StructDef` carries `is_vector`.
+pub(crate) fn is_vector_ty(structs: &[super::StructDef], ty: i64) -> bool {
+    if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
+        return false;
+    }
+    let id = struct_id_of(ty);
+    id < structs.len() && structs[id].is_vector
+}
+
 /// True when `ty` (unsigned bit stripped) lands in the 100-wide band
 /// starting at `base`. Each non-integer scalar family (`_Bool`, float,
 /// double, long, long long, short) reserves its own band; the +2-per-`*`

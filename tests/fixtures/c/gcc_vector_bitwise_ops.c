@@ -10,6 +10,18 @@ typedef __attribute__((vector_size(16))) unsigned char u8x16;
 typedef __attribute__((vector_size(16))) unsigned int u32x4;
 typedef __attribute__((vector_size(8))) unsigned char u8x8;
 
+// Trailing-form vector typedef used as a struct member, mirroring a common
+// SIMD-state layout: a vector operator result stored back through a pointer.
+typedef unsigned char StateVec __attribute__((vector_size(16)));
+typedef struct {
+    StateVec v;
+} State;
+
+static void xor_into(State *ret, const State *st, const State *key) {
+    u8x16 t = (u8x16)st->v;
+    ret->v = (StateVec)t ^ key->v;
+}
+
 static int same16(u8x16 v, const unsigned char *want) {
     const unsigned char *p = (const unsigned char *)&v;
     for (int i = 0; i < 16; i++) {
@@ -62,6 +74,19 @@ int main(void) {
     h ^= k;
     const unsigned char *ph = (const unsigned char *)&h;
     if (ph[0] != (1 ^ 0xff) || ph[1] != 2 || ph[7] != 8) return 9;
+
+    // Store a vector operator result back through a pointer's member.
+    State s, key, out;
+    unsigned char *ps = (unsigned char *)&s, *pk = (unsigned char *)&key;
+    for (int i = 0; i < 16; i++) {
+        ps[i] = (unsigned char)(i * 7 + 1);
+        pk[i] = (unsigned char)(200 - i);
+    }
+    xor_into(&out, &s, &key);
+    const unsigned char *po = (const unsigned char *)&out;
+    for (int i = 0; i < 16; i++) {
+        if (po[i] != (unsigned char)(ps[i] ^ pk[i])) return 10;
+    }
 
     return 0;
 }

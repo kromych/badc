@@ -371,6 +371,14 @@ impl Compiler {
                 // terminator (`name(args) __attribute__((...));`, an
                 // initializer, a comma, or a function body's `{`).
                 self.skip_attribute_specifiers()?;
+                // `typedef T name __attribute__((vector_size(N)))` (and the
+                // object form) binds the attribute to the declarator, not the
+                // base type, so it lands here rather than at the base-type
+                // sites. The leading form already consumed it, leaving 0.
+                if self.pending.attr_vector_size > 0 {
+                    let n = core::mem::take(&mut self.pending.attr_vector_size);
+                    ty = self.make_vector_type(ty, n);
+                }
                 // Capture per this declarator before any nested parse can
                 // overwrite it (a later parameter of function type would
                 // re-set it). A bare function-type declarator is a function

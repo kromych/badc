@@ -11,6 +11,9 @@ typedef __attribute__((vector_size(16))) unsigned char u8x16;
 typedef __attribute__((vector_size(16))) unsigned int  u32x4;
 typedef __attribute__((vector_size(8)))  float          f32x2;
 
+// The attribute also binds in the trailing position, after the declarator.
+typedef unsigned char u8x16_trailing __attribute__((vector_size(16)));
+
 // Pass and return a vector by value.
 static u8x16 identity(u8x16 v) { return v; }
 
@@ -53,6 +56,20 @@ int main(void) {
     // that follows a vector object keeps its own width.
     unsigned char scalar = 3;
     if (scalar != 3 || sizeof(scalar) != 1) return 10;
+
+    // The trailing-position typedef names the same 16-byte vector; it must
+    // size correctly as a struct member too (a scalar-sized member would
+    // truncate the aggregate).
+    if (sizeof(u8x16_trailing) != 16) return 11;
+    u8x16_trailing tv = {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10};
+    unsigned char *ptv = (unsigned char *)&tv;
+    if (ptv[0] != 9 || ptv[15] != 10) return 12;
+    struct {
+        u8x16_trailing m;
+    } holder;
+    holder.m = tv;
+    unsigned char *ph = (unsigned char *)&holder;
+    if (sizeof(holder) != 16 || ph[0] != 9 || ph[15] != 10) return 13;
 
     return 0;
 }

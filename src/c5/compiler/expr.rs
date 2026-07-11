@@ -3779,12 +3779,18 @@ impl Compiler {
                             let dims = field.array_dims.clone();
                             let elem_size = self.size_of_type(field.ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
+                        } else {
+                            // A flexible array member (`array_size == -1`,
+                            // C99 6.7.2.1p16) is an incomplete array type,
+                            // distinct from the decayed element pointer.
+                            // Signal array-ness to a surrounding `typeof` /
+                            // `__builtin_types_compatible_p` with the `-1`
+                            // sentinel (its element count is genuinely
+                            // unknown, which the `> 0` recovery paths read as
+                            // "no array hint"), mirroring the zero-length
+                            // array variable path.
+                            self.pending.last_array_decay_size = -1;
                         }
-                        // A flexible array member (`array_size == -1`,
-                        // C99 6.7.2.1p16) decays to a pointer-to-element
-                        // at the field offset; its element count is
-                        // unknown, so no sizeof recovery or multi-dim
-                        // stride seeding applies.
                     } else if !field_is_struct_value {
                         self.mark_emit_scalar_load();
                         // Function-pointer field: re-seed the fn-ptr

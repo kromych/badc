@@ -2694,6 +2694,15 @@ fn pointer_local_ignores_type_alignment() {
 }
 
 #[test]
+fn flexible_array_member_typeof_is_array() {
+    // C99 6.7.2.1p16: a flexible array member has an incomplete array type,
+    // distinct from its decayed element pointer, so
+    // `__builtin_types_compatible_p(typeof(m), typeof(&m[0]))` is false --
+    // the array-detection idiom must see it as an array.
+    assert_eq!(run_fixture("flexible_array_member_typeof_is_array.c"), 0);
+}
+
+#[test]
 fn func_name_predeclared_identifier() {
     // C99 6.4.2.2 makes `__func__` an implicitly declared string
     // literal carrying the enclosing function's name. c5 mirrors

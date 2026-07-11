@@ -2670,6 +2670,14 @@ fn macro_paste_result_is_rescanned() {
 }
 
 #[test]
+fn macro_paste_empty_arg_placemarker() {
+    // C99 6.10.3.3: an empty macro argument is a placemarker, so
+    // `sign##name` with an empty `sign` yields `name` and keeps the
+    // preceding token (`return`) separate rather than gluing `returnname`.
+    assert_eq!(run_fixture("macro_paste_empty_arg_placemarker.c"), 0);
+}
+
+#[test]
 fn func_name_predeclared_identifier() {
     // C99 6.4.2.2 makes `__func__` an implicitly declared string
     // literal carrying the enclosing function's name. c5 mirrors

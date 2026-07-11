@@ -5247,6 +5247,13 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
     // True when the next token is the right-hand operand of a `##`, so
     // it must substitute from the unexpanded argument.
     let mut after_paste = false;
+    // True when the token most recently emitted (ignoring intervening
+    // whitespace) was an empty-argument parameter substitution. C99
+    // 6.10.3.3 makes an empty argument a placemarker: `placemarker ## x`
+    // is `x`, and the token before the placemarker stays separate. So a
+    // `##` whose left operand is such a placemarker must not glue the
+    // preceding token to the right operand.
+    let mut left_operand_empty = false;
     while i < bytes.len() {
         let c = bytes[i];
         if c == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'#' {
@@ -5281,20 +5288,26 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
             // the operator; for c5's textual preprocessor that means
             // trim trailing whitespace from what we've already emitted,
             // then skip the operator and any leading whitespace before
-            // the next token.
-            while out.ends_with(' ') || out.ends_with('\t') {
-                out.pop();
+            // the next token. When the left operand was an empty-argument
+            // placemarker there is no left token to glue, so keep the
+            // preceding whitespace and leave that token separate.
+            if !left_operand_empty {
+                while out.ends_with(' ') || out.ends_with('\t') {
+                    out.pop();
+                }
             }
             i += 2;
             while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
                 i += 1;
             }
             after_paste = true;
+            left_operand_empty = false;
             continue;
         }
         let preceded_by_paste = after_paste;
         after_paste = false;
         if c == b'#' {
+            left_operand_empty = false;
             // Stringification: `#param` -> `"<arg>"`. The C standard
             // says the operand must be a parameter; we follow that
             // and pass a stray `#` through unchanged. The operand uses
@@ -5332,6 +5345,7 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
             // iteration.
             out.push_str(&def.body[i..i + plen]);
             i += plen;
+            left_operand_empty = false;
         } else if c.is_ascii_alphabetic() || c == b'_' {
             let start = i;
             i += 1;
@@ -5358,13 +5372,21 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
             };
             if def.is_variadic && is_va_token(def, word) {
                 out.push_str(va);
+                left_operand_empty = va.is_empty();
             } else {
                 match def.params.iter().position(|p| p == word) {
-                    Some(idx) if idx < params.len() => out.push_str(&params[idx]),
-                    _ => out.push_str(word),
+                    Some(idx) if idx < params.len() => {
+                        out.push_str(&params[idx]);
+                        left_operand_empty = params[idx].is_empty();
+                    }
+                    _ => {
+                        out.push_str(word);
+                        left_operand_empty = false;
+                    }
                 }
             }
         } else if c == b'"' || c == b'\'' {
+            left_operand_empty = false;
             // Pass literals through unchanged so identifier-like bytes
             // inside don't get substituted. Copy the byte range as a
             // UTF-8 slice rather than byte by byte so a multibyte
@@ -5391,6 +5413,12 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
                 }
             }
         } else {
+            // Preserve the placemarker flag across whitespace so a `##`
+            // separated from its empty-argument left operand by spaces is
+            // still recognized; any other character is a real token.
+            if c != b' ' && c != b'\t' {
+                left_operand_empty = false;
+            }
             out.push(c as char);
             i += 1;
         }

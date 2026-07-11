@@ -183,7 +183,7 @@ impl Compiler {
     /// can color the `warning:` word when stderr is a TTY.
     pub(super) fn warn_at(&mut self, line: usize, message: alloc::string::String) {
         let mut s = alloc::format!("{}:{line}: warning: {message}", self.lex.file);
-        if let Some(src) = self.lex.current_line_text()
+        if let Some(src) = self.lex.line_text_by_number(line)
             && !src.is_empty()
         {
             s.push('\n');
@@ -330,9 +330,15 @@ impl Compiler {
     /// Pulls `<file>` / `<line>` out of `self.lex` so call sites
     /// don't have to thread them through every `format!`.
     pub(super) fn compile_err(&self, message: impl AsRef<str>) -> C5Error {
-        let mut s =
-            super::super::error::fmt_compile_err(&self.lex.file, self.lex.line, message.as_ref());
-        if let Some(src) = self.lex.current_line_text()
+        self.compile_err_line(self.lex.line, message.as_ref())
+    }
+
+    /// Shared builder: a `<file>:<line>: error: <message>` diagnostic with
+    /// the source text of `line` echoed beneath it (the line the number
+    /// points at, recovered even when the parser has read past it).
+    fn compile_err_line(&self, line: usize, message: &str) -> C5Error {
+        let mut s = super::super::error::fmt_compile_err(&self.lex.file, line, message);
+        if let Some(src) = self.lex.line_text_by_number(line)
             && !src.is_empty()
         {
             s.push('\n');
@@ -347,11 +353,7 @@ impl Compiler {
     /// function / argument *started*, not where the parser noticed
     /// the problem.
     pub(super) fn compile_err_at(&self, line: usize, message: impl AsRef<str>) -> C5Error {
-        C5Error::Compile(super::super::error::fmt_compile_err(
-            &self.lex.file,
-            line,
-            message.as_ref(),
-        ))
+        self.compile_err_line(line, message.as_ref())
     }
 
     pub(super) fn type_warning(

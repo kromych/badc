@@ -2948,6 +2948,20 @@ fn diagnostic_echoes_the_source_line() {
         warns.contains("return add(1);"),
         "expected the source line echoed under the warning, got {warns:?}"
     );
+
+    // A diagnostic whose line the parser already read past echoes THAT
+    // line, not the current one: an unused-parameter warning fires at the
+    // closing brace but names the signature line.
+    let usrc = "int cmd(int f, int n)\n{\n    return n;\n}\nint main(void) { return cmd(1, 2); }\n";
+    let prog2 = Compiler::new(usrc.to_string())
+        .compile()
+        .expect("unused parameter is a warning");
+    let w2 = prog2.warnings.join("\n");
+    assert!(w2.contains("unused parameter `f`"), "warnings: {w2:?}");
+    assert!(
+        w2.contains("int cmd(int f, int n)"),
+        "expected the signature line, not the brace, got {w2:?}"
+    );
 }
 
 #[test]

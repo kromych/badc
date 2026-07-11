@@ -211,10 +211,6 @@ pub(crate) struct LexerSnapshot {
 pub(crate) struct Lexer {
     src: Vec<u8>,
     pos: usize,
-    /// Byte offset in `src` where the most recent token began (after
-    /// whitespace / line-marker skipping). Used to recover the source
-    /// line for a diagnostic, since `pos` reads ahead of the token.
-    tok_start: usize,
     pub line: usize,
     /// Name of the file `self.line` is counting within. Updated
     /// when the lexer crosses a GNU-style line marker (`# N "file"
@@ -396,7 +392,6 @@ impl Lexer {
         Self {
             src: source.into_bytes(),
             pos: 0,
-            tok_start: 0,
             line: 1,
             file: String::from("<source>"),
             tk: Tok::EOF,
@@ -1016,29 +1011,44 @@ impl Lexer {
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.
-    /// The source line containing the current token, taken from the
-    /// preprocessed buffer the lexer scans, with trailing whitespace
-    /// trimmed. `None` for an empty buffer. Used to echo the offending
-    /// line beneath a diagnostic.
-    pub(crate) fn current_line_text(&self) -> Option<&str> {
-        let n = self.src.len();
-        if n == 0 {
-            return None;
+    /// The text of source line `target` in the current file (`self.file`),
+    /// recovered by walking the `#line` markers the preprocessor embedded
+    /// in the buffer so the original (file, line) numbering is honoured.
+    /// Trailing whitespace is trimmed. `None` when no such line is found.
+    /// Used to echo the line a diagnostic points at, even when the parser
+    /// has read ahead of it (an unused-parameter warning fires at the
+    /// closing brace but names the parameter's declaration line).
+    pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
+        let want_file: &str = &self.file;
+        let src = &self.src;
+        let n = src.len();
+        let mut file = String::from("<source>");
+        let mut line = 1usize;
+        let mut i = 0usize;
+        while i < n {
+            let start = i;
+            let mut j = i;
+            while j < n && src[j] != b'\n' {
+                j += 1;
+            }
+            let bytes = &src[start..j];
+            if bytes.first() == Some(&b'#')
+                && let Some(marker) = parse_line_marker(&bytes[1..])
+            {
+                line = marker.line;
+                if let Some(f) = marker.file {
+                    file = f;
+                }
+                i = j + 1;
+                continue;
+            }
+            if line == target && file == want_file {
+                return core::str::from_utf8(bytes).ok().map(|s| s.trim_end());
+            }
+            line += 1;
+            i = j + 1;
         }
-        let p = self.tok_start.min(n - 1);
-        let start = self.src[..p]
-            .iter()
-            .rposition(|&b| b == b'\n')
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        let end = self.src[p..]
-            .iter()
-            .position(|&b| b == b'\n')
-            .map(|i| p + i)
-            .unwrap_or(n);
-        core::str::from_utf8(&self.src[start..end])
-            .ok()
-            .map(|s| s.trim_end())
+        None
     }
 
     pub fn next(
@@ -1064,10 +1074,6 @@ impl Lexer {
 
             let c = self.src[self.pos] as char;
             self.pos += 1;
-            // Records where this token started; whitespace / newline /
-            // line-marker iterations re-set it, so it ends on the real
-            // token the branches below emit.
-            self.tok_start = self.pos - 1;
 
             if c == '\n' {
                 self.line += 1;

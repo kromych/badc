@@ -503,6 +503,18 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "linux/parport.h",
         include_str!("../../headers/include/linux/parport.h"),
     ),
+    (
+        "linux/vm_sockets.h",
+        include_str!("../../headers/include/linux/vm_sockets.h"),
+    ),
+    (
+        "linux/time_types.h",
+        include_str!("../../headers/include/linux/time_types.h"),
+    ),
+    (
+        "linux/errqueue.h",
+        include_str!("../../headers/include/linux/errqueue.h"),
+    ),
     // every host.
     (
         "msvc_compat.h",

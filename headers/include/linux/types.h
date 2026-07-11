@@ -35,4 +35,17 @@ typedef __u32 __bitwise __wsum;
 #define __aligned_le64 __le64 __attribute__((aligned(8)))
 
 typedef unsigned __bitwise __poll_t;
+
+// Kernel posix types (real kernel: <asm/posix_types.h>). LP64 on every
+// badc Linux target, so `long`-width fields are 64-bit here.
+typedef long __kernel_long_t;
+typedef unsigned long __kernel_ulong_t;
+typedef __kernel_long_t __kernel_off_t;
+typedef long long __kernel_loff_t;
+typedef long long __kernel_time64_t;
+typedef __kernel_long_t __kernel_old_time_t;
+typedef __kernel_long_t __kernel_time_t;
+typedef __kernel_long_t __kernel_clock_t;
+typedef __kernel_long_t __kernel_suseconds_t;
+typedef unsigned short __kernel_sa_family_t;
 #endif

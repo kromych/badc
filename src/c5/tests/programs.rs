@@ -1467,6 +1467,34 @@ fn linux_falloc_parport_uapi_headers() {
 }
 
 #[test]
+fn linux_vsock_errqueue_socket_constants() {
+    use crate::{CompileOptions, Compiler, Target};
+    // AF_VSOCK / SO_PEERCRED / IPPROTO_MPTCP and the bundled linux/
+    // vm_sockets.h + errqueue.h (with linux/time_types.h): the socket
+    // credential struct and the vsock address struct must define, and the
+    // constants match (arch independent). A successful compile is the check.
+    let compiles = |src: &str| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .is_ok()
+    };
+    let src = "#include <sys/socket.h>\n#include <netinet/in.h>\n\
+               #include <linux/vm_sockets.h>\n#include <linux/errqueue.h>\n\
+               int ck[(AF_VSOCK==40 && PF_VSOCK==40 && SO_PEERCRED==17 \
+               && SO_PASSCRED==16 && IPPROTO_MPTCP==262 && VMADDR_CID_HOST==2 \
+               && SO_EE_ORIGIN_ICMP==2 && SCM_TSTAMP_ACK==2)?1:-1];\n\
+               int cred_size(void){ struct ucred u; return sizeof(u.pid)+sizeof(u.uid)+sizeof(u.gid); }\n\
+               int vm_size(void){ struct sockaddr_vm v; return sizeof(v)==sizeof(struct sockaddr); }\n";
+    assert!(
+        compiles(src),
+        "vsock/errqueue headers + constants must compile"
+    );
+    let wrong = "#include <sys/socket.h>\nint ck[(AF_VSOCK==0)?1:-1];\n";
+    assert!(!compiles(wrong), "a wrong constant should fail to compile");
+}
+
+#[test]
 fn utf16_utf32_string_literals() {
     // C11 `u"..."` (char16_t, 2-byte) and `U"..."` (char32_t, 4-byte)
     // string literals initialize a matching-width array; `L"..."` is

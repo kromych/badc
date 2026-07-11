@@ -41,6 +41,7 @@
 #define AF_INET6    23
 #elif defined(__linux__)
 #define AF_INET6    10
+#define AF_VSOCK    40
 #endif
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
@@ -59,6 +60,9 @@
 #define PF_LOCAL  AF_UNIX
 #define PF_INET   AF_INET
 #define PF_INET6  AF_INET6
+#ifdef __linux__
+#define PF_VSOCK  AF_VSOCK
+#endif
 
 // Address-family field type. macOS holds it in one byte (sin_len precedes
 // it); Linux and Winsock use a 16-bit field.
@@ -87,10 +91,19 @@ typedef unsigned short sa_family_t;
 #define SO_RCVBUF     8
 #define SO_KEEPALIVE  9
 #define SO_REUSEPORT  15
+#define SO_PASSCRED   16
+#define SO_PEERCRED   17
 // Receive/send timeout option names. aarch64 and x86_64 have a natively
 // 64-bit time_t, so glibc selects the timeval-based "_OLD" numbers.
 #define SO_RCVTIMEO   20
 #define SO_SNDTIMEO   21
+// SO_PEERCRED fills the peer's credentials. glibc's `struct ucred` holds a
+// pid_t and two uid_t/gid_t, all 32-bit on Linux.
+struct ucred {
+    int pid;
+    unsigned int uid;
+    unsigned int gid;
+};
 #endif
 
 // `struct sockaddr` is the address header passed by reference to bind /

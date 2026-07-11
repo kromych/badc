@@ -9,6 +9,9 @@
 
 #define IPPROTO_IP   0
 #define IPPROTO_IPV6 41
+#ifdef __linux__
+#define IPPROTO_MPTCP 262 // Multipath TCP (Linux)
+#endif
 #define IPV6_V6ONLY  26 // Linux value; macOS=27 -- set via setsockopt only
 
 // IP / IPv6 per-packet class-of-service option names for setsockopt. The

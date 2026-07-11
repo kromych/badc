@@ -1390,6 +1390,14 @@ fn empty_array_init() {
 }
 
 #[test]
+fn struct_member_array_range_designator() {
+    // A struct's array member accepts a GNU range designator
+    // `[a ... b] = v` (the top-level array path already did); mixed with
+    // single `[i] = v` designators and a following scalar member.
+    assert_eq!(run_fixture("struct_member_array_range_designator.c"), 0);
+}
+
+#[test]
 fn runtime_struct_array_member_init() {
     // A struct's array-of-struct member brace-initialized with a
     // non-constant element value (`&g[i]`) takes the runtime store path;

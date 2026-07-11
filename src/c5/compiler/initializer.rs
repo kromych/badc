@@ -2447,6 +2447,7 @@ impl Compiler {
                 // clauses) continue from there. Mirrors the
                 // top-level array-init path in
                 // `collect_array_initializer`.
+                let mut range_hi = idx;
                 if self.lex.tk == Token::Brak {
                     self.next()?;
                     let n = self.parse_constant_int()?;
@@ -2454,6 +2455,20 @@ impl Compiler {
                         return Err(self.compile_err(format!(
                             "array designator index must be non-negative (got {n})"
                         )));
+                    }
+                    idx = n as usize;
+                    range_hi = idx;
+                    // GCC range designator `[a ... b] = value`: fill every
+                    // element in `[a, b]` with the same value.
+                    if self.lex.tk == Token::Ellipsis {
+                        self.next()?;
+                        let hi = self.parse_constant_int()?;
+                        if hi < n {
+                            return Err(self.compile_err(format!(
+                                "array range designator high {hi} below low {n}"
+                            )));
+                        }
+                        range_hi = hi as usize;
                     }
                     if self.lex.tk != ']' {
                         return Err(self.compile_err("`]` expected after array designator index"));
@@ -2463,9 +2478,8 @@ impl Compiler {
                         return Err(self.compile_err("`=` expected after `[N]` designator"));
                     }
                     self.next()?;
-                    idx = n as usize;
                 }
-                if idx as i64 >= field.array_size {
+                if range_hi as i64 >= field.array_size {
                     return Err(self.compile_err(format!(
                         "too many initializers for `{}.{}`",
                         self.structs[struct_id].name, field.name
@@ -2483,6 +2497,14 @@ impl Compiler {
                 // flat list wrote a single scalar with the struct's
                 // byte width, overflowing `write_init_bytes`.)
                 if let Some(sid) = elem_sid {
+                    // A range spanning a struct element would need to replay
+                    // the brace parse per index; the single-element form is
+                    // the one that occurs in practice.
+                    if range_hi != idx {
+                        return Err(self.compile_err(
+                            "range designator on a struct-array element is not supported",
+                        ));
+                    }
                     if self.lex.tk == '{' {
                         self.collect_struct_initializer(sid, here as i64)?;
                     } else {
@@ -2490,9 +2512,17 @@ impl Compiler {
                     }
                 } else {
                     let (value, reloc) = self.parse_constant_init_value()?;
-                    self.write_init_value(here, elem_size, value, reloc, field.ty);
+                    for j in idx..=range_hi {
+                        self.write_init_value(
+                            field_base + j * elem_size,
+                            elem_size,
+                            value,
+                            reloc,
+                            field.ty,
+                        );
+                    }
                 }
-                idx += 1;
+                idx = range_hi + 1;
                 self.accept(',')?;
             }
             self.next()?; // consume `}`

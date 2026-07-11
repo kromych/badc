@@ -1635,6 +1635,34 @@ fn atomic128_emits_ldp_stp_ldxp_stxp_aarch64() {
     );
 }
 
+#[test]
+fn atomic128_positional_ldp_load_pair_aarch64() {
+    // The aligned 128-bit load-extract idiom writes its `ldp` with positional
+    // operands (`%0, %1, %2`) and an unnamed `"m"` memory input, unlike the
+    // named-operand `ldp %[l], %[h], %[mem]` shape. Both lower to the same
+    // plain LDP register pair.
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned long long lo, hi; } u128;\n\
+         void ld(const u128 *p, unsigned long long *ol, unsigned long long *oh){\n\
+           unsigned long long l, h;\n\
+           __asm__(\"ldp %0, %1, %2\" : \"=r\"(l), \"=r\"(h) : \"m\"(*p));\n\
+           *ol = l; *oh = h; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    // enc_ldp_off(x10, x11, x9, 0).
+    let any_ldp = bytes
+        .windows(4)
+        .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+        .any(|w| w == 0xA940_2D2A);
+    assert!(
+        any_ldp,
+        "positional ldp load-extract must lower to the plain LDP register pair"
+    );
+}
+
 /// Bytes of the section named `name` in an ELF64 little-endian
 /// object, or `None` when absent. Reads only the section header
 /// table and the section-name string table.

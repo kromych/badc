@@ -880,9 +880,12 @@ impl Compiler {
             // forms and the pre-LSE2 `ldxp`/`stxp` exclusive-pair loops used
             // when there is no native 16-byte atomic access. Same operand
             // grammar as the RMW shapes; the template selects the kind.
-            let ldst_kind = if tmpl_ws == "ldp%[l],%[h],%[mem]" {
+            let ldst_kind = if tmpl_ws == "ldp%[l],%[h],%[mem]" || tmpl_ws == "ldp%0,%1,%2" {
+                // Named form, and the positional form used by the aligned
+                // 128-bit load-extract (`ldp %0, %1, %2` with two `=r`
+                // outputs and an `"m"` input) -- both load a register pair.
                 Some(I::Atomic128Load)
-            } else if tmpl_ws == "stp%[l],%[h],%[mem]" {
+            } else if tmpl_ws == "stp%[l],%[h],%[mem]" || tmpl_ws == "stp%0,%1,%2" {
                 Some(I::Atomic128Store)
             } else if tmpl_ws.starts_with("0:ldxp%[l],%[h],%[mem]")
                 && tmpl_ws.contains("stxp%w[tmp],%[l],%[h],%[mem]")
@@ -1344,6 +1347,14 @@ impl Compiler {
             }
             let cstart = self.lex.ival as usize;
             self.next()?; // consume the constraint string
+            // Classify an unnamed operand by its constraint: a memory
+            // constraint (`"m"` / `"+m"`) names the 128-bit object, matching
+            // the `[mem]` role the named-operand shapes use. Register
+            // constraints (`"r"` / `"=r"`) carry no `m`, so the positional
+            // `ldp %0, %1, %2` shape resolves its `"m"(*ptr)` input correctly.
+            if matches!(role, Role::Reg) && self.data[cstart..].contains(&b'm') {
+                role = Role::Mem;
+            }
             self.data.truncate(cstart);
             // Clobbers (fourth section on) are bare strings with no operand.
             if section >= 3 {

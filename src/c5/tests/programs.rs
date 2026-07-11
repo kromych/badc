@@ -141,6 +141,13 @@ fn atomic128_ldst() {
 }
 
 #[test]
+fn builtin_inf() {
+    // __builtin_inf / __builtin_inff / __builtin_huge_val are positive
+    // infinity; the Linux SYNC_FILE_RANGE_* flags ride along under guard.
+    assert_eq!(run_fixture("builtin_inf.c"), 0);
+}
+
+#[test]
 fn alignof_expression() {
     // GCC `__alignof__` accepts an expression operand (C11 `_Alignof` is
     // type-only); the alignment is that of the operand's unevaluated type,

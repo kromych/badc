@@ -72,6 +72,10 @@
 #pragma binding(libc::mktemp,  "_mktemp")
 #pragma binding(libc::random,  "_random")
 #pragma binding(libc::srandom, "_srandom")
+#pragma binding(libc::drand48, "_drand48")
+#pragma binding(libc::srand48, "_srand48")
+#pragma binding(libc::lrand48, "_lrand48")
+#pragma binding(libc::mrand48, "_mrand48")
 #pragma binding(libc::grantpt,   "_grantpt")
 #pragma binding(libc::unlockpt,  "_unlockpt")
 #pragma binding(libc::posix_openpt,"_posix_openpt")
@@ -138,6 +142,10 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::mktemp,  "mktemp")
 #pragma binding(libc::random,  "random")
 #pragma binding(libc::srandom, "srandom")
+#pragma binding(libc::drand48, "drand48")
+#pragma binding(libc::srand48, "srand48")
+#pragma binding(libc::lrand48, "lrand48")
+#pragma binding(libc::mrand48, "mrand48")
 #pragma binding(libc::grantpt,   "grantpt")
 #pragma binding(libc::unlockpt,  "unlockpt")
 #pragma binding(libc::posix_openpt,"posix_openpt")
@@ -409,6 +417,12 @@ char *mkdtemp(char *templ);
 char *mktemp(char *templ);
 int random();
 int srandom(int seed);
+// SVID 48-bit linear-congruential PRNG family. drand48 returns a double
+// in [0.0, 1.0); lrand48 a non-negative long; mrand48 a signed long.
+double drand48(void);
+long lrand48(void);
+long mrand48(void);
+void srand48(long seed);
 // Pseudo-terminal master/slave setup (POSIX). ptsname returns the slave
 // device path for the given master descriptor.
 int posix_openpt(int flags);

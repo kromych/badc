@@ -24,6 +24,18 @@
 #define __builtin_constant_p(x) 0
 #define __builtin_prefetch(...) ((void) 0)
 #define __builtin_assume_aligned(p, ...) (p)
+// GCC exposes the infinity / NaN constants as builtins. The double form
+// overflows to +inf the same way <math.h>'s INFINITY does; the float and
+// long-double forms cast that value, and NaN is 0.0/0.0. The NaN payload
+// string argument is ignored.
+#define __builtin_inf() (1.0e+308 * 10.0)
+#define __builtin_huge_val() (1.0e+308 * 10.0)
+#define __builtin_inff() ((float)(1.0e+308 * 10.0))
+#define __builtin_huge_valf() ((float)(1.0e+308 * 10.0))
+#define __builtin_infl() ((long double)(1.0e+308 * 10.0))
+#define __builtin_huge_vall() ((long double)(1.0e+308 * 10.0))
+#define __builtin_nan(s) (0.0 / 0.0)
+#define __builtin_nanf(s) ((float)(0.0 / 0.0))
 // Convert between the raw and "real" return address. The supported
 // targets carry no flag bits in the return address, so both are identity.
 #define __builtin_extract_return_addr(a) (a)

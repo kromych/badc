@@ -20,8 +20,9 @@ implementation is linked in as usual.
 
 ## Contents
 
-- **Third-party libraries**: `zlib.h` (zlib compression) and `libfdt.h` /
-  `fdt.h` / `libfdt_env.h` (flattened device tree).
+- **Third-party libraries**: `zlib.h` (zlib compression) and `libfdt.h`
+  (flattened device tree; self-contained, folds in the upstream `fdt.h` and
+  `libfdt_env.h`).
 - **Platform / windowing / graphics**: the objc runtime and Cocoa, Core*,
   OpenGL/CGL frameworks (macOS); win32 / WGL surfaces (Windows); X11 / GLX
   (Linux); plus `GL/`, `dirent.h`, and the RGFW framework-binding headers.

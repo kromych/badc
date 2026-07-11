@@ -7115,7 +7115,8 @@ fn emit_intrinsic(
         | I::Atomic128Load
         | I::Atomic128Store
         | I::Atomic128LoadEx
-        | I::Atomic128StoreEx => {
+        | I::Atomic128StoreEx
+        | I::Atomic128StoreInsert => {
             // The 128-bit atomic ldaxp/stlxp and ldp/stp, ldxp/stxp shapes
             // are aarch64-only; the source selects them via the aarch64
             // host-include path, so x86-64 (which has native `cmpxchg16b`)

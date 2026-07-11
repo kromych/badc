@@ -3638,6 +3638,7 @@ fn emit_intrinsic(
         I::Atomic128Load | I::Atomic128Store | I::Atomic128LoadEx | I::Atomic128StoreEx => {
             emit_atomic128_ldst(code, intrinsic, args, alloc, frame, scratch)
         }
+        I::Atomic128StoreInsert => emit_atomic128_store_insert(code, args, alloc, frame, scratch),
         I::Sqrt
         | I::Sqrtf
         | I::Fabs
@@ -4947,6 +4948,54 @@ fn emit_atomic128_ldst(
     {
         return false;
     }
+    atomic128_restore_working(code);
+    true
+}
+
+/// AArch64 128-bit masked store-insert: `*mem = (*mem & ~msk) | val`, from an
+/// `LDXP` / `BIC` / `ORR` / `STXP` exclusive retry loop (no LSE2). `args` is
+/// `[ptr, vl, vh, ml, mh]`; there is no register result. Borrowed working
+/// registers x9..x15 are saved / restored so spilled operands can route
+/// through the save area.
+fn emit_atomic128_store_insert(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use super::encode::{enc_bic_reg, enc_ldxp, enc_orr_reg, enc_stxp};
+    if args.len() != 5 {
+        bail_msg("atomic128 store-insert: wrong operand count");
+        return false;
+    }
+    let ptr = Reg(9);
+    let lo = Reg(10);
+    let hi = Reg(11);
+    let status = scratch.secondary; // x17
+    let (vl, vh, ml, mh) = (Reg(12), Reg(13), Reg(14), Reg(15));
+    atomic128_save_working(code);
+    if !atomic128_operand_into(code, args[0], ptr, frame, alloc) {
+        bail_msg("atomic128 store-insert: ptr operand not int reg / spill");
+        return false;
+    }
+    // Inputs land in x12..x15 as (vl, vh, ml, mh); reads route through the
+    // save area if the allocator parked one in a working register.
+    for (r, &a) in [vl, vh, ml, mh].iter().zip(&args[1..]) {
+        if !atomic128_operand_into(code, a, *r, frame, alloc) {
+            bail_msg("atomic128 store-insert: input operand not int reg / spill");
+            return false;
+        }
+    }
+    let loop_start = code.len();
+    emit(code, enc_ldxp(lo, hi, ptr));
+    emit(code, enc_bic_reg(lo, lo, ml)); // lo &= ~ml
+    emit(code, enc_bic_reg(hi, hi, mh)); // hi &= ~mh
+    emit(code, enc_orr_reg(lo, lo, vl)); // lo |= vl
+    emit(code, enc_orr_reg(hi, hi, vh)); // hi |= vh
+    emit(code, enc_stxp(status, lo, hi, ptr));
+    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(code, enc_cbnz(status, back as i32));
     atomic128_restore_working(code);
     true
 }

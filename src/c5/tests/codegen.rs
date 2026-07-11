@@ -1663,6 +1663,45 @@ fn atomic128_positional_ldp_load_pair_aarch64() {
     );
 }
 
+#[test]
+fn atomic128_store_insert_aarch64() {
+    // The masked 128-bit store-insert `*mem = (*mem & ~msk) | val` lowers to
+    // an LDXP / BIC / BIC / ORR / ORR / STXP exclusive retry loop. The `[l]`,
+    // `[h]`, `[f]` operands are asm scratch (no C output), and the value /
+    // mask halves are inputs.
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned long long lo, hi; } u128;\n\
+         void si(u128 *ps, unsigned long long vl, unsigned long long vh,\n\
+                 unsigned long long ml, unsigned long long mh){\n\
+           unsigned long long tl, th; unsigned f;\n\
+           __asm__(\"0: ldxp %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"bic %[l], %[l], %[ml]\\n\\t\"\n\
+                   \"bic %[h], %[h], %[mh]\\n\\t\"\n\
+                   \"orr %[l], %[l], %[vl]\\n\\t\"\n\
+                   \"orr %[h], %[h], %[vh]\\n\\t\"\n\
+                   \"stxp %w[f], %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"cbnz %w[f], 0b\\n\"\n\
+                   : [mem]\"+Q\"(*ps), [f]\"=&r\"(f), [l]\"=&r\"(tl), [h]\"=&r\"(th)\n\
+                   : [vl]\"r\"(vl), [vh]\"r\"(vh), [ml]\"r\"(ml), [mh]\"r\"(mh)); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    let any_ldxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_0000);
+    let any_stxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_0000);
+    // BIC (logical shifted-register AND with N=1): base 0x8A20_0000.
+    let any_bic = words().any(|w| (w & 0xFFE0_0000) == 0x8A20_0000);
+    assert!(any_ldxp, "store-insert must emit an LDXP");
+    assert!(any_stxp, "store-insert must emit an STXP");
+    assert!(any_bic, "store-insert must emit a BIC (mask clear)");
+}
+
 /// Bytes of the section named `name` in an ELF64 little-endian
 /// object, or `None` when absent. Reads only the section header
 /// table and the section-name string table.

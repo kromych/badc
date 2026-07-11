@@ -398,6 +398,12 @@ pub(crate) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x8A00_0000, rd, rn, rm)
 }
 
+/// `BIC <Xd>, <Xn>, <Xm>` -- bit clear: `Xn & ~Xm`. The logical
+/// shifted-register `AND` form with `N=1` (bit 21) complements `Xm`.
+pub(crate) fn enc_bic_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x8A20_0000, rd, rn, rm)
+}
+
 /// `AND <Xd>, <Xn>, #~15` -- mask off the low four bits so the
 /// result is a multiple of 16. Used by the alloca lowering to
 /// round the requested size up to the platform's stack-alignment

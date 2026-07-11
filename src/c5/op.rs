@@ -266,6 +266,11 @@ pub enum Intrinsic {
     /// (`[fp + 8]` under both the AAPCS64 and SysV prologues). Only level
     /// 0 is supported. The interpreter returns a stable per-frame proxy.
     ReturnAddress = 69,
+    /// 128-bit masked store-insert: `*mem = (*mem & ~msk) | val`, built from
+    /// an `LDXP` / `BIC` / `ORR` / `STXP` exclusive retry loop. Takes the
+    /// pointer and the value and mask halves (`vl`, `vh`, `ml`, `mh`) as
+    /// inputs; there is no result. AArch64 only.
+    Atomic128StoreInsert = 70,
 }
 
 impl Intrinsic {
@@ -340,6 +345,7 @@ impl Intrinsic {
             67 => Some(Intrinsic::Atomic128LoadEx),
             68 => Some(Intrinsic::Atomic128StoreEx),
             69 => Some(Intrinsic::ReturnAddress),
+            70 => Some(Intrinsic::Atomic128StoreInsert),
             _ => None,
         }
     }

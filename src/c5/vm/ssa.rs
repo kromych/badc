@@ -2197,6 +2197,20 @@ fn run_intrinsic(
             store_to_memory(mem, ptr + 8, h, StoreKind::I64)?;
             Ok(())
         }
+        Intrinsic::Atomic128StoreInsert => {
+            // args: [ptr, vl, vh, ml, mh]. Masked insert:
+            // *mem = (*mem & ~msk) | val.
+            let ptr = frame.regs[args[0] as usize] as usize;
+            let vl = frame.regs[args[1] as usize];
+            let vh = frame.regs[args[2] as usize];
+            let ml = frame.regs[args[3] as usize];
+            let mh = frame.regs[args[4] as usize];
+            let cur_l = load_from_memory(mem, ptr, LoadKind::I64)?;
+            let cur_h = load_from_memory(mem, ptr + 8, LoadKind::I64)?;
+            store_to_memory(mem, ptr, (cur_l & !ml) | vl, StoreKind::I64)?;
+            store_to_memory(mem, ptr + 8, (cur_h & !mh) | vh, StoreKind::I64)?;
+            Ok(())
+        }
         Intrinsic::Rdtsc => {
             // No host clock; zero the low/high output words so a caller
             // reads a defined result rather than uninitialized data.

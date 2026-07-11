@@ -897,6 +897,16 @@ impl Compiler {
                 && tmpl_ws.contains("cbnz%w[t1],0b")
             {
                 Some(I::Atomic128StoreEx)
+            } else if tmpl_ws.starts_with("0:ldxp%[l],%[h],%[mem]")
+                && tmpl_ws.contains("bic%[l],%[l],%[ml]")
+                && tmpl_ws.contains("bic%[h],%[h],%[mh]")
+                && tmpl_ws.contains("orr%[l],%[l],%[vl]")
+                && tmpl_ws.contains("orr%[h],%[h],%[vh]")
+                && tmpl_ws.contains("stxp%w[f],%[l],%[h],%[mem]")
+                && tmpl_ws.contains("cbnz%w[f],0b")
+            {
+                // Masked 128-bit store-insert: `*mem = (*mem & ~msk) | val`.
+                Some(I::Atomic128StoreInsert)
             } else {
                 None
             };
@@ -1356,6 +1366,13 @@ impl Compiler {
                 role = Role::Mem;
             }
             self.data.truncate(cstart);
+            // The masked store-insert has no C output: its section-1 register
+            // operands (`[f]`, `[l]`, `[h]`) are asm scratch, unlike the load
+            // shapes whose section-1 `[l]`/`[h]` are result lvalues.
+            if matches!(kind, I::Atomic128StoreInsert) && matches!(role, Role::Reg) && section == 1
+            {
+                role = Role::Scratch;
+            }
             // Clobbers (fourth section on) are bare strings with no operand.
             if section >= 3 {
                 continue;
@@ -1415,6 +1432,8 @@ impl Compiler {
             I::Atomic128Xchg | I::Atomic128FetchAnd | I::Atomic128FetchOr => (2, 2),
             I::Atomic128Load | I::Atomic128LoadEx => (2, 0),
             I::Atomic128Store | I::Atomic128StoreEx => (0, 2),
+            // Masked store-insert: ptr + (vl, vh, ml, mh); no result address.
+            I::Atomic128StoreInsert => (0, 4),
             _ => (0, 0),
         };
         let ptr = match ptr {

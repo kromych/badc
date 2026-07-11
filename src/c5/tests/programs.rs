@@ -1390,6 +1390,15 @@ fn empty_array_init() {
 }
 
 #[test]
+fn runtime_struct_array_member_init() {
+    // A struct's array-of-struct member brace-initialized with a
+    // non-constant element value (`&g[i]`) takes the runtime store path;
+    // each element must recurse into the struct initializer instead of
+    // being parsed as a scalar leaf.
+    assert_eq!(run_fixture("runtime_struct_array_member_init.c"), 0);
+}
+
+#[test]
 fn builtin_frame_address() {
     // __builtin_frame_address(0): non-null, stable within a frame,
     // distinct between a function and its callee.

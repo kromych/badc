@@ -1572,6 +1572,15 @@ impl Compiler {
                 } else {
                     self.fill_array_leaves_runtime(local_val, off, sub_span, ty, elem_size)?;
                 }
+            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                // Array-of-struct element (C99 6.7.8p17): recurse into the
+                // struct initializer instead of the scalar-leaf path, which
+                // would hand the element's `{` to the expression parser.
+                // Reached when a struct-array MEMBER is forced onto the
+                // runtime path by a non-constant element value (e.g.
+                // `&mms->field[0]`); braces may be elided (6.7.8p20).
+                let braced = self.lex.tk == '{';
+                self.emit_struct_runtime_at(local_val, off, struct_id_of(ty), braced)?;
             } else {
                 self.emit_array_leaf_runtime(local_val, off, ty)?;
             }

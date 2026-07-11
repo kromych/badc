@@ -2996,6 +2996,22 @@ fn diagnostic_echoes_the_source_line() {
         w2.contains("int cmd(int f, int n)"),
         "expected the signature line, not the brace, got {w2:?}"
     );
+
+    // Giving a body to a predefined library function is an error anchored
+    // to the signature line, not the body's opening brace parsed after it.
+    let asrc = "#include <stdlib.h>\nint abs(int n)\n{\n    return n < 0 ? -n : n;\n}\nint main(void) { return abs(-1); }\n";
+    let err3 = Compiler::new(asrc.to_string())
+        .compile()
+        .expect_err("a body for a predefined library function is an error");
+    let m3 = format!("{err3}");
+    assert!(
+        m3.contains("predefined library function `abs`"),
+        "message: {m3:?}"
+    );
+    assert!(
+        m3.contains("int abs(int n)"),
+        "expected the signature line echoed, not the brace, got {m3:?}"
+    );
 }
 
 #[test]

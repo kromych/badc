@@ -332,6 +332,10 @@ impl Compiler {
                 self.pending.base_is_function_type = base_is_function_type;
                 self.pending.typedef_fn_proto = base_typedef_fn_proto;
                 self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
+                // The declarator's own line -- the name and its parameter
+                // list -- for diagnostics that would otherwise point at the
+                // function body's opening brace parsed further below.
+                let signature_line = self.lex.line;
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
                 // `__declspec(dllexport)` on the declarator exports the name,
                 // the equivalent of `#pragma export(name)`. resolve_exports
@@ -859,12 +863,15 @@ impl Compiler {
                     }
 
                     if was_sys {
-                        return Err(self.compile_err(format!(
-                            "cannot give a body to predefined library function `{}` \
-                             (the per-target header's `#pragma binding` provides the \
-                             implementation -- use a prototype only)",
-                            self.symbols[id_idx].name
-                        )));
+                        return Err(self.compile_err_at(
+                            signature_line,
+                            format!(
+                                "cannot give a body to predefined library function `{}` \
+                                 (the per-target header's `#pragma binding` provides the \
+                                 implementation -- use a prototype only)",
+                                self.symbols[id_idx].name
+                            ),
+                        ));
                     }
                     // C99 6.9.1: an old-style (K&R) definition lists the
                     // parameter names in the declarator and gives their

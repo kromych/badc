@@ -4023,7 +4023,11 @@ impl Compiler {
             if depth == 0 && (tk == ',' || tk == ')') {
                 return Ok(());
             }
-            if tk == '(' || tk == '[' || tk == '{' {
+            // The lexer emits `Token::Brak` for a subscript `[` (not the
+            // raw `[` byte), so an arm containing `&x[i]` must count it or
+            // the bracket depth unbalances and the scan stops at the wrong
+            // `)` / `,`.
+            if tk == '(' || tk == '[' || tk == Token::Brak || tk == '{' {
                 depth += 1;
             } else if tk == ')' || tk == ']' || tk == '}' {
                 depth -= 1;

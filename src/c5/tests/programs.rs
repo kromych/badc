@@ -3321,3 +3321,10 @@ fn constfold_post_inline_matches_interpreter() {
 fn rotate_inline_const_count_matches_interpreter() {
     assert_eq!(run_fixture("rotate_inline_const_count.c"), 0);
 }
+
+#[test]
+fn generic_selection_subscript_arm() {
+    // A `_Generic` arm containing a subscript (`&x[0]`) must not break the
+    // balanced-bracket association scan (QEMU's qemu_make_lockable shape).
+    assert_eq!(run_fixture("generic_selection_subscript_arm.c"), 0);
+}

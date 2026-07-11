@@ -124,6 +124,7 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::tmpfile,   "_tmpfile")
 #pragma binding(libc::tmpnam,    "_tmpnam")
 #pragma binding(libc::setbuf,    "_setbuf")
+#pragma binding(libc::setbuffer, "_setbuffer")
 #pragma binding(libc::puts,      "_puts")
 #pragma binding(libc::perror,    "_perror")
 #pragma binding(libc::fseek,     "_fseek")
@@ -202,6 +203,7 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::tmpfile,   "tmpfile")
 #pragma binding(libc::tmpnam,    "tmpnam")
 #pragma binding(libc::setbuf,    "setbuf")
+#pragma binding(libc::setbuffer, "setbuffer")
 #pragma binding(libc::puts,      "puts")
 #pragma binding(libc::perror,    "perror")
 #pragma binding(libc::fseek,     "fseek")
@@ -499,6 +501,11 @@ FILE *tmpfile(void);
 char *tmpnam(char *s);
 // C99 7.19.5.5: convenience wrapper around setvbuf.
 void setbuf(FILE *stream, char *buf);
+// BSD extension (glibc / macOS, not msvcrt): setvbuf with a caller-sized
+// buffer, fully-buffered when `buf` is non-null.
+#ifndef _WIN32
+void setbuffer(FILE *stream, char *buf, int size);
+#endif
 int puts(char *s);
 int perror(char *s);
 // C99 7.19.9.2 / 7.19.9.4: fseek takes a long offset, ftell returns long.

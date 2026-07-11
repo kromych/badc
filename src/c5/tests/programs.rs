@@ -1381,6 +1381,28 @@ fn zero_length_array() {
 }
 
 #[test]
+fn setbuffer_is_a_unix_stdio_binding() {
+    use crate::{CompileOptions, Compiler, Target};
+    // The BSD `setbuffer` is bound on the Unix targets (glibc / macOS) and
+    // absent on Windows (msvcrt has no such symbol); a successful compile
+    // is the presence check.
+    let compiles = |target: Target| -> bool {
+        let src = "#include <stdio.h>\nvoid f(char *b) { setbuffer(0, b, 512); }\n";
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    assert!(compiles(Target::LinuxAarch64), "setbuffer on linux-aarch64");
+    assert!(compiles(Target::LinuxX64), "setbuffer on linux-x64");
+    assert!(compiles(Target::MacOSAarch64), "setbuffer on macos");
+    assert!(
+        !compiles(Target::WindowsX64),
+        "setbuffer must be absent on Windows"
+    );
+}
+
+#[test]
 fn fcntl_stat_constants_match_the_target_libc() {
     use crate::{CompileOptions, Compiler, Target};
     // A negative-size array declaration is a compile error unless every

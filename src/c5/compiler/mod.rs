@@ -1095,6 +1095,11 @@ pub struct Compiler {
     /// where.
     dylibs: Vec<DylibSpec>,
 
+    /// Symbol indices of callees already reported as used without a
+    /// return-type prototype (implicit int). Dedupes the diagnostic to
+    /// one per callee.
+    warned_implicit_ret: alloc::collections::BTreeSet<usize>,
+
     /// The native target this compilation is producing for.
     /// Drives data-model picks: `long` is 8 bytes on LP64
     /// (Linux / macOS) and 4 bytes on LLP64 (Windows). Stored
@@ -1461,6 +1466,7 @@ impl Compiler {
             symbol_index,
             deferred_error,
             dylibs,
+            warned_implicit_ret: alloc::collections::BTreeSet::new(),
             target,
             next_ent_pc: 0,
             data,

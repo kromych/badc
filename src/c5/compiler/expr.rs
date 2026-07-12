@@ -695,6 +695,7 @@ impl Compiler {
                 {
                     self.symbols[id_idx].class = Token::Fun as i64;
                     self.symbols[id_idx].type_ = Ty::Int as i64;
+                    self.symbols[id_idx].implicit_return_int = true;
                     self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
                     self.symbols[id_idx].defined_here = false;
                 }
@@ -1060,6 +1061,23 @@ impl Compiler {
                     // caller-side narrowing below is needed only for Sys
                     // calls to satisfy the C99 6.5.2.2p4 conversion.
                     let is_sys_call = self.symbols[id_idx].class == Token::Sys as i64;
+                    // A callee whose return type is the implicit `int`
+                    // default -- a `#pragma binding` with no prototype, or
+                    // a C89 implicit declaration -- truncates the result to
+                    // 32 bits if it really returns a pointer or wider type.
+                    // Warn once so the source (or a header) declares it.
+                    if self.symbols[id_idx].implicit_return_int
+                        && self.warned_implicit_ret.insert(id_idx)
+                    {
+                        let name = self.symbols[id_idx].name.clone();
+                        let line = self.lex.line;
+                        self.warn_at(
+                            line,
+                            alloc::format!(
+                                "`{name}` is called without a return-type prototype; assuming `int`"
+                            ),
+                        );
+                    }
                     // Struct-returning callees use a hidden out-pointer
                     // arg at val=2: the caller pre-allocates a temp for
                     // the result and passes its address as arg 0; the

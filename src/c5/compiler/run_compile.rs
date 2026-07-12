@@ -685,6 +685,9 @@ impl Compiler {
                 let prior_params = self.symbols[id_idx].params.clone();
                 let prior_is_variadic = self.symbols[id_idx].is_variadic;
                 self.symbols[id_idx].type_ = ty;
+                // An explicit return type replaces the implicit-`int`
+                // default (Sys binding without a prior prototype).
+                self.symbols[id_idx].implicit_return_int = false;
 
                 if self.lex.tk == '(' || preconsumed_params.is_some() {
                     if !was_sys {

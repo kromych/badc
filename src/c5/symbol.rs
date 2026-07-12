@@ -27,6 +27,14 @@ pub(crate) struct Symbol {
     /// Type-checking only verifies the fixed parameters.
     pub is_variadic: bool,
 
+    /// True while the function's return type is the implicit `int`
+    /// default rather than a declared type: a `#pragma binding` seen
+    /// without a following prototype, or a C89 implicit declaration.
+    /// A call site warns once (the result is truncated to 32 bits if
+    /// the function really returns a pointer or wider type). Cleared
+    /// when a declaration supplies an explicit return type.
+    pub implicit_return_int: bool,
+
     /// True for a function declared `_Noreturn` / `noreturn` (C11
     /// 6.7.4) or one of the built-in non-returning library functions
     /// (`exit`, `abort`, ...). The reachability analysis treats a call

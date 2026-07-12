@@ -77,6 +77,48 @@ fn warn_return_type_mismatch() {
 }
 
 #[test]
+fn call_without_return_prototype_warns_implicit_int() {
+    use crate::{Compiler, Target};
+    // A `#pragma binding` seen without an accompanying prototype leaves
+    // the callee's return type at the implicit `int` default. A call
+    // warns once: the result truncates to 32 bits if the function really
+    // returns a pointer or wider type. Target-fixed so the bound dylib
+    // name (`libc`) is the same regardless of the host.
+    let src = "#pragma dylib(libc, \"libc.so.6\")\n\
+               #pragma binding(libc::mystery, \"getenv\")\n\
+               int main(void) { return mystery(\"PATH\") ? 0 : 1; }\n";
+    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    assert!(
+        p.warnings
+            .iter()
+            .any(|w| w.contains("mystery") && w.contains("without a return-type prototype")),
+        "expected implicit-int warning, got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn call_with_return_prototype_is_silent() {
+    use crate::{Compiler, Target};
+    // Declaring the return type clears the implicit-`int` default, so
+    // the same call produces no warning.
+    let src = "#pragma dylib(libc, \"libc.so.6\")\n\
+               #pragma binding(libc::mystery, \"getenv\")\n\
+               char *mystery(char *name);\n\
+               int main(void) { return mystery(\"PATH\") ? 0 : 1; }\n";
+    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    assert!(
+        !p.warnings.iter().any(|w| w.contains("mystery")),
+        "expected no warning for a prototyped binding, got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
 fn cast_silences_int_to_pointer_warning() {
     // Same shape, but with `p = (int *)5;` -- the cast tells the compiler
     // the conversion is intentional, so no warning.

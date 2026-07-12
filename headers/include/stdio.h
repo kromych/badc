@@ -499,6 +499,10 @@ int getchar();
 // C99 7.19.4.3 / 7.19.4.4: temporary file streams.
 FILE *tmpfile(void);
 char *tmpnam(char *s);
+// POSIX pipe / fd streams (bound above).
+FILE *popen(char *command, char *type);
+int pclose(FILE *stream);
+FILE *fdopen(int fd, char *mode);
 // C99 7.19.5.5: convenience wrapper around setvbuf.
 void setbuf(FILE *stream, char *buf);
 // BSD extension (glibc / macOS, not msvcrt): setvbuf with a caller-sized

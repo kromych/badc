@@ -2089,6 +2089,9 @@ pub(crate) fn init_symbols(
                     class: Token::Sys as i64,
                     type_: Ty::Int as i64,
                     val: binding_idx,
+                    // Return type defaults to `int` until a prototype
+                    // declares it; a call before then warns.
+                    implicit_return_int: true,
                     ..Default::default()
                 });
                 index.record(hash);

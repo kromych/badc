@@ -505,9 +505,7 @@ impl Compiler {
                         // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
                         // designator jumps the cursor; `[N].field... =`
                         // initializes one member of each designated element.
-                        if let Some((lo, hi, chain)) =
-                            self.take_array_element_designator(count)?
-                        {
+                        if let Some((lo, hi, chain)) = self.take_array_element_designator(count)? {
                             if chain || hi > lo {
                                 self.fill_element_range(
                                     sid,
@@ -1148,9 +1146,7 @@ impl Compiler {
                         // TODO: member chains (`[N].field =`) and ranges
                         // with runtime element values route through
                         // per-field stores.
-                        if let Some((idx, hi, chain)) =
-                            self.take_array_element_designator(count)?
-                        {
+                        if let Some((idx, hi, chain)) = self.take_array_element_designator(count)? {
                             if chain || hi > idx {
                                 return Err(self.compile_err(
                                     "`[N].field` / range designator requires constant \

@@ -840,9 +840,7 @@ impl Compiler {
                 self.next()?; // `,`
                 v = self.parse_const_expr_cond_val()?;
                 if self.lex.tk != ')' {
-                    return Err(
-                        self.compile_err("`)` expected to close `__builtin_choose_expr`")
-                    );
+                    return Err(self.compile_err("`)` expected to close `__builtin_choose_expr`"));
                 }
                 self.next()?;
             }

@@ -145,7 +145,11 @@ impl Compiler {
                     }
                     ty += Ty::Ptr as i64;
                 }
-                if self.pending.typedef_base_array_size != 0 {
+                // Bare array-typedef parameter (`Node`): adjust to a
+                // pointer per 6.7.5.3p7. A pointer-to-array (`Node *`)
+                // already has its pointer level from the leading `*`, so
+                // it must not gain a second one.
+                if self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0 {
                     ty += Ty::Ptr as i64;
                 }
                 self.ty = ty;
@@ -182,7 +186,23 @@ impl Compiler {
             // into `array_size` (i.e., the declarator carried no
             // explicit brackets).
             if array_size == 0 && self.pending.typedef_base_array_size != 0 {
-                full_ty += Ty::Ptr as i64;
+                if leading_ptr_count > 0 {
+                    // `Node *p` where `Node` is an array typedef: a pointer
+                    // TO the array, not an array parameter. 6.7.5.3p7 does
+                    // not apply -- the leading `*` already gave the pointer
+                    // level. Record the pointer-to-array shape (array_dims
+                    // [1, N]) so `p[k]` strides by the whole row and decays
+                    // to the row address, matching the general declarator
+                    // path; the `*` was consumed here, so parse_declarator
+                    // never saw it to set this itself.
+                    if param_idx != usize::MAX {
+                        let inner = self.pending.typedef_base_array_size;
+                        self.symbols[param_idx].inner_array_size = inner;
+                        self.symbols[param_idx].array_dims = alloc::vec![1, inner];
+                    }
+                } else {
+                    full_ty += Ty::Ptr as i64;
+                }
             }
             // Fn-pointer lineage: pick up the side-channel that
             // parse_declarator (or the typedef-of-fn-ptr base)

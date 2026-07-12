@@ -2636,6 +2636,17 @@ fn pointer_to_array_typedef_deref_decays() {
 }
 
 #[test]
+fn pointer_to_array_typedef_param_subscript() {
+    // A `Node *nodes` parameter, where `Node` is an array typedef, is a
+    // pointer to the array (not an array parameter -- 6.7.5.3p7 does not
+    // apply), so `nodes[k]` strides by `sizeof(Node)` and decays to the
+    // row address. The parameter path used to add a second pointer level,
+    // striding by a pointer width and loading a word as the row -- the
+    // shape qemu's `phys_page_compact(..., Node *nodes)` crashed on.
+    assert_eq!(run_fixture("pointer_to_array_typedef_param_subscript.c"), 0);
+}
+
+#[test]
 fn fnptr_param_indirection() {
     // A parameter of type "pointer to function-pointer typedef"
     // (`fn_t *p`) carries two levels of fn-pointer indirection, so

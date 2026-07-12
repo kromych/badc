@@ -41,6 +41,8 @@ pub(crate) mod object;
 #[cfg(feature = "std")]
 mod synth_build;
 
+#[cfg(feature = "std")]
+pub use archive::read_archive_at;
 pub use archive::{ArchiveMember, read_archive, write_archive};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

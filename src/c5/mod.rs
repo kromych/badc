@@ -42,6 +42,9 @@ pub use {
 #[cfg(feature = "std")]
 pub use host::StdHost;
 
+#[cfg(all(feature = "full", feature = "std"))]
+#[allow(unused_imports)]
+pub use linker::read_archive_at;
 #[cfg(feature = "full")]
 #[allow(unused_imports)]
 pub use linker::{ArchiveMember, read_archive, write_archive};

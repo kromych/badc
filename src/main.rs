@@ -1213,7 +1213,10 @@ fn run() {
                     std::process::exit(1);
                 }
             };
-            let members = match badc::read_archive(&bytes) {
+            // A GNU thin archive stores only member paths; resolve them
+            // against the archive's own directory.
+            let base_dir = std::path::Path::new(a_path).parent();
+            let members = match badc::read_archive_at(&bytes, base_dir) {
                 Ok(m) => m,
                 Err(e) => {
                     eprint_diagnostic(format!("badc: {a_path}: {e}"));

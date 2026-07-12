@@ -25,6 +25,45 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
+/// ar(5) member header: a fixed 60-byte record of space-padded ASCII
+/// fields, identical in the regular `!<arch>` and thin `!<thin>`
+/// flavours. All fields are byte arrays, so the layout is align-1 and
+/// the on-disk bytes map directly onto this struct.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct ArHeader {
+    name: [u8; 16],
+    date: [u8; 12],
+    uid: [u8; 6],
+    gid: [u8; 6],
+    mode: [u8; 8],
+    size: [u8; 10],
+    /// Trailer magic, always `0x60 0x0a` ("`\n").
+    fmag: [u8; 2],
+}
+const AR_HEADER_SIZE: usize = 60;
+const _: () = assert!(core::mem::size_of::<ArHeader>() == AR_HEADER_SIZE);
+
+fn read_header(bytes: &[u8], off: usize) -> Result<ArHeader, C5Error> {
+    if off
+        .checked_add(AR_HEADER_SIZE)
+        .is_none_or(|end| end > bytes.len())
+    {
+        return Err(err("ar header truncated"));
+    }
+    // SAFETY: bounds checked above; `ArHeader` is `#[repr(C)]` of byte
+    // arrays (align 1), so any offset reads cleanly and the in-memory
+    // pattern matches the on-disk bytes.
+    Ok(unsafe { core::ptr::read_unaligned(bytes.as_ptr().add(off) as *const ArHeader) })
+}
+
+fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
+    let bytes = unsafe {
+        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
+    };
+    out.extend_from_slice(bytes);
+}
+
 /// One archive member after parsing. `bytes` aliases into the
 /// archive blob the caller owns; copying out lets the caller
 /// drop the archive once everything is parsed.
@@ -40,17 +79,29 @@ pub struct ArchiveMember {
     pub bytes: Vec<u8>,
 }
 
-/// Read an archive's members. Skips the SysV symbol-index and
-/// the GNU string-table members; the caller only sees real
-/// object members. Returns members in the order they appear in
-/// the archive.
-pub fn read_archive(blob: &[u8]) -> Result<Vec<ArchiveMember>, C5Error> {
-    if blob.len() < 8 || &blob[..8] != b"!<arch>\n" {
+/// Where a parsed member's bytes live: inline in the archive blob
+/// (regular `!<arch>`) or in an external file at the given path
+/// (GNU thin `!<thin>` archive, resolved relative to the archive's
+/// directory).
+enum MemberSource {
+    Inline(Vec<u8>),
+    External(String),
+}
+
+/// Walk an archive's member headers, handling both the regular
+/// `!<arch>` flavour (member bodies stored inline) and the GNU thin
+/// `!<thin>` flavour (member bodies live in external files; only the
+/// `/` symbol index and `//` name table are stored inline). Returns
+/// each real member's name and the source of its bytes. The SysV
+/// symbol index and GNU string table are consumed, not returned.
+fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5Error> {
+    let thin = blob.len() >= 8 && &blob[..8] == b"!<thin>\n";
+    if !thin && (blob.len() < 8 || &blob[..8] != b"!<arch>\n") {
         return Err(err("missing ar(5) magic `!<arch>\\n`"));
     }
     let mut cursor = 8usize;
     let mut long_names: Vec<u8> = Vec::new();
-    let mut out: Vec<ArchiveMember> = Vec::new();
+    let mut out: Vec<(String, MemberSource)> = Vec::new();
     while cursor < blob.len() {
         // Align to even byte boundary -- ar pads odd-size members.
         if !cursor.is_multiple_of(2) {
@@ -59,24 +110,33 @@ pub fn read_archive(blob: &[u8]) -> Result<Vec<ArchiveMember>, C5Error> {
                 break;
             }
         }
-        if cursor + 60 > blob.len() {
-            return Err(err("ar header truncated"));
-        }
-        let hdr = &blob[cursor..cursor + 60];
-        if &hdr[58..60] != b"\x60\x0a" {
+        let hdr = read_header(blob, cursor)?;
+        if hdr.fmag != [0x60, 0x0a] {
             return Err(err(&format!(
                 "ar header magic mismatch at offset 0x{cursor:x}"
             )));
         }
-        let raw_name = trim_ascii(&hdr[0..16]);
-        let size_str = trim_ascii(&hdr[48..58]);
-        let size = parse_dec(&size_str, "size")?;
-        cursor += 60;
-        if cursor + size > blob.len() {
-            return Err(err("ar member body truncated"));
-        }
-        let body = &blob[cursor..cursor + size];
-        cursor += size;
+        let raw_name = trim_ascii(&hdr.name);
+        let size = parse_dec(&trim_ascii(&hdr.size), "size")?;
+        cursor += AR_HEADER_SIZE;
+
+        // The `/` symbol index and `//` name table are stored inline in
+        // both flavours; a regular member is inline, a thin member's
+        // body lives in an external file (the header records its size
+        // but no bytes follow). `is_meta` singles out the two inline
+        // metadata members so a thin archive still skips their bodies.
+        let is_meta = raw_name == "/" || raw_name == "/SYM64/" || raw_name == "//";
+        let inline = !thin || is_meta;
+        let body: &[u8] = if inline {
+            if cursor + size > blob.len() {
+                return Err(err("ar member body truncated"));
+            }
+            let b = &blob[cursor..cursor + size];
+            cursor += size;
+            b
+        } else {
+            &[]
+        };
 
         // Decode name. Variants we accept:
         //   "/"            -- SysV symbol index. Skip.
@@ -92,20 +152,82 @@ pub fn read_archive(blob: &[u8]) -> Result<Vec<ArchiveMember>, C5Error> {
             long_names = body.to_vec();
             continue;
         }
-        let name = if let Some(digits) = raw_name.strip_prefix('/') {
+        let name = if let Some(rest) = raw_name.strip_prefix('/') {
+            // GNU long-name reference `/<decimal offset>` into the `//`
+            // table. Some archivers pad the 16-byte field with spaces
+            // and a trailing `/`, so read the leading digit run and
+            // ignore the rest -- matching binutils' ar reader.
+            let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
             let offset: usize = digits
                 .parse()
-                .map_err(|_| err("bad GNU long-name offset"))?;
+                .map_err(|_| err(&format!("bad GNU long-name offset in `{raw_name}`")))?;
             extract_long_name(&long_names, offset)?
         } else if let Some(stripped) = raw_name.strip_suffix('/') {
             stripped.to_string()
         } else {
             raw_name
         };
-        out.push(ArchiveMember {
-            name,
-            bytes: body.to_vec(),
-        });
+        if thin {
+            // A thin member's `name` is its path relative to the
+            // archive's directory (or absolute); the caller resolves it.
+            out.push((name.clone(), MemberSource::External(name)));
+        } else {
+            out.push((name, MemberSource::Inline(body.to_vec())));
+        }
+    }
+    Ok(out)
+}
+
+/// Read an archive's members. Skips the SysV symbol-index and
+/// the GNU string-table members; the caller only sees real
+/// object members. Returns members in the order they appear in
+/// the archive. A GNU thin archive (`!<thin>`) needs the external
+/// member files, which this blob-only entry point cannot reach; use
+/// [`read_archive_at`] for those.
+pub fn read_archive(blob: &[u8]) -> Result<Vec<ArchiveMember>, C5Error> {
+    let mut out = Vec::new();
+    for (name, src) in parse_archive_members(blob)? {
+        match src {
+            MemberSource::Inline(bytes) => out.push(ArchiveMember { name, bytes }),
+            MemberSource::External(_) => {
+                return Err(err(
+                    "thin archive member requires a base directory (use read_archive_at)",
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// As [`read_archive`], but resolves a GNU thin archive's external
+/// member files against `base_dir` (the directory containing the
+/// archive). A regular archive ignores `base_dir`. Relative member
+/// paths join `base_dir`; absolute paths are read as-is.
+#[cfg(feature = "std")]
+pub fn read_archive_at(
+    blob: &[u8],
+    base_dir: Option<&std::path::Path>,
+) -> Result<Vec<ArchiveMember>, C5Error> {
+    let mut out = Vec::new();
+    for (name, src) in parse_archive_members(blob)? {
+        let bytes = match src {
+            MemberSource::Inline(bytes) => bytes,
+            MemberSource::External(path) => {
+                let p = std::path::Path::new(&path);
+                let resolved = match base_dir {
+                    Some(dir) if p.is_relative() => dir.join(p),
+                    _ => p.to_path_buf(),
+                };
+                std::fs::read(&resolved).map_err(|e| {
+                    err(&format!(
+                        "thin archive member `{}`: cannot read `{}`: {e}",
+                        name,
+                        resolved.display()
+                    ))
+                })?
+            }
+        };
+        out.push(ArchiveMember { name, bytes });
     }
     Ok(out)
 }
@@ -226,31 +348,28 @@ pub fn write_archive(
 }
 
 fn write_ar_header(out: &mut Vec<u8>, name_field: &str, size: usize) {
-    let mut hdr = [b' '; 60];
-    // Name (16). Zero-padded with trailing spaces.
-    let bytes = name_field.as_bytes();
-    let n = bytes.len().min(16);
-    hdr[..n].copy_from_slice(&bytes[..n]);
-    // Date (12) -- zero.
-    hdr[16..28].fill(b' ');
-    hdr[16] = b'0';
-    // uid (6), gid (6), mode (8) -- zeros.
-    hdr[28] = b'0';
-    hdr[34] = b'0';
-    hdr[40..48].fill(b' ');
-    hdr[40] = b'0';
-    // Size (10) -- ASCII decimal.
+    // Space-padded ASCII fields; the numeric fields carry a single `0`
+    // (date / uid / gid / mode are unused by the linker) except `size`.
+    let mut hdr = ArHeader {
+        name: [b' '; 16],
+        date: [b' '; 12],
+        uid: [b' '; 6],
+        gid: [b' '; 6],
+        mode: [b' '; 8],
+        size: [b' '; 10],
+        fmag: [0x60, 0x0a],
+    };
+    let name = name_field.as_bytes();
+    let n = name.len().min(16);
+    hdr.name[..n].copy_from_slice(&name[..n]);
+    hdr.date[0] = b'0';
+    hdr.uid[0] = b'0';
+    hdr.gid[0] = b'0';
+    hdr.mode[0] = b'0';
     let size_str = format!("{size}");
     let sbytes = size_str.as_bytes();
-    hdr[48..48 + sbytes.len()].copy_from_slice(sbytes);
-    // Fill rest of size field with spaces.
-    for b in &mut hdr[48 + sbytes.len()..58] {
-        *b = b' ';
-    }
-    // Trailer magic.
-    hdr[58] = 0x60;
-    hdr[59] = 0x0a;
-    out.extend_from_slice(&hdr);
+    hdr.size[..sbytes.len().min(10)].copy_from_slice(&sbytes[..sbytes.len().min(10)]);
+    write_struct(out, &hdr);
 }
 
 fn trim_ascii(bytes: &[u8]) -> String {
@@ -291,4 +410,86 @@ fn extract_long_name(table: &[u8], off: usize) -> Result<String, C5Error> {
 
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use super::*;
+
+    /// A regular `!<arch>` round-trips: write members, read them back.
+    #[test]
+    fn regular_archive_round_trips() {
+        let members = alloc::vec![
+            ArchiveMember {
+                name: "a.o".into(),
+                bytes: alloc::vec![1, 2, 3]
+            },
+            ArchiveMember {
+                name: "b.o".into(),
+                bytes: alloc::vec![4, 5, 6, 7]
+            },
+        ];
+        let blob = write_archive(
+            &members,
+            &[(0, alloc::vec!["sa".into()]), (1, alloc::vec!["sb".into()])],
+        );
+        let back = read_archive(&blob).expect("read");
+        assert_eq!(back.len(), 2);
+        assert_eq!(back[0].name, "a.o");
+        assert_eq!(back[0].bytes, alloc::vec![1, 2, 3]);
+        assert_eq!(back[1].name, "b.o");
+        assert_eq!(back[1].bytes, alloc::vec![4, 5, 6, 7]);
+    }
+
+    /// A GNU thin archive (`!<thin>`) stores member paths in the `//`
+    /// table with no inline bodies; `read_archive_at` resolves each
+    /// against the archive's directory and reads the external file.
+    #[test]
+    fn thin_archive_reads_external_members() {
+        let dir = std::env::temp_dir().join(format!("badc-thin-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("m1.o"), b"OBJECT-ONE").unwrap();
+        std::fs::write(dir.join("m2.o"), b"OBJ2").unwrap();
+        std::fs::write(dir.join("m3.o"), b"THREE").unwrap();
+
+        // GNU `//` entries are `<path>/\n`; a thin member header names
+        // `/<offset>` into that table and carries no body.
+        let names: &[u8] = b"m1.o/\nm2.o/\nm3.o/\n";
+        let off2 = b"m1.o/\n".len();
+        let off3 = b"m1.o/\nm2.o/\n".len();
+        let mut blob: Vec<u8> = Vec::new();
+        blob.extend_from_slice(b"!<thin>\n");
+        write_ar_header(&mut blob, "//", names.len());
+        blob.extend_from_slice(names);
+        if !names.len().is_multiple_of(2) {
+            blob.push(b'\n');
+        }
+        write_ar_header(&mut blob, "/0", 10); // m1.o size; no body in a thin archive
+        write_ar_header(&mut blob, &format!("/{off2}"), 4); // m2.o
+        // m3.o's ref uses the trailing-`/` field padding some archivers
+        // emit (`/<off>` then spaces then `/`); the reader must take the
+        // leading digits only.
+        let mut hdr3 = [b' '; AR_HEADER_SIZE];
+        let field = format!("/{off3}");
+        hdr3[..field.len()].copy_from_slice(field.as_bytes());
+        hdr3[15] = b'/'; // trailing slash at the end of the 16-byte name field
+        hdr3[48] = b'5'; // size 5
+        hdr3[58] = 0x60;
+        hdr3[59] = 0x0a;
+        blob.extend_from_slice(&hdr3);
+
+        let members = read_archive_at(&blob, Some(&dir)).expect("read thin");
+        assert_eq!(members.len(), 3, "three external members");
+        assert_eq!(members[0].name, "m1.o");
+        assert_eq!(members[0].bytes, b"OBJECT-ONE");
+        assert_eq!(members[1].name, "m2.o");
+        assert_eq!(members[1].bytes, b"OBJ2");
+        assert_eq!(members[2].name, "m3.o", "trailing-slash ref resolves");
+        assert_eq!(members[2].bytes, b"THREE");
+
+        // The blob-only entry point rejects thin members (no base dir).
+        assert!(read_archive(&blob).is_err(), "thin needs a base dir");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

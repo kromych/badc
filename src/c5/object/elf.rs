@@ -31,8 +31,9 @@
 //!
 //! ## Dynamic linking
 //!
-//! ET_EXEC + PT_INTERP. The loader (ld-linux-aarch64.so.1) maps both
-//! PT_LOAD segments at their fixed vmaddrs (no slide -- ET_EXEC), then
+//! ET_DYN (PIE) + PT_INTERP. The loader (ld-linux-aarch64.so.1) maps both
+//! PT_LOAD segments at a random slide, applies the .rela.dyn R_*_RELATIVE
+//! entries to fix up internal absolute pointers by the load bias, then
 //! walks .dynamic, finds DT_NEEDED `libc.so.6`, loads it, and uses
 //! .rela.dyn to populate each .got slot with the resolved libc symbol
 //! address (R_AARCH64_GLOB_DAT). DT_BIND_NOW forces eager binding so
@@ -1324,6 +1325,13 @@ pub(super) fn write(
     machine: Machine,
 ) -> Result<Vec<u8>, C5Error> {
     let is_shared = build.output_kind == super::OutputKind::SharedLibrary;
+    // ELF executables are position-independent (ET_DYN / PIE), matching the
+    // Mach-O output and the modern default: the loader slides the image at a
+    // random base and the `.rela.dyn` R_*_RELATIVE entries fix up every
+    // internal absolute pointer in static data. Shared libraries are already
+    // ET_DYN. `emit_dyn` therefore holds for every ELF image the writer emits;
+    // the entry stub and `e_entry` stay gated on `!is_shared`.
+    let emit_dyn = true;
     // Both backends lower `_Thread_local` access with the local-exec
     // model, whose TP-relative offsets are valid only in the
     // executable's static TLS block; baked into ET_DYN they address
@@ -1606,7 +1614,7 @@ pub(super) fn write(
     // (a function / data pointer initializer) into an R_*_RELATIVE
     // relocation so it tracks the runtime load base; an executable maps at
     // its link-time vmaddr, so the baked bytes are final and need none.
-    let n_relative = if is_shared {
+    let n_relative = if emit_dyn {
         build.data_relocs.len() + build.code_relocs.len()
     } else {
         0
@@ -1966,7 +1974,7 @@ pub(super) fn write(
         &mut out,
         &Elf64Ehdr {
             e_ident,
-            e_type: if is_shared { ET_DYN } else { ET_EXEC },
+            e_type: if emit_dyn { ET_DYN } else { ET_EXEC },
             e_machine: e_machine(machine),
             e_version: EV_CURRENT as u32,
             // For executables: start of `_start`. For shared
@@ -2155,7 +2163,7 @@ pub(super) fn write(
     // value; a RELA loader overwrites it with `load_bias + r_addend`,
     // where the addend is that same link-time target address.
     let mut rela = build_rela_dyn(got_vmaddr, n_imports, machine);
-    if is_shared {
+    if emit_dyn {
         let r_type = r_relative(machine);
         for r in &build.data_relocs {
             let addend = data_off_to_vaddr(r.target_offset);
@@ -2257,10 +2265,11 @@ pub(super) fn write(
     debug_assert_eq!(out.len() as u64, data_off);
 
     // build.data -- the program's static data segment, with
-    // pointer-to-global initializers resolved to absolute VAs.
-    // ET_EXEC means the loader maps at the link-time vmaddr
-    // (no slide), so the bytes can hold the final VA verbatim
-    // -- no `.rela.dyn` relocations needed.
+    // pointer-to-global initializers resolved to their link-time absolute
+    // VAs. The image is ET_DYN (PIE), so each such slot also gets a
+    // `.rela.dyn` R_*_RELATIVE entry (built above) whose addend is this same
+    // VA; the RELA loader overwrites the slot with `load_bias + addend`. The
+    // baked value is the pre-slide initializer.
     let mut data_with_relocs = build.data.clone();
     for r in &build.data_relocs {
         let absolute = data_off_to_vaddr(r.target_offset);
@@ -2278,9 +2287,9 @@ pub(super) fn write(
     // Function-pointer initializers in the data segment: translate
     // each ent_pc to a native code-segment offset (skipping
     // the prologue stub at the start of the code blob), add the
-    // text vmaddr, and write the absolute code address. ET_EXEC
-    // means no slide so the bytes hold the final VA -- no
-    // .rela.dyn entries needed.
+    // text vmaddr, and write the link-time absolute code address. As with
+    // data pointers, a matching `.rela.dyn` R_*_RELATIVE entry slides it at
+    // load time.
     for r in &build.code_relocs {
         let ent_pc = r.target_ent_pc as usize;
         let native_off = build

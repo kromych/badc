@@ -868,8 +868,8 @@ fn export_all_executable_exposes_dynamic_symbols() {
     let exported = build_exe(true);
     assert_eq!(
         read_elf_header(&exported).expect("read header").e_type,
-        2,
-        "executable must be ET_EXEC"
+        3,
+        "executable must be ET_DYN (PIE)"
     );
     assert!(
         read_dynamic_symbol_names(&exported)
@@ -1200,9 +1200,10 @@ fn shared_object_relocates_internal_data_pointers() {
     )
     .expect("write executable");
     let exe_rel = count_dynamic_relocs_of_type(&exe, R_X86_64_RELATIVE).expect("count exe relocs");
-    assert_eq!(
-        exe_rel, 0,
-        "executable maps at a fixed base and must emit no RELATIVE relocs, got {exe_rel}"
+    assert!(
+        exe_rel >= 2,
+        "a PIE executable relocates its internal function pointers like the shared \
+         object, got {exe_rel}"
     );
 }
 

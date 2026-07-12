@@ -4259,8 +4259,31 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
                 }
             }
             _ => {
-                current.push(c as char);
-                i += 1;
+                // Bulk-copy the run up to the next structural byte.
+                // Arguments here can be megabytes (a generated table
+                // wrapped in nested macro calls); per-byte pushes make
+                // argument collection the dominant compile cost.
+                //
+                // A `,` below depth 1 falls through the guarded arm
+                // above into this one while also being a stop byte:
+                // copy it directly or the scan cannot advance.
+                let start = i;
+                if c == b',' {
+                    current.push(',');
+                    i += 1;
+                    continue;
+                }
+                while i < bytes.len() && !matches!(bytes[i], b'(' | b')' | b',' | b'"' | b'\'') {
+                    i += 1;
+                }
+                match core::str::from_utf8(&bytes[start..i]) {
+                    Ok(run) => current.push_str(run),
+                    Err(_) => {
+                        for &b in &bytes[start..i] {
+                            current.push(b as char);
+                        }
+                    }
+                }
             }
         }
     }

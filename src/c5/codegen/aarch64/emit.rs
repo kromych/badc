@@ -2674,7 +2674,7 @@ fn emit_tls_addr(
     // offset) rather than by the placeholder `offset`.
     tls_extern_sym: Option<&str>,
 ) -> bool {
-    use super::encode::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
+    use super::encode::{enc_add_imm_lsl12, enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
     let Some(rd) = int_reg(dst) else {
         bail_msg("TlsAddr: dst not int reg");
         return false;
@@ -2683,26 +2683,27 @@ fn emit_tls_addr(
         Target::LinuxAarch64 => {
             // AAPCS64 variant-1: the static TLS block sits above the thread
             // pointer after a 16-byte TCB reserve, so a variable at
-            // `offset` in its unit's block reads `tp + 16 + offset`. A
-            // unit-local access bakes that immediate; a cross-unit extern
-            // emits the 16-byte reserve as a placeholder. Both record an
-            // `elf_tpoff_fixups` entry so the linker rebases the immediate
-            // when more than one unit contributes TLS storage (Local) or
-            // resolves it by symbol (Extern). The 12-bit add immediate caps
-            // a single unit's TLS at 4080 bytes; a wider block would need
-            // the two-add tprel_hi12 / lo12 sequence (TODO).
-            let imm = if tls_extern_sym.is_some() {
+            // `offset` in its unit's block reads `tp + 16 + offset`. The
+            // local-exec form is the standard two-add sequence
+            // (`tprel_hi12` + `tprel_lo12`), which covers a 24-bit TPOFF
+            // and gives the linker two patchable immediates. A unit-local
+            // access bakes the single-unit TPOFF; a cross-unit extern
+            // bakes the 16-byte reserve as a placeholder. Both record an
+            // `elf_tpoff_fixups` entry (at the first add) so the linker
+            // rebases the pair against the merged TLS layout.
+            let tpoff = if tls_extern_sym.is_some() {
                 16u32
             } else {
                 (offset + 16) as u32
             };
-            if imm >= 4096 {
-                bail_msg("TlsAddr: tpoff exceeds 12-bit add immediate");
+            if tpoff >= (1 << 24) {
+                bail_msg("TlsAddr: tpoff exceeds the hi12/lo12 range");
                 return false;
             }
             emit(code, enc_mrs_tpidr_el0(rd));
             let add_off = code.len();
-            emit(code, enc_add_imm(rd, rd, imm));
+            emit(code, enc_add_imm_lsl12(rd, rd, tpoff >> 12));
+            emit(code, enc_add_imm(rd, rd, tpoff & 0xFFF));
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset: add_off,
                 target: match tls_extern_sym {

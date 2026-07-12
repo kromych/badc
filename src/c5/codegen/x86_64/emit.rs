@@ -3229,11 +3229,16 @@ fn emit_tls_addr(
             // the linker re-patches it against the merged layout when more
             // than one unit contributes TLS storage.
             let extern_sym = extern_tls_names.get(&v).cloned();
+            // Variant-2 TPOFF is negative: the block sits below the
+            // thread pointer, `var = fs:[0] + (offset - tls_total)`.
+            // Emitting an `add` with the signed immediate (rather than
+            // a `sub` of the magnitude) keeps the field patchable with
+            // the standard negative TPOFF value.
             let tpoff = if extern_sym.is_some() {
                 0
             } else {
-                let t = (tls_total_size as i64) - offset;
-                if !(0..=i32::MAX as i64).contains(&t) {
+                let t = offset - (tls_total_size as i64);
+                if !(i32::MIN as i64..=0).contains(&t) {
                     bail_msg("TlsAddr: tpoff out of i32 range");
                     return false;
                 }
@@ -3251,15 +3256,15 @@ fn emit_tls_addr(
             code.push(0x04 | ((rd.0 & 7) << 3));
             code.push(0x25);
             code.extend_from_slice(&0u32.to_le_bytes());
-            // sub rd, imm32
+            // add rd, imm32
             //   REX.W=1, REX.B = (rd >= 8);
-            //   opcode 81 /5;
-            //   ModR/M mod=11 reg=5 rm=rd.lo;
+            //   opcode 81 /0;
+            //   ModR/M mod=11 reg=0 rm=rd.lo;
             //   imm32 = tpoff (patched by the linker per the fixup).
-            let rex_sub = 0x48 | ((rd.0 >> 3) & 1);
-            code.push(rex_sub);
+            let rex_add = 0x48 | ((rd.0 >> 3) & 1);
+            code.push(rex_add);
             code.push(0x81);
-            code.push(0xE8 | (rd.0 & 7));
+            code.push(0xC0 | (rd.0 & 7));
             let imm_offset = code.len();
             code.extend_from_slice(&(tpoff as i32).to_le_bytes());
             elf_tpoff_fixups.push(super::ElfTpoffFixup {

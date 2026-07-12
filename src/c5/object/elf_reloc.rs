@@ -128,6 +128,9 @@ const R_X86_64_64: u32 = 1;
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
 const R_X86_64_32: u32 = 10;
+// Local-exec TLS: the linker writes the (negative, variant-2) TP-relative
+// offset of the symbol into the `add r64, imm32` immediate.
+const R_X86_64_TPOFF32: u32 = 23;
 
 // AArch64 reloc types (ELF for the ARM 64-bit architecture, table 5-1).
 const R_AARCH64_ABS64: u32 = 257;
@@ -141,6 +144,11 @@ const R_AARCH64_CALL26: u32 = 283;
 // valid for a symbol resolved within the same image).
 const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
 const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
+// Local-exec TLS pair over the two-`add` sequence: the linker splits the
+// TP-relative offset (variant-1, 16-byte TCB bias included) into the
+// shifted high and low 12-bit immediates.
+const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
+const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;
@@ -149,6 +157,7 @@ const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
 const STT_FILE: u8 = 4;
 const STT_SECTION: u8 = 3;
+const STT_TLS: u8 = 6;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
 
@@ -501,6 +510,26 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
+    // TLS section symbols anchor the local-exec relocations of
+    // `static _Thread_local` accesses (section + addend); named
+    // globals get their own STT_TLS entries below.
+    let (tdata_sec_sym, tbss_sec_sym) = if has_tls {
+        let td = symbols.len() as u64;
+        symbols.push(Elf64Sym {
+            st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
+            st_shndx: SHIDX_TDATA,
+            ..Default::default()
+        });
+        let tb = symbols.len() as u64;
+        symbols.push(Elf64Sym {
+            st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
+            st_shndx: SHIDX_TBSS,
+            ..Default::default()
+        });
+        (td, tb)
+    } else {
+        (0, 0)
+    };
     // `first_global` is set after the static-linkage function
     // symbols are pushed below; ELF requires every LOCAL symbol
     // to precede every GLOBAL one and `.symtab`'s `sh_info`
@@ -722,6 +751,38 @@ pub(super) fn write_relocatable(
     for name in &user_extern_data_names {
         all_names.push(*name);
     }
+    // Standard TLS symbols + local-exec relocations are the ELF interop
+    // surface for an external linker; they describe the variant-1/2
+    // `tp`-relative access models, which only the Linux targets use. A
+    // Windows-target unit reuses this container but its TLS surface is
+    // the PE model (TEB + `_tls_index`), carried by the note channel.
+    let elf_tls_interop = matches!(
+        target,
+        super::Target::LinuxX64 | super::Target::LinuxAarch64
+    );
+    // Cross-unit `extern _Thread_local` names referenced by TLS access
+    // fixups, deduplicated; each surfaces as an undefined STT_TLS symbol
+    // the local-exec relocations bind against.
+    let mut extern_tls_names: Vec<&str> = Vec::new();
+    if elf_tls_interop {
+        for f in &build.elf_tpoff_fixups {
+            if let super::ElfTpoffTarget::Extern(name) = &f.target
+                && !extern_tls_names.contains(&name.as_str())
+            {
+                extern_tls_names.push(name.as_str());
+            }
+        }
+    }
+    let defined_tls_globals_start = all_names.len();
+    if elf_tls_interop {
+        for (name, _, _) in &defined_tls_globals {
+            all_names.push(*name);
+        }
+    }
+    let extern_tls_names_start = all_names.len();
+    for name in &extern_tls_names {
+        all_names.push(*name);
+    }
     let prologue_end_names_start = all_names.len();
     for s in &prologue_end_names {
         all_names.push(s.as_str());
@@ -890,6 +951,45 @@ pub(super) fn write_relocatable(
         });
     }
 
+    // Defined `_Thread_local` globals: STB_GLOBAL + STT_TLS against
+    // `.tdata` / `.tbss` with a section-relative value, so sibling
+    // units' local-exec relocations resolve through the merged TLS
+    // block. The unit's block is `.tdata` bytes then `.tbss` zero
+    // fill; an offset past the initialized bytes is `.tbss`-relative.
+    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
+    for (i, (_, off, size)) in defined_tls_globals
+        .iter()
+        .enumerate()
+        .take_while(|_| elf_tls_interop)
+    {
+        let (shndx, value) = if *off >= tls_init_len {
+            (SHIDX_TBSS, off - tls_init_len)
+        } else {
+            (SHIDX_TDATA, *off)
+        };
+        symbols.push(Elf64Sym {
+            st_name: name_offs[defined_tls_globals_start + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_TLS),
+            st_shndx: shndx,
+            st_value: value as u64,
+            st_size: *size,
+            ..Default::default()
+        });
+    }
+
+    // Cross-unit `extern _Thread_local` imports: STB_GLOBAL + STT_TLS +
+    // SHN_UNDEF.
+    let mut extern_tls_sym_idx: Vec<usize> = Vec::with_capacity(extern_tls_names.len());
+    for (i, _name) in extern_tls_names.iter().enumerate() {
+        extern_tls_sym_idx.push(symbols.len());
+        symbols.push(Elf64Sym {
+            st_name: name_offs[extern_tls_names_start + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_TLS),
+            st_shndx: SHN_UNDEF,
+            ..Default::default()
+        });
+    }
+
     // Build the `.rela.text` payload now that import symbols
     // have their final indices.
     let machine_for_rela = machine;
@@ -967,6 +1067,67 @@ pub(super) fn write_relocatable(
             r_addend,
         };
         write_struct(&mut rela_bytes, &rela);
+    }
+
+    // TLS access sites. Local-exec relocations let an external linker
+    // rebase each unit's baked single-unit offset against the merged
+    // TLS block: `static _Thread_local` accesses anchor on the TLS
+    // section symbol plus the section-relative addend, named externs on
+    // their undefined STT_TLS symbol. aarch64 patches the two-`add`
+    // pair (`tprel_hi12` at the fixup, `tprel_lo12_nc` on the following
+    // word); x86_64 patches the `add` imm32 with the negative TPOFF.
+    for f in build
+        .elf_tpoff_fixups
+        .iter()
+        .take_while(|_| elf_tls_interop)
+    {
+        let (sym_idx, r_addend) = match &f.target {
+            super::ElfTpoffTarget::Extern(name) => {
+                let pos = extern_tls_names
+                    .iter()
+                    .position(|n| *n == name.as_str())
+                    .expect("extern_tls_names contains every fixup's symbol name");
+                (extern_tls_sym_idx[pos] as u64, 0i64)
+            }
+            super::ElfTpoffTarget::Local(off) => {
+                let off = *off as i64;
+                if off >= tls_init_len {
+                    (tbss_sec_sym, off - tls_init_len)
+                } else {
+                    (tdata_sec_sym, off)
+                }
+            }
+        };
+        match machine_for_rela {
+            Machine::X86_64 => {
+                write_struct(
+                    &mut rela_bytes,
+                    &Elf64Rela {
+                        r_offset: f.imm_offset as u64,
+                        r_info: (sym_idx << 32) | (R_X86_64_TPOFF32 as u64),
+                        r_addend,
+                    },
+                );
+            }
+            Machine::Aarch64 => {
+                write_struct(
+                    &mut rela_bytes,
+                    &Elf64Rela {
+                        r_offset: f.imm_offset as u64,
+                        r_info: (sym_idx << 32) | (R_AARCH64_TLSLE_ADD_TPREL_HI12 as u64),
+                        r_addend,
+                    },
+                );
+                write_struct(
+                    &mut rela_bytes,
+                    &Elf64Rela {
+                        r_offset: f.imm_offset as u64 + 4,
+                        r_info: (sym_idx << 32) | (R_AARCH64_TLSLE_ADD_TPREL_LO12_NC as u64),
+                        r_addend,
+                    },
+                );
+            }
+        }
     }
 
     // Data-segment references (string literals / globals). The

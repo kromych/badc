@@ -2494,3 +2494,77 @@ fn x64_int_to_float_breaks_dep_and_avoids_double_hop() {
         "unexpected float<->double convert (double hop): {body:02x?}"
     );
 }
+
+/// A relocatable Linux unit surfaces its `_Thread_local` layout to an
+/// external linker: STT_TLS symbols for the defined globals (UNDEF for
+/// the externs) and standard local-exec relocations at each access
+/// site, so several units' TLS blocks merge with per-symbol offsets.
+/// Without them every unit's baked single-unit offsets alias onto the
+/// merged block's first slots and the units clobber each other.
+#[test]
+fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    for (target, want_types) in [
+        (Target::LinuxAarch64, &[549u32, 551][..]),
+        (Target::LinuxX64, &[23u32][..]),
+    ] {
+        let src = "_Thread_local long counter = 7;\n\
+                   extern _Thread_local long other;\n\
+                   long bump(void) { counter += other; return counter; }\n\
+                   int main(void) { return (int)bump(); }\n";
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap();
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .expect("emit relocatable");
+        let rela = elf64_section(&obj, ".rela.text").expect(".rela.text");
+        let mut types = std::collections::BTreeSet::new();
+        for e in rela.chunks_exact(24) {
+            let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            types.insert((r_info & 0xffff_ffff) as u32);
+        }
+        for want in want_types {
+            assert!(
+                types.contains(want),
+                "{target:?}: expected TLS reloc type {want} in .rela.text, got {types:?}"
+            );
+        }
+        let symtab = elf64_section(&obj, ".symtab").expect(".symtab");
+        let strtab = elf64_section(&obj, ".strtab").expect(".strtab");
+        let name_at = |off: usize| {
+            let end = strtab[off..].iter().position(|b| *b == 0).unwrap() + off;
+            core::str::from_utf8(&strtab[off..end]).unwrap()
+        };
+        let (mut saw_counter, mut saw_other_undef) = (false, false);
+        for e in symtab.chunks_exact(24) {
+            let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
+            let st_info = e[4];
+            let st_shndx = u16::from_le_bytes(e[6..8].try_into().unwrap());
+            if st_info & 0xf != 6 {
+                continue;
+            }
+            match name_at(st_name) {
+                "counter" => {
+                    assert_ne!(st_shndx, 0, "{target:?}: `counter` must be defined STT_TLS");
+                    saw_counter = true;
+                }
+                "other" => {
+                    assert_eq!(st_shndx, 0, "{target:?}: `other` must be UNDEF STT_TLS");
+                    saw_other_undef = true;
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            saw_counter && saw_other_undef,
+            "{target:?}: missing STT_TLS symtab entries (counter={saw_counter}, other={saw_other_undef})"
+        );
+    }
+}

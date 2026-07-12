@@ -41,6 +41,9 @@ const R_AARCH64_CALL26: u32 = 283;
 const R_AARCH64_JUMP26: u32 = 282;
 const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
 const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
+const R_X86_64_TPOFF32: u32 = 23;
+const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
+const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
 
 /// Result of merging N [`NativeObject`]s. Carries enough state
 /// for a final-image writer to lay out `.text` / `.data` at the
@@ -728,6 +731,18 @@ pub fn link_native_objects_with_shared_libs(
                 ))
             })?;
             let patch_offset = text_base + reloc.offset as usize;
+            // Local-exec TLS relocations duplicate the note-channel TLS
+            // fixups for external linkers; Pass 4.1 below patches the
+            // same sites from the fixup records, so skip them here.
+            // Other TLS models (initial-exec / general-dynamic, from
+            // foreign objects) still land in the `NativeSymSection::Tls`
+            // arm and error.
+            if reloc.rtype == R_X86_64_TPOFF32
+                || reloc.rtype == R_AARCH64_TLSLE_ADD_TPREL_HI12
+                || reloc.rtype == R_AARCH64_TLSLE_ADD_TPREL_LO12_NC
+            {
+                continue;
+            }
             // GOT-relaxation: badc's own image is ET_EXEC (no symbol
             // preemption), so an emitted GOT reference (adrp :got: + ldr) to a
             // resolvable symbol is materialized directly. Convert the pair to
@@ -1040,18 +1055,19 @@ pub fn link_native_objects_with_shared_libs(
                 NativeMachine::X86_64 => {
                     // Windows: the `lea` adds disp32 to the TEB block base,
                     // so disp32 = merged_offset (no bias). Linux variant-2:
-                    // the block sits below the thread pointer, so
-                    // imm32 = merged_size - merged_offset (a `sub` from fs:[0]).
+                    // the block sits below the thread pointer, so the `add`
+                    // takes the negative TPOFF `merged_offset - merged_size`.
                     let value = if win_teb {
-                        merged_offset
+                        if merged_offset > i32::MAX as u64 {
+                            return Err(err(&format!(
+                                "link_native_objects: TLS offset 0x{merged_offset:x} exceeds the \
+                                 i32 immediate",
+                            )));
+                        }
+                        merged_offset as i64
                     } else {
-                        merged_tls_total - merged_offset
+                        merged_offset as i64 - merged_tls_total as i64
                     };
-                    if value > i32::MAX as u64 {
-                        return Err(err(&format!(
-                            "link_native_objects: TLS offset 0x{value:x} exceeds the i32 immediate",
-                        )));
-                    }
                     text[patch..patch + 4].copy_from_slice(&(value as i32).to_le_bytes());
                 }
                 NativeMachine::Aarch64 => {
@@ -1060,22 +1076,43 @@ pub fn link_native_objects_with_shared_libs(
                     } else {
                         merged_offset + 16
                     };
-                    if tpoff >= 4096 {
+                    if tpoff >= (1 << 24) {
                         return Err(err(&format!(
-                            "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the 12-bit `add` \
-                             immediate; a TLS block past 4080 bytes needs the two-add \
-                             tprel_hi12 / lo12 sequence (TODO)",
+                            "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the \
+                             hi12/lo12 range",
                         )));
                     }
-                    // Rewrite bits 10-21 (the imm12) of the `add rd, rd, #imm`.
-                    let mut insn = u32::from_le_bytes([
-                        text[patch],
-                        text[patch + 1],
-                        text[patch + 2],
-                        text[patch + 3],
-                    ]);
-                    insn = (insn & !(0xFFF << 10)) | ((tpoff as u32 & 0xFFF) << 10);
-                    text[patch..patch + 4].copy_from_slice(&insn.to_le_bytes());
+                    let patch_imm12 = |text: &mut [u8], at: usize, imm: u32| {
+                        let mut insn = u32::from_le_bytes([
+                            text[at],
+                            text[at + 1],
+                            text[at + 2],
+                            text[at + 3],
+                        ]);
+                        insn = (insn & !(0xFFF << 10)) | ((imm & 0xFFF) << 10);
+                        text[at..at + 4].copy_from_slice(&insn.to_le_bytes());
+                    };
+                    if win_teb {
+                        // TEB sequence: a single `add rd, x16, #imm12`.
+                        if tpoff >= 4096 {
+                            return Err(err(&format!(
+                                "link_native_objects: TLS offset 0x{tpoff:x} exceeds the 12-bit \
+                                 `add` immediate",
+                            )));
+                        }
+                        patch_imm12(&mut text, patch, tpoff as u32);
+                    } else {
+                        // Variant-1 local-exec pair: `add #hi12, lsl 12`
+                        // at the fixup, `add #lo12` right after it.
+                        if patch + 8 > text.len() {
+                            return Err(err(&format!(
+                                "link_native_objects: TLS fixup offset 0x{text_off:x} out of \
+                                 range in object {i}",
+                            )));
+                        }
+                        patch_imm12(&mut text, patch, (tpoff >> 12) as u32);
+                        patch_imm12(&mut text, patch + 4, (tpoff & 0xFFF) as u32);
+                    }
                 }
             }
         }

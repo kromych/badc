@@ -11,13 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	xorq	%rax, %rax
-               	movl	$0x7, %eax
-               	movslq	%eax, %rax
-               	cmpq	$0x7, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x4d2, %rax            # imm = 0x4D2
@@ -26,4 +19,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	jmp	<addr>
+               	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -1,600 +1,3 @@
-large_stack_frame.c:20: warning: unused variable `a001`
-large_stack_frame.c:20: warning: unused variable `a002`
-large_stack_frame.c:20: warning: unused variable `a003`
-large_stack_frame.c:20: warning: unused variable `a004`
-large_stack_frame.c:20: warning: unused variable `a005`
-large_stack_frame.c:20: warning: unused variable `a006`
-large_stack_frame.c:20: warning: unused variable `a007`
-large_stack_frame.c:20: warning: unused variable `a008`
-large_stack_frame.c:20: warning: unused variable `a009`
-large_stack_frame.c:21: warning: unused variable `a010`
-large_stack_frame.c:21: warning: unused variable `a011`
-large_stack_frame.c:21: warning: unused variable `a012`
-large_stack_frame.c:21: warning: unused variable `a013`
-large_stack_frame.c:21: warning: unused variable `a014`
-large_stack_frame.c:21: warning: unused variable `a015`
-large_stack_frame.c:21: warning: unused variable `a016`
-large_stack_frame.c:21: warning: unused variable `a017`
-large_stack_frame.c:21: warning: unused variable `a018`
-large_stack_frame.c:21: warning: unused variable `a019`
-large_stack_frame.c:22: warning: unused variable `a020`
-large_stack_frame.c:22: warning: unused variable `a021`
-large_stack_frame.c:22: warning: unused variable `a022`
-large_stack_frame.c:22: warning: unused variable `a023`
-large_stack_frame.c:22: warning: unused variable `a024`
-large_stack_frame.c:22: warning: unused variable `a025`
-large_stack_frame.c:22: warning: unused variable `a026`
-large_stack_frame.c:22: warning: unused variable `a027`
-large_stack_frame.c:22: warning: unused variable `a028`
-large_stack_frame.c:22: warning: unused variable `a029`
-large_stack_frame.c:23: warning: unused variable `a030`
-large_stack_frame.c:23: warning: unused variable `a031`
-large_stack_frame.c:23: warning: unused variable `a032`
-large_stack_frame.c:23: warning: unused variable `a033`
-large_stack_frame.c:23: warning: unused variable `a034`
-large_stack_frame.c:23: warning: unused variable `a035`
-large_stack_frame.c:23: warning: unused variable `a036`
-large_stack_frame.c:23: warning: unused variable `a037`
-large_stack_frame.c:23: warning: unused variable `a038`
-large_stack_frame.c:23: warning: unused variable `a039`
-large_stack_frame.c:24: warning: unused variable `a040`
-large_stack_frame.c:24: warning: unused variable `a041`
-large_stack_frame.c:24: warning: unused variable `a042`
-large_stack_frame.c:24: warning: unused variable `a043`
-large_stack_frame.c:24: warning: unused variable `a044`
-large_stack_frame.c:24: warning: unused variable `a045`
-large_stack_frame.c:24: warning: unused variable `a046`
-large_stack_frame.c:24: warning: unused variable `a047`
-large_stack_frame.c:24: warning: unused variable `a048`
-large_stack_frame.c:24: warning: unused variable `a049`
-large_stack_frame.c:25: warning: unused variable `a050`
-large_stack_frame.c:25: warning: unused variable `a051`
-large_stack_frame.c:25: warning: unused variable `a052`
-large_stack_frame.c:25: warning: unused variable `a053`
-large_stack_frame.c:25: warning: unused variable `a054`
-large_stack_frame.c:25: warning: unused variable `a055`
-large_stack_frame.c:25: warning: unused variable `a056`
-large_stack_frame.c:25: warning: unused variable `a057`
-large_stack_frame.c:25: warning: unused variable `a058`
-large_stack_frame.c:25: warning: unused variable `a059`
-large_stack_frame.c:26: warning: unused variable `a060`
-large_stack_frame.c:26: warning: unused variable `a061`
-large_stack_frame.c:26: warning: unused variable `a062`
-large_stack_frame.c:26: warning: unused variable `a063`
-large_stack_frame.c:26: warning: unused variable `a064`
-large_stack_frame.c:26: warning: unused variable `a065`
-large_stack_frame.c:26: warning: unused variable `a066`
-large_stack_frame.c:26: warning: unused variable `a067`
-large_stack_frame.c:26: warning: unused variable `a068`
-large_stack_frame.c:26: warning: unused variable `a069`
-large_stack_frame.c:27: warning: unused variable `a070`
-large_stack_frame.c:27: warning: unused variable `a071`
-large_stack_frame.c:27: warning: unused variable `a072`
-large_stack_frame.c:27: warning: unused variable `a073`
-large_stack_frame.c:27: warning: unused variable `a074`
-large_stack_frame.c:27: warning: unused variable `a075`
-large_stack_frame.c:27: warning: unused variable `a076`
-large_stack_frame.c:27: warning: unused variable `a077`
-large_stack_frame.c:27: warning: unused variable `a078`
-large_stack_frame.c:27: warning: unused variable `a079`
-large_stack_frame.c:28: warning: unused variable `a080`
-large_stack_frame.c:28: warning: unused variable `a081`
-large_stack_frame.c:28: warning: unused variable `a082`
-large_stack_frame.c:28: warning: unused variable `a083`
-large_stack_frame.c:28: warning: unused variable `a084`
-large_stack_frame.c:28: warning: unused variable `a085`
-large_stack_frame.c:28: warning: unused variable `a086`
-large_stack_frame.c:28: warning: unused variable `a087`
-large_stack_frame.c:28: warning: unused variable `a088`
-large_stack_frame.c:28: warning: unused variable `a089`
-large_stack_frame.c:29: warning: unused variable `a090`
-large_stack_frame.c:29: warning: unused variable `a091`
-large_stack_frame.c:29: warning: unused variable `a092`
-large_stack_frame.c:29: warning: unused variable `a093`
-large_stack_frame.c:29: warning: unused variable `a094`
-large_stack_frame.c:29: warning: unused variable `a095`
-large_stack_frame.c:29: warning: unused variable `a096`
-large_stack_frame.c:29: warning: unused variable `a097`
-large_stack_frame.c:29: warning: unused variable `a098`
-large_stack_frame.c:29: warning: unused variable `a099`
-large_stack_frame.c:30: warning: unused variable `a100`
-large_stack_frame.c:30: warning: unused variable `a101`
-large_stack_frame.c:30: warning: unused variable `a102`
-large_stack_frame.c:30: warning: unused variable `a103`
-large_stack_frame.c:30: warning: unused variable `a104`
-large_stack_frame.c:30: warning: unused variable `a105`
-large_stack_frame.c:30: warning: unused variable `a106`
-large_stack_frame.c:30: warning: unused variable `a107`
-large_stack_frame.c:30: warning: unused variable `a108`
-large_stack_frame.c:30: warning: unused variable `a109`
-large_stack_frame.c:31: warning: unused variable `a110`
-large_stack_frame.c:31: warning: unused variable `a111`
-large_stack_frame.c:31: warning: unused variable `a112`
-large_stack_frame.c:31: warning: unused variable `a113`
-large_stack_frame.c:31: warning: unused variable `a114`
-large_stack_frame.c:31: warning: unused variable `a115`
-large_stack_frame.c:31: warning: unused variable `a116`
-large_stack_frame.c:31: warning: unused variable `a117`
-large_stack_frame.c:31: warning: unused variable `a118`
-large_stack_frame.c:31: warning: unused variable `a119`
-large_stack_frame.c:32: warning: unused variable `a120`
-large_stack_frame.c:32: warning: unused variable `a121`
-large_stack_frame.c:32: warning: unused variable `a122`
-large_stack_frame.c:32: warning: unused variable `a123`
-large_stack_frame.c:32: warning: unused variable `a124`
-large_stack_frame.c:32: warning: unused variable `a125`
-large_stack_frame.c:32: warning: unused variable `a126`
-large_stack_frame.c:32: warning: unused variable `a127`
-large_stack_frame.c:32: warning: unused variable `a128`
-large_stack_frame.c:32: warning: unused variable `a129`
-large_stack_frame.c:33: warning: unused variable `a130`
-large_stack_frame.c:33: warning: unused variable `a131`
-large_stack_frame.c:33: warning: unused variable `a132`
-large_stack_frame.c:33: warning: unused variable `a133`
-large_stack_frame.c:33: warning: unused variable `a134`
-large_stack_frame.c:33: warning: unused variable `a135`
-large_stack_frame.c:33: warning: unused variable `a136`
-large_stack_frame.c:33: warning: unused variable `a137`
-large_stack_frame.c:33: warning: unused variable `a138`
-large_stack_frame.c:33: warning: unused variable `a139`
-large_stack_frame.c:34: warning: unused variable `a140`
-large_stack_frame.c:34: warning: unused variable `a141`
-large_stack_frame.c:34: warning: unused variable `a142`
-large_stack_frame.c:34: warning: unused variable `a143`
-large_stack_frame.c:34: warning: unused variable `a144`
-large_stack_frame.c:34: warning: unused variable `a145`
-large_stack_frame.c:34: warning: unused variable `a146`
-large_stack_frame.c:34: warning: unused variable `a147`
-large_stack_frame.c:34: warning: unused variable `a148`
-large_stack_frame.c:34: warning: unused variable `a149`
-large_stack_frame.c:35: warning: unused variable `a150`
-large_stack_frame.c:35: warning: unused variable `a151`
-large_stack_frame.c:35: warning: unused variable `a152`
-large_stack_frame.c:35: warning: unused variable `a153`
-large_stack_frame.c:35: warning: unused variable `a154`
-large_stack_frame.c:35: warning: unused variable `a155`
-large_stack_frame.c:35: warning: unused variable `a156`
-large_stack_frame.c:35: warning: unused variable `a157`
-large_stack_frame.c:35: warning: unused variable `a158`
-large_stack_frame.c:35: warning: unused variable `a159`
-large_stack_frame.c:36: warning: unused variable `a160`
-large_stack_frame.c:36: warning: unused variable `a161`
-large_stack_frame.c:36: warning: unused variable `a162`
-large_stack_frame.c:36: warning: unused variable `a163`
-large_stack_frame.c:36: warning: unused variable `a164`
-large_stack_frame.c:36: warning: unused variable `a165`
-large_stack_frame.c:36: warning: unused variable `a166`
-large_stack_frame.c:36: warning: unused variable `a167`
-large_stack_frame.c:36: warning: unused variable `a168`
-large_stack_frame.c:36: warning: unused variable `a169`
-large_stack_frame.c:37: warning: unused variable `a170`
-large_stack_frame.c:37: warning: unused variable `a171`
-large_stack_frame.c:37: warning: unused variable `a172`
-large_stack_frame.c:37: warning: unused variable `a173`
-large_stack_frame.c:37: warning: unused variable `a174`
-large_stack_frame.c:37: warning: unused variable `a175`
-large_stack_frame.c:37: warning: unused variable `a176`
-large_stack_frame.c:37: warning: unused variable `a177`
-large_stack_frame.c:37: warning: unused variable `a178`
-large_stack_frame.c:37: warning: unused variable `a179`
-large_stack_frame.c:38: warning: unused variable `a180`
-large_stack_frame.c:38: warning: unused variable `a181`
-large_stack_frame.c:38: warning: unused variable `a182`
-large_stack_frame.c:38: warning: unused variable `a183`
-large_stack_frame.c:38: warning: unused variable `a184`
-large_stack_frame.c:38: warning: unused variable `a185`
-large_stack_frame.c:38: warning: unused variable `a186`
-large_stack_frame.c:38: warning: unused variable `a187`
-large_stack_frame.c:38: warning: unused variable `a188`
-large_stack_frame.c:38: warning: unused variable `a189`
-large_stack_frame.c:39: warning: unused variable `a190`
-large_stack_frame.c:39: warning: unused variable `a191`
-large_stack_frame.c:39: warning: unused variable `a192`
-large_stack_frame.c:39: warning: unused variable `a193`
-large_stack_frame.c:39: warning: unused variable `a194`
-large_stack_frame.c:39: warning: unused variable `a195`
-large_stack_frame.c:39: warning: unused variable `a196`
-large_stack_frame.c:39: warning: unused variable `a197`
-large_stack_frame.c:39: warning: unused variable `a198`
-large_stack_frame.c:39: warning: unused variable `a199`
-large_stack_frame.c:40: warning: unused variable `a200`
-large_stack_frame.c:40: warning: unused variable `a201`
-large_stack_frame.c:40: warning: unused variable `a202`
-large_stack_frame.c:40: warning: unused variable `a203`
-large_stack_frame.c:40: warning: unused variable `a204`
-large_stack_frame.c:40: warning: unused variable `a205`
-large_stack_frame.c:40: warning: unused variable `a206`
-large_stack_frame.c:40: warning: unused variable `a207`
-large_stack_frame.c:40: warning: unused variable `a208`
-large_stack_frame.c:40: warning: unused variable `a209`
-large_stack_frame.c:41: warning: unused variable `a210`
-large_stack_frame.c:41: warning: unused variable `a211`
-large_stack_frame.c:41: warning: unused variable `a212`
-large_stack_frame.c:41: warning: unused variable `a213`
-large_stack_frame.c:41: warning: unused variable `a214`
-large_stack_frame.c:41: warning: unused variable `a215`
-large_stack_frame.c:41: warning: unused variable `a216`
-large_stack_frame.c:41: warning: unused variable `a217`
-large_stack_frame.c:41: warning: unused variable `a218`
-large_stack_frame.c:41: warning: unused variable `a219`
-large_stack_frame.c:42: warning: unused variable `a220`
-large_stack_frame.c:42: warning: unused variable `a221`
-large_stack_frame.c:42: warning: unused variable `a222`
-large_stack_frame.c:42: warning: unused variable `a223`
-large_stack_frame.c:42: warning: unused variable `a224`
-large_stack_frame.c:42: warning: unused variable `a225`
-large_stack_frame.c:42: warning: unused variable `a226`
-large_stack_frame.c:42: warning: unused variable `a227`
-large_stack_frame.c:42: warning: unused variable `a228`
-large_stack_frame.c:42: warning: unused variable `a229`
-large_stack_frame.c:43: warning: unused variable `a230`
-large_stack_frame.c:43: warning: unused variable `a231`
-large_stack_frame.c:43: warning: unused variable `a232`
-large_stack_frame.c:43: warning: unused variable `a233`
-large_stack_frame.c:43: warning: unused variable `a234`
-large_stack_frame.c:43: warning: unused variable `a235`
-large_stack_frame.c:43: warning: unused variable `a236`
-large_stack_frame.c:43: warning: unused variable `a237`
-large_stack_frame.c:43: warning: unused variable `a238`
-large_stack_frame.c:43: warning: unused variable `a239`
-large_stack_frame.c:44: warning: unused variable `a240`
-large_stack_frame.c:44: warning: unused variable `a241`
-large_stack_frame.c:44: warning: unused variable `a242`
-large_stack_frame.c:44: warning: unused variable `a243`
-large_stack_frame.c:44: warning: unused variable `a244`
-large_stack_frame.c:44: warning: unused variable `a245`
-large_stack_frame.c:44: warning: unused variable `a246`
-large_stack_frame.c:44: warning: unused variable `a247`
-large_stack_frame.c:44: warning: unused variable `a248`
-large_stack_frame.c:44: warning: unused variable `a249`
-large_stack_frame.c:45: warning: unused variable `a250`
-large_stack_frame.c:45: warning: unused variable `a251`
-large_stack_frame.c:45: warning: unused variable `a252`
-large_stack_frame.c:45: warning: unused variable `a253`
-large_stack_frame.c:45: warning: unused variable `a254`
-large_stack_frame.c:45: warning: unused variable `a255`
-large_stack_frame.c:45: warning: unused variable `a256`
-large_stack_frame.c:45: warning: unused variable `a257`
-large_stack_frame.c:45: warning: unused variable `a258`
-large_stack_frame.c:45: warning: unused variable `a259`
-large_stack_frame.c:46: warning: unused variable `a260`
-large_stack_frame.c:46: warning: unused variable `a261`
-large_stack_frame.c:46: warning: unused variable `a262`
-large_stack_frame.c:46: warning: unused variable `a263`
-large_stack_frame.c:46: warning: unused variable `a264`
-large_stack_frame.c:46: warning: unused variable `a265`
-large_stack_frame.c:46: warning: unused variable `a266`
-large_stack_frame.c:46: warning: unused variable `a267`
-large_stack_frame.c:46: warning: unused variable `a268`
-large_stack_frame.c:46: warning: unused variable `a269`
-large_stack_frame.c:47: warning: unused variable `a270`
-large_stack_frame.c:47: warning: unused variable `a271`
-large_stack_frame.c:47: warning: unused variable `a272`
-large_stack_frame.c:47: warning: unused variable `a273`
-large_stack_frame.c:47: warning: unused variable `a274`
-large_stack_frame.c:47: warning: unused variable `a275`
-large_stack_frame.c:47: warning: unused variable `a276`
-large_stack_frame.c:47: warning: unused variable `a277`
-large_stack_frame.c:47: warning: unused variable `a278`
-large_stack_frame.c:47: warning: unused variable `a279`
-large_stack_frame.c:48: warning: unused variable `a280`
-large_stack_frame.c:48: warning: unused variable `a281`
-large_stack_frame.c:48: warning: unused variable `a282`
-large_stack_frame.c:48: warning: unused variable `a283`
-large_stack_frame.c:48: warning: unused variable `a284`
-large_stack_frame.c:48: warning: unused variable `a285`
-large_stack_frame.c:48: warning: unused variable `a286`
-large_stack_frame.c:48: warning: unused variable `a287`
-large_stack_frame.c:48: warning: unused variable `a288`
-large_stack_frame.c:48: warning: unused variable `a289`
-large_stack_frame.c:49: warning: unused variable `a290`
-large_stack_frame.c:49: warning: unused variable `a291`
-large_stack_frame.c:49: warning: unused variable `a292`
-large_stack_frame.c:49: warning: unused variable `a293`
-large_stack_frame.c:49: warning: unused variable `a294`
-large_stack_frame.c:49: warning: unused variable `a295`
-large_stack_frame.c:49: warning: unused variable `a296`
-large_stack_frame.c:49: warning: unused variable `a297`
-large_stack_frame.c:49: warning: unused variable `a298`
-large_stack_frame.c:49: warning: unused variable `a299`
-large_stack_frame.c:50: warning: unused variable `a301`
-large_stack_frame.c:50: warning: unused variable `a302`
-large_stack_frame.c:50: warning: unused variable `a303`
-large_stack_frame.c:50: warning: unused variable `a304`
-large_stack_frame.c:50: warning: unused variable `a305`
-large_stack_frame.c:50: warning: unused variable `a306`
-large_stack_frame.c:50: warning: unused variable `a307`
-large_stack_frame.c:50: warning: unused variable `a308`
-large_stack_frame.c:50: warning: unused variable `a309`
-large_stack_frame.c:51: warning: unused variable `a310`
-large_stack_frame.c:51: warning: unused variable `a311`
-large_stack_frame.c:51: warning: unused variable `a312`
-large_stack_frame.c:51: warning: unused variable `a313`
-large_stack_frame.c:51: warning: unused variable `a314`
-large_stack_frame.c:51: warning: unused variable `a315`
-large_stack_frame.c:51: warning: unused variable `a316`
-large_stack_frame.c:51: warning: unused variable `a317`
-large_stack_frame.c:51: warning: unused variable `a318`
-large_stack_frame.c:51: warning: unused variable `a319`
-large_stack_frame.c:52: warning: unused variable `a320`
-large_stack_frame.c:52: warning: unused variable `a321`
-large_stack_frame.c:52: warning: unused variable `a322`
-large_stack_frame.c:52: warning: unused variable `a323`
-large_stack_frame.c:52: warning: unused variable `a324`
-large_stack_frame.c:52: warning: unused variable `a325`
-large_stack_frame.c:52: warning: unused variable `a326`
-large_stack_frame.c:52: warning: unused variable `a327`
-large_stack_frame.c:52: warning: unused variable `a328`
-large_stack_frame.c:52: warning: unused variable `a329`
-large_stack_frame.c:53: warning: unused variable `a330`
-large_stack_frame.c:53: warning: unused variable `a331`
-large_stack_frame.c:53: warning: unused variable `a332`
-large_stack_frame.c:53: warning: unused variable `a333`
-large_stack_frame.c:53: warning: unused variable `a334`
-large_stack_frame.c:53: warning: unused variable `a335`
-large_stack_frame.c:53: warning: unused variable `a336`
-large_stack_frame.c:53: warning: unused variable `a337`
-large_stack_frame.c:53: warning: unused variable `a338`
-large_stack_frame.c:53: warning: unused variable `a339`
-large_stack_frame.c:54: warning: unused variable `a340`
-large_stack_frame.c:54: warning: unused variable `a341`
-large_stack_frame.c:54: warning: unused variable `a342`
-large_stack_frame.c:54: warning: unused variable `a343`
-large_stack_frame.c:54: warning: unused variable `a344`
-large_stack_frame.c:54: warning: unused variable `a345`
-large_stack_frame.c:54: warning: unused variable `a346`
-large_stack_frame.c:54: warning: unused variable `a347`
-large_stack_frame.c:54: warning: unused variable `a348`
-large_stack_frame.c:54: warning: unused variable `a349`
-large_stack_frame.c:55: warning: unused variable `a350`
-large_stack_frame.c:55: warning: unused variable `a351`
-large_stack_frame.c:55: warning: unused variable `a352`
-large_stack_frame.c:55: warning: unused variable `a353`
-large_stack_frame.c:55: warning: unused variable `a354`
-large_stack_frame.c:55: warning: unused variable `a355`
-large_stack_frame.c:55: warning: unused variable `a356`
-large_stack_frame.c:55: warning: unused variable `a357`
-large_stack_frame.c:55: warning: unused variable `a358`
-large_stack_frame.c:55: warning: unused variable `a359`
-large_stack_frame.c:56: warning: unused variable `a360`
-large_stack_frame.c:56: warning: unused variable `a361`
-large_stack_frame.c:56: warning: unused variable `a362`
-large_stack_frame.c:56: warning: unused variable `a363`
-large_stack_frame.c:56: warning: unused variable `a364`
-large_stack_frame.c:56: warning: unused variable `a365`
-large_stack_frame.c:56: warning: unused variable `a366`
-large_stack_frame.c:56: warning: unused variable `a367`
-large_stack_frame.c:56: warning: unused variable `a368`
-large_stack_frame.c:56: warning: unused variable `a369`
-large_stack_frame.c:57: warning: unused variable `a370`
-large_stack_frame.c:57: warning: unused variable `a371`
-large_stack_frame.c:57: warning: unused variable `a372`
-large_stack_frame.c:57: warning: unused variable `a373`
-large_stack_frame.c:57: warning: unused variable `a374`
-large_stack_frame.c:57: warning: unused variable `a375`
-large_stack_frame.c:57: warning: unused variable `a376`
-large_stack_frame.c:57: warning: unused variable `a377`
-large_stack_frame.c:57: warning: unused variable `a378`
-large_stack_frame.c:57: warning: unused variable `a379`
-large_stack_frame.c:58: warning: unused variable `a380`
-large_stack_frame.c:58: warning: unused variable `a381`
-large_stack_frame.c:58: warning: unused variable `a382`
-large_stack_frame.c:58: warning: unused variable `a383`
-large_stack_frame.c:58: warning: unused variable `a384`
-large_stack_frame.c:58: warning: unused variable `a385`
-large_stack_frame.c:58: warning: unused variable `a386`
-large_stack_frame.c:58: warning: unused variable `a387`
-large_stack_frame.c:58: warning: unused variable `a388`
-large_stack_frame.c:58: warning: unused variable `a389`
-large_stack_frame.c:59: warning: unused variable `a390`
-large_stack_frame.c:59: warning: unused variable `a391`
-large_stack_frame.c:59: warning: unused variable `a392`
-large_stack_frame.c:59: warning: unused variable `a393`
-large_stack_frame.c:59: warning: unused variable `a394`
-large_stack_frame.c:59: warning: unused variable `a395`
-large_stack_frame.c:59: warning: unused variable `a396`
-large_stack_frame.c:59: warning: unused variable `a397`
-large_stack_frame.c:59: warning: unused variable `a398`
-large_stack_frame.c:59: warning: unused variable `a399`
-large_stack_frame.c:60: warning: unused variable `a400`
-large_stack_frame.c:60: warning: unused variable `a401`
-large_stack_frame.c:60: warning: unused variable `a402`
-large_stack_frame.c:60: warning: unused variable `a403`
-large_stack_frame.c:60: warning: unused variable `a404`
-large_stack_frame.c:60: warning: unused variable `a405`
-large_stack_frame.c:60: warning: unused variable `a406`
-large_stack_frame.c:60: warning: unused variable `a407`
-large_stack_frame.c:60: warning: unused variable `a408`
-large_stack_frame.c:60: warning: unused variable `a409`
-large_stack_frame.c:61: warning: unused variable `a410`
-large_stack_frame.c:61: warning: unused variable `a411`
-large_stack_frame.c:61: warning: unused variable `a412`
-large_stack_frame.c:61: warning: unused variable `a413`
-large_stack_frame.c:61: warning: unused variable `a414`
-large_stack_frame.c:61: warning: unused variable `a415`
-large_stack_frame.c:61: warning: unused variable `a416`
-large_stack_frame.c:61: warning: unused variable `a417`
-large_stack_frame.c:61: warning: unused variable `a418`
-large_stack_frame.c:61: warning: unused variable `a419`
-large_stack_frame.c:62: warning: unused variable `a420`
-large_stack_frame.c:62: warning: unused variable `a421`
-large_stack_frame.c:62: warning: unused variable `a422`
-large_stack_frame.c:62: warning: unused variable `a423`
-large_stack_frame.c:62: warning: unused variable `a424`
-large_stack_frame.c:62: warning: unused variable `a425`
-large_stack_frame.c:62: warning: unused variable `a426`
-large_stack_frame.c:62: warning: unused variable `a427`
-large_stack_frame.c:62: warning: unused variable `a428`
-large_stack_frame.c:62: warning: unused variable `a429`
-large_stack_frame.c:63: warning: unused variable `a430`
-large_stack_frame.c:63: warning: unused variable `a431`
-large_stack_frame.c:63: warning: unused variable `a432`
-large_stack_frame.c:63: warning: unused variable `a433`
-large_stack_frame.c:63: warning: unused variable `a434`
-large_stack_frame.c:63: warning: unused variable `a435`
-large_stack_frame.c:63: warning: unused variable `a436`
-large_stack_frame.c:63: warning: unused variable `a437`
-large_stack_frame.c:63: warning: unused variable `a438`
-large_stack_frame.c:63: warning: unused variable `a439`
-large_stack_frame.c:64: warning: unused variable `a440`
-large_stack_frame.c:64: warning: unused variable `a441`
-large_stack_frame.c:64: warning: unused variable `a442`
-large_stack_frame.c:64: warning: unused variable `a443`
-large_stack_frame.c:64: warning: unused variable `a444`
-large_stack_frame.c:64: warning: unused variable `a445`
-large_stack_frame.c:64: warning: unused variable `a446`
-large_stack_frame.c:64: warning: unused variable `a447`
-large_stack_frame.c:64: warning: unused variable `a448`
-large_stack_frame.c:64: warning: unused variable `a449`
-large_stack_frame.c:65: warning: unused variable `a450`
-large_stack_frame.c:65: warning: unused variable `a451`
-large_stack_frame.c:65: warning: unused variable `a452`
-large_stack_frame.c:65: warning: unused variable `a453`
-large_stack_frame.c:65: warning: unused variable `a454`
-large_stack_frame.c:65: warning: unused variable `a455`
-large_stack_frame.c:65: warning: unused variable `a456`
-large_stack_frame.c:65: warning: unused variable `a457`
-large_stack_frame.c:65: warning: unused variable `a458`
-large_stack_frame.c:65: warning: unused variable `a459`
-large_stack_frame.c:66: warning: unused variable `a460`
-large_stack_frame.c:66: warning: unused variable `a461`
-large_stack_frame.c:66: warning: unused variable `a462`
-large_stack_frame.c:66: warning: unused variable `a463`
-large_stack_frame.c:66: warning: unused variable `a464`
-large_stack_frame.c:66: warning: unused variable `a465`
-large_stack_frame.c:66: warning: unused variable `a466`
-large_stack_frame.c:66: warning: unused variable `a467`
-large_stack_frame.c:66: warning: unused variable `a468`
-large_stack_frame.c:66: warning: unused variable `a469`
-large_stack_frame.c:67: warning: unused variable `a470`
-large_stack_frame.c:67: warning: unused variable `a471`
-large_stack_frame.c:67: warning: unused variable `a472`
-large_stack_frame.c:67: warning: unused variable `a473`
-large_stack_frame.c:67: warning: unused variable `a474`
-large_stack_frame.c:67: warning: unused variable `a475`
-large_stack_frame.c:67: warning: unused variable `a476`
-large_stack_frame.c:67: warning: unused variable `a477`
-large_stack_frame.c:67: warning: unused variable `a478`
-large_stack_frame.c:67: warning: unused variable `a479`
-large_stack_frame.c:68: warning: unused variable `a480`
-large_stack_frame.c:68: warning: unused variable `a481`
-large_stack_frame.c:68: warning: unused variable `a482`
-large_stack_frame.c:68: warning: unused variable `a483`
-large_stack_frame.c:68: warning: unused variable `a484`
-large_stack_frame.c:68: warning: unused variable `a485`
-large_stack_frame.c:68: warning: unused variable `a486`
-large_stack_frame.c:68: warning: unused variable `a487`
-large_stack_frame.c:68: warning: unused variable `a488`
-large_stack_frame.c:68: warning: unused variable `a489`
-large_stack_frame.c:69: warning: unused variable `a490`
-large_stack_frame.c:69: warning: unused variable `a491`
-large_stack_frame.c:69: warning: unused variable `a492`
-large_stack_frame.c:69: warning: unused variable `a493`
-large_stack_frame.c:69: warning: unused variable `a494`
-large_stack_frame.c:69: warning: unused variable `a495`
-large_stack_frame.c:69: warning: unused variable `a496`
-large_stack_frame.c:69: warning: unused variable `a497`
-large_stack_frame.c:69: warning: unused variable `a498`
-large_stack_frame.c:69: warning: unused variable `a499`
-large_stack_frame.c:70: warning: unused variable `a500`
-large_stack_frame.c:70: warning: unused variable `a501`
-large_stack_frame.c:70: warning: unused variable `a502`
-large_stack_frame.c:70: warning: unused variable `a503`
-large_stack_frame.c:70: warning: unused variable `a504`
-large_stack_frame.c:70: warning: unused variable `a505`
-large_stack_frame.c:70: warning: unused variable `a506`
-large_stack_frame.c:70: warning: unused variable `a507`
-large_stack_frame.c:70: warning: unused variable `a508`
-large_stack_frame.c:70: warning: unused variable `a509`
-large_stack_frame.c:71: warning: unused variable `a510`
-large_stack_frame.c:71: warning: unused variable `a511`
-large_stack_frame.c:71: warning: unused variable `a512`
-large_stack_frame.c:71: warning: unused variable `a513`
-large_stack_frame.c:71: warning: unused variable `a514`
-large_stack_frame.c:71: warning: unused variable `a515`
-large_stack_frame.c:71: warning: unused variable `a516`
-large_stack_frame.c:71: warning: unused variable `a517`
-large_stack_frame.c:71: warning: unused variable `a518`
-large_stack_frame.c:71: warning: unused variable `a519`
-large_stack_frame.c:72: warning: unused variable `a520`
-large_stack_frame.c:72: warning: unused variable `a521`
-large_stack_frame.c:72: warning: unused variable `a522`
-large_stack_frame.c:72: warning: unused variable `a523`
-large_stack_frame.c:72: warning: unused variable `a524`
-large_stack_frame.c:72: warning: unused variable `a525`
-large_stack_frame.c:72: warning: unused variable `a526`
-large_stack_frame.c:72: warning: unused variable `a527`
-large_stack_frame.c:72: warning: unused variable `a528`
-large_stack_frame.c:72: warning: unused variable `a529`
-large_stack_frame.c:73: warning: unused variable `a530`
-large_stack_frame.c:73: warning: unused variable `a531`
-large_stack_frame.c:73: warning: unused variable `a532`
-large_stack_frame.c:73: warning: unused variable `a533`
-large_stack_frame.c:73: warning: unused variable `a534`
-large_stack_frame.c:73: warning: unused variable `a535`
-large_stack_frame.c:73: warning: unused variable `a536`
-large_stack_frame.c:73: warning: unused variable `a537`
-large_stack_frame.c:73: warning: unused variable `a538`
-large_stack_frame.c:73: warning: unused variable `a539`
-large_stack_frame.c:74: warning: unused variable `a540`
-large_stack_frame.c:74: warning: unused variable `a541`
-large_stack_frame.c:74: warning: unused variable `a542`
-large_stack_frame.c:74: warning: unused variable `a543`
-large_stack_frame.c:74: warning: unused variable `a544`
-large_stack_frame.c:74: warning: unused variable `a545`
-large_stack_frame.c:74: warning: unused variable `a546`
-large_stack_frame.c:74: warning: unused variable `a547`
-large_stack_frame.c:74: warning: unused variable `a548`
-large_stack_frame.c:74: warning: unused variable `a549`
-large_stack_frame.c:75: warning: unused variable `a550`
-large_stack_frame.c:75: warning: unused variable `a551`
-large_stack_frame.c:75: warning: unused variable `a552`
-large_stack_frame.c:75: warning: unused variable `a553`
-large_stack_frame.c:75: warning: unused variable `a554`
-large_stack_frame.c:75: warning: unused variable `a555`
-large_stack_frame.c:75: warning: unused variable `a556`
-large_stack_frame.c:75: warning: unused variable `a557`
-large_stack_frame.c:75: warning: unused variable `a558`
-large_stack_frame.c:75: warning: unused variable `a559`
-large_stack_frame.c:76: warning: unused variable `a560`
-large_stack_frame.c:76: warning: unused variable `a561`
-large_stack_frame.c:76: warning: unused variable `a562`
-large_stack_frame.c:76: warning: unused variable `a563`
-large_stack_frame.c:76: warning: unused variable `a564`
-large_stack_frame.c:76: warning: unused variable `a565`
-large_stack_frame.c:76: warning: unused variable `a566`
-large_stack_frame.c:76: warning: unused variable `a567`
-large_stack_frame.c:76: warning: unused variable `a568`
-large_stack_frame.c:76: warning: unused variable `a569`
-large_stack_frame.c:77: warning: unused variable `a570`
-large_stack_frame.c:77: warning: unused variable `a571`
-large_stack_frame.c:77: warning: unused variable `a572`
-large_stack_frame.c:77: warning: unused variable `a573`
-large_stack_frame.c:77: warning: unused variable `a574`
-large_stack_frame.c:77: warning: unused variable `a575`
-large_stack_frame.c:77: warning: unused variable `a576`
-large_stack_frame.c:77: warning: unused variable `a577`
-large_stack_frame.c:77: warning: unused variable `a578`
-large_stack_frame.c:77: warning: unused variable `a579`
-large_stack_frame.c:78: warning: unused variable `a580`
-large_stack_frame.c:78: warning: unused variable `a581`
-large_stack_frame.c:78: warning: unused variable `a582`
-large_stack_frame.c:78: warning: unused variable `a583`
-large_stack_frame.c:78: warning: unused variable `a584`
-large_stack_frame.c:78: warning: unused variable `a585`
-large_stack_frame.c:78: warning: unused variable `a586`
-large_stack_frame.c:78: warning: unused variable `a587`
-large_stack_frame.c:78: warning: unused variable `a588`
-large_stack_frame.c:78: warning: unused variable `a589`
-large_stack_frame.c:79: warning: unused variable `a590`
-large_stack_frame.c:79: warning: unused variable `a591`
-large_stack_frame.c:79: warning: unused variable `a592`
-large_stack_frame.c:79: warning: unused variable `a593`
-large_stack_frame.c:79: warning: unused variable `a594`
-large_stack_frame.c:79: warning: unused variable `a595`
-large_stack_frame.c:79: warning: unused variable `a596`
-large_stack_frame.c:79: warning: unused variable `a597`
-large_stack_frame.c:79: warning: unused variable `a598`
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=big
 fn ent_pc=6 n_params=1 variadic=false locals=600
@@ -639,6 +42,1200 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v14  Imm(0)                                           -> x0
     v15  Imm(42)                                          -> x0
     terminator Return(v15)   (exit_acc=v15)
+large_stack_frame.c:20: warning: unused variable `a001`
+    int a000, a001, a002, a003, a004, a005, a006, a007, a008, a009;
+large_stack_frame.c:20: warning: unused variable `a002`
+    int a000, a001, a002, a003, a004, a005, a006, a007, a008, a009;
+large_stack_frame.c:20: warning: unused variable `a003`
+    int a000, a001, a002, a003, a004, a005, a006, a007, a008, a009;
+large_stack_frame.c:20: warning: unused variable `a004`
+    int a000, a001, a002, a003, a004, a005, a006, a007, a008, a009;
+large_stack_frame.c:20: warning: unused variable `a005`
+    int a000, a001, a002, a003, a004, a005, a006, a007, a008, a009;
+large_stack_frame.c:20: warning: unused variable `a006`
+    int a000, a001, a002, a003, a004, a005, a006, a007, a008, a009;
+large_stack_frame.c:20: warning: unused variable `a007`
+    int a000, a001, a002, a003, a004, a005, a006, a007, a008, a009;
+large_stack_frame.c:20: warning: unused variable `a008`
+    int a000, a001, a002, a003, a004, a005, a006, a007, a008, a009;
+large_stack_frame.c:20: warning: unused variable `a009`
+    int a000, a001, a002, a003, a004, a005, a006, a007, a008, a009;
+large_stack_frame.c:21: warning: unused variable `a010`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:21: warning: unused variable `a011`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:21: warning: unused variable `a012`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:21: warning: unused variable `a013`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:21: warning: unused variable `a014`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:21: warning: unused variable `a015`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:21: warning: unused variable `a016`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:21: warning: unused variable `a017`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:21: warning: unused variable `a018`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:21: warning: unused variable `a019`
+    int a010, a011, a012, a013, a014, a015, a016, a017, a018, a019;
+large_stack_frame.c:22: warning: unused variable `a020`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:22: warning: unused variable `a021`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:22: warning: unused variable `a022`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:22: warning: unused variable `a023`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:22: warning: unused variable `a024`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:22: warning: unused variable `a025`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:22: warning: unused variable `a026`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:22: warning: unused variable `a027`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:22: warning: unused variable `a028`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:22: warning: unused variable `a029`
+    int a020, a021, a022, a023, a024, a025, a026, a027, a028, a029;
+large_stack_frame.c:23: warning: unused variable `a030`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:23: warning: unused variable `a031`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:23: warning: unused variable `a032`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:23: warning: unused variable `a033`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:23: warning: unused variable `a034`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:23: warning: unused variable `a035`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:23: warning: unused variable `a036`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:23: warning: unused variable `a037`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:23: warning: unused variable `a038`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:23: warning: unused variable `a039`
+    int a030, a031, a032, a033, a034, a035, a036, a037, a038, a039;
+large_stack_frame.c:24: warning: unused variable `a040`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:24: warning: unused variable `a041`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:24: warning: unused variable `a042`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:24: warning: unused variable `a043`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:24: warning: unused variable `a044`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:24: warning: unused variable `a045`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:24: warning: unused variable `a046`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:24: warning: unused variable `a047`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:24: warning: unused variable `a048`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:24: warning: unused variable `a049`
+    int a040, a041, a042, a043, a044, a045, a046, a047, a048, a049;
+large_stack_frame.c:25: warning: unused variable `a050`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:25: warning: unused variable `a051`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:25: warning: unused variable `a052`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:25: warning: unused variable `a053`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:25: warning: unused variable `a054`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:25: warning: unused variable `a055`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:25: warning: unused variable `a056`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:25: warning: unused variable `a057`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:25: warning: unused variable `a058`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:25: warning: unused variable `a059`
+    int a050, a051, a052, a053, a054, a055, a056, a057, a058, a059;
+large_stack_frame.c:26: warning: unused variable `a060`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:26: warning: unused variable `a061`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:26: warning: unused variable `a062`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:26: warning: unused variable `a063`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:26: warning: unused variable `a064`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:26: warning: unused variable `a065`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:26: warning: unused variable `a066`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:26: warning: unused variable `a067`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:26: warning: unused variable `a068`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:26: warning: unused variable `a069`
+    int a060, a061, a062, a063, a064, a065, a066, a067, a068, a069;
+large_stack_frame.c:27: warning: unused variable `a070`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:27: warning: unused variable `a071`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:27: warning: unused variable `a072`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:27: warning: unused variable `a073`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:27: warning: unused variable `a074`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:27: warning: unused variable `a075`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:27: warning: unused variable `a076`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:27: warning: unused variable `a077`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:27: warning: unused variable `a078`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:27: warning: unused variable `a079`
+    int a070, a071, a072, a073, a074, a075, a076, a077, a078, a079;
+large_stack_frame.c:28: warning: unused variable `a080`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:28: warning: unused variable `a081`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:28: warning: unused variable `a082`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:28: warning: unused variable `a083`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:28: warning: unused variable `a084`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:28: warning: unused variable `a085`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:28: warning: unused variable `a086`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:28: warning: unused variable `a087`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:28: warning: unused variable `a088`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:28: warning: unused variable `a089`
+    int a080, a081, a082, a083, a084, a085, a086, a087, a088, a089;
+large_stack_frame.c:29: warning: unused variable `a090`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:29: warning: unused variable `a091`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:29: warning: unused variable `a092`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:29: warning: unused variable `a093`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:29: warning: unused variable `a094`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:29: warning: unused variable `a095`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:29: warning: unused variable `a096`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:29: warning: unused variable `a097`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:29: warning: unused variable `a098`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:29: warning: unused variable `a099`
+    int a090, a091, a092, a093, a094, a095, a096, a097, a098, a099;
+large_stack_frame.c:30: warning: unused variable `a100`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:30: warning: unused variable `a101`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:30: warning: unused variable `a102`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:30: warning: unused variable `a103`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:30: warning: unused variable `a104`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:30: warning: unused variable `a105`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:30: warning: unused variable `a106`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:30: warning: unused variable `a107`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:30: warning: unused variable `a108`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:30: warning: unused variable `a109`
+    int a100, a101, a102, a103, a104, a105, a106, a107, a108, a109;
+large_stack_frame.c:31: warning: unused variable `a110`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:31: warning: unused variable `a111`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:31: warning: unused variable `a112`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:31: warning: unused variable `a113`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:31: warning: unused variable `a114`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:31: warning: unused variable `a115`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:31: warning: unused variable `a116`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:31: warning: unused variable `a117`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:31: warning: unused variable `a118`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:31: warning: unused variable `a119`
+    int a110, a111, a112, a113, a114, a115, a116, a117, a118, a119;
+large_stack_frame.c:32: warning: unused variable `a120`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:32: warning: unused variable `a121`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:32: warning: unused variable `a122`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:32: warning: unused variable `a123`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:32: warning: unused variable `a124`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:32: warning: unused variable `a125`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:32: warning: unused variable `a126`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:32: warning: unused variable `a127`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:32: warning: unused variable `a128`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:32: warning: unused variable `a129`
+    int a120, a121, a122, a123, a124, a125, a126, a127, a128, a129;
+large_stack_frame.c:33: warning: unused variable `a130`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:33: warning: unused variable `a131`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:33: warning: unused variable `a132`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:33: warning: unused variable `a133`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:33: warning: unused variable `a134`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:33: warning: unused variable `a135`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:33: warning: unused variable `a136`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:33: warning: unused variable `a137`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:33: warning: unused variable `a138`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:33: warning: unused variable `a139`
+    int a130, a131, a132, a133, a134, a135, a136, a137, a138, a139;
+large_stack_frame.c:34: warning: unused variable `a140`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:34: warning: unused variable `a141`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:34: warning: unused variable `a142`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:34: warning: unused variable `a143`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:34: warning: unused variable `a144`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:34: warning: unused variable `a145`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:34: warning: unused variable `a146`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:34: warning: unused variable `a147`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:34: warning: unused variable `a148`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:34: warning: unused variable `a149`
+    int a140, a141, a142, a143, a144, a145, a146, a147, a148, a149;
+large_stack_frame.c:35: warning: unused variable `a150`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:35: warning: unused variable `a151`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:35: warning: unused variable `a152`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:35: warning: unused variable `a153`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:35: warning: unused variable `a154`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:35: warning: unused variable `a155`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:35: warning: unused variable `a156`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:35: warning: unused variable `a157`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:35: warning: unused variable `a158`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:35: warning: unused variable `a159`
+    int a150, a151, a152, a153, a154, a155, a156, a157, a158, a159;
+large_stack_frame.c:36: warning: unused variable `a160`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:36: warning: unused variable `a161`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:36: warning: unused variable `a162`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:36: warning: unused variable `a163`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:36: warning: unused variable `a164`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:36: warning: unused variable `a165`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:36: warning: unused variable `a166`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:36: warning: unused variable `a167`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:36: warning: unused variable `a168`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:36: warning: unused variable `a169`
+    int a160, a161, a162, a163, a164, a165, a166, a167, a168, a169;
+large_stack_frame.c:37: warning: unused variable `a170`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:37: warning: unused variable `a171`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:37: warning: unused variable `a172`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:37: warning: unused variable `a173`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:37: warning: unused variable `a174`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:37: warning: unused variable `a175`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:37: warning: unused variable `a176`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:37: warning: unused variable `a177`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:37: warning: unused variable `a178`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:37: warning: unused variable `a179`
+    int a170, a171, a172, a173, a174, a175, a176, a177, a178, a179;
+large_stack_frame.c:38: warning: unused variable `a180`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:38: warning: unused variable `a181`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:38: warning: unused variable `a182`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:38: warning: unused variable `a183`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:38: warning: unused variable `a184`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:38: warning: unused variable `a185`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:38: warning: unused variable `a186`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:38: warning: unused variable `a187`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:38: warning: unused variable `a188`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:38: warning: unused variable `a189`
+    int a180, a181, a182, a183, a184, a185, a186, a187, a188, a189;
+large_stack_frame.c:39: warning: unused variable `a190`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:39: warning: unused variable `a191`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:39: warning: unused variable `a192`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:39: warning: unused variable `a193`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:39: warning: unused variable `a194`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:39: warning: unused variable `a195`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:39: warning: unused variable `a196`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:39: warning: unused variable `a197`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:39: warning: unused variable `a198`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:39: warning: unused variable `a199`
+    int a190, a191, a192, a193, a194, a195, a196, a197, a198, a199;
+large_stack_frame.c:40: warning: unused variable `a200`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:40: warning: unused variable `a201`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:40: warning: unused variable `a202`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:40: warning: unused variable `a203`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:40: warning: unused variable `a204`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:40: warning: unused variable `a205`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:40: warning: unused variable `a206`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:40: warning: unused variable `a207`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:40: warning: unused variable `a208`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:40: warning: unused variable `a209`
+    int a200, a201, a202, a203, a204, a205, a206, a207, a208, a209;
+large_stack_frame.c:41: warning: unused variable `a210`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:41: warning: unused variable `a211`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:41: warning: unused variable `a212`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:41: warning: unused variable `a213`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:41: warning: unused variable `a214`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:41: warning: unused variable `a215`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:41: warning: unused variable `a216`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:41: warning: unused variable `a217`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:41: warning: unused variable `a218`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:41: warning: unused variable `a219`
+    int a210, a211, a212, a213, a214, a215, a216, a217, a218, a219;
+large_stack_frame.c:42: warning: unused variable `a220`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:42: warning: unused variable `a221`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:42: warning: unused variable `a222`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:42: warning: unused variable `a223`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:42: warning: unused variable `a224`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:42: warning: unused variable `a225`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:42: warning: unused variable `a226`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:42: warning: unused variable `a227`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:42: warning: unused variable `a228`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:42: warning: unused variable `a229`
+    int a220, a221, a222, a223, a224, a225, a226, a227, a228, a229;
+large_stack_frame.c:43: warning: unused variable `a230`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:43: warning: unused variable `a231`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:43: warning: unused variable `a232`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:43: warning: unused variable `a233`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:43: warning: unused variable `a234`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:43: warning: unused variable `a235`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:43: warning: unused variable `a236`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:43: warning: unused variable `a237`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:43: warning: unused variable `a238`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:43: warning: unused variable `a239`
+    int a230, a231, a232, a233, a234, a235, a236, a237, a238, a239;
+large_stack_frame.c:44: warning: unused variable `a240`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:44: warning: unused variable `a241`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:44: warning: unused variable `a242`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:44: warning: unused variable `a243`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:44: warning: unused variable `a244`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:44: warning: unused variable `a245`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:44: warning: unused variable `a246`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:44: warning: unused variable `a247`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:44: warning: unused variable `a248`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:44: warning: unused variable `a249`
+    int a240, a241, a242, a243, a244, a245, a246, a247, a248, a249;
+large_stack_frame.c:45: warning: unused variable `a250`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:45: warning: unused variable `a251`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:45: warning: unused variable `a252`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:45: warning: unused variable `a253`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:45: warning: unused variable `a254`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:45: warning: unused variable `a255`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:45: warning: unused variable `a256`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:45: warning: unused variable `a257`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:45: warning: unused variable `a258`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:45: warning: unused variable `a259`
+    int a250, a251, a252, a253, a254, a255, a256, a257, a258, a259;
+large_stack_frame.c:46: warning: unused variable `a260`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:46: warning: unused variable `a261`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:46: warning: unused variable `a262`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:46: warning: unused variable `a263`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:46: warning: unused variable `a264`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:46: warning: unused variable `a265`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:46: warning: unused variable `a266`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:46: warning: unused variable `a267`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:46: warning: unused variable `a268`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:46: warning: unused variable `a269`
+    int a260, a261, a262, a263, a264, a265, a266, a267, a268, a269;
+large_stack_frame.c:47: warning: unused variable `a270`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:47: warning: unused variable `a271`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:47: warning: unused variable `a272`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:47: warning: unused variable `a273`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:47: warning: unused variable `a274`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:47: warning: unused variable `a275`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:47: warning: unused variable `a276`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:47: warning: unused variable `a277`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:47: warning: unused variable `a278`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:47: warning: unused variable `a279`
+    int a270, a271, a272, a273, a274, a275, a276, a277, a278, a279;
+large_stack_frame.c:48: warning: unused variable `a280`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:48: warning: unused variable `a281`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:48: warning: unused variable `a282`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:48: warning: unused variable `a283`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:48: warning: unused variable `a284`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:48: warning: unused variable `a285`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:48: warning: unused variable `a286`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:48: warning: unused variable `a287`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:48: warning: unused variable `a288`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:48: warning: unused variable `a289`
+    int a280, a281, a282, a283, a284, a285, a286, a287, a288, a289;
+large_stack_frame.c:49: warning: unused variable `a290`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:49: warning: unused variable `a291`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:49: warning: unused variable `a292`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:49: warning: unused variable `a293`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:49: warning: unused variable `a294`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:49: warning: unused variable `a295`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:49: warning: unused variable `a296`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:49: warning: unused variable `a297`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:49: warning: unused variable `a298`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:49: warning: unused variable `a299`
+    int a290, a291, a292, a293, a294, a295, a296, a297, a298, a299;
+large_stack_frame.c:50: warning: unused variable `a301`
+    int a300, a301, a302, a303, a304, a305, a306, a307, a308, a309;
+large_stack_frame.c:50: warning: unused variable `a302`
+    int a300, a301, a302, a303, a304, a305, a306, a307, a308, a309;
+large_stack_frame.c:50: warning: unused variable `a303`
+    int a300, a301, a302, a303, a304, a305, a306, a307, a308, a309;
+large_stack_frame.c:50: warning: unused variable `a304`
+    int a300, a301, a302, a303, a304, a305, a306, a307, a308, a309;
+large_stack_frame.c:50: warning: unused variable `a305`
+    int a300, a301, a302, a303, a304, a305, a306, a307, a308, a309;
+large_stack_frame.c:50: warning: unused variable `a306`
+    int a300, a301, a302, a303, a304, a305, a306, a307, a308, a309;
+large_stack_frame.c:50: warning: unused variable `a307`
+    int a300, a301, a302, a303, a304, a305, a306, a307, a308, a309;
+large_stack_frame.c:50: warning: unused variable `a308`
+    int a300, a301, a302, a303, a304, a305, a306, a307, a308, a309;
+large_stack_frame.c:50: warning: unused variable `a309`
+    int a300, a301, a302, a303, a304, a305, a306, a307, a308, a309;
+large_stack_frame.c:51: warning: unused variable `a310`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:51: warning: unused variable `a311`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:51: warning: unused variable `a312`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:51: warning: unused variable `a313`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:51: warning: unused variable `a314`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:51: warning: unused variable `a315`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:51: warning: unused variable `a316`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:51: warning: unused variable `a317`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:51: warning: unused variable `a318`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:51: warning: unused variable `a319`
+    int a310, a311, a312, a313, a314, a315, a316, a317, a318, a319;
+large_stack_frame.c:52: warning: unused variable `a320`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:52: warning: unused variable `a321`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:52: warning: unused variable `a322`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:52: warning: unused variable `a323`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:52: warning: unused variable `a324`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:52: warning: unused variable `a325`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:52: warning: unused variable `a326`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:52: warning: unused variable `a327`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:52: warning: unused variable `a328`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:52: warning: unused variable `a329`
+    int a320, a321, a322, a323, a324, a325, a326, a327, a328, a329;
+large_stack_frame.c:53: warning: unused variable `a330`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:53: warning: unused variable `a331`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:53: warning: unused variable `a332`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:53: warning: unused variable `a333`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:53: warning: unused variable `a334`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:53: warning: unused variable `a335`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:53: warning: unused variable `a336`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:53: warning: unused variable `a337`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:53: warning: unused variable `a338`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:53: warning: unused variable `a339`
+    int a330, a331, a332, a333, a334, a335, a336, a337, a338, a339;
+large_stack_frame.c:54: warning: unused variable `a340`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:54: warning: unused variable `a341`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:54: warning: unused variable `a342`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:54: warning: unused variable `a343`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:54: warning: unused variable `a344`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:54: warning: unused variable `a345`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:54: warning: unused variable `a346`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:54: warning: unused variable `a347`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:54: warning: unused variable `a348`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:54: warning: unused variable `a349`
+    int a340, a341, a342, a343, a344, a345, a346, a347, a348, a349;
+large_stack_frame.c:55: warning: unused variable `a350`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:55: warning: unused variable `a351`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:55: warning: unused variable `a352`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:55: warning: unused variable `a353`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:55: warning: unused variable `a354`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:55: warning: unused variable `a355`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:55: warning: unused variable `a356`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:55: warning: unused variable `a357`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:55: warning: unused variable `a358`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:55: warning: unused variable `a359`
+    int a350, a351, a352, a353, a354, a355, a356, a357, a358, a359;
+large_stack_frame.c:56: warning: unused variable `a360`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:56: warning: unused variable `a361`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:56: warning: unused variable `a362`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:56: warning: unused variable `a363`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:56: warning: unused variable `a364`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:56: warning: unused variable `a365`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:56: warning: unused variable `a366`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:56: warning: unused variable `a367`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:56: warning: unused variable `a368`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:56: warning: unused variable `a369`
+    int a360, a361, a362, a363, a364, a365, a366, a367, a368, a369;
+large_stack_frame.c:57: warning: unused variable `a370`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:57: warning: unused variable `a371`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:57: warning: unused variable `a372`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:57: warning: unused variable `a373`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:57: warning: unused variable `a374`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:57: warning: unused variable `a375`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:57: warning: unused variable `a376`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:57: warning: unused variable `a377`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:57: warning: unused variable `a378`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:57: warning: unused variable `a379`
+    int a370, a371, a372, a373, a374, a375, a376, a377, a378, a379;
+large_stack_frame.c:58: warning: unused variable `a380`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:58: warning: unused variable `a381`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:58: warning: unused variable `a382`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:58: warning: unused variable `a383`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:58: warning: unused variable `a384`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:58: warning: unused variable `a385`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:58: warning: unused variable `a386`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:58: warning: unused variable `a387`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:58: warning: unused variable `a388`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:58: warning: unused variable `a389`
+    int a380, a381, a382, a383, a384, a385, a386, a387, a388, a389;
+large_stack_frame.c:59: warning: unused variable `a390`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:59: warning: unused variable `a391`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:59: warning: unused variable `a392`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:59: warning: unused variable `a393`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:59: warning: unused variable `a394`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:59: warning: unused variable `a395`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:59: warning: unused variable `a396`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:59: warning: unused variable `a397`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:59: warning: unused variable `a398`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:59: warning: unused variable `a399`
+    int a390, a391, a392, a393, a394, a395, a396, a397, a398, a399;
+large_stack_frame.c:60: warning: unused variable `a400`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:60: warning: unused variable `a401`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:60: warning: unused variable `a402`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:60: warning: unused variable `a403`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:60: warning: unused variable `a404`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:60: warning: unused variable `a405`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:60: warning: unused variable `a406`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:60: warning: unused variable `a407`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:60: warning: unused variable `a408`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:60: warning: unused variable `a409`
+    int a400, a401, a402, a403, a404, a405, a406, a407, a408, a409;
+large_stack_frame.c:61: warning: unused variable `a410`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:61: warning: unused variable `a411`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:61: warning: unused variable `a412`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:61: warning: unused variable `a413`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:61: warning: unused variable `a414`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:61: warning: unused variable `a415`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:61: warning: unused variable `a416`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:61: warning: unused variable `a417`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:61: warning: unused variable `a418`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:61: warning: unused variable `a419`
+    int a410, a411, a412, a413, a414, a415, a416, a417, a418, a419;
+large_stack_frame.c:62: warning: unused variable `a420`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:62: warning: unused variable `a421`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:62: warning: unused variable `a422`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:62: warning: unused variable `a423`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:62: warning: unused variable `a424`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:62: warning: unused variable `a425`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:62: warning: unused variable `a426`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:62: warning: unused variable `a427`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:62: warning: unused variable `a428`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:62: warning: unused variable `a429`
+    int a420, a421, a422, a423, a424, a425, a426, a427, a428, a429;
+large_stack_frame.c:63: warning: unused variable `a430`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:63: warning: unused variable `a431`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:63: warning: unused variable `a432`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:63: warning: unused variable `a433`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:63: warning: unused variable `a434`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:63: warning: unused variable `a435`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:63: warning: unused variable `a436`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:63: warning: unused variable `a437`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:63: warning: unused variable `a438`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:63: warning: unused variable `a439`
+    int a430, a431, a432, a433, a434, a435, a436, a437, a438, a439;
+large_stack_frame.c:64: warning: unused variable `a440`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:64: warning: unused variable `a441`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:64: warning: unused variable `a442`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:64: warning: unused variable `a443`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:64: warning: unused variable `a444`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:64: warning: unused variable `a445`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:64: warning: unused variable `a446`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:64: warning: unused variable `a447`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:64: warning: unused variable `a448`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:64: warning: unused variable `a449`
+    int a440, a441, a442, a443, a444, a445, a446, a447, a448, a449;
+large_stack_frame.c:65: warning: unused variable `a450`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:65: warning: unused variable `a451`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:65: warning: unused variable `a452`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:65: warning: unused variable `a453`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:65: warning: unused variable `a454`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:65: warning: unused variable `a455`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:65: warning: unused variable `a456`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:65: warning: unused variable `a457`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:65: warning: unused variable `a458`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:65: warning: unused variable `a459`
+    int a450, a451, a452, a453, a454, a455, a456, a457, a458, a459;
+large_stack_frame.c:66: warning: unused variable `a460`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:66: warning: unused variable `a461`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:66: warning: unused variable `a462`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:66: warning: unused variable `a463`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:66: warning: unused variable `a464`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:66: warning: unused variable `a465`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:66: warning: unused variable `a466`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:66: warning: unused variable `a467`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:66: warning: unused variable `a468`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:66: warning: unused variable `a469`
+    int a460, a461, a462, a463, a464, a465, a466, a467, a468, a469;
+large_stack_frame.c:67: warning: unused variable `a470`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:67: warning: unused variable `a471`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:67: warning: unused variable `a472`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:67: warning: unused variable `a473`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:67: warning: unused variable `a474`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:67: warning: unused variable `a475`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:67: warning: unused variable `a476`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:67: warning: unused variable `a477`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:67: warning: unused variable `a478`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:67: warning: unused variable `a479`
+    int a470, a471, a472, a473, a474, a475, a476, a477, a478, a479;
+large_stack_frame.c:68: warning: unused variable `a480`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:68: warning: unused variable `a481`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:68: warning: unused variable `a482`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:68: warning: unused variable `a483`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:68: warning: unused variable `a484`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:68: warning: unused variable `a485`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:68: warning: unused variable `a486`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:68: warning: unused variable `a487`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:68: warning: unused variable `a488`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:68: warning: unused variable `a489`
+    int a480, a481, a482, a483, a484, a485, a486, a487, a488, a489;
+large_stack_frame.c:69: warning: unused variable `a490`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:69: warning: unused variable `a491`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:69: warning: unused variable `a492`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:69: warning: unused variable `a493`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:69: warning: unused variable `a494`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:69: warning: unused variable `a495`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:69: warning: unused variable `a496`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:69: warning: unused variable `a497`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:69: warning: unused variable `a498`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:69: warning: unused variable `a499`
+    int a490, a491, a492, a493, a494, a495, a496, a497, a498, a499;
+large_stack_frame.c:70: warning: unused variable `a500`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:70: warning: unused variable `a501`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:70: warning: unused variable `a502`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:70: warning: unused variable `a503`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:70: warning: unused variable `a504`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:70: warning: unused variable `a505`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:70: warning: unused variable `a506`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:70: warning: unused variable `a507`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:70: warning: unused variable `a508`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:70: warning: unused variable `a509`
+    int a500, a501, a502, a503, a504, a505, a506, a507, a508, a509;
+large_stack_frame.c:71: warning: unused variable `a510`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:71: warning: unused variable `a511`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:71: warning: unused variable `a512`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:71: warning: unused variable `a513`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:71: warning: unused variable `a514`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:71: warning: unused variable `a515`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:71: warning: unused variable `a516`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:71: warning: unused variable `a517`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:71: warning: unused variable `a518`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:71: warning: unused variable `a519`
+    int a510, a511, a512, a513, a514, a515, a516, a517, a518, a519;
+large_stack_frame.c:72: warning: unused variable `a520`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:72: warning: unused variable `a521`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:72: warning: unused variable `a522`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:72: warning: unused variable `a523`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:72: warning: unused variable `a524`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:72: warning: unused variable `a525`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:72: warning: unused variable `a526`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:72: warning: unused variable `a527`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:72: warning: unused variable `a528`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:72: warning: unused variable `a529`
+    int a520, a521, a522, a523, a524, a525, a526, a527, a528, a529;
+large_stack_frame.c:73: warning: unused variable `a530`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:73: warning: unused variable `a531`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:73: warning: unused variable `a532`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:73: warning: unused variable `a533`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:73: warning: unused variable `a534`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:73: warning: unused variable `a535`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:73: warning: unused variable `a536`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:73: warning: unused variable `a537`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:73: warning: unused variable `a538`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:73: warning: unused variable `a539`
+    int a530, a531, a532, a533, a534, a535, a536, a537, a538, a539;
+large_stack_frame.c:74: warning: unused variable `a540`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:74: warning: unused variable `a541`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:74: warning: unused variable `a542`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:74: warning: unused variable `a543`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:74: warning: unused variable `a544`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:74: warning: unused variable `a545`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:74: warning: unused variable `a546`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:74: warning: unused variable `a547`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:74: warning: unused variable `a548`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:74: warning: unused variable `a549`
+    int a540, a541, a542, a543, a544, a545, a546, a547, a548, a549;
+large_stack_frame.c:75: warning: unused variable `a550`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:75: warning: unused variable `a551`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:75: warning: unused variable `a552`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:75: warning: unused variable `a553`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:75: warning: unused variable `a554`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:75: warning: unused variable `a555`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:75: warning: unused variable `a556`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:75: warning: unused variable `a557`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:75: warning: unused variable `a558`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:75: warning: unused variable `a559`
+    int a550, a551, a552, a553, a554, a555, a556, a557, a558, a559;
+large_stack_frame.c:76: warning: unused variable `a560`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:76: warning: unused variable `a561`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:76: warning: unused variable `a562`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:76: warning: unused variable `a563`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:76: warning: unused variable `a564`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:76: warning: unused variable `a565`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:76: warning: unused variable `a566`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:76: warning: unused variable `a567`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:76: warning: unused variable `a568`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:76: warning: unused variable `a569`
+    int a560, a561, a562, a563, a564, a565, a566, a567, a568, a569;
+large_stack_frame.c:77: warning: unused variable `a570`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:77: warning: unused variable `a571`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:77: warning: unused variable `a572`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:77: warning: unused variable `a573`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:77: warning: unused variable `a574`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:77: warning: unused variable `a575`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:77: warning: unused variable `a576`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:77: warning: unused variable `a577`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:77: warning: unused variable `a578`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:77: warning: unused variable `a579`
+    int a570, a571, a572, a573, a574, a575, a576, a577, a578, a579;
+large_stack_frame.c:78: warning: unused variable `a580`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:78: warning: unused variable `a581`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:78: warning: unused variable `a582`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:78: warning: unused variable `a583`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:78: warning: unused variable `a584`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:78: warning: unused variable `a585`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:78: warning: unused variable `a586`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:78: warning: unused variable `a587`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:78: warning: unused variable `a588`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:78: warning: unused variable `a589`
+    int a580, a581, a582, a583, a584, a585, a586, a587, a588, a589;
+large_stack_frame.c:79: warning: unused variable `a590`
+    int a590, a591, a592, a593, a594, a595, a596, a597, a598, a599;
+large_stack_frame.c:79: warning: unused variable `a591`
+    int a590, a591, a592, a593, a594, a595, a596, a597, a598, a599;
+large_stack_frame.c:79: warning: unused variable `a592`
+    int a590, a591, a592, a593, a594, a595, a596, a597, a598, a599;
+large_stack_frame.c:79: warning: unused variable `a593`
+    int a590, a591, a592, a593, a594, a595, a596, a597, a598, a599;
+large_stack_frame.c:79: warning: unused variable `a594`
+    int a590, a591, a592, a593, a594, a595, a596, a597, a598, a599;
+large_stack_frame.c:79: warning: unused variable `a595`
+    int a590, a591, a592, a593, a594, a595, a596, a597, a598, a599;
+large_stack_frame.c:79: warning: unused variable `a596`
+    int a590, a591, a592, a593, a594, a595, a596, a597, a598, a599;
+large_stack_frame.c:79: warning: unused variable `a597`
+    int a590, a591, a592, a593, a594, a595, a596, a597, a598, a599;
+large_stack_frame.c:79: warning: unused variable `a598`
+    int a590, a591, a592, a593, a594, a595, a596, a597, a598, a599;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
@@ -652,9 +1249,96 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=1 ---
-; name=__c5_entry
-fn ent_pc=1 n_params=2 variadic=false locals=6
+; name=__c5_run_fini_array
+fn ent_pc=1 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(0)                                       -> x3
+    v2   Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v1)
+  block 1  start_pc=0
+    v7   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v8   BinopI { op=add, lhs=v3, rhs_imm=-8 }            -> x3
+    v9   Imm(0)                                           -> x0
+    v10  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v11  Load { addr=v8, disp=0, kind=I64 }               -> x0
+    v12  CallIndirect { target=v11, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v13  BinopI { op=and, lhs=v12, rhs_imm=255 }          -> x0
+    terminator Jmp(b2)   (exit_acc=v13)
+  block 2  start_pc=0
+    v3   Phi { incoming=[b0:v1, b1:v8], kind=I64 }        -> x3
+    v4   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v5   ImmData(0)                                       -> x0
+    v6   Binop { op=ne, lhs=v3, rhs=v5 }                  -> x0
+    terminator Bnz { cond=v6, target=b1, fall=b3 }   (exit_acc=v6)
+  block 3  start_pc=0
+    v14  Imm(0)                                           -> x0
+    terminator Return(v14)   (exit_acc=v14)
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=__c5_fini_trampoline
+fn ent_pc=2 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I64 }                    -> x0
+    v4   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
+    v5   Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Imm(0)                                           -> x0
+    terminator Return(v6)   (exit_acc=v6)
+; --- SSA dump (ok=true) ent_pc=3 ---
+; name=__c5_register_fini
+fn ent_pc=3 n_params=0 variadic=false locals=3
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmCode(ent_pc=2)                                -> x7
+    v2   Imm(0)                                           -> x3
+    v3   CallExt { binding_idx=1, args=[v1, v2, v2], fp_arg_mask=0x0 } -> x0
+    terminator Return(v2)   (exit_acc=v2)
+; --- SSA dump (ok=true) ent_pc=4 ---
+; name=__c5_run_init_array
+fn ent_pc=4 n_params=0 variadic=false locals=2
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(0)                                       -> x0
+    v2   ImmData(0)                                       -> x1
+    v3   Binop { op=ne, lhs=v1, rhs=v2 }                  -> x0
+    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+  block 1  start_pc=0
+    v4   Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b2)   (exit_acc=v4)
+  block 2  start_pc=0
+    v5   ImmData(0)                                       -> x3
+    v6   Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v5)
+  block 3  start_pc=0
+    v14  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v15  Load { addr=v7, disp=0, kind=I64 }               -> x0
+    v16  CallIndirect { target=v15, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  BinopI { op=and, lhs=v16, rhs_imm=255 }          -> x0
+    terminator Jmp(b4)   (exit_acc=v17)
+  block 4  start_pc=0
+    v11  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v12  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x3
+    v13  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v12)
+  block 5  start_pc=0
+    v7   Phi { incoming=[b2:v5, b4:v12], kind=I64 }       -> x3
+    v8   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v9   ImmData(0)                                       -> x0
+    v10  Binop { op=ne, lhs=v7, rhs=v9 }                  -> x0
+    terminator Bnz { cond=v10, target=b3, fall=b6 }   (exit_acc=v10)
+  block 6  start_pc=0
+    v18  Imm(0)                                           -> x0
+    terminator Return(v18)   (exit_acc=v18)
+; --- SSA dump (ok=true) ent_pc=5 ---
+; name=__c5_entry
+fn ent_pc=5 n_params=2 variadic=false locals=6
+  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -666,23 +1350,26 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v7   LoadLocal { off=2, kind=I64 }                    -> x0
     v8   Imm(0)                                           -> x0
     v9   LoadLocal { off=-1, kind=I64 }                   -> x0
-    v10  Imm(0)                                           -> x3
+    v10  Imm(0)                                           -> x13
     v11  Load { addr=v1, disp=0, kind=I64 }               -> x0
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
-    v13  Extend { value=v11, kind=I32 }                   -> x0
-    v14  Imm(0)                                           -> x1
-    v15  Imm(8)                                           -> x1
-    v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
-    v17  Imm(0)                                           -> x1
-    v18  ImmData(24)                                      -> x1
-    v19  LoadLocal { off=-3, kind=I64 }                   -> x2
-    v20  LoadLocal { off=-2, kind=I32 }                   -> x2
-    v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x2
-    v22  Binop { op=add, lhs=v16, rhs=v21 }               -> x2
-    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x2
+    v13  Extend { value=v11, kind=I32 }                   -> x3
+    v14  Imm(0)                                           -> x0
+    v15  Imm(8)                                           -> x0
+    v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x12
+    v17  Imm(0)                                           -> x0
+    v18  ImmData(24)                                      -> x0
+    v19  LoadLocal { off=-3, kind=I64 }                   -> x1
+    v20  LoadLocal { off=-2, kind=I32 }                   -> x1
+    v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1
+    v22  Binop { op=add, lhs=v16, rhs=v21 }               -> x1
+    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
     v24  Store { addr=v18, disp=0, value=v23, kind=I64 }  -> -
-    v25  LoadLocal { off=-2, kind=I32 }                   -> x1
-    v26  LoadLocal { off=-3, kind=I64 }                   -> x1
-    v27  Call { target_pc=3, args=[v13, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
-    v28  Call { target_pc=0, args=[v27], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v25  Call { target_pc=4, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v26  LoadLocal { off=-2, kind=I32 }                   -> x0
+    v27  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v28  Call { target_pc=7, args=[v13, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
+    v29  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x0
+    v30  Extend { value=v28, kind=I32 }                   -> x0
+    v31  Call { target_pc=0, args=[v28], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Return(v10)   (exit_acc=v10)

@@ -87,7 +87,6 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rax)
                	movslq	(%rax,%rdi,4), %rax
                	retq
-               	xorq	%rcx, %rcx
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
                	xorq	%rcx, %rcx
@@ -141,4 +140,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

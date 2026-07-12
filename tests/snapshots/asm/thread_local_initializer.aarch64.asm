@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x270              // =624
+               	mov	x1, #0x2b0              // =688
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
@@ -14,6 +14,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mrs	x1, TPIDR_EL0
+               	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x10
                	ldrsw	x0, [x1]
                	cmp	x0, #0x7
@@ -23,6 +24,7 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x20
                	ret
                	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x18
                	ldrsw	x0, [x0]
                	mov	x17, #0xfffd            // =65533
@@ -36,6 +38,7 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x20
                	ret
                	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x20
                	ldrsw	x0, [x0]
                	cmp	x0, #0x0
@@ -46,6 +49,7 @@ Disassembly of section .text:
                	ret
                	ldrsw	x0, [x1]
                	mrs	x2, TPIDR_EL0
+               	add	x2, x2, #0x0, lsl #12   // =0x0
                	add	x2, x2, #0x18
                	ldrsw	x2, [x2]
                	add	x0, x0, x2

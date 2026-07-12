@@ -12,14 +12,4 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	movl	$0x1, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	xorq	%rax, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	jmp	<addr>

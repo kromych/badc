@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x2a0              // =672
+               	mov	x1, #0x2f0              // =752
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
@@ -33,7 +33,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	uxtb	w0, w0
-               	b	<addr>
+               	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x19, [sp], #0x20
+               	ret
 
 <main>:
                	stp	x20, x21, [sp, #-0x30]!
@@ -80,11 +83,12 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
-               	mov	x1, #0x0                // =0
+               	mov	x21, #0x0               // =0
                	mov	x0, x20
+               	mov	x1, x21
                	bl	<addr>
                	uxtb	w0, w0
-               	mov	x0, #0x15               // =21
+               	mov	x0, x21
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
@@ -141,7 +145,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	uxtb	w0, w0
-               	mov	x0, #0x1f               // =31
+               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
@@ -150,11 +154,12 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
-               	mov	x1, #0x0                // =0
+               	mov	x21, #0x0               // =0
                	mov	x0, x20
+               	mov	x1, x21
                	bl	<addr>
                	uxtb	w0, w0
-               	mov	x0, #0x17               // =23
+               	mov	x0, x21
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

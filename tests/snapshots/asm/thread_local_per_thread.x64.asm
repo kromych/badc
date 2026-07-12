@@ -14,7 +14,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
-               	subq	$0x8, %rax
+               	addq	$-0x8, %rax
                	movslq	(%rax), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	movq	%fs:0x0, %r12
-               	subq	$0x8, %r12
+               	addq	$-0x8, %r12
                	movl	$0x1, %eax
                	movl	%eax, (%r12)
                	xorq	%rbx, %rbx

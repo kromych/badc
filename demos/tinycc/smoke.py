@@ -259,7 +259,7 @@ def compile_one(
         cmd.extend(["-D", d])
     cmd.extend(["-c", str(src), "-o", str(out)])
     # Pin cwd to the repo root so badc's auto-add of `./include`
-    # picks up the bundled c5 headers under `./headers/include`
+    # picks up the bundled c5 headers under `./libc/include`
     # instead of tinycc's vendored `demos/tinycc/include/` (which
     # uses gcc-only `__builtin_va_list` and friends).
     proc = subprocess.run(

@@ -2,7 +2,7 @@
 
 Hand-authored header declarations for libraries and platform interfaces that
 real-world C programs `#include` but that are not part of the C standard
-library and so are not in badc's embedded header set (`headers/include/`).
+library and so are not in badc's embedded header set (`libc/include/`).
 badc's include search is hermetic -- it consults its embedded headers plus
 explicit `-I` paths, never the host's default system include directories -- so
 a program that uses one of these cannot find its header unless it is provided

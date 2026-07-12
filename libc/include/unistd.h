@@ -312,7 +312,7 @@ extern char **environ;
 #pragma binding(libc::confstr,   "confstr")
 // POSIX `environ` is exposed on Linux as the data symbol `__environ`
 // (with `environ` as its alias). The `extern` slot lives in
-// `lib/runtime.c`; the data binding makes the linker emit a COPY
+// `libc/lib/runtime.c`; the data binding makes the linker emit a COPY
 // relocation so that slot and the Linux C library's `__environ` share one cell.
 // Without it, the Linux C library's getenv / setenv / tzset read a different cell
 // than a direct `environ = ...` assignment writes.

@@ -673,7 +673,7 @@ fn qsort_with_cross_tu_compare() {
 
 // stdio buffers were lost when the writer's `_start` stub
 // called `exit_group` via syscall, bypassing libc's atexit
-// chain. The embedded runtime (`lib/runtime.c`) now exports
+// chain. The embedded runtime (`libc/lib/runtime.c`) now exports
 // `__c5_exit` which calls libc `exit`; the writer's stub
 // routes the tail through it when the symbol is present.
 // Redirecting stdout to a file forces full buffering, so the

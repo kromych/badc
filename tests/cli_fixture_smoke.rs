@@ -362,7 +362,7 @@ fn installed_overlay_overrides_embedded() {
 
     // With BADC_HOME set the overlay header is used, so the marker is
     // defined and the program builds and exits 0. The temp cwd has no
-    // ./include or ./headers/include, so the overlay is the only one.
+    // ./include or ./libc/include, so the overlay is the only one.
     let exe = dir.join("m");
     let built = Command::new(badc)
         .env("BADC_HOME", &home)

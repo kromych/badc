@@ -207,7 +207,7 @@ pub(crate) struct Preprocessor {
     /// a user can `cp $(badc --dump-headers) ./include/...` and
     /// override one without rebuilding badc. Plumbed in from the
     /// CLI's `-I path` flag and any built-in defaults
-    /// (`./include`, `./headers/include`). Filesystem reads are
+    /// (`./include`, `./libc/include`). Filesystem reads are
     /// gated behind `cfg(feature = "std")`; the no_std build
     /// keeps the field but never reads from it (the embedded
     /// headers are always available).

@@ -112,7 +112,7 @@ is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
 ### POSIX
 
 - The `<dlfcn.h>`, `<pthread.h>`, `<dirent.h>`, `<setjmp.h>`, and related
-  surfaces in `headers/include/`; `struct dirent` matches the host libc
+  surfaces in `libc/include/`; `struct dirent` matches the host libc
   byte layout so `readdir` reads `d_name` at its real offset.
 - `fseeko` / `ftello` (the `off_t` seek/tell pair), and the glibc
   `malloc_usable_size` and `sighandler_t` on Linux.

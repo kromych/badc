@@ -120,7 +120,7 @@ assertion fires.
 The Universal CRT switched to the C99 spellings in VS2015 and
 the math entry points (`frexp`, `pow`) are exported directly
 by `ucrtbase.dll` -- the surgical `ucrtbase::frexp` and
-`ucrtbase::pow` pins in `headers/include/math.h` are what
+`ucrtbase::pow` pins in `libc/include/math.h` are what
 cleared the earlier `math.lua:692` (`frexp(+/-inf)`) and
 `math.lua:1104` (`pow(2, -1023)` flushing to zero) divergences.
 

@@ -95,7 +95,7 @@ Compile knobs:
   -I path                  Add a header search path, probed before
                            the bundled headers on #include.
                            Repeatable. `./include` and
-                           `./headers/include` are auto-added when
+                           `./libc/include` are auto-added when
                            present, so a local copy of a bundled
                            header overrides the embedded one.
   -include FILE            Splice the named header in front of the
@@ -581,11 +581,11 @@ fn run() {
 
     // Auto-add common header overlays so a developer iterating on
     // the bundled headers can edit `./include/...` (or
-    // `./headers/include/...` from the repo root) and have the
+    // `./libc/include/...` from the repo root) and have the
     // change take effect without rebuilding badc. User-supplied
     // -I paths still win because they were pushed earlier in the
     // search order.
-    for default in ["./include", "./headers/include"] {
+    for default in ["./include", "./libc/include"] {
         if std::path::Path::new(default).is_dir() && !include_paths.iter().any(|p| p == default) {
             include_paths.push(default.to_string());
         }

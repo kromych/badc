@@ -12,8 +12,7 @@ categories = ["compilers", "development-tools"]
 # library at build time, so they must ship in the published package.
 include = [
     "src/**/*.rs",
-    "lib/**",
-    "headers/**",
+    "libc/**",
     "build.rs",
     "Cargo.toml",
     "README.md",

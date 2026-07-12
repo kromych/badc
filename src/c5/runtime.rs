@@ -26,4 +26,4 @@ pub fn embedded_runtime() -> &'static [(&'static str, &'static str)] {
 }
 
 pub(super) const EMBEDDED_RUNTIME: &[(&str, &str)] =
-    &[("runtime.c", include_str!("../../lib/runtime.c"))];
+    &[("runtime.c", include_str!("../../libc/lib/runtime.c"))];

@@ -772,7 +772,7 @@ pub(crate) struct FunctionSsa {
 /// External functions that may return twice into the caller's frame:
 /// the setjmp family (C99 7.13.1.1) plus vfork(2). Matched on the
 /// c5-side symbol name; `__c5_msvcrt_setjmp` is the target of the
-/// Windows x86_64 `setjmp` macro (headers/include/setjmp.h). The
+/// Windows x86_64 `setjmp` macro (libc/include/setjmp.h). The
 /// AArch64 inline setjmp is an intrinsic, recognised structurally by
 /// `codegen::ssa::reg_alloc::is_setjmp_barrier`.
 pub(crate) fn returns_twice_fn_name(name: &str) -> bool {

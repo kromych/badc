@@ -127,6 +127,7 @@ const SHF_INFO_LINK: u64 = 0x40;
 const R_X86_64_64: u32 = 1;
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
+const R_X86_64_GOTPCREL: u32 = 9;
 const R_X86_64_32: u32 = 10;
 // Local-exec TLS: the linker writes the (negative, variant-2) TP-relative
 // offset of the symbol into the `add r64, imm32` immediate.
@@ -1294,17 +1295,17 @@ pub(super) fn write_relocatable(
     let mut sh: Vec<Elf64Shdr> = Vec::with_capacity(num_sections);
     sh.push(Elf64Shdr::default()); // SHN_UNDEF
 
-    // .text -- the extern-address `add`s become `ldr`s so they read the GOT
-    // slot (see `rewrite_extern_adds_to_got_ldr`). Both cross-TU data/function
+    // .text -- extern-address materializations become GOT loads (see
+    // `rewrite_extern_addr_loads_to_got`). Both cross-TU data/function
     // references (`user_extern_data_refs`) and import address-of sites
     // (`reloc_call_sites` with `is_addr`) go through the GOT. Same length as
     // `build.text`.
-    let mut got_adrp_offsets: alloc::vec::Vec<usize> = build
+    let mut got_site_offsets: alloc::vec::Vec<usize> = build
         .user_extern_data_refs
         .iter()
         .map(|r| r.instr_offset)
         .collect();
-    got_adrp_offsets.extend(
+    got_site_offsets.extend(
         build
             .reloc_call_sites
             .iter()
@@ -1312,7 +1313,7 @@ pub(super) fn write_relocatable(
             .map(|s| s.instr_offset),
     );
     let text_body =
-        rewrite_extern_adds_to_got_ldr(machine_for_rela, &build.text, &got_adrp_offsets);
+        rewrite_extern_addr_loads_to_got(machine_for_rela, &build.text, &got_site_offsets);
     let text_off = round_up(out.len() as u64, 16);
     out.resize(text_off as usize, 0);
     out.extend_from_slice(&text_body);
@@ -2068,9 +2069,10 @@ fn emit_addr_fixup_relocs(
 
 /// Emit the GOT-indirect relocs for address-taking an undefined external
 /// symbol: `R_AARCH64_ADR_GOT_PAGE` at the `adrp` and
-/// `R_AARCH64_LD64_GOT_LO12_NC` at the paired `ldr`. The `add` the codegen
-/// left is rewritten to that `ldr` by [`rewrite_extern_adds_to_got_ldr`].
-/// x86_64 keeps the direct PC-relative form for now (GOTPCREL is a TODO).
+/// `R_AARCH64_LD64_GOT_LO12_NC` at the paired `ldr` on aarch64;
+/// `R_X86_64_GOTPCREL` at the disp32 of the rewritten `mov` on x86_64.
+/// The direct-address instruction the codegen left is rewritten to the
+/// GOT load by [`rewrite_extern_addr_loads_to_got`].
 fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, sym_idx: u64) {
     match machine {
         Machine::Aarch64 => {
@@ -2087,36 +2089,58 @@ fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, s
             write_struct(out, &page);
             write_struct(out, &lo12);
         }
-        Machine::X86_64 => emit_addr_fixup_relocs(machine, out, instr_offset, sym_idx, 0),
+        Machine::X86_64 => {
+            // `mov reg, [rip + disp32]` (rewritten from the codegen's
+            // `lea`): the disp32 sits after REX + opcode + modrm, and
+            // resolves as `G + GOT + A - P` with the end-of-field `-4`.
+            let rela = Elf64Rela {
+                r_offset: instr_offset + 3,
+                r_info: (sym_idx << 32) | R_X86_64_GOTPCREL as u64,
+                r_addend: -4,
+            };
+            write_struct(out, &rela);
+        }
     }
 }
 
-/// Rewrite the `add` half of each `adrp + add` external-address load into an
-/// `ldr` so it dereferences the GOT slot (paired with the GOT relocs emitted
-/// by [`emit_got_ref_relocs`]). Returns a copy of `.text` with the rewrites
-/// applied; the shared `build.text` is untouched so the JIT / direct-image
-/// paths keep the direct form. aarch64 only.
-fn rewrite_extern_adds_to_got_ldr(
+/// Rewrite each external-address materialization into the GOT-load form
+/// (paired with the relocs from [`emit_got_ref_relocs`]): the `add` half
+/// of an aarch64 `adrp + add` becomes `ldr`, and an x86_64 rip-relative
+/// `lea` becomes `mov` (opcode 0x8d -> 0x8b, same REX/modrm/disp32).
+/// Returns a copy of `.text` with the rewrites applied; the shared
+/// `build.text` is untouched so the JIT / direct-image paths keep the
+/// direct form.
+fn rewrite_extern_addr_loads_to_got(
     machine: Machine,
     text: &[u8],
-    adrp_offsets: &[usize],
+    instr_offsets: &[usize],
 ) -> alloc::vec::Vec<u8> {
     let mut body = text.to_vec();
-    if machine != Machine::Aarch64 {
-        return body;
-    }
-    for &adrp_offset in adrp_offsets {
-        let off = adrp_offset + 4; // the `add` following the `adrp`
-        if off + 4 > body.len() {
-            continue;
+    match machine {
+        Machine::Aarch64 => {
+            for &adrp_offset in instr_offsets {
+                let off = adrp_offset + 4; // the `add` following the `adrp`
+                if off + 4 > body.len() {
+                    continue;
+                }
+                let add =
+                    u32::from_le_bytes([body[off], body[off + 1], body[off + 2], body[off + 3]]);
+                let rd = add & 0x1f;
+                let rn = (add >> 5) & 0x1f;
+                // `ldr Xrd, [Xrn, #0]` (0xF9400000 | Rn<<5 | Rt); the
+                // :got_lo12: reloc fills the scaled imm12.
+                let ldr = 0xF940_0000u32 | (rn << 5) | rd;
+                body[off..off + 4].copy_from_slice(&ldr.to_le_bytes());
+            }
         }
-        let add = u32::from_le_bytes([body[off], body[off + 1], body[off + 2], body[off + 3]]);
-        let rd = add & 0x1f;
-        let rn = (add >> 5) & 0x1f;
-        // `ldr Xrd, [Xrn, #0]` (0xF9400000 | Rn<<5 | Rt); the :got_lo12: reloc
-        // fills the scaled imm12.
-        let ldr = 0xF940_0000u32 | (rn << 5) | rd;
-        body[off..off + 4].copy_from_slice(&ldr.to_le_bytes());
+        Machine::X86_64 => {
+            for &lea_offset in instr_offsets {
+                let op = lea_offset + 1; // REX prefix, then the opcode byte
+                if op < body.len() && body[op] == 0x8d {
+                    body[op] = 0x8b;
+                }
+            }
+        }
     }
     body
 }

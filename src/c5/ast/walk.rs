@@ -920,6 +920,26 @@ impl<'a> Walker<'a> {
                 then_s,
                 else_s,
             } => {
+                // A constant controlling expression selects one branch
+                // at translation time (C99 6.8.4.1); emit only that
+                // branch so the dead branch's side effects and
+                // undefined-symbol references are never emitted. Skip
+                // the fold when the dead branch defines a label a goto
+                // or switch could target -- dropping its block would
+                // leave the jump unresolved. Matches gcc's front-end
+                // fold at -O0.
+                if let Some(c) = self.const_fold_int(*cond) {
+                    let dead = if c != 0 { *else_s } else { Some(*then_s) };
+                    if !dead.is_some_and(|s| self.stmt_defines_label(s)) {
+                        if c != 0 {
+                            return self.walk_stmt(b, *then_s);
+                        }
+                        return match *else_s {
+                            Some(else_id) => self.walk_stmt(b, else_id),
+                            None => Ok(false),
+                        };
+                    }
+                }
                 let cond_v = self.walk_cond_value(b, *cond)?;
                 let then_blk = b.new_block();
                 let after_blk = b.new_block();
@@ -1924,28 +1944,7 @@ impl<'a> Walker<'a> {
                 // bails (Mod / Modu / Div / Divu / every FP op)
                 // stay on the register-rhs path so the SSA emit
                 // doesn't fall back to the pool path.
-                let imm_safe_op = matches!(
-                    *op,
-                    BinOp::Add
-                        | BinOp::Sub
-                        | BinOp::Mul
-                        | BinOp::And
-                        | BinOp::Or
-                        | BinOp::Xor
-                        | BinOp::Shl
-                        | BinOp::Shr
-                        | BinOp::Shru
-                        | BinOp::Eq
-                        | BinOp::Ne
-                        | BinOp::Lt
-                        | BinOp::Gt
-                        | BinOp::Le
-                        | BinOp::Ge
-                        | BinOp::Ult
-                        | BinOp::Ugt
-                        | BinOp::Ule
-                        | BinOp::Uge
-                );
+                let imm_safe_op = imm_safe_binop(*op);
                 // Operands that need masking take the register path so the
                 // mask below applies; the immediate fast paths skip it.
                 let imm_safe_op = imm_safe_op && cmp_mask == 0;
@@ -2252,6 +2251,19 @@ impl<'a> Walker<'a> {
                 ty,
                 elvis,
             } => {
+                // A constant controlling expression selects one arm at
+                // translation time (C99 6.5.15); evaluate only that arm
+                // so the dead arm's side effects and undefined-symbol
+                // references are never emitted. Ternary arms are
+                // expressions, so no label/goto concern applies. The
+                // GNU `a ?: b` form keeps its runtime path. Matches
+                // gcc's front-end fold at -O0.
+                if !*elvis && let Some(c) = self.const_fold_int(*cond) {
+                    let live = if c != 0 { *then_e } else { *else_e };
+                    let v = self.walk_expr_rvalue(b, live)?;
+                    let arm_ty = expr_ty(self.ast.expr(live)).unwrap_or(*ty);
+                    return Ok(self.convert_scalar_value(b, v, arm_ty, *ty));
+                }
                 // C99 6.5.15: evaluate cond; depending on the
                 // value, evaluate exactly one of then_e / else_e
                 // and the conditional expression's value is that
@@ -4004,6 +4016,106 @@ impl<'a> Walker<'a> {
         expr_ty(e).is_some_and(is_floating_scalar)
     }
 
+    /// Fold `id` to a compile-time integer constant when it is an
+    /// integer constant expression the walker can evaluate without
+    /// runtime state (C99 6.6). Returns None for any operand that
+    /// needs a load, a call, or an operator outside the handled set.
+    /// Used to select the live arm of a constant-condition `?:` /
+    /// `if` so the dead arm's side effects -- including references to
+    /// undefined symbols -- are never emitted, matching the front-end
+    /// fold gcc performs even at -O0. Identifiers are not resolved, so
+    /// only literal-rooted expressions fold.
+    fn const_fold_int(&self, id: ExprId) -> Option<i64> {
+        match self.ast.expr(id) {
+            Expr::IntLit { val, .. } => Some(*val),
+            Expr::Unary { op, child, .. } => {
+                let v = self.const_fold_int(*child)?;
+                match op {
+                    UnOp::Neg => Some(v.wrapping_neg()),
+                    UnOp::BitNot => Some(!v),
+                    UnOp::LogNot => Some((v == 0) as i64),
+                    UnOp::AddrOf | UnOp::Deref => None,
+                }
+            }
+            Expr::Binary { op, lhs, rhs, .. } => {
+                if !imm_safe_binop(*op) {
+                    return None;
+                }
+                let l = self.const_fold_int(*lhs)?;
+                let r = self.const_fold_int(*rhs)?;
+                Some(fold_int_binop(*op, l, r))
+            }
+            Expr::ShortCircuit { op, lhs, rhs, .. } => {
+                let l = self.const_fold_int(*lhs)?;
+                match op {
+                    super::ShortCircuitOp::Lan if l == 0 => Some(0),
+                    super::ShortCircuitOp::Lan => Some((self.const_fold_int(*rhs)? != 0) as i64),
+                    super::ShortCircuitOp::Lor if l != 0 => Some(1),
+                    super::ShortCircuitOp::Lor => Some((self.const_fold_int(*rhs)? != 0) as i64),
+                }
+            }
+            Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+                elvis,
+                ..
+            } => {
+                let c = self.const_fold_int(*cond)?;
+                if *elvis {
+                    if c != 0 {
+                        Some(c)
+                    } else {
+                        self.const_fold_int(*else_e)
+                    }
+                } else if c != 0 {
+                    self.const_fold_int(*then_e)
+                } else {
+                    self.const_fold_int(*else_e)
+                }
+            }
+            Expr::Cast { child, to_ty } => {
+                let v = self.const_fold_int(*child)?;
+                let to = *to_ty;
+                if is_floating_scalar(to) {
+                    return None;
+                }
+                if is_bool_scalar(to) {
+                    return Some((v != 0) as i64);
+                }
+                if type_size_bytes(to, self.target) == 0 {
+                    return None;
+                }
+                Some(narrow_const_to_ty(v, to, self.target))
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether the statement subtree defines a label a `goto` or an
+    /// enclosing `switch` could target (`Labeled` / `Case` /
+    /// `Default`). A constant-condition `if` may drop its dead branch
+    /// only when that branch defines none, since the branch's block
+    /// would otherwise never be emitted for the jump to reach.
+    fn stmt_defines_label(&self, id: StmtId) -> bool {
+        match self.ast.stmt(id) {
+            Stmt::Labeled { .. } | Stmt::Case { .. } | Stmt::Default { .. } => true,
+            Stmt::Compound(items) => items.iter().any(|it| match it {
+                super::BlockItem::Stmt(s) => self.stmt_defines_label(*s),
+                super::BlockItem::Decl(_) => false,
+            }),
+            Stmt::If { then_s, else_s, .. } => {
+                self.stmt_defines_label(*then_s)
+                    || else_s.is_some_and(|e| self.stmt_defines_label(e))
+            }
+            Stmt::While { body, .. }
+            | Stmt::DoWhile { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Switch { body, .. } => self.stmt_defines_label(*body),
+            _ => false,
+        }
+    }
+
     /// Convert an already-evaluated scalar value from `src_ty` to
     /// `to_ty` (C99 6.3.1). Shared by the `Cast` lowering and the GNU
     /// `?:` then-arm, which reuses the condition's value.
@@ -4866,6 +4978,67 @@ fn unsigned_narrow_mask(ty: i64) -> i64 {
         0xffff_ffff
     } else {
         0
+    }
+}
+
+/// Ops whose two-constant fold and per-arch `BinopI` immediate
+/// lowering are both defined: arithmetic, bitwise, shift, and
+/// integer comparison. Excludes Div / Divu / Mod / Modu (guarded
+/// separately) and every FP op. Exactly the set `fold_int_binop`
+/// handles.
+fn imm_safe_binop(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Add
+            | BinOp::Sub
+            | BinOp::Mul
+            | BinOp::And
+            | BinOp::Or
+            | BinOp::Xor
+            | BinOp::Shl
+            | BinOp::Shr
+            | BinOp::Shru
+            | BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::Le
+            | BinOp::Ge
+            | BinOp::Ult
+            | BinOp::Ugt
+            | BinOp::Ule
+            | BinOp::Uge
+    )
+}
+
+/// Narrow a folded integer constant to the storage width and
+/// signedness of `ty` (C99 6.3.1.3). Widths above 4 bytes and
+/// types `type_size_bytes` can't size keep the full 64-bit value.
+fn narrow_const_to_ty(v: i64, ty: i64, target: Target) -> i64 {
+    let unsigned = (ty & UNSIGNED_BIT) != 0;
+    match type_size_bytes(ty, target) {
+        1 => {
+            if unsigned {
+                v as u8 as i64
+            } else {
+                v as i8 as i64
+            }
+        }
+        2 => {
+            if unsigned {
+                v as u16 as i64
+            } else {
+                v as i16 as i64
+            }
+        }
+        4 => {
+            if unsigned {
+                v as u32 as i64
+            } else {
+                v as i32 as i64
+            }
+        }
+        _ => v,
     }
 }
 

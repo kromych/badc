@@ -2126,6 +2126,66 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
     );
 }
 
+/// A constant controlling expression in a `?:` or `if` selects one
+/// arm at translation time (C99 6.5.15 / 6.8.4.1); the walker emits
+/// only that arm, so a dead arm's call -- and the undefined-symbol
+/// reference it would carry into the object -- never reaches the SSA.
+/// gcc performs this front-end fold even at -O0. A non-constant
+/// condition must still emit both arms.
+#[test]
+fn constant_condition_drops_dead_branch_call() {
+    use crate::c5::ir::Inst;
+    use crate::{Compiler, Target};
+    let target = Target::LinuxAarch64;
+    let program = Compiler::with_target(
+        "extern int dead_sink(int); \
+         int t_false(int x){ return 0 ? dead_sink(x) : x + 1; } \
+         int t_true(int x){ return 1 ? x + 2 : dead_sink(x); } \
+         int if_zero(int x){ if (0) { dead_sink(x); } return x + 3; } \
+         int if_else(int x){ if (0) return dead_sink(x); else return x + 4; } \
+         int short_circuit(int x){ return (1 && 0) ? dead_sink(x) : x + 5; } \
+         int cast_zero(int x){ return (char)256 ? dead_sink(x) : x + 6; } \
+         int runtime_cond(int c, int x){ return c ? dead_sink(x) : x + 7; } \
+         int main(void){ return 0; }"
+            .to_string(),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+    let has_call = |name: &str| -> bool {
+        let f = funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("function `{name}` not produced"));
+        f.insts.iter().any(|i| {
+            matches!(
+                i,
+                Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }
+            )
+        })
+    };
+    for name in [
+        "t_false",
+        "t_true",
+        "if_zero",
+        "if_else",
+        "short_circuit",
+        "cast_zero",
+    ] {
+        assert!(
+            !has_call(name),
+            "{name}: constant-condition fold must not emit the dead-branch call"
+        );
+    }
+    // The fold fires only on compile-time constants: a runtime
+    // condition still evaluates and calls into its selected arm.
+    assert!(
+        has_call("runtime_cond"),
+        "runtime_cond: a non-constant condition must still emit the call"
+    );
+}
+
 /// A constant struct-field offset folds into the displacement of a
 /// floating-point load and store, and the AArch64 emit carries that
 /// displacement into the immediate-offset encoding. The load side used

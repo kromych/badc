@@ -832,16 +832,16 @@ pub(super) fn write_relocatable(
         // An address-of site (`&strcmp`, `Inst::ImmExtCode`) is a
         // page-relative address materialization, not a control
         // transfer: `lea reg, [rip+disp32]` on x86_64, `adrp + add`
-        // on aarch64. It uses the same relocation shape as a data
-        // reference but against the import's external symbol; the
-        // linker's PLT pass resolves the symbol to its shared stub.
+        // on aarch64. The import binds externally, so take its address
+        // through the GOT (`adrp :got: + ldr`); an external linker resolves
+        // it against the shared library and badc's own linker relaxes it to
+        // the import's PLT stub. The `add` half is rewritten to `ldr` below.
         if site.is_addr {
-            emit_addr_fixup_relocs(
+            emit_got_ref_relocs(
                 machine_for_rela,
                 &mut rela_bytes,
                 site.instr_offset as u64,
                 sym_idx,
-                0,
             );
             continue;
         }
@@ -1007,9 +1007,24 @@ pub(super) fn write_relocatable(
     sh.push(Elf64Shdr::default()); // SHN_UNDEF
 
     // .text -- the extern-address `add`s become `ldr`s so they read the GOT
-    // slot (see `rewrite_extern_adds_to_got_ldr`). Same length as `build.text`.
+    // slot (see `rewrite_extern_adds_to_got_ldr`). Both cross-TU data/function
+    // references (`user_extern_data_refs`) and import address-of sites
+    // (`reloc_call_sites` with `is_addr`) go through the GOT. Same length as
+    // `build.text`.
+    let mut got_adrp_offsets: alloc::vec::Vec<usize> = build
+        .user_extern_data_refs
+        .iter()
+        .map(|r| r.instr_offset)
+        .collect();
+    got_adrp_offsets.extend(
+        build
+            .reloc_call_sites
+            .iter()
+            .filter(|s| s.is_addr)
+            .map(|s| s.instr_offset),
+    );
     let text_body =
-        rewrite_extern_adds_to_got_ldr(machine_for_rela, &build.text, &build.user_extern_data_refs);
+        rewrite_extern_adds_to_got_ldr(machine_for_rela, &build.text, &got_adrp_offsets);
     let text_off = round_up(out.len() as u64, 16);
     out.resize(text_off as usize, 0);
     out.extend_from_slice(&text_body);
@@ -1759,14 +1774,14 @@ fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, s
 fn rewrite_extern_adds_to_got_ldr(
     machine: Machine,
     text: &[u8],
-    refs: &[crate::c5::codegen::UserExternDataRef],
+    adrp_offsets: &[usize],
 ) -> alloc::vec::Vec<u8> {
     let mut body = text.to_vec();
     if machine != Machine::Aarch64 {
         return body;
     }
-    for r in refs {
-        let off = r.instr_offset + 4; // the `add` following the `adrp`
+    for &adrp_offset in adrp_offsets {
+        let off = adrp_offset + 4; // the `add` following the `adrp`
         if off + 4 > body.len() {
             continue;
         }

@@ -3658,3 +3658,89 @@ fn generic_selection_subscript_arm() {
     // balanced-bracket association scan.
     assert_eq!(run_fixture("generic_selection_subscript_arm.c"), 0);
 }
+
+#[test]
+fn stmt_expr_local_aggregate_assign() {
+    // A statement-expression block must leave the enclosing expression
+    // parse's operand stack net-unchanged: an aggregate (array or
+    // bitfield-struct) local initializer inside the block previously
+    // left a residual entry that made the enclosing assignment pop the
+    // wrong operand and drop itself.
+    assert_eq!(run_fixture("stmt_expr_local_aggregate_assign.c"), 0);
+}
+
+#[test]
+fn stmt_expr_zero_length_array() {
+    // `T a[] = { }` keeps its array-ness (decay, subscript typing,
+    // sizeof 0) when declared in a nested block or statement expression.
+    assert_eq!(run_fixture("stmt_expr_zero_length_array.c"), 0);
+}
+
+#[test]
+fn pp_number_macro_token() {
+    // C99 6.4.8: a pp-number is one token; an identifier-shaped tail
+    // (`2op`, `1.f`) is not a macro or parameter candidate.
+    assert_eq!(run_fixture("pp_number_macro_token.c"), 0);
+}
+
+#[test]
+fn pp_expansion_token_seam() {
+    // Expansion output must not paste adjacent tokens into new ones
+    // (`- -22` stays two tokens); `##` still glues.
+    assert_eq!(run_fixture("pp_expansion_token_seam.c"), 0);
+}
+
+#[test]
+fn array_field_designator_local() {
+    // C99 6.7.8p7 designator lists continuing into the element
+    // (`[N].field = v`, `[i][j].field = v`) in block-scope static and
+    // automatic struct arrays.
+    assert_eq!(run_fixture("array_field_designator_local.c"), 0);
+}
+
+#[test]
+fn volatile_struct_assign() {
+    // C99 6.5.16.1p1: struct assignment compares unqualified types;
+    // qualified sources and destinations interoperate with plain ones.
+    assert_eq!(run_fixture("volatile_struct_assign.c"), 0);
+}
+
+#[test]
+fn builtin_object_size() {
+    // GCC `__builtin_object_size`: folds for a known declared array,
+    // (size_t)-1 / 0 per type class otherwise, operand unevaluated.
+    assert_eq!(run_fixture("builtin_object_size.c"), 0);
+}
+
+#[test]
+fn ipproto_case_labels() {
+    // <netinet/in.h> IPPROTO_* constants are usable as case labels.
+    assert_eq!(run_fixture("ipproto_case_labels.c"), 0);
+}
+
+#[test]
+fn elf_header_types() {
+    // <elf.h> specification-fixed type and struct layouts.
+    assert_eq!(run_fixture("elf_header_types.c"), 0);
+}
+
+#[test]
+fn syscall_numbers_x86_64() {
+    // <sys/syscall.h> per-architecture numbers: SYS_/__NR_ pairs, with
+    // arch_prctl present on x86-64 only.
+    assert_eq!(run_fixture("syscall_numbers_x86_64.c"), 0);
+}
+
+#[test]
+fn noreturn_dead_tail() {
+    // The noreturn-call block seal must not disturb control flow
+    // around an untaken guard.
+    assert_eq!(run_fixture("noreturn_dead_tail.c"), 0);
+}
+
+#[test]
+fn builtin_choose_expr() {
+    // `__builtin_choose_expr` keeps the chosen operand's exact type
+    // (no `?:` conversions) and never evaluates the other operand.
+    assert_eq!(run_fixture("builtin_choose_expr.c"), 0);
+}

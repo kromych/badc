@@ -529,6 +529,13 @@ impl Compiler {
                 self.restore_pending_local_carriers(saved);
                 r?;
             }
+            // A deferred-size local (`T x[]`) whose initializer resolved to
+            // zero elements keeps its array-ness (decay, sizeof 0) through
+            // this flag; the `array_size == 0` encoding alone reads as a
+            // scalar. Assigned unconditionally so a reused symbol slot does
+            // not leak a stale flag (mirrors the function-body decl path).
+            self.symbols[loc_idx].is_zero_len_array =
+                array_size == -1 && self.symbols[loc_idx].array_size == 0;
             // Write the lineage tag after `allocate_local_with_init`
             // (which may have parsed an initializer) so it can't be
             // clobbered by the init expression's symbol lookups.
@@ -937,7 +944,17 @@ impl Compiler {
     /// records the node as the current expression accumulator.
     pub(super) fn parse_stmt_expr_body(&mut self) -> Result<(), C5Error> {
         let arena_before = self.ast.stmts.len();
+        // The block re-enters statement parsing from inside an
+        // expression parse. Its statements must leave the expression
+        // vstack net-unchanged (the block's value travels through
+        // `ast_acc`); an aggregate local initializer inside may leave
+        // residual transient entries -- same hazard the compound-
+        // literal path guards against -- which would sit on top of the
+        // enclosing operator's pushed operand and make it pop the
+        // wrong slot. Restore the depth after the block parse.
+        let vstack_depth = self.ast_vstack.len();
         let block = self.parse_block_stmt()?;
+        self.ast_vstack.truncate(vstack_depth);
         let arena_after = self.ast.stmts.len();
         // The block's statements are sub-statements of this
         // expression, not top-level items of the enclosing block;

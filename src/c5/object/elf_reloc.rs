@@ -510,19 +510,21 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
-    // TLS section symbols anchor the local-exec relocations of
-    // `static _Thread_local` accesses (section + addend); named
-    // globals get their own STT_TLS entries below.
+    // Local STT_TLS anchors at each TLS section's start carry the
+    // local-exec relocations of `static _Thread_local` accesses
+    // (anchor + addend). STT_SECTION anchors would work for the
+    // arithmetic but linkers require a TLS-typed symbol on TLS
+    // relocations; named globals get their own entries below.
     let (tdata_sec_sym, tbss_sec_sym) = if has_tls {
         let td = symbols.len() as u64;
         symbols.push(Elf64Sym {
-            st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
+            st_info: pack_sym_info(STB_LOCAL, STT_TLS),
             st_shndx: SHIDX_TDATA,
             ..Default::default()
         });
         let tb = symbols.len() as u64;
         symbols.push(Elf64Sym {
-            st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
+            st_info: pack_sym_info(STB_LOCAL, STT_TLS),
             st_shndx: SHIDX_TBSS,
             ..Default::default()
         });

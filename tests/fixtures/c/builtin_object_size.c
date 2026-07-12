@@ -2,7 +2,7 @@
  * declared array folds to its byte count; an unknown pointer yields
  * (size_t)-1 for the maximum forms (types 0 and 1) and 0 for the
  * minimum forms (types 2 and 3). The pointer operand is unevaluated. */
-typedef unsigned long usize;
+typedef unsigned long long usize;
 
 static char buf[16];
 

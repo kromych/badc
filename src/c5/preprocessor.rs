@@ -212,6 +212,17 @@ pub(crate) struct Preprocessor {
     /// keeps the field but never reads from it (the embedded
     /// headers are always available).
     search_paths: Vec<String>,
+    /// System header directories probed only *after* the bundled
+    /// in-binary headers, so a third-party header the embedded set
+    /// lacks (`zlib.h`, `libfdt.h`) resolves against the host system
+    /// while a standard header (`stdlib.h`, `stdio.h`) still comes from
+    /// the embedded set -- the embedded copy carries the `#pragma
+    /// binding` metadata the system copy does not, and the system copy
+    /// may use constructs the dialect does not parse. Populated for a
+    /// hosted native build (the driver's implicit system include path,
+    /// as a compiler driver adds `/usr/include`); a cross build or a
+    /// `--freestanding` / `--nostdinc` build leaves it empty.
+    system_fallback_paths: Vec<String>,
     /// Headers to splice in front of the user's translation unit,
     /// before any source line is preprocessed. Mirrors gcc /
     /// clang's `-include FILE` flag: each name resolves through
@@ -646,6 +657,7 @@ impl Preprocessor {
             pragma_once_files: BTreeSet::new(),
             include_stack: Vec::new(),
             search_paths: Vec::new(),
+            system_fallback_paths: Vec::new(),
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
             warnings: Vec::new(),
@@ -722,6 +734,18 @@ impl Preprocessor {
     pub fn add_search_path(&mut self, path: &str) {
         if !self.search_paths.iter().any(|p| p == path) {
             self.search_paths.push(path.to_string());
+        }
+    }
+
+    /// Append a system header directory probed only after the bundled
+    /// headers (see [`Preprocessor::system_fallback_paths`]). The
+    /// driver adds the host's default system include directories here
+    /// for a hosted native build, the way a compiler driver's implicit
+    /// system include path resolves third-party headers without
+    /// shadowing the standard headers.
+    pub fn add_system_fallback_path(&mut self, path: &str) {
+        if !self.system_fallback_paths.iter().any(|p| p == path) {
+            self.system_fallback_paths.push(path.to_string());
         }
     }
 
@@ -2972,6 +2996,28 @@ impl Preprocessor {
         let _ = source_dir;
         if let Some(body) = embedded_header(name) {
             return Some((body.to_string(), name.to_string()));
+        }
+        // A header the embedded set lacks (a third-party `zlib.h`,
+        // `libfdt.h`) falls back to the host system directories, probed
+        // only here so a standard header still resolves to the embedded
+        // copy above.
+        #[cfg(feature = "std")]
+        {
+            let join = |dir: &str| -> String {
+                if dir.is_empty() {
+                    name.to_string()
+                } else if dir.ends_with('/') || dir.ends_with('\\') {
+                    format!("{dir}{name}")
+                } else {
+                    format!("{dir}/{name}")
+                }
+            };
+            for path in &self.system_fallback_paths {
+                let candidate = join(path);
+                if let Ok(body) = std::fs::read_to_string(&candidate) {
+                    return Some((body, candidate));
+                }
+            }
         }
         // Windows resolves includes case-insensitively (its filesystems
         // are); match the embedded registry the same way there.
@@ -6652,6 +6698,36 @@ int x_2 = __COUNTER__;
             pp.warnings.is_empty(),
             "unexpected warnings: {:?}",
             pp.warnings
+        );
+    }
+
+    #[test]
+    fn system_fallback_resolves_third_party_but_not_standard_headers() {
+        // A system-fallback directory holds `zlib.h` (only there) and a
+        // decoy `stdlib.h` that also exists in the embedded set. The
+        // embedded standard header must win (it carries the binding
+        // metadata); the third-party header resolves from the fallback.
+        let base = std::env::temp_dir().join(format!("badc-sysfb-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("zlib.h"), "int ZLIB_FROM_FALLBACK;\n").unwrap();
+        std::fs::write(base.join("stdlib.h"), "int DECOY_STDLIB;\n").unwrap();
+
+        let mut pp = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+        pp.add_system_fallback_path(base.to_str().unwrap());
+        let z = pp.process("#include <zlib.h>\n").unwrap();
+
+        let mut pp2 = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+        pp2.add_system_fallback_path(base.to_str().unwrap());
+        let s = pp2.process("#include <stdlib.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+
+        assert!(
+            z.contains("ZLIB_FROM_FALLBACK"),
+            "third-party zlib.h should resolve from the system fallback: {z}"
+        );
+        assert!(
+            !s.contains("DECOY_STDLIB"),
+            "embedded stdlib.h must win over a system-fallback decoy"
         );
     }
 

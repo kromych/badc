@@ -649,6 +649,11 @@ fn run() {
         }
     };
 
+    // The host's implicit system include path, probed after the bundled
+    // headers so a hosted native build resolves third-party headers
+    // (`zlib.h`, `libfdt.h`) without shadowing the embedded standard set.
+    let system_include_paths = default_system_include_paths(target, freestanding);
+
     // VM-only flags.
     if (track_pointers || trace) && mode != Mode::Interp {
         eprintln!(
@@ -865,6 +870,7 @@ fn run() {
             .with_defines(defines.clone())
             .with_undefines(undefines.clone())
             .with_include_paths(include_paths.clone())
+            .with_system_include_paths(system_include_paths.clone())
             .with_force_includes(force_includes.clone())
             .with_source_label(src_path.clone())
             .with_show_includes(show_includes)
@@ -950,6 +956,7 @@ fn run() {
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
+                .with_system_include_paths(system_include_paths.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(label.clone());
             match Compiler::preprocess(contents, target, opts) {
@@ -1030,6 +1037,7 @@ fn run() {
             defines: &defines,
             undefines: &undefines,
             include_paths: &include_paths,
+            system_include_paths: &system_include_paths,
             force_includes: &force_includes,
             stdin_src: stdin_src.as_deref(),
         };
@@ -1052,6 +1060,7 @@ fn run() {
                 .with_defines(copts_defines)
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
+                .with_system_include_paths(system_include_paths.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(label.to_string())
                 .with_no_entry_point(true);
@@ -1544,6 +1553,7 @@ fn run() {
             defines: &defines,
             undefines: &undefines,
             include_paths: &include_paths,
+            system_include_paths: &system_include_paths,
             force_includes: &force_includes,
             stdin_src: None,
         };
@@ -1653,6 +1663,7 @@ fn run() {
             defines: &defines,
             undefines: &undefines,
             include_paths: &include_paths,
+            system_include_paths: &system_include_paths,
             force_includes: &force_includes,
             stdin_src: None,
         };
@@ -1722,6 +1733,35 @@ fn run() {
     // the native-link path (executable / shared library), `-c`, and
     // `--ar`. Reaching here means a mode was added without a handler.
     unreachable!("every CLI mode is handled and returns above");
+}
+
+/// The host's default system header directories, probed after the
+/// bundled headers (a compiler driver's implicit system include path).
+/// Non-empty only for a hosted native build: the host's `/usr/include`
+/// is the target's only when compiling for the host platform, so a
+/// cross or `--freestanding` build returns empty and relies on `-I`.
+/// Standard headers still resolve to the embedded copies (searched
+/// first); only a header the embedded set lacks reaches these.
+fn default_system_include_paths(target: badc::Target, freestanding: bool) -> Vec<String> {
+    if freestanding {
+        return Vec::new();
+    }
+    let native = cfg!(target_os = "linux")
+        && ((cfg!(target_arch = "x86_64") && matches!(target, badc::Target::LinuxX64))
+            || (cfg!(target_arch = "aarch64") && matches!(target, badc::Target::LinuxAarch64)));
+    if !native {
+        return Vec::new();
+    }
+    [
+        "/usr/local/include",
+        "/usr/include/aarch64-linux-gnu",
+        "/usr/include/x86_64-linux-gnu",
+        "/usr/include",
+    ]
+    .iter()
+    .filter(|d| std::path::Path::new(d).is_dir())
+    .map(|s| (*s).to_string())
+    .collect()
 }
 
 /// Locate `lib<name>.so` (preferred), a versioned `lib<name>.so.N`
@@ -1901,6 +1941,7 @@ struct CompileCfg<'a> {
     defines: &'a [(String, String)],
     undefines: &'a [String],
     include_paths: &'a [String],
+    system_include_paths: &'a [String],
     force_includes: &'a [String],
     /// Pre-read stdin bytes for a `-` source; `None` when no input is
     /// stdin. Keeps a worker off the process stdin stream.
@@ -2052,6 +2093,7 @@ fn compile_native_tu(
         .with_defines(cfg.defines.to_vec())
         .with_undefines(cfg.undefines.to_vec())
         .with_include_paths(cfg.include_paths.to_vec())
+        .with_system_include_paths(cfg.system_include_paths.to_vec())
         .with_force_includes(cfg.force_includes.to_vec())
         .with_source_label(src_path.to_string())
         .with_show_includes(cfg.show_includes)
@@ -2131,6 +2173,7 @@ fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Result<Vec<u8>
         .with_defines(cfg.defines.to_vec())
         .with_undefines(cfg.undefines.to_vec())
         .with_include_paths(cfg.include_paths.to_vec())
+        .with_system_include_paths(cfg.system_include_paths.to_vec())
         .with_force_includes(cfg.force_includes.to_vec())
         .with_source_label(src_path.to_string())
         .with_show_includes(cfg.show_includes)

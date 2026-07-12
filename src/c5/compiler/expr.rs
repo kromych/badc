@@ -730,7 +730,19 @@ impl Compiler {
                             | "__builtin_sub_overflow"
                             | "__builtin_mul_overflow"
                     );
-                if is_overflow {
+                // GCC `__builtin_object_size`, folded to a constant at
+                // the call site (the pointer operand is unevaluated).
+                let is_object_size =
+                    not_real_fn && self.symbols[id_idx].name == "__builtin_object_size";
+                // GCC `__builtin_choose_expr`: the chosen operand is the
+                // expression, with its exact type.
+                let is_choose_expr =
+                    not_real_fn && self.symbols[id_idx].name == "__builtin_choose_expr";
+                if is_choose_expr {
+                    self.parse_choose_expr_builtin()?;
+                } else if is_object_size {
+                    self.parse_object_size_builtin()?;
+                } else if is_overflow {
                     let name = self.symbols[id_idx].name.clone();
                     self.parse_overflow_builtin(&name)?;
                 } else if is_gcc_atomic {
@@ -2634,7 +2646,12 @@ impl Compiler {
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
                         return Err(self.compile_err("cannot assign non-struct value to a struct"));
                     }
-                    if t != self.ty {
+                    // C99 6.5.16.1p1: the operands need compatible
+                    // unqualified struct types -- lvalue conversion
+                    // (6.3.2.1p2) already drops qualifiers from the
+                    // right operand's value, so a `volatile`-qualified
+                    // source object assigns to a plain destination.
+                    if t & !super::types::VOLATILE_BIT != self.ty & !super::types::VOLATILE_BIT {
                         let lhs_s = format_type(t, &self.structs);
                         let rhs_s = format_type(self.ty, &self.structs);
                         return Err(self.compile_err(format!(

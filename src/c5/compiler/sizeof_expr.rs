@@ -256,6 +256,112 @@ impl Compiler {
         Ok(total)
     }
 
+    /// GCC `__builtin_object_size(ptr, type)`, `type` in 0..=3: a
+    /// `size_t` constant. The pointer operand is unevaluated, like a
+    /// `sizeof` operand. When it names a complete declared array the
+    /// object's byte count folds (exact for every `type`); otherwise
+    /// the result is the documented "unknown" value -- `(size_t)-1`
+    /// for types 0 and 1 (maximum forms), 0 for types 2 and 3
+    /// (minimum forms).
+    pub(super) fn parse_object_size_builtin(&mut self) -> Result<(), C5Error> {
+        // The call dispatch consumed `__builtin_object_size (`.
+        let saved_ty = self.ty;
+        let saved_text_len = self.next_ent_pc;
+        let saved_reloc = self.code_reloc_sym_idx.len();
+        let saved_acc = self.ast_acc.take();
+        let vstack_depth = self.ast_vstack.len();
+        self.pending.last_array_decay_size = 0;
+        self.pending.last_array_decay_bytes = 0;
+        self.expr(Token::Assign as i64)?;
+        let array_count = self.pending.last_array_decay_size;
+        let array_bytes = self.pending.last_array_decay_bytes;
+        let expr_ty = self.ty;
+        self.next_ent_pc = saved_text_len;
+        self.clear_recent_emits();
+        self.code_reloc_sym_idx.truncate(saved_reloc);
+        self.ast_vstack.truncate(vstack_depth);
+        self.ast_acc = saved_acc;
+        self.pending.last_array_decay_size = 0;
+        self.pending.last_array_decay_bytes = 0;
+        self.ty = saved_ty;
+        if self.lex.tk != ',' {
+            return Err(self.compile_err("`,` expected in `__builtin_object_size`"));
+        }
+        self.next()?;
+        let kind = self.parse_constant_int()?;
+        if !(0..=3).contains(&kind) {
+            return Err(self.compile_err("`__builtin_object_size` type must be 0..=3"));
+        }
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected to close `__builtin_object_size`"));
+        }
+        self.next()?;
+        let known: Option<i64> = if array_bytes > 0 {
+            Some(array_bytes)
+        } else if array_count > 0 {
+            let elem_ty = expr_ty - Ty::Ptr as i64;
+            Some(array_count * self.size_of_type(elem_ty) as i64)
+        } else if array_count < 0 {
+            // Zero-length array: a known object of 0 bytes.
+            Some(0)
+        } else {
+            None
+        };
+        let v = match known {
+            Some(n) => n,
+            None if kind <= 1 => -1,
+            None => 0,
+        };
+        self.emit_imm(v);
+        self.ty = self.size_t_ty();
+        self.ast_emit_int_lit(v, self.ty);
+        Ok(())
+    }
+
+    /// GCC `__builtin_choose_expr(const, e1, e2)`: the chosen operand
+    /// IS the expression -- its exact type carries through (no `?:`
+    /// arithmetic conversions) and the other operand is parsed but not
+    /// evaluated. The condition must fold to an integer constant.
+    pub(super) fn parse_choose_expr_builtin(&mut self) -> Result<(), C5Error> {
+        // The call dispatch consumed `__builtin_choose_expr (`.
+        let cond = self.parse_constant_int()?;
+        if self.lex.tk != ',' {
+            return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+        }
+        self.next()?;
+        let mut parse_arm = |me: &mut Self, live: bool| -> Result<(), C5Error> {
+            if live {
+                return me.expr(Token::Assign as i64);
+            }
+            // Discarded operand: parse for syntax, drop every emission
+            // (same rollback set as the unevaluated `sizeof` operand).
+            let saved_ty = me.ty;
+            let saved_text_len = me.next_ent_pc;
+            let saved_reloc = me.code_reloc_sym_idx.len();
+            let saved_acc = me.ast_acc.take();
+            let vstack_depth = me.ast_vstack.len();
+            me.expr(Token::Assign as i64)?;
+            me.next_ent_pc = saved_text_len;
+            me.clear_recent_emits();
+            me.code_reloc_sym_idx.truncate(saved_reloc);
+            me.ast_vstack.truncate(vstack_depth);
+            me.ast_acc = saved_acc;
+            me.ty = saved_ty;
+            Ok(())
+        };
+        parse_arm(self, cond != 0)?;
+        if self.lex.tk != ',' {
+            return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+        }
+        self.next()?;
+        parse_arm(self, cond == 0)?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected to close `__builtin_choose_expr`"));
+        }
+        self.next()?;
+        Ok(())
+    }
+
     /// C11 6.5.3.4: `_Alignof ( type-name )`. The operand is always a
     /// parenthesized type name (an expression operand is a constraint
     /// violation), so the dual operand-shape dispatch `sizeof` needs is

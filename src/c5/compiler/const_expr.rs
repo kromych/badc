@@ -331,6 +331,49 @@ impl Compiler {
         }
     }
 
+    /// Skip a balanced token run up to (not consuming) the next `,` at
+    /// paren/bracket depth 0. The unchosen `__builtin_choose_expr`
+    /// operand in a constant expression is skipped this way -- it need
+    /// not itself be constant.
+    fn skip_balanced_to_comma(&mut self) -> Result<(), C5Error> {
+        let mut depth: i64 = 0;
+        loop {
+            if (self.lex.tk == ',' || self.lex.tk == ')') && depth == 0 {
+                return Ok(());
+            }
+            if self.lex.tk == '(' || self.lex.tk == Token::Brak {
+                depth += 1;
+            } else if self.lex.tk == ')' || self.lex.tk == ']' {
+                depth -= 1;
+            } else if self.lex.tk == 0 {
+                return Err(self.compile_err("unterminated `__builtin_choose_expr` operand"));
+            }
+            self.next()?;
+        }
+    }
+
+    /// Skip a balanced token run through the closing `)` at depth 0
+    /// (the `)` is consumed).
+    fn skip_balanced_to_close_paren(&mut self) -> Result<(), C5Error> {
+        let mut depth: i64 = 0;
+        loop {
+            if self.lex.tk == '(' || self.lex.tk == Token::Brak {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                if depth == 0 {
+                    self.next()?;
+                    return Ok(());
+                }
+                depth -= 1;
+            } else if self.lex.tk == ']' {
+                depth -= 1;
+            } else if self.lex.tk == 0 {
+                return Err(self.compile_err("unterminated `__builtin_choose_expr` operand"));
+            }
+            self.next()?;
+        }
+    }
+
     /// Parse a C11 6.7.10 `_Static_assert(<const-int-expr>,
     /// "<string-literal>");` (or its C23 `static_assert` alias).
     /// On entry the current token is `Token::StaticAssert`. The
@@ -767,6 +810,43 @@ impl Compiler {
             self.next()?;
             let v = self.parse_types_compatible_p()?;
             return Ok(ConstVal::int(v));
+        }
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].name == "__builtin_choose_expr"
+        {
+            // GCC `__builtin_choose_expr(const, e1, e2)`: a constant
+            // expression when the chosen operand is one; the unchosen
+            // operand is skipped and need not be constant.
+            self.next()?;
+            if self.lex.tk != '(' {
+                return Err(self.compile_err("`(` expected after `__builtin_choose_expr`"));
+            }
+            self.next()?;
+            let c = self.parse_const_expr_cond_val()?.as_int();
+            if self.lex.tk != ',' {
+                return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+            }
+            self.next()?;
+            let v;
+            if c != 0 {
+                v = self.parse_const_expr_cond_val()?;
+                if self.lex.tk != ',' {
+                    return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+                }
+                self.next()?;
+                self.skip_balanced_to_close_paren()?;
+            } else {
+                self.skip_balanced_to_comma()?;
+                self.next()?; // `,`
+                v = self.parse_const_expr_cond_val()?;
+                if self.lex.tk != ')' {
+                    return Err(
+                        self.compile_err("`)` expected to close `__builtin_choose_expr`")
+                    );
+                }
+                self.next()?;
+            }
+            return Ok(v);
         }
         if self.lex.tk == Token::BuiltinOffsetof {
             // GCC `__builtin_offsetof(T, member)` is an integer constant

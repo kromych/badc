@@ -40,12 +40,9 @@
 // targets carry no flag bits in the return address, so both are identity.
 #define __builtin_extract_return_addr(a) (a)
 #define __builtin_frob_return_addr(a) (a)
-// `__builtin_choose_expr(c, a, b)` selects `a` or `b` on the compile-time
-// constant `c`. A constant-condition conditional is equivalent for a
-// well-typed pair: C evaluates only the taken branch, and the constant
-// folds to it. Since `__builtin_constant_p` above is always 0, the common
-// `if_constant`-style idioms fold to their second operand, as intended.
-#define __builtin_choose_expr(c, a, b) ((c) ? (a) : (b))
+// `__builtin_choose_expr` is a first-class builtin: the chosen operand
+// IS the expression, keeping its exact type (a `?:` rewrite would apply
+// the usual arithmetic conversions and widen, e.g., a chosen `bool`).
 
 #define __builtin_memcpy memcpy
 #define __builtin_memmove memmove

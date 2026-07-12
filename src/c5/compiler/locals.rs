@@ -502,9 +502,27 @@ impl Compiler {
                     }
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {
-                        // C99 6.7.8p7 `[N] =` designator jumps the cursor.
-                        if let Some(idx) = self.take_array_element_designator(count)? {
-                            i = idx;
+                        // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
+                        // designator jumps the cursor; `[N].field... =`
+                        // initializes one member of each designated element.
+                        if let Some((lo, hi, chain)) =
+                            self.take_array_element_designator(count)?
+                        {
+                            if chain || hi > lo {
+                                self.fill_element_range(
+                                    sid,
+                                    ty,
+                                    off,
+                                    elem_size as i64,
+                                    lo,
+                                    hi,
+                                    chain,
+                                )?;
+                                i = hi + 1;
+                                self.accept(',')?;
+                                continue;
+                            }
+                            i = lo;
                         }
                         let here = off + i * elem_size as i64;
                         if self.lex.tk == '{' {
@@ -565,18 +583,24 @@ impl Compiler {
                     if self.lex.tk == Token::Brak {
                         self.next()?; // `[`
                         let desig = self.parse_constant_int()?;
+                        // GNU range designator `[lo ... hi]`.
+                        let mut desig_hi = desig;
+                        if self.lex.tk == Token::Ellipsis {
+                            self.next()?;
+                            desig_hi = self.parse_constant_int()?;
+                        }
                         if self.lex.tk != ']' {
                             return Err(
                                 self.compile_err("`]` expected after array designator index")
                             );
                         }
                         self.next()?; // `]`
-                        if desig < 0 || desig >= group_count {
+                        if desig < 0 || desig_hi < desig || desig_hi >= group_count {
                             return Err(self.compile_err(format!(
-                                "array designator index {desig} out of bounds [0, {group_count})"
+                                "array designator index {desig}..{desig_hi} out of bounds [0, {group_count})"
                             )));
                         }
-                        if self.lex.tk == Token::Brak {
+                        if self.lex.tk == Token::Brak && desig_hi == desig {
                             // Multi-dimensional element designator: each inner
                             // subscript scales by the product of the dimensions
                             // below it; the outer `desig` scales by the whole
@@ -606,6 +630,15 @@ impl Compiler {
                                     "multi-dimensional `[i][j]` designator must index every dimension",
                                 ));
                             }
+                            // C99 6.7.8p7: the designator list may continue
+                            // into the element (`[i][j].field... = v`).
+                            if self.lex.tk == Token::Dot {
+                                let here = var_offset + elem * elem_size as i64;
+                                self.fill_element_field_designator(sid, ty, here)?;
+                                i = desig + 1;
+                                self.accept(',')?;
+                                continue;
+                            }
                             if self.lex.tk != Token::Assign {
                                 return Err(
                                     self.compile_err("`=` expected after `[i][j]` designator")
@@ -622,10 +655,44 @@ impl Compiler {
                             self.accept(',')?;
                             continue;
                         }
+                        // C99 6.7.8p7 member chain on the designated
+                        // element(s) (`[N].field... = v`; 1-D elements only,
+                        // a row of a multi-dimensional array is not a
+                        // struct object).
+                        if self.lex.tk == Token::Dot && inner_dims.is_empty() {
+                            self.fill_element_range(
+                                sid,
+                                ty,
+                                var_offset,
+                                group_stride,
+                                desig,
+                                desig_hi,
+                                true,
+                            )?;
+                            i = desig_hi + 1;
+                            self.accept(',')?;
+                            continue;
+                        }
                         if self.lex.tk != Token::Assign {
                             return Err(self.compile_err("`=` expected after `[N]` designator"));
                         }
                         self.next()?; // `=`
+                        // A range fills each designated element from the
+                        // same re-parsed entry.
+                        if desig_hi > desig && inner_dims.is_empty() {
+                            self.fill_element_range(
+                                sid,
+                                ty,
+                                var_offset,
+                                group_stride,
+                                desig,
+                                desig_hi,
+                                false,
+                            )?;
+                            i = desig_hi + 1;
+                            self.accept(',')?;
+                            continue;
+                        }
                         i = desig;
                     }
                     if i >= group_count {
@@ -921,30 +988,77 @@ impl Compiler {
         Ok(())
     }
 
-    /// If the next brace-list entry is an array designator `[N] =`, consume
-    /// it and return the index; otherwise leave the cursor and return None.
-    /// Shared by the deferred-local struct-array fill loops -- the file-scope
-    /// path carries the same logic inline.
-    fn take_array_element_designator(&mut self, count: i64) -> Result<Option<i64>, C5Error> {
+    /// If the next brace-list entry is an array designator `[N]` or a
+    /// GNU range `[lo ... hi]`, consume it and return `(lo, hi, chain)`
+    /// (`hi == lo` for the single form). A following `= value` consumes
+    /// the `=` and returns `chain == false`; a C99 6.7.8p7 designator
+    /// list continuing into the element (`[N].field... =`) leaves the
+    /// cursor on the `.`/`[` and returns `chain == true` for the caller
+    /// to resolve. Shared by the deferred-local struct-array fill loops
+    /// -- the file-scope path carries the same logic inline.
+    fn take_array_element_designator(
+        &mut self,
+        count: i64,
+    ) -> Result<Option<(i64, i64, bool)>, C5Error> {
         if self.lex.tk != Token::Brak {
             return Ok(None);
         }
         self.next()?; // `[`
         let idx = self.parse_constant_int()?;
-        if idx < 0 || idx >= count {
+        let mut hi = idx;
+        if self.lex.tk == Token::Ellipsis {
+            self.next()?;
+            hi = self.parse_constant_int()?;
+        }
+        if idx < 0 || hi < idx || hi >= count {
             return Err(self.compile_err(format!(
-                "array designator index {idx} out of bounds [0, {count})"
+                "array designator index {idx}..{hi} out of bounds [0, {count})"
             )));
         }
         if self.lex.tk != ']' {
             return Err(self.compile_err("`]` expected after array designator index"));
         }
         self.next()?; // `]`
+        if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+            return Ok(Some((idx, hi, true)));
+        }
         if self.lex.tk != Token::Assign {
             return Err(self.compile_err("`=` expected after `[N]` designator"));
         }
         self.next()?; // `=`
-        Ok(Some(idx))
+        Ok(Some((idx, hi, false)))
+    }
+
+    /// Fill elements `lo..=hi` of a struct array staged in `self.data`
+    /// from one source-level entry, re-parsing the entry per element
+    /// through a lexer snapshot. `chain` selects the designator-chain
+    /// form (`.field... = v`, cursor on the `.`) over the plain value
+    /// form (`{ ... }` or a flat field list, cursor on the value).
+    fn fill_element_range(
+        &mut self,
+        sid: usize,
+        ty: i64,
+        base: i64,
+        elem_size: i64,
+        lo: i64,
+        hi: i64,
+        chain: bool,
+    ) -> Result<(), C5Error> {
+        for e in lo..=hi {
+            let snap = self.lex.snapshot();
+            let here = base + e * elem_size;
+            if chain {
+                self.fill_element_field_designator(sid, ty, here)?;
+            } else if self.lex.tk == '{' {
+                self.collect_struct_initializer(sid, here)?;
+            } else {
+                self.fill_struct_fields(sid, here, false)?;
+            }
+            if e < hi {
+                self.lex.restore(snap);
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn allocate_local_with_init(
@@ -1031,7 +1145,18 @@ impl Compiler {
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {
                         // C99 6.7.8p7 `[N] =` designator jumps the cursor.
-                        if let Some(idx) = self.take_array_element_designator(count)? {
+                        // TODO: member chains (`[N].field =`) and ranges
+                        // with runtime element values route through
+                        // per-field stores.
+                        if let Some((idx, hi, chain)) =
+                            self.take_array_element_designator(count)?
+                        {
+                            if chain || hi > idx {
+                                return Err(self.compile_err(
+                                    "`[N].field` / range designator requires constant \
+                                     element values",
+                                ));
+                            }
                             i = idx;
                         }
                         if i >= count {
@@ -1060,9 +1185,25 @@ impl Compiler {
                 }
                 let mut i: i64 = 0;
                 while self.lex.tk != '}' {
-                    // C99 6.7.8p7 `[N] =` designator jumps the cursor.
-                    if let Some(idx) = self.take_array_element_designator(count)? {
-                        i = idx;
+                    // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
+                    // designator jumps the cursor; `[N].field... =`
+                    // initializes one member of each designated element.
+                    if let Some((lo, hi, chain)) = self.take_array_element_designator(count)? {
+                        if chain || hi > lo {
+                            self.fill_element_range(
+                                sid,
+                                ty,
+                                staged_off as i64,
+                                elem_size as i64,
+                                lo,
+                                hi,
+                                chain,
+                            )?;
+                            i = hi + 1;
+                            self.accept(',')?;
+                            continue;
+                        }
+                        i = lo;
                     }
                     let here = staged_off as i64 + i * elem_size as i64;
                     if self.lex.tk == '{' {
@@ -1170,9 +1311,18 @@ impl Compiler {
                         let mut i: i64 = 0;
                         while self.lex.tk != '}' {
                             // C99 6.7.8p7 `[N] =` designator jumps the cursor.
-                            if let Some(idx) =
+                            // TODO: member chains (`[N].field =`) and ranges
+                            // with runtime element values route through
+                            // per-field stores.
+                            if let Some((idx, hi, chain)) =
                                 self.take_array_element_designator(declared_array_size)?
                             {
+                                if chain || hi > idx {
+                                    return Err(self.compile_err(
+                                        "`[N].field` / range designator requires constant \
+                                         element values",
+                                    ));
+                                }
                                 i = idx;
                             }
                             if i >= declared_array_size {
@@ -1217,18 +1367,24 @@ impl Compiler {
                         if self.lex.tk == Token::Brak {
                             self.next()?; // `[`
                             let desig = self.parse_constant_int()?;
+                            // GNU range designator `[lo ... hi]`.
+                            let mut desig_hi = desig;
+                            if self.lex.tk == Token::Ellipsis {
+                                self.next()?;
+                                desig_hi = self.parse_constant_int()?;
+                            }
                             if self.lex.tk != ']' {
                                 return Err(
                                     self.compile_err("`]` expected after array designator index")
                                 );
                             }
                             self.next()?; // `]`
-                            if desig < 0 || desig >= group_count {
+                            if desig < 0 || desig_hi < desig || desig_hi >= group_count {
                                 return Err(self.compile_err(format!(
-                                    "array designator index {desig} out of bounds [0, {group_count})"
+                                    "array designator index {desig}..{desig_hi} out of bounds [0, {group_count})"
                                 )));
                             }
-                            if self.lex.tk == Token::Brak {
+                            if self.lex.tk == Token::Brak && desig_hi == desig {
                                 // Each inner subscript scales by the product of
                                 // the dimensions below it; the outer `desig`
                                 // scales by the whole inner product.
@@ -1258,6 +1414,15 @@ impl Compiler {
                                         "multi-dimensional `[i][j]` designator must index every dimension",
                                     ));
                                 }
+                                // C99 6.7.8p7: the designator list may continue
+                                // into the element (`[i][j].field... = v`).
+                                if self.lex.tk == Token::Dot {
+                                    let here = staged_off as i64 + elem * elem_size as i64;
+                                    self.fill_element_field_designator(sid, ty, here)?;
+                                    i = desig + 1;
+                                    self.accept(',')?;
+                                    continue;
+                                }
                                 if self.lex.tk != Token::Assign {
                                     return Err(
                                         self.compile_err("`=` expected after `[i][j]` designator")
@@ -1274,10 +1439,44 @@ impl Compiler {
                                 self.accept(',')?;
                                 continue;
                             }
+                            // C99 6.7.8p7 member chain on the designated
+                            // element(s) (`[N].field... = v`; 1-D elements
+                            // only, a row of a multi-dimensional array is
+                            // not a struct object).
+                            if self.lex.tk == Token::Dot && inner_dims.is_empty() {
+                                self.fill_element_range(
+                                    sid,
+                                    ty,
+                                    staged_off as i64,
+                                    group_stride,
+                                    desig,
+                                    desig_hi,
+                                    true,
+                                )?;
+                                i = desig_hi + 1;
+                                self.accept(',')?;
+                                continue;
+                            }
                             if self.lex.tk != Token::Assign {
                                 return Err(self.compile_err("`=` expected after `[N]` designator"));
                             }
                             self.next()?; // `=`
+                            // A range fills each designated element from the
+                            // same re-parsed entry.
+                            if desig_hi > desig && inner_dims.is_empty() {
+                                self.fill_element_range(
+                                    sid,
+                                    ty,
+                                    staged_off as i64,
+                                    group_stride,
+                                    desig,
+                                    desig_hi,
+                                    false,
+                                )?;
+                                i = desig_hi + 1;
+                                self.accept(',')?;
+                                continue;
+                            }
                             i = desig;
                         }
                         if i >= group_count {

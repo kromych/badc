@@ -2853,6 +2853,7 @@ mod tests {
             data: Vec::new(),
             data_align: 8,
             bss_size: 0,
+            init_fini_arrays: Default::default(),
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),

@@ -2047,6 +2047,7 @@ pub(crate) fn lower(
         data: program.data.clone(),
         data_align: program.data_align,
         bss_size: 0,
+        init_fini_arrays: Default::default(),
         entry_offset,
         got_fixups,
         data_fixups,

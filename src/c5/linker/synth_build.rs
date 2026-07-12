@@ -347,6 +347,7 @@ fn synth_program_and_build(
         data: merged.data.clone(),
         data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
+        init_fini_arrays: merged.init_fini_arrays,
         entry_offset,
         got_fixups,
         data_fixups,
@@ -1019,6 +1020,7 @@ mod tests {
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
+            init_fini_arrays: Default::default(),
         }
     }
 

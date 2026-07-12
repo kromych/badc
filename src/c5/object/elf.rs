@@ -101,6 +101,10 @@ const DT_RELASZ: u64 = 8;
 const DT_RELAENT: u64 = 9;
 const DT_STRSZ: u64 = 10;
 const DT_SYMENT: u64 = 11;
+const DT_INIT_ARRAY: u64 = 25;
+const DT_FINI_ARRAY: u64 = 26;
+const DT_INIT_ARRAYSZ: u64 = 27;
+const DT_FINI_ARRAYSZ: u64 = 28;
 const DT_BIND_NOW: u64 = 24;
 const DT_FLAGS: u64 = 30;
 const DT_VERSYM: u64 = 0x6fff_fff0;
@@ -1002,6 +1006,17 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
         (DT_BIND_NOW, 0),
         (DT_FLAGS, DF_BIND_NOW),
     ];
+    // Constructor / destructor arrays the loader runs around the program.
+    // Emitted only when present so a program with no constructors keeps the
+    // same dynamic section it had before.
+    if let Some((vmaddr, size)) = info.init_array {
+        entries.push((DT_INIT_ARRAY, vmaddr));
+        entries.push((DT_INIT_ARRAYSZ, size));
+    }
+    if let Some((vmaddr, size)) = info.fini_array {
+        entries.push((DT_FINI_ARRAY, vmaddr));
+        entries.push((DT_FINI_ARRAYSZ, size));
+    }
     // Version tags precede DT_NULL. The dynamic linker reads DT_VERSYM /
     // DT_VERNEED to bind each import to its required symbol version.
     if let Some(v) = info.versions {
@@ -1028,6 +1043,11 @@ struct DynamicInfo {
     rela_size: u64,
     strtab_size: u64,
     versions: Option<VersionInfo>,
+    /// `.init_array` / `.fini_array` runtime address and byte length, each
+    /// `None` when the program has no constructors / destructors. The
+    /// dynamic loader runs the pointer arrays before / after the program.
+    init_array: Option<(u64, u64)>,
+    fini_array: Option<(u64, u64)>,
 }
 
 /// A defined dynamic-symbol export for the ELF writer. `offset` is a
@@ -1094,8 +1114,20 @@ fn patch_adrp_ldr(
         )));
     }
 
-    let adrp_word = aarch64::enc_adrp(aarch64::Reg::X16, imm21);
-    let ldr_word = aarch64::enc_ldr_imm(aarch64::Reg::X16, aarch64::Reg::X16, in_page);
+    // Preserve the destination register the codegen chose: a GOT call
+    // loads into x16 (matched by its `blr x16`), but an inline GOT data
+    // load (`adrp x0; ldr x0, [x0]` for the address of an imported data
+    // object) loads into the register the following code reads. Read the
+    // original `Rd` from the adrp being patched rather than forcing x16,
+    // which would strand the loaded address in a register the code never
+    // reads. `adrp` Rd is bits 0..4; `ldr` (unsigned offset) has Rt in
+    // 0..4 and Rn in 5..9, both the same register for this pair.
+    let orig_adrp = u32::from_le_bytes(out[adrp_file_off..adrp_file_off + 4].try_into().unwrap());
+    let rd = orig_adrp & 0x1f;
+    let adrp_word = (aarch64::enc_adrp(aarch64::Reg::X16, imm21) & !0x1f) | rd;
+    let ldr_word = (aarch64::enc_ldr_imm(aarch64::Reg::X16, aarch64::Reg::X16, in_page) & !0x3ff)
+        | rd
+        | (rd << 5);
     out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
     out[ldr_file_off..ldr_file_off + 4].copy_from_slice(&ldr_word.to_le_bytes());
     Ok(())
@@ -1663,7 +1695,14 @@ pub(super) fn write(
     // `build_dynamic` emits one DT_NEEDED per resolved dylib plus
     // 11 fixed tags (DT_HASH, DT_STRTAB, ..., DT_NULL terminator).
     let version_dyn_tags: u64 = if has_versions { 3 } else { 0 };
-    let dynamic_size = (build.imports.dylibs.len() as u64 + 11 + version_dyn_tags) * ELF64_DYN_SIZE;
+    // DT_INIT_ARRAY + DT_INIT_ARRAYSZ (and the fini pair) are emitted only
+    // when the program declares constructors / destructors: two tags each.
+    let init_fini_dyn_tags: u64 = 2
+        * (build.init_fini_arrays.init.is_some() as u64
+            + build.init_fini_arrays.fini.is_some() as u64);
+    let dynamic_size =
+        (build.imports.dylibs.len() as u64 + 11 + version_dyn_tags + init_fini_dyn_tags)
+            * ELF64_DYN_SIZE;
     let got_off = dynamic_off + dynamic_size;
     let got_size = (n_imports as u64) * 8;
     // `.data`'s base alignment: p_vaddr == p_offset within the RW
@@ -2250,6 +2289,14 @@ pub(super) fn write(
             } else {
                 None
             },
+            init_array: build
+                .init_fini_arrays
+                .init
+                .map(|(off, len)| (data_vmaddr + off, len)),
+            fini_array: build
+                .init_fini_arrays
+                .fini
+                .map(|(off, len)| (data_vmaddr + off, len)),
         },
     );
     debug_assert_eq!(dynamic.len() as u64, dynamic_size);
@@ -2960,6 +3007,7 @@ mod tests {
             data: Vec::new(),
             data_align: 8,
             bss_size: 0,
+            init_fini_arrays: Default::default(),
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
@@ -3159,6 +3207,82 @@ mod tests {
         // Last entry must be DT_NULL.
         let last = (dyn_off + dyn_sz - ELF64_DYN_SIZE) as usize;
         assert_eq!(read_u64(&bytes, last), DT_NULL);
+    }
+
+    // Collect every (d_tag, d_val) pair from PT_DYNAMIC.
+    fn dynamic_entries(bytes: &[u8]) -> Vec<(u64, u64)> {
+        let phoff = read_u64(bytes, 32);
+        let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
+        let (mut off, mut sz) = (0u64, 0u64);
+        for i in 0..phnum {
+            let p = (phoff + i * PROGRAM_HEADER_SIZE) as usize;
+            if read_u32(bytes, p) == PT_DYNAMIC {
+                off = read_u64(bytes, p + 8);
+                sz = read_u64(bytes, p + 32);
+                break;
+            }
+        }
+        let mut out = Vec::new();
+        let mut e = off as usize;
+        while (e as u64) < off + sz {
+            out.push((read_u64(bytes, e), read_u64(bytes, e + 8)));
+            e += ELF64_DYN_SIZE as usize;
+        }
+        out
+    }
+
+    #[test]
+    fn dynamic_section_emits_init_fini_array_when_present() {
+        // A program with constructors / destructors must carry
+        // DT_INIT_ARRAY / DT_FINI_ARRAY (plus the size tags) so the
+        // dynamic loader runs the pointer arrays; without them the
+        // constructors never fire on the self-linked path.
+        let mut build = tiny_build();
+        build.data = alloc::vec![0u8; 16];
+        build.init_fini_arrays = crate::c5::codegen::InitFiniArrays {
+            init: Some((0, 8)),
+            fini: Some((8, 8)),
+        };
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64).unwrap();
+        let dyn_ = dynamic_entries(&bytes);
+        let val = |tag| dyn_.iter().find(|(t, _)| *t == tag).map(|(_, v)| *v);
+        assert_eq!(val(DT_INIT_ARRAYSZ), Some(8), "DT_INIT_ARRAYSZ");
+        assert_eq!(val(DT_FINI_ARRAYSZ), Some(8), "DT_FINI_ARRAYSZ");
+        // The array vmaddrs point inside the rw data segment.
+        assert!(val(DT_INIT_ARRAY).is_some(), "DT_INIT_ARRAY present");
+        assert!(val(DT_FINI_ARRAY).is_some(), "DT_FINI_ARRAY present");
+
+        // A program with no constructors emits neither, keeping its
+        // dynamic section unchanged.
+        let plain = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let pd = dynamic_entries(&plain);
+        assert!(!pd.iter().any(|(t, _)| *t == DT_INIT_ARRAY));
+        assert!(!pd.iter().any(|(t, _)| *t == DT_FINI_ARRAY));
+    }
+
+    #[test]
+    fn patch_adrp_ldr_preserves_destination_register() {
+        // A GOT load `adrp xD; ldr xD, [xD, #off]` must keep xD after
+        // patching. A GOT call uses x16 (matched by its `blr x16`), but
+        // an inline GOT data load uses whatever register the following
+        // code reads; forcing x16 would strand the address. Check a
+        // data register (x0), an arbitrary one (x5), and x16 all survive.
+        for rd in [0u8, 5, 16] {
+            let mut out = Vec::new();
+            out.extend_from_slice(&aarch64::enc_adrp(aarch64::Reg(rd), 0).to_le_bytes());
+            out.extend_from_slice(
+                &aarch64::enc_ldr_imm(aarch64::Reg(rd), aarch64::Reg(rd), 0).to_le_bytes(),
+            );
+            // Code at vmaddr 0x1000, GOT slot at 0x5008: page diff 0x4000
+            // (4 KiB aligned), in-page offset 8 (8-aligned).
+            patch_adrp_ldr(&mut out, 0, 0x1000, 0, 0x5008, "test").unwrap();
+            let adrp = u32::from_le_bytes(out[0..4].try_into().unwrap());
+            let ldr = u32::from_le_bytes(out[4..8].try_into().unwrap());
+            assert_eq!(adrp & 0x1f, rd as u32, "adrp Rd preserved (rd={rd})");
+            assert_eq!(ldr & 0x1f, rd as u32, "ldr Rt preserved (rd={rd})");
+            assert_eq!((ldr >> 5) & 0x1f, rd as u32, "ldr Rn preserved (rd={rd})");
+            assert_eq!(adrp & 0x9f00_0000, 0x9000_0000, "still an ADRP (rd={rd})");
+        }
     }
 
     #[test]

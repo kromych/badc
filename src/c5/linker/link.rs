@@ -210,6 +210,11 @@ pub struct MergedNative {
     /// `_Thread_local` storage.
     pub tls_data: Vec<u8>,
     pub tls_init_size: usize,
+    /// `.init_array` / `.fini_array` placement in [`Self::data`] (Pass 1.5),
+    /// forwarded to the dynamic-ELF writer so it emits DT_INIT_ARRAY /
+    /// DT_FINI_ARRAY. The pointer slots already carry R_*_RELATIVE via
+    /// [`Self::data_abs_relocs`].
+    pub init_fini_arrays: crate::c5::codegen::InitFiniArrays,
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
@@ -321,6 +326,14 @@ pub fn link_native_objects_with_shared_libs(
     let shlib_exports: BTreeSet<&str> = shared_libs
         .iter()
         .flat_map(|l| l.exports.iter().map(String::as_str))
+        .collect();
+    // The data-object subset. A reference to one resolves to the
+    // object's address through the GOT (a data import), never to a PLT
+    // stub -- a stub is code, so reading the object through it returns
+    // instructions.
+    let shlib_data_exports: BTreeSet<&str> = shared_libs
+        .iter()
+        .flat_map(|l| l.data_exports.iter().map(String::as_str))
         .collect();
     let machine = objs[0].machine;
     for (i, obj) in objs.iter().enumerate().skip(1) {
@@ -863,7 +876,11 @@ pub fn link_native_objects_with_shared_libs(
                         // symbol lives in a dylib. Admit it as a flat import
                         // so the writer binds the host symbol through the GOT,
                         // rather than rejecting it as unresolved.
-                        let is_data_binding = data_binding_locals.contains(&sym.name);
+                        // A shared library's data object (`g_ascii_table`)
+                        // is a data import too: its reference reaches the
+                        // object through the GOT, never a PLT stub.
+                        let is_data_binding = data_binding_locals.contains(&sym.name)
+                            || shlib_data_exports.contains(sym.name.as_str());
                         // STB_WEAK = 2. An unresolved weak reference with
                         // no dylib routing resolves to address 0 (C
                         // practice; ELF leaves the symbol 0 so the
@@ -1487,6 +1504,12 @@ pub fn link_native_objects_with_shared_libs(
         local_funcs,
         tls_data,
         tls_init_size,
+        init_fini_arrays: crate::c5::codegen::InitFiniArrays {
+            init: (init_array_end > init_array_start)
+                .then_some((init_array_start, init_array_end - init_array_start)),
+            fini: (fini_array_end > fini_array_start)
+                .then_some((fini_array_start, fini_array_end - fini_array_start)),
+        },
     })
 }
 
@@ -2315,6 +2338,40 @@ mod tests {
     /// erroring, the symbol becomes a load-time import, and the
     /// library is recorded as a DT_NEEDED dependency by its SONAME.
     #[test]
+    fn shared_library_data_object_resolves_as_data_import() {
+        // A reference to a shared library's data object (a `STT_OBJECT`
+        // export, e.g. glib's `g_ascii_table`) must resolve to the
+        // object's address through the GOT -- a data import -- not to a
+        // PLT stub, whose bytes are code. The `data_exports` set drives
+        // this: it routes the reference like a `#pragma binding(data ...)`
+        // local so the PLT pass skips a call stub for it.
+        let target = Target::LinuxAarch64;
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        let copts = crate::CompileOptions::default().with_no_entry_point(true);
+        let src = "extern unsigned short tbl[]; int f(void){ return tbl[3]; }\n";
+        let obj = compile_native_with(src, target, opts, copts);
+
+        let names = |n: &str| core::iter::once(alloc::string::String::from(n)).collect();
+        let lib = SharedLibrary {
+            soname: alloc::string::String::from("libext.so.1"),
+            exports: names("tbl"),
+            data_exports: names("tbl"),
+        };
+        let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
+            .expect("link resolves the data object against the shared library");
+        let idx = merged
+            .imports
+            .iter()
+            .position(|n| n == "tbl")
+            .expect("tbl recorded as an import");
+        assert!(
+            merged.data_import_indices.contains(&idx),
+            "a shared-library data object must route as a data import, not a call stub",
+        );
+    }
+
+    #[test]
     fn shared_library_export_resolves_undefined_reference() {
         let target = Target::LinuxAarch64;
         let mut opts = NativeOptions::new().with_debug_info(false);
@@ -2336,6 +2393,7 @@ mod tests {
         let lib = SharedLibrary {
             soname: alloc::string::String::from("libext.so.1"),
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
+            data_exports: alloc::collections::BTreeSet::new(),
         };
         let merged = link_native_objects_with_shared_libs(&[caller], false, &[lib])
             .expect("link resolves ext_fn against the shared library");
@@ -2367,6 +2425,7 @@ mod tests {
         let lib = SharedLibrary {
             soname: alloc::string::String::from("libext.so.1"),
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
+            data_exports: alloc::collections::BTreeSet::new(),
         };
         let mut merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
             .expect("a data reference to a shared-library import must link");

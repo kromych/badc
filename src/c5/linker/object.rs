@@ -250,6 +250,12 @@ pub(crate) fn read_dynamic_symbol_names(bytes: &[u8]) -> Result<Vec<String>, C5E
 pub struct SharedLibrary {
     pub soname: String,
     pub exports: alloc::collections::BTreeSet<String>,
+    /// The subset of `exports` that are data objects (`STT_OBJECT`, e.g.
+    /// glib's `g_ascii_table`) rather than functions. A reference to one
+    /// must resolve to the object's address through the GOT, not to a
+    /// PLT stub -- a stub's bytes are code, so reading the "object"
+    /// through it returns instructions.
+    pub data_exports: alloc::collections::BTreeSet<String>,
 }
 
 /// Read a shared object's SONAME and exported dynamic symbols from its
@@ -272,6 +278,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     };
     let mut soname = String::new();
     let mut exports = alloc::collections::BTreeSet::new();
+    let mut data_exports = alloc::collections::BTreeSet::new();
     for i in 0..ehdr.e_shnum as usize {
         let sh = shdr(i)?;
         if sh.sh_type == SHT_DYNSYM {
@@ -290,9 +297,15 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                     continue;
                 }
                 let name = read_cstr(strtab.sh_offset as usize + sym.st_name as usize);
-                if !name.is_empty() {
-                    exports.insert(name);
+                if name.is_empty() {
+                    continue;
                 }
+                // STT_OBJECT (1) is a data object; a reference to it must
+                // reach the object's address, not a PLT stub.
+                if (sym.st_info & 0xf) == 1 {
+                    data_exports.insert(name.clone());
+                }
+                exports.insert(name);
             }
         } else if sh.sh_type == SHT_DYNAMIC {
             let strtab = shdr(sh.sh_link as usize)?;
@@ -312,7 +325,11 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
             }
         }
     }
-    Ok(SharedLibrary { soname, exports })
+    Ok(SharedLibrary {
+        soname,
+        exports,
+        data_exports,
+    })
 }
 
 /// Which architecture's relocations the object uses. Drives the
@@ -2181,5 +2198,10 @@ mod tests {
         assert!(lib.exports.contains("bar"));
         assert!(!lib.exports.contains("ext")); // SHN_UNDEF is an import, not an export
         assert_eq!(lib.exports.len(), 2);
+        // `foo` is STT_FUNC, `bar` is STT_OBJECT: only the object is a
+        // data export.
+        assert!(lib.data_exports.contains("bar"));
+        assert!(!lib.data_exports.contains("foo"));
+        assert_eq!(lib.data_exports.len(), 1);
     }
 }

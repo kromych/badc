@@ -39,9 +39,9 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_float_ty, is_floating_scalar,
-    is_pointer_ty, is_struct_ty, is_unsigned_ty, is_vector_ty, struct_id_of, struct_ptr_depth,
-    usual_arith_common_ty,
+    UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_bool_ty, is_float_ty,
+    is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty, is_vector_ty, struct_id_of,
+    struct_ptr_depth, usual_arith_common_ty,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -3821,7 +3821,11 @@ impl Compiler {
                         bit_offset: field.bit_offset as u8,
                         bit_width: field.bit_width as u8,
                         unit_size: field.bit_unit_size,
-                        signed: !is_unsigned_ty(field.ty),
+                        // C99 6.2.5p2: `_Bool` holds only 0 or 1, so a
+                        // `_Bool` bitfield is unsigned even at width 1,
+                        // where a signed 1-bit field reads its set bit
+                        // back as -1.
+                        signed: !is_unsigned_ty(field.ty) && !is_bool_ty(field.ty),
                     };
                     let bf_field_off = field.offset as i64;
                     let bf_field_ty = field.ty;

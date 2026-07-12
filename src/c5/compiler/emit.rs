@@ -21,7 +21,7 @@ use super::super::ir::LoadKind;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_struct_ty, is_unsigned_ty, load_op_for, struct_ptr_depth};
+use super::types::{is_bool_ty, is_struct_ty, is_unsigned_ty, load_op_for, struct_ptr_depth};
 
 impl Compiler {
     // ---- Lexer plumbing ----
@@ -532,7 +532,10 @@ impl Compiler {
             self.ast_psh();
             self.emit_imm(mask);
             self.ast_binop(crate::c5::ir::BinOp::And); // a = (...) & mask
-            if !is_unsigned_ty(field_ty) && bit_width < 64 {
+            // C99 6.2.5p2: `_Bool` holds only 0 or 1, so a `_Bool`
+            // bitfield is unsigned even at width 1, where a signed
+            // 1-bit field would read its set bit back as -1.
+            if !is_unsigned_ty(field_ty) && !is_bool_ty(field_ty) && bit_width < 64 {
                 let shift = 64i64 - (bit_width as i64);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift); // arithmetic Shr

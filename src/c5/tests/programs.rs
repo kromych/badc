@@ -3713,6 +3713,15 @@ fn builtin_object_size() {
 }
 
 #[test]
+fn bool_bitfield_zero_extends() {
+    // C99 6.2.5p2: a `_Bool` bitfield is unsigned even at width 1, so
+    // a set bit reads back as 1, not the -1 a signed 1-bit field
+    // yields. The wrong sign made `64 - 8 * param.tbi` overshoot in
+    // the AArch64 LPAE page-table walker.
+    assert_eq!(run_fixture("bool_bitfield_zero_extends.c"), 0);
+}
+
+#[test]
 fn ipproto_case_labels() {
     // <netinet/in.h> IPPROTO_* constants are usable as case labels.
     assert_eq!(run_fixture("ipproto_case_labels.c"), 0);

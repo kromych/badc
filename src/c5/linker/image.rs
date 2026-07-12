@@ -1039,6 +1039,7 @@ mod tests {
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            data_import_refs: alloc::vec![],
             machine: NativeMachine::X86_64,
             dylibs: alloc::vec![],
             import_dylib_map: alloc::collections::BTreeMap::new(),

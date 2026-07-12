@@ -88,6 +88,16 @@ pub struct MergedNative {
     /// `data_vaddr + target_data_offset` once the final-image
     /// writer commits a layout.
     pub data_abs_relocs: Vec<DataAbsReloc>,
+    /// Data-initializer slots that hold the address of an imported
+    /// function: `(slot_data_offset, import_index)`. A function-pointer
+    /// table entry naming a shared-library symbol (`static freefn t =
+    /// g_free;`) resolves to that import's PLT stub -- a valid function
+    /// pointer. The PLT pass creates the stub (even for an import
+    /// referenced only from data) and turns each entry into a
+    /// `Text`-target [`DataAbsReloc`] against the stub, so the PIE
+    /// writer emits the load-time relative relocation like any other
+    /// function-pointer initializer.
+    pub data_import_refs: Vec<(u64, usize)>,
     /// Architecture of the merged image. Every unit must agree;
     /// the link errors out if they don't.
     pub machine: NativeMachine,
@@ -1060,6 +1070,9 @@ pub fn link_native_objects_with_shared_libs(
     // target to a merged-image data offset and queue it for
     // the writer to patch once `data_vaddr` is committed.
     let mut data_abs_relocs: Vec<DataAbsReloc> = Vec::new();
+    // Data slots that name an imported function; the PLT pass turns each
+    // into a stub-targeting `DataAbsReloc` (see `data_import_refs`).
+    let mut data_import_refs: Vec<(u64, usize)> = Vec::new();
     for (i, obj) in objs.iter().enumerate() {
         for reloc in &obj.data_relocs {
             if reloc.sym_idx >= obj.symbols.len() {
@@ -1094,6 +1107,20 @@ pub fn link_native_objects_with_shared_libs(
                             }
                             data[slot..slot + 8]
                                 .copy_from_slice(&(reloc.addend as u64).to_le_bytes());
+                            continue;
+                        }
+                        // A data initializer naming an imported function
+                        // (a function-pointer table entry, e.g.
+                        // `static freefn t = g_free;`). Route it to the
+                        // import's PLT stub -- a valid function pointer --
+                        // recorded for the PLT pass to resolve.
+                        None if shlib_exports.contains(sym.name.as_str())
+                            || import_idx_for_name.contains_key(&sym.name) =>
+                        {
+                            let idx =
+                                record_import(&sym.name, &mut imports, &mut import_idx_for_name);
+                            flat_imports.insert(sym.name.clone());
+                            data_import_refs.push((slot_offset, idx));
                             continue;
                         }
                         None => {
@@ -1431,6 +1458,7 @@ pub fn link_native_objects_with_shared_libs(
         imports,
         pending_imports,
         data_abs_relocs,
+        data_import_refs,
         machine,
         dylibs,
         import_dylib_map,
@@ -1687,6 +1715,34 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
         patch_x86_64_pc32(&mut merged.text, site, target)?;
     }
 
+    // A data initializer naming an imported function resolves to that
+    // import's PLT stub. Create a stub for an import referenced only
+    // from data, then record a Text-target DataAbsReloc so the writer
+    // patches the slot to the stub's vmaddr (a valid function pointer).
+    let data_import_refs = merged.data_import_refs.clone();
+    for (slot, import_index) in data_import_refs {
+        let stub = match tramp_for_import.get(&import_index) {
+            Some(&off) => off,
+            None => {
+                let text_offset = merged.text.len();
+                tramp_for_import.insert(import_index, text_offset);
+                trampolines.push(PltTrampoline {
+                    text_offset,
+                    import_index,
+                });
+                merged
+                    .text
+                    .extend_from_slice(&[0xFF, 0x25, 0x00, 0x00, 0x00, 0x00]);
+                text_offset
+            }
+        };
+        merged.data_abs_relocs.push(DataAbsReloc {
+            slot_offset: slot,
+            target_offset: stub as u64,
+            target_section: NativeSymSection::Text,
+        });
+    }
+
     merged.pending_imports = parked_back;
     Ok(trampolines)
 }
@@ -1814,6 +1870,35 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
             }
             _ => unreachable!("pass 1 rejected every other rtype"),
         }
+    }
+
+    // A data initializer naming an imported function resolves to that
+    // import's PLT stub. Create a stub for an import referenced only
+    // from data, then record a Text-target DataAbsReloc so the writer
+    // patches the slot to the stub's vmaddr (a valid function pointer).
+    let data_import_refs = merged.data_import_refs.clone();
+    for (slot, import_index) in data_import_refs {
+        let stub = match tramp_for_import.get(&import_index) {
+            Some(&off) => off,
+            None => {
+                let text_offset = merged.text.len();
+                tramp_for_import.insert(import_index, text_offset);
+                trampolines.push(PltTrampoline {
+                    text_offset,
+                    import_index,
+                });
+                // adrp x16, 0 ; ldr x16, [x16] ; br x16
+                merged.text.extend_from_slice(&0x9000_0010u32.to_le_bytes());
+                merged.text.extend_from_slice(&0xF940_0210u32.to_le_bytes());
+                merged.text.extend_from_slice(&0xD61F_0200u32.to_le_bytes());
+                text_offset
+            }
+        };
+        merged.data_abs_relocs.push(DataAbsReloc {
+            slot_offset: slot,
+            target_offset: stub as u64,
+            target_section: NativeSymSection::Text,
+        });
     }
 
     merged.pending_imports = parked_back;
@@ -2262,6 +2347,38 @@ mod tests {
         assert!(
             merged.imports.iter().any(|n| n == "ext_fn"),
             "ext_fn should be recorded as a runtime import",
+        );
+    }
+
+    /// A file-scope function-pointer table entry naming a shared-library
+    /// import (`static fn t = ext_fn;`, the qemu TypeInfo shape) links
+    /// instead of erroring, and the PLT pass turns the data slot into a
+    /// stub-targeting DataAbsReloc so the slot holds a valid pointer.
+    #[test]
+    fn shared_library_function_pointer_in_data_resolves_via_stub() {
+        let target = Target::LinuxAarch64;
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        let copts = crate::CompileOptions::default().with_no_entry_point(true);
+        let src = "int ext_fn(void);\n\
+                   int (*tbl)(void) = ext_fn;\n\
+                   int use_tbl(void){ return tbl != 0; }\n";
+        let obj = compile_native_with(src, target, opts, copts);
+        let lib = SharedLibrary {
+            soname: alloc::string::String::from("libext.so.1"),
+            exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
+        };
+        let mut merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
+            .expect("a data reference to a shared-library import must link");
+        assert!(
+            !merged.data_import_refs.is_empty(),
+            "the function pointer in data should be recorded as a data import",
+        );
+        let before = merged.data_abs_relocs.len();
+        let _ = emit_aarch64_plt(&mut merged).expect("plt pass");
+        assert!(
+            merged.data_abs_relocs.len() > before,
+            "the PLT pass should emit a stub-targeting DataAbsReloc for the data import",
         );
     }
 

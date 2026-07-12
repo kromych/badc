@@ -187,6 +187,10 @@ pub struct CompileOptions {
     /// `-I path` -- filesystem search paths probed before the
     /// bundled in-binary headers on `#include`.
     pub include_paths: Vec<String>,
+    /// `-iquote path` -- search paths for `#include "..."` only,
+    /// probed after the including file's directory and before the
+    /// `-I` paths (gcc scope).
+    pub quote_include_paths: Vec<String>,
     /// System header directories probed only after the bundled headers
     /// (the driver's implicit system include path for a hosted native
     /// build). A third-party header the embedded set lacks (`zlib.h`)
@@ -268,6 +272,11 @@ impl CompileOptions {
     /// Replace the `-I` include-search-path list.
     pub fn with_include_paths(mut self, include_paths: Vec<String>) -> Self {
         self.include_paths = include_paths;
+        self
+    }
+    /// Replace the `-iquote` (quoted-include-only) search-path list.
+    pub fn with_quote_include_paths(mut self, paths: Vec<String>) -> Self {
+        self.quote_include_paths = paths;
         self
     }
     /// Replace the system header directories (probed after the bundled
@@ -1332,6 +1341,9 @@ impl Compiler {
         pp.set_show_includes(opts.show_includes);
         for path in &opts.include_paths {
             pp.add_search_path(path);
+        }
+        for path in &opts.quote_include_paths {
+            pp.add_quote_path(path);
         }
         for path in &opts.system_include_paths {
             pp.add_system_fallback_path(path);

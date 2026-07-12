@@ -212,6 +212,10 @@ pub(crate) struct Preprocessor {
     /// keeps the field but never reads from it (the embedded
     /// headers are always available).
     search_paths: Vec<String>,
+    /// Directories probed for `#include "..."` only (the gcc `-iquote`
+    /// scope), after the including file's directory and before
+    /// `search_paths`. An angle include never reads them.
+    quote_search_paths: Vec<String>,
     /// System header directories probed only *after* the bundled
     /// in-binary headers, so a third-party header the embedded set
     /// lacks (`zlib.h`, `libfdt.h`) resolves against the host system
@@ -744,6 +748,15 @@ impl Preprocessor {
     pub fn add_search_path(&mut self, path: &str) {
         if !self.search_paths.iter().any(|p| p == path) {
             self.search_paths.push(path.to_string());
+        }
+    }
+
+    /// Append a `#include "..."`-only search path (the gcc `-iquote`
+    /// scope). Probed after the including file's directory and before
+    /// the `-I` paths; angle includes never read it.
+    pub fn add_quote_path(&mut self, path: &str) {
+        if !self.quote_search_paths.iter().any(|p| p == path) {
+            self.quote_search_paths.push(path.to_string());
         }
     }
 
@@ -3026,6 +3039,16 @@ impl Preprocessor {
                 let candidate = join(dir);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
                     return Some((body, candidate));
+                }
+                // `-iquote` directories apply to `#include "..."` only
+                // (C99 6.10.2p2 leaves the extra places implementation-
+                // defined; gcc scopes them to the quoted form), probed
+                // after the including file's directory and before `-I`.
+                for path in &self.quote_search_paths {
+                    let candidate = join(path);
+                    if let Ok(body) = std::fs::read_to_string(&candidate) {
+                        return Some((body, candidate));
+                    }
                 }
             }
             for path in &self.search_paths {
@@ -6688,6 +6711,33 @@ int x_2 = __COUNTER__;
         assert!(out.contains("int main()"), "{out}");
     }
 
+    #[test]
+    fn iquote_paths_apply_to_quoted_includes_only() {
+        // gcc `-iquote` scope: probed for `#include "..."` (after the
+        // including file's directory, before `-I`), never for `<...>`.
+        let base = std::env::temp_dir().join(format!("badc-iquote-{}", std::process::id()));
+        let qdir = base.join("q");
+        let adir = base.join("a");
+        std::fs::create_dir_all(&qdir).unwrap();
+        std::fs::create_dir_all(&adir).unwrap();
+        std::fs::write(qdir.join("pick.h"), "int from_quote_dir;\n").unwrap();
+        std::fs::write(adir.join("pick.h"), "int from_angle_dir;\n").unwrap();
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_quote_path(qdir.to_str().unwrap());
+        pp.add_search_path(adir.to_str().unwrap());
+        // Quoted form: the -iquote dir wins over -I.
+        let out = pp.process("#include \"pick.h\"\n").unwrap();
+        assert!(out.contains("from_quote_dir"), "{out}");
+        // Angle form: the -iquote dir is invisible.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_quote_path(qdir.to_str().unwrap());
+        pp.add_search_path(adir.to_str().unwrap());
+        let out = pp.process("#include <pick.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert!(out.contains("from_angle_dir"), "{out}");
+    }
+
+    #[test]
     fn pp_number_is_one_token_in_substitution() {
         // C99 6.4.8: `2op` is a single pp-number; the `op` tail is not
         // a parameter reference, so pasting forms `T_2op`.

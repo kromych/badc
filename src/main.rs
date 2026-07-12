@@ -98,6 +98,9 @@ Compile knobs:
                            `./libc/include` are auto-added when
                            present, so a local copy of a bundled
                            header overrides the embedded one.
+  -iquote path             Add a search path for #include \"...\" only,
+                           probed after the including file's directory
+                           and before the -I paths. Repeatable.
   -include FILE            Splice the named header in front of the
                            source as if `#include \"FILE\"` opened
                            the translation unit. Repeatable; later
@@ -260,6 +263,7 @@ fn run() {
     let mut defines: Vec<(String, String)> = Vec::new();
     let mut undefines: Vec<String> = Vec::new();
     let mut include_paths: Vec<String> = Vec::new();
+    let mut quote_include_paths: Vec<String> = Vec::new();
     let mut force_includes: Vec<String> = Vec::new();
     // gcc `-H`-shape include tracing. When on, the preprocessor
     // records one line per `#include` resolve (with leading-dot
@@ -442,6 +446,19 @@ fn run() {
             },
             s if s.starts_with("-I") && s.len() > 2 => {
                 include_paths.push(s[2..].to_string());
+            }
+            // gcc / clang -iquote DIR: a search path for `#include "..."`
+            // only, probed after the including file's directory and
+            // before the -I paths.
+            "-iquote" => match iter.next() {
+                Some(p) => quote_include_paths.push(p),
+                None => {
+                    eprint_diagnostic("badc: error: -iquote requires a path argument");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-iquote") && s.len() > 7 => {
+                quote_include_paths.push(s[7..].to_string());
             }
             // gcc / clang -include FILE: splice the named header
             // in front of the source as if `#include "FILE"` had
@@ -870,6 +887,7 @@ fn run() {
             .with_defines(defines.clone())
             .with_undefines(undefines.clone())
             .with_include_paths(include_paths.clone())
+            .with_quote_include_paths(quote_include_paths.clone())
             .with_system_include_paths(system_include_paths.clone())
             .with_force_includes(force_includes.clone())
             .with_source_label(src_path.clone())
@@ -956,6 +974,7 @@ fn run() {
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
+                .with_quote_include_paths(quote_include_paths.clone())
                 .with_system_include_paths(system_include_paths.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(label.clone());
@@ -1037,6 +1056,7 @@ fn run() {
             defines: &defines,
             undefines: &undefines,
             include_paths: &include_paths,
+            quote_include_paths: &quote_include_paths,
             system_include_paths: &system_include_paths,
             force_includes: &force_includes,
             stdin_src: stdin_src.as_deref(),
@@ -1553,6 +1573,7 @@ fn run() {
             defines: &defines,
             undefines: &undefines,
             include_paths: &include_paths,
+            quote_include_paths: &quote_include_paths,
             system_include_paths: &system_include_paths,
             force_includes: &force_includes,
             stdin_src: None,
@@ -1663,6 +1684,7 @@ fn run() {
             defines: &defines,
             undefines: &undefines,
             include_paths: &include_paths,
+            quote_include_paths: &quote_include_paths,
             system_include_paths: &system_include_paths,
             force_includes: &force_includes,
             stdin_src: None,
@@ -1941,6 +1963,7 @@ struct CompileCfg<'a> {
     defines: &'a [(String, String)],
     undefines: &'a [String],
     include_paths: &'a [String],
+    quote_include_paths: &'a [String],
     system_include_paths: &'a [String],
     force_includes: &'a [String],
     /// Pre-read stdin bytes for a `-` source; `None` when no input is
@@ -2093,6 +2116,7 @@ fn compile_native_tu(
         .with_defines(cfg.defines.to_vec())
         .with_undefines(cfg.undefines.to_vec())
         .with_include_paths(cfg.include_paths.to_vec())
+        .with_quote_include_paths(cfg.quote_include_paths.to_vec())
         .with_system_include_paths(cfg.system_include_paths.to_vec())
         .with_force_includes(cfg.force_includes.to_vec())
         .with_source_label(src_path.to_string())
@@ -2173,6 +2197,7 @@ fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Result<Vec<u8>
         .with_defines(cfg.defines.to_vec())
         .with_undefines(cfg.undefines.to_vec())
         .with_include_paths(cfg.include_paths.to_vec())
+        .with_quote_include_paths(cfg.quote_include_paths.to_vec())
         .with_system_include_paths(cfg.system_include_paths.to_vec())
         .with_force_includes(cfg.force_includes.to_vec())
         .with_source_label(src_path.to_string())

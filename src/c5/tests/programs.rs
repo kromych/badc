@@ -916,6 +916,14 @@ fn flex_array_member_static_init() {
 }
 
 #[test]
+fn attribute_cleanup() {
+    // __attribute__((cleanup(fn))) runs fn(&var) at every scope exit
+    // (fall-through, return, break, continue), reverse order, innermost
+    // scope first; a returned value is evaluated before the cleanups.
+    assert_eq!(run_fixture("attribute_cleanup.c"), 0);
+}
+
+#[test]
 fn sizeof_array_type_and_binding() {
     // `sizeof(T [N])` sizes the array type; `sizeof(arr)[i]` binds to
     // the full unary-expression.

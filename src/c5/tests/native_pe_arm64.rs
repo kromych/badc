@@ -834,6 +834,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("flex_array_member_static_init.c", 0),
+    ("attribute_cleanup.c", 0),
     ("array_compound_literal_static_init.c", 0),
     ("const_address_cast_and_arith.c", 0),
     ("const_conditional_address_init.c", 0),

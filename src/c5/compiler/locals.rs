@@ -179,6 +179,9 @@ impl Compiler {
         if self.try_parse_block_fn_prototype(lbt, is_static)? {
             return Ok(());
         }
+        // `__attribute__((cleanup(fn)))` leading the declaration applies to
+        // every declarator (the glib `g_auto*` / `QEMU_LOCK_GUARD` form).
+        let leading_cleanup = self.pending.attr_cleanup.take();
         while self.lex.tk != ';' {
             // Re-seed the base type's function-pointer lineage for this
             // declarator; the previous declarator's symbol creation took it.
@@ -191,6 +194,8 @@ impl Compiler {
             self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = false;
+            // Trailing cleanup wins for this declarator; else the leading one.
+            let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
             // C23 6.7.13.5 `[[maybe_unused]]` / GNU
             // `__attribute__((unused))` on the declaration suppresses
             // the unused-variable diagnostic for the names it declares.
@@ -371,6 +376,18 @@ impl Compiler {
             } else if let Some((proto_fixed, true)) = fnptr_proto {
                 self.symbols[loc_idx].params = alloc::vec![0i64; proto_fixed];
                 self.symbols[loc_idx].is_variadic = true;
+            }
+
+            // Register `__attribute__((cleanup))` after the binding is
+            // final (the automatic branch reset `was_referenced`). It
+            // requires automatic storage (C has no such feature; the
+            // GCC/Clang extension), so a static / extern declarator's
+            // cleanup is inert.
+            if let Some(fn_sym) = cleanup_fn
+                && !is_static
+                && !is_extern
+            {
+                self.register_cleanup_var(loc_idx, fn_sym);
             }
 
             self.accept(',')?;

@@ -687,6 +687,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// Explicit priority from `constructor(N)` / `destructor(N)`; `None`
     /// for the bare form. Applies to whichever of the two above is set.
     pub attr_init_priority: Option<u32>,
+    /// A consumed `__attribute__((cleanup(fn)))`: the symbol index of the
+    /// cleanup function. Read where a local is bound to register a call to
+    /// `fn(&var)` at every exit from the variable's scope (C99 has no such
+    /// feature; this is the GCC/Clang extension glib `g_auto*` and the
+    /// `QEMU_LOCK_GUARD` family rely on).
+    pub attr_cleanup: Option<usize>,
 }
 
 impl Default for Pending {
@@ -739,6 +745,7 @@ impl Default for Pending {
             attr_constructor: false,
             attr_destructor: false,
             attr_init_priority: None,
+            attr_cleanup: None,
         }
     }
 }
@@ -1154,6 +1161,17 @@ pub struct Compiler {
     /// entry PC. The entries flatten into function scope; precise
     /// `DW_TAG_lexical_block` ranges are not emitted yet (TODO).
     pending_block_locals: Vec<crate::c5::program::VariableInfo>,
+    /// Stack of block scopes carrying `__attribute__((cleanup(fn)))`
+    /// variables, innermost last. Each entry is `(var_sym, cleanup_fn_sym)`
+    /// in declaration order. A block exit emits `fn(&var)` in reverse order
+    /// (C++-style, matching GCC) on every path out: fall-through, `return`,
+    /// `break`, and `continue`.
+    cleanup_scopes: Vec<Vec<(usize, usize)>>,
+    /// `cleanup_scopes` depth at each enclosing `break` target (loop or
+    /// `switch`) and `continue` target (loop only), innermost last. A
+    /// `break` / `continue` cleans the scopes above the recorded depth.
+    break_cleanup_depths: Vec<usize>,
+    continue_cleanup_depths: Vec<usize>,
     /// Name of the C function whose body is currently being
     /// emitted. Set on function-entry emit and cleared on the
     /// closing return.
@@ -1488,6 +1506,9 @@ impl Compiler {
             source_label: opts.source_label.clone(),
             variables: Vec::new(),
             pending_block_locals: Vec::new(),
+            cleanup_scopes: Vec::new(),
+            break_cleanup_depths: Vec::new(),
+            continue_cleanup_depths: Vec::new(),
             current_function_name: String::new(),
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),

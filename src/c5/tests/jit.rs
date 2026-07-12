@@ -1440,6 +1440,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_member_operand.c", 0),
     ("signal_nsig.c", 0),
     ("flex_array_member_static_init.c", 0),
+    ("attribute_cleanup.c", 0),
     ("array_compound_literal_static_init.c", 0),
     ("const_address_cast_and_arith.c", 0),
     ("const_conditional_address_init.c", 0),

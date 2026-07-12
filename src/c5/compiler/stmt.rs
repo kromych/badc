@@ -68,6 +68,12 @@ impl Compiler {
         self.next()?;
         self.consume(b'(', "open paren expected")?;
 
+        // C99 6.8.5.3: a for-init `__attribute__((cleanup))` variable's
+        // scope is the whole for statement. Push a cleanup scope so the
+        // init declaration registers into it; it is run where control
+        // leaves the loop (below) rather than at the enclosing block.
+        self.cleanup_scopes.push(alloc::vec::Vec::new());
+
         // C99 6.8.5.3 for-init is either an expression or a
         // declaration. The declared identifier's scope is the
         // entire for statement, so a fresh `block_symbols`
@@ -172,7 +178,30 @@ impl Compiler {
         // context. Without it, a Break inside the body would
         // bubble up to the enclosing function as a sibling stmt
         // with no loop_ctx.
+        let for_stmt_start = self.ast.stmts.len();
         self.ast_emit_for(init_ast, cond_ast, post_ast, body_s);
+
+        // Run the for-init scope's cleanups after the loop: control
+        // reaches here on both normal exit and `break` (both land in the
+        // loop's after-block). `return` cleans the scope inline through
+        // the scope stack; `continue` keeps the object (it persists
+        // across iterations, C99 6.8.5.3). The calls are read while the
+        // init binding is still live -- before the restore below.
+        if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
+            let pairs: alloc::vec::Vec<(usize, usize)> = self
+                .cleanup_scopes
+                .last()
+                .unwrap()
+                .iter()
+                .rev()
+                .cloned()
+                .collect();
+            for (var_sym, fn_sym) in pairs {
+                self.push_cleanup_call(var_sym, fn_sym);
+            }
+            self.coalesce_exit_since(for_stmt_start);
+        }
+        self.cleanup_scopes.pop();
 
         // Restore symbols shadowed by the for-init declaration so
         // the binding's scope ends with the for statement
@@ -358,6 +387,10 @@ impl Compiler {
         if self.try_parse_block_fn_prototype(lbt, is_static)? {
             return Ok(());
         }
+        // A `__attribute__((cleanup(fn)))` written before the type applies to
+        // every declarator in the list (the glib `g_auto*` / `QEMU_LOCK_GUARD`
+        // form); one written after a declarator applies to it alone.
+        let leading_cleanup = self.pending.attr_cleanup.take();
         while self.lex.tk != ';' {
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.base_is_function_type = base_is_function_type;
@@ -368,6 +401,9 @@ impl Compiler {
             self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = false;
+            // Trailing cleanup wins for this declarator; otherwise the
+            // leading one (if any) applies.
+            let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
             // C99 6.3.2.1p4: a function-pointer rvalue auto-decays
             // through any unary `*` chain. The `Symbol::fn_ptr_indirection`
             // side-channel records how many indirection levels sit between
@@ -514,10 +550,159 @@ impl Compiler {
                 self.symbols[loc_idx].is_variadic = true;
             }
 
+            // Register the cleanup after the binding is final (the
+            // automatic-storage branch above resets `was_referenced`).
+            // C99 6.7.2.1 has no such attribute; GCC/Clang require an
+            // object with automatic storage, so a `static` / `extern`
+            // declarator's cleanup is inert.
+            if let Some(fn_sym) = cleanup_fn
+                && !is_static
+                && !is_extern
+            {
+                self.register_cleanup_var(loc_idx, fn_sym);
+            }
+
             self.accept(',')?;
         }
         self.next()?;
         Ok(())
+    }
+
+    /// Register a `__attribute__((cleanup(fn)))` variable in the current
+    /// block scope. `fn(&var)` then runs on every exit from the scope.
+    /// The variable and the function are marked referenced so neither
+    /// draws an unused diagnostic.
+    pub(super) fn register_cleanup_var(&mut self, var_sym: usize, fn_sym: usize) {
+        self.symbols[var_sym].was_read = true;
+        self.symbols[var_sym].was_referenced = true;
+        self.symbols[fn_sym].was_referenced = true;
+        if let Some(scope) = self.cleanup_scopes.last_mut() {
+            scope.push((var_sym, fn_sym));
+        }
+    }
+
+    /// Build the `Stmt::Expr` for one cleanup call `fn(&var)` and push it
+    /// into the AST statement stream.
+    pub(super) fn push_cleanup_call(&mut self, var_sym: usize, fn_sym: usize) {
+        use super::super::ast::{Expr, Stmt, UnOp};
+        let pos = self.ast_src_pos();
+        let var_ty = self.symbols[var_sym].type_;
+        let ident = self.ast_emit_ident(var_sym as u32, var_ty);
+        let ptr_ty = var_ty + Ty::Ptr as i64;
+        let addr = self.ast.push_expr(
+            Expr::Unary {
+                op: UnOp::AddrOf,
+                child: ident,
+                ty: ptr_ty,
+            },
+            pos,
+        );
+        let ret_ty = self.symbols[fn_sym].type_;
+        let callee = self.ast_synthesize_callee(fn_sym as u32, ret_ty);
+        let call = self.ast.push_expr(
+            Expr::Call {
+                callee,
+                args: alloc::vec![addr],
+                ty: ret_ty,
+            },
+            pos,
+        );
+        self.ast.push_stmt(Stmt::Expr(call), pos);
+    }
+
+    /// Emit the cleanup calls for the scopes at index `from` and above
+    /// (innermost scope cleaned first; each scope's variables in reverse
+    /// declaration order, C++-style, matching GCC). Used before a
+    /// `return` (`from == 0`), `break`, or `continue`.
+    fn emit_cleanups_above(&mut self, from: usize) {
+        let mut pending: alloc::vec::Vec<(usize, usize)> = alloc::vec::Vec::new();
+        for scope in self.cleanup_scopes[from..].iter().rev() {
+            for &(var_sym, fn_sym) in scope.iter().rev() {
+                pending.push((var_sym, fn_sym));
+            }
+        }
+        for (var_sym, fn_sym) in pending {
+            self.push_cleanup_call(var_sym, fn_sym);
+        }
+    }
+
+    /// True when any cleanup scope at index `from` and above holds a
+    /// variable, i.e. a `return` / `break` / `continue` here must run
+    /// cleanup functions.
+    fn has_cleanups_above(&self, from: usize) -> bool {
+        self.cleanup_scopes[from..].iter().any(|s| !s.is_empty())
+    }
+
+    /// Coalesce the sibling statements pushed since `start` (a spill, the
+    /// cleanup calls, and the jump / return) into one Compound. The
+    /// one-statement-per-body contexts (`if` / loop bodies, the block-item
+    /// loop) capture a body by its last arena entry, so a bare `return`
+    /// under a cleanup must resolve to a single statement carrying all of
+    /// them, not just the trailing jump.
+    fn coalesce_exit_since(&mut self, start: usize) {
+        if self.ast.stmts.len().saturating_sub(start) > 1 {
+            let ids: alloc::vec::Vec<super::super::ast::StmtId> = (start..self.ast.stmts.len())
+                .map(|i| i as super::super::ast::StmtId)
+                .collect();
+            self.ast_wrap_block_items(&ids);
+        }
+    }
+
+    /// Spill `value` (already converted to `ty`) into a fresh unnamed
+    /// stack temporary and return an lvalue-ident that reloads it. Used
+    /// so a `return <expr>;` under an active cleanup evaluates the value
+    /// before the cleanup functions run (C's scope-exit order): e.g.
+    /// `return g_strdup(s)` copies before a `g_autofree s` is freed.
+    fn spill_expr_to_temp(
+        &mut self,
+        value: super::super::ast::ExprId,
+        ty: i64,
+    ) -> super::super::ast::ExprId {
+        use super::super::ast::{Expr, Stmt};
+        let slot = self.reserve_slots(self.local_storage_slots(ty, 1));
+        let sym_idx = self.symbols.len();
+        // The shadow fields mirror the live ones so the function-exit
+        // `restore_shadowed_symbol` leaves this compiler-generated local
+        // a `Loc`, rather than resetting its class to the zero default.
+        self.symbols.push(crate::c5::symbol::Symbol {
+            class: Token::Loc as i64,
+            type_: ty,
+            val: slot,
+            h_class: Token::Loc as i64,
+            h_type: ty,
+            h_val: slot,
+            ..Default::default()
+        });
+        // The symbol index runs a hash array in lockstep with `symbols`;
+        // a push without a matching `record` desyncs it and the next
+        // interned identifier lands at the wrong index. The empty name is
+        // never the target of a source-level lookup.
+        self.symbol_index.record(crate::c5::lexer::hash_name(b""));
+        let pos = self.ast_src_pos();
+        let mk_ident = |c: &mut Self| {
+            c.ast.push_expr(
+                Expr::Ident {
+                    sym: sym_idx as u32,
+                    ty,
+                    class: Token::Loc as i64,
+                    val: slot,
+                    is_thread_local: false,
+                    array_size: 0,
+                },
+                pos,
+            )
+        };
+        let lhs = mk_ident(self);
+        let assign = self.ast.push_expr(
+            Expr::Assign {
+                lhs,
+                rhs: value,
+                ty,
+            },
+            pos,
+        );
+        self.ast.push_stmt(Stmt::Expr(assign), pos);
+        mk_ident(self)
     }
 
     /// `{ ... }`. C99 block-scope: declarations may appear anywhere a
@@ -526,6 +711,7 @@ impl Compiler {
     /// exit.
     fn parse_block_stmt(&mut self) -> Result<super::super::ast::StmtId, C5Error> {
         self.next()?;
+        self.cleanup_scopes.push(alloc::vec::Vec::new());
         // C99 6.2.1: a block introduces a new scope for struct,
         // union, and enum tags. Tag bindings declared in this block
         // shadow same-named tags in any enclosing scope and go out of
@@ -547,6 +733,10 @@ impl Compiler {
                 || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
             {
                 self.pending.attr_maybe_unused = false;
+                // Clear per-item so a `cleanup` attribute leading a
+                // statement (not a declaration) cannot leak onto the next
+                // declaration; the declaration path re-reads it after this.
+                self.pending.attr_cleanup = None;
                 self.skip_attribute_specifiers()?;
                 leading_maybe_unused = self.pending.attr_maybe_unused;
                 if self.lex.tk == '}' {
@@ -607,6 +797,29 @@ impl Compiler {
                 top_level_ids.push(item_id);
             }
         }
+        // Fall-through exit: run this block's `__attribute__((cleanup))`
+        // functions in reverse declaration order, before any VLA arena
+        // reclaim below (a cleanup may read VLA storage). When the block
+        // ends in a terminator these are emitted after it and the walker
+        // never reaches them; the terminator's own path already cleaned.
+        if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
+            let pairs: alloc::vec::Vec<(usize, usize)> = self
+                .cleanup_scopes
+                .last()
+                .unwrap()
+                .iter()
+                .rev()
+                .cloned()
+                .collect();
+            for (var_sym, fn_sym) in pairs {
+                let before = self.ast.stmts.len();
+                self.push_cleanup_call(var_sym, fn_sym);
+                for id in before..self.ast.stmts.len() {
+                    top_level_ids.push(id as super::super::ast::StmtId);
+                }
+            }
+        }
+        self.cleanup_scopes.pop();
         // C99 6.2.4p2: bracket a VLA-declaring block so the arena top
         // is snapshotted on entry and restored on exit, reclaiming the
         // VLA storage (per iteration when the block is a loop body).
@@ -1894,7 +2107,13 @@ impl Compiler {
             }
             self.flush_pending_stores();
             self.consume(b';', "semicolon expected after break")?;
+            // Run the cleanup functions of every scope opened inside the
+            // loop / switch being left (C++-style scope-exit order).
+            let start = self.ast.stmts.len();
+            let depth = self.break_cleanup_depths.last().copied().unwrap_or(0);
+            self.emit_cleanups_above(depth);
             self.ast_emit_break();
+            self.coalesce_exit_since(start);
         } else if self.lex.tk == Token::Continue {
             self.next()?;
             if self.loop_continue_depth == 0 {
@@ -1902,7 +2121,11 @@ impl Compiler {
             }
             self.flush_pending_stores();
             self.consume(b';', "semicolon expected after continue")?;
+            let start = self.ast.stmts.len();
+            let depth = self.continue_cleanup_depths.last().copied().unwrap_or(0);
+            self.emit_cleanups_above(depth);
             self.ast_emit_continue();
+            self.coalesce_exit_since(start);
         } else if self.lex.tk == Token::Return {
             let line = self.lex.line;
             self.next()?;
@@ -2002,7 +2225,27 @@ impl Compiler {
                 );
             }
             self.emit_dead_stores_and_flush();
+            // Run every enclosing scope's `__attribute__((cleanup))`
+            // functions before leaving the function. C's scope-exit order
+            // evaluates the returned value first, so spill a returned value
+            // to a temporary and run the cleanups between its evaluation
+            // and the return; a void return's expression is evaluated for
+            // side effects first, then discarded.
+            let start = self.ast.stmts.len();
+            if self.has_cleanups_above(0) {
+                if returns_void {
+                    if let Some(v) = return_value {
+                        let pos = self.ast_src_pos();
+                        self.ast.push_stmt(super::super::ast::Stmt::Expr(v), pos);
+                        return_value = None;
+                    }
+                } else if let Some(v) = return_value {
+                    return_value = Some(self.spill_expr_to_temp(v, ret_ty));
+                }
+                self.emit_cleanups_above(0);
+            }
             self.ast_emit_return(return_value);
+            self.coalesce_exit_since(start);
             self.consume(b';', "semicolon expected")?;
         } else if self.lex.tk == '{' {
             self.parse_block_stmt()?;

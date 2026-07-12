@@ -439,6 +439,11 @@ impl Compiler {
                                 self.symbols[self.lex.curr_id_idx].name.as_str(),
                                 "vector_size" | "__vector_size__"
                             );
+                        let is_cleanup = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "cleanup" | "__cleanup__"
+                            );
                         let mut saw_aligned = false;
                         let mut saw_constructor = false;
                         let mut saw_destructor = false;
@@ -483,6 +488,24 @@ impl Compiler {
                             if self.lex.tk != ')' {
                                 return Err(
                                     self.compile_err("`)` expected after `vector_size` operand")
+                                );
+                            }
+                            self.next()?;
+                        } else if is_cleanup && self.lex.tk == '(' {
+                            // GCC `cleanup(fn)`: name the function to call with
+                            // the variable's address at scope exit. The operand
+                            // is an identifier already in scope.
+                            self.next()?; // `(`
+                            if self.lex.tk != Token::Id {
+                                return Err(
+                                    self.compile_err("`cleanup` operand must be a function name")
+                                );
+                            }
+                            self.pending.attr_cleanup = Some(self.lex.curr_id_idx);
+                            self.next()?; // function name
+                            if self.lex.tk != ')' {
+                                return Err(
+                                    self.compile_err("`)` expected after `cleanup` operand")
                                 );
                             }
                             self.next()?;

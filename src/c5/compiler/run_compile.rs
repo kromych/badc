@@ -179,6 +179,7 @@ impl Compiler {
             self.pending.attr_constructor = false;
             self.pending.attr_destructor = false;
             self.pending.attr_init_priority = None;
+            self.pending.attr_cleanup = None;
             self.pending_is_inline = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
@@ -1162,6 +1163,10 @@ impl Compiler {
                     // file-scope one. Nested blocks push their own scopes
                     // through parse_block_stmt.
                     self.tag_scopes.push(alloc::vec::Vec::new());
+                    // The function body's top-level block scope for
+                    // `__attribute__((cleanup))` variables; cleaned on
+                    // fall-through (below) and on every `return`.
+                    self.cleanup_scopes.push(alloc::vec::Vec::new());
                     while self.lex.tk != '}' {
                         // C23 6.7.13 / 6.8: an attribute-specifier-
                         // sequence may lead either a declaration or a
@@ -1173,6 +1178,7 @@ impl Compiler {
                             || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
                         {
                             self.pending.attr_maybe_unused = false;
+                            self.pending.attr_cleanup = None;
                             self.skip_attribute_specifiers()?;
                             leading_maybe_unused = self.pending.attr_maybe_unused;
                             if self.lex.tk == '}' {
@@ -1223,6 +1229,27 @@ impl Compiler {
                             top_level_ids.push(item_id);
                         }
                     }
+                    // Fall-through / implicit return: run the body's
+                    // top-level `__attribute__((cleanup))` functions in
+                    // reverse declaration order before the synthetic return.
+                    if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
+                        let pairs: alloc::vec::Vec<(usize, usize)> = self
+                            .cleanup_scopes
+                            .last()
+                            .unwrap()
+                            .iter()
+                            .rev()
+                            .cloned()
+                            .collect();
+                        for (var_sym, fn_sym) in pairs {
+                            let before = self.ast.stmts.len();
+                            self.push_cleanup_call(var_sym, fn_sym);
+                            for id in before..self.ast.stmts.len() {
+                                top_level_ids.push(id as super::super::ast::StmtId);
+                            }
+                        }
+                    }
+                    self.cleanup_scopes.pop();
                     self.tag_scopes.pop();
                     // Wrap the function's top-level stmts into a
                     // Compound and pin it as `ast.body` so the

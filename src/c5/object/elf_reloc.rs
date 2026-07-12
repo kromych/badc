@@ -130,6 +130,12 @@ const R_AARCH64_ABS32: u32 = 258;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
+// GOT-indirect page + offset: address-taking an undefined external symbol
+// goes through the GOT so the object links into a PIE / shared object where
+// the symbol binds at run time (a direct ADR_PREL page relocation is only
+// valid for a symbol resolved within the same image).
+const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
+const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;
@@ -889,12 +895,14 @@ pub(super) fn write_relocatable(
             .position(|n| *n == r.symbol_name.as_str())
             .expect("user_extern_data_names contains every ref's name");
         let sym_idx = user_extern_data_sym_idx[pos] as u64;
-        emit_addr_fixup_relocs(
+        // Address-of an undefined external symbol goes through the GOT (the
+        // symbol binds at run time in a PIE / shared object). The paired `add`
+        // in `.text` is rewritten to an `ldr` below.
+        emit_got_ref_relocs(
             machine_for_rela,
             &mut rela_bytes,
             r.instr_offset as u64,
             sym_idx,
-            0,
         );
     }
 
@@ -998,10 +1006,13 @@ pub(super) fn write_relocatable(
     let mut sh: Vec<Elf64Shdr> = Vec::with_capacity(num_sections);
     sh.push(Elf64Shdr::default()); // SHN_UNDEF
 
-    // .text
+    // .text -- the extern-address `add`s become `ldr`s so they read the GOT
+    // slot (see `rewrite_extern_adds_to_got_ldr`). Same length as `build.text`.
+    let text_body =
+        rewrite_extern_adds_to_got_ldr(machine_for_rela, &build.text, &build.user_extern_data_refs);
     let text_off = round_up(out.len() as u64, 16);
     out.resize(text_off as usize, 0);
-    out.extend_from_slice(&build.text);
+    out.extend_from_slice(&text_body);
     sh.push(Elf64Shdr {
         sh_name: shstrtab_offs[0],
         sh_type: SHT_PROGBITS,
@@ -1713,6 +1724,61 @@ fn emit_addr_fixup_relocs(
             write_struct(out, &rela);
         }
     }
+}
+
+/// Emit the GOT-indirect relocs for address-taking an undefined external
+/// symbol: `R_AARCH64_ADR_GOT_PAGE` at the `adrp` and
+/// `R_AARCH64_LD64_GOT_LO12_NC` at the paired `ldr`. The `add` the codegen
+/// left is rewritten to that `ldr` by [`rewrite_extern_adds_to_got_ldr`].
+/// x86_64 keeps the direct PC-relative form for now (GOTPCREL is a TODO).
+fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, sym_idx: u64) {
+    match machine {
+        Machine::Aarch64 => {
+            let page = Elf64Rela {
+                r_offset: instr_offset,
+                r_info: (sym_idx << 32) | R_AARCH64_ADR_GOT_PAGE as u64,
+                r_addend: 0,
+            };
+            let lo12 = Elf64Rela {
+                r_offset: instr_offset + 4,
+                r_info: (sym_idx << 32) | R_AARCH64_LD64_GOT_LO12_NC as u64,
+                r_addend: 0,
+            };
+            write_struct(out, &page);
+            write_struct(out, &lo12);
+        }
+        Machine::X86_64 => emit_addr_fixup_relocs(machine, out, instr_offset, sym_idx, 0),
+    }
+}
+
+/// Rewrite the `add` half of each `adrp + add` external-address load into an
+/// `ldr` so it dereferences the GOT slot (paired with the GOT relocs emitted
+/// by [`emit_got_ref_relocs`]). Returns a copy of `.text` with the rewrites
+/// applied; the shared `build.text` is untouched so the JIT / direct-image
+/// paths keep the direct form. aarch64 only.
+fn rewrite_extern_adds_to_got_ldr(
+    machine: Machine,
+    text: &[u8],
+    refs: &[crate::c5::codegen::UserExternDataRef],
+) -> alloc::vec::Vec<u8> {
+    let mut body = text.to_vec();
+    if machine != Machine::Aarch64 {
+        return body;
+    }
+    for r in refs {
+        let off = r.instr_offset + 4; // the `add` following the `adrp`
+        if off + 4 > body.len() {
+            continue;
+        }
+        let add = u32::from_le_bytes([body[off], body[off + 1], body[off + 2], body[off + 3]]);
+        let rd = add & 0x1f;
+        let rn = (add >> 5) & 0x1f;
+        // `ldr Xrd, [Xrn, #0]` (0xF9400000 | Rn<<5 | Rt); the :got_lo12: reloc
+        // fills the scaled imm12.
+        let ldr = 0xF940_0000u32 | (rn << 5) | rd;
+        body[off..off + 4].copy_from_slice(&ldr.to_le_bytes());
+    }
+    body
 }
 
 #[cfg(test)]

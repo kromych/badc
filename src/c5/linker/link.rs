@@ -32,6 +32,8 @@ const R_X86_64_PLT32: u32 = 4;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
+const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
+const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
 
 /// Result of merging N [`NativeObject`]s. Carries enough state
 /// for a final-image writer to lay out `.text` / `.data` at the
@@ -609,6 +611,38 @@ pub fn link_native_objects_with_options(
                 ))
             })?;
             let patch_offset = text_base + reloc.offset as usize;
+            // GOT-relaxation: badc's own image is ET_EXEC (no symbol
+            // preemption), so an emitted GOT reference (adrp :got: + ldr) to a
+            // resolvable symbol is materialized directly. Convert the pair to
+            // ADR_PREL / ADD_ABS and rewrite the `ldr` back to the `add` it came
+            // from; the rest of the loop then resolves it like any direct
+            // page-relative reference. An external linker keeps the GOT.
+            let relaxed_reloc;
+            let reloc = if reloc.rtype == R_AARCH64_ADR_GOT_PAGE
+                || reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC
+            {
+                if reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC && patch_offset + 4 <= text.len() {
+                    let ldr = u32::from_le_bytes([
+                        text[patch_offset],
+                        text[patch_offset + 1],
+                        text[patch_offset + 2],
+                        text[patch_offset + 3],
+                    ]);
+                    let add = 0x9100_0000u32 | (ldr & 0x3ff); // add Xrd, Xrn, #0
+                    text[patch_offset..patch_offset + 4].copy_from_slice(&add.to_le_bytes());
+                }
+                relaxed_reloc = NativeReloc {
+                    rtype: if reloc.rtype == R_AARCH64_ADR_GOT_PAGE {
+                        R_AARCH64_ADR_PREL_PG_HI21
+                    } else {
+                        R_AARCH64_ADD_ABS_LO12_NC
+                    },
+                    ..*reloc
+                };
+                &relaxed_reloc
+            } else {
+                reloc
+            };
             match sym.section {
                 NativeSymSection::Text => {
                     let target = text_bases[i] as i64 + sym.value as i64 + reloc.addend;

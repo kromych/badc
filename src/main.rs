@@ -742,25 +742,86 @@ fn run() {
         }
     }
 
-    // Resolve `-l<name>` against `-L<dir>` paths -- each lib
-    // becomes a positional archive in declared order.
+    // Resolve `-l<name>` against the `-L<dir>` paths, then the standard
+    // system directories. A shared object (`lib<name>.so`) is preferred
+    // over a static archive (`lib<name>.a`), matching `ld`'s default
+    // search order: the `.so` becomes a DT_NEEDED dependency whose
+    // exports resolve otherwise-undefined references, the `.a` a
+    // positional archive whose members are pulled on demand.
+    let mut shared_libs: Vec<badc::SharedLibrary> = Vec::new();
+    let mut search_paths: Vec<String> = library_paths.clone();
+    for d in [
+        "/usr/lib64",
+        "/lib64",
+        "/usr/lib",
+        "/lib",
+        "/usr/lib/x86_64-linux-gnu",
+        "/usr/lib/aarch64-linux-gnu",
+    ] {
+        search_paths.push(d.to_string());
+    }
     for name in &lib_names {
-        let candidate = format!("lib{name}.a");
-        let mut found: Option<String> = None;
-        for dir in &library_paths {
-            let p = std::path::Path::new(dir).join(&candidate);
-            if p.exists() {
-                found = Some(p.to_string_lossy().into_owned());
+        // (path, is_shared)
+        let mut resolved: Option<(String, bool)> = None;
+        'search: for dir in &search_paths {
+            let so = std::path::Path::new(dir).join(format!("lib{name}.so"));
+            if so.exists() {
+                resolved = Some((so.to_string_lossy().into_owned(), true));
+                break;
+            }
+            // A versioned `lib<name>.so.N` when no linker-name symlink
+            // is installed; pick the shortest match (the bare SONAME
+            // version, e.g. `libz.so.1` over `libz.so.1.3.1`).
+            if let Ok(rd) = std::fs::read_dir(dir) {
+                let prefix = format!("lib{name}.so.");
+                let mut best: Option<String> = None;
+                for ent in rd.flatten() {
+                    let fname = ent.file_name().to_string_lossy().into_owned();
+                    if fname.starts_with(&prefix)
+                        && best.as_ref().is_none_or(|b| fname.len() < b.len())
+                    {
+                        best = Some(fname);
+                    }
+                }
+                if let Some(b) = best {
+                    let p = std::path::Path::new(dir).join(b);
+                    resolved = Some((p.to_string_lossy().into_owned(), true));
+                    break 'search;
+                }
+            }
+            let a = std::path::Path::new(dir).join(format!("lib{name}.a"));
+            if a.exists() {
+                resolved = Some((a.to_string_lossy().into_owned(), false));
                 break;
             }
         }
-        match found {
-            Some(p) => archives.push(p),
+        match resolved {
+            Some((p, true)) => match std::fs::read(&p) {
+                Ok(bytes) => match badc::parse_shared_library(&bytes) {
+                    Ok(mut lib) => {
+                        // No DT_SONAME (some libraries omit it): record the
+                        // linker name as the DT_NEEDED string.
+                        if lib.soname.is_empty() {
+                            lib.soname = format!("lib{name}.so");
+                        }
+                        shared_libs.push(lib);
+                    }
+                    Err(e) => {
+                        eprintln!("badc: error: reading `{p}` as a shared library: {e}");
+                        std::process::exit(1);
+                    }
+                },
+                Err(e) => {
+                    eprintln!("badc: error: cannot read `{p}`: {e}");
+                    std::process::exit(1);
+                }
+            },
+            Some((p, false)) => archives.push(p),
             None => {
                 eprintln!(
-                    "badc: cannot find `lib{name}.a` on any -L search path \
+                    "badc: cannot find `lib{name}.so` or `lib{name}.a` on any search path \
                      ({} probed)",
-                    library_paths.len()
+                    search_paths.len()
                 );
                 std::process::exit(1);
             }
@@ -1377,8 +1438,11 @@ fn run() {
         // supplies at `dlopen` time; let an unresolved global become a
         // load-time import instead of a link error.
         let allow_undefined = mode == Mode::SharedLibrary;
-        let mut merged = match badc::link_native_objects_with_options(&native_objs, allow_undefined)
-        {
+        let mut merged = match badc::link_native_objects_with_shared_libs(
+            &native_objs,
+            allow_undefined,
+            &shared_libs,
+        ) {
             Ok(m) => m,
             Err(e) => {
                 eprint_diagnostic(format!("badc: {e}"));

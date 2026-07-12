@@ -22,7 +22,9 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
-use super::object::{ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection};
+use super::object::{
+    ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection, SharedLibrary,
+};
 
 /// AArch64 reloc-type constants. Kept in step with the writer
 /// and the reader; a future common module lifts them out of
@@ -281,9 +283,30 @@ pub fn link_native_objects_with_options(
     objs: &[NativeObject],
     allow_undefined: bool,
 ) -> Result<MergedNative, C5Error> {
+    link_native_objects_with_shared_libs(objs, allow_undefined, &[])
+}
+
+/// Link, resolving otherwise-undefined references against the exports
+/// of the given shared libraries (the `-l<name>` inputs). A reference
+/// a library exports becomes a runtime import; every referenced
+/// library is recorded as a `DT_NEEDED` dependency, so the dynamic
+/// loader binds the import at load time. This is how a system linker
+/// resolves undefined references against a `.so` on the `-l` path.
+pub fn link_native_objects_with_shared_libs(
+    objs: &[NativeObject],
+    allow_undefined: bool,
+    shared_libs: &[SharedLibrary],
+) -> Result<MergedNative, C5Error> {
     if objs.is_empty() {
         return Err(err("link_native_objects: no input objects"));
     }
+    // Union of every shared library's exports: an undefined global
+    // reference whose name appears here is a load-time import, not a
+    // link error.
+    let shlib_exports: BTreeSet<&str> = shared_libs
+        .iter()
+        .flat_map(|l| l.exports.iter().map(String::as_str))
+        .collect();
     let machine = objs[0].machine;
     for (i, obj) in objs.iter().enumerate().skip(1) {
         if obj.machine != machine {
@@ -843,7 +866,11 @@ pub fn link_native_objects_with_options(
                             )?;
                             continue;
                         }
-                        if sym.binding == 1 && !allow_undefined && !is_data_binding {
+                        if sym.binding == 1
+                            && !allow_undefined
+                            && !is_data_binding
+                            && !shlib_exports.contains(sym.name.as_str())
+                        {
                             return Err(link_err(&format!(
                                 "undefined reference to `{}`",
                                 sym.name,
@@ -1166,6 +1193,15 @@ pub fn link_native_objects_with_options(
             if seen_dylibs.insert(d.clone()) {
                 dylibs.push(d.clone());
             }
+        }
+    }
+    // Each `-l<name>` shared library is a DT_NEEDED dependency so the
+    // dynamic loader resolves the flat imports admitted against its
+    // exports above. Recorded by SONAME (the canonical name a
+    // dependent names), deduped against the `#pragma dylib` set.
+    for lib in shared_libs {
+        if !lib.soname.is_empty() && seen_dylibs.insert(lib.soname.clone()) {
+            dylibs.push(lib.soname.clone());
         }
     }
     // Build the merged import->dylib map. Each unit's per-import
@@ -2180,6 +2216,46 @@ mod tests {
             resolved as u64, helper_def.value,
             "post-link bl should reach helper at 0x{:x}, got 0x{resolved:x}",
             helper_def.value,
+        );
+    }
+
+    /// An otherwise-undefined reference resolves against a shared
+    /// library's exports: the executable link succeeds instead of
+    /// erroring, the symbol becomes a load-time import, and the
+    /// library is recorded as a DT_NEEDED dependency by its SONAME.
+    #[test]
+    fn shared_library_export_resolves_undefined_reference() {
+        let target = Target::LinuxAarch64;
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        let copts = crate::CompileOptions::default().with_no_entry_point(true);
+        let src = "int ext_fn(void); int caller(void){ return ext_fn(); }\n";
+        let caller = compile_native_with(src, target, opts, copts.clone());
+
+        // With no provider, an executable link rejects the reference.
+        let unresolved = compile_native_with(src, target, opts, copts);
+        let err = link_native_objects(&[unresolved]).unwrap_err();
+        assert!(
+            alloc::format!("{err}").contains("ext_fn"),
+            "expected an undefined-reference error naming ext_fn, got {err}",
+        );
+
+        // A shared library that exports it turns the reference into a
+        // load-time import and records the library as DT_NEEDED.
+        let lib = SharedLibrary {
+            soname: alloc::string::String::from("libext.so.1"),
+            exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
+        };
+        let merged = link_native_objects_with_shared_libs(&[caller], false, &[lib])
+            .expect("link resolves ext_fn against the shared library");
+        assert!(
+            merged.dylibs.iter().any(|d| d == "libext.so.1"),
+            "DT_NEEDED should include the shared library, got {:?}",
+            merged.dylibs,
+        );
+        assert!(
+            merged.imports.iter().any(|n| n == "ext_fn"),
+            "ext_fn should be recorded as a runtime import",
         );
     }
 

@@ -331,6 +331,12 @@ impl Compiler {
         constructor: &mut bool,
         destructor: &mut bool,
     ) {
+        // The bare `noreturn` spelling lexes as the <stdnoreturn.h>
+        // keyword token, not an identifier; both name this attribute.
+        if self.lex.tk == Token::Noreturn {
+            *noreturn = true;
+            return;
+        }
         if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.as_str();
             if n == "packed" || n == "__packed__" {

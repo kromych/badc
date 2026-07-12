@@ -85,6 +85,16 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
         }
     }
     out.sort_by_key(|f| f.ent_pc);
+    // Correctness cleanup at every optimization level, before the
+    // static DCE below reads the call graph: fold constant-condition
+    // branches the walker could not drop (constant loop conditions)
+    // and delete the unreachable blocks they orphan -- including the
+    // tails sealed off behind `noreturn` calls -- so a dead arm's
+    // calls neither pin a static function here nor lower into calls
+    // and relocations against symbols the program never references.
+    // The -O pipeline reruns both post-inline.
+    crate::c5::codegen::passes::constfold_branch::run(&mut out);
+    crate::c5::codegen::passes::prune_unreachable::run(&mut out);
     drop_unreachable_statics(&mut out, program);
     Ok(out)
 }
@@ -158,13 +168,11 @@ fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
             continue;
         }
         let Some(&idx) = by_pc.get(&pc) else { continue };
-        for inst in &funcs[idx].insts {
-            match inst {
-                Inst::Call { target_pc, .. } => queue.push(*target_pc),
-                Inst::ImmCode(target_pc) => queue.push(*target_pc),
-                _ => {}
-            }
-        }
+        for_each_block_inst(&funcs[idx], |inst| match inst {
+            Inst::Call { target_pc, .. } => queue.push(*target_pc),
+            Inst::ImmCode(target_pc) => queue.push(*target_pc),
+            _ => {}
+        });
     }
 
     funcs.retain(|f| {
@@ -280,7 +288,7 @@ pub(crate) fn compute_live_functions(
     }
     while let Some(ent) = work.pop() {
         let Some(f) = by_ent.get(&ent) else { continue };
-        for inst in &f.insts {
+        for_each_block_inst(f, |inst| {
             let target = match inst {
                 Inst::Call { target_pc, .. } => Some(*target_pc),
                 Inst::ImmCode(t) => Some(*t),
@@ -292,9 +300,22 @@ pub(crate) fn compute_live_functions(
             {
                 work.push(t);
             }
-        }
+        });
     }
     live
+}
+
+/// Visit the instructions belonging to a function's blocks. The
+/// unreachable-block prune drops a dead block from `blocks` but leaves
+/// its instructions in the flat `insts` array, so a liveness scan over
+/// `insts` would resurrect call targets only dead code names; the block
+/// ranges are the live view.
+fn for_each_block_inst(f: &FunctionSsa, mut visit: impl FnMut(&crate::c5::ir::Inst)) {
+    for blk in &f.blocks {
+        for v in blk.inst_range.clone() {
+            visit(&f.insts[v as usize]);
+        }
+    }
 }
 
 /// Sorted data-object start offsets and a per-object live flag, shared by

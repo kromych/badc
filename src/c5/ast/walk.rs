@@ -864,7 +864,24 @@ impl<'a> Walker<'a> {
                 // value. The walker emits the side-effecting
                 // chain; the SSA DCE pass drops the dead final
                 // value if it has no other uses.
-                let _ = self.walk_expr_rvalue(b, *e)?;
+                let e = *e;
+                let _ = self.walk_expr_rvalue(b, e)?;
+                // A direct call to a `noreturn` function ends the
+                // block: the statements after it are unreachable
+                // (C11 6.7.4p8) and the unreachable-block prune
+                // drops them, so a dead tail's calls never reach
+                // the object. The sealing return never executes.
+                if let Expr::Call { callee, .. } = self.ast.expr(e)
+                    && let Expr::Ident { sym, .. } = self.ast.expr(*callee)
+                    && self
+                        .symbols
+                        .get(*sym as usize)
+                        .is_some_and(|s| s.is_noreturn)
+                {
+                    let zero = b.imm(0);
+                    b.return_(zero);
+                    return Ok(true);
+                }
                 Ok(false)
             }
             Stmt::Compound(items) => {
@@ -4125,26 +4142,36 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Whether the statement subtree defines a label a `goto` or an
-    /// enclosing `switch` could target (`Labeled` / `Case` /
-    /// `Default`). A constant-condition `if` may drop its dead branch
+    /// Whether the statement subtree defines a label reachable from
+    /// outside it: a `goto` target (`Labeled`) anywhere within, or a
+    /// `case` / `default` belonging to a `switch` that encloses the
+    /// subtree. A constant-condition `if` may drop its dead branch
     /// only when that branch defines none, since the branch's block
-    /// would otherwise never be emitted for the jump to reach.
+    /// would otherwise never be emitted for the jump to reach. A
+    /// `switch` wholly inside the branch owns its case labels -- its
+    /// dispatch drops with the branch -- so those don't pin it.
     fn stmt_defines_label(&self, id: StmtId) -> bool {
+        self.stmt_defines_external_label(id, false)
+    }
+
+    fn stmt_defines_external_label(&self, id: StmtId, cases_owned: bool) -> bool {
         match self.ast.stmt(id) {
-            Stmt::Labeled { .. } | Stmt::Case { .. } | Stmt::Default { .. } => true,
+            Stmt::Labeled { .. } => true,
+            Stmt::Case { body, .. } | Stmt::Default { body } => {
+                !cases_owned || self.stmt_defines_external_label(*body, cases_owned)
+            }
             Stmt::Compound(items) => items.iter().any(|it| match it {
-                super::BlockItem::Stmt(s) => self.stmt_defines_label(*s),
+                super::BlockItem::Stmt(s) => self.stmt_defines_external_label(*s, cases_owned),
                 super::BlockItem::Decl(_) => false,
             }),
             Stmt::If { then_s, else_s, .. } => {
-                self.stmt_defines_label(*then_s)
-                    || else_s.is_some_and(|e| self.stmt_defines_label(e))
+                self.stmt_defines_external_label(*then_s, cases_owned)
+                    || else_s.is_some_and(|e| self.stmt_defines_external_label(e, cases_owned))
             }
-            Stmt::While { body, .. }
-            | Stmt::DoWhile { body, .. }
-            | Stmt::For { body, .. }
-            | Stmt::Switch { body, .. } => self.stmt_defines_label(*body),
+            Stmt::While { body, .. } | Stmt::DoWhile { body, .. } | Stmt::For { body, .. } => {
+                self.stmt_defines_external_label(*body, cases_owned)
+            }
+            Stmt::Switch { body, .. } => self.stmt_defines_external_label(*body, true),
             _ => false,
         }
     }

@@ -2461,3 +2461,57 @@ fn constructor_links_into_executable_with_runtime() {
         );
     }
 }
+
+#[test]
+fn dead_arm_switch_and_noreturn_tail_drop_their_callees() {
+    // Two shapes the constant-branch elimination must cover so an
+    // undefined fallback symbol is never referenced from the object:
+    //   * an `if (0)` arm containing a whole `switch` (its case labels
+    //     are owned by the dropped dispatch, so they don't pin it);
+    //   * the tail behind a statement-level call to a `noreturn`
+    //     function (C11 6.7.4p8), in each accepted spelling.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         __attribute__((noreturn)) extern void die_attr(void);\n\
+         _Noreturn void die_kw(void);\n\
+         static int sw_helper(int x) {{ return x * 2; }}\n\
+         static int nr_helper_a(int x) {{ return x + 1; }}\n\
+         static int nr_helper_k(int x) {{ return x + 2; }}\n\
+         int probe(int v, int s) {{\n\
+             if (0) {{\n\
+                 int x;\n\
+                 switch (s) {{\n\
+                 case 1 ... 7: x = sw_helper(s); break;\n\
+                 default: x = 0;\n\
+                 }}\n\
+                 return x;\n\
+             }}\n\
+             if (v == 1) {{ die_attr(); return nr_helper_a(v); }}\n\
+             if (v == 2) {{ die_kw(); return nr_helper_k(v); }}\n\
+             return 9;\n\
+         }}\n\
+         int main(void) {{ return probe(0, 0) - 9; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    assert!(has(b"probe"), "the reachable function must survive");
+    assert!(
+        !has(b"sw_helper"),
+        "a helper only the dead switch arm names must not be emitted"
+    );
+    assert!(
+        !has(b"nr_helper_a"),
+        "a helper behind an attribute-noreturn call must not be emitted"
+    );
+    assert!(
+        !has(b"nr_helper_k"),
+        "a helper behind a _Noreturn call must not be emitted"
+    );
+}

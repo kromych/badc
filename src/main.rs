@@ -761,62 +761,15 @@ fn run() {
         search_paths.push(d.to_string());
     }
     for name in &lib_names {
-        // (path, is_shared)
-        let mut resolved: Option<(String, bool)> = None;
-        'search: for dir in &search_paths {
-            let so = std::path::Path::new(dir).join(format!("lib{name}.so"));
-            if so.exists() {
-                resolved = Some((so.to_string_lossy().into_owned(), true));
-                break;
-            }
-            // A versioned `lib<name>.so.N` when no linker-name symlink
-            // is installed; pick the shortest match (the bare SONAME
-            // version, e.g. `libz.so.1` over `libz.so.1.3.1`).
-            if let Ok(rd) = std::fs::read_dir(dir) {
-                let prefix = format!("lib{name}.so.");
-                let mut best: Option<String> = None;
-                for ent in rd.flatten() {
-                    let fname = ent.file_name().to_string_lossy().into_owned();
-                    if fname.starts_with(&prefix)
-                        && best.as_ref().is_none_or(|b| fname.len() < b.len())
-                    {
-                        best = Some(fname);
-                    }
-                }
-                if let Some(b) = best {
-                    let p = std::path::Path::new(dir).join(b);
-                    resolved = Some((p.to_string_lossy().into_owned(), true));
-                    break 'search;
-                }
-            }
-            let a = std::path::Path::new(dir).join(format!("lib{name}.a"));
-            if a.exists() {
-                resolved = Some((a.to_string_lossy().into_owned(), false));
-                break;
-            }
-        }
-        match resolved {
-            Some((p, true)) => match std::fs::read(&p) {
-                Ok(bytes) => match badc::parse_shared_library(&bytes) {
-                    Ok(mut lib) => {
-                        // No DT_SONAME (some libraries omit it): record the
-                        // linker name as the DT_NEEDED string.
-                        if lib.soname.is_empty() {
-                            lib.soname = format!("lib{name}.so");
-                        }
-                        shared_libs.push(lib);
-                    }
-                    Err(e) => {
-                        eprintln!("badc: error: reading `{p}` as a shared library: {e}");
-                        std::process::exit(1);
-                    }
-                },
-                Err(e) => {
-                    eprintln!("badc: error: cannot read `{p}`: {e}");
+        match find_library(name, &search_paths) {
+            Some(p) => {
+                if let Err(e) =
+                    ingest_linker_input(&p, &search_paths, &mut shared_libs, &mut archives, 0)
+                {
+                    eprintln!("badc: error: {e}");
                     std::process::exit(1);
                 }
-            },
-            Some((p, false)) => archives.push(p),
+            }
             None => {
                 eprintln!(
                     "badc: cannot find `lib{name}.so` or `lib{name}.a` on any search path \
@@ -824,6 +777,27 @@ fn run() {
                     search_paths.len()
                 );
                 std::process::exit(1);
+            }
+        }
+    }
+
+    // A hosted executable link resolves undefined references against the
+    // C library implicitly, the way a compiler driver's implicit `-lc`
+    // does. libc is already a DT_NEEDED dependency; parsing its exports
+    // lets a reference from a foreign object -- or a compiler-emitted
+    // `memset` / `memcpy` -- resolve as a load-time import rather than a
+    // link error. Only the real shared object is read (not the `libc.so`
+    // linker script), so no extra DT_NEEDED entry is introduced.
+    if mode == Mode::NativeExecutable && !freestanding {
+        for cand in ["libc.so.6", "libc.so"] {
+            if let Some(p) = search_paths
+                .iter()
+                .map(|d| std::path::Path::new(d).join(cand))
+                .find(|p| p.exists())
+            {
+                let p = p.to_string_lossy().into_owned();
+                let _ = ingest_linker_input(&p, &search_paths, &mut shared_libs, &mut archives, 0);
+                break;
             }
         }
     }
@@ -1750,6 +1724,109 @@ fn run() {
     unreachable!("every CLI mode is handled and returns above");
 }
 
+/// Locate `lib<name>.so` (preferred), a versioned `lib<name>.so.N`
+/// (shortest match -- the bare SONAME version), or `lib<name>.a` on the
+/// search path, mirroring `ld`'s `-l<name>` order.
+fn find_library(name: &str, search_paths: &[String]) -> Option<String> {
+    for dir in search_paths {
+        let so = std::path::Path::new(dir).join(format!("lib{name}.so"));
+        if so.exists() {
+            return Some(so.to_string_lossy().into_owned());
+        }
+        if let Ok(rd) = std::fs::read_dir(dir) {
+            let prefix = format!("lib{name}.so.");
+            let mut best: Option<String> = None;
+            for ent in rd.flatten() {
+                let fname = ent.file_name().to_string_lossy().into_owned();
+                if fname.starts_with(&prefix) && best.as_ref().is_none_or(|b| fname.len() < b.len())
+                {
+                    best = Some(fname);
+                }
+            }
+            if let Some(b) = best {
+                return Some(
+                    std::path::Path::new(dir)
+                        .join(b)
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+        let a = std::path::Path::new(dir).join(format!("lib{name}.a"));
+        if a.exists() {
+            return Some(a.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
+/// Extract the file entries of a GNU ld script's GROUP / INPUT /
+/// AS_NEEDED directives. After stripping `/* ... */` comments, an
+/// entry is any `/absolute` path or `-l<name>` token; the directive
+/// keywords and the `OUTPUT_FORMAT` argument carry neither form.
+fn parse_ld_script_inputs(bytes: &[u8]) -> Vec<String> {
+    let text = String::from_utf8_lossy(bytes);
+    let mut cleaned = String::new();
+    let mut rest: &str = text.as_ref();
+    while let Some(start) = rest.find("/*") {
+        cleaned.push_str(&rest[..start]);
+        match rest[start + 2..].find("*/") {
+            Some(end) => rest = &rest[start + 2 + end + 2..],
+            None => {
+                rest = "";
+                break;
+            }
+        }
+    }
+    cleaned.push_str(rest);
+    cleaned
+        .split(|c: char| c.is_whitespace() || c == '(' || c == ')' || c == ',')
+        .filter(|t| t.starts_with('/') || t.starts_with("-l"))
+        .map(|t| t.to_string())
+        .collect()
+}
+
+/// Ingest one resolved `-l` / positional linker input, following GNU
+/// ld scripts. An ELF shared object is parsed for its SONAME +
+/// exports; a static archive (`!<arch>` / `!<thin>`) is recorded
+/// positionally; anything else is treated as a linker script whose
+/// GROUP / INPUT / AS_NEEDED file list is resolved recursively.
+fn ingest_linker_input(
+    path: &str,
+    search_paths: &[String],
+    shared_libs: &mut Vec<badc::SharedLibrary>,
+    archives: &mut Vec<String>,
+    depth: usize,
+) -> Result<(), String> {
+    if depth > 16 {
+        return Err(format!("linker-script nesting too deep at `{path}`"));
+    }
+    let bytes = std::fs::read(path).map_err(|e| format!("cannot read `{path}`: {e}"))?;
+    if bytes.starts_with(b"\x7fELF") {
+        let mut lib = badc::parse_shared_library(&bytes)
+            .map_err(|e| format!("reading `{path}` as a shared library: {e}"))?;
+        if lib.soname.is_empty() {
+            lib.soname = std::path::Path::new(path)
+                .file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string());
+        }
+        shared_libs.push(lib);
+    } else if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
+        archives.push(path.to_string());
+    } else {
+        for entry in parse_ld_script_inputs(&bytes) {
+            let resolved = match entry.strip_prefix("-l") {
+                Some(n) => find_library(n, search_paths)
+                    .ok_or_else(|| format!("linker script `{path}`: cannot find `-l{n}`"))?,
+                None => entry,
+            };
+            ingest_linker_input(&resolved, search_paths, shared_libs, archives, depth + 1)?;
+        }
+    }
+    Ok(())
+}
+
 /// Parse a `--jobs` / `-j` value: a positive integer. Exits with a
 /// diagnostic on a non-integer or non-positive value.
 fn parse_jobs(s: &str) -> usize {
@@ -2573,6 +2650,31 @@ fn print_predefined_symbols() {
     println!("\nConstants:");
     for (name, value) in consts {
         println!("  {name:<max_name_width$} = {value}");
+    }
+}
+
+#[cfg(test)]
+mod ld_script_tests {
+    use super::parse_ld_script_inputs;
+
+    #[test]
+    fn parses_group_and_as_needed_file_entries() {
+        // The glibc `libc.so` shape: comment, OUTPUT_FORMAT (whose
+        // argument is not a path), and a GROUP with an AS_NEEDED clause.
+        let script = b"/* GNU ld script */\n\
+            OUTPUT_FORMAT(elf64-littleaarch64)\n\
+            GROUP ( /lib64/libc.so.6 /usr/lib64/libc_nonshared.a \
+            AS_NEEDED ( /lib/ld-linux-aarch64.so.1 ) )\n";
+        let entries = parse_ld_script_inputs(script);
+        assert_eq!(
+            entries,
+            vec![
+                "/lib64/libc.so.6".to_string(),
+                "/usr/lib64/libc_nonshared.a".to_string(),
+                "/lib/ld-linux-aarch64.so.1".to_string(),
+            ],
+            "OUTPUT_FORMAT argument and keywords must not appear as file entries",
+        );
     }
 }
 

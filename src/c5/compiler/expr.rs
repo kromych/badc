@@ -3997,6 +3997,21 @@ impl Compiler {
                             self.ty -= array_ptrs * (Ty::Ptr as i64);
                             let elem_size = self.size_of_type(scalar_ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
+                        } else if field.array_dims.len() >= 2
+                            && field.array_dims[0] == 1
+                            && is_pointer_ty(self.ty)
+                        {
+                            // Pointer-to-array-typedef field (`Node *f`
+                            // where `Node` is `T[N]`): the declarator
+                            // recorded `[1, N]` with no positional Ptr
+                            // levels (the single Ptr is the real `*`), so
+                            // seed the row stride without collapsing.
+                            // `f[i]` then strides by the row width and
+                            // decays to the element pointer, matching the
+                            // parameter path.
+                            let dims = field.array_dims.clone();
+                            let elem_size = self.size_of_type(field.ty - Ty::Ptr as i64) as i64;
+                            self.seed_multi_dim_strides(&dims, elem_size);
                         }
                     }
                 }

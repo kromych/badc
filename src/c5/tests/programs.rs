@@ -2658,6 +2658,18 @@ fn pointer_to_array_typedef_param_subscript() {
 }
 
 #[test]
+fn pointer_to_array_typedef_member_subscript() {
+    // A struct member of pointer-to-array-typedef type is a pointer to
+    // the row array: `s->nodes[k]` strides by the row width and decays
+    // to the element pointer. The member path used to stride by the
+    // element width and load through the row.
+    assert_eq!(
+        run_fixture("pointer_to_array_typedef_member_subscript.c"),
+        0
+    );
+}
+
+#[test]
 fn shadowed_fn_signature_restored() {
     // C99 6.2.1p4: a fn-ptr parameter or block-scope local that reuses
     // a function name hides it only for its scope; the function's

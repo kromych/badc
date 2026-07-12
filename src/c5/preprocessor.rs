@@ -628,6 +628,15 @@ impl Preprocessor {
                 // installed before the CLI lists so `-D`/`-U __GLIBC__` win.
                 macros.insert("__GLIBC__".to_string(), "2".to_string());
                 macros.insert("__GLIBC_MINOR__".to_string(), "17".to_string());
+                // The feature-test state glibc's <features.h> derives when
+                // no request macro is set. The bundled headers stand in for
+                // glibc's, so the derivation must come from here or system
+                // headers keying on it (e.g. a `struct timeval` fallback
+                // guarded by `!defined(_POSIX_C_SOURCE)`) misread the
+                // environment. Overridable like any predefine.
+                macros.insert("_DEFAULT_SOURCE".to_string(), "1".to_string());
+                macros.insert("_POSIX_SOURCE".to_string(), "1".to_string());
+                macros.insert("_POSIX_C_SOURCE".to_string(), "200809L".to_string());
             }
             Target::WindowsX64 | Target::WindowsAarch64 => {
                 // Target-detection macros plus the `__intN` fixed-width
@@ -657,6 +666,7 @@ impl Preprocessor {
             pragma_once_files: BTreeSet::new(),
             include_stack: Vec::new(),
             search_paths: Vec::new(),
+            quote_search_paths: Vec::new(),
             system_fallback_paths: Vec::new(),
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
@@ -1601,6 +1611,13 @@ impl Preprocessor {
                 i += plen;
                 continue;
             }
+            // Skip a pp-number whole (C99 6.4.8) so its identifier-
+            // shaped tail is not collected as a macro name.
+            let np = pp_number_len(bytes, i);
+            if np > 0 {
+                i += np;
+                continue;
+            }
             if c.is_ascii_alphabetic() || c == b'_' {
                 let start = i;
                 i += 1;
@@ -1660,8 +1677,20 @@ impl Preprocessor {
         let bytes = line.as_bytes();
         let mut out = String::with_capacity(line.len());
         let mut i = 0;
+        // Set after an expansion push: the next source byte starts a
+        // new token, so space the seam if it would re-lex into the
+        // expansion's tail.
+        let mut guard_seam = false;
         while i < bytes.len() {
             let c = bytes[i];
+            if guard_seam {
+                guard_seam = false;
+                if let Some(&last) = out.as_bytes().last()
+                    && pp_tokens_would_merge(last, c)
+                {
+                    out.push(' ');
+                }
+            }
             // A string / char literal may carry an encoding prefix
             // (`L`, `u`, `U`, `u8`) that is part of the literal token,
             // not an identifier (C99 6.4.5 / 6.4.4.4). Detect it before
@@ -1671,6 +1700,14 @@ impl Preprocessor {
             if let Some(plen) = literal_prefix_len(bytes, i) {
                 out.push_str(&line[i..i + plen]);
                 i += plen;
+                continue;
+            }
+            // A pp-number is one token (C99 6.4.8): copy it whole so an
+            // identifier-shaped tail (`2op`) is not scanned as a macro.
+            let np = pp_number_len(bytes, i);
+            if np > 0 {
+                out.push_str(&line[i..i + np]);
+                i += np;
                 continue;
             }
             if c.is_ascii_alphabetic() || c == b'_' {
@@ -1830,12 +1867,14 @@ impl Preprocessor {
                                     line_no,
                                     &deeper,
                                 );
-                                out.push_str(&inner_recursed);
+                                push_expansion_text(&mut out, &inner_recursed);
+                                guard_seam = true;
                                 i = k + inner_after;
                                 continue;
                             }
                         }
-                        out.push_str(&recursed);
+                        push_expansion_text(&mut out, &recursed);
+                        guard_seam = true;
                         i = next_src;
                         continue;
                     }
@@ -1911,14 +1950,17 @@ impl Preprocessor {
                                     line_no,
                                     &deeper,
                                 );
-                                out.push_str(&recursed);
+                                push_expansion_text(&mut out, &recursed);
+                                guard_seam = true;
                                 i = j + after;
                                 continue;
                             }
                         }
-                        out.push_str(
+                        push_expansion_text(
+                            &mut out,
                             &self.substitute_with_blocklist(&expanded, filename, line_no, &nested),
                         );
+                        guard_seam = true;
                     }
                 }
             } else if c == b'"' || c == b'\'' {
@@ -3487,6 +3529,76 @@ fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
+/// Length of the C99 6.4.8 preprocessing number starting at `at` (a
+/// digit, or `.` followed by a digit), else 0. A pp-number is one
+/// token, so the substitution scanners must treat text like `2op`
+/// opaquely: its identifier-shaped tail is not a candidate macro or
+/// parameter name.
+fn pp_number_len(bytes: &[u8], at: usize) -> usize {
+    let n = bytes.len();
+    let starts = bytes[at].is_ascii_digit()
+        || (bytes[at] == b'.' && at + 1 < n && bytes[at + 1].is_ascii_digit());
+    if !starts {
+        return 0;
+    }
+    let mut i = at + 1;
+    while i < n {
+        let b = bytes[i];
+        if matches!(b, b'e' | b'E' | b'p' | b'P')
+            && i + 1 < n
+            && matches!(bytes[i + 1], b'+' | b'-')
+        {
+            i += 2;
+        } else if is_ident_byte(b) || b == b'.' {
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    i - at
+}
+
+/// True when `prev` directly followed by `next` would re-lex as part
+/// of a single preprocessing token even though the two bytes end and
+/// begin distinct tokens. The textual expansion sites insert one
+/// space at such boundaries -- whitespace between tokens never
+/// changes phase-7 semantics -- so substituted text cannot paste onto
+/// its neighbors (C99 6.10.3.3 reserves pasting for `##`).
+fn pp_tokens_would_merge(prev: u8, next: u8) -> bool {
+    if is_ident_byte(prev) && is_ident_byte(next) {
+        return true;
+    }
+    (prev == b'.' && next.is_ascii_digit())
+        || matches!(
+            (prev, next),
+            (b'-', b'-' | b'>' | b'=')
+                | (b'+', b'+' | b'=')
+                | (b'<', b'<' | b'=' | b':' | b'%')
+                | (b'>', b'>' | b'=')
+                | (b'&', b'&' | b'=')
+                | (b'|', b'|' | b'=')
+                | (b'=' | b'!' | b'*' | b'^', b'=')
+                | (b'/', b'/' | b'*' | b'=')
+                | (b'%', b'=' | b'>' | b':')
+                | (b'#', b'#')
+                | (b':', b'>')
+                | (b'.', b'.')
+                | (b'e' | b'E' | b'p' | b'P', b'+' | b'-')
+        )
+}
+
+/// Append expansion output to `out`, spacing the seam when the last
+/// emitted byte and the first byte of `text` would otherwise re-lex
+/// as one token.
+fn push_expansion_text(out: &mut String, text: &str) {
+    if let (Some(&last), Some(&first)) = (out.as_bytes().last(), text.as_bytes().first())
+        && pp_tokens_would_merge(last, first)
+    {
+        out.push(' ');
+    }
+    out.push_str(text);
+}
+
 /// Parse the `( token-string )` operand of an MSVC `__pragma` operator,
 /// starting at `start` (just past the `__pragma` keyword). Returns the
 /// content between the outer parens verbatim (trimmed) and the byte
@@ -4168,6 +4280,13 @@ fn macro_call_unclosed(
             if i < bytes.len() {
                 i += 1;
             }
+            continue;
+        }
+        // Skip a pp-number whole (C99 6.4.8) so its identifier-shaped
+        // tail is not read as a macro invocation head.
+        let np = pp_number_len(bytes, i);
+        if np > 0 {
+            i += np;
             continue;
         }
         if c.is_ascii_alphabetic() || c == b'_' {
@@ -5300,8 +5419,22 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
     // `##` whose left operand is such a placemarker must not glue the
     // preceding token to the right operand.
     let mut left_operand_empty = false;
+    // Set after a parameter substitution: the next body byte starts a
+    // new token, so space the seam if it would re-lex into the
+    // substituted text's tail (`-x` with `x` = `-22` must stay `- -22`,
+    // not `--22`). A following `##` trims the space back off, keeping
+    // explicit pastes intact.
+    let mut guard_seam = false;
     while i < bytes.len() {
         let c = bytes[i];
+        if guard_seam {
+            guard_seam = false;
+            if let Some(&last) = out.as_bytes().last()
+                && pp_tokens_would_merge(last, c)
+            {
+                out.push(' ');
+            }
+        }
         if c == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'#' {
             // GNU `, ## <variadic>` comma idiom: when a comma precedes
             // `##` and the right operand is the variadic tail, this is
@@ -5392,6 +5525,13 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
             out.push_str(&def.body[i..i + plen]);
             i += plen;
             left_operand_empty = false;
+        } else if pp_number_len(bytes, i) > 0 {
+            // A pp-number is one token (C99 6.4.8): copy it whole so an
+            // identifier-shaped tail (`2op`) is not read as a parameter.
+            let np = pp_number_len(bytes, i);
+            out.push_str(&def.body[i..i + np]);
+            i += np;
+            left_operand_empty = false;
         } else if c.is_ascii_alphabetic() || c == b'_' {
             let start = i;
             i += 1;
@@ -5417,12 +5557,22 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
                 &va_args_str
             };
             if def.is_variadic && is_va_token(def, word) {
-                out.push_str(va);
+                if preceded_by_paste {
+                    out.push_str(va);
+                } else {
+                    push_expansion_text(&mut out, va);
+                    guard_seam = true;
+                }
                 left_operand_empty = va.is_empty();
             } else {
                 match def.params.iter().position(|p| p == word) {
                     Some(idx) if idx < params.len() => {
-                        out.push_str(&params[idx]);
+                        if preceded_by_paste {
+                            out.push_str(&params[idx]);
+                        } else {
+                            push_expansion_text(&mut out, &params[idx]);
+                            guard_seam = true;
+                        }
                         left_operand_empty = params[idx].is_empty();
                     }
                     _ => {
@@ -6536,6 +6686,41 @@ int x_2 = __COUNTER__;
         std::fs::remove_dir_all(&base).ok();
         assert!(out.contains("from_quoted"), "{out}");
         assert!(out.contains("int main()"), "{out}");
+    }
+
+    fn pp_number_is_one_token_in_substitution() {
+        // C99 6.4.8: `2op` is a single pp-number; the `op` tail is not
+        // a parameter reference, so pasting forms `T_2op`.
+        let out = process(
+            "#define GLUE(a,b) a##b\n\
+             #define E3(op, arg) GLUE(T_, arg) GLUE(gen_, op)\n\
+             #define E1(op) E3(op, 2op)\n\
+             E1(FOO)\n",
+        );
+        let line = out.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert_eq!(line.trim(), "T_2op gen_FOO", "{out}");
+        // An object-like macro name embedded in a pp-number stays put.
+        let out = process("#define f 99\nx = 1.f;\n");
+        let line = out.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert_eq!(line.trim(), "x = 1.f;", "{out}");
+    }
+
+    #[test]
+    fn expansion_seams_do_not_paste_tokens() {
+        // Substituted text must not re-lex into its neighbors: `-x`
+        // with `x` = `-22` keeps two `-` tokens (C99 6.10.3.3 reserves
+        // gluing for `##`).
+        let out = process("#define E 22\n#define M(x) (-x)\nint v = M(-E);\n");
+        let line = out.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert_eq!(line.trim(), "int v = (- -22);", "{out}");
+        // Object-like expansion head seam.
+        let out = process("#define MINUS22 -22\nint w = 30 - MINUS22;\n");
+        let line = out.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert_eq!(line.trim(), "int w = 30 - -22;", "{out}");
+        // `##` still glues.
+        let out = process("#define CAT(x,y) x##y\nint CAT(v,1) = 9;\n");
+        let line = out.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert_eq!(line.trim(), "int v1 = 9;", "{out}");
     }
 
     #[test]

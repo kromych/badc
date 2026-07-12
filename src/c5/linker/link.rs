@@ -34,6 +34,11 @@ const R_X86_64_PLT32: u32 = 4;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
+// A tail-call `b <sym>` reaches its target the same way `bl` does --
+// a 26-bit PC-relative branch immediate -- so JUMP26 shares CALL26's
+// patch, PLT eligibility, and undefined-weak handling. Emitted by
+// other toolchains' objects; c5's own codegen uses CALL26 for calls.
+const R_AARCH64_JUMP26: u32 = 282;
 const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
 const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
 
@@ -1743,12 +1748,13 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
         // `R_AARCH64_ADD_ABS_LO12_NC`) materializes the stub's
         // address for `&import`. Both need one stub per import.
         if reloc.rtype != R_AARCH64_CALL26
+            && reloc.rtype != R_AARCH64_JUMP26
             && reloc.rtype != R_AARCH64_ADR_PREL_PG_HI21
             && reloc.rtype != R_AARCH64_ADD_ABS_LO12_NC
         {
             return Err(err(&format!(
                 "emit_aarch64_plt: pending reloc at text[{:#x}] has rtype {} \
-                 (only CALL26 / ADR_PREL_PG_HI21 / ADD_ABS_LO12_NC supported on aarch64)",
+                 (only CALL26 / JUMP26 / ADR_PREL_PG_HI21 / ADD_ABS_LO12_NC supported on aarch64)",
                 reloc.text_offset, reloc.rtype,
             )));
         }
@@ -1783,10 +1789,10 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
             .copied()
             .expect("every reloc has a tramp entry from pass 1");
         match reloc.rtype {
-            // CALL26 is PC-relative, so the stub's `merged.text`
-            // offset patches in directly regardless of where the
-            // text segment lands in vmaddr space.
-            R_AARCH64_CALL26 => {
+            // CALL26 / JUMP26 are PC-relative, so the stub's
+            // `merged.text` offset patches in directly regardless of
+            // where the text segment lands in vmaddr space.
+            R_AARCH64_CALL26 | R_AARCH64_JUMP26 => {
                 patch_aarch64_call26(&mut merged.text, site, tramp as i64 + reloc.addend)?
             }
             // The address-of pair (`adrp` + `add`) is page-relative,
@@ -1847,7 +1853,7 @@ fn resolve_weak_undef_to_zero(
     }
     const AARCH64_NOP: u32 = 0xd503_201f;
     match (machine, reloc.rtype) {
-        (NativeMachine::Aarch64, R_AARCH64_CALL26) => {
+        (NativeMachine::Aarch64, R_AARCH64_CALL26) | (NativeMachine::Aarch64, R_AARCH64_JUMP26) => {
             text[patch_offset..patch_offset + 4].copy_from_slice(&AARCH64_NOP.to_le_bytes());
             Ok(())
         }
@@ -1927,7 +1933,7 @@ fn apply_reloc(
         )));
     }
     match (machine, reloc.rtype) {
-        (NativeMachine::Aarch64, R_AARCH64_CALL26) => {
+        (NativeMachine::Aarch64, R_AARCH64_CALL26) | (NativeMachine::Aarch64, R_AARCH64_JUMP26) => {
             patch_aarch64_call26(text, patch_offset, target)
         }
         (NativeMachine::X86_64, R_X86_64_PLT32) | (NativeMachine::X86_64, R_X86_64_PC32) => {
@@ -2256,6 +2262,30 @@ mod tests {
         assert!(
             merged.imports.iter().any(|n| n == "ext_fn"),
             "ext_fn should be recorded as a runtime import",
+        );
+    }
+
+    /// A `b <target>` tail call (R_AARCH64_JUMP26, type 282, emitted by
+    /// other toolchains' objects) patches its 26-bit branch immediate
+    /// exactly like a `bl` CALL26, rather than erroring as an
+    /// unimplemented relocation.
+    #[test]
+    fn jump26_reloc_patches_branch_immediate() {
+        let mut text = alloc::vec![0u8; 0x40];
+        // Branch from offset 0 to offset 0x20: imm26 = 0x20 >> 2 = 8.
+        let reloc = super::super::object::NativeReloc {
+            offset: 0,
+            sym_idx: 0,
+            rtype: R_AARCH64_JUMP26,
+            addend: 0,
+        };
+        apply_reloc(NativeMachine::Aarch64, &mut text, 0, &reloc, 0x20)
+            .expect("JUMP26 must be an implemented relocation");
+        let instr = u32::from_le_bytes(text[0..4].try_into().unwrap());
+        assert_eq!(
+            instr & 0x03ff_ffff,
+            8,
+            "JUMP26 imm26 should encode the 0x20-byte forward branch",
         );
     }
 

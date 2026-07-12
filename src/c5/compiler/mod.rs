@@ -766,6 +766,10 @@ pub struct Compiler {
     /// `__func__`) recorded as they are placed in `data`, for static
     /// DCE object boundaries. See `Program::data_object_starts`.
     data_object_starts: Vec<i64>,
+    /// Element count the most recent flexible array member fill wrote.
+    /// Read by the speculative pass that sizes a FAM-bearing object's
+    /// storage before the real fill runs; `None` between measurements.
+    flex_array_measured_count: Option<usize>,
     /// Type of the current expression -- set by `expr` callees, read by callers
     /// to decide between byte and word loads/stores and for pointer scaling.
     ty: i64,
@@ -1429,6 +1433,7 @@ impl Compiler {
             next_ent_pc: 0,
             data,
             data_object_starts: Vec::new(),
+            flex_array_measured_count: None,
             ty: 0,
             loc_offs: 0,
             max_loc_offs: 0,

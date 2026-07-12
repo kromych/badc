@@ -1828,12 +1828,39 @@ impl Compiler {
                         self.symbols[id_idx].has_initializer = true;
                         self.symbols[id_idx].defined_here = true;
                     } else {
-                        let bytes = if array_size > 0 {
+                        let mut bytes = if array_size > 0 {
                             let total = (self.size_of_type(ty) as i64) * array_size;
                             ((total + 7) / 8) * 8
                         } else {
                             self.slots_of_type(ty) * 8
                         };
+                        // A flexible array member initialized via `.<fam> =
+                        // {...}` needs its element bytes reserved now, before
+                        // the field fill appends string literals into that
+                        // trailing region (they would collide with the
+                        // member's data). Only the defining `= {` form
+                        // reserves extra; a bare / tentative declaration keeps
+                        // the fixed size.
+                        if is_struct_ty(ty)
+                            && struct_ptr_depth(ty) == 0
+                            && self.lex.tk == Token::Assign
+                        {
+                            let sid = struct_id_of(ty);
+                            let fam_elem_ty = self.structs[sid]
+                                .fields
+                                .iter()
+                                .find(|f| f.array_size < 0)
+                                .map(|f| f.ty);
+                            if let Some(elem_ty) = fam_elem_ty {
+                                let elem = self.size_of_type(elem_ty) as i64;
+                                let snap = self.lex.snapshot();
+                                self.next()?; // `=`
+                                let count = self.flexible_array_init_count(sid)? as i64;
+                                self.lex.restore(snap);
+                                bytes += count * elem;
+                                bytes = ((bytes + 7) / 8) * 8;
+                            }
+                        }
                         // `extern T x;` -- C99 6.9.2 says no
                         // tentative definition. We still
                         // allocate storage here so the single-TU

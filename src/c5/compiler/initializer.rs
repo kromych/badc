@@ -35,6 +35,7 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
+use super::super::lexer::LexerSnapshot;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::const_expr::ConstVal;
@@ -123,6 +124,21 @@ impl InitTarget {
     fn is_runtime(self) -> bool {
         matches!(self, InitTarget::Runtime { .. })
     }
+}
+
+/// Lengths of the append-only initializer output buffers plus the lexer
+/// position, captured so a speculative measuring parse can be undone
+/// exactly. See [`Compiler::init_checkpoint`].
+struct InitCheckpoint {
+    lex: LexerSnapshot,
+    next_ent_pc: usize,
+    data: usize,
+    data_object_starts: usize,
+    data_relocs: usize,
+    data_reloc_sym_idx: usize,
+    code_relocs: usize,
+    code_reloc_sym_idx: usize,
+    extern_data_relocs: usize,
 }
 
 impl Compiler {
@@ -1783,6 +1799,87 @@ impl Compiler {
         total
     }
 
+    /// Count the elements a struct's flexible array member (`T v[]`,
+    /// C99 6.7.2.1) is initialized with. A file-scope object of a
+    /// FAM-bearing struct is laid out as if the member were a fixed
+    /// array sized to its initializer; the storage reservation must
+    /// include those element bytes *before* the field fill runs, or an
+    /// earlier field's string literal is appended into that trailing
+    /// region and then overwritten by the member's data.
+    ///
+    /// The count is obtained by running the ordinary struct-initializer
+    /// descent speculatively against a scratch tail of the data segment,
+    /// so a positional member, a `.<fam> =` designator, brace elision,
+    /// and string / struct element forms are all counted exactly as the
+    /// real fill lays them out. Every speculative write is rolled back
+    /// through [`InitCheckpoint`]. The lexer must be at the struct
+    /// initializer's opening `{`; it is restored before returning.
+    /// Returns 0 when the struct has no FAM or the initializer does not
+    /// reach it.
+    pub(super) fn flexible_array_init_count(&mut self, sid: usize) -> Result<usize, C5Error> {
+        let fam_offset = self.structs[sid]
+            .fields
+            .iter()
+            .find(|f| f.array_size < 0)
+            .map(|f| f.offset);
+        let Some(fam_offset) = fam_offset else {
+            return Ok(0);
+        };
+        if self.lex.tk != '{' {
+            return Ok(0);
+        }
+        let cp = self.init_checkpoint();
+        // The FAM is the last member, so its offset is the fixed part's
+        // size; reserve that scratch region so the preceding fields'
+        // writes land in bounds, then let the FAM fill grow the tail.
+        let scratch = self.data.len();
+        self.data.resize(scratch + fam_offset, 0);
+        self.flex_array_measured_count = None;
+        let filled = self.collect_struct_initializer(sid, scratch as i64);
+        // A genuine initializer error is left for the real fill to report
+        // with an accurate source position; the under-count it yields is
+        // moot because that fill then aborts the compile.
+        let count = if filled.is_ok() {
+            self.flex_array_measured_count
+        } else {
+            None
+        };
+        self.restore_init_checkpoint(cp);
+        Ok(count.unwrap_or(0))
+    }
+
+    /// Capture the lengths of every append-only initializer output
+    /// buffer plus the lexer position, so a speculative measuring parse
+    /// can be undone exactly. The lexer snapshot does not cover these
+    /// compiler-owned buffers, and identifier interning done during the
+    /// parse is left in place (it is idempotent -- a later lex of the
+    /// same name reuses the entry).
+    fn init_checkpoint(&self) -> InitCheckpoint {
+        InitCheckpoint {
+            lex: self.lex.snapshot(),
+            next_ent_pc: self.next_ent_pc,
+            data: self.data.len(),
+            data_object_starts: self.data_object_starts.len(),
+            data_relocs: self.data_relocs.len(),
+            data_reloc_sym_idx: self.data_reloc_sym_idx.len(),
+            code_relocs: self.code_relocs.len(),
+            code_reloc_sym_idx: self.code_reloc_sym_idx.len(),
+            extern_data_relocs: self.extern_data_relocs.len(),
+        }
+    }
+
+    fn restore_init_checkpoint(&mut self, cp: InitCheckpoint) {
+        self.lex.restore(cp.lex);
+        self.next_ent_pc = cp.next_ent_pc;
+        self.data.truncate(cp.data);
+        self.data_object_starts.truncate(cp.data_object_starts);
+        self.data_relocs.truncate(cp.data_relocs);
+        self.data_reloc_sym_idx.truncate(cp.data_reloc_sym_idx);
+        self.code_relocs.truncate(cp.code_relocs);
+        self.code_reloc_sym_idx.truncate(cp.code_reloc_sym_idx);
+        self.extern_data_relocs.truncate(cp.extern_data_relocs);
+    }
+
     pub(super) fn collect_struct_initializer(
         &mut self,
         struct_id: usize,
@@ -1965,6 +2062,7 @@ impl Compiler {
                     break;
                 }
             }
+            self.flex_array_measured_count = Some(idx);
             return Ok(());
         }
         if self.lex.tk != '{' {
@@ -1992,6 +2090,7 @@ impl Compiler {
             self.accept(',')?;
         }
         self.next()?; // consume `}`
+        self.flex_array_measured_count = Some(idx);
         Ok(())
     }
 

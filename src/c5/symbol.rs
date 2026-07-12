@@ -27,6 +27,16 @@ pub(crate) struct Symbol {
     /// Type-checking only verifies the fixed parameters.
     pub is_variadic: bool,
 
+    /// Shadow slots for `params` / `is_variadic`. See `h_array_size`:
+    /// a function-pointer parameter, block-scope local, or block-scope
+    /// typedef that reuses an outer function name writes its own
+    /// prototype onto the shared symbol slot; without the save the
+    /// outer signature is permanently replaced (C99 6.2.1p4), which
+    /// breaks later call type-checks and can flip a variadic call's
+    /// ABI.
+    pub h_params: Vec<i64>,
+    pub h_is_variadic: bool,
+
     /// True while the function's return type is the implicit `int`
     /// default rather than a declared type: a `#pragma binding` seen
     /// without a following prototype, or a C89 implicit declaration.

@@ -2,7 +2,7 @@
 //! error) on type mismatches, and a C-style cast should silence the
 //! warning. Variadic functions skip type-check past the fixed prefix.
 
-use super::{compile_fixture, run_fixture};
+use super::{compile_fixture, compile_str, run_fixture};
 
 /// C99 6.4.4.4p11: a wide character constant (`L'x'`) has type `wchar_t`,
 /// whose width the target fixes -- 2 bytes on Windows (UTF-16) and 4 on
@@ -114,6 +114,24 @@ fn call_with_return_prototype_is_silent() {
     assert!(
         !p.warnings.iter().any(|w| w.contains("mystery")),
         "expected no warning for a prototyped binding, got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn shadowing_fnptr_param_does_not_clobber_signature() {
+    // A prototype whose fn-ptr parameter reuses a bound library
+    // function's name must not replace that function's recorded
+    // signature: a later 1-arg `exit(0)` would otherwise be checked
+    // against the parameter's own prototype (C99 6.2.1p4).
+    let p = compile_str(
+        "struct Obj { int x; };\n\
+         void takes(void (*exit)(struct Obj *o, int code));\n\
+         int main(void) { exit(0); }\n",
+    );
+    assert!(
+        !p.warnings.iter().any(|w| w.contains("exit")),
+        "shadowed `exit` signature leaked, got: {:?}",
         p.warnings
     );
 }

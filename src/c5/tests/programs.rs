@@ -2640,9 +2640,7 @@ fn flexible_array_member_after_tentative_decl() {
     // A struct with a flexible array member, forward-declared before it is
     // defined with FAM elements, must allocate storage for the elements
     // rather than reuse the tentative slot (which reserved only the fixed
-    // part). Reusing it overflows the FAM data into the following global --
-    // the shape qemu's `extern QemuOptsList qemu_legacy_drive_opts;` plus
-    // its definition hit, stomping the next opts list's head.
+    // part). Reusing it overflows the FAM data into the following global.
     assert_eq!(
         run_fixture("flexible_array_member_after_tentative_decl.c"),
         0
@@ -2655,9 +2653,17 @@ fn pointer_to_array_typedef_param_subscript() {
     // pointer to the array (not an array parameter -- 6.7.5.3p7 does not
     // apply), so `nodes[k]` strides by `sizeof(Node)` and decays to the
     // row address. The parameter path used to add a second pointer level,
-    // striding by a pointer width and loading a word as the row -- the
-    // shape qemu's `phys_page_compact(..., Node *nodes)` crashed on.
+    // striding by a pointer width and loading a word as the row.
     assert_eq!(run_fixture("pointer_to_array_typedef_param_subscript.c"), 0);
+}
+
+#[test]
+fn shadowed_fn_signature_restored() {
+    // C99 6.2.1p4: a fn-ptr parameter or block-scope local that reuses
+    // a function name hides it only for its scope; the function's
+    // params / variadic flag must be intact afterward, or a later
+    // variadic call misroutes its tail on stack-packing ABIs.
+    assert_eq!(run_fixture("shadowed_fn_signature_restored.c"), 0);
 }
 
 #[test]
@@ -3637,6 +3643,6 @@ fn rotate_inline_const_count_matches_interpreter() {
 #[test]
 fn generic_selection_subscript_arm() {
     // A `_Generic` arm containing a subscript (`&x[0]`) must not break the
-    // balanced-bracket association scan (QEMU's qemu_make_lockable shape).
+    // balanced-bracket association scan.
     assert_eq!(run_fixture("generic_selection_subscript_arm.c"), 0);
 }

@@ -1371,22 +1371,26 @@ impl Compiler {
                     } else {
                         callee_ret_ty
                     };
-                    if !callee_returns_struct {
-                        let callee_ty = self.symbols[id_idx].type_;
-                        let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
-                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
-                    } else {
-                        // Struct-returning callee: dual-emit a
-                        // `Expr::Call { ty: <struct> }` so the
-                        // walker allocates a synthetic local for
-                        // the hidden out-pointer, prepends its
-                        // address to the arg list, and returns
-                        // the address as the call's value (the
-                        // c5 ABI's address-as-value rule).
-                        let callee_ty = self.symbols[id_idx].type_;
-                        let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
-                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
+                    // For a struct-returning callee the `Expr::Call
+                    // { ty: <struct> }` makes the walker allocate a
+                    // synthetic local for the hidden out-pointer,
+                    // prepend its address to the arg list, and return
+                    // the address as the call's value (the c5 ABI's
+                    // address-as-value rule).
+                    let callee_ty = self.symbols[id_idx].type_;
+                    let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
+                    // A call through a variadic function-pointer
+                    // variable records its fixed count at parse time,
+                    // while the block-scope binding is live: the
+                    // walker runs after scope exit restored the outer
+                    // signature, so the symbol no longer carries the
+                    // pointer's prototype (C99 6.2.1p4).
+                    if is_var_call && self.symbols[id_idx].is_variadic {
+                        self.ast
+                            .variadic_indirect_callees
+                            .push((callee_id, self.symbols[id_idx].params.len() as u32));
                     }
+                    self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
                     // For struct-returning callees, the result lives
                     // in the caller-allocated temp. After the call,
                     // load the temp's address into `a` so the

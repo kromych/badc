@@ -554,6 +554,8 @@ impl Compiler {
         s.h_type = s.type_;
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
+        s.h_params = s.params.clone();
+        s.h_is_variadic = s.is_variadic;
         s.h_array_size = s.array_size;
         s.h_inner_array_size = s.inner_array_size;
         // Clone rather than `mem::take`: the inner-scope binding
@@ -577,6 +579,8 @@ impl Compiler {
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
+        sym.params = core::mem::take(&mut sym.h_params);
+        sym.is_variadic = sym.h_is_variadic;
         sym.array_size = sym.h_array_size;
         sym.inner_array_size = sym.h_inner_array_size;
         sym.array_dims = core::mem::take(&mut sym.h_array_dims);

@@ -2636,6 +2636,20 @@ fn pointer_to_array_typedef_deref_decays() {
 }
 
 #[test]
+fn flexible_array_member_after_tentative_decl() {
+    // A struct with a flexible array member, forward-declared before it is
+    // defined with FAM elements, must allocate storage for the elements
+    // rather than reuse the tentative slot (which reserved only the fixed
+    // part). Reusing it overflows the FAM data into the following global --
+    // the shape qemu's `extern QemuOptsList qemu_legacy_drive_opts;` plus
+    // its definition hit, stomping the next opts list's head.
+    assert_eq!(
+        run_fixture("flexible_array_member_after_tentative_decl.c"),
+        0
+    );
+}
+
+#[test]
 fn pointer_to_array_typedef_param_subscript() {
     // A `Node *nodes` parameter, where `Node` is an array typedef, is a
     // pointer to the array (not an array parameter -- 6.7.5.3p7 does not

@@ -1555,18 +1555,26 @@ impl Compiler {
                     };
                     let was_extern_only_decl =
                         extern_seen && self.lex.tk != Token::Assign && array_size != -1;
-                    // `extern struct S s;` while `struct S` is still
-                    // incomplete cannot reserve storage (its size is
-                    // unknown), and C99 6.9.2 makes it a pure declaration
-                    // anyway. Record an undefined external reference; the
-                    // defining declaration that follows the struct's
-                    // completion allocates the bytes. Without this the
-                    // permissive single-TU fallback below would reserve a
-                    // wrong-sized slot and the next global would overlap.
+                    // `extern struct S s;` whose `struct S` has no fixed
+                    // size at the declaration cannot reserve storage: an
+                    // incomplete struct (size unknown), or one with a
+                    // flexible array member (C99 6.7.2.1 -- the element
+                    // count comes from the defining initializer). C99 6.9.2
+                    // makes it a pure declaration anyway. Record an
+                    // undefined external reference; the defining
+                    // declaration allocates the bytes. Without this the
+                    // permissive single-TU fallback below reserves a
+                    // wrong-sized slot, and either the next global overlaps
+                    // it (fixed part too small) or the definition allocating
+                    // fresh strands references emitted against the slot.
                     if was_extern_only_decl
                         && is_struct_ty(ty)
                         && struct_ptr_depth(ty) == 0
-                        && self.structs[struct_id_of(ty)].fields.is_empty()
+                        && (self.structs[struct_id_of(ty)].fields.is_empty()
+                            || self.structs[struct_id_of(ty)]
+                                .fields
+                                .iter()
+                                .any(|f| f.array_size < 0))
                     {
                         self.symbols[id_idx].is_extern_decl = true;
                         self.symbols[id_idx].defined_here = false;

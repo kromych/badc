@@ -512,8 +512,7 @@ impl Compiler {
                                     ty,
                                     off,
                                     elem_size as i64,
-                                    lo,
-                                    hi,
+                                    lo..=hi,
                                     chain,
                                 )?;
                                 i = hi + 1;
@@ -663,8 +662,7 @@ impl Compiler {
                                 ty,
                                 var_offset,
                                 group_stride,
-                                desig,
-                                desig_hi,
+                                desig..=desig_hi,
                                 true,
                             )?;
                             i = desig_hi + 1;
@@ -683,8 +681,7 @@ impl Compiler {
                                 ty,
                                 var_offset,
                                 group_stride,
-                                desig,
-                                desig_hi,
+                                desig..=desig_hi,
                                 false,
                             )?;
                             i = desig_hi + 1;
@@ -1038,11 +1035,11 @@ impl Compiler {
         ty: i64,
         base: i64,
         elem_size: i64,
-        lo: i64,
-        hi: i64,
+        range: core::ops::RangeInclusive<i64>,
         chain: bool,
     ) -> Result<(), C5Error> {
-        for e in lo..=hi {
+        let hi = *range.end();
+        for e in range {
             let snap = self.lex.snapshot();
             let here = base + e * elem_size;
             if chain {
@@ -1191,8 +1188,7 @@ impl Compiler {
                                 ty,
                                 staged_off as i64,
                                 elem_size as i64,
-                                lo,
-                                hi,
+                                lo..=hi,
                                 chain,
                             )?;
                             i = hi + 1;
@@ -1445,8 +1441,7 @@ impl Compiler {
                                     ty,
                                     staged_off as i64,
                                     group_stride,
-                                    desig,
-                                    desig_hi,
+                                    desig..=desig_hi,
                                     true,
                                 )?;
                                 i = desig_hi + 1;
@@ -1465,8 +1460,7 @@ impl Compiler {
                                     ty,
                                     staged_off as i64,
                                     group_stride,
-                                    desig,
-                                    desig_hi,
+                                    desig..=desig_hi,
                                     false,
                                 )?;
                                 i = desig_hi + 1;

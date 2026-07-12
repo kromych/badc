@@ -329,7 +329,7 @@ impl Compiler {
             return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
         }
         self.next()?;
-        let mut parse_arm = |me: &mut Self, live: bool| -> Result<(), C5Error> {
+        let parse_arm = |me: &mut Self, live: bool| -> Result<(), C5Error> {
             if live {
                 return me.expr(Token::Assign as i64);
             }

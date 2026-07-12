@@ -1676,6 +1676,14 @@ impl Compiler {
                 // float, double, or struct base, with any number of
                 // `*` markers and pointer-level qualifiers.
                 t = self.parse_decl_base_type()?;
+                // An array typedef (`typedef T A[N]`, e.g. `sigjmp_buf`)
+                // contributes its element count here; a single `*` below
+                // forms a pointer-to-array whose deref is the C99 6.3.2.1p3
+                // decay (no load), not a dereference. Capture the count and
+                // element type before the pointer loop rewrites `t`.
+                let cast_array_elem_ty = t;
+                let cast_typedef_array = core::mem::take(&mut self.pending.typedef_base_array_size);
+                let mut cast_ptr_levels: i64 = 0;
                 // Fn-pointer lineage: if the base type came from a
                 // typedef-of-fn-pointer, parse_decl_base_type seeded
                 // `pending_fn_ptr_indirection`; the leading `*`s
@@ -1696,6 +1704,7 @@ impl Compiler {
                         absorb_fn_type_ptr = false;
                     } else {
                         t += Ty::Ptr as i64;
+                        cast_ptr_levels += 1;
                         if let Some(fpi) = cast_fpi {
                             cast_fpi = Some(fpi + 1);
                         }
@@ -1855,6 +1864,7 @@ impl Compiler {
                     // narrows each argument and splits the variadic
                     // tail per the cast, whatever the operand's own
                     // declared type said.
+                    let cast_had_fn_proto = cast_fn_proto.is_some();
                     if let Some(pp) = cast_fn_proto {
                         self.pending.indirect_callee_is_variadic = pp.is_variadic;
                         self.pending.indirect_callee_params = if pp.types.is_empty() {
@@ -1862,6 +1872,22 @@ impl Compiler {
                         } else {
                             Some(pp.types)
                         };
+                    }
+                    // Pointer-to-array cast `(A *)p` where `A` is an array
+                    // typedef of `N` elements: seed the row stride so a
+                    // following unary `*` (or `[i]`) takes the array-decay
+                    // no-load path, reproducing `p` rather than loading
+                    // through it -- the same decay an `N`-element array
+                    // variable gets. Only the single-`*` shape is a
+                    // pointer-to-array; more levels are ordinary pointers
+                    // and a bracketed / fn-proto declarator is not an array.
+                    if cast_typedef_array > 0
+                        && cast_ptr_levels == 1
+                        && !cast_had_fn_proto
+                        && !cast_is_array
+                    {
+                        let elem_size = self.size_of_type(cast_array_elem_ty) as i64;
+                        self.seed_multi_dim_strides(&[1, cast_typedef_array], elem_size);
                     }
                 }
             } else {

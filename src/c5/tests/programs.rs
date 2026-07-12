@@ -2625,6 +2625,17 @@ fn typedef_name_as_declarator() {
 }
 
 #[test]
+fn pointer_to_array_typedef_deref_decays() {
+    // C99 6.3.2.1p3: `*(A *)p` where `A` is an array typedef yields the
+    // array, which decays to `p` (its address) with no load. The cast
+    // to a pointer-to-array typedef previously dropped the array shape,
+    // so the deref loaded the first element and passed that as the
+    // pointer -- the failure a `siglongjmp(*(sigjmp_buf *)slot, 1)`
+    // reaches when the jmp_buf is stashed through a `void *`.
+    assert_eq!(run_fixture("pointer_to_array_typedef_deref_decays.c"), 0);
+}
+
+#[test]
 fn fnptr_param_indirection() {
     // A parameter of type "pointer to function-pointer typedef"
     // (`fn_t *p`) carries two levels of fn-pointer indirection, so

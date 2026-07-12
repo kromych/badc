@@ -434,6 +434,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("phi_class_nested_loops.c", 49),
     ("phi_class_diamond_join.c", 30),
     ("arithmetic.c", 60),
+    ("compound_literal_struct_field.c", 0),
     ("goto.c", 5),
     ("switch_statement.c", 25),
     ("switch_binary_search.c", 0),

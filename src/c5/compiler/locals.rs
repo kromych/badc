@@ -1404,9 +1404,15 @@ impl Compiler {
         is_array: bool,
         decl_array_size: i64,
     ) -> Result<(), C5Error> {
-        self.pending_local_init_ast = None;
-        self.pending_local_aggregate_ast = None;
-        self.pending_local_runtime_elements.clear();
+        // A compound literal reuses the three pending-init carriers as
+        // scratch for its own initializer (drained below). When it appears
+        // as a field / element value of an enclosing aggregate that is
+        // itself accumulating runtime stores (`T t = { .a = v, .p =
+        // &(P){...} }`), the enclosing declaration's carriers must survive:
+        // save them here and restore before returning so the fields
+        // written before the literal are not dropped. C99 6.5.2.5: the
+        // literal is a distinct object, not part of the enclosing one.
+        let saved_carriers = self.take_pending_local_carriers();
         self.pending.init_inner_dims = alloc::vec::Vec::new();
 
         // A compound literal yields its value through `ast_acc` (the
@@ -1544,6 +1550,9 @@ impl Compiler {
 
         self.ast_vstack.truncate(vstack_depth);
         self.ast_emit_compound_literal(slot, t, final_array_size, init);
+        // Restore the enclosing declaration's carriers (the literal's own
+        // carriers were just drained into `init`).
+        self.restore_pending_local_carriers(saved_carriers);
         self.ty = value_ty;
         Ok(())
     }

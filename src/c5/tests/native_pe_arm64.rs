@@ -625,6 +625,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("vla_scope_reclaim_loop.c", 0),
     ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
+    ("compound_literal_struct_field.c", 0),
     ("strtof_parses_float.c", 0),
     ("snprintf_truncation_c99.c", 0),
     // Runtime CRT shim: POSIX setenv overwrite semantics over msvcrt's

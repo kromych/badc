@@ -46,6 +46,14 @@ fn arithmetic() {
 }
 
 #[test]
+fn compound_literal_struct_field() {
+    // C99 6.5.2.5: a compound literal used as a struct field value must
+    // not drop the fields written before it. Returns 0 only when every
+    // field survived.
+    assert_eq!(run_fixture("compound_literal_struct_field.c"), 0);
+}
+
+#[test]
 fn hex_float_literal() {
     // C99 6.4.4.2 hexadecimal floating constants.
     assert_eq!(run_fixture("hex_float_literal.c"), 0);

@@ -396,6 +396,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("vla_scope_reclaim_loop.c", 0),
     ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
+    ("compound_literal_struct_field.c", 0),
     ("goto.c", 5),
     ("switch_statement.c", 25),
     ("switch_binary_search.c", 0),

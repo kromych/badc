@@ -74,6 +74,41 @@ fn return_zero() {
 }
 
 #[test]
+fn constructors_run_before_main_in_priority_order() {
+    // The JIT runs `__attribute__((constructor))` functions before the
+    // entry, ordered as `.init_array` does (prioritized ascending, then
+    // unprioritized). `main` returns an encoding of the observed order.
+    let src = "
+        static int order[8];
+        static int n;
+        __attribute__((constructor(102))) static void c2(void) { order[n++] = 2; }
+        __attribute__((constructor(101))) static void c1(void) { order[n++] = 1; }
+        __attribute__((constructor)) static void c3(void) { order[n++] = 3; }
+        int main(void) {
+            if (n != 3) return 100;
+            return order[0] * 100 + order[1] * 10 + order[2];
+        }
+    ";
+    assert_eq!(jit_exit(src, &["jit-ctor-order"]), 123);
+}
+
+#[test]
+fn destructor_runs_through_atexit_chain() {
+    // The JIT registers destructors on its atexit chain, drained after
+    // main. A destructor that observably runs would need stdout capture;
+    // here assert the program with a constructor + destructor completes
+    // and returns the constructor-set value (the destructor drains
+    // without disturbing the exit code).
+    let src = "
+        static int n;
+        __attribute__((constructor)) static void ctor(void) { n = 9; }
+        __attribute__((destructor)) static void dtor(void) { n = 0; }
+        int main(void) { return n; }
+    ";
+    assert_eq!(jit_exit(src, &["jit-dtor"]), 9);
+}
+
+#[test]
 fn arithmetic_and_locals() {
     let src = r#"
         int main() {

@@ -176,6 +176,9 @@ impl Compiler {
             self.pending.attr_dllexport = false;
             self.pending.attr_align = 0;
             self.pending.attr_vector_size = 0;
+            self.pending.attr_constructor = false;
+            self.pending.attr_destructor = false;
+            self.pending.attr_init_priority = None;
             self.pending_is_inline = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
@@ -1038,6 +1041,24 @@ impl Compiler {
                     // forward declaration -- the function is now
                     // defined in this translation unit.
                     self.symbols[id_idx].is_extern_decl = false;
+
+                    // `__attribute__((constructor))` / `((destructor))` on
+                    // this definition: record it so the emit path lowers it
+                    // into `.init_array` / `.fini_array` and the VM / JIT run
+                    // it around `main`. The pending flags were set by the
+                    // leading or trailing attribute specifier.
+                    if self.pending.attr_constructor || self.pending.attr_destructor {
+                        let is_destructor = self.pending.attr_destructor;
+                        self.init_funcs.push(crate::c5::program::InitFunc {
+                            name: self.symbols[id_idx].name.clone(),
+                            ent_pc,
+                            priority: self.pending.attr_init_priority,
+                            is_destructor,
+                        });
+                        self.pending.attr_constructor = false;
+                        self.pending.attr_destructor = false;
+                        self.pending.attr_init_priority = None;
+                    }
 
                     // Struct-value parameters: the caller pushed
                     // the struct's *address* into the param slot
@@ -2179,6 +2200,11 @@ impl Compiler {
     /// entry, called by the runtime stub the codegen emits.
     fn warn_unused_static_functions(&mut self) {
         use crate::c5::symbol::Linkage;
+        // A `__attribute__((constructor))` / `((destructor))` function
+        // has no in-source call site but runs at startup / exit, so it is
+        // not unused (matching gcc / clang, which never warn on it).
+        let init_names: alloc::collections::BTreeSet<&str> =
+            self.init_funcs.iter().map(|f| f.name.as_str()).collect();
         let mut unused: Vec<(usize, String)> = Vec::new();
         for sym in self.symbols.iter() {
             if sym.class != Token::Fun as i64
@@ -2189,6 +2215,7 @@ impl Compiler {
                 || sym.name.is_empty()
                 || sym.name.starts_with('_')
                 || sym.name == "main"
+                || init_names.contains(sym.name.as_str())
             {
                 continue;
             }

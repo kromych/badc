@@ -70,6 +70,15 @@ pub struct Vm<H: Host> {
     /// `target_ent_pc` of every static-initializer function
     /// pointer, checked against `extern_fn_names` at `run`.
     code_reloc_pcs: Vec<usize>,
+    /// Constructor entry pcs (`__attribute__((constructor))`), ordered as
+    /// they run before the entry: prioritized ascending, then
+    /// unprioritized. The native path runs these through `.init_array`;
+    /// the VM calls them itself before `main`.
+    init_pcs: Vec<usize>,
+    /// Destructor entry pcs, in the same order; the VM runs them in
+    /// reverse after the entry returns (a direct `exit()` bypasses them,
+    /// as the VM has no atexit chain).
+    fini_pcs: Vec<usize>,
 }
 
 /// `Vm::new` is only available with the `std` feature; it picks the
@@ -121,6 +130,20 @@ impl<H: Host> Vm<H> {
             .iter()
             .map(|r| r.target_ent_pc as usize)
             .collect();
+        // Constructors / destructors, ordered as the native `.init_array`
+        // path runs them: prioritized ascending, then unprioritized (a
+        // stable sort keeps source order within a priority).
+        let order_init = |dtor: bool| -> Vec<usize> {
+            let mut v: Vec<&crate::c5::program::InitFunc> = program
+                .init_funcs
+                .iter()
+                .filter(|f| f.is_destructor == dtor)
+                .collect();
+            v.sort_by_key(|f| (f.priority.is_none(), f.priority.unwrap_or(0)));
+            v.into_iter().map(|f| f.ent_pc).collect()
+        };
+        let init_pcs = order_init(false);
+        let fini_pcs = order_init(true);
         // Concatenate the TLS block onto the data segment so
         // `Inst::TlsAddr` resolutions ride the existing data-side
         // access checks. The starting offset is captured before
@@ -156,6 +179,8 @@ impl<H: Host> Vm<H> {
             symbol_defs,
             data_binding_locals,
             code_reloc_pcs,
+            init_pcs,
+            fini_pcs,
         }
     }
 
@@ -269,6 +294,8 @@ impl<H: Host> Vm<H> {
             &mut self.host,
             &self.args,
             self.track_pointers,
+            &self.init_pcs,
+            &self.fini_pcs,
         )
     }
 }

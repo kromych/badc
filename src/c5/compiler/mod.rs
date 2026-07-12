@@ -679,6 +679,14 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__declspec(dllexport)`. Read after the declarator to add the
     /// declared name to the export list -- the equivalent of `#pragma export`.
     pub attr_dllexport: bool,
+    /// A consumed `__attribute__((constructor))`. Read at function-body
+    /// close to record the function in `Compiler::init_funcs`.
+    pub attr_constructor: bool,
+    /// A consumed `__attribute__((destructor))`.
+    pub attr_destructor: bool,
+    /// Explicit priority from `constructor(N)` / `destructor(N)`; `None`
+    /// for the bare form. Applies to whichever of the two above is set.
+    pub attr_init_priority: Option<u32>,
 }
 
 impl Default for Pending {
@@ -728,6 +736,9 @@ impl Default for Pending {
             attr_vector_size: 0,
             attr_thread_local: false,
             attr_dllexport: false,
+            attr_constructor: false,
+            attr_destructor: false,
+            attr_init_priority: None,
         }
     }
 }
@@ -1021,6 +1032,11 @@ pub struct Compiler {
     /// ent_pc. Empty for executables that don't reach
     /// for the directive.
     pending_exports: Vec<String>,
+    /// Functions defined with `__attribute__((constructor))` /
+    /// `((destructor))`, accumulated in source order and copied onto
+    /// `Program::init_funcs`. Populated at each function-body close
+    /// when `pending.attr_constructor` / `attr_destructor` is set.
+    init_funcs: Vec<crate::c5::program::InitFunc>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -1453,6 +1469,7 @@ impl Compiler {
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             pending_exports,
+            init_funcs: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
             pending: Pending::default(),
@@ -1850,6 +1867,7 @@ impl Compiler {
             // codegen sees the walker as the source of truth.
             user_ssa_funcs: Vec::new(),
             extern_function_imports: extern_imports,
+            init_funcs: self.init_funcs,
         })
     }
 }

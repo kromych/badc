@@ -146,6 +146,12 @@ fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
     for e in &program.exports {
         queue.push(e.ent_pc);
     }
+    // Constructors / destructors are referenced only through
+    // `.init_array` / `.fini_array`; keep them as roots even when
+    // `static` and never called in-image.
+    for f in &program.init_funcs {
+        queue.push(f.ent_pc);
+    }
 
     while let Some(pc) = queue.pop() {
         if !reachable.insert(pc) {
@@ -261,6 +267,15 @@ pub(crate) fn compute_live_functions(
         let ent = r.target_ent_pc as usize;
         if by_ent.contains_key(&ent) && live.insert(ent) {
             work.push(ent);
+        }
+    }
+    // A `__attribute__((constructor))` / `((destructor))` function is
+    // referenced only through `.init_array` / `.fini_array` (or the
+    // startup runtime), never by an in-image call, yet must survive DCE
+    // -- these are frequently `static` (the `type_init`-style idiom).
+    for f in &program.init_funcs {
+        if by_ent.contains_key(&f.ent_pc) && live.insert(f.ent_pc) {
+            work.push(f.ent_pc);
         }
     }
     while let Some(ent) = work.pop() {

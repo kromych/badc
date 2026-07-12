@@ -22,6 +22,31 @@ pub struct ExportedFunction {
     pub ent_pc: usize,
 }
 
+/// A function defined with `__attribute__((constructor))` or
+/// `((destructor))` (GNU practice; C99 has no such attribute).
+/// Constructors run before `main`, destructors after it returns.
+/// Entries with an explicit priority run in ascending priority
+/// order; unprioritized entries run last among constructors (and,
+/// symmetrically, in the reverse of that order among destructors).
+///
+/// The ET_REL writer lowers each into an `.init_array` / `.fini_array`
+/// section so a system linker + C library run them (the object stays
+/// linkable by `ld` / `lld`). badc's own link path collects the
+/// entries and runs them from the startup runtime instead.
+#[derive(Debug, Clone)]
+pub struct InitFunc {
+    /// Defined function's name, as it appears in the symbol table.
+    pub name: String,
+    /// `ent_pc` identifier of the function's entry, for the single-TU
+    /// native path (maps through `Build::pc_to_native`).
+    pub ent_pc: usize,
+    /// Explicit priority from `constructor(N)`; `None` for the bare
+    /// form. GNU reserves priorities 0-100 for the implementation.
+    pub priority: Option<u32>,
+    /// `true` for `((destructor))`, `false` for `((constructor))`.
+    pub is_destructor: bool,
+}
+
 /// A pointer-to-extern-data initializer. The slot at `data_offset` in
 /// [`Program::data`] must hold the runtime address of the data symbol
 /// `symbol_name`, which is defined in another translation unit and
@@ -322,6 +347,12 @@ pub struct Program {
     /// `CompileOptions::no_entry_point`; the regular single-
     /// TU compile errors out on undefined externs earlier.
     pub(crate) extern_function_imports: alloc::vec::Vec<(usize, alloc::string::String)>,
+    /// Functions tagged `__attribute__((constructor))` /
+    /// `((destructor))`, in source order. The native emit path lowers
+    /// these into `.init_array` / `.fini_array`; the VM and JIT run
+    /// the constructors before `main`. Empty for programs that declare
+    /// none, and for `Program` shapes built outside the parser.
+    pub init_funcs: alloc::vec::Vec<InitFunc>,
 }
 
 /// A single local variable or formal parameter belonging to a

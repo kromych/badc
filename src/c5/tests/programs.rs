@@ -2,6 +2,43 @@
 //! check the exit code. These exercise the whole pipeline.
 
 use super::run_fixture;
+use super::run_str;
+
+#[test]
+fn constructors_run_before_main_in_priority_order() {
+    // `__attribute__((constructor))` functions run before `main` under
+    // the interpreter, ordered as the native `.init_array` runs them:
+    // prioritized ascending, then unprioritized. `main` observes their
+    // writes; the encoded return pins the order (portable, no native
+    // toolchain needed).
+    let src = "
+        static int order[8];
+        static int n;
+        __attribute__((constructor(102))) static void c2(void) { order[n++] = 2; }
+        __attribute__((constructor(101))) static void c1(void) { order[n++] = 1; }
+        __attribute__((constructor)) static void c3(void) { order[n++] = 3; }
+        int main(void) {
+            if (n != 3) return 100;
+            return order[0] * 100 + order[1] * 10 + order[2];
+        }
+    ";
+    assert_eq!(run_str(src), 123);
+}
+
+#[test]
+fn destructor_runs_after_main_without_disturbing_return() {
+    // A destructor runs after `main` returns (the VM has no way for
+    // `main` to observe it), so `main` still returns the constructor's
+    // value and the destructor path executes without error. Destructor
+    // ordering is pinned by the native Linux suites' stdout sequence.
+    let src = "
+        static int n;
+        __attribute__((constructor)) static void ctor(void) { n = 5; }
+        __attribute__((destructor)) static void dtor(void) { n = 0; }
+        int main(void) { return n; }
+    ";
+    assert_eq!(run_str(src), 5);
+}
 
 #[test]
 fn arithmetic() {

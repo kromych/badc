@@ -48,6 +48,11 @@ const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
 const SHT_NOTE: u32 = 7;
 const SHT_NOBITS: u32 = 8;
+// SHT_INIT_ARRAY / SHT_FINI_ARRAY (ELF gABI): arrays of function
+// pointers a C library runs before / after `main`. Entries are
+// resolved by a paired `.rela.init_array` / `.rela.fini_array`.
+const SHT_INIT_ARRAY: u32 = 14;
+const SHT_FINI_ARRAY: u32 = 15;
 
 // Vendor note types under namesz="badc\0". Standard ELF note
 // shape (ELF gABI, section 5): each entry is (namesz, descsz,
@@ -254,6 +259,90 @@ fn e_machine_for(machine: Machine) -> u16 {
     }
 }
 
+/// One `.init_array` / `.fini_array` section plus its companion
+/// `.rela.*`: a group of constructor / destructor pointers sharing a
+/// priority. The writer appends the pair after the fixed sections.
+struct InitArraySection {
+    name: String,
+    rela_name: String,
+    sh_type: u32,
+    /// Entry count -- each is an 8-byte function pointer, so the
+    /// section's byte size is `count * 8`.
+    count: usize,
+    rela: Vec<u8>,
+}
+
+/// Group `init_funcs` by (destructor?, priority) into `.init_array` /
+/// `.fini_array` sections, building each group's `.rela` payload that
+/// binds slot `i` to its function symbol. Prioritized groups get the
+/// GNU `.init_array.NNNNN` name; the bare form carries the rest.
+fn build_init_array_sections(
+    init_funcs: &[crate::c5::program::InitFunc],
+    func_symidx_by_name: &alloc::collections::BTreeMap<String, u32>,
+    rtype_abs64: u32,
+) -> Result<Vec<InitArraySection>, C5Error> {
+    if init_funcs.is_empty() {
+        return Ok(Vec::new());
+    }
+    // Deterministic group order: constructors before destructors,
+    // prioritized (ascending) before unprioritized. Section names
+    // carry the ordering a linker actually sorts on; this is only for
+    // reproducible output. Within a group, source order is preserved.
+    let mut groups: alloc::collections::BTreeMap<(bool, bool, u32), Vec<u32>> =
+        alloc::collections::BTreeMap::new();
+    for f in init_funcs {
+        let sym_idx = *func_symidx_by_name.get(&f.name).ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "elf_reloc: init/fini function `{}` has no .symtab entry",
+                f.name
+            )))
+        })?;
+        let key = (
+            f.is_destructor,
+            f.priority.is_none(),
+            f.priority.unwrap_or(0),
+        );
+        groups.entry(key).or_default().push(sym_idx);
+    }
+    let mut out = Vec::with_capacity(groups.len());
+    for ((is_dtor, no_prio, prio), sym_idxs) in groups {
+        let base = if is_dtor {
+            ".fini_array"
+        } else {
+            ".init_array"
+        };
+        let name = if no_prio {
+            base.to_string()
+        } else {
+            format!("{base}.{prio:05}")
+        };
+        let rela_name = format!(".rela{name}");
+        let mut rela = Vec::with_capacity(sym_idxs.len() * ELF64_RELA_SIZE);
+        for (i, sym_idx) in sym_idxs.iter().enumerate() {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: (i * 8) as u64,
+                    r_info: ((*sym_idx as u64) << 32) | rtype_abs64 as u64,
+                    r_addend: 0,
+                },
+            );
+        }
+        out.push(InitArraySection {
+            name,
+            rela_name,
+            sh_type: if is_dtor {
+                SHT_FINI_ARRAY
+            } else {
+                SHT_INIT_ARRAY
+            },
+            count: sym_idxs.len(),
+            rela,
+        });
+    }
+    Ok(out)
+}
+
 /// Byte size of a defined data global, for the symbol table's
 /// `st_size`. Pointers and scalars resolve by width (ELF targets are
 /// LP64, so `long` is 8); an array multiplies by its element count. A
@@ -360,7 +449,11 @@ pub(super) fn write_relocatable(
     let has_tls = !program.tls_data.is_empty();
     const SHIDX_TDATA: u16 = 15;
     const SHIDX_TBSS: u16 = 16;
-    let num_sections: usize = if has_tls { 17 } else { 15 };
+    // Base section count (null + the fixed sections, plus the two TLS
+    // sections when present). Each `.init_array` / `.fini_array` group
+    // adds two more (the array + its `.rela`), counted once the groups
+    // are known below.
+    let base_sections: usize = if has_tls { 17 } else { 15 };
 
     // Strtab + symtab construction. The file symbol leads
     // (binding LOCAL, type FILE); per-function symbols follow
@@ -659,10 +752,17 @@ pub(super) fn write_relocatable(
             .unwrap_or(build.text.len());
         Ok((lo, hi))
     };
+    // Function name -> `.symtab` index, for the `.init_array` /
+    // `.fini_array` relocations to reference each constructor /
+    // destructor function symbol. Covers both static (STB_LOCAL) and
+    // external (STB_GLOBAL) functions.
+    let mut func_symidx_by_name: alloc::collections::BTreeMap<String, u32> =
+        alloc::collections::BTreeMap::new();
     // STB_LOCAL function symbols. Emitted before `first_global`
     // so the LOCAL block is contiguous as ELF requires.
     for &i in &local_func_idxs {
         let (lo, hi) = func_extent(i)?;
+        func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[1 + i],
             st_info: pack_sym_info(STB_LOCAL, STT_FUNC),
@@ -690,6 +790,7 @@ pub(super) fn write_relocatable(
     // STB_GLOBAL function symbols.
     for &i in &global_func_idxs {
         let (lo, hi) = func_extent(i)?;
+        func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[1 + i],
             st_info: pack_sym_info(STB_GLOBAL, STT_FUNC),
@@ -929,6 +1030,23 @@ pub(super) fn write_relocatable(
         })
         .collect();
 
+    // `.init_array` / `.fini_array` groups. C99 has no such attribute;
+    // GNU practice (matched by every mainstream toolchain) lowers each
+    // `__attribute__((constructor))` into an `SHT_INIT_ARRAY` pointer
+    // and each `((destructor))` into `SHT_FINI_ARRAY`. An explicit
+    // priority rides in the section name (`.init_array.NNNNN`, 5-digit
+    // per GNU) so a system linker's `SORT_BY_INIT_PRIORITY` orders
+    // across units; unprioritized entries land in the bare
+    // `.init_array` the script places last. Entries sharing a group
+    // keep source order.
+    let rtype_abs64_init = match machine_for_rela {
+        Machine::X86_64 => R_X86_64_64,
+        Machine::Aarch64 => R_AARCH64_ABS64,
+    };
+    let init_sections =
+        build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64_init)?;
+    let num_sections: usize = base_sections + 2 * init_sections.len();
+
     // Section name table. Index map below mirrors the SHIDX_*
     // constants above (one entry per non-null section).
     let mut shstrtab_names: Vec<&str> = alloc::vec![
@@ -953,6 +1071,13 @@ pub(super) fn write_relocatable(
     if has_tls {
         shstrtab_names.push(".tdata");
         shstrtab_names.push(".tbss");
+    }
+    // `.init_array*` / `.fini_array*` names and their `.rela.*`
+    // companions, appended last so the fixed and TLS indices stay put.
+    let init_names_start = shstrtab_names.len();
+    for s in &init_sections {
+        shstrtab_names.push(s.name.as_str());
+        shstrtab_names.push(s.rela_name.as_str());
     }
     let (shstrtab_bytes, shstrtab_offs) = build_strtab(&shstrtab_names);
 
@@ -1378,6 +1503,43 @@ pub(super) fn write_relocatable(
     let _ = SHIDX_DEBUG_ABBREV;
     let _ = SHIDX_DEBUG_LINE;
     let _ = SHIDX_RELA_DEBUG_LINE;
+
+    // `.init_array` / `.fini_array` groups. Each is a zero-filled array
+    // of 8-byte pointers (the paired `.rela.*` binds each slot to its
+    // function) followed immediately by that `.rela.*` section, whose
+    // `sh_info` names the array it patches. Appended last so every
+    // fixed and TLS section index is unchanged.
+    for (k, s) in init_sections.iter().enumerate() {
+        let array_shndx = sh.len() as u32;
+        let arr_off = round_up(out.len() as u64, 8);
+        out.resize(arr_off as usize, 0);
+        out.resize(arr_off as usize + s.count * 8, 0);
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[init_names_start + 2 * k],
+            sh_type: s.sh_type,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_offset: arr_off,
+            sh_size: (s.count * 8) as u64,
+            sh_addralign: 8,
+            sh_entsize: 8,
+            ..Default::default()
+        });
+        let rela_off = round_up(out.len() as u64, 8);
+        out.resize(rela_off as usize, 0);
+        out.extend_from_slice(&s.rela);
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[init_names_start + 2 * k + 1],
+            sh_type: SHT_RELA,
+            sh_flags: SHF_INFO_LINK,
+            sh_offset: rela_off,
+            sh_size: s.rela.len() as u64,
+            sh_link: SHIDX_SYMTAB as u32,
+            sh_info: array_shndx,
+            sh_addralign: 8,
+            sh_entsize: ELF64_RELA_SIZE as u64,
+            ..Default::default()
+        });
+    }
 
     debug_assert_eq!(sh.len(), num_sections);
 
@@ -1852,6 +2014,7 @@ mod tests {
             synthetic_ssa_funcs: Vec::new(),
             user_ssa_funcs: Vec::new(),
             extern_function_imports: Vec::new(),
+            init_funcs: Vec::new(),
         }
     }
 

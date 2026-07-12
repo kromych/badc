@@ -319,6 +319,7 @@ impl Compiler {
     /// corresponding attribute name (`packed` / `__packed__`,
     /// `unused` / `maybe_unused` / `__unused__`). Other names are
     /// ignored.
+    #[allow(clippy::too_many_arguments)]
     fn note_attribute_name(
         &self,
         packed: &mut bool,
@@ -327,6 +328,8 @@ impl Compiler {
         noreturn: &mut bool,
         dllexport: &mut bool,
         aligned: &mut bool,
+        constructor: &mut bool,
+        destructor: &mut bool,
     ) {
         if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.as_str();
@@ -348,6 +351,12 @@ impl Compiler {
             } else if n == "aligned" || n == "__aligned__" || n == "align" {
                 // GNU `aligned(N)` / MSVC `__declspec(align(N))`.
                 *aligned = true;
+            } else if n == "constructor" || n == "__constructor__" {
+                // GNU `constructor` / `constructor(N)`: run before `main`.
+                *constructor = true;
+            } else if n == "destructor" || n == "__destructor__" {
+                // GNU `destructor` / `destructor(N)`: run after `main` returns.
+                *destructor = true;
             }
         }
     }
@@ -369,6 +378,9 @@ impl Compiler {
         let mut dllexport = false;
         let mut align: i64 = 0;
         let mut vector_size: i64 = 0;
+        let mut constructor = false;
+        let mut destructor = false;
+        let mut init_priority: Option<u32> = None;
         loop {
             if self.lex.tk == Token::Attribute {
                 // `__attribute__((...))`, `__declspec(...)`,
@@ -428,6 +440,8 @@ impl Compiler {
                                 "vector_size" | "__vector_size__"
                             );
                         let mut saw_aligned = false;
+                        let mut saw_constructor = false;
+                        let mut saw_destructor = false;
                         self.note_attribute_name(
                             &mut packed,
                             &mut maybe_unused,
@@ -435,6 +449,8 @@ impl Compiler {
                             &mut noreturn,
                             &mut dllexport,
                             &mut saw_aligned,
+                            &mut saw_constructor,
+                            &mut saw_destructor,
                         );
                         self.next()?;
                         if saw_aligned {
@@ -454,6 +470,10 @@ impl Compiler {
                                 // supported targets).
                                 align = align.max(16);
                             }
+                        } else if saw_constructor || saw_destructor {
+                            constructor |= saw_constructor;
+                            destructor |= saw_destructor;
+                            init_priority = self.parse_init_priority(init_priority)?;
                         } else if is_vector_size && self.lex.tk == '(' {
                             // GCC `vector_size(N)`: the declared type becomes a
                             // vector N bytes wide. Captured here; the base-type
@@ -498,6 +518,8 @@ impl Compiler {
                         return Err(self.compile_err("unterminated `[[` attribute"));
                     } else {
                         let mut saw_aligned = false;
+                        let mut saw_constructor = false;
+                        let mut saw_destructor = false;
                         self.note_attribute_name(
                             &mut packed,
                             &mut maybe_unused,
@@ -505,6 +527,8 @@ impl Compiler {
                             &mut noreturn,
                             &mut dllexport,
                             &mut saw_aligned,
+                            &mut saw_constructor,
+                            &mut saw_destructor,
                         );
                         self.next()?;
                         if saw_aligned && self.lex.tk == '(' {
@@ -517,6 +541,10 @@ impl Compiler {
                                 );
                             }
                             self.next()?;
+                        } else if saw_constructor || saw_destructor {
+                            constructor |= saw_constructor;
+                            destructor |= saw_destructor;
+                            init_priority = self.parse_init_priority(init_priority)?;
                         }
                     }
                 }
@@ -542,7 +570,38 @@ impl Compiler {
         if vector_size > 0 {
             self.pending.attr_vector_size = vector_size;
         }
+        if constructor {
+            self.pending.attr_constructor = true;
+        }
+        if destructor {
+            self.pending.attr_destructor = true;
+        }
+        if let Some(p) = init_priority {
+            self.pending.attr_init_priority = Some(p);
+        }
         Ok(packed)
+    }
+
+    /// Parse the optional `(N)` priority argument of a
+    /// `constructor` / `destructor` attribute. The current token is
+    /// the attribute name's successor; `(` opens the priority, absent
+    /// leaves `prev` unchanged (the bare form). GNU reserves 0-100 for
+    /// the implementation but does not reject them; the value rides
+    /// into the `.init_array.NNNNN` section ordering.
+    fn parse_init_priority(&mut self, prev: Option<u32>) -> Result<Option<u32>, C5Error> {
+        if self.lex.tk != '(' {
+            return Ok(prev);
+        }
+        self.next()?; // (
+        let n = self.parse_constant_int()?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected after constructor/destructor priority"));
+        }
+        self.next()?;
+        if !(0..=65535).contains(&n) {
+            return Err(self.compile_err("constructor/destructor priority out of range 0..65535"));
+        }
+        Ok(Some(n as u32))
     }
 
     /// Parse a scalar base-type keyword (`int` / `char` / `void` /

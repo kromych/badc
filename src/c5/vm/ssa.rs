@@ -485,6 +485,8 @@ pub(super) fn run_program_with_args<H: Host>(
         host,
         args,
         false,
+        &[],
+        &[],
     )
 }
 
@@ -502,12 +504,28 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     host: &mut H,
     args: &[alloc::string::String],
     track_pointers: bool,
+    init_pcs: &[usize],
+    fini_pcs: &[usize],
 ) -> Result<i64, C5Error> {
     let prog = Program::new(funcs)
         .with_bindings(binding_names)
         .with_tls_base(tls_base);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
     let mut mem = Memory::new(&data_with_argv).with_track_pointers(track_pointers);
+    // `__attribute__((constructor))` functions run before the entry, in
+    // the native `.init_array` order the caller already sorted. An
+    // `exit()` from a constructor short-circuits to the exit status.
+    for &pc in init_pcs {
+        let ctor = prog
+            .lookup(pc)
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no constructor at ent_pc {pc}")))?;
+        if let Err(e) = run_func(&prog, &mut mem, host, ctor, &[]) {
+            return match exit_status_of(&e) {
+                Some(status) => Ok(status),
+                None => Err(e),
+            };
+        }
+    }
     let entry = prog.lookup(entry_pc).ok_or_else(|| {
         C5Error::Runtime(format!(
             "vm_ssa: run_program: no function at ent_pc {entry_pc}",
@@ -519,13 +537,28 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     } else {
         &entry_args
     };
-    match run_func(&prog, &mut mem, host, entry, slice) {
+    let status = match run_func(&prog, &mut mem, host, entry, slice) {
         Err(e) => match exit_status_of(&e) {
-            Some(status) => Ok(status),
-            None => Err(e),
+            Some(status) => status,
+            None => return Err(e),
         },
-        ok => ok,
+        Ok(v) => v,
+    };
+    // `__attribute__((destructor))` functions run in reverse after the
+    // entry returns. The VM has no atexit chain, so an `exit()` path
+    // does not reach these (documented in `Vm::fini_pcs`).
+    for &pc in fini_pcs.iter().rev() {
+        let dtor = prog
+            .lookup(pc)
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no destructor at ent_pc {pc}")))?;
+        if let Err(e) = run_func(&prog, &mut mem, host, dtor, &[]) {
+            match exit_status_of(&e) {
+                Some(s) => return Ok(s),
+                None => return Err(e),
+            }
+        }
     }
+    Ok(status)
 }
 
 /// `exit(status)` unwinds the interpreter through the `Result`

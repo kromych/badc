@@ -163,6 +163,7 @@ fn synth_program_and_build(
         synthetic_ssa_funcs: Vec::new(),
         user_ssa_funcs: Vec::new(),
         extern_function_imports: Vec::new(),
+        init_funcs: Vec::new(),
     };
 
     // Surface every Text-section defined symbol as a "function"

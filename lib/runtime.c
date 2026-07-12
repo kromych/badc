@@ -123,6 +123,72 @@ void __c5_exit(int rc) {
     exit(rc);
 }
 
+// Constructors / destructors (`__attribute__((constructor))` /
+// `((destructor))`). badc's linker lays out two arrays of function
+// pointers in the image and defines the boundary symbols below; the
+// entry (`__c5_entry`) walks `__init_array` forward before the program
+// entry. Destructors run in reverse on exit through the platform atexit
+// chain, so they fire on both a return from the entry and a direct
+// `exit()`. An object linked by a system toolchain instead carries a
+// real `.init_array` the platform C library runs, so both link paths
+// execute the same functions.
+typedef void (*__c5_init_fn)(void);
+extern __c5_init_fn __init_array_start[];
+extern __c5_init_fn __init_array_end[];
+extern __c5_init_fn __fini_array_start[];
+extern __c5_init_fn __fini_array_end[];
+
+// Run destructors in reverse registration order.
+static void __c5_run_fini_array(void) {
+    __c5_init_fn *fn = __fini_array_end;
+    while (fn != __fini_array_start) {
+        fn--;
+        (*fn)();
+    }
+}
+
+#if defined(__linux__)
+// The Linux C library exposes the exit chain as `__cxa_atexit`, whose
+// handler takes a closure argument (see <stdlib.h>); the trampoline
+// discards it. A NULL DSO handle registers on the main program's chain.
+#pragma binding(libc::__cxa_atexit, "__cxa_atexit")
+extern int __cxa_atexit(void (*)(void *), void *, void *);
+static void __c5_fini_trampoline(void *arg) {
+    (void)arg;
+    __c5_run_fini_array();
+}
+static void __c5_register_fini(void) {
+    __cxa_atexit(__c5_fini_trampoline, 0, 0);
+}
+#elif defined(_WIN32)
+// msvcrt exports `atexit` directly, taking a `void (*)(void)` handler.
+#pragma binding(libc::atexit, "atexit")
+extern int atexit(void (*)(void));
+static void __c5_register_fini(void) {
+    atexit(__c5_run_fini_array);
+}
+#elif defined(__APPLE__)
+// libSystem spells the exit chain `_atexit`, taking a `void (*)(void)`.
+#pragma binding(libc::atexit, "_atexit")
+extern int atexit(void (*)(void));
+static void __c5_register_fini(void) {
+    atexit(__c5_run_fini_array);
+}
+#endif
+
+void __c5_run_init_array(void) {
+    // Register destructors before running constructors so a handler a
+    // constructor installs with atexit() runs before the static
+    // destructors -- the ordering a C library gives.
+    if (__fini_array_end != __fini_array_start) {
+        __c5_register_fini();
+    }
+    __c5_init_fn *fn;
+    for (fn = __init_array_start; fn != __init_array_end; fn++) {
+        (*fn)();
+    }
+}
+
 #ifdef __linux__
 // Linux process entry. The image writer's entry adapter hands control
 // here with the initial stack pointer in the first argument and the
@@ -142,7 +208,25 @@ void __c5_entry(void *sp, long image_off) {
     // through `environ` (POSIX 8.3); without this the global stays NULL
     // and an `environ[i]` read faults.
     environ = argv + argc + 1;
+    __c5_run_init_array();
     __c5_exit(__BADC_ENTRY__(argc, argv));
+}
+#endif
+
+#ifdef __APPLE__
+// macOS process entry. dyld enters through `LC_MAIN`, calling this like
+// the program main -- `int (int argc, char **argv, char **envp, char
+// **apple)` -- and passes the return value to `exit()`, so the atexit
+// chain (destructors + stdio flush) runs without an explicit `__c5_exit`.
+// The Mach-O writer points `LC_MAIN` at `__c5_entry` when it is linked
+// (see mach_o::write); a bare single-TU image with no runtime keeps
+// `LC_MAIN` on `main`. `environ` is a libSystem GOT import here, so it
+// needs no startup assignment.
+extern int __BADC_ENTRY__(int argc, char **argv);
+
+int __c5_entry(int argc, char **argv) {
+    __c5_run_init_array();
+    return __BADC_ENTRY__(argc, argv);
 }
 #endif
 
@@ -184,6 +268,7 @@ unsigned short *__c5_getcommandlinew(void) {
 void __c5_entry(void *sp, long image_off) {
     (void)sp;
     (void)image_off;
+    __c5_run_init_array();
     __c5_exit(__BADC_ENTRY__(__c5_getmodulehandle(), 0, __c5_getcommandlinew(), 1));
 }
 #else
@@ -199,6 +284,7 @@ char *__c5_getcommandline(void) {
 void __c5_entry(void *sp, long image_off) {
     (void)sp;
     (void)image_off;
+    __c5_run_init_array();
     __c5_exit(__BADC_ENTRY__(__c5_getmodulehandle(), 0, __c5_getcommandline(), 1));
 }
 #endif
@@ -238,6 +324,7 @@ void __c5_entry(void *sp, long image_off) {
     int argc;
     unsigned short **argv;
     __c5_wgetmainargs(&argc, &argv);
+    __c5_run_init_array();
     __c5_exit(__BADC_ENTRY__(argc, argv));
 }
 #else
@@ -249,6 +336,7 @@ void __c5_entry(void *sp, long image_off) {
     int argc;
     char **argv;
     __c5_getmainargs(&argc, &argv);
+    __c5_run_init_array();
     __c5_exit(__BADC_ENTRY__(argc, argv));
 }
 #endif

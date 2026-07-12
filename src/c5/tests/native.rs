@@ -102,6 +102,65 @@ fn return_42() {
     assert_eq!(build_and_run("int main() { return 42; }", "ret42"), 42);
 }
 
+/// Link + run a source through the startup runtime (`__c5_entry`),
+/// signing before exec. Mirrors `build_and_run` but takes the full
+/// link path so `__attribute__((constructor))` functions run: dyld
+/// enters `__c5_entry` via `LC_MAIN`, which walks the linker's
+/// `.init_array`. Returns (exit code, stdout).
+fn link_run_capture(src: &str, stem: &str) -> (i32, String) {
+    use crate::{Compiler, NativeOptions, Target};
+    let program = Compiler::new(super::with_prelude(src))
+        .compile()
+        .expect("compile");
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::MacOSAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link with runtime");
+    let path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+    }
+    set_executable(&path);
+    codesign(&path);
+    let output = Command::new(&path).output().expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    let code = output.status.code().unwrap_or(-1);
+    (code, String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+#[test]
+fn constructor_runs_before_main() {
+    // A `static` constructor sets a global `main` returns; a non-zero
+    // exit proves it ran first, through `LC_MAIN` -> `__c5_entry` ->
+    // `.init_array`.
+    let (code, _) = link_run_capture(
+        "static int g;\n\
+         __attribute__((constructor)) static void ctor(void) { g = 42; }\n\
+         int main(void) { return g; }\n",
+        "mac-ctor",
+    );
+    assert_eq!(code, 42, "constructor must run before main");
+}
+
+#[test]
+fn constructor_priority_and_destructor_order() {
+    // Prioritized constructors run ascending, unprioritized last, then
+    // main, then the destructor via the atexit chain at exit.
+    let (_, stdout) = link_run_capture(
+        "#include <stdio.h>\n\
+         __attribute__((constructor(102))) static void c2(void) { printf(\"c2\\n\"); }\n\
+         __attribute__((constructor(101))) static void c1(void) { printf(\"c1\\n\"); }\n\
+         __attribute__((constructor)) static void c3(void) { printf(\"c3\\n\"); }\n\
+         __attribute__((destructor)) static void d1(void) { printf(\"d1\\n\"); }\n\
+         int main(void) { printf(\"main\\n\"); return 0; }\n",
+        "mac-ctor-order",
+    );
+    assert_eq!(stdout, "c1\nc2\nc3\nmain\nd1\n");
+}
+
 #[test]
 fn return_zero() {
     assert_eq!(build_and_run("int main() { return 0; }", "ret0"), 0);

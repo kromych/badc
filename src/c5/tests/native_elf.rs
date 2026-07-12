@@ -291,6 +291,81 @@ fn environ_populated_through_runtime() {
     );
 }
 
+/// A `static` constructor runs before `main`: it sets a global `main`
+/// returns, so the exit code is non-zero only if the constructor ran
+/// first. Exercises the full link path (runtime.c walks the linker's
+/// `.init_array`), not the self-contained `emit_native` stub.
+#[test]
+fn constructor_runs_before_main() {
+    use crate::{Compiler, NativeOptions, Target};
+    let program = Compiler::new(super::with_prelude(
+        "static int g;\n\
+         __attribute__((constructor)) static void ctor(void) { g = 42; }\n\
+         int main(void) { return g; }\n",
+    ))
+    .compile()
+    .expect("compile constructor program");
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link with runtime");
+    let path = unique_temp_path("badc-ctor", "run");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec constructor binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(42),
+        "the constructor must run before main and set the global",
+    );
+}
+
+/// Constructor priority ordering plus a destructor firing at exit.
+/// Prioritized constructors run in ascending priority, unprioritized
+/// last; the destructor runs on the atexit chain after main. The
+/// stdout sequence pins the whole order.
+#[test]
+fn constructor_priority_and_destructor_order() {
+    use crate::{Compiler, NativeOptions, Target};
+    let program = Compiler::new(super::with_prelude(
+        "#include <stdio.h>\n\
+         __attribute__((constructor(102))) static void c2(void) { printf(\"c2\\n\"); }\n\
+         __attribute__((constructor(101))) static void c1(void) { printf(\"c1\\n\"); }\n\
+         __attribute__((constructor)) static void c3(void) { printf(\"c3\\n\"); }\n\
+         __attribute__((destructor)) static void d1(void) { printf(\"d1\\n\"); }\n\
+         int main(void) { printf(\"main\\n\"); return 0; }\n",
+    ))
+    .compile()
+    .expect("compile ctor/dtor program");
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link with runtime");
+    let path = unique_temp_path("badc-ctor-order", "run");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec ctor/dtor binary");
+    let _ = std::fs::remove_file(&path);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        stdout, "c1\nc2\nc3\nmain\nd1\n",
+        "constructors run priority-ascending then unprioritized, main, then the destructor at exit",
+    );
+}
+
 // ---- Fixture parity. Mirror of the `fixture_parity` test in
 //      `super::native`, against the same fixture set so a drift in
 //      either backend shows up as a Linux-specific failure. ----

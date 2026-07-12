@@ -321,6 +321,22 @@ pub struct NativeReloc {
     pub addend: i64,
 }
 
+/// One `.init_array` / `.fini_array` entry parsed from an ET_REL
+/// object: a constructor / destructor pointer resolved to a `.text`
+/// offset within this unit. The linker adds the unit's text base to
+/// place it in the merged image and orders entries by priority.
+#[derive(Debug, Clone, Copy)]
+pub struct NativeInitFunc {
+    /// `true` for a `.fini_array` (destructor) entry.
+    pub is_destructor: bool,
+    /// Priority from the `.init_array.NNNNN` section-name suffix;
+    /// `None` for the bare `.init_array`. Lower runs earlier.
+    pub priority: Option<u32>,
+    /// Byte offset of the target function within this unit's merged
+    /// `.text`.
+    pub unit_text_offset: u64,
+}
+
 /// Target of a TLS access fixup (`NT_BADC_ELF_TPOFF`). The linker
 /// resolves it to a byte offset in the merged TLS block (Linux x86_64 /
 /// aarch64 and the Windows/aarch64 TEB path; see `link_native_objects`).
@@ -362,6 +378,12 @@ pub struct NativeObject {
     /// patching the 8-byte slot at `offset` in the merged
     /// `.data`.
     pub data_relocs: Vec<NativeReloc>,
+    /// `.init_array` / `.fini_array` entries, each a constructor /
+    /// destructor pointer resolved to this unit's `.text` offset. The
+    /// linker collects these across units, orders them by priority, and
+    /// materialises the merged init/fini arrays the startup runtime
+    /// walks. Empty for objects declaring no such functions.
+    pub init_funcs: Vec<NativeInitFunc>,
     /// Dylib load paths the writer copied out of the unit's
     /// `#pragma dylib` declarations (`.note.badc` /
     /// `NT_BADC_DYLIBS`). Each entry is the verbatim path the
@@ -552,10 +574,16 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut debug_str_idx: Option<usize> = None;
     let mut rela_debug_info_idx: Option<usize> = None;
     let mut rela_debug_line_idx: Option<usize> = None;
+    // `.init_array*` / `.fini_array*` sections: (shndx, is_dtor, priority).
+    let mut init_array_sections: Vec<(usize, bool, Option<u32>)> = Vec::new();
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.sh_name as usize)?;
         if name == ".symtab" {
             symtab_idx = Some(i);
+            continue;
+        }
+        if let Some((is_dtor, priority)) = parse_init_array_section_name(name) {
+            init_array_sections.push((i, is_dtor, priority));
             continue;
         }
         if name == ".note.badc" {
@@ -815,6 +843,53 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
     }
 
+    // `.init_array` / `.fini_array` entries. Each array's paired
+    // `.rela.*` (found by `sh_info` == the array's index) binds every
+    // 8-byte slot to a constructor / destructor function. Resolve each
+    // to its `.text` offset within this unit; the linker rebases and
+    // orders them. Slot order (by `r_offset`) is preserved so
+    // same-priority entries keep source order.
+    let mut init_funcs: Vec<NativeInitFunc> = Vec::new();
+    for &(shndx, is_destructor, priority) in &init_array_sections {
+        let mut entries: Vec<(u64, u64)> = Vec::new(); // (slot_offset, text_offset)
+        for rela_sh in shdrs
+            .iter()
+            .filter(|s| s.sh_type == SHT_RELA && s.sh_info as usize == shndx)
+        {
+            if rela_sh.sh_entsize != ELF64_RELA_SIZE as u64 {
+                return Err(err(&format!(
+                    ".rela for init/fini section {shndx} has entry size {}; expected {ELF64_RELA_SIZE}",
+                    rela_sh.sh_entsize,
+                )));
+            }
+            let rela_bytes = section_slice(bytes, rela_sh)?;
+            let n = rela_bytes.len() / ELF64_RELA_SIZE;
+            for j in 0..n {
+                let rela: Elf64Rela = read_struct(rela_bytes, j * ELF64_RELA_SIZE)?;
+                let sym_idx = (rela.r_info >> 32) as usize;
+                let sym = symbols.get(sym_idx).ok_or_else(|| {
+                    err(&format!(
+                        "init/fini reloc references symbol {sym_idx} past the symbol table",
+                    ))
+                })?;
+                if !matches!(sym.section, NativeSymSection::Text) {
+                    return Err(err(
+                        "init/fini array entry must reference a defined function (.text symbol)",
+                    ));
+                }
+                entries.push((rela.r_offset, (sym.value as i64 + rela.r_addend) as u64));
+            }
+        }
+        entries.sort_by_key(|&(slot, _)| slot);
+        for (_, text_off) in entries {
+            init_funcs.push(NativeInitFunc {
+                is_destructor,
+                priority,
+                unit_text_offset: text_off,
+            });
+        }
+    }
+
     // `.note.badc` -- vendor note section. Record types:
     //   type=1 NT_BADC_DYLIBS       -- NUL-separated dylib paths.
     //   type=2 NT_BADC_BINDING_MAP  -- per-import dylib routing,
@@ -1048,6 +1123,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         symbols,
         text_relocs,
         data_relocs,
+        init_funcs,
         dylibs,
         import_dylib_map,
         exports,
@@ -1219,6 +1295,31 @@ enum SectionFamily {
     Tdata,
     Tbss,
     Other,
+}
+
+/// Recognise `.init_array` / `.fini_array` (and their
+/// `.<name>.NNNNN` priority variants) section names, returning
+/// `(is_destructor, priority)`. Returns `None` for any other name,
+/// including the `.rela.*` companions. A non-numeric or out-of-range
+/// suffix is treated as the bare (unprioritized) form.
+fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
+    let (is_dtor, rest) = if let Some(r) = name.strip_prefix(".init_array") {
+        (false, r)
+    } else if let Some(r) = name.strip_prefix(".fini_array") {
+        (true, r)
+    } else {
+        return None;
+    };
+    if rest.is_empty() {
+        return Some((is_dtor, None));
+    }
+    // A `.NNNNN` priority suffix; anything else (e.g. `.init_arrayX`
+    // would already have failed the prefix, but guard the dotted form).
+    let digits = rest.strip_prefix('.')?;
+    match digits.parse::<u32>() {
+        Ok(p) if p <= 65535 => Some((is_dtor, Some(p))),
+        _ => Some((is_dtor, None)),
+    }
 }
 
 fn classify_section_family(name: &str) -> SectionFamily {

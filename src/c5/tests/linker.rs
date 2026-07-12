@@ -1880,6 +1880,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
             symbols: alloc::vec![null_sym(), weak_undef()],
             text_relocs,
             data_relocs,
+            init_funcs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
@@ -2388,4 +2389,75 @@ fn macho_data_import_gets_no_bogus_local_text_symbol() {
             .any(|(n, t)| n == "_strlen" && t & 0x0e == 0x0e && t & 0x01 == 0),
         "a trampolined import must keep its local text symbol: {names:?}"
     );
+}
+
+#[test]
+fn init_array_round_trips_through_object() {
+    // A constructor and a prioritized destructor emit `.init_array` /
+    // `.fini_array.NNNNN` sections in the ET_REL object; `parse_native_elf`
+    // recovers them as `NativeObject::init_funcs`, each resolved to the
+    // target function's `.text` offset. Static (internal-linkage) init
+    // functions -- what `type_init`-style macros generate -- must resolve
+    // too, so use `static`.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(
+            "static int g;\n\
+             __attribute__((constructor)) static void ctor(void) { g = 1; }\n\
+             __attribute__((destructor(101))) static void dtor(void) { g = 0; }\n\
+             int main(void) { return g; }\n"
+                .to_string(),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let ctors: alloc::vec::Vec<_> =
+            obj.init_funcs.iter().filter(|f| !f.is_destructor).collect();
+        let dtors: alloc::vec::Vec<_> = obj.init_funcs.iter().filter(|f| f.is_destructor).collect();
+        assert_eq!(ctors.len(), 1, "{target:?}: one constructor");
+        assert_eq!(dtors.len(), 1, "{target:?}: one destructor");
+        assert!(ctors[0].priority.is_none(), "{target:?}: bare ctor");
+        assert_eq!(dtors[0].priority, Some(101), "{target:?}: dtor priority");
+        // Each entry resolves to a real function body inside `.text`.
+        assert!((ctors[0].unit_text_offset as usize) < obj.text.len());
+        assert!((dtors[0].unit_text_offset as usize) < obj.text.len());
+    }
+}
+
+#[test]
+fn constructor_links_into_executable_with_runtime() {
+    // The full CLI link path: a program with a `static` constructor plus
+    // the startup runtime. runtime.c references the linker-defined
+    // `__init_array_*` boundary symbols; before they were provided this
+    // link failed with "undefined reference to __init_array_start".
+    // Producing a well-formed image proves the boundary symbols resolve
+    // and the init array is laid out. Execution is covered by the
+    // native_elf / native_elf_x64 suites on Linux.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, Target};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            "static int g;\n\
+             __attribute__((constructor)) static void ctor(void) { g = 7; }\n\
+             __attribute__((destructor)) static void dtor(void) { g = 0; }\n\
+             int main(void) { return g; }\n"
+                .to_string(),
+            target,
+            CompileOptions::default(),
+        )
+        .compile()
+        .expect("compile");
+        let bytes = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: link with runtime: {e}"));
+        assert!(
+            bytes.len() > 64 && &bytes[0..4] == b"\x7fELF",
+            "{target:?}: produced a valid ELF image"
+        );
+    }
 }

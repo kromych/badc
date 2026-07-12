@@ -390,6 +390,51 @@ pub fn link_native_objects_with_options(
         bss_bases.push(bss_size);
         bss_size += obj.bss_size;
     }
+
+    // Pass 1.5 -- `.init_array` / `.fini_array` materialisation. Collect
+    // every unit's constructor / destructor entries, rebased to merged
+    // `.text` offsets, and order them: prioritized ascending, then
+    // unprioritized in link order (a stable sort over
+    // `(priority.is_none(), priority)` keeps each unit's slot order). Two
+    // contiguous pointer arrays are appended to `.data`; the startup
+    // runtime walks `[__init_array_start, __init_array_end)` forward
+    // before `main` and `[__fini_array_start, __fini_array_end)` backward
+    // after. Each 8-byte slot is a `.text` pointer, so a `DataAbsReloc`
+    // (Pass 5) gives the PIE its load-time R_*_RELATIVE. This is the same
+    // `.init_array` a system linker + C library consume on the `-c` +
+    // system-`cc` path, so both paths run the constructors.
+    let mut init_entries: Vec<(Option<u32>, u64)> = Vec::new();
+    let mut fini_entries: Vec<(Option<u32>, u64)> = Vec::new();
+    for (i, obj) in objs.iter().enumerate() {
+        for f in &obj.init_funcs {
+            let off = text_bases[i] as u64 + f.unit_text_offset;
+            if f.is_destructor {
+                fini_entries.push((f.priority, off));
+            } else {
+                init_entries.push((f.priority, off));
+            }
+        }
+    }
+    init_entries.sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+    fini_entries.sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+    // A program with no constructors gets no `.data` change (start ==
+    // end leaves the runtime's walk a no-op); only touch the layout when
+    // there is something to lay out, so existing data offsets are stable.
+    let (init_array_start, init_array_end, fini_array_start, fini_array_end) =
+        if init_entries.is_empty() && fini_entries.is_empty() {
+            let at = data.len() as u64;
+            (at, at, at, at)
+        } else {
+            align_up(&mut data, 8);
+            let init_start = data.len() as u64;
+            data.resize(data.len() + init_entries.len() * 8, 0);
+            let init_end = data.len() as u64;
+            let fini_start = data.len() as u64;
+            data.resize(data.len() + fini_entries.len() * 8, 0);
+            let fini_end = data.len() as u64;
+            (init_start, init_end, fini_start, fini_end)
+        };
+
     // The merged bss region begins at `data.len()` in the unified
     // data-offset space; pad the file image so bss offsets keep their
     // per-unit alignment residues in the final image.
@@ -546,6 +591,27 @@ pub fn link_native_objects_with_options(
                 section: NativeSymSection::Bss,
                 value: slot_offset,
                 size: *size,
+            },
+        );
+    }
+
+    // Boundary symbols for the init/fini arrays laid out in Pass 1.5.
+    // The startup runtime references them as `extern` arrays; defining
+    // them here lets Pass 4 resolve those references against the merged
+    // `.data`. Always defined (an empty array leaves start == end so the
+    // runtime's walk is a no-op) so the runtime's references never dangle.
+    for (name, off) in [
+        ("__init_array_start", init_array_start),
+        ("__init_array_end", init_array_end),
+        ("__fini_array_start", fini_array_start),
+        ("__fini_array_end", fini_array_end),
+    ] {
+        defined.insert(
+            name.to_string(),
+            MergedSymbol {
+                section: NativeSymSection::Data,
+                value: off,
+                size: 0,
             },
         );
     }
@@ -1066,6 +1132,24 @@ pub fn link_native_objects_with_options(
                 target_section: resolved_section,
             });
         }
+    }
+    // Init/fini array slots (laid out in Pass 1.5): each 8-byte slot
+    // holds a `.text` function pointer, so it needs the same absolute
+    // relocation as a function-pointer data initializer -- an
+    // R_*_RELATIVE in the PIE the final-image writer emits.
+    for (k, &(_, text_off)) in init_entries.iter().enumerate() {
+        data_abs_relocs.push(DataAbsReloc {
+            slot_offset: init_array_start + (k * 8) as u64,
+            target_offset: text_off,
+            target_section: NativeSymSection::Text,
+        });
+    }
+    for (k, &(_, text_off)) in fini_entries.iter().enumerate() {
+        data_abs_relocs.push(DataAbsReloc {
+            slot_offset: fini_array_start + (k * 8) as u64,
+            target_offset: text_off,
+            target_section: NativeSymSection::Text,
+        });
     }
 
     // Dedupe dylib paths across input units, preserving the
@@ -2342,6 +2426,7 @@ mod tests {
             ],
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
+            init_funcs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
@@ -2412,6 +2497,7 @@ mod tests {
             ],
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
+            init_funcs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
@@ -2457,6 +2543,7 @@ mod tests {
             ],
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
+            init_funcs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
@@ -2515,6 +2602,7 @@ mod tests {
                 symbols,
                 text_relocs,
                 data_relocs: alloc::vec::Vec::new(),
+                init_funcs: alloc::vec::Vec::new(),
                 dylibs: alloc::vec::Vec::new(),
                 import_dylib_map: alloc::vec::Vec::new(),
                 exports: alloc::vec::Vec::new(),
@@ -2673,6 +2761,7 @@ mod tests {
             symbols: alloc::vec::Vec::new(),
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
+            init_funcs: alloc::vec::Vec::new(),
             dylibs: alloc::vec![dylib.to_string()],
             import_dylib_map: alloc::vec![("f".to_string(), 0u32)],
             exports: alloc::vec::Vec::new(),

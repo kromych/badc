@@ -101,8 +101,8 @@ pub use c5::{
 #[cfg(all(feature = "full", feature = "std"))]
 pub use c5::{
     MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt, emit_x86_64_plt,
-    is_elf_object, link_native_objects, link_native_objects_with_options, parse_native_elf,
-    read_archive_at, write_executable_elf64, write_native_image_from_merged,
-    write_native_image_from_merged_ex,
+    NativeSymbol, PendingImportReloc, PltTrampoline, SharedLibrary, emit_aarch64_plt,
+    emit_x86_64_plt, is_elf_object, link_native_objects, link_native_objects_with_options,
+    parse_native_elf, parse_shared_library, read_archive_at, write_executable_elf64,
+    write_native_image_from_merged, write_native_image_from_merged_ex,
 };

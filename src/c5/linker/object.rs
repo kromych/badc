@@ -110,6 +110,15 @@ struct Elf64Rela {
     r_addend: i64,
 }
 
+/// On-disk ELF64 `.dynamic` entry: a `(tag, value)` directive read by
+/// the dynamic loader (DT_NEEDED, DT_SONAME, ...).
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Elf64Dyn {
+    d_tag: i64,
+    d_val: u64,
+}
+
 /// ELF note header: the fixed prefix before a note's name and
 /// descriptor payloads.
 #[repr(C)]
@@ -126,6 +135,7 @@ const _: () = {
     assert!(core::mem::size_of::<Elf64Sym>() == 24);
     assert!(core::mem::size_of::<Elf64Rela>() == 24);
     assert!(core::mem::size_of::<Elf64Nhdr>() == 12);
+    assert!(core::mem::size_of::<Elf64Dyn>() == 16);
 };
 
 /// Read a `#[repr(C)]` ELF record at byte offset `off`. Bounds-
@@ -151,8 +161,11 @@ fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
 }
 
 /// `SHT_DYNSYM` -- the loader-visible dynamic symbol table.
-#[cfg(test)]
 const SHT_DYNSYM: u32 = 11;
+/// `SHT_DYNAMIC` -- the dynamic-linking directive array.
+const SHT_DYNAMIC: u32 = 6;
+/// `DT_SONAME` -- `.dynstr` offset of a shared object's canonical name.
+const DT_SONAME: i64 = 14;
 
 /// Count the dynamic relocations of a given type (`r_info & 0xffffffff`)
 /// across every `SHT_RELA` section of a linked ELF64 image. Used to
@@ -225,6 +238,81 @@ pub(crate) fn read_dynamic_symbol_names(bytes: &[u8]) -> Result<Vec<String>, C5E
         }
     }
     Ok(names)
+}
+
+/// A shared library resolved from a `-l<name>` input: its canonical
+/// name (the SONAME a dependent records as `DT_NEEDED`) and the set of
+/// symbols it defines and exports through `.dynsym`. The linker turns
+/// an otherwise-undefined reference whose name is in `exports` into a
+/// runtime import bound to `soname`, exactly as a system linker
+/// resolves undefined references against a `.so` on the `-l` path.
+#[derive(Debug, Clone)]
+pub struct SharedLibrary {
+    pub soname: String,
+    pub exports: alloc::collections::BTreeSet<String>,
+}
+
+/// Read a shared object's SONAME and exported dynamic symbols from its
+/// ELF image. The SONAME comes from the `.dynamic` `DT_SONAME` entry
+/// (empty when absent -- the caller substitutes the file's base name);
+/// the exports are every `.dynsym` entry that is defined (not
+/// `SHN_UNDEF`) and externally bound (`STB_GLOBAL` / `STB_WEAK`).
+pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
+    let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
+    let read_cstr = |off: usize| -> String {
+        let start = off.min(bytes.len());
+        let mut end = start;
+        while end < bytes.len() && bytes[end] != 0 {
+            end += 1;
+        }
+        String::from_utf8_lossy(&bytes[start..end]).into_owned()
+    };
+    let shdr = |i: usize| -> Result<Elf64Shdr, C5Error> {
+        read_struct(bytes, ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize)
+    };
+    let mut soname = String::new();
+    let mut exports = alloc::collections::BTreeSet::new();
+    for i in 0..ehdr.e_shnum as usize {
+        let sh = shdr(i)?;
+        if sh.sh_type == SHT_DYNSYM {
+            let strtab = shdr(sh.sh_link as usize)?;
+            let entsize = sh.sh_entsize as usize;
+            if entsize == 0 {
+                continue;
+            }
+            for j in 0..(sh.sh_size as usize / entsize) {
+                let sym: Elf64Sym = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
+                // SHN_UNDEF (0) is an import, not an export; STB_LOCAL (0)
+                // has no external linkage. Keep STB_GLOBAL (1) / STB_WEAK (2)
+                // definitions.
+                let bind = sym.st_info >> 4;
+                if sym.st_shndx == 0 || (bind != 1 && bind != 2) {
+                    continue;
+                }
+                let name = read_cstr(strtab.sh_offset as usize + sym.st_name as usize);
+                if !name.is_empty() {
+                    exports.insert(name);
+                }
+            }
+        } else if sh.sh_type == SHT_DYNAMIC {
+            let strtab = shdr(sh.sh_link as usize)?;
+            let entsize = if sh.sh_entsize == 0 {
+                core::mem::size_of::<Elf64Dyn>()
+            } else {
+                sh.sh_entsize as usize
+            };
+            for j in 0..(sh.sh_size as usize / entsize) {
+                let ent: Elf64Dyn = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
+                if ent.d_tag == 0 {
+                    break; // DT_NULL terminates the array
+                }
+                if ent.d_tag == DT_SONAME {
+                    soname = read_cstr(strtab.sh_offset as usize + ent.d_val as usize);
+                }
+            }
+        }
+    }
+    Ok(SharedLibrary { soname, exports })
 }
 
 /// Which architecture's relocations the object uses. Drives the
@@ -2033,5 +2121,65 @@ mod tests {
             s.value, 4,
             "rodata STT_SECTION value should land at .data size"
         );
+    }
+
+    #[test]
+    fn parse_shared_library_reads_soname_and_exports() {
+        // Section layout (build_test_elf adds NULL@0, .shstrtab@1):
+        //   2: .dynstr, 3: .dynsym (sh_link=2), 4: .dynamic (sh_link=2)
+        let mut dynstr: Vec<u8> = vec![0];
+        let foo = dynstr.len() as u32;
+        dynstr.extend_from_slice(b"foo\0");
+        let bar = dynstr.len() as u32;
+        dynstr.extend_from_slice(b"bar\0");
+        let ext = dynstr.len() as u32;
+        dynstr.extend_from_slice(b"ext\0");
+        let soname_off = dynstr.len() as u64;
+        dynstr.extend_from_slice(b"libtest.so.1\0");
+
+        let mut dynsym = Vec::new();
+        push_test_sym(&mut dynsym, 0, 0, 0, 0, 0); // null
+        push_test_sym(&mut dynsym, foo, 0x12, 1, 0, 0); // GLOBAL FUNC, defined -> export
+        push_test_sym(&mut dynsym, bar, 0x21, 1, 0, 0); // WEAK OBJECT, defined -> export
+        push_test_sym(&mut dynsym, ext, 0x12, 0, 0, 0); // GLOBAL FUNC, SHN_UNDEF -> import, excluded
+
+        let mut dynamic = Vec::new();
+        write_struct(
+            &mut dynamic,
+            &Elf64Dyn {
+                d_tag: DT_SONAME,
+                d_val: soname_off,
+            },
+        );
+        write_struct(&mut dynamic, &Elf64Dyn { d_tag: 0, d_val: 0 }); // DT_NULL
+
+        let plans = [
+            SecPlan::strtab(".dynstr", dynstr),
+            SecPlan {
+                name: ".dynsym",
+                sh_type: SHT_DYNSYM,
+                body: dynsym,
+                sh_link: 2,
+                sh_info: 0,
+                sh_entsize: ELF64_SYM_SIZE as u64,
+                sh_size_override: None,
+            },
+            SecPlan {
+                name: ".dynamic",
+                sh_type: SHT_DYNAMIC,
+                body: dynamic,
+                sh_link: 2,
+                sh_info: 0,
+                sh_entsize: core::mem::size_of::<Elf64Dyn>() as u64,
+                sh_size_override: None,
+            },
+        ];
+        let bytes = build_test_elf(EM_X86_64, &plans);
+        let lib = parse_shared_library(&bytes).expect("parse .so");
+        assert_eq!(lib.soname, "libtest.so.1");
+        assert!(lib.exports.contains("foo"));
+        assert!(lib.exports.contains("bar"));
+        assert!(!lib.exports.contains("ext")); // SHN_UNDEF is an import, not an export
+        assert_eq!(lib.exports.len(), 2);
     }
 }

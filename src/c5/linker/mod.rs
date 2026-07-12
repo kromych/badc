@@ -56,8 +56,8 @@ pub use link::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use object::{
-    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, is_elf_object,
-    parse_native_elf,
+    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, SharedLibrary,
+    is_elf_object, parse_native_elf, parse_shared_library,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

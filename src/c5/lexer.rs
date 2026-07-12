@@ -208,8 +208,21 @@ pub(crate) struct LexerSnapshot {
     curr_id_idx: usize,
 }
 
+/// Marker-aware map from (file, line) to the line's byte span in
+/// `Lexer::src`. First occurrence wins, matching the sequential-scan
+/// semantics it replaces. Built once, on the first diagnostic that
+/// echoes a source line; the source buffer never changes after
+/// construction.
+struct LineIndex {
+    files: Vec<String>,
+    spans: alloc::collections::BTreeMap<(u32, u32), (u32, u32)>,
+}
+
 pub(crate) struct Lexer {
     src: Vec<u8>,
+    /// Lazily built (file, line) -> byte-span index for diagnostics.
+    /// See [`LineIndex`].
+    line_index: core::cell::OnceCell<LineIndex>,
     pos: usize,
     pub line: usize,
     /// Name of the file `self.line` is counting within. Updated
@@ -396,6 +409,7 @@ impl Lexer {
     pub fn new(source: String) -> Self {
         Self {
             src: source.into_bytes(),
+            line_index: core::cell::OnceCell::new(),
             pos: 0,
             line: 1,
             file: String::from("<source>"),
@@ -1031,36 +1045,55 @@ impl Lexer {
     /// has read ahead of it (an unused-parameter warning fires at the
     /// closing brace but names the parameter's declaration line).
     pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
-        let want_file: &str = &self.file;
-        let src = &self.src;
-        let n = src.len();
-        let mut file = String::from("<source>");
-        let mut line = 1usize;
-        let mut i = 0usize;
-        while i < n {
-            let start = i;
-            let mut j = i;
-            while j < n && src[j] != b'\n' {
-                j += 1;
-            }
-            let bytes = &src[start..j];
-            if bytes.first() == Some(&b'#')
-                && let Some(marker) = parse_line_marker(&bytes[1..])
-            {
-                line = marker.line;
-                if let Some(f) = marker.file {
-                    file = f;
+        // Build the (file, line) -> byte-span index on first use. A
+        // diagnostic may be constructed speculatively on a trial-parse
+        // path that its caller discards, so this lookup must not
+        // re-scan the buffer per call.
+        let index = self.line_index.get_or_init(|| {
+            let src = &self.src;
+            let n = src.len();
+            let mut files: Vec<String> = alloc::vec![String::from("<source>")];
+            let mut spans: alloc::collections::BTreeMap<(u32, u32), (u32, u32)> =
+                alloc::collections::BTreeMap::new();
+            let mut file_id: u32 = 0;
+            let mut line = 1usize;
+            let mut i = 0usize;
+            while i < n {
+                let start = i;
+                let mut j = i;
+                while j < n && src[j] != b'\n' {
+                    j += 1;
                 }
+                let bytes = &src[start..j];
+                if bytes.first() == Some(&b'#')
+                    && let Some(marker) = parse_line_marker(&bytes[1..])
+                {
+                    line = marker.line;
+                    if let Some(f) = marker.file {
+                        file_id = match files.iter().position(|x| *x == f) {
+                            Some(id) => id as u32,
+                            None => {
+                                files.push(f);
+                                (files.len() - 1) as u32
+                            }
+                        };
+                    }
+                    i = j + 1;
+                    continue;
+                }
+                spans
+                    .entry((file_id, line as u32))
+                    .or_insert((start as u32, j as u32));
+                line += 1;
                 i = j + 1;
-                continue;
             }
-            if line == target && file == want_file {
-                return core::str::from_utf8(bytes).ok().map(|s| s.trim_end());
-            }
-            line += 1;
-            i = j + 1;
-        }
-        None
+            LineIndex { files, spans }
+        });
+        let file_id = index.files.iter().position(|f| *f == self.file)? as u32;
+        let (start, end) = *index.spans.get(&(file_id, target as u32))?;
+        core::str::from_utf8(&self.src[start as usize..end as usize])
+            .ok()
+            .map(|s| s.trim_end())
     }
 
     pub fn next(

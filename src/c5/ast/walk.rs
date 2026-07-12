@@ -2636,7 +2636,16 @@ impl<'a> Walker<'a> {
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));
                             }
-                            return Ok(call);
+                            // An external (`target_pc == 0`) callee may per
+                            // AAPCS leave a narrow return's high bits
+                            // undefined; extend to keep the walker's
+                            // sign/zero-extended-to-64-bits invariant. An
+                            // intra-TU callee already returns full width.
+                            return Ok(if !self.symbols[*sym as usize].defined_here {
+                                extend_scalar_call_result(b, call, *ty, self.target)
+                            } else {
+                                call
+                            });
                         }
                         // Register-save host variadic ABI (System V AMD64
                         // on Linux x86_64, AAPCS64 on Linux aarch64): a
@@ -2694,7 +2703,16 @@ impl<'a> Walker<'a> {
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));
                             }
-                            return Ok(call);
+                            // An external (`target_pc == 0`) callee may per
+                            // AAPCS leave a narrow return's high bits
+                            // undefined; extend to keep the walker's
+                            // sign/zero-extended-to-64-bits invariant. An
+                            // intra-TU callee already returns full width.
+                            return Ok(if !self.symbols[*sym as usize].defined_here {
+                                extend_scalar_call_result(b, call, *ty, self.target)
+                            } else {
+                                call
+                            });
                         }
                         // A variadic callee reaching here is a
                         // `variadic_int_only` host (Win64 / Windows arm64,
@@ -2783,7 +2801,16 @@ impl<'a> Walker<'a> {
                         if is_float_ty(*ty) {
                             return Ok(b.mark_f32(call));
                         }
-                        return Ok(call);
+                        // An external (`target_pc == 0`) callee may per
+                        // AAPCS leave a narrow return's high bits undefined;
+                        // extend to keep the walker's sign/zero-extended-to-
+                        // 64-bits invariant. An intra-TU callee already
+                        // returns full width.
+                        return Ok(if !self.symbols[*sym as usize].defined_here {
+                            extend_scalar_call_result(b, call, *ty, self.target)
+                        } else {
+                            call
+                        });
                     }
                     if *class == Token::Sys as i64 {
                         // A returns-twice callee (setjmp family /
@@ -2902,6 +2929,12 @@ impl<'a> Walker<'a> {
                         if is_float_ty(*ty) {
                             return Ok(b.mark_f32(call));
                         }
+                        // A libc / bound (`Sys`) callee's narrow return is
+                        // extended by `return_extension` at the CallExt
+                        // lowering, keyed on the binding's declared return
+                        // type -- which correctly leaves an unprototyped
+                        // binding (return_type_tag == 0) unextended rather
+                        // than truncating a value that is really a pointer.
                         return Ok(call);
                     }
                 }

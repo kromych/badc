@@ -6,10 +6,8 @@
 // element count is unknown without an initializer). The later defining
 // `= { ..., .fam = { e0, e1, ... } }` must therefore allocate fresh
 // storage sized to include the elements; reusing the tentative slot
-// overflows the FAM data into whatever global follows it. This is the
-// shape qemu's `extern QemuOptsList qemu_legacy_drive_opts;` (header)
-// plus its definition (blockdev.c) hit -- the desc[] entries stomped the
-// next opts list's list head. `long long` keeps the element 64-bit under
+// overflows the FAM data into whatever global follows it -- the FAM
+// entries stomp the next global's contents. `long long` keeps the element 64-bit under
 // both LP64 and LLP64.
 
 struct FamList {
@@ -22,9 +20,8 @@ struct FamList {
 extern struct FamList big;
 
 // A reference emitted BEFORE big's definition. The address it takes must
-// be big's final storage, not a stranded fixed-size placeholder. (This is
-// the qemu shape: blockdev_init takes `&qemu_common_drive_opts` long
-// before the list is defined further down the file.)
+// be big's final storage, not a stranded fixed-size placeholder -- the
+// address is taken long before the list is defined further down the file.
 struct FamList *early_ref(void) {
     return &big;
 }

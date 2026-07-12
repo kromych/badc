@@ -64,7 +64,6 @@ fn external_int_return_is_sign_extended() {
     // used at 64 bits must be extended at the call site. libc `atoi`
     // (resolved via dlsym) returns -1 for "-1"; the `== -1` compare is a
     // 64-bit signed compare and fails unless the result is sign-extended.
-    // Regression for qemu's `g_slist_index(...) == -1` assert (migration).
     let src = "int atoi(const char *); \
                int main(void) { return atoi(\"-1\") == -1 ? 0 : 1; }";
     assert_eq!(jit_exit(src, &["t"]), 0);

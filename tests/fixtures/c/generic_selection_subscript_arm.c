@@ -2,7 +2,6 @@
 // (`&obj->arr[i]`) must not confuse the association scanner: the lexer
 // emits a distinct token for a subscript `[`, so the balanced-bracket scan
 // has to count it or it stops early and reports "no association matches".
-// This is the shape of QEMU's qemu_make_lockable(&s->locks[i]).
 
 typedef struct M { int a; } M;
 typedef struct N { int b; } N;

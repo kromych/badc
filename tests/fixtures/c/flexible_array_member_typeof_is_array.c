@@ -7,7 +7,7 @@
 
 #define IS_ARRAY(x) (!__builtin_types_compatible_p(typeof(x), typeof(&(x)[0])))
 
-// The build-time array assertion QEMU-style code layers on top: an empty
+// A build-time array assertion layered on top: an empty
 // bitfield of width 0 when the argument is true, a diagnostic (negative
 // width) when false.
 #define BUILD_ASSERT_STRUCT(x) struct { int : (-!!(x)); }

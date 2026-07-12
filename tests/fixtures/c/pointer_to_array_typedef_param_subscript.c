@@ -6,8 +6,7 @@
 //
 // The parameter path used to add a second pointer level (making `nodes`
 // a `T **`), so `nodes[k]` strided by a pointer width and loaded a word
-// as the row address -- the shape qemu's `phys_page_compact(..., Node
-// *nodes)` with `p = nodes[lp->ptr]` crashed on. Uses `long long` so the
+// as the row address. Uses `long long` so the
 // element is 64-bit under both LP64 and LLP64.
 
 typedef long long Node[8]; // sizeof(Node) == 64

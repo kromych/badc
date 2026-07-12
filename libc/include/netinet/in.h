@@ -7,8 +7,39 @@
 
 #include <sys/socket.h>
 
-#define IPPROTO_IP   0
-#define IPPROTO_IPV6 41
+// IANA-assigned protocol numbers (POSIX 7.40 requires IP, IPV6, ICMP,
+// RAW, TCP, UDP; the rest are the values every platform shares).
+#define IPPROTO_IP       0
+#define IPPROTO_HOPOPTS  0  // IPv6 hop-by-hop options
+#define IPPROTO_ICMP     1
+#define IPPROTO_IGMP     2
+#define IPPROTO_IPIP     4  // IPIP tunnels
+#define IPPROTO_TCP      6
+#define IPPROTO_EGP      8
+#define IPPROTO_PUP      12
+#define IPPROTO_UDP      17
+#define IPPROTO_IDP      22
+#define IPPROTO_TP       29
+#define IPPROTO_DCCP     33
+#define IPPROTO_IPV6     41
+#define IPPROTO_ROUTING  43 // IPv6 routing header
+#define IPPROTO_FRAGMENT 44 // IPv6 fragmentation header
+#define IPPROTO_RSVP     46
+#define IPPROTO_GRE      47
+#define IPPROTO_ESP      50
+#define IPPROTO_AH       51
+#define IPPROTO_ICMPV6   58
+#define IPPROTO_NONE     59 // IPv6 no-next-header
+#define IPPROTO_DSTOPTS  60 // IPv6 destination options
+#define IPPROTO_MTP      92
+#define IPPROTO_ENCAP    98
+#define IPPROTO_PIM      103
+#define IPPROTO_COMP     108
+#define IPPROTO_SCTP     132
+#define IPPROTO_UDPLITE  136
+#define IPPROTO_MPLS     137
+#define IPPROTO_RAW      255
+#define IPPROTO_MAX      263
 #ifdef __linux__
 #define IPPROTO_MPTCP 262 // Multipath TCP (Linux)
 #endif

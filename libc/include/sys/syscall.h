@@ -28,6 +28,7 @@
 #define __NR_pidfd_open     434
 #define __NR_close_range    436
 #else
+#define __NR_arch_prctl     158
 #define __NR_gettid         186
 #define __NR_getdents64     217
 #define __NR_futex          202
@@ -60,6 +61,9 @@
 #define SYS_statx           __NR_statx
 #define SYS_pidfd_open      __NR_pidfd_open
 #define SYS_close_range     __NR_close_range
+#ifdef __NR_arch_prctl
+#define SYS_arch_prctl      __NR_arch_prctl
+#endif
 
 long syscall(long number, ...);
 #endif

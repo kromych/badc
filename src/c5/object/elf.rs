@@ -1264,6 +1264,41 @@ fn patch_lea_rip32(
     Ok(())
 }
 
+/// Patch a data-import GOT reference so it loads the import's address from
+/// its GOT slot at `slot_vmaddr`. The reference reads the slot's value
+/// (an imported data object's address), not a call thunk. GOT relaxation
+/// (see `link.rs`) left a `lea r64, [rip+disp32]` (opcode 0x8D); flip it
+/// back to `mov r64, [rip+disp32]` (0x8B) against the slot. `mov` and
+/// `lea` share the 7-byte REX-prefixed encoding and disp32 position, so
+/// the disp is patched with the same `patch_lea_rip32` math.
+fn patch_got_data_load(
+    out: &mut [u8],
+    code_base_in_file: u64,
+    code_vmaddr_base: u64,
+    instr_offset_in_code: u64,
+    slot_vmaddr: u64,
+    label: &str,
+) -> Result<(), C5Error> {
+    let opcode_off = (code_base_in_file + instr_offset_in_code + 1) as usize;
+    if out[opcode_off] != 0x8D {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "ELF: {label} expected lea opcode 0x8D at file+{opcode_off:#x}, found {:#04x}",
+                out[opcode_off],
+            ),
+        )));
+    }
+    out[opcode_off] = 0x8B;
+    patch_lea_rip32(
+        out,
+        code_base_in_file,
+        code_vmaddr_base,
+        instr_offset_in_code,
+        slot_vmaddr,
+        label,
+    )
+}
+
 /// Patch an `adrp Xd, page; add Xd, Xd, #imm12` pair so the result
 /// equals `target_vmaddr`. Used for data-segment references and
 /// function-pointer literals; both are absolute-address materializations.
@@ -2908,18 +2943,34 @@ pub(super) fn write(
     // `movz x8, #94; svc #0` (aarch64) bytes are absolute and
     // self-contained.
 
-    // GOT fixups for libc calls inside build.text. Same per-arch
-    // dispatch as the _start exit call.
+    // GOT fixups for imports referenced inside build.text. A call thunk
+    // reaches its target through `call [rip+slot]`; a data import reads
+    // the slot's value, a distinct x86_64 instruction form (mov vs the
+    // call the lookup helper emits), so it routes to a data-load patch.
+    // aarch64's adrp + ldr already loads the slot for both.
     for fx in &build.got_fixups {
-        patch_got_call(
-            machine,
-            &mut out,
-            code_file_offset,
-            code_vmaddr,
-            stub_len + fx.adrp_offset as u64,
-            got_vmaddr + (fx.import_index as u64) * 8,
-            "GOT fixup",
-        )?;
+        let instr_off = stub_len + fx.adrp_offset as u64;
+        let slot_vmaddr = got_vmaddr + (fx.import_index as u64) * 8;
+        if fx.is_data_load && machine == Machine::X86_64 {
+            patch_got_data_load(
+                &mut out,
+                code_file_offset,
+                code_vmaddr,
+                instr_off,
+                slot_vmaddr,
+                "GOT data-load fixup",
+            )?;
+        } else {
+            patch_got_call(
+                machine,
+                &mut out,
+                code_file_offset,
+                code_vmaddr,
+                instr_off,
+                slot_vmaddr,
+                "GOT fixup",
+            )?;
+        }
     }
 
     // Data-segment references (string literals / globals). Per-arch
@@ -3355,6 +3406,28 @@ mod tests {
         assert_eq!(elf_hash(b"printf"), 0x077905a6);
         assert_eq!(elf_hash(b"malloc"), 0x07383353);
         assert_eq!(elf_hash(b"exit"), 0x0006cf04);
+    }
+
+    #[test]
+    fn got_data_load_rewrites_lea_to_mov_against_slot() {
+        // A data import (e.g. glib's `g_ascii_table`) is referenced as a
+        // load of its address from the GOT slot. GOT relaxation leaves a
+        // `lea rax, [rip+disp32]` (48 8D 05 ..); the writer must flip it to
+        // `mov rax, [rip+disp32]` (48 8B 05 ..) loading the slot, preserving
+        // the ModRM. The prior code applied the call-thunk patcher, which
+        // writes the disp at the 6-byte-call offset and clobbers the ModRM
+        // (05 -> 8A), turning the load into `lea rcx, [rdx+..]` that faults.
+        let mut out = vec![0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00, 0xC3];
+        // code at file offset 0, code vmaddr base 0x1000, instr at code
+        // offset 0, GOT slot at vmaddr 0x2000.
+        patch_got_data_load(&mut out, 0, 0x1000, 0, 0x2000, "test").unwrap();
+        assert_eq!(out[0], 0x48, "REX.W preserved");
+        assert_eq!(out[1], 0x8B, "lea (0x8D) flipped to mov (0x8B)");
+        assert_eq!(out[2], 0x05, "ModRM preserved (rax, RIP-relative)");
+        assert_ne!(out[2], 0x8A, "ModRM not clobbered by the call-form patcher");
+        // disp32 = slot - (instr_vmaddr + 7-byte instr length).
+        let disp = i32::from_le_bytes(out[3..7].try_into().unwrap());
+        assert_eq!(disp, 0x2000 - (0x1000 + 7), "RIP-relative disp to GOT slot");
     }
 
     #[test]

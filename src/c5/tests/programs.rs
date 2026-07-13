@@ -3722,6 +3722,16 @@ fn bool_bitfield_zero_extends() {
 }
 
 #[test]
+fn return_narrows_to_type_width() {
+    // C99 6.8.6.4 / 6.3.1.1: a sub-64-bit integer return is narrowed to
+    // its declared type in the result register -- zero-extend when
+    // unsigned, sign-extend when signed. A same-unit caller reads the
+    // register directly. A `uint32_t` syndrome built from `0x24 << 26`
+    // (bit 31 set) reached a 64-bit read sign-extended before the fix.
+    assert_eq!(run_fixture("return_narrows_to_type_width.c"), 0);
+}
+
+#[test]
 fn ipproto_case_labels() {
     // <netinet/in.h> IPPROTO_* constants are usable as case labels.
     assert_eq!(run_fixture("ipproto_case_labels.c"), 0);

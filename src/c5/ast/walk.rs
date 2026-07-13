@@ -824,28 +824,43 @@ impl<'a> Walker<'a> {
                     return Ok(true);
                 }
                 let mut v = self.walk_expr_rvalue(b, *e)?;
-                // C99 6.8.6.4 / 6.3.1.1: the returned value is converted to
-                // the function's return type. For a `char` / `short` return
-                // the ABI carries an `int`-promoted value, so a body result
-                // wider than the declared type (e.g. `(x << 8) | (x >> 8)`
-                // in a `uint16_t`-returning byte-swap) must be narrowed to
-                // the type's width here; without it the caller reads the
-                // un-narrowed bits. Integer-and-wider returns already ride
-                // the result register at full width. `_Bool` is excluded: its
-                // conversion is a boolean `!= 0` (6.3.1.2), not a width mask,
-                // and the rvalue walk already normalizes it to 0/1.
+                // C99 6.8.6.4 / 6.3.1.1: the return value is converted to the
+                // function's return type. A body evaluated in 64-bit registers
+                // can leave bits above the type width set -- a signed constant
+                // or arithmetic sign-extends past bit 31, an unsigned source
+                // zero-extends -- so a char/short/int (and LLP64 long) return
+                // is narrowed to its declared width: zero-extend when unsigned,
+                // sign-extend when signed. Same-unit callers read the result
+                // register directly and do not re-narrow. `_Bool` is excluded:
+                // 6.3.1.2 already normalized it to 0/1.
                 let stripped = self.scalar_return_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
                 let rs = type_size_bytes(self.scalar_return_ty, self.target);
                 if !is_floating_scalar(self.scalar_return_ty)
                     && !is_pointer_ty(self.scalar_return_ty)
                     && stripped != Ty::Bool as i64
-                    && (rs == 1 || rs == 2)
+                    && (rs == 1 || rs == 2 || rs == 4)
                 {
-                    if (self.scalar_return_ty & UNSIGNED_BIT) != 0 {
-                        let mask: i64 = if rs == 1 { 0xff } else { 0xffff };
+                    let unsigned = (self.scalar_return_ty & UNSIGNED_BIT) != 0;
+                    let bits = 64i64 - (rs as i64) * 8;
+                    let mask: i64 = match rs {
+                        1 => 0xff,
+                        2 => 0xffff,
+                        _ => 0xffff_ffff,
+                    };
+                    if let Some(k) = b.peek_imm(v) {
+                        // A constant is its own narrowing: fold it, and leave
+                        // the value untouched when it already fits the type.
+                        let narrowed = if unsigned {
+                            k & mask
+                        } else {
+                            (k << bits) >> bits
+                        };
+                        if narrowed != k {
+                            v = b.imm(narrowed);
+                        }
+                    } else if unsigned {
                         v = b.binop_imm(BinOp::And, v, mask);
                     } else {
-                        let bits = 64i64 - (rs as i64) * 8;
                         let shifted = b.binop_imm(BinOp::Shl, v, bits);
                         v = b.binop_imm(BinOp::Shr, shifted, bits);
                     }

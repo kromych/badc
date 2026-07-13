@@ -619,20 +619,28 @@ fn run_one(func: &mut FunctionSsa) {
     if !func.insts.iter().any(|i| matches!(i, Inst::Extend { .. })) {
         return;
     }
-    // An Extend is redundant when (1) its operand is a sign-extending load of
-    // the same kind, so the extend re-applies the load's own sign extension; or
-    // (2) it is an i32 sign-extend whose upper bits no consumer reads, so every
-    // consumer sees the same low 32 bits in the operand. Both redirect the
-    // extend's consumers to the operand; `resolve` walks redirect chains.
+    // An Extend is redundant when (1) its operand is a sign-extending load no
+    // wider than the extend: the load already sign-extended its value to 64
+    // bits from its own width, and re-extending from an equal-or-wider width
+    // reproduces the same bits (a narrower load's sign already fills every bit
+    // the wider extend would set). This covers an `int`-return sign-extend of a
+    // char/short load left by the callee-narrowing convention. Or (2) it is an
+    // i32 sign-extend whose upper bits no consumer reads, so every consumer
+    // sees the same low 32 bits in the operand. Both redirect the extend's
+    // consumers to the operand; `resolve` walks redirect chains.
     let high = compute_high_observed(func);
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     for (idx, inst) in func.insts.iter().enumerate() {
         let Inst::Extend { value, kind } = inst else {
             continue;
         };
-        if is_signed_load(&func.insts, *value) == Some(*kind)
-            || (*kind == LoadKind::I32 && !high[idx])
-        {
+        let load_covers = is_signed_load(&func.insts, *value).is_some_and(|lk| {
+            matches!(
+                (narrow_kind_bits(lk), narrow_kind_bits(*kind)),
+                (Some(l), Some(k)) if l <= k
+            )
+        });
+        if load_covers || (*kind == LoadKind::I32 && !high[idx]) {
             redirect[idx] = Some(*value);
         }
     }
@@ -820,6 +828,70 @@ mod tests {
             "Return should redirect from v2 (Extend) to v1 (Load); got {:?}",
             f.blocks[0].terminator
         );
+    }
+
+    #[test]
+    fn extend_i32_of_narrower_sign_load_redirects() {
+        // v1: Load(kind=I8) already sign-extends to 64 bits; v2: Extend(v1, I32)
+        // re-extends from a wider width -- a no-op, since the I8 sign already
+        // fills every bit the i32 extend would set. Return(v2) -> Return(v1).
+        // (This is the int-return sign-extend of a char load.)
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I8,
+                    volatile: false,
+                },
+                Inst::Extend {
+                    value: 1,
+                    kind: LoadKind::I32,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            }],
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(1)),
+            "Return should redirect from v2 (Extend i32) to v1 (I8 Load); got {:?}",
+            f.blocks[0].terminator
+        );
+    }
+
+    #[test]
+    fn extend_of_wider_sign_load_is_not_redirected() {
+        // v1: Load(kind=I32); v2: Extend(v1, I8) truncates to 8 bits and
+        // changes the value, so it must stay.
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I32,
+                    volatile: false,
+                },
+                Inst::Extend {
+                    value: 1,
+                    kind: LoadKind::I8,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            }],
+        );
+        run_one(&mut f);
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
     }
 
     #[test]

@@ -3124,3 +3124,73 @@ fn outline_atomics_run_correct() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+// A program using the glibc entry points that live only in the static
+// libc_nonshared.a: atexit, at_quick_exit, pthread_atfork. The atexit handler
+// prints a marker so a run confirms it was registered and invoked.
+#[cfg(target_os = "linux")]
+const GLIBC_NONSHARED_SRC: &str = "\
+extern int atexit(void (*)(void));\n\
+extern int at_quick_exit(void (*)(void));\n\
+extern int pthread_atfork(void (*)(void), void (*)(void), void (*)(void));\n\
+extern int puts(const char *);\n\
+static void bye(void) { puts(\"ATEXIT_RAN\"); }\n\
+static void nop(void) {}\n\
+int main(void) {\n\
+    pthread_atfork(nop, nop, nop);\n\
+    at_quick_exit(nop);\n\
+    atexit(bye);\n\
+    puts(\"MAIN\");\n\
+    return 0;\n\
+}\n";
+
+// badc supplies these from compiler-rt (wrapping the shared-library entry
+// points), so a glibc program links against libc.so alone -- no host
+// libc_nonshared.a. Cross-linking both arches exercises the resolution
+// without needing to run.
+#[cfg(target_os = "linux")]
+#[test]
+fn glibc_nonshared_wrappers_resolve() {
+    for (tag, target) in [
+        ("x64", "--target=linux-x64"),
+        ("arm", "--target=linux-aarch64"),
+    ] {
+        let dir = tempdir(&format!("glibc-nonshared-{tag}"));
+        let src = write_source(&dir, "m.c", GLIBC_NONSHARED_SRC);
+        let exe = dir.join("m");
+        run(
+            Command::new(badc())
+                .arg(target)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            "cross-link glibc-nonshared wrappers",
+        );
+        assert!(exe.exists(), "{tag}: linked executable should exist");
+    }
+}
+
+// On a Linux host the produced binary runs: the atexit handler must fire.
+#[cfg(target_os = "linux")]
+#[test]
+fn glibc_nonshared_atexit_runs() {
+    let dir = tempdir("glibc-nonshared-run");
+    let src = write_source(&dir, "m.c", GLIBC_NONSHARED_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "link glibc-nonshared wrappers for host",
+    );
+    let out = Command::new(&exe).output().expect("run glibc-nonshared");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "program exits cleanly");
+    assert!(
+        stdout.contains("MAIN") && stdout.contains("ATEXIT_RAN"),
+        "atexit handler must run: stdout={stdout:?}"
+    );
+}

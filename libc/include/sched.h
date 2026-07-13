@@ -121,9 +121,19 @@ typedef struct {
     ((unsigned long)(cpu) < (unsigned long)(setsize) * 8 \
         ? ((((unsigned long *)(set))[(cpu) / __NCPUBITS] >> ((cpu) % __NCPUBITS)) & 1UL) \
         : 0UL)
+// Set-bit count over the first `setsize` bytes; matches glibc __sched_cpucount
+// (popcount of each mask word).
+static inline int __cpu_count_s(unsigned long setsize, const unsigned long *bits) {
+    int n = 0;
+    for (unsigned long i = 0; i < setsize / sizeof(unsigned long); i++)
+        n += __builtin_popcountl(bits[i]);
+    return n;
+}
+#define CPU_COUNT_S(setsize, set) __cpu_count_s((setsize), (const unsigned long *)(set))
 
 #define CPU_ZERO(set)       CPU_ZERO_S(sizeof(cpu_set_t), set)
 #define CPU_SET(cpu, set)   CPU_SET_S(cpu, sizeof(cpu_set_t), set)
 #define CPU_CLR(cpu, set)   CPU_CLR_S(cpu, sizeof(cpu_set_t), set)
 #define CPU_ISSET(cpu, set) CPU_ISSET_S(cpu, sizeof(cpu_set_t), set)
+#define CPU_COUNT(set)      CPU_COUNT_S(sizeof(cpu_set_t), set)
 #endif

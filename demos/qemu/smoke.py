@@ -400,28 +400,30 @@ def main() -> int:
             out = (d.stdout or d.stderr).strip()
             if out:
                 lines.append(f"  {tool}: {out[:600]}")
-    # A crash before the emulator prints its version is a runtime fault; a
-    # backtrace + faulting instruction pin it to a function rather than
-    # guessing from the exit status alone.
+    # The fault is __c5_run_init_array calling a null: its loop pointer `fn`
+    # (at [x29,#-8]) is corrupted mid-loop to a value past __init_array_end,
+    # so the walk runs off the array into zero padding. A watchpoint on `fn`
+    # that fires only when it jumps outside the array names the store that
+    # corrupts it -- the actual bug, in whichever constructor ran just before.
+    # A hardware watchpoint catches it at full speed; a software one would be
+    # too slow, so this is best-effort within the timeout.
     if v.returncode and v.returncode < 0 and _shutil.which("gdb"):
-        # __c5_run_init_array keeps the current slot pointer `fn` at
-        # [x29,#-8]; from frame 1 that names which constructor slot faulted
-        # and whether it is a lone null or a run of nulls. info proc mappings
-        # gives the load base so the slot's link-time index can be recovered.
         g = subprocess.run(
             ["gdb", "-batch", "-nx",
-             "-ex", "run", "-ex", "bt", "-ex", "info registers pc sp x9",
-             "-ex", "up",
-             "-ex", "set $fn = *(unsigned long *)($x29 - 8)",
-             "-ex", "printf \"fn=0x%lx *fn=0x%lx\\n\", $fn, *(unsigned long *)$fn",
-             "-ex", "x/24gx ($fn - 64)",
-             "-ex", "info proc mappings",
+             "-ex", "break __c5_run_init_array", "-ex", "run",
+             "-ex", "stepi 20",
+             "-ex", "set $fnloc = (unsigned long *)($x29 - 8)",
+             "-ex", "set $lo = *$fnloc",
+             "-ex", "printf \"init_array_start=0x%lx fnloc=%p\\n\", $lo, $fnloc",
+             "-ex", "watch *$fnloc if *$fnloc - $lo > 0x4000",
+             "-ex", "continue",
+             "-ex", "bt", "-ex", "info registers pc",
              "--args", str(binp), "--version"],
-            capture_output=True, text=True, timeout=180)
+            capture_output=True, text=True, timeout=170)
         bt = (g.stdout + g.stderr).strip()
         if bt:
-            lines.append("  gdb:")
-            lines += [f"    {ln}" for ln in bt.splitlines()[:70]]
+            lines.append("  gdb (watchpoint on init-loop pointer):")
+            lines += [f"    {ln}" for ln in bt.splitlines()[:60]]
     if os.environ.get("BADC_QEMU_REQUIRE_RUN") == "1":
         fail("\n".join(lines))
     for line in lines:

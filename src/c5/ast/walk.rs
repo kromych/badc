@@ -3377,6 +3377,9 @@ impl<'a> Walker<'a> {
                     Expr::LabelAddr(_) => {
                         crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64
                     }
+                    // An asm statement yields no value; it is never a
+                    // cast operand.
+                    Expr::InlineAsm(_) => Ty::Int as i64,
                 };
                 Ok(self.convert_scalar_value(b, v, src_ty, *to_ty))
             }
@@ -3696,6 +3699,19 @@ impl<'a> Walker<'a> {
                     return Ok(b.mark_f32(v));
                 }
                 Ok(v)
+            }
+            Expr::InlineAsm(idx) => {
+                // GCC extended asm. Each operand expression is an output
+                // destination address (the parser applied `&`) or an
+                // input value; the block descriptor carries the template
+                // and per-operand constraints for the per-arch lowering.
+                let asm = self.ast.asm_blocks[*idx as usize].clone();
+                let mut args: alloc::vec::Vec<super::super::ir::ValueId> =
+                    alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
+                for &e in &asm.operand_exprs {
+                    args.push(self.walk_expr_rvalue(b, e)?);
+                }
+                Ok(b.inline_asm(alloc::boxed::Box::new(asm.block), args))
             }
             Expr::LabelAddr(label) => {
                 // GCC `&&label`: materialize the address of the label's
@@ -5004,6 +5020,8 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
         Expr::LabelAddr(_) => {
             Some(crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64)
         }
+        // An asm statement carries no value type.
+        Expr::InlineAsm(_) => None,
     }
 }
 
@@ -5190,6 +5208,7 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::VlaSizeof { .. } => "VlaSizeof",
         Expr::StmtExpr { .. } => "StmtExpr",
         Expr::CheckedArith { .. } => "CheckedArith",
+        Expr::InlineAsm(_) => "InlineAsm",
     }
 }
 

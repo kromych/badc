@@ -187,7 +187,10 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
         Inst::Extend { value, .. } => f(value),
         Inst::FpCast { value, .. } => f(value),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Call { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. }
+        | Inst::InlineAsm { args, .. } => {
             for a in args {
                 f(a);
             }

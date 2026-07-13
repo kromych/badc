@@ -143,7 +143,10 @@ pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
             }
-            Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+            Inst::Call { args, .. }
+            | Inst::CallExt { args, .. }
+            | Inst::Intrinsic { args, .. }
+            | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     observe(&mut hi, &mut work, *a);
                 }
@@ -286,7 +289,10 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
     };
     for inst in &func.insts {
         match inst {
-            Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+            Inst::Call { args, .. }
+            | Inst::CallExt { args, .. }
+            | Inst::Intrinsic { args, .. }
+            | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     mark(&mut placed, *a);
                 }
@@ -729,7 +735,10 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
         Inst::Extend { value, .. } => f(value),
         Inst::FpCast { value, .. } => f(value),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Call { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. }
+        | Inst::InlineAsm { args, .. } => {
             for a in args {
                 f(a);
             }

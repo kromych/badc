@@ -490,7 +490,10 @@ fn for_each_operand(inst: &Inst, f: &mut impl FnMut(&ValueId)) {
             f(dst);
             f(src);
         }
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Call { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. }
+        | Inst::InlineAsm { args, .. } => {
             for a in args {
                 f(a);
             }
@@ -560,7 +563,10 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
             f(dst);
             f(src);
         }
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Call { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. }
+        | Inst::InlineAsm { args, .. } => {
             for a in args {
                 f(a);
             }

@@ -1176,6 +1176,10 @@ fn run_inst<H: Host>(
             run_intrinsic(mem, frame, v, *kind, args)?;
             return Ok(());
         }
+        Inst::InlineAsm { asm, args } => {
+            run_inline_asm(mem, frame, asm, args)?;
+            return Ok(());
+        }
         Inst::AllocaInit(_) => {
             // No-op for v0 == AllocaInit(0); the SSA-VM does not
             // expose alloca yet -- callers requesting a real
@@ -1991,6 +1995,229 @@ fn libc_size(name: &str, raw: Option<i64>) -> Result<usize, C5Error> {
 /// * `VaCopy(&dst, &src)` -- `*dst = *src`.
 /// * AArch64 setjmp / longjmp intrinsics return "not implemented";
 ///   they only land in JIT / AOT output.
+/// Evaluate a GCC extended-asm statement (`Inst::InlineAsm`) in the
+/// interpreter. The template is parsed into instructions and executed
+/// against a 16-entry model register file seeded from the operand
+/// values; the results are stored through the output addresses. This
+/// reproduces the semantics the native encoding runs on hardware, so a
+/// fixture round-trips identically on any host. Non-deterministic reads
+/// (timestamp counter) yield zero, matching the native fallback in
+/// value tests.
+fn run_inline_asm(
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    asm: &crate::c5::ir::AsmBlock,
+    args: &[ValueId],
+) -> Result<(), C5Error> {
+    use crate::c5::codegen::x86_64::asm::{AsmOpnd, Mnemonic, parse_template};
+    use crate::c5::ir::AsmRegSize;
+
+    let insns = parse_template(&asm.template).map_err(C5Error::Runtime)?;
+    let op_reg = crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands)
+        .map_err(C5Error::Runtime)?;
+    // Model register file; operand `%N` reads / writes its assigned slot.
+    let mut xregs = [0i64; 16];
+    // Seed input registers, and the current value of a `+` (read-write)
+    // output loaded from its destination address.
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        if !op.is_output {
+            xregs[r as usize] = frame.regs[args[i] as usize];
+        } else if op.is_rw {
+            let addr = frame.regs[args[i] as usize] as usize;
+            xregs[r as usize] = load_from_memory(mem, addr, width_load_kind(op.width))?;
+        }
+    }
+
+    // Resolve one template operand to its current value and its width.
+    let value_of = |o: &AsmOpnd, xregs: &[i64; 16]| -> (i64, AsmRegSize) {
+        match *o {
+            AsmOpnd::Imm(v) => (v, AsmRegSize::Long),
+            AsmOpnd::Reg { reg, size } => (xregs[reg as usize], size),
+            AsmOpnd::Ref { idx, size } => {
+                let sz = size.unwrap_or(AsmRegSize::from_width(asm.operands[idx as usize].width));
+                match op_reg[idx as usize] {
+                    Some(r) => (xregs[r as usize], sz),
+                    None => (frame.regs[args[idx as usize] as usize], sz),
+                }
+            }
+        }
+    };
+    // The model register a destination operand writes into.
+    let dst_reg = |o: &AsmOpnd| -> Option<usize> {
+        match *o {
+            AsmOpnd::Reg { reg, .. } => Some(reg as usize),
+            AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
+            AsmOpnd::Imm(_) => None,
+        }
+    };
+
+    for insn in &insns {
+        let ops = &insn.operands;
+        match insn.mnemonic {
+            Mnemonic::Nop | Mnemonic::Rdtsc | Mnemonic::Rdtscp => {
+                // No host clock: the timestamp read produces zero in the
+                // registers it defines (rax/rdx, and rcx for rdtscp).
+                if !matches!(insn.mnemonic, Mnemonic::Nop) {
+                    xregs[0] = 0;
+                    xregs[2] = 0;
+                    xregs[1] = 0;
+                }
+            }
+            Mnemonic::Bswap => {
+                let (val, size) = value_of(&ops[0], &xregs);
+                let w = insn.suffix.unwrap_or(size);
+                let sw = byte_swap(val, w);
+                if let Some(r) = dst_reg(&ops[0]) {
+                    xregs[r] = sw;
+                }
+            }
+            Mnemonic::Shld | Mnemonic::Shrd => {
+                let (count, _) = value_of(&ops[0], &xregs);
+                let (src, _) = value_of(&ops[1], &xregs);
+                let (dst, dsz) = value_of(&ops[2], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let res = double_shift(insn.mnemonic == Mnemonic::Shld, dst, src, count, w);
+                if let Some(r) = dst_reg(&ops[2]) {
+                    xregs[r] = res;
+                }
+            }
+            Mnemonic::Shl | Mnemonic::Shr | Mnemonic::Sar => {
+                let (dst, dsz) = value_of(ops.last().unwrap(), &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let count = if ops.len() == 2 {
+                    value_of(&ops[0], &xregs).0
+                } else {
+                    1
+                };
+                let res = single_shift(insn.mnemonic, dst, count, w);
+                if let Some(r) = dst_reg(ops.last().unwrap()) {
+                    xregs[r] = mask_width(res, w);
+                }
+            }
+            Mnemonic::Or
+            | Mnemonic::And
+            | Mnemonic::Add
+            | Mnemonic::Sub
+            | Mnemonic::Xor
+            | Mnemonic::Mov => {
+                let (src, _) = value_of(&ops[0], &xregs);
+                let (dst, dsz) = value_of(&ops[1], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let res = match insn.mnemonic {
+                    Mnemonic::Or => dst | src,
+                    Mnemonic::And => dst & src,
+                    Mnemonic::Add => dst.wrapping_add(src),
+                    Mnemonic::Sub => dst.wrapping_sub(src),
+                    Mnemonic::Xor => dst ^ src,
+                    _ => src,
+                };
+                if let Some(r) = dst_reg(&ops[1]) {
+                    xregs[r] = mask_width(res, w);
+                }
+            }
+        }
+    }
+
+    // Store the outputs back through their destination addresses.
+    for (i, op) in asm.operands.iter().enumerate() {
+        if op.is_output
+            && let Some(r) = op_reg[i]
+        {
+            let addr = frame.regs[args[i] as usize] as usize;
+            store_to_memory(mem, addr, xregs[r as usize], width_store_kind(op.width))?;
+        }
+    }
+    Ok(())
+}
+
+/// Mask a value to `w`'s low bits (an infinite-precision result is
+/// truncated to the operand width before it lands in a register).
+fn mask_width(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    match w.bytes() {
+        1 => v & 0xFF,
+        2 => v & 0xFFFF,
+        4 => v & 0xFFFF_FFFF,
+        _ => v,
+    }
+}
+
+/// Byte-reverse the low `w` bytes of `v` (BSWAP).
+fn byte_swap(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    match w.bytes() {
+        8 => v.swap_bytes(),
+        _ => (v as u32).swap_bytes() as i64,
+    }
+}
+
+/// Double-precision shift (SHLD / SHRD): shift `dst` by `count`,
+/// feeding in bits from `src`. `w` is the operand bit width.
+fn double_shift(left: bool, dst: i64, src: i64, count: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    let bits = (w.bytes() as u32) * 8;
+    let n = (count as u64 as u32) % bits;
+    let dst = mask_width(dst, w) as u64;
+    let src = mask_width(src, w) as u64;
+    if n == 0 {
+        return mask_width(dst as i64, w);
+    }
+    let r = if left {
+        (dst << n) | (src >> (bits - n))
+    } else {
+        (dst >> n) | (src << (bits - n))
+    };
+    mask_width(r as i64, w)
+}
+
+/// Single-operand shift (SHL / SHR / SAR).
+fn single_shift(
+    m: crate::c5::codegen::x86_64::asm::Mnemonic,
+    dst: i64,
+    count: i64,
+    w: crate::c5::ir::AsmRegSize,
+) -> i64 {
+    use crate::c5::codegen::x86_64::asm::Mnemonic;
+    let bits = (w.bytes() as u32) * 8;
+    let n = (count as u64 as u32) & (bits - 1);
+    let val = mask_width(dst, w) as u64;
+    match m {
+        Mnemonic::Shl => (val << n) as i64,
+        Mnemonic::Shr => (val >> n) as i64,
+        _ => {
+            // Arithmetic: sign-extend from the operand width, then shift.
+            let signed = sign_extend(dst, w);
+            signed >> n
+        }
+    }
+}
+
+/// Sign-extend the low `w` bits of `v` to a full i64.
+fn sign_extend(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    match w.bytes() {
+        1 => v as i8 as i64,
+        2 => v as i16 as i64,
+        4 => v as i32 as i64,
+        _ => v,
+    }
+}
+
+fn width_load_kind(width: u8) -> LoadKind {
+    match width {
+        1 => LoadKind::U8,
+        2 => LoadKind::U16,
+        4 => LoadKind::U32,
+        _ => LoadKind::I64,
+    }
+}
+
+fn width_store_kind(width: u8) -> StoreKind {
+    match width {
+        1 => StoreKind::I8,
+        2 => StoreKind::I16,
+        4 => StoreKind::I32,
+        _ => StoreKind::I64,
+    }
+}
+
 fn run_intrinsic(
     mem: &mut Memory,
     frame: &mut Frame<'_>,

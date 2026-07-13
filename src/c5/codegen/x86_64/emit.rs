@@ -3107,6 +3107,7 @@ fn emit_inst(
             abi,
             *current_alloca_top,
         ),
+        Inst::InlineAsm { asm, args } => emit_inline_asm(code, asm, args, func, alloc, frame),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {
             a,
@@ -3190,6 +3191,7 @@ fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
         Inst::AtomicRmw { .. } => "AtomicRmw",
         Inst::AtomicCas { .. } => "AtomicCas",
         Inst::Intrinsic { .. } => "Intrinsic",
+        Inst::InlineAsm { .. } => "InlineAsm",
         Inst::AllocaInit(_) => "AllocaInit",
         Inst::ParamRef { .. } => "ParamRef",
         Inst::Phi { .. } => "Phi",
@@ -6295,6 +6297,151 @@ fn emit_va_arg_sysv(
         Place::None => {}
     }
     true
+}
+
+/// Lower an `Inst::InlineAsm` (GCC extended asm with operands). Assigns
+/// each register operand a machine register per its constraint, saves
+/// the registers it and the clobber list overwrite, loads the inputs,
+/// encodes the register-concrete template, and stores the outputs back
+/// through their addresses. Operand values / addresses are captured to
+/// the stack first (via r10) so an operand living in a register the asm
+/// then overwrites is read before it is clobbered -- the shape the
+/// register-tied intrinsics above use, generalised over the constraints.
+fn emit_inline_asm(
+    code: &mut Vec<u8>,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::super::ir::{AsmRegSize, Inst};
+    use super::asm::{AsmOpnd, Concrete};
+    let insns = match super::asm::parse_template(&asm.template) {
+        Ok(i) => i,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let op_reg = match super::asm::assign_operand_regs(&asm.operands) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    // Registers the asm overwrites: the operand registers plus the
+    // explicit clobber list. Save and restore them around the block.
+    let mut used = asm.clobber_regs;
+    for r in op_reg.iter().flatten() {
+        used |= 1 << r;
+    }
+    let save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| used & (1 << r) != 0).collect();
+    for &r in &save_list {
+        super::encode::emit_push_r(code, Reg(r));
+    }
+    // Capture each operand's value (input) / address (output) into a
+    // stack slot via r10, before any asm register is written.
+    let n = asm.operands.len();
+    for &a in args.iter() {
+        let Some(place) = alloc.places.get(a as usize).copied() else {
+            bail_msg("inline asm: operand place missing");
+            return false;
+        };
+        let Some(r) = materialize_int(code, place, SCRATCH_R10, frame) else {
+            bail_msg("inline asm: operand not an integer place");
+            return false;
+        };
+        if r.0 != SCRATCH_R10.0 {
+            emit_mov_rr(code, SCRATCH_R10, r);
+        }
+        super::encode::emit_push_r(code, SCRATCH_R10);
+    }
+    // The i-th captured slot now sits at `[rsp + (n-1-i)*8]`; rsp does
+    // not move again until the block finishes.
+    let cap_off = |i: usize| -> i32 { ((n - 1 - i) * 8) as i32 };
+    // Load inputs into their registers; a `+` output loads its current
+    // value from the destination address.
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        let reg = Reg(r);
+        if !op.is_output {
+            super::encode::emit_mov_r_mem(code, reg, Reg::RSP, cap_off(i));
+        } else if op.is_rw {
+            super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
+            emit_asm_load_width(code, reg, SCRATCH_R11, op.width);
+        }
+    }
+    // Encode each template instruction with its operands resolved to the
+    // assigned registers, explicit registers, and immediates.
+    for insn in &insns {
+        let mut concrete: alloc::vec::Vec<Concrete> = alloc::vec::Vec::new();
+        for o in &insn.operands {
+            let c = match *o {
+                AsmOpnd::Imm(val) => Concrete::Imm(val),
+                AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
+                AsmOpnd::Ref { idx, size } => {
+                    let width = asm.operands[idx as usize].width;
+                    let size = size.unwrap_or(AsmRegSize::from_width(width));
+                    match op_reg[idx as usize] {
+                        Some(r) => Concrete::Reg { reg: r, size },
+                        // A `%N` naming an immediate-only operand: use its
+                        // constant value.
+                        None => match func.insts.get(args[idx as usize] as usize) {
+                            Some(Inst::Imm(v)) => Concrete::Imm(*v),
+                            _ => {
+                                bail_msg("inline asm: non-constant immediate operand");
+                                return false;
+                            }
+                        },
+                    }
+                }
+            };
+            concrete.push(c);
+        }
+        if let Err(m) = super::asm::encode(code, insn.mnemonic, insn.suffix, &concrete) {
+            bail_msg(&m);
+            return false;
+        }
+    }
+    // Store the outputs back through their captured addresses.
+    for (i, op) in asm.operands.iter().enumerate() {
+        if !op.is_output {
+            continue;
+        }
+        let Some(r) = op_reg[i] else { continue };
+        super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
+        emit_asm_store_width(code, SCRATCH_R11, Reg(r), op.width);
+    }
+    // Discard the captured slots and restore the saved registers.
+    if n > 0 {
+        super::encode::emit_add_r_imm32(code, Reg::RSP, (n * 8) as i32);
+    }
+    for &r in save_list.iter().rev() {
+        super::encode::emit_pop_r(code, Reg(r));
+    }
+    true
+}
+
+/// Load the low `width` bytes at `[base]` into `dst` (zero-extended).
+fn emit_asm_load_width(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
+    match width {
+        1 => super::encode::emit_movzx_r_mem8(code, dst, base, 0),
+        2 => super::encode::emit_movzx_r_mem16(code, dst, base, 0),
+        4 => super::encode::emit_mov_r_mem32(code, dst, base, 0),
+        _ => super::encode::emit_mov_r_mem(code, dst, base, 0),
+    }
+}
+
+/// Store the low `width` bytes of `src` to `[base]`.
+fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
+    match width {
+        1 => super::encode::emit_mov_mem_r8(code, base, 0, src),
+        2 => super::encode::emit_mov_mem_r16(code, base, 0, src),
+        4 => super::encode::emit_mov_mem_r32(code, base, 0, src),
+        _ => super::encode::emit_mov_mem_r(code, base, 0, src),
+    }
 }
 
 fn emit_intrinsic(

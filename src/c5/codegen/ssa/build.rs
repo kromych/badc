@@ -1195,6 +1195,21 @@ impl SsaBuilder {
         id
     }
 
+    /// `Inst::InlineAsm` -- GCC extended asm with operands. The block
+    /// carries the template and constraints; `args` is parallel to its
+    /// operands (an output's destination address, an input's value).
+    /// Conservative like a call: clear the CSE cache, since the asm may
+    /// write through the output addresses or (with a `"memory"` clobber)
+    /// order surrounding accesses.
+    pub(crate) fn inline_asm(
+        &mut self,
+        asm: alloc::boxed::Box<crate::c5::ir::AsmBlock>,
+        args: Vec<ValueId>,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::InlineAsm { asm, args })
+    }
+
     /// Record that the function calls a returns-twice function (the
     /// setjmp family / vfork). See
     /// [`FunctionSsa::has_returns_twice_call`].

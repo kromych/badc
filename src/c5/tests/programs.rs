@@ -3895,3 +3895,107 @@ fn builtin_choose_expr() {
     // (no `?:` conversions) and never evaluates the other operand.
     assert_eq!(run_fixture("builtin_choose_expr.c"), 0);
 }
+
+// GCC extended inline asm with operand lists (x86_64 register-operand
+// forms). The interpreter evaluates the template semantics, so these
+// round-trip on any host; the native x86_64 encoding is checked by the
+// snapshot suite and the box validation.
+#[test]
+fn inline_asm_shld_double_shift() {
+    // `shld count, src, dst` (AT&T) shifts `dst` left by `count`, feeding
+    // in the high bits of `src`. Constraints: `+r` read-write output, `r`
+    // input, `ci` (immediate-or-CL) count with a `%b` byte-size operand.
+    let src = "
+        unsigned long shl_double(unsigned long l, unsigned long r, int c) {
+            asm(\"shld %b2, %1, %0\" : \"+r\"(l) : \"r\"(r), \"ci\"(c));
+            return l;
+        }
+        int main(void) {
+            unsigned long l = 0x0123456789ABCDEFUL, r = 0xFEDCBA9876543210UL;
+            int c = 12;
+            unsigned long got = shl_double(l, r, c);
+            unsigned long want = (l << c) | (r >> (64 - c));
+            return got == want ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_shrd_double_shift() {
+    let src = "
+        unsigned long shr_double(unsigned long l, unsigned long r, int c) {
+            asm(\"shrd %b2, %1, %0\" : \"+r\"(r) : \"r\"(l), \"ci\"(c));
+            return r;
+        }
+        int main(void) {
+            unsigned long l = 0x0123456789ABCDEFUL, r = 0xFEDCBA9876543210UL;
+            int c = 20;
+            unsigned long got = shr_double(l, r, c);
+            unsigned long want = (r >> c) | (l << (64 - c));
+            return got == want ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_bswap_matching_constraint() {
+    // `bswapl %0` with `"=r"(val)` output and `"0"(val)` matching input:
+    // the input shares operand 0's register (a byte-reverse in place).
+    let src = "
+        unsigned bswap32(unsigned val) {
+            __asm__(\"bswapl %0\" : \"=r\"(val) : \"0\"(val));
+            return val;
+        }
+        int main(void) {
+            unsigned x = 0x11223344u;
+            return bswap32(x) == 0x44332211u ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_bswap_size_modifier() {
+    // A size-modifier register name: `bswapq` on a 64-bit operand.
+    let src = "
+        unsigned long bswap64(unsigned long val) {
+            __asm__(\"bswapq %0\" : \"=r\"(val) : \"0\"(val));
+            return val;
+        }
+        int main(void) {
+            unsigned long x = 0x0102030405060708UL;
+            return bswap64(x) == 0x0807060504030201UL ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_rdtscp_sequence_fixed_regs() {
+    // `rdtscp; shl $32,%%rdx; or %%rdx,%%rax` assembles a 64-bit value in
+    // rax from the timestamp halves: fixed-register output `=a`, explicit
+    // `%%reg` operands, an immediate `$32`, and `%rcx`/`%rdx` clobbers.
+    // The interpreter has no clock, so the read is zero; the point is
+    // that the multi-instruction template compiles and runs.
+    let src = "
+        unsigned long rdtscp_read(void) {
+            unsigned long tsc;
+            __asm__ __volatile__(\"rdtscp; shl $32,%%rdx; or %%rdx,%%rax\"
+                                 : \"=a\"(tsc) : : \"%rcx\", \"%rdx\");
+            return tsc;
+        }
+        int main(void) {
+            return rdtscp_read() == 0 ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_extended_operands_fixture() {
+    // Full fixture (also snapshotted): x86_64 asm forms with a portable
+    // fallback. Returns 0 when every form round-trips.
+    assert_eq!(run_fixture("inline_asm_extended_operands.c"), 0);
+}

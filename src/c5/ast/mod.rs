@@ -316,6 +316,12 @@ pub(crate) enum Expr {
         args: Vec<ExprId>,
         ty: i64,
     },
+    /// GCC extended inline asm with operands. The payload is an index
+    /// into [`Ast::asm_blocks`]; the descriptor there holds the
+    /// template, per-operand constraints, clobbers, and the operand
+    /// expressions. As a statement it yields no value (`void`); the
+    /// walker lowers it to `Inst::InlineAsm`.
+    InlineAsm(u32),
     /// C11 7.17 atomic operation (`atomic_load`, `atomic_store`,
     /// `atomic_exchange`, `atomic_fetch_*`,
     /// `atomic_compare_exchange_strong`). `args` holds the pointer
@@ -623,11 +629,25 @@ pub(crate) struct FinishedFunction {
 
 /// Per-function AST. One instance lives on the active function in
 /// [`super::compiler::Compiler`]; dropped at function exit.
+/// A GCC extended-asm statement as parsed, before the walker evaluates
+/// its operands. `block` carries the template, constraints, and
+/// clobbers; `operand_exprs` is parallel to `block.operands` and holds
+/// each operand's parenthesised expression (an lvalue for an output, an
+/// rvalue for an input). Referenced by index from [`Expr::InlineAsm`].
+#[derive(Debug, Clone)]
+pub(crate) struct AsmBlockAst {
+    pub block: crate::c5::ir::AsmBlock,
+    pub operand_exprs: Vec<ExprId>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Ast {
     pub exprs: Vec<Expr>,
     pub stmts: Vec<Stmt>,
     pub decls: Vec<Decl>,
+    /// Extended inline-asm descriptors, indexed by [`Expr::InlineAsm`].
+    /// Sparse: empty unless a function uses operand-carrying asm.
+    pub asm_blocks: Vec<AsmBlockAst>,
     /// Source position columns. Same length as the matching arena;
     /// `expr_src[ExprId as usize]` is the position of that node.
     pub expr_src: Vec<SrcPos>,
@@ -966,6 +986,8 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         Expr::Sizeof(_) => {}
         // No `ty` field; `&&label` is always a `void *`.
         Expr::LabelAddr(_) => {}
+        // No `ty` field; the operand expressions carry their own.
+        Expr::InlineAsm(_) => {}
     }
 }
 

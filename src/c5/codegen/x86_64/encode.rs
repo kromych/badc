@@ -291,6 +291,16 @@ pub(crate) fn emit_mov_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32)
     emit_modrm_mem(code, dst, base, disp);
 }
 
+/// `MOV r32, [base + disp]` -- 32-bit load (zero-extends to 64).
+/// Encoding: `8B /r` (no REX.W).
+pub(crate) fn emit_mov_r_mem32(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    if dst.high() || base.high() {
+        emit_byte(code, rex(false, dst.high(), false, base.high()));
+    }
+    emit_byte(code, 0x8B);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
 /// `MOV [base + disp], r64` -- 64-bit memory store.
 /// Encoding: `REX.W + 89 /r`.
 pub(crate) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {

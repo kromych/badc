@@ -254,7 +254,10 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 mark(*dst, &mut used);
                 mark(*src, &mut used);
             }
-            Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+            Inst::Call { args, .. }
+            | Inst::CallExt { args, .. }
+            | Inst::Intrinsic { args, .. }
+            | Inst::InlineAsm { args, .. } => {
                 for &a in args {
                     mark(a, &mut used);
                 }
@@ -493,7 +496,10 @@ pub(super) fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
         }
         Inst::Extend { value, .. } => *value = map_v(*value, remap),
         Inst::FpCast { value, .. } => *value = map_v(*value, remap),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Call { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. }
+        | Inst::InlineAsm { args, .. } => {
             for a in args.iter_mut() {
                 *a = map_v(*a, remap);
             }

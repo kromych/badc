@@ -236,6 +236,12 @@ fn fmt_inst(inst: &Inst) -> String {
             "Intrinsic {{ kind={kind}, args=[{}] }}",
             fmt_value_list(args),
         ),
+        InlineAsm { asm, args } => format!(
+            "InlineAsm {{ template={:?}, ops={}, args=[{}] }}",
+            core::str::from_utf8(&asm.template).unwrap_or("<?>"),
+            asm.operands.len(),
+            fmt_value_list(args),
+        ),
         AllocaInit(slot) => format!("AllocaInit({slot})"),
         ParamRef { idx, kind } => format!("ParamRef({idx}, kind={})", fmt_load_kind(*kind)),
         Phi { incoming, kind } => {

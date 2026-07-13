@@ -335,6 +335,20 @@ pub(crate) enum Inst {
     /// setjmp's 0-on-initial-call); longjmp does not return at
     /// all.
     Intrinsic { kind: i64, args: Vec<ValueId> },
+    /// GCC extended inline asm with operands (`asm(template : outputs :
+    /// inputs : clobbers)`). `asm` carries the template, per-operand
+    /// constraints, and clobbers; `args` is parallel to `asm.operands`
+    /// and holds each operand's SSA value -- the destination address for
+    /// an output, the value for an input. Every arg is a read for
+    /// liveness; the instruction defines no SSA value (outputs are
+    /// stored through their addresses). The per-arch lowering assigns a
+    /// machine register to each register operand per its constraint,
+    /// loads the inputs, encodes the register-concrete template, and
+    /// stores the outputs back through their addresses.
+    InlineAsm {
+        asm: alloc::boxed::Box<AsmBlock>,
+        args: Vec<ValueId>,
+    },
     /// Per-frame alloca arena bookkeeping setup. Slot index is
     /// the alloca-top FP-slot offset. Produces no SSA value;
     /// emitted purely for the side effect.
@@ -505,6 +519,91 @@ pub(crate) enum FpCastKind {
     /// explicit `(float)d` cast and an assignment / return converting
     /// a `double` value to a `float` object.
     F64ToF32,
+}
+
+/// Register-name size for an inline-asm template `%`-reference, from a
+/// GCC operand-size modifier (`%b`/`%w`/`%k`/`%q` -> byte/word/long/quad
+/// sub-register name). Absent modifier defaults to the operand's width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmRegSize {
+    Byte,
+    Word,
+    Long,
+    Quad,
+}
+
+impl AsmRegSize {
+    pub(crate) fn from_width(width: u8) -> AsmRegSize {
+        match width {
+            1 => AsmRegSize::Byte,
+            2 => AsmRegSize::Word,
+            4 => AsmRegSize::Long,
+            _ => AsmRegSize::Quad,
+        }
+    }
+    pub(crate) fn bytes(self) -> u8 {
+        match self {
+            AsmRegSize::Byte => 1,
+            AsmRegSize::Word => 2,
+            AsmRegSize::Long => 4,
+            AsmRegSize::Quad => 8,
+        }
+    }
+}
+
+/// Constraint on one GCC extended-asm operand (x86_64 register classes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmConstraint {
+    /// Any allocatable general register (`r`, or the register arm of
+    /// `rm`/`g`).
+    Reg,
+    /// A specific general register named by a class letter (`a`->rax,
+    /// `b`->rbx, `c`->rcx, `d`->rdx, `S`->rsi, `D`->rdi); the value is
+    /// the architectural register number.
+    Fixed(u8),
+    /// Matching constraint (`"0".."9"`): shares the register assigned to
+    /// the operand at that index (an earlier output).
+    Match(u8),
+    /// Immediate-or-register (`ci`): a compile-time-constant operand is
+    /// used as an immediate, otherwise the value is loaded into the
+    /// register of the given class.
+    RegOrImm(u8),
+    /// Immediate-only (`i`, `n`).
+    Imm,
+}
+
+/// One operand of a GCC extended-asm statement.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AsmOperand {
+    pub constraint: AsmConstraint,
+    /// `=`/`+` output: the operand argument is the destination address.
+    pub is_output: bool,
+    /// `+` read-write output: the current value is loaded into the
+    /// operand register before the instruction and stored after.
+    pub is_rw: bool,
+    /// Operand access width in bytes (from the C operand type). Drives
+    /// the default register-name size of a `%N` reference and the width
+    /// of the load / store through an output address.
+    pub width: u8,
+}
+
+/// A parsed GCC extended-asm statement (`asm(template : outputs :
+/// inputs : clobbers)`). The template's `%N` / `%<size>N` references
+/// are substituted with the operands' assigned registers at emit time.
+#[derive(Debug, Clone)]
+pub(crate) struct AsmBlock {
+    /// Template bytes, adjacent-literal concatenation already resolved.
+    pub template: Vec<u8>,
+    /// Operands in `%N` numbering order (outputs first, then inputs).
+    pub operands: Vec<AsmOperand>,
+    /// Registers preserved across the statement (explicit clobbers plus
+    /// the operand registers), as a bitmask over register numbers 0..15.
+    pub clobber_regs: u32,
+    /// A `"memory"` clobber was listed: an ordering barrier for memory
+    /// accesses (C practice for `asm volatile("" ::: "memory")`).
+    pub clobber_memory: bool,
+    /// The statement carried the `volatile` qualifier.
+    pub volatile: bool,
 }
 
 /// A basic block's terminator. Drives the block's control-flow

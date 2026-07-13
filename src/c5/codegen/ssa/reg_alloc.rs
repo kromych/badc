@@ -1405,7 +1405,7 @@ pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
                 f(a);
             }
         }
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } => {
+        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::InlineAsm { args, .. } => {
             for &a in args {
                 f(a);
             }
@@ -1548,6 +1548,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
             }
         }
         AllocaInit(_) => ResultKind::None,
+        // Extended asm stores its results through the output addresses;
+        // it defines no register value the allocator must place.
+        InlineAsm { .. } => ResultKind::None,
     }
 }
 

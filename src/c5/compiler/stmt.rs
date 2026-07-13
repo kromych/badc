@@ -1009,8 +1009,13 @@ impl Compiler {
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?; // asm / __asm__ / __asm
         // Optional qualifiers (`volatile` / `__volatile__`, `inline`,
-        // `goto`). c5 acts on none of them.
+        // `goto`). Only `volatile` carries a code-generation effect
+        // (it must not be elided); it rides the parsed asm block.
+        let mut is_volatile = false;
         while self.lex.tk == Token::TypeQual || self.lex.tk == Token::Inline {
+            if self.lex.tk == Token::TypeQual {
+                is_volatile = true;
+            }
             self.next()?;
         }
         self.consume(b'(', "`(` expected after `asm`")?;
@@ -1179,38 +1184,18 @@ impl Compiler {
             self.data.truncate(tstart);
             return Ok(());
         }
-        // Optional `: outputs : inputs : clobbers`. An operand binding
-        // (`"constraint"(expr)`) introduces a `(` and is rejected; bare
-        // clobber strings and the separating colons are accepted.
-        while self.lex.tk != ')' {
-            if self.lex.tk == '(' {
-                self.data.truncate(tstart);
-                return Err(self.compile_err("inline asm operands are not supported"));
-            }
-            if self.lex.tk == ':' || self.lex.tk == ',' || self.lex.tk == '"' {
-                self.next()?;
-                continue;
-            }
-            self.data.truncate(tstart);
-            return Err(self.compile_err("unsupported inline asm syntax"));
-        }
-        self.next()?; // consume ')'
-        self.consume(b';', "`;` expected after `asm(...)`")?;
-        self.data.truncate(tstart);
-        let t = core::str::from_utf8(&template)
-            .unwrap_or("")
-            .trim()
-            .trim_end_matches(';')
-            .trim()
-            .to_ascii_lowercase();
         // The spin-loop hint appears as `pause` / `yield` (x86 / arm) or
         // the `rep; nop` byte encoding of PAUSE on x86; normalize away the
-        // whitespace and `;` so every spelling maps to the relax hint.
-        let compact: alloc::string::String = t
+        // whitespace and `;` so every spelling maps to the relax hint. It
+        // carries no operand (only an optional `"memory"` clobber), so it
+        // is recognised before the general operand parser.
+        let compact: alloc::string::String = tmpl_lc
             .chars()
             .filter(|c| !c.is_whitespace() && *c != ';')
             .collect();
         if compact == "pause" || compact == "yield" || compact == "repnop" {
+            self.skip_asm_operand_region()?;
+            self.data.truncate(tstart);
             self.mark_emit_other();
             self.ty = Ty::Int as i64;
             let pos = self.ast_src_pos();
@@ -1226,7 +1211,218 @@ impl Compiler {
             let _ = self.ast_emit_expr_stmt();
             return Ok(());
         }
-        Err(self.compile_err(format!("inline asm instruction `{t}` is not supported")))
+        // General GCC extended asm: parse the `: outputs : inputs :
+        // clobbers` operand lists into an `AsmBlock`. The template bytes
+        // are dropped from the data section; the parsed block references
+        // its operand expressions by AST id.
+        self.data.truncate(tstart);
+        self.parse_extended_asm(template, is_volatile)
+    }
+
+    /// Consume the `: outputs : inputs : clobbers` region and the
+    /// closing `)` and `;` of an operand-free asm statement, discarding
+    /// the tokens. Used for the spin-loop hint, whose only operand-list
+    /// content is a clobber with no machine effect.
+    fn skip_asm_operand_region(&mut self) -> Result<(), C5Error> {
+        let mut depth = 0i32;
+        while !(self.lex.tk == ')' && depth == 0) {
+            if self.lex.tk == '(' {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                depth -= 1;
+            }
+            self.next()?;
+        }
+        self.next()?; // consume ')'
+        self.consume(b';', "`;` expected after `asm(...)`")
+    }
+
+    /// Parse the operand lists of a GCC extended-asm statement into an
+    /// [`ast::AsmBlockAst`] and emit an [`ast::Expr::InlineAsm`]. The
+    /// grammar is `: outputs : inputs : clobbers`, each operand a
+    /// constraint string and a parenthesised expression (an lvalue for
+    /// an output, an rvalue for an input); a clobber is a bare string.
+    /// On entry the template is consumed and the cursor is at the first
+    /// `:` (or `)` when there is no operand list).
+    fn parse_extended_asm(
+        &mut self,
+        template: alloc::vec::Vec<u8>,
+        volatile: bool,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::{AsmBlockAst, Expr, UnOp};
+        use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand};
+        let mut operands: alloc::vec::Vec<AsmOperand> = alloc::vec::Vec::new();
+        let mut operand_exprs: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
+        let mut clobber_regs: u32 = 0;
+        let mut clobber_memory = false;
+        let mut n_outputs = 0usize;
+        // Section 1 = outputs, 2 = inputs, 3+ = clobbers.
+        let mut section: u8 = 0;
+        let data_base = self.data.len();
+        while self.lex.tk != ')' {
+            if self.lex.tk == ':' {
+                section += 1;
+                self.next()?;
+                continue;
+            }
+            if self.lex.tk == ',' {
+                self.next()?;
+                continue;
+            }
+            if self.lex.tk != '"' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("inline asm: constraint string expected"));
+            }
+            // The lexer appended the constraint bytes to the data
+            // section; copy them out and drop them.
+            let cstart = self.lex.ival as usize;
+            let cbytes: alloc::vec::Vec<u8> = self.data[cstart..].to_vec();
+            self.next()?; // consume the constraint string
+            self.data.truncate(cstart);
+            let cstr = core::str::from_utf8(&cbytes).unwrap_or("");
+            if section >= 3 {
+                // Clobber list: a bare register name, `"cc"`, or
+                // `"memory"`. A named register is preserved across the
+                // asm; `cc` (flags) needs no action since no value is
+                // kept in flags across the statement.
+                let name = cstr.trim_start_matches('%');
+                if name == "memory" {
+                    clobber_memory = true;
+                } else if name != "cc"
+                    && !name.is_empty()
+                    && let Some((reg, _)) = super::super::codegen::x86_64::asm::reg_by_name(name)
+                {
+                    clobber_regs |= 1 << reg;
+                }
+                continue;
+            }
+            let is_output = section == 1;
+            let (constraint, is_rw) = match Self::parse_asm_constraint(cstr, is_output, n_outputs) {
+                Some(c) => c,
+                None => {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err(alloc::format!(
+                        "inline asm: unsupported constraint `{cstr}`"
+                    )));
+                }
+            };
+            if self.lex.tk != '(' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("inline asm: `(` expected after constraint"));
+            }
+            self.next()?; // consume `(`
+            self.expr(Token::Assign as i64)?;
+            let width = self.size_of_type(self.ty).min(8) as u8;
+            if is_output {
+                // Store back through the destination's address.
+                self.ty += Ty::Ptr as i64;
+                self.ast_apply_unary(UnOp::AddrOf);
+            }
+            let e = match self.ast_acc.take() {
+                Some(e) => e,
+                None => {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("inline asm: operand expression expected"));
+                }
+            };
+            operand_exprs.push(e);
+            operands.push(AsmOperand {
+                constraint,
+                is_output,
+                is_rw,
+                width,
+            });
+            if is_output {
+                n_outputs += 1;
+            }
+            if self.lex.tk != ')' {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("inline asm: `)` expected after operand"));
+            }
+            self.next()?; // consume the operand's `)`
+        }
+        self.next()?; // consume the outer `)`
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        self.data.truncate(data_base);
+
+        // Every register operand is preserved across the statement.
+        for (op, _) in operands.iter().zip(operand_exprs.iter()) {
+            if let AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm(r) = op.constraint {
+                clobber_regs |= 1 << r;
+            }
+        }
+        let block = AsmBlock {
+            template,
+            operands,
+            clobber_regs,
+            clobber_memory,
+            volatile,
+        };
+        let idx = self.ast.asm_blocks.len() as u32;
+        self.ast.asm_blocks.push(AsmBlockAst {
+            block,
+            operand_exprs,
+        });
+        self.mark_emit_other();
+        self.ty = Ty::Int as i64;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::InlineAsm(idx), pos);
+        self.ast_acc = Some(id);
+        let _ = self.ast_emit_expr_stmt();
+        Ok(())
+    }
+
+    /// Classify a GCC operand constraint string into an
+    /// [`ir::AsmConstraint`] and whether it is a read-write (`+`)
+    /// output. `is_output` selects the output vs input grammar;
+    /// `n_outputs` is the count of outputs already parsed, so a digit
+    /// (matching) constraint resolves to an earlier output. Returns
+    /// `None` for a constraint the codegen does not model.
+    fn parse_asm_constraint(
+        cstr: &str,
+        is_output: bool,
+        n_outputs: usize,
+    ) -> Option<(super::super::ir::AsmConstraint, bool)> {
+        use super::super::ir::AsmConstraint;
+        let is_rw = cstr.starts_with('+');
+        let body = cstr.trim_start_matches(['=', '+', '&', '%']);
+        // A matching constraint ties an input to an earlier output.
+        if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {
+            let idx = d as u8 - b'0';
+            if (idx as usize) < n_outputs {
+                return Some((AsmConstraint::Match(idx), is_rw));
+            }
+            return None;
+        }
+        // Fixed-register class letters.
+        let fixed = |c: char| -> Option<u8> {
+            Some(match c {
+                'a' => 0,
+                'b' => 3,
+                'c' => 1,
+                'd' => 2,
+                'S' => 6,
+                'D' => 7,
+                _ => return None,
+            })
+        };
+        let has_imm = body.contains(['i', 'n']);
+        let has_reg = body.contains(['r', 'm', 'g', 'q']);
+        // A specific-register letter (possibly combined with `i` as in
+        // `ci`: the value takes that register, or an immediate).
+        if let Some(reg) = body.chars().find_map(fixed) {
+            if has_imm {
+                return Some((AsmConstraint::RegOrImm(reg), is_rw));
+            }
+            return Some((AsmConstraint::Fixed(reg), is_rw));
+        }
+        if has_reg {
+            return Some((AsmConstraint::Reg, is_rw));
+        }
+        if has_imm && !is_output {
+            return Some((AsmConstraint::Imm, is_rw));
+        }
+        None
     }
 
     /// `asm("fnstcw %0":"=m"(cw))` / `asm("fldcw %0"::"m"(cw))` -- the two

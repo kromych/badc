@@ -583,8 +583,11 @@ def maybe_boot(binp: Path, arch: str) -> None:
     cpu = "cortex-a57" if arch == "aarch64" else "qemu64"
     console = "ttyAMA0" if arch == "aarch64" else "ttyS0"
     append = os.environ.get("BADC_QEMU_APPEND") or f"rdinit=/sbin/init console={console}"
+    # No network: a boot smoke test needs none, and the default virtio-net
+    # NIC pulls in a boot ROM (efi-virtio.rom) that is not staged next to the
+    # freshly linked emulator, so `-nic none` keeps the run self-contained.
     cmd = [str(binp), "-M", machine, "-cpu", cpu, "-smp", "4", "-m", "512",
-           "-nographic", "-no-reboot", "-kernel", kernel, "-append", append]
+           "-nographic", "-no-reboot", "-nic", "none", "-kernel", kernel, "-append", append]
     if initrd:
         cmd += ["-initrd", initrd]
 

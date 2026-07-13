@@ -1266,10 +1266,16 @@ jobs:
         run: cargo build --release --locked --features full --bin badc
       - name: qemu setup (fetch source + build config)
         run: python demos/qemu/setup.py
-      - name: qemu smoke (badc build + self-link + run)
-        # Gate on the run, not just compile + self-link: the runner builds at a
-        # long path whose length lands the init_array on the .data boundary, so
-        # a regression in the boundary handling faults the emulator at startup.
+      - name: qemu smoke (badc build + self-link + boot)
+        # Two-stage gate. BADC_QEMU_REQUIRE_RUN=1 requires the linked emulator
+        # to start (--version): the runner builds at a long path whose length
+        # lands the init_array on the .data boundary, catching a boundary
+        # regression that faults startup. BADC_QEMU_BOOT=gate then requires it
+        # to boot the published kernel bundle to a userspace shell and power
+        # off cleanly. fetch_kernel pulls the bundle on demand (GITHUB_TOKEN is
+        # inherited from the workflow env); the per-boot timeout fails a hang
+        # fast rather than approaching the job budget.
         env:
           BADC_QEMU_REQUIRE_RUN: "1"
+          BADC_QEMU_BOOT: "gate"
         run: python demos/qemu/smoke.py

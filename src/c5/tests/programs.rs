@@ -40,6 +40,58 @@ fn destructor_runs_after_main_without_disturbing_return() {
     assert_eq!(run_str(src), 5);
 }
 
+// C23 6.7.13 `[[...]]` attribute-specifier-sequences in the declarator
+// positions GNU headers place them: after a pointer `*`, leading a
+// declaration, after the type before the identifier, before a
+// parenthesized function-pointer declarator, and on a struct member. All
+// are parsed and ignored; the program's value pins that they were skipped,
+// not miscompiled.
+#[test]
+fn c23_attribute_specifier_positions() {
+    let src = "
+        int gv = 5;
+        int * [[deprecated]] gp = &gv;
+        [[maybe_unused]] static int leading(void) { return 1; }
+        void [[cold]] noop(void) { }
+        int [[deprecated]] doubler(int x) { return x + x; }
+        struct ops { int [[deprecated]] (*fn)(int); };
+        int main(void) {
+            struct ops o;
+            o.fn = doubler;
+            noop();
+            if (*gp != 5) return 99;
+            return o.fn(21) + leading();
+        }
+    ";
+    assert_eq!(run_str(src), 43);
+}
+
+// The bundled <sched.h> gained the glibc CPU_COUNT_S / CPU_COUNT set-bit
+// counters (popcount over the mask words). Build a mask and check the
+// counts, including a byte-limited count over just the first word.
+// cpu_set_t and the CPU_* macros are `__linux__`-only, so gate on a
+// Linux host where the host-target preprocess defines it.
+#[cfg(target_os = "linux")]
+#[test]
+fn cpu_set_count_macros() {
+    let src = "
+        #include <sched.h>
+        int main(void) {
+            cpu_set_t s;
+            CPU_ZERO(&s);
+            CPU_SET(0, &s);
+            CPU_SET(3, &s);
+            CPU_SET(64, &s);
+            if (CPU_COUNT(&s) != 3) return 1;
+            if (CPU_COUNT_S(sizeof(unsigned long), &s) != 2) return 2;
+            CPU_CLR(3, &s);
+            if (CPU_COUNT(&s) != 2 || !CPU_ISSET(64, &s)) return 3;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
 #[test]
 fn arithmetic() {
     assert_eq!(run_fixture("arithmetic.c"), 60);

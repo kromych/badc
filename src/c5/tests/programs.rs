@@ -292,6 +292,57 @@ fn deferred_array_designator() {
 }
 
 #[test]
+fn outer_range_designator_replicates_subarray() {
+    // A GCC range designator on the outer dimension of an array of
+    // aggregates (`[a ... b] = { ... }`) replicates the brace-enclosed
+    // sub-array across every covered index, so the deferred outer size
+    // resolves to `max index + 1` -- not the ragged element count that
+    // dropped the last row and under-sized the array (state-transition
+    // table shape: rows selected by an enum, one range covering the two
+    // start states, then a two-level designator patching the last row).
+    let src = "
+        enum { S_A = 1, S_START = 4, S_INTERP = 5 };
+        static const unsigned char tbl[][8] = {
+            [S_A] = { [0 ... 7] = 9 },
+            [S_START ... S_INTERP] = { [1] = 3, [2 ... 4] = 7 },
+            [S_INTERP][6] = 5,
+        };
+        int main(void) {
+            if (sizeof(tbl) / sizeof(tbl[0]) != 6) return 1;
+            if (tbl[4][1] != 3 || tbl[4][2] != 7 || tbl[4][4] != 7 || tbl[4][0] != 0) return 2;
+            if (tbl[5][1] != 3 || tbl[5][2] != 7 || tbl[5][4] != 7) return 3;
+            if (tbl[5][6] != 5) return 4;
+            if (tbl[4][6] != 0) return 5;
+            if (tbl[1][0] != 9 || tbl[1][7] != 9) return 6;
+            if (tbl[0][0] != 0 || tbl[2][3] != 0 || tbl[3][7] != 0) return 7;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn outer_range_designator_replicates_string_rows() {
+    // A GCC range designator whose value is a string literal
+    // (`[a ... b] = "..."`) replicates the row across every covered
+    // index of a 2-D character array, zero-padding each to the row
+    // width -- the string-row counterpart of the brace-list case above.
+    let src = "
+        static const char m[][6] = { [0 ... 2] = \"abc\", [4] = \"XY\" };
+        int main(void) {
+            if (sizeof(m) / sizeof(m[0]) != 5) return 1;
+            for (int r = 0; r <= 2; r++)
+                if (m[r][0] != 'a' || m[r][1] != 'b' || m[r][2] != 'c'
+                    || m[r][3] != 0 || m[r][5] != 0) return 2 + r;
+            if (m[3][0] != 0 || m[3][5] != 0) return 6;
+            if (m[4][0] != 'X' || m[4][1] != 'Y' || m[4][2] != 0) return 7;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn member_array_designator() {
     // C99 6.7.8p7 `.member[i] = value` designator chain into an array-typed
     // struct member (a real-world device-register table shape).

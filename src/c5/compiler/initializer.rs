@@ -590,20 +590,30 @@ impl Compiler {
                 };
                 let inner = self.collect_array_initializer(elem_ty)?;
                 let written = inner.len();
-                if elements.len() < before + written {
-                    elements.resize(before + written, (0, InitElemReloc::None));
+                // One sub-array copy spans `child_span` scalars (its
+                // declared element count), or its own length when the
+                // brace list is longer (no declared inner dimension).
+                let stride = child_span.max(written);
+                // A range designator (`[a ... b] = { ... }`) replicates the
+                // sub-array across every covered index; a plain designator or
+                // positional entry writes it once (C99 6.7.8 with the GCC
+                // range extension over an array of aggregates). A short brace
+                // list zero-pads to `stride` per C99 6.7.8p21.
+                let reps = match desig_range_end.take() {
+                    Some(end) if stride > 0 && end > before => (end - before).div_ceil(stride),
+                    _ => 1,
+                };
+                let total = before + reps * stride;
+                if elements.len() < total {
+                    elements.resize(total, (0, InitElemReloc::None));
                 }
-                for (i, entry) in inner.into_iter().enumerate() {
-                    elements[before + i] = entry;
-                }
-                cursor = before + written;
-                if child_span > written {
-                    let pad = child_span - written;
-                    if elements.len() < cursor + pad {
-                        elements.resize(cursor + pad, (0, InitElemReloc::None));
+                for r in 0..reps {
+                    let dst = before + r * stride;
+                    for (i, &entry) in inner.iter().enumerate() {
+                        elements[dst + i] = entry;
                     }
-                    cursor += pad;
                 }
+                cursor = total;
                 self.accept(',')?;
                 continue;
             }
@@ -622,22 +632,32 @@ impl Compiler {
                 let start_addr = self.take_concat_string_literal()?;
                 let avail = self.data.len() - start_addr;
                 let before = cursor;
-                if elements.len() < before + row {
-                    elements.resize(before + row, (0, InitElemReloc::None));
+                // A range designator (`[a ... b] = "..."`) replicates the row
+                // across every covered index; a plain entry fills one row.
+                let reps = match desig_range_end.take() {
+                    Some(end) if row > 0 && end > before => (end - before).div_ceil(row),
+                    _ => 1,
+                };
+                let total = before + reps * row;
+                if elements.len() < total {
+                    elements.resize(total, (0, InitElemReloc::None));
                 }
-                for k in 0..row {
-                    let b = if k < avail {
-                        self.data[start_addr + k] as i64
-                    } else {
-                        0
-                    };
-                    elements[before + k] = (b, InitElemReloc::None);
+                for r in 0..reps {
+                    let dst = before + r * row;
+                    for k in 0..row {
+                        let b = if k < avail {
+                            self.data[start_addr + k] as i64
+                        } else {
+                            0
+                        };
+                        elements[dst + k] = (b, InitElemReloc::None);
+                    }
                 }
                 // The string's bytes were appended to the data segment by
                 // the lexer; they are copied into `elements` now, so drop
                 // them to avoid an orphaned literal.
                 self.data.truncate(start_addr);
-                cursor = before + row;
+                cursor = total;
                 self.accept(',')?;
                 continue;
             }

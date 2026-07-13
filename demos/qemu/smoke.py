@@ -408,10 +408,16 @@ def main() -> int:
     # A hardware watchpoint catches it at full speed; a software one would be
     # too slow, so this is best-effort within the timeout.
     if v.returncode and v.returncode < 0 and _shutil.which("gdb"):
+        # Break at the loop top (past the prologue + the fn store) rather than
+        # single-stepping, which would descend into the first constructor and
+        # read its frame instead of the loop's. +0x34 is __c5_run_init_array's
+        # loop head in the current crt; if it drifts the watchpoint just stays
+        # silent (best-effort). $lo is fn's start; the watch fires when fn
+        # jumps out of the array, and bt then names the store that moved it.
         g = subprocess.run(
             ["gdb", "-batch", "-nx",
              "-ex", "break __c5_run_init_array", "-ex", "run",
-             "-ex", "stepi 20",
+             "-ex", "tbreak *((char *)__c5_run_init_array + 0x34)", "-ex", "continue",
              "-ex", "set $fnloc = (unsigned long *)($x29 - 8)",
              "-ex", "set $lo = *$fnloc",
              "-ex", "printf \"init_array_start=0x%lx fnloc=%p\\n\", $lo, $fnloc",

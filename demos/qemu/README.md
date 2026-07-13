@@ -59,10 +59,37 @@ the system shared libraries.
 - badc archives the utility library with `--ar`;
 - the linked `qemu-system-aarch64` reports `QEMU emulator version 11.0.2`.
 
-Set `$BADC_QEMU_KERNEL` (and optionally `$BADC_QEMU_INITRD`) to a bootable
-image to add a best-effort boot check on the default machine (`-M virt`): the
-emulator must reach an early kernel boot marker. `$BADC_QEMU_OPT=1` also runs
-the `-O` lane; `$BADC_QEMU_JOBS` sets the compile parallelism.
+`$BADC_QEMU_OPT=1` also runs the `-O` lane; `$BADC_QEMU_JOBS` sets the compile
+parallelism.
+
+## Boot check
+
+The smoke can boot the emulator it just built on a real kernel and require a
+full round trip: the kernel boots, reaches its init process / a busybox shell,
+faults nowhere, and the guest powers the machine off on request. The gate is
+the serial log showing a boot marker (`Linux version` / `Booting Linux`) and
+userspace (`Run /sbin/init`), no fault marker (`Kernel panic`, `Unable to
+handle`, `Oops`, ...), and a clean power-down (the smoke sends `poweroff -f`
+over the console and the guest exits rc 0). The boot runs with `-smp 4`,
+`-nographic`, a 60s timeout, and `-no-reboot`.
+
+`$BADC_QEMU_BOOT` drives it:
+
+- unset -- boot only if a kernel is already available (`$BADC_QEMU_KERNEL`, or a
+  bundle already fetched into `.cache`); otherwise skip. A plain smoke run stays
+  green; a pre-fetched bundle gates.
+- `gate` -- fetch the published kernel bundle for the host arch, boot, and gate
+  on the full round trip.
+- `best-effort` -- fetch + boot, but a boot failure is logged, not fatal (for a
+  host too slow under TCG within the timeout).
+- `skip` -- do not boot.
+
+The kernel bundle (arm64 only) is a vendor-deps release asset fetched + sha256-
+verified by `setup.py --kernel` the same way the source is; it holds the kernel
+`Image`, a busybox `initramfs.cpio.gz`, and the kernel `config`. Point
+`$BADC_QEMU_KERNEL` / `$BADC_QEMU_INITRD` at your own images to boot those
+instead; `$BADC_QEMU_APPEND` overrides the kernel command line,
+`$BADC_QEMU_BOOT_TIMEOUT` the timeout.
 
 ## Scope
 

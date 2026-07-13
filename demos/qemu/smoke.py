@@ -452,31 +452,185 @@ def main() -> int:
     return 0
 
 
+# Serial markers. A boot is good when the kernel starts (BOOT), reaches its
+# init process / a shell (USERSPACE), shows no fault (PANIC), and the guest
+# powers the machine off on request (POWERDOWN). The panic set is the strong
+# kernel fault strings; a clean boot prints none of them.
+BOOT_MARKERS = ("Linux version", "Booting Linux")
+USERSPACE_MARKERS = ("Run /sbin/init", "Run /init", "as init process")
+PANIC_MARKERS = ("Kernel panic", "Unable to handle", "Internal error", "Oops",
+                 "Kernel BUG", "BUG: ", "Call trace:", "segfault at")
+POWERDOWN_MARKERS = ("reboot: Power down", "Power down", "System halted")
+
+# Sent to the guest shell to prove the shell runs and then power the machine
+# off. The token is echoed twice on execution -- once as the typed command
+# line, once as the command's output -- so a count of two means the shell ran
+# the command, not merely received it. The command is sent only after a settle
+# so it lands on the initialized console tty, not mid-init where the shell's
+# tty setup would flush it.
+_SHELL_TOKEN = "BADC_BOOT_OK"
+_SHELL_CMD = b"\necho BADC_BOOT_OK\npoweroff -f\n"
+
+
+def _drive_boot(cmd: list[str], deadline: float) -> tuple[int | None, str]:
+    """Run the emulator, wait for the guest to reach userspace, settle, then
+    send a shell command that prints a token and powers off. Resends the whole
+    command periodically as a fallback until the guest exits. Returns (exit
+    code or None on timeout, merged serial output)."""
+    import threading
+    settle = float(os.environ.get("BADC_QEMU_BOOT_SETTLE") or 3.0)
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, bufsize=0)
+    buf = bytearray()
+    lock = threading.Lock()
+
+    def reader() -> None:
+        assert p.stdout is not None
+        while True:
+            b = p.stdout.read(4096)
+            if not b:
+                break
+            with lock:
+                buf.extend(b)
+
+    threading.Thread(target=reader, daemon=True).start()
+
+    def out() -> str:
+        with lock:
+            return bytes(buf).decode(errors="replace")
+
+    def send() -> None:
+        try:
+            assert p.stdin is not None
+            p.stdin.write(_SHELL_CMD)
+            p.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass
+
+    t0 = time.time()
+    reached_at = 0.0
+    sent_at = 0.0
+    while time.time() - t0 < deadline:
+        if p.poll() is not None:
+            break
+        now = time.time()
+        if reached_at == 0.0 and any(m in out() for m in USERSPACE_MARKERS):
+            reached_at = now
+        # Send once the console has settled past the shell's tty init, then
+        # resend every few seconds as a fallback (a full command line, safe to
+        # repeat) until the guest powers off.
+        if reached_at and now - reached_at >= settle and now - sent_at >= 5.0:
+            send()
+            sent_at = now
+        time.sleep(0.2)
+    # Let a powering-off guest finish exiting within the remaining budget.
+    while time.time() - t0 < deadline and p.poll() is None:
+        time.sleep(0.2)
+    rc = p.poll()
+    if rc is None:
+        p.kill()
+        try:
+            p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+    return rc, out()
+
+
 def maybe_boot(binp: Path, arch: str) -> None:
-    """Optional boot check: if $BADC_QEMU_KERNEL (and optionally
-    $BADC_QEMU_INITRD) point at a bootable image, launch the emulator on the
-    default machine and require the kernel to reach an early boot marker.
-    Best-effort and off by default -- the version check is the functional gate.
-    """
-    kernel = os.environ.get("BADC_QEMU_KERNEL")
-    if not kernel:
+    """Boot the freshly built emulator on a kernel + initramfs and require a
+    full round trip: the kernel boots, reaches its init process / busybox
+    shell, faults nowhere, and the guest powers the machine off cleanly (proof
+    the interactive shell ran the command we sent). Any panic marker, a missing
+    boot / userspace marker, or a failure to power off within the timeout fails
+    the demo.
+
+    Driven by kernel availability, per $BADC_QEMU_BOOT:
+      * unset       -- boot only if a kernel is already available (via
+                       $BADC_QEMU_KERNEL or a bundle already in the cache);
+                       gate on it. Nothing to boot -> skip. Keeps a plain smoke
+                       run green while letting a pre-fetched bundle gate.
+      * gate/require -- fetch the published bundle if needed, boot, gate.
+      * best-effort  -- fetch + boot, but a boot failure is logged, not fatal
+                       (for a host too slow under TCG within the timeout).
+      * skip         -- do not boot.
+    Timeout is $BADC_QEMU_BOOT_TIMEOUT seconds (default 60)."""
+    mode = os.environ.get("BADC_QEMU_BOOT", "").strip().lower()
+    if mode in ("skip", "0", "off", "no", "none"):
+        log("boot: disabled ($BADC_QEMU_BOOT=skip)")
         return
+    best_effort = mode in ("best-effort", "best_effort", "besteffort", "soft")
+    gate = mode in ("gate", "require", "on", "yes", "1")
+    kernel = os.environ.get("BADC_QEMU_KERNEL")
+    initrd = os.environ.get("BADC_QEMU_INITRD")
+    if not (gate or best_effort or kernel):
+        log("boot: not requested; skipping (set BADC_QEMU_BOOT=gate to fetch + "
+            "boot the published kernel, or point $BADC_QEMU_KERNEL at an image)")
+        return
+    if not kernel:
+        sys.path.insert(0, str(QEMU_DIR))
+        import setup as qsetup  # sibling module; fetches the boot bundle
+        pair = qsetup.fetch_kernel(QEMU_DIR / ".cache", arch, log)
+        if pair is None:
+            msg = f"boot: no kernel bundle published for {arch}"
+            if not best_effort:
+                fail(msg + " (BADC_QEMU_BOOT set but nothing to boot)")
+            log(msg + "; skipping (best-effort)")
+            return
+        kernel, initrd = str(pair[0]), str(pair[1])
+
+    timeout = float(os.environ.get("BADC_QEMU_BOOT_TIMEOUT") or 60)
     machine = "virt" if arch == "aarch64" else "q35"
     cpu = "cortex-a57" if arch == "aarch64" else "qemu64"
-    cmd = [str(binp), "-M", machine, "-cpu", cpu, "-m", "512", "-nographic",
-           "-kernel", kernel, "-append", "console=ttyAMA0 console=ttyS0"]
-    initrd = os.environ.get("BADC_QEMU_INITRD")
+    console = "ttyAMA0" if arch == "aarch64" else "ttyS0"
+    append = os.environ.get("BADC_QEMU_APPEND") or f"rdinit=/sbin/init console={console}"
+    cmd = [str(binp), "-M", machine, "-cpu", cpu, "-smp", "4", "-m", "512",
+           "-nographic", "-no-reboot", "-kernel", kernel, "-append", append]
     if initrd:
         cmd += ["-initrd", initrd]
+
+    log(f"boot: {os.path.basename(kernel)} on -M {machine} -smp 4 (timeout {timeout:.0f}s)")
+    t0 = time.time()
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        out = r.stdout + r.stderr
-    except subprocess.TimeoutExpired as e:
-        out = (e.stdout or "") + (e.stderr or "")
-    if "Linux version" in out or "Booting Linux" in out:
-        log("boot: kernel reached early boot")
+        rc, out = _drive_boot(cmd, timeout)
+    except Exception as e:  # noqa: BLE001 -- report, then gate on best_effort
+        _boot_result(False, f"launch failed: {e}", "", best_effort)
+        return
+    elapsed = time.time() - t0
+
+    panic = next((m for m in PANIC_MARKERS if m in out), None)
+    booted = any(m in out for m in BOOT_MARKERS)
+    userspace = any(m in out for m in USERSPACE_MARKERS)
+    powered = rc == 0 and any(m in out for m in POWERDOWN_MARKERS)
+
+    if panic:
+        _boot_result(False, f"kernel fault after {elapsed:.0f}s (marker {panic!r})", out, best_effort)
+    elif not booted and rc is not None and rc != 0:
+        _boot_result(False, f"emulator exited (rc={rc}) before the kernel started", out, best_effort)
+    elif not booted:
+        _boot_result(False, f"kernel did not start within {timeout:.0f}s", out, best_effort)
+    elif not userspace:
+        _boot_result(False, f"kernel booted but did not reach userspace within {timeout:.0f}s", out, best_effort)
+    elif rc is None:
+        _boot_result(False, f"guest did not power off within {timeout:.0f}s", out, best_effort)
+    elif not powered:
+        _boot_result(False, f"guest exited rc={rc} without a clean power-down", out, best_effort)
     else:
-        fail(f"boot: kernel did not reach an early boot marker:\n{out[-1500:]}")
+        shell = out.count(_SHELL_TOKEN) >= 2
+        log(f"boot: kernel booted, reached userspace{' + shell' if shell else ''}, "
+            f"powered off cleanly in {elapsed:.0f}s")
+
+
+def _boot_result(ok: bool, reason: str, out: str, best_effort: bool) -> None:
+    """A boot failure fails the demo, unless the host opted into best-effort."""
+    if ok:
+        return
+    tail = out[-2000:]
+    if best_effort:
+        log(f"boot: {reason} (best-effort; not gating)")
+        for ln in tail.splitlines()[-20:]:
+            log(f"  | {ln}")
+        return
+    fail(f"boot: {reason}\n--- serial tail ---\n{tail}")
 
 
 if __name__ == "__main__":

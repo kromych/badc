@@ -2568,3 +2568,40 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
         );
     }
 }
+
+/// A `_Bool` returned by a callee defined in another unit is only
+/// defined in the low byte per the psABI; a caller that tests the full
+/// return register (`!f()` / `if (f())`) must mask to the low byte
+/// first, or garbage high bits (e.g. a gcc `sete %al` with no
+/// zero-extend) make the branch go the wrong way. Regression for the
+/// AArch64 TCG wake path where `!qemu_cpu_is_self(cpu)` skipped the
+/// vCPU kick.
+#[test]
+fn external_bool_return_is_masked_before_branch() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "int _Bool_ext(void);\n\
+               extern _Bool other(void);\n\
+               int main(void) { return other() ? 7 : 3; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    let obj = emit_native_with_options(
+        &program,
+        Target::LinuxX64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        },
+    )
+    .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    // `and $0xff, %rax` == 48 81 e0 ff 00 00 00. The bool return must be
+    // reduced to its low byte before the conditional branch.
+    let masks = text
+        .windows(7)
+        .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00]);
+    assert!(
+        masks,
+        "expected the external _Bool return to be masked to its low byte before use"
+    );
+}

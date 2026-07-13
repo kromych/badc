@@ -4793,14 +4793,14 @@ fn extend_scalar_call_result(
     use super::super::ir::BinOp;
     let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
     let rs = type_size_bytes(ty, target);
-    if is_floating_scalar(ty)
-        || is_pointer_ty(ty)
-        || stripped == Ty::Bool as i64
-        || !(rs == 1 || rs == 2 || rs == 4)
-    {
+    if is_floating_scalar(ty) || is_pointer_ty(ty) || !(rs == 1 || rs == 2 || rs == 4) {
         return v;
     }
-    if (ty & UNSIGNED_BIT) != 0 {
+    // A `_Bool` return is defined only in the low byte per the psABI
+    // (a callee compiled by another toolchain may leave garbage in the
+    // high bits, e.g. `sete %al` with no zero-extend). Zero-extend it
+    // like an unsigned char so a full-width test / `!` reads 0 or 1.
+    if (ty & UNSIGNED_BIT) != 0 || stripped == Ty::Bool as i64 {
         let mask: i64 = match rs {
             1 => 0xff,
             2 => 0xffff,

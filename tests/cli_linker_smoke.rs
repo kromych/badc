@@ -3037,6 +3037,9 @@ fn link_defined_symbol_wins_over_auto_included_binding() {
 
 // A program calling the GCC aarch64 outline-atomics helpers, one per op
 // family plus a 1-byte and a matching/non-matching compare-exchange.
+// Used only by the two tests below; gate the const to their combined cfg so
+// targets that compile neither (e.g. windows-x64) do not see it as dead code.
+#[cfg(any(target_os = "linux", target_arch = "aarch64"))]
 const OUTLINE_ATOMICS_SRC: &str = "\
 typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long u64;\n\
 extern u64 __aarch64_ldadd8_acq_rel(u64, u64*);\n\

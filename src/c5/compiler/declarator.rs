@@ -223,11 +223,19 @@ impl Compiler {
         // A calling-convention decoration may precede the declarator
         // (`RET __stdcall name(args)`) or sit just inside the parentheses
         // of a function-pointer declarator (`RET (__stdcall *fp)(args)`);
-        // it lexes as a no-op type qualifier. Consume any here so it does
-        // not stand in for the declarator name.
-        while self.lex.tk == Token::TypeQual {
-            ty |= self.lex_volatile_bit();
-            self.next()?;
+        // it lexes as a no-op type qualifier. A GNU/C23 attribute-specifier
+        // may also lead the declarator, before the `*` / `(` / identifier
+        // (`void [[cold]] f(void)`, `void [[format(printf,2,3)]] (*fp)()`).
+        // Consume either here so neither stands in for the declarator name.
+        loop {
+            if self.lex.tk == Token::TypeQual {
+                ty |= self.lex_volatile_bit();
+                self.next()?;
+            } else if self.at_attribute_specifier() {
+                self.skip_attribute_specifiers()?;
+            } else {
+                break;
+            }
         }
         let mut leading_ptr_count: i64 = 0;
         while self.lex.tk == Token::MulOp {
@@ -243,7 +251,7 @@ impl Compiler {
                 if self.lex.tk == Token::TypeQual {
                     ty |= self.lex_volatile_bit();
                     self.next()?;
-                } else if self.lex.tk == Token::Attribute {
+                } else if self.at_attribute_specifier() {
                     self.skip_attribute_specifiers()?;
                 } else {
                     break;
@@ -753,10 +761,11 @@ impl Compiler {
             }
         }
 
-        // GNU C: an attribute-specifier-list may trail the declarator
-        // (`T x[N] __attribute__((aligned(8)))`); it does not change c5's
-        // type tag. Consume it so the caller resumes at `=` / `,` / `;`.
-        while self.lex.tk == Token::Attribute {
+        // GNU C / C23: an attribute-specifier-list may trail the declarator
+        // (`T x[N] __attribute__((aligned(8)))` or `T x[N] [[...]]`); it does
+        // not change c5's type tag. Consume it so the caller resumes at
+        // `=` / `,` / `;`.
+        while self.at_attribute_specifier() {
             self.skip_attribute_specifiers()?;
         }
 

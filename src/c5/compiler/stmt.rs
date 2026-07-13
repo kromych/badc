@@ -736,9 +736,7 @@ impl Compiler {
             // lead either a declaration or a statement at block scope.
             // Consume it, then dispatch on the following token.
             let mut leading_maybe_unused = false;
-            if self.lex.tk == Token::Attribute
-                || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
-            {
+            if self.at_attribute_specifier() {
                 self.pending.attr_maybe_unused = false;
                 // Clear per-item so a `cleanup` attribute leading a
                 // statement (not a declaration) cannot leak onto the next

@@ -376,6 +376,16 @@ impl Compiler {
     /// on and is discarded. The payload is matched by balance, so any
     /// parenthesis depth and content -- nested calls, string literals,
     /// comma lists -- is consumed.
+    /// True when the cursor is at an attribute-specifier: a GNU/MSVC
+    /// keyword (`__attribute__`, `__declspec`, `_Alignas`) or a C23
+    /// `[[` sequence (6.7.13). `[[` is unambiguous -- no C99 declarator
+    /// or expression begins with two adjacent `[` -- so peeking one byte
+    /// past the current `[` suffices.
+    pub(super) fn at_attribute_specifier(&self) -> bool {
+        self.lex.tk == Token::Attribute
+            || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+    }
+
     pub(super) fn skip_attribute_specifiers(&mut self) -> Result<bool, C5Error> {
         let mut packed = false;
         let mut maybe_unused = false;

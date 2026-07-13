@@ -2515,3 +2515,52 @@ fn dead_arm_switch_and_noreturn_tail_drop_their_callees() {
         "a helper behind a _Noreturn call must not be emitted"
     );
 }
+
+#[test]
+fn init_array_stays_strictly_inside_data_at_bss_boundary() {
+    // The startup runtime walks `[__init_array_start, __init_array_end)`; the
+    // end symbol is a one-past-the-array `.data` address. If an array ends
+    // exactly at the `.data` length, the offset->vaddr map resolves that
+    // offset as the first `.bss` byte -- and a `.tbss` gap between `.data`
+    // and `.bss` then makes the end symbol overshoot, so the walk runs off
+    // the array into zero padding and calls a null pointer. `g` is a lone
+    // 8-byte `.data` datum, so the single init_array slot ends 16-aligned at
+    // the `.data` length, and `t` forces the `.tbss` gap: exactly that
+    // boundary. The linker must keep the array strictly inside `.data`.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // Sweep the `.data` size a byte at a time so one size lands the sole
+    // init_array slot 16-aligned exactly at the `.data` length -- the case the
+    // fix guards. Every size must keep the array strictly inside `.data`.
+    for pad in 1..=24usize {
+        let program = Compiler::new(alloc::format!(
+            "{TEST_PRELUDE}\
+             long pad[{pad}] = {{1}};\n\
+             __thread int t;\n\
+             static int b;\n\
+             __attribute__((constructor)) static void ctor(void) {{ b = (int)pad[0]; }}\n\
+             int main(void) {{ return b + t; }}\n"
+        ))
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let merged = link_native_objects(&[obj]).expect("link");
+        let (start, size) = merged
+            .init_fini_arrays
+            .init
+            .expect("the constructor must produce an init_array");
+        assert!(
+            start + size < merged.data.len() as u64,
+            "pad={pad}: init_array end offset {:#x} must stay strictly below the .data length \
+             {:#x}; at the boundary the end symbol resolves into .bss past the .tbss gap and \
+             the startup walk overruns the array",
+            start + size,
+            merged.data.len(),
+        );
+    }
+}

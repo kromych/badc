@@ -1267,4 +1267,9 @@ jobs:
       - name: qemu setup (fetch source + build config)
         run: python demos/qemu/setup.py
       - name: qemu smoke (badc build + self-link + run)
+        # Gate on the run, not just compile + self-link: the runner builds at a
+        # long path whose length lands the init_array on the .data boundary, so
+        # a regression in the boundary handling faults the emulator at startup.
+        env:
+          BADC_QEMU_REQUIRE_RUN: "1"
         run: python demos/qemu/smoke.py

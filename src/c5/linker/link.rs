@@ -490,6 +490,18 @@ pub fn link_native_objects_with_shared_libs(
             (init_start, init_end, fini_start, fini_end)
         };
 
+    // The startup runtime walks `[__init_array_start, __init_array_end)`; the
+    // end symbol is a one-past-the-array `.data` address. These arrays are the
+    // last `.data` content, so if one ends exactly at the `.data` length the
+    // offset->vaddr map (which treats an offset at `data.len()` as the first
+    // `.bss` byte) resolves the end symbol into `.bss` -- and with a `.tbss`
+    // gap between `.data` and `.bss` the two addresses differ, so the walk
+    // overruns the array into zero padding and calls a null pointer. Keep the
+    // arrays strictly inside `.data` by ending it past `fini_array_end`.
+    if fini_array_end > init_array_start {
+        data.resize(data.len() + 8, 0);
+    }
+
     // The merged bss region begins at `data.len()` in the unified
     // data-offset space; pad the file image so bss offsets keep their
     // per-unit alignment residues in the final image.

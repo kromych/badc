@@ -1224,3 +1224,47 @@ jobs:
           # runner firmware paths + QEMU stability are confirmed.
           BADC_EDK2_BOOT_OPTIONAL: "1"
         run: python demos/edk2/smoke.py
+
+  qemu:
+    # Compile every translation unit of QEMU 11.0.2's qemu-system-aarch64 (1683
+    # units: the emulator objects + its utility library) with badc, archive the
+    # library with badc's --ar, and link the emulator -- preferring badc's own
+    # linker and falling back to cc-linking badc's objects where the linker's
+    # aarch64 reloc support is still incomplete (TODO). The gate is that badc
+    # compiles every unit and the linked emulator reports its version.
+    #
+    # setup.py fetches the source + captured meson build config from the
+    # vendor-deps release (GITHUB_TOKEN inherited from the workflow env). Only
+    # the aarch64 Linux config is vendored so far; the x86_64 Linux and macOS
+    # configs are pending capture + validation (TODO), so this is a single lane.
+    name: qemu (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64 }
+    runs-on: ${{ matrix.os }}
+    # badc build (warm cache) + ~1683-unit compile + link. The compile is the
+    # long pole; 30 min is a backstop it must never approach.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: qemu-${{ matrix.label }}
+      - name: install QEMU compile + link deps
+        # glib headers (no badc shim), and the zlib / libfdt shared objects the
+        # emulator links against; their headers come from the demo's shim.
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y pkg-config libglib2.0-dev zlib1g-dev libfdt-dev
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: qemu setup (fetch source + build config)
+        run: python demos/qemu/setup.py
+      - name: qemu smoke (badc build + self-link + run)
+        run: python demos/qemu/smoke.py

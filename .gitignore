@@ -235,3 +235,12 @@ demos/edk2/*
 !demos/edk2/AutoGenGlue.c
 !demos/edk2/MyApp.c
 !demos/edk2/MiniAutoGen.h
+
+# qemu -- QEMU 11.0.2 system emulator. `setup.py` fetches the trimmed source and
+# the captured meson build config from the vendor-deps mirror into `.cache/`.
+# Only the runner scripts, the badc build shims, and the README are committed.
+demos/qemu/*
+!demos/qemu/setup.py
+!demos/qemu/smoke.py
+!demos/qemu/README.md
+!demos/qemu/shim/

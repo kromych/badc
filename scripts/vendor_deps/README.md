@@ -34,9 +34,27 @@ project's identifier for the release:
 | bearssl    | bearssl.org release tarball             | tarball-sha256  |
 | lua        | lua.org source + test-suite tarballs    | tarball-sha256  |
 | curl       | curl.se release tarball                 | tarball-sha256  |
+| qemu       | git v11.0.2 tag; bundle assembled off   | git (assembled) |
 
 The full sha is recorded in `manifest.json` and in each
 demo's `setup.py` constants (`UPSTREAM_SHA`).
+
+## QEMU bundle (assembled)
+
+`qemu` is the one asset that is not a plain upstream archive.
+QEMU's build is driven by meson, which generates a large tree of
+headers and sources that is not reproducible off-box, so the
+demo needs that generated config captured alongside the source.
+`build_qemu_bundle.py` assembles the bundle from a configured
+QEMU build directory: it trims the source (dropping the git
+history, test suite, docs, ROM/firmware blobs, and meson
+subprojects -- none are compile inputs) and captures the
+meson-generated build inputs (`compile_commands.json`, the
+`*.rsp` response files, and every generated `*.h`/`*.c`/`*.inc`/
+`*.def`). See that script's header for the per-target capture +
+`--pack` flow. Pin the packed asset's sha256 in
+`demos/qemu/setup.py` and upload it to the release. `manifest.json`
+does not track it (it is not produced by `build_bundle.py`).
 
 ## Refreshing the bundle
 

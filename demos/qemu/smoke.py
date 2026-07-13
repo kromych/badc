@@ -374,6 +374,19 @@ def main() -> int:
             f"PT_LOAD p_align={{{', '.join(hex(a) for a in aligns)}}}")
     except Exception as e:
         log(f"env: page_size/p_align probe failed: {e}")
+    # The image differing between build hosts (a null init_array slot on one,
+    # not the other) points at a non-reproducible input -- glib headers or the
+    # badc build -- rather than the runtime. Log the glib version and the
+    # badc + image hashes so a runner build can be compared against a local one.
+    try:
+        import hashlib
+        gv = subprocess.run(["pkg-config", "--modversion", "glib-2.0"],
+                            capture_output=True, text=True).stdout.strip()
+        bh = hashlib.sha256(Path(badc).read_bytes()).hexdigest()[:16]
+        qh = hashlib.sha256(binp.read_bytes()).hexdigest()[:16]
+        log(f"env: glib={gv} badc_sha={bh} image_sha={qh}")
+    except Exception as e:
+        log(f"env: repro probe failed: {e}")
     v = subprocess.run([str(binp), "--version"], capture_output=True, text=True)
     if "QEMU emulator version" in v.stdout:
         log(f"--version: {v.stdout.strip().splitlines()[0]}")

@@ -38,7 +38,7 @@ VERSION = "11.0.2"
 UPSTREAM_SHA = "e545d8bb9d63e9dd61542b88463183314cff9482"
 ASSET = f"qemu-{VERSION}-{UPSTREAM_SHA[:8]}.tar.xz"
 RELEASE_TAG = "vendor-deps-v1"
-SHA256 = "63489d195f3d5eb55d46316cc3874e276f7d08944efe008d8dc12dd642a5c2bd"
+SHA256 = "9b56494bd7124e6802c551b2c5ef1b22a05c6145f99e8be8bec4baa2a5cd4776"
 PREFIX = f"qemu-{VERSION}"
 
 QEMU_DIR = Path(__file__).resolve().parent

@@ -38,9 +38,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Source subtrees that are not compile inputs for the emulator.
+# Source subtrees that are not compile inputs for the emulator. subprojects is
+# kept (libvhost-user / libvduse headers are included by the build) minus the
+# large berkeley reference/test float data, which the build does not use (QEMU
+# compiles its in-tree fpu/softfloat.c).
 SRC_EXCLUDE = {".git", ".github", ".gitlab", ".gitlab-ci.d", "tests", "docs",
-               "roms", "pc-bios", "subprojects"}
+               "roms", "pc-bios"}
+NESTED_EXCLUDE = SRC_EXCLUDE | {"berkeley-softfloat-3", "berkeley-testfloat-3"}
 
 # Build-directory files that are compile inputs (meson-generated headers and
 # sources, the compile database, and the linker response files). Everything else
@@ -71,7 +75,7 @@ def copy_source(src: Path, dst: Path) -> None:
         target = dst / entry.name
         if entry.is_dir():
             shutil.copytree(entry, target, symlinks=True,
-                            ignore=shutil.ignore_patterns(*SRC_EXCLUDE))
+                            ignore=shutil.ignore_patterns(*NESTED_EXCLUDE))
         else:
             shutil.copy2(entry, target, follow_symlinks=False)
 

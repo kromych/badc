@@ -71,6 +71,9 @@ DROP_PREFIX = ("-W", "-f", "-m", "-g", "-O", "-std", "-M", "-arch", "-print", "-
 HOST_ACCEL = "/host/include/aarch64"
 HOST_GENERIC = "/host/include/generic"
 
+# QEMU's kernel-header tree names the arch dir asm-<arch>; code includes <asm/*>.
+ASM_ARCH = {"aarch64": "arm64", "x86_64": "x86"}
+
 
 def log(m: str) -> None:
     print(f"qemu smoke: {m}", flush=True)
@@ -131,15 +134,43 @@ def ensure_source(src_dir: Path) -> None:
     subprocess.run([sys.executable, str(QEMU_DIR / "setup.py")], check=True)
 
 
-def transform(argv: list[str], glib_cflags: list[str], src: Path, scalar: bool) -> list[str]:
-    """Rewrite a gcc compile command into badc flags. Drops the output/source/
-    dependency-tracking args and the gcc-only optimization/warning flags, keeps
-    the -I/-D/-U/-include set, and replaces the absolute glib includes with the
-    host's. When `scalar` is set, host-accelerated include dirs are redirected to
-    QEMU's portable equivalents so a unit needing <arm_neon.h> builds without it.
-    """
+def ensure_asm_symlink(src_dir: Path, arch: str) -> None:
+    """Recreate the linux-headers/asm -> asm-<arch> symlink locally. The build box
+    provides it with an absolute target that does not exist off-box, so <asm/*>
+    resolves against the bundled headers rather than the host's kernel headers."""
+    lh = src_dir / "linux-headers"
+    target = f"asm-{ASM_ARCH.get(arch, arch)}"
+    asm = lh / "asm"
+    if (lh / target).is_dir() and not (asm.is_symlink() or asm.exists()):
+        asm.symlink_to(target)
 
-    def remap(p: str) -> str:
+
+def portable_path(p: str, orig_build: str, build_dir: Path, orig_src: str, src_dir: Path) -> str:
+    """Rewrite a path captured as an absolute build-box path (under the original
+    build or source root) to its location in the extracted bundle. Relative paths
+    resolve from the build dir (the smoke's cwd) and are returned unchanged."""
+    for orig, local in ((orig_build, build_dir), (orig_src, src_dir)):
+        if p == orig:
+            return str(local)
+        if p.startswith(orig + os.sep):
+            return str(local) + p[len(orig):]
+    return p
+
+
+def transform(argv: list[str], glib_cflags: list[str], src_dir: Path, build_dir: Path,
+              orig_build: str, orig_src: str, scalar: bool) -> list[str]:
+    """Rewrite a gcc compile command into badc flags. Drops the output/source/
+    dependency args and the gcc-only optimization/warning flags; keeps the
+    include + -D/-U set. Include paths captured as absolute build-box paths are
+    rewritten to the bundle (portable_path) so the build uses QEMU's own
+    linux-headers / host / tcg headers, not the host's; the absolute glib
+    includes are dropped for the host's pkg-config set. -isystem/-iquote become
+    -I (badc searches one include list). When `scalar` is set, host-accelerated
+    dirs redirect to QEMU's portable equivalents so a unit needing <arm_neon.h>
+    builds without it."""
+
+    def fix(p: str) -> str:
+        p = portable_path(p, orig_build, build_dir, orig_src, src_dir)
         return p.replace(HOST_ACCEL, HOST_GENERIC) if scalar else p
 
     out: list[str] = []
@@ -150,21 +181,17 @@ def transform(argv: list[str], glib_cflags: list[str], src: Path, scalar: bool) 
             i += 1
         elif a in ("-o", "-MF", "-MQ", "-MT"):
             i += 2
-        elif a in ("-isystem", "-iquote", "-idirafter"):
+        elif a in ("-I", "-isystem", "-iquote", "-idirafter"):
             if argv[i + 1] not in SYS_INCLUDE:
-                out += ["-I", remap(argv[i + 1])]
-            i += 2
-        elif a == "-include":
-            out += ["-include", argv[i + 1]]
-            i += 2
-        elif a == "-I":
-            if argv[i + 1] not in SYS_INCLUDE:
-                out += ["-I", remap(argv[i + 1])]
+                out += ["-I", fix(argv[i + 1])]
             i += 2
         elif a.startswith("-I"):
             if a[2:] not in SYS_INCLUDE:
-                out += ["-I", remap(a[2:])]
+                out += ["-I", fix(a[2:])]
             i += 1
+        elif a == "-include":
+            out += ["-include", portable_path(argv[i + 1], orig_build, build_dir, orig_src, src_dir)]
+            i += 2
         elif a.startswith(("-D", "-U")):
             out.append(a)
             i += 1
@@ -175,7 +202,7 @@ def transform(argv: list[str], glib_cflags: list[str], src: Path, scalar: bool) 
         else:
             i += 1  # a stray positional (the source file); added by the caller
     out += glib_cflags
-    out += ["-I", str(src / "include"), "-I", str(SHIM)]
+    out += ["-I", str(src_dir / "include"), "-I", str(SHIM)]
     return out
 
 
@@ -216,6 +243,7 @@ def main() -> int:
     if not (build_dir / "compile_commands.json").is_file():
         log(f"no vendored QEMU build config for {arch} in this asset; skipping")
         return 0
+    ensure_asm_symlink(src_dir, arch)
 
     glib_cflags = [a for a in pkg_config("--cflags", "glib-2.0") if a.startswith(("-I", "-D"))]
     glib_libs = [a for a in pkg_config("--libs", "glib-2.0") if a.startswith(("-L", "-l"))]
@@ -225,6 +253,11 @@ def main() -> int:
     util_o = read_objects(build_dir, "libqemuutil.a")
     all_o = list(dict.fromkeys(main_o + util_o))
     by_out = index_by_output(build_dir)
+    # The build box's absolute source/build roots, recorded in compile_commands,
+    # are rewritten to the extracted bundle so captured -isystem/-iquote paths
+    # (linux-headers, host, tcg) resolve here and the build stays hermetic.
+    orig_build = os.path.normpath(next(iter(by_out.values()))["directory"])
+    orig_src = os.path.normpath(os.path.join(orig_build, os.pardir, src_dir.name))
 
     optimize = os.environ.get("BADC_QEMU_OPT") == "1"
     jobs = int(os.environ.get("BADC_QEMU_JOBS") or (os.cpu_count() or 4))
@@ -239,10 +272,11 @@ def main() -> int:
         dst = out_dir / obj
         dst.parent.mkdir(parents=True, exist_ok=True)
         argv = entry.get("arguments") or shlex.split(entry["command"])
+        src_file = portable_path(entry["file"], orig_build, build_dir, orig_src, src_dir)
         # Retry a unit that needs <arm_neon.h> with the portable path selected.
         for scalar in (False, True):
-            flags = transform(argv, glib_cflags, src_dir, scalar)
-            cmd = [str(badc), "--gnu", "-q", *opt, "-c", "-o", str(dst), *flags, entry["file"]]
+            flags = transform(argv, glib_cflags, src_dir, build_dir, orig_build, orig_src, scalar)
+            cmd = [str(badc), "--gnu", "-q", *opt, "-c", "-o", str(dst), *flags, src_file]
             r = subprocess.run(cmd, cwd=build_dir, capture_output=True, text=True)
             if r.returncode == 0:
                 return (obj, "ok")

@@ -2383,7 +2383,7 @@ fn compile_only_writes_relocatable_elf() {
     assert!(
         bytes.len() > 64 && &bytes[0..4] == b"\x7fELF",
         "expected ELF magic; got {:?}",
-        &bytes.get(..16),
+        bytes.get(..16),
     );
     // ELF64 ET_REL (e_type = 1) at offset 0x10.
     let e_type = u16::from_le_bytes([bytes[16], bytes[17]]);
@@ -2482,7 +2482,7 @@ fn compile_only_propagates_preprocessor_flags() {
     assert!(
         bytes.len() > 64 && &bytes[0..4] == b"\x7fELF",
         "expected ELF magic; got {:?}",
-        &bytes.get(..16),
+        bytes.get(..16),
     );
 }
 
@@ -2506,7 +2506,7 @@ fn compile_only_with_minus_o_writes_named_object() {
     assert!(
         bytes.len() > 4 && &bytes[0..4] == b"\x7fELF",
         "expected ELF magic; got {:?}",
-        &bytes.get(..16)
+        bytes.get(..16)
     );
 }
 

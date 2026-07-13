@@ -1410,10 +1410,9 @@ enum SectionFamily {
 fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
     let (is_dtor, rest) = if let Some(r) = name.strip_prefix(".init_array") {
         (false, r)
-    } else if let Some(r) = name.strip_prefix(".fini_array") {
-        (true, r)
     } else {
-        return None;
+        let r = name.strip_prefix(".fini_array")?;
+        (true, r)
     };
     if rest.is_empty() {
         return Some((is_dtor, None));

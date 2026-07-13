@@ -1313,7 +1313,7 @@ fn patch_adrp_add(
         aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page)
     } else if (prev_add & 0x3B00_0000) == 0x3900_0000 {
         let scale = 1u32 << (prev_add >> 30);
-        if in_page % scale != 0 {
+        if !in_page.is_multiple_of(scale) {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                 "ELF: {label} low-12 offset {in_page:#x} not aligned to load/store size {scale}"
             ))));

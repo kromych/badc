@@ -3906,15 +3906,15 @@ fn inline_asm_shld_double_shift() {
     // in the high bits of `src`. Constraints: `+r` read-write output, `r`
     // input, `ci` (immediate-or-CL) count with a `%b` byte-size operand.
     let src = "
-        unsigned long shl_double(unsigned long l, unsigned long r, int c) {
+        unsigned long long shl_double(unsigned long long l, unsigned long long r, int c) {
             asm(\"shld %b2, %1, %0\" : \"+r\"(l) : \"r\"(r), \"ci\"(c));
             return l;
         }
         int main(void) {
-            unsigned long l = 0x0123456789ABCDEFUL, r = 0xFEDCBA9876543210UL;
+            unsigned long long l = 0x0123456789ABCDEFULL, r = 0xFEDCBA9876543210ULL;
             int c = 12;
-            unsigned long got = shl_double(l, r, c);
-            unsigned long want = (l << c) | (r >> (64 - c));
+            unsigned long long got = shl_double(l, r, c);
+            unsigned long long want = (l << c) | (r >> (64 - c));
             return got == want ? 42 : 1;
         }
     ";
@@ -3924,15 +3924,15 @@ fn inline_asm_shld_double_shift() {
 #[test]
 fn inline_asm_shrd_double_shift() {
     let src = "
-        unsigned long shr_double(unsigned long l, unsigned long r, int c) {
+        unsigned long long shr_double(unsigned long long l, unsigned long long r, int c) {
             asm(\"shrd %b2, %1, %0\" : \"+r\"(r) : \"r\"(l), \"ci\"(c));
             return r;
         }
         int main(void) {
-            unsigned long l = 0x0123456789ABCDEFUL, r = 0xFEDCBA9876543210UL;
+            unsigned long long l = 0x0123456789ABCDEFULL, r = 0xFEDCBA9876543210ULL;
             int c = 20;
-            unsigned long got = shr_double(l, r, c);
-            unsigned long want = (r >> c) | (l << (64 - c));
+            unsigned long long got = shr_double(l, r, c);
+            unsigned long long want = (r >> c) | (l << (64 - c));
             return got == want ? 42 : 1;
         }
     ";
@@ -3960,13 +3960,13 @@ fn inline_asm_bswap_matching_constraint() {
 fn inline_asm_bswap_size_modifier() {
     // A size-modifier register name: `bswapq` on a 64-bit operand.
     let src = "
-        unsigned long bswap64(unsigned long val) {
+        unsigned long long bswap64(unsigned long long val) {
             __asm__(\"bswapq %0\" : \"=r\"(val) : \"0\"(val));
             return val;
         }
         int main(void) {
-            unsigned long x = 0x0102030405060708UL;
-            return bswap64(x) == 0x0807060504030201UL ? 42 : 1;
+            unsigned long long x = 0x0102030405060708ULL;
+            return bswap64(x) == 0x0807060504030201ULL ? 42 : 1;
         }
     ";
     assert_eq!(run_str(src), 42);
@@ -3980,8 +3980,8 @@ fn inline_asm_rdtscp_sequence_fixed_regs() {
     // The interpreter has no clock, so the read is zero; the point is
     // that the multi-instruction template compiles and runs.
     let src = "
-        unsigned long rdtscp_read(void) {
-            unsigned long tsc;
+        unsigned long long rdtscp_read(void) {
+            unsigned long long tsc;
             __asm__ __volatile__(\"rdtscp; shl $32,%%rdx; or %%rdx,%%rax\"
                                  : \"=a\"(tsc) : : \"%rcx\", \"%rdx\");
             return tsc;

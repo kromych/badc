@@ -3231,12 +3231,26 @@ mod tests {
         ];
         a.debug_info = alloc::vec![0u8; 24];
         a.debug_info_relocs = alloc::vec![
-            NativeReloc { offset: 0, sym_idx: 1, rtype: R_X86_64_64, addend: 0 },
-            NativeReloc { offset: 8, sym_idx: 2, rtype: R_X86_64_64, addend: 0 },
-            NativeReloc { offset: 16, sym_idx: 3, rtype: R_X86_64_64, addend: 0 },
+            NativeReloc {
+                offset: 0,
+                sym_idx: 1,
+                rtype: R_X86_64_64,
+                addend: 0
+            },
+            NativeReloc {
+                offset: 8,
+                sym_idx: 2,
+                rtype: R_X86_64_64,
+                addend: 0
+            },
+            NativeReloc {
+                offset: 16,
+                sym_idx: 3,
+                rtype: R_X86_64_64,
+                addend: 0
+            },
         ];
-        let merged =
-            link_native_objects(&[a, b]).expect("cross-unit debug reference must not ICE");
+        let merged = link_native_objects(&[a, b]).expect("cross-unit debug reference must not ICE");
         let ext_off = merged.defined.get("ext_fn").expect("ext_fn defined").value;
         // Exactly one deferred text reloc -- the cross-unit function reference,
         // pointing where `ext_fn` landed. The import and data references defer

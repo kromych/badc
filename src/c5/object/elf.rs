@@ -1314,15 +1314,17 @@ fn patch_adrp_add(
     } else if (prev_add & 0x3B00_0000) == 0x3900_0000 {
         let scale = 1u32 << (prev_add >> 30);
         if !in_page.is_multiple_of(scale) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "ELF: {label} low-12 offset {in_page:#x} not aligned to load/store size {scale}"
-            ))));
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: {label} low-12 offset {in_page:#x} not aligned to load/store size {scale}"
+                ),
+            )));
         }
         (prev_add & !(0xFFF << 10)) | (((in_page / scale) & 0xFFF) << 10)
     } else {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-            "ELF: {label} adrp paired with an unrecognized instruction {prev_add:#010x}"
-        ))));
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} adrp paired with an unrecognized instruction {prev_add:#010x}"),
+        )));
     };
     out[add_file_off..add_file_off + 4].copy_from_slice(&second.to_le_bytes());
     Ok(())

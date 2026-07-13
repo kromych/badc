@@ -1261,7 +1261,7 @@ jobs:
         # emulator links against; their headers come from the demo's shim.
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y pkg-config libglib2.0-dev zlib1g-dev libfdt-dev
+          sudo apt-get install -y pkg-config libglib2.0-dev zlib1g-dev libfdt-dev gdb
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
       - name: qemu setup (fetch source + build config)

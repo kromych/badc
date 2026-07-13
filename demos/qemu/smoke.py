@@ -400,6 +400,23 @@ def main() -> int:
             out = (d.stdout or d.stderr).strip()
             if out:
                 lines.append(f"  {tool}: {out[:600]}")
+    # A crash before the emulator prints its version is a runtime fault; a
+    # backtrace + faulting instruction pin it to a function rather than
+    # guessing from the exit status alone.
+    if v.returncode and v.returncode < 0 and _shutil.which("gdb"):
+        g = subprocess.run(
+            ["gdb", "-batch", "-nx",
+             "-ex", "run", "-ex", "bt", "-ex", "info registers pc sp",
+             "-ex", "x/4i $pc",
+             "-ex", "print (void*)&__init_array_start",
+             "-ex", "print (void*)&__init_array_end",
+             "-ex", "x/16gx &__init_array_start",
+             "--args", str(binp), "--version"],
+            capture_output=True, text=True, timeout=180)
+        bt = (g.stdout + g.stderr).strip()
+        if bt:
+            lines.append("  gdb:")
+            lines += [f"    {ln}" for ln in bt.splitlines()[:45]]
     if os.environ.get("BADC_QEMU_REQUIRE_RUN") == "1":
         fail("\n".join(lines))
     for line in lines:

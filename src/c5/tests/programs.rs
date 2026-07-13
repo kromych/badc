@@ -1613,6 +1613,29 @@ fn setbuffer_is_a_unix_stdio_binding() {
 }
 
 #[test]
+fn struct_mmsghdr_batched_socket_io() {
+    use crate::{CompileOptions, Compiler, Target};
+    // struct mmsghdr + recvmmsg/sendmmsg -- the GNU/Linux batched-socket
+    // extension. A successful compile is the presence check for the
+    // struct's msg_len field and the two prototypes.
+    let src = "#define _GNU_SOURCE\n\
+               #include <sys/socket.h>\n\
+               struct timespec;\n\
+               unsigned len_of(struct mmsghdr *m) { return m->msg_len; }\n\
+               int io(int f, struct mmsghdr *m, unsigned n, struct timespec *t) {\n\
+                   return recvmmsg(f, m, n, 0, t) + sendmmsg(f, m, n, 0);\n\
+               }";
+    let compiles = |target: Target| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    assert!(compiles(Target::LinuxX64), "mmsghdr on linux-x64");
+    assert!(compiles(Target::LinuxAarch64), "mmsghdr on linux-aarch64");
+}
+
+#[test]
 fn fcntl_stat_constants_match_the_target_libc() {
     use crate::{CompileOptions, Compiler, Target};
     // A negative-size array declaration is a compile error unless every

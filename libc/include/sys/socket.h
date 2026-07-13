@@ -275,6 +275,17 @@ struct cmsghdr {
 
 long sendmsg(int fd, const struct msghdr *msg, int flags);
 long recvmsg(int fd, struct msghdr *msg, int flags);
+
+// Batched socket I/O (GNU/Linux): recvmmsg/sendmmsg transfer an array of
+// mmsghdr in one call, each pairing a msghdr with the byte count moved.
+struct mmsghdr {
+    struct msghdr msg_hdr;
+    unsigned int msg_len;
+};
+struct timespec;
+int recvmmsg(int fd, struct mmsghdr *msgvec, unsigned int vlen, int flags,
+             struct timespec *timeout);
+int sendmmsg(int fd, struct mmsghdr *msgvec, unsigned int vlen, int flags);
 #endif
 
 #ifdef _WIN32

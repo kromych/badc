@@ -805,6 +805,14 @@ pub struct Compiler {
     /// (parse_function_args) bumps it temporarily for each in-flight call's
     /// reverse-push temp slots and then restores it.
     loc_offs: i64,
+    /// Per-function floor the call-argument staging recycle may not drop
+    /// below. A block-scope compound literal reserves storage that lasts to
+    /// the end of the enclosing block (C99 6.5.2.5p5); when it is evaluated
+    /// inside a call argument, that storage sits above the recycle's saved
+    /// `loc_offs`. Raising this to the literal's top keeps the recycle from
+    /// reclaiming it for a later full-expression's temporaries. Reset per
+    /// function.
+    committed_loc_offs: i64,
     /// Per-function high-water mark of `loc_offs` -- the SSA
     /// builder uses it to size the function's local slot count
     /// so the prologue reserves enough stack for every nested-call
@@ -1377,6 +1385,13 @@ impl Compiler {
         -self.loc_offs
     }
 
+    /// Mark the block-lifetime storage based at `base` (the most negative
+    /// slot of the object) as committed, so the call-argument staging
+    /// recycle cannot reclaim it while evaluating an enclosing expression.
+    pub(super) fn commit_block_slot(&mut self, base: i64) {
+        self.committed_loc_offs = self.committed_loc_offs.max(-base);
+    }
+
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
         Self::with_options_inner(source, target, opts, true)
     }
@@ -1486,6 +1501,7 @@ impl Compiler {
             flex_array_measured_count: None,
             ty: 0,
             loc_offs: 0,
+            committed_loc_offs: 0,
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
             uses_alloca_in_current_fn: false,

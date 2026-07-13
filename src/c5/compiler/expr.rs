@@ -1285,7 +1285,11 @@ impl Compiler {
                     } else {
                         saved_loc_offs
                     };
-                    self.loc_offs = target_loc_offs;
+                    // Never drop below block-lifetime storage a compound
+                    // literal reserved while evaluating these arguments
+                    // (C99 6.5.2.5p5); reclaiming it would alias the literal
+                    // with a later full-expression's temporaries.
+                    self.loc_offs = target_loc_offs.max(self.committed_loc_offs);
                     // Arity underflow check (after the loop, when nargs is
                     // final). Only fires for non-variadic functions with a
                     // recorded signature.

@@ -1754,6 +1754,11 @@ impl Compiler {
 
         let init = self.drain_pending_local_init();
 
+        // C99 6.5.2.5p5: the literal's storage lasts to the end of the
+        // enclosing block. When it is evaluated inside a call argument, an
+        // enclosing call's staging recycle must not reclaim its cells.
+        self.commit_block_slot(slot);
+
         self.ast_vstack.truncate(vstack_depth);
         self.ast_emit_compound_literal(slot, t, final_array_size, init);
         // Restore the enclosing declaration's carriers (the literal's own

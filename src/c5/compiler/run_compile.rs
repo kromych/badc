@@ -1013,6 +1013,7 @@ impl Compiler {
                     }
 
                     self.loc_offs = 0;
+                    self.committed_loc_offs = 0;
                     self.max_loc_offs = 0;
                     self.multi_cell_temps.clear();
                     self.labels.clear();

@@ -1072,6 +1072,35 @@ fn compound_literal_tagged_address() {
 }
 
 #[test]
+fn compound_literal_in_call_arg_survives_next_call() {
+    // C99 6.5.2.5p5: a block-scope compound literal has automatic storage
+    // lasting to the end of the enclosing block. When `&(T){...}` is a call
+    // argument, its cells sit above the call's argument-staging frame; the
+    // staging recycle must not reclaim them for a later full-expression, or
+    // the second literal aliases the first (the polymorphic-lock idiom
+    // `f(&(struct L){.object=x, .lock=..., .unlock=...})` twice in a block).
+    let src = "
+        typedef void Fn(void *);
+        struct L { void *object; Fn *lock; Fn *unlock; };
+        static void lk(void *x) { (void)x; }
+        static void ul(void *x) { (void)x; }
+        static struct L *mk(void *x, struct L *l) { return x ? l : 0; }
+        static int a, b;
+        int main(void) {
+            struct L *p = mk(&a, &(struct L){ .object = &a, .lock = lk, .unlock = ul });
+            struct L *q = mk(&b, &(struct L){ .object = &b, .lock = lk, .unlock = ul });
+            int bad = 0;
+            if (p->object != (void *)&a) bad |= 1;
+            if (p->lock   != lk)         bad |= 2;
+            if (p->unlock != ul)         bad |= 4;
+            if (q->object != (void *)&b) bad |= 8;
+            return bad;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn function_typed_parameter() {
     // A function-typed parameter `RET name(args)` / `RET (name)(args)`
     // decays to a pointer to function (C99 6.7.5.3p8).

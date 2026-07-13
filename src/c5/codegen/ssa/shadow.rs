@@ -349,7 +349,15 @@ fn live_data_intervals(
         }
     }
     for sym in &program.symbols {
-        if sym.class == Token::Glo as i64 && sym.defined_here && (0..data_len).contains(&sym.val) {
+        // A `_Thread_local` symbol's `val` is an offset into the separate
+        // TLS image, not `.data`; conflating it here would plant a spurious
+        // `.data` object boundary at a coinciding low offset and split a
+        // real object. The symbol remap below skips them for the same reason.
+        if sym.class == Token::Glo as i64
+            && sym.defined_here
+            && !sym.is_thread_local
+            && (0..data_len).contains(&sym.val)
+        {
             start_set.insert(sym.val);
         }
     }
@@ -380,6 +388,7 @@ fn live_data_intervals(
     for sym in &program.symbols {
         if sym.class == Token::Glo as i64
             && sym.defined_here
+            && !sym.is_thread_local
             && matches!(sym.linkage, Linkage::External)
             && (0..data_len).contains(&sym.val)
         {
@@ -760,5 +769,62 @@ mod tests {
                 .any(|r| r.target_offset >= data_len),
             "the &g[3] initializer must target a byte in the bss region"
         );
+    }
+
+    // A `_Thread_local` global's `val` is an offset into the TLS image, not
+    // `.data`. When such an offset coincides with an interior byte of a real
+    // `.data` object, the data-DCE interval model must not treat it as an
+    // object boundary: doing so splits the object and lets the prune drop the
+    // unreferenced tail, so a following literal is packed over it.
+    #[test]
+    fn thread_local_offset_does_not_split_data_object() {
+        let target = Target::LinuxX64;
+        // `tb` takes TLS offset 16, which lands inside `arr`'s 24-byte `.data`
+        // span (`arr` is the first object past the 8-byte NULL guard).
+        let src = "static _Thread_local char ta[16]; \
+                   static _Thread_local long tb; \
+                   long arr[3] = {1, 0, 0}; \
+                   char *msg = \"abcdefgh\"; \
+                   int main(void){ ta[0]=1; tb=2; \
+                       return (int)arr[2] + msg[0] + (int)tb + ta[0]; }";
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let (compacted, _) = compact_program_data(&program, target, true).expect("compact");
+
+        // `arr` has external linkage, so its symbol survives with its remapped
+        // `.data` offset. It must keep all 24 bytes, disjoint from the literal.
+        let arr = compacted
+            .symbols
+            .iter()
+            .find(|s| s.name == "arr")
+            .expect("arr symbol");
+        let arr_lo = arr.val as usize;
+        let arr_hi = arr_lo + 24;
+        let msg = compacted
+            .data
+            .windows(9)
+            .position(|w| w == b"abcdefgh\0")
+            .expect("string literal kept intact");
+        assert!(
+            msg + 9 <= arr_lo || msg >= arr_hi,
+            "literal at {msg:#x} overlaps arr [{arr_lo:#x}, {arr_hi:#x})"
+        );
+
+        // A thread-local offset must never pass through the `.data` remap.
+        for s in &compacted.symbols {
+            if s.is_thread_local && s.defined_here {
+                let orig = program
+                    .symbols
+                    .iter()
+                    .find(|p| p.name == s.name && p.is_thread_local)
+                    .expect("original TLS symbol");
+                assert_eq!(
+                    s.val, orig.val,
+                    "thread-local `{}` val was remapped as .data",
+                    s.name
+                );
+            }
+        }
     }
 }

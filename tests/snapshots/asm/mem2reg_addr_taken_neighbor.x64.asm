@@ -37,5 +37,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x7, %edi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
+               	retq

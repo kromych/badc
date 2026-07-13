@@ -27,6 +27,7 @@ Disassembly of section .text:
                	leaq	-0x400(%rbp), %rax
                	movzwq	(%rax), %rax
                	movslq	%eax, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -88,3 +89,4 @@ Disassembly of section .text:
                	addq	$0x520, %rsp            # imm = 0x520
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

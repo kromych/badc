@@ -12,9 +12,11 @@ Disassembly of section .text:
 
 <classify>:
                	leaq	0x64(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
                	xorq	%rax, %rax
                	retq
+               	addb	%al, 0x41(%rdx)

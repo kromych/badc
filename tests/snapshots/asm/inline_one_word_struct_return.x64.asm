@@ -61,7 +61,9 @@ Disassembly of section .text:
                	cmpq	$0x96, %rcx
                	jne	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

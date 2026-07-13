@@ -32,31 +32,37 @@ Disassembly of section .text:
 <feq>:
                	fcmp	d0, d1
                	cset	x0, eq
+               	sxtw	x0, w0
                	ret
 
 <fne>:
                	fcmp	d0, d1
                	cset	x0, ne
+               	sxtw	x0, w0
                	ret
 
 <flt>:
                	fcmp	d0, d1
                	cset	x0, mi
+               	sxtw	x0, w0
                	ret
 
 <fgt>:
                	fcmp	d0, d1
                	cset	x0, gt
+               	sxtw	x0, w0
                	ret
 
 <fle>:
                	fcmp	d0, d1
                	cset	x0, ls
+               	sxtw	x0, w0
                	ret
 
 <fge>:
                	fcmp	d0, d1
                	cset	x0, ge
+               	sxtw	x0, w0
                	ret
 
 <itof>:
@@ -66,6 +72,7 @@ Disassembly of section .text:
 
 <ftoi>:
                	fcvtzs	x0, d0
+               	sxtw	x0, w0
                	ret
 
 <round_through_f32>:
@@ -147,6 +154,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d16, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x7                // =7
@@ -157,6 +165,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
                	ret
@@ -166,6 +175,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, ne
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x9                // =9
@@ -175,6 +185,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d16, d17
                	cset	x0, ne
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xa                // =10
                	ret
@@ -184,6 +195,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, mi
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0xb                // =11
@@ -194,6 +206,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, mi
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xc                // =12
                	ret
@@ -203,6 +216,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, gt
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0xd                // =13
@@ -213,6 +227,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, gt
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xe                // =14
                	ret
@@ -221,6 +236,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d16, d17
                	cset	x0, ls
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0xf                // =15
@@ -231,6 +247,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, ls
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x10               // =16
@@ -241,6 +258,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, ls
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x11               // =17
                	ret
@@ -249,6 +267,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d16, d17
                	cset	x0, ge
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x12               // =18
@@ -259,6 +278,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, ge
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x13               // =19
@@ -269,6 +289,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, ge
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x14               // =20
                	ret
@@ -297,6 +318,7 @@ Disassembly of section .text:
                	mov	x0, #0x400e000000000000 // =4615626668101337088
                	fmov	d16, x0
                	fcvtzs	x0, d16
+               	sxtw	x0, w0
                	cmp	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x17               // =23
@@ -305,6 +327,7 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fneg	d0, d16
                	fcvtzs	x0, d0
+               	sxtw	x0, w0
                	mov	x17, #0xfffd            // =65533
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

@@ -11,7 +11,5 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%edi, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

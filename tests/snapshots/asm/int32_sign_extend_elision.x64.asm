@@ -14,7 +14,8 @@ Disassembly of section .text:
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <widen>:
@@ -29,6 +30,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	setl	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <pick>:
@@ -78,3 +80,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

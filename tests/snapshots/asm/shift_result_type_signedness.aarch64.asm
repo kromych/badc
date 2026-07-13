@@ -16,6 +16,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	sxtw	x0, w0
                	asr	x0, x0, x1
+               	sxtw	x0, w0
                	ret
 
 <main>:

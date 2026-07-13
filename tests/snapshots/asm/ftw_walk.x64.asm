@@ -96,6 +96,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x170, %rsp            # imm = 0x170
                	popq	%rbp
@@ -108,5 +109,3 @@ Disassembly of section .text:
                	addq	$0x170, %rsp            # imm = 0x170
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

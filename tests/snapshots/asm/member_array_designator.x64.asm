@@ -248,7 +248,8 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
                	movl	$0x3, %edi
@@ -257,10 +258,10 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

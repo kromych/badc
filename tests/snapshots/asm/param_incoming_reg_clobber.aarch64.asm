@@ -142,12 +142,14 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x60
                	ret
                	add	x0, x20, #0x14
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
                	ret
                	add	x0, x0, #0xa
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
                	ret

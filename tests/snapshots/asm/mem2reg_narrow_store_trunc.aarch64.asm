@@ -19,6 +19,7 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>
@@ -28,5 +29,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x12c              // =300
                	bl	<addr>
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret

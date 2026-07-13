@@ -12,12 +12,14 @@ Disassembly of section .text:
 
 <plus_one>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <minus_one>:
                	leaq	-0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <plus_one_l>:
@@ -40,6 +42,7 @@ Disassembly of section .text:
                	cmpq	%rdi, %rdx
                	jl	<addr>
                	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <wrap>:
@@ -61,4 +64,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

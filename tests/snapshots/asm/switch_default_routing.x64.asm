@@ -12,7 +12,6 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x64, %eax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

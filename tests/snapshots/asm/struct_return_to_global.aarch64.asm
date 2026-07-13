@@ -144,6 +144,7 @@ Disassembly of section .text:
                	cmp	x0, #0x4e
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x90]
                	ldp	x20, x21, [sp], #0xa0
                	ret

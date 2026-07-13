@@ -35,7 +35,8 @@ Disassembly of section .text:
                	cmpq	$0x2, %rdi
                	je	<addr>
                	movl	$0x190, %eax            # imm = 0x190
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
                	movl	$0x12c, %eax            # imm = 0x12C
                	jmp	<addr>
@@ -52,7 +53,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x2, %edi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)
+               	retq

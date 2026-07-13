@@ -46,6 +46,7 @@ Disassembly of section .text:
                	mov	x9, x21
                	blr	x9
                	ldur	x0, [x29, #-0x28]
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x19, [sp, #0x20]
                	ldr	x22, [sp, #0x10]

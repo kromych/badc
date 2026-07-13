@@ -79,10 +79,12 @@ Disassembly of section .text:
                	cmpq	$0x3, %rdx
                	jl	<addr>
                	leaq	-0x6f(%rcx), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

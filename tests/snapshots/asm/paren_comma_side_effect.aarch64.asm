@@ -54,10 +54,10 @@ Disassembly of section .text:
                	ret
 
 <bump_to>:
-               	sxtw	x0, w0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	w0, [x1]
+               	sxtw	x0, w0
                	ret
 
 <main>:

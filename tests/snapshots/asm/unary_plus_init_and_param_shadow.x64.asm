@@ -34,12 +34,12 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
                	jmp	<addr>
 
 <f>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%edi, %rax
                	retq
 
 <main>:

@@ -11,12 +11,14 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	add	x0, x0, #0x3
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <adder7>:
                	add	x0, x0, #0x7
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:

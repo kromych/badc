@@ -43,7 +43,8 @@ Disassembly of section .text:
                	add	x3, x2, #0xc
                	cmp	x1, x3
                	b.lt	<addr>
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:

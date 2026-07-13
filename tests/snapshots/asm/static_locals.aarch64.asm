@@ -43,7 +43,8 @@ Disassembly of section .text:
                	ldrsw	x1, [x1]
                	sxtw	x0, w0
                	add	x0, x1, x0
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <next_x>:

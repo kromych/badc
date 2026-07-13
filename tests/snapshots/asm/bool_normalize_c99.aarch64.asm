@@ -18,6 +18,7 @@ Disassembly of section .text:
 <take_bool>:
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
+               	sxtw	x0, w0
                	ret
 
 <main>:

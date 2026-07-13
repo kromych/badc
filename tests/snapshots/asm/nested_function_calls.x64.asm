@@ -12,10 +12,12 @@ Disassembly of section .text:
 
 <add>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
                	movl	$0x64, %eax
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

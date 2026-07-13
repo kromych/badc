@@ -14,6 +14,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	ret
 
 <notf>:
@@ -22,6 +23,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -34,6 +36,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -46,6 +49,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -59,6 +63,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -74,6 +79,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -87,6 +93,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d0, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -100,6 +107,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d0, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

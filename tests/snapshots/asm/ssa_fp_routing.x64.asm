@@ -39,6 +39,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	retq
 
 <fne>:
@@ -48,6 +49,7 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
+               	movslq	%eax, %rax
                	retq
 
 <flt>:
@@ -57,12 +59,14 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	retq
 
 <fgt>:
                	ucomisd	%xmm1, %xmm0
                	seta	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <fle>:
@@ -72,12 +76,14 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	retq
 
 <fge>:
                	ucomisd	%xmm1, %xmm0
                	setae	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <itof>:
@@ -88,6 +94,7 @@ Disassembly of section .text:
 
 <ftoi>:
                	cvttsd2si	%xmm0, %rax
+               	movslq	%eax, %rax
                	retq
 
 <round_through_f32>:
@@ -211,6 +218,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x7, %eax
@@ -225,6 +233,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
@@ -239,6 +248,7 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x9, %eax
@@ -252,6 +262,7 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xa, %eax
@@ -266,6 +277,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0xb, %eax
@@ -280,6 +292,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xc, %eax
@@ -291,6 +304,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	seta	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0xd, %eax
@@ -302,6 +316,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	seta	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xe, %eax
@@ -315,6 +330,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0xf, %eax
@@ -329,6 +345,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x10, %eax
@@ -343,6 +360,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x11, %eax
@@ -353,6 +371,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	setae	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x12, %eax
@@ -364,6 +383,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	setae	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x13, %eax
@@ -375,6 +395,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	setae	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x14, %eax
@@ -415,6 +436,7 @@ Disassembly of section .text:
                	movabsq	$0x400e000000000000, %rax # imm = 0x400E000000000000
                	movq	%rax, %xmm14
                	cvttsd2si	%xmm14, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x17, %eax
@@ -425,6 +447,7 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	cvttsd2si	%xmm0, %rax
+               	movslq	%eax, %rax
                	cmpq	$-0x3, %rax
                	je	<addr>
                	movl	$0x18, %eax
@@ -461,4 +484,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

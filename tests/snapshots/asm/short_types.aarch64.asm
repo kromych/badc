@@ -18,15 +18,17 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x17, #0x10000           // =65536
                	sub	x0, x0, x17
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <as_ushort>:
-               	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
+               	sxtw	x0, w0
                	ret
 
 <main>:

@@ -16,4 +16,5 @@ Disassembly of section .text:
                	cmp	x0, #0x5
                	b.ge	<addr>
                	b	<addr>
+               	sxtw	x0, w0
                	ret

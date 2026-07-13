@@ -19,10 +19,12 @@ Disassembly of section .text:
                	andq	$0xff, %rcx
                	addq	%rcx, %rax
                	shlq	$0x1, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
                	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

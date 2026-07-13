@@ -56,8 +56,10 @@ Disassembly of section .text:
                	cmpq	$0x2578, %rax           # imm = 0x2578
                	jne	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

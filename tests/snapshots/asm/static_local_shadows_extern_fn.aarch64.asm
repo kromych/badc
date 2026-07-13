@@ -13,7 +13,8 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	ldrb	w0, [x0, #0x1]
                	add	x0, x1, x0
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <driver>:
@@ -24,7 +25,8 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	x1, #0x2
                	b.eq	<addr>
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
@@ -39,7 +41,8 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	ldrb	w0, [x0, #0x1]
                	add	x0, x1, x0
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	b	<addr>
 
 <main>:
@@ -47,5 +50,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x1                // =1
                	bl	<addr>
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret

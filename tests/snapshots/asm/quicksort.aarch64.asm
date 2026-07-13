@@ -58,7 +58,8 @@ Disassembly of section .text:
                	add	x1, x22, x1
                	bl	<addr>
                	add	x0, x20, #0x1
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]

@@ -15,12 +15,14 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm0
                	cvttss2si	%xmm0, %rax
+               	movslq	%eax, %rax
                	retq
 
 <mix>:
                	cvttss2si	%xmm0, %rax
                	addq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <run>:
@@ -29,14 +31,16 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movq	%rsi, %rax
                	callq	*%rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
 
 <cb_impl>:
                	cvttss2si	%xmm0, %rax
                	addq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:

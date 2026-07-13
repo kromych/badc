@@ -14,7 +14,8 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <f1>:
@@ -45,7 +46,8 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -98,7 +100,8 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x4, %eax
@@ -109,3 +112,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

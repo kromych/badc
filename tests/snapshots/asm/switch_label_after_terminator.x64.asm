@@ -22,7 +22,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x3, %eax
                	addq	$0x64, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
                	cmpq	$0x2, %rdi
                	jne	<addr>
@@ -68,3 +69,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

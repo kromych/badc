@@ -14,6 +14,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cmp	x0, x1
                	cset	x0, eq
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -59,6 +60,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x11
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0xe                // =14
@@ -104,6 +106,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0xf                // =15

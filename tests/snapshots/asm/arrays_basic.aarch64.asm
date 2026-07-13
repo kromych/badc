@@ -23,7 +23,8 @@ Disassembly of section .text:
                	sxtw	x2, w1
                	cmp	x2, x4
                	b.lt	<addr>
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:

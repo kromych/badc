@@ -12,17 +12,20 @@ Disassembly of section .text:
 
 <add_two>:
                	leaq	0x2(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <times_three>:
                	leaq	(%rdi,%rdi,2), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <minus_seven>:
                	leaq	-0x7(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <call_via_table>:
@@ -34,7 +37,8 @@ Disassembly of section .text:
                	movq	(%rax,%rdi,8), %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
 

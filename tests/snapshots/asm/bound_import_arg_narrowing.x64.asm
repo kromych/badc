@@ -11,8 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <user_count>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%edi, %rax
                	retq
 
 <main>:
@@ -97,3 +96,5 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

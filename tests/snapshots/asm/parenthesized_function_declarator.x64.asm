@@ -12,7 +12,8 @@ Disassembly of section .text:
 
 <one>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <two>:
@@ -48,3 +49,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

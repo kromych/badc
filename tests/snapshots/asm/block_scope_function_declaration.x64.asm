@@ -30,6 +30,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -78,15 +79,17 @@ Disassembly of section .text:
 <sum3>:
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <add>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <label>:
                	leaq	<rip>, %rax
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

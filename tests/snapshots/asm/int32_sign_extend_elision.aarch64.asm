@@ -13,7 +13,8 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	add	x0, x0, x2
                	add	x0, x0, x3
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <widen>:
@@ -26,6 +27,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, lt
+               	sxtw	x0, w0
                	ret
 
 <pick>:

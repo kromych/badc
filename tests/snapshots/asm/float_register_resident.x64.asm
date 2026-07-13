@@ -156,7 +156,9 @@ Disassembly of section .text:
                	movss	%xmm0, -0x8(%rbp,%riz)
                	movss	-0x8(%rbp,%riz), %xmm0
                	cvttss2si	%xmm0, %rax
+               	movslq	%eax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

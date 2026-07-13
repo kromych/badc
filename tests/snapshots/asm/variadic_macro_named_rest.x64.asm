@@ -13,12 +13,12 @@ Disassembly of section .text:
 <add3>:
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <id>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%edi, %rax
                	retq
 
 <streq>:
@@ -41,6 +41,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -57,5 +58,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

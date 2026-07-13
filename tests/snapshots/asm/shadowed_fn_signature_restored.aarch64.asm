@@ -80,6 +80,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
                	add	sp, sp, #0xc0
@@ -87,6 +88,7 @@ Disassembly of section .text:
 
 <shadow_in_block>:
                	mov	x0, #0x1                // =1
+               	sxtw	x0, w0
                	ret
 
 <main>:

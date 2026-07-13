@@ -13,5 +13,6 @@ Disassembly of section .text:
                	mov	x0, #0x14               // =20
                	add	x0, x0, #0x5
                	sxtw	x0, w0
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret

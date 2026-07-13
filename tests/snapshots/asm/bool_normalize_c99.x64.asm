@@ -20,6 +20,7 @@ Disassembly of section .text:
 <take_bool>:
                	movq	%rdi, %rax
                	andq	$0xff, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -156,5 +157,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

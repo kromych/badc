@@ -27,6 +27,7 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	movzbq	(%rdi), %rcx
                	orq	%rcx, %rax
+               	movl	%eax, %eax
                	retq
 
 <core>:
@@ -65,6 +66,7 @@ Disassembly of section .text:
                	movl	%r9d, %r9d
                	movzbq	(%rcx), %rcx
                	orq	%r9, %rcx
+               	movl	%ecx, %ecx
                	movl	%ecx, (%rdi,%r8,4)
                	leaq	-0x40(%rbp), %rdi
                	leaq	0x1(%rax), %rcx
@@ -89,6 +91,7 @@ Disassembly of section .text:
                	movl	%r9d, %r9d
                	movzbq	(%rcx), %rcx
                	orq	%r9, %rcx
+               	movl	%ecx, %ecx
                	movl	%ecx, (%rdi,%r8,4)
                	leaq	-0x40(%rbp), %rdi
                	leaq	0x6(%rax), %rcx
@@ -113,6 +116,7 @@ Disassembly of section .text:
                	movl	%r9d, %r9d
                	movzbq	(%rcx), %rcx
                	orq	%r9, %rcx
+               	movl	%ecx, %ecx
                	movl	%ecx, (%rdi,%r8,4)
                	leaq	-0x40(%rbp), %rdi
                	leaq	0xb(%rax), %rcx
@@ -138,6 +142,7 @@ Disassembly of section .text:
                	movl	%r9d, %r9d
                	movzbq	(%rcx), %rcx
                	orq	%r9, %rcx
+               	movl	%ecx, %ecx
                	movl	%ecx, (%rdi,%r8,4)
                	leaq	0x1(%rsi), %rax
                	movslq	%eax, %rsi
@@ -240,5 +245,4 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

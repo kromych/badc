@@ -65,10 +65,12 @@ Disassembly of section .text:
                	b.ge	<addr>
                	ldr	x0, [x0, #0x8]
                	bl	<addr>
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x0, [x0, #0x10]
                	bl	<addr>
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
 

@@ -294,6 +294,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
+               	movslq	%eax, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
@@ -303,4 +304,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

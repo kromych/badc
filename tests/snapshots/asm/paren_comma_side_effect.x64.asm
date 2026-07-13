@@ -54,10 +54,9 @@ Disassembly of section .text:
                	retq
 
 <bump_to>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
-               	leaq	<rip>, %rcx
-               	movl	%eax, (%rcx)
+               	leaq	<rip>, %rax
+               	movl	%edi, (%rax)
+               	movslq	%edi, %rax
                	retq
 
 <main>:
@@ -118,3 +117,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -30,6 +30,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -419,15 +420,17 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addq	$0x1e, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
                	addq	$0xa, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

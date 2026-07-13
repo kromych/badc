@@ -11,10 +11,10 @@ Disassembly of section .text:
                	ud2
 
 <add>:
-               	movslq	%edi, %rdi
                	movl	%esi, %eax
                	addq	%rdi, %rax
                	movl	%eax, %eax
+               	movslq	%eax, %rax
                	retq
 
 <read_one>:
@@ -26,7 +26,8 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpq	%rsi, %rcx
                	jb	<addr>
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
@@ -68,4 +69,4 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

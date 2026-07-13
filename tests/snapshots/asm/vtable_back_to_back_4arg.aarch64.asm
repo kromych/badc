@@ -19,11 +19,10 @@ Disassembly of section .text:
                	ret
 
 <g_generate>:
-               	sxtw	x2, w2
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x0, #0x64
                	str	w0, [x1]
-               	mov	x0, x2
+               	sxtw	x0, w2
                	ret
 
 <driver>:
@@ -73,5 +72,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret

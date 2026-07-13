@@ -13,12 +13,14 @@ Disassembly of section .text:
                	scvtf	d1, x0
                	fcmp	d0, d1
                	cset	x0, mi
+               	sxtw	x0, w0
                	ret
 
 <le_float_int>:
                	scvtf	d1, x0
                	fcmp	d0, d1
                	cset	x0, ls
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -39,6 +41,7 @@ Disassembly of section .text:
                	scvtf	d1, x0
                	fcmp	d0, d1
                	cset	x1, mi
+               	sxtw	x1, w1
                	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -51,6 +54,7 @@ Disassembly of section .text:
                	fmov	d16, x1
                	fcmp	d16, d0
                	cset	x1, mi
+               	sxtw	x1, w1
                	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -61,6 +65,7 @@ Disassembly of section .text:
                	scvtf	d1, x0
                	fcmp	d0, d1
                	cset	x1, ls
+               	sxtw	x1, w1
                	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -74,6 +79,7 @@ Disassembly of section .text:
                	scvtf	d1, x0
                	fcmp	d0, d1
                	cset	x0, ls
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

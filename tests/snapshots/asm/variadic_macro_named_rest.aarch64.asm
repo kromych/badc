@@ -12,7 +12,8 @@ Disassembly of section .text:
                	brk	#<addr>:
                	add	x0, x0, x1
                	add	x0, x0, x2
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <id>:
@@ -35,6 +36,7 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	x0, x1
                	cset	x0, eq
+               	sxtw	x0, w0
                	ret
 
 <main>:

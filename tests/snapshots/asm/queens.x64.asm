@@ -105,6 +105,7 @@ Disassembly of section .text:
                	cmpq	$0x8, %rax
                	jl	<addr>
                	movslq	%r12d, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -131,5 +132,3 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

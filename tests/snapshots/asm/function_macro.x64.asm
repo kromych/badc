@@ -39,6 +39,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
                	jmp	<addr>
 
@@ -142,14 +143,16 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
@@ -163,4 +166,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

@@ -11,13 +11,11 @@ Disassembly of section .text:
                	ud2
 
 <side_effect>:
-               	movq	%rdi, %rcx
-               	movslq	%ecx, %rcx
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rdx
-               	incq	%rdx
-               	movl	%edx, (%rax)
-               	movq	%rcx, %rax
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	movl	%ecx, (%rax)
+               	movslq	%edi, %rax
                	retq
 
 <main>:
@@ -181,4 +179,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x63, %eax
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -11,7 +11,8 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	add	x0, x0, #0x64
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:
@@ -54,6 +55,7 @@ Disassembly of section .text:
                	cmp	x0, #0x19a
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x90

@@ -19,6 +19,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>
@@ -34,6 +35,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>
@@ -49,6 +51,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>
@@ -64,6 +67,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>
@@ -79,6 +83,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>
@@ -108,6 +113,7 @@ Disassembly of section .text:
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -140,6 +146,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	sxtw	x0, w20
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30

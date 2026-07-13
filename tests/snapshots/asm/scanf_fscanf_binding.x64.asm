@@ -79,7 +79,9 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rax
                	movslq	-0x10(%rbp), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

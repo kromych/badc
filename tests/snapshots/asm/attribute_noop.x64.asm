@@ -12,7 +12,8 @@ Disassembly of section .text:
 
 <sum_two>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <formatted>:
@@ -56,3 +57,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

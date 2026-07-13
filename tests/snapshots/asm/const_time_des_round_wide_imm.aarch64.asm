@@ -19,6 +19,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	lsr	x0, x0, x1
                	orr	x0, x2, x0
+               	mov	w0, w0
                	ret
 
 <des_round>:
@@ -454,6 +455,7 @@ Disassembly of section .text:
                	mov	w3, w3
                	lsr	x1, x1, #27
                	orr	x1, x3, x1
+               	mov	w1, w1
                	orr	x1, x2, x1
                	mov	w2, w1
                	mov	w1, w0
@@ -488,6 +490,7 @@ Disassembly of section .text:
                	mov	w3, w3
                	lsr	x1, x1, #20
                	orr	x1, x3, x1
+               	mov	w1, w1
                	orr	x1, x2, x1
                	mov	w2, w1
                	mov	w1, w0
@@ -522,6 +525,7 @@ Disassembly of section .text:
                	mov	w3, w3
                	lsr	x1, x1, #15
                	orr	x1, x3, x1
+               	mov	w1, w1
                	orr	x1, x2, x1
                	mov	w2, w1
                	mov	w1, w0
@@ -549,6 +553,7 @@ Disassembly of section .text:
                	mov	w3, w3
                	lsr	x1, x1, #8
                	orr	x1, x3, x1
+               	mov	w1, w1
                	orr	x1, x2, x1
                	mov	w1, w1
                	mov	w0, w0
@@ -696,7 +701,8 @@ Disassembly of section .text:
                	eor	x0, x1, x0
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

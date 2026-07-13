@@ -14,6 +14,7 @@ Disassembly of section .text:
                	movl	$0x14, %eax
                	addq	$0x5, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

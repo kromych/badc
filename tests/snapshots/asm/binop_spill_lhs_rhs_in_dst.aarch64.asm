@@ -25,7 +25,8 @@ Disassembly of section .text:
                	cmp	x2, x4
                	b.le	<addr>
                	add	x0, x0, x6
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:
@@ -51,6 +52,7 @@ Disassembly of section .text:
                	str	w3, [x0, #0x10]
                	sub	x0, x29, #0x18
                	bl	<addr>
+               	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

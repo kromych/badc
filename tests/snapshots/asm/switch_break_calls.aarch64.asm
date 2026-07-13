@@ -34,7 +34,8 @@ Disassembly of section .text:
                	cmp	x0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x190              // =400
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
                	mov	x0, #0x12c              // =300
                	b	<addr>
@@ -52,5 +53,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x2                // =2
                	bl	<addr>
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret

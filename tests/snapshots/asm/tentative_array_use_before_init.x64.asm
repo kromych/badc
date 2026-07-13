@@ -26,6 +26,7 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	jne	<addr>
                	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <sum_first_four>:
@@ -42,7 +43,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movslq	0xc(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
@@ -81,4 +83,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)

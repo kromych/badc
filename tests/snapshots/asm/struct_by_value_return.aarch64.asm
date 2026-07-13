@@ -28,7 +28,8 @@ Disassembly of section .text:
                	mov	x17, #0x1589            // =5513
                	movk	x17, #0x12, lsl #16
                	add	x0, x0, x17
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <sum_pair_pair>:

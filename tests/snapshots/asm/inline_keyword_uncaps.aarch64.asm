@@ -30,4 +30,5 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ret

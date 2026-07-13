@@ -26,6 +26,7 @@ Disassembly of section .text:
                	cmpq	%r8, %rdx
                	jl	<addr>
                	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -136,4 +137,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

@@ -11,8 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <trunc_id>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%edi, %rax
                	retq
 
 <phi_accumulate>:
@@ -22,7 +21,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	imulq	$0xf4243, %rcx, %rcx    # imm = 0xF4243
                	addq	%rax, %rcx
-               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rsi
+               	movslq	%esi, %rcx
                	incq	%rcx
                	leaq	0x1(%rdx), %rax
                	movslq	%eax, %rdx
@@ -39,8 +39,9 @@ Disassembly of section .text:
                	cmpq	$-0x4728dfba, %rax      # imm = 0xB8D72046
                	jne	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

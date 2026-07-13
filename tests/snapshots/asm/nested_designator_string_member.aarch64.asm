@@ -25,6 +25,7 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	x0, x1
                	cset	x0, eq
+               	sxtw	x0, w0
                	ret
 
 <main>:

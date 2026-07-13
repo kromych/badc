@@ -178,9 +178,13 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
+               	popq	%rbp
+               	retq
+               	callq	<addr>
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-               	popq	%rbp
-               	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

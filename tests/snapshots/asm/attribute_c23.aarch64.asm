@@ -11,7 +11,8 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <classify>:
@@ -26,7 +27,8 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
                	add	x0, x0, #0x1
                	b	<addr>

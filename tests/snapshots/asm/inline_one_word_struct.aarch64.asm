@@ -65,6 +65,7 @@ Disassembly of section .text:
                	cmp	x0, #0x5dc
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

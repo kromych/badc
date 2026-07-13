@@ -24,6 +24,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, mi
+               	sxtw	x0, w0
                	ret
                	b	<addr>
 

@@ -26,6 +26,7 @@ Disassembly of section .text:
                	mov	w1, w1
                	ldrb	w0, [x0]
                	orr	x0, x1, x0
+               	mov	w0, w0
                	ret
 
 <core>:
@@ -60,6 +61,7 @@ Disassembly of section .text:
                	mov	w6, w6
                	ldrb	w1, [x1]
                	orr	x1, x6, x1
+               	mov	w1, w1
                	str	w1, [x4, x5, lsl #2]
                	sub	x4, x29, #0x40
                	add	x1, x0, #0x1
@@ -83,6 +85,7 @@ Disassembly of section .text:
                	mov	w6, w6
                	ldrb	w1, [x1]
                	orr	x1, x6, x1
+               	mov	w1, w1
                	str	w1, [x4, x5, lsl #2]
                	sub	x4, x29, #0x40
                	add	x1, x0, #0x6
@@ -106,6 +109,7 @@ Disassembly of section .text:
                	mov	w6, w6
                	ldrb	w1, [x1]
                	orr	x1, x6, x1
+               	mov	w1, w1
                	str	w1, [x4, x5, lsl #2]
                	sub	x4, x29, #0x40
                	add	x1, x0, #0xb
@@ -130,6 +134,7 @@ Disassembly of section .text:
                	mov	w6, w6
                	ldrb	w1, [x1]
                	orr	x1, x6, x1
+               	mov	w1, w1
                	str	w1, [x4, x5, lsl #2]
                	add	x0, x3, #0x1
                	sxtw	x3, w0

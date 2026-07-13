@@ -12,7 +12,8 @@ Disassembly of section .text:
 
 <bump>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <combine>:
@@ -33,7 +34,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rbx
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rbx
                	testq	%rdi, %rdi
                	je	<addr>
                	leaq	0x64(%rdi), %rax
@@ -67,6 +69,9 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	callq	<addr>
                	subq	$0xde, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

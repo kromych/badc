@@ -19,6 +19,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	retq
 
 <le_float_int>:
@@ -30,6 +31,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -55,6 +57,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
+               	movslq	%ecx, %rcx
                	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x1, %eax
@@ -70,6 +73,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
@@ -85,6 +89,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
+               	movslq	%ecx, %rcx
                	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x3, %eax
@@ -103,6 +108,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
@@ -115,4 +121,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

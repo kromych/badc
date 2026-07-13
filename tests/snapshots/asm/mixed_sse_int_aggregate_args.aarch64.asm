@@ -120,6 +120,7 @@ Disassembly of section .text:
                	ldr	x4, [x3, #0x8]
                	ldr	x3, [x3]
                	bl	<addr>
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -156,6 +157,7 @@ Disassembly of section .text:
                	mov	x4, #0x3ff4000000000000 // =4608308318706860032
                	fmov	d0, x4
                	bl	<addr>
+               	sxtw	x0, w0
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret

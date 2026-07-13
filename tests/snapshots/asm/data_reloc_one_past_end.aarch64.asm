@@ -26,5 +26,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x18]
                	add	x0, x1, x0
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret

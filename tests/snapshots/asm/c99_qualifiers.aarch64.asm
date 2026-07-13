@@ -10,10 +10,10 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	sxtw	x0, w0
                	mov	w1, w1
                	add	x0, x0, x1
                	mov	w0, w0
+               	sxtw	x0, w0
                	ret
 
 <read_one>:
@@ -27,7 +27,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	x1, x3
                	b.lo	<addr>
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:

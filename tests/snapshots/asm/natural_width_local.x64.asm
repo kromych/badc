@@ -12,6 +12,7 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

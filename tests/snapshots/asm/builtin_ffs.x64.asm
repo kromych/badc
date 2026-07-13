@@ -16,6 +16,7 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdi
                	sete	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -60,6 +61,7 @@ Disassembly of section .text:
                	cmpq	$0x11, %rax
                	sete	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0xe, %eax
@@ -104,6 +106,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0xf, %eax
@@ -115,4 +118,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

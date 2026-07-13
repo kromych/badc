@@ -147,6 +147,7 @@ Disassembly of section .text:
                	cmpq	$0x24, %rax
                	jne	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -154,3 +155,4 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

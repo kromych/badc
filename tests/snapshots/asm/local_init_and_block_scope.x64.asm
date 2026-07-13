@@ -13,7 +13,8 @@ Disassembly of section .text:
 <sum_three>:
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
@@ -51,6 +52,7 @@ Disassembly of section .text:
                	addq	$0x2, %rax
                	addq	$0x3, %rax
                	movslq	%eax, %rcx
+               	movslq	%ecx, %rcx
                	movslq	%ecx, %rdx
                	cmpq	$0x6, %rdx
                	je	<addr>
@@ -112,4 +114,3 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

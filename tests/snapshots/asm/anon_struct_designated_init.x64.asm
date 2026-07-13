@@ -90,6 +90,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
@@ -232,6 +233,7 @@ Disassembly of section .text:
                	movl	$0xb, %edi
                	movl	$0x16, %esi
                	callq	<addr>
+               	movslq	%eax, %rax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
@@ -241,4 +243,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

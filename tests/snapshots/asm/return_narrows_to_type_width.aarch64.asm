@@ -15,10 +15,12 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	orr	x0, x0, x17
+               	mov	w0, w0
                	ret
 
 <sret>:
                	mov	w0, w0
+               	sxtw	x0, w0
                	ret
 
 <hret>:
@@ -28,5 +30,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x1                // =1
+               	mov	x0, #0x0                // =0
                	ret

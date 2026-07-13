@@ -61,12 +61,14 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
 
 <shadow_in_block>:
                	movl	$0x1, %eax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -92,4 +94,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

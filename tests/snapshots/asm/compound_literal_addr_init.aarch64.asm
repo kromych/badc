@@ -154,9 +154,11 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x1, w0
                	cbz	x1, <addr>
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret

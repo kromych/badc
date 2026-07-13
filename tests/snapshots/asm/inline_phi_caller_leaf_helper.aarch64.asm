@@ -18,6 +18,7 @@ Disassembly of section .text:
                	mov	w2, w2
                	and	x0, x0, x2
                	eor	x0, x1, x0
+               	mov	w0, w0
                	ret
 
 <digest>:
@@ -43,6 +44,7 @@ Disassembly of section .text:
                	mov	w8, w9
                	and	x4, x4, x8
                	eor	x4, x7, x4
+               	mov	w4, w4
                	ldr	w7, [x5, x3, lsl #2]
                	add	x4, x4, x7
                	mov	w7, w4
@@ -58,6 +60,7 @@ Disassembly of section .text:
                	eor	x0, x0, x1
                	mov	w1, w4
                	eor	x0, x0, x1
+               	mov	w0, w0
                	ret
 
 <main>:
@@ -85,6 +88,7 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

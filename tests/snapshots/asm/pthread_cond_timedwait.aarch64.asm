@@ -82,6 +82,7 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp]
                	add	sp, sp, #0x100

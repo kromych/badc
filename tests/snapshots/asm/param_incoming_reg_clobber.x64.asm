@@ -150,17 +150,18 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	0x14(%rbx), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	movq	(%rsp), %rbx
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
                	addq	$0xa, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	movq	(%rsp), %rbx
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

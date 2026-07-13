@@ -12,7 +12,8 @@ Disassembly of section .text:
 
 <helper>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <classify>:
@@ -23,7 +24,8 @@ Disassembly of section .text:
                	cmpq	$0x2, %rdi
                	je	<addr>
                	movabsq	$-0x1, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
                	incq	%rax
                	jmp	<addr>
@@ -121,4 +123,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

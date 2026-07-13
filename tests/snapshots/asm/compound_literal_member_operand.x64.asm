@@ -37,6 +37,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	setne	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11
@@ -71,6 +72,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11
@@ -103,7 +105,8 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11
@@ -138,6 +141,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	setne	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11

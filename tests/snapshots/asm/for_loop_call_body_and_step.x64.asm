@@ -12,12 +12,14 @@ Disassembly of section .text:
 
 <add_one>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <advance>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <driver>:
@@ -25,20 +27,23 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	incq	%rcx
-               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rdx
+               	movslq	%edx, %rcx
                	incq	%rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rdx
+               	movslq	%edx, %rax
                	movslq	%eax, %rdx
                	cmpq	$0x7, %rdx
                	jl	<addr>
                	imulq	$0x6, %rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)
+               	retq

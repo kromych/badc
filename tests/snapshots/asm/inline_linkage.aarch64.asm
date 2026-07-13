@@ -11,17 +11,20 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <sinl>:
                	add	x0, x0, #0x2
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <einl>:
                	add	x0, x0, #0x3
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:
@@ -31,6 +34,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>

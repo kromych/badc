@@ -18,6 +18,7 @@ Disassembly of section .text:
 
 <f2i>:
                	cvttss2si	%xmm0, %rax
+               	movslq	%eax, %rax
                	retq
 
 <chain>:
@@ -76,6 +77,7 @@ Disassembly of section .text:
                	movl	$0x4079999a, %eax       # imm = 0x4079999A
                	movq	%rax, %xmm14
                	cvttss2si	%xmm14, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x3, %eax
@@ -88,6 +90,7 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	cvttss2si	%xmm0, %rax
+               	movslq	%eax, %rax
                	cmpq	$-0x2, %rax
                	je	<addr>
                	movl	$0x4, %eax
@@ -211,4 +214,3 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

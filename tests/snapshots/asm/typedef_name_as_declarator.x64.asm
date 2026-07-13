@@ -12,6 +12,7 @@ Disassembly of section .text:
 
 <take>:
                	movslq	%edi, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -38,3 +39,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

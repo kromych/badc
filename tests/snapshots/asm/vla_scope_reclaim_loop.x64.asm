@@ -89,6 +89,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, -0x2058(%rbp)
                	movq	-0x2058(%rbp), %rax
+               	movslq	%eax, %rax
                	addq	$0x2060, %rsp           # imm = 0x2060
                	popq	%rbp
                	retq
@@ -96,3 +97,4 @@ Disassembly of section .text:
                	movq	%rax, -0x2058(%rbp)
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

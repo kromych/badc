@@ -16,7 +16,8 @@ Disassembly of section .text:
                	cmp	x0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x1e               // =30
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
                	mov	x0, #0x14               // =20
                	b	<addr>

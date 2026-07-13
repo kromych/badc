@@ -13,7 +13,8 @@ Disassembly of section .text:
 <triple_plus_one>:
                	leaq	(%rdi,%rdi,2), %rax
                	incq	%rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <bit_count>:
@@ -48,3 +49,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

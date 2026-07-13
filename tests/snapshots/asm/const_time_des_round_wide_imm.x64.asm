@@ -24,6 +24,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	shrq	%cl, %rax
                	orq	%rdx, %rax
+               	movl	%eax, %eax
                	retq
 
 <des_round>:
@@ -504,6 +505,7 @@ Disassembly of section .text:
                	movl	%esi, %esi
                	shrq	$0x1b, %rcx
                	orq	%rsi, %rcx
+               	movl	%ecx, %ecx
                	orq	%rdx, %rcx
                	movl	%ecx, %edx
                	movl	%eax, %ecx
@@ -537,6 +539,7 @@ Disassembly of section .text:
                	movl	%esi, %esi
                	shrq	$0x14, %rcx
                	orq	%rsi, %rcx
+               	movl	%ecx, %ecx
                	orq	%rdx, %rcx
                	movl	%ecx, %edx
                	movl	%eax, %ecx
@@ -570,6 +573,7 @@ Disassembly of section .text:
                	movl	%esi, %esi
                	shrq	$0xf, %rcx
                	orq	%rsi, %rcx
+               	movl	%ecx, %ecx
                	orq	%rdx, %rcx
                	movl	%ecx, %edx
                	movl	%eax, %ecx
@@ -597,6 +601,7 @@ Disassembly of section .text:
                	movl	%esi, %esi
                	shrq	$0x8, %rcx
                	orq	%rsi, %rcx
+               	movl	%ecx, %ecx
                	orq	%rdx, %rcx
                	movl	%ecx, %ecx
                	movl	%eax, %eax
@@ -712,9 +717,9 @@ Disassembly of section .text:
                	shrq	$0x18, %rax
                	xorq	%rcx, %rax
                	andq	$0xff, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

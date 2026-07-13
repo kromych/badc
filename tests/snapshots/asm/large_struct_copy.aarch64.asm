@@ -358,19 +358,22 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x0, x1, #0x6e
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldr	x19, [sp]
                	add	sp, sp, #0x480
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x0, x1, #0x3c
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldr	x19, [sp]
                	add	sp, sp, #0x480
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x0, x1, #0xa
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldr	x19, [sp]
                	add	sp, sp, #0x480
                	ldp	x29, x30, [sp], #0x10

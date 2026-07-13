@@ -18,7 +18,8 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	add	x0, x1, x0
                	lsl	x0, x0, #1
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:

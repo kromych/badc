@@ -14,12 +14,14 @@ Disassembly of section .text:
                	fmov	s17, w0
                	fmul	s0, s0, s17
                	fcvtzs	x0, s0
+               	sxtw	x0, w0
                	ret
 
 <mix>:
                	fcvtzs	x1, s0
                	add	x0, x0, x1
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <run>:
@@ -29,7 +31,8 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	mov	x9, x1
                	blr	x9
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
@@ -37,7 +40,8 @@ Disassembly of section .text:
 <cb_impl>:
                	fcvtzs	x1, s0
                	add	x0, x0, x1
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:

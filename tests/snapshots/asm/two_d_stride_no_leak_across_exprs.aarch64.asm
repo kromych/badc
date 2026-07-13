@@ -26,6 +26,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x400
                	ldrh	w0, [x0]
                	sxtw	x0, w0
+               	sxtw	x0, w0
                	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

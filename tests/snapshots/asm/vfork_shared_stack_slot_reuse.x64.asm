@@ -77,8 +77,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	0x140(%rbp), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	andq	$0x7f, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	popq	%r11
                	addq	$0x140, %rsp            # imm = 0x140

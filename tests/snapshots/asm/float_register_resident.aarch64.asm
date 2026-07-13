@@ -144,6 +144,7 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
                	fcvtzs	x0, s0
+               	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -149,10 +149,11 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, -0x2050(%rbp)
                	movq	-0x2050(%rbp), %rax
+               	movslq	%eax, %rax
                	addq	$0x2050, %rsp           # imm = 0x2050
                	popq	%rbp
                	retq
                	movl	$0x1, %eax
                	movq	%rax, -0x2050(%rbp)
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

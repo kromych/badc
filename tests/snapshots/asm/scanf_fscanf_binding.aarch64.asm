@@ -81,7 +81,8 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x8]
                	ldursw	x1, [x29, #-0x10]
                	add	x0, x0, x1
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
                	ret

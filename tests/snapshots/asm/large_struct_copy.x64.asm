@@ -352,17 +352,20 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	0x6e(%rcx), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x470, %rsp            # imm = 0x470
                	popq	%rbp
                	retq
                	leaq	0x3c(%rcx), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x470, %rsp            # imm = 0x470
                	popq	%rbp
                	retq
                	leaq	0xa(%rcx), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x470, %rsp            # imm = 0x470
                	popq	%rbp
                	retq

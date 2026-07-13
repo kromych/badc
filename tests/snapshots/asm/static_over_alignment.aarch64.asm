@@ -19,7 +19,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ret
                	ldr	x0, [x0]
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:

@@ -20,7 +20,8 @@ Disassembly of section .text:
                	movl	0x8(%rax), %eax
                	sarq	$0x6, %rax
                	andq	$0x3ffffff, %rax        # imm = 0x3FFFFFF
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <chained_via_dot>:
@@ -37,7 +38,8 @@ Disassembly of section .text:
                	movl	0x80c(%rax), %eax
                	sarq	$0x6, %rax
                	andq	$0x3ffffff, %rax        # imm = 0x3FFFFFF
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11
@@ -87,7 +89,8 @@ Disassembly of section .text:
                	movl	0x8(%rax), %eax
                	sarq	$0x6, %rax
                	andq	$0x3ffffff, %rax        # imm = 0x3FFFFFF
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -99,7 +102,8 @@ Disassembly of section .text:
                	movl	0x80c(%rax), %eax
                	sarq	$0x6, %rax
                	andq	$0x3ffffff, %rax        # imm = 0x3FFFFFF
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x2, %eax

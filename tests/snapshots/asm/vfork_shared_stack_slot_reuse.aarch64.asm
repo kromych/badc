@@ -74,9 +74,9 @@ Disassembly of section .text:
                	add	x16, x29, #0x140
                	ldrsw	x1, [x16]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x140
                	ret

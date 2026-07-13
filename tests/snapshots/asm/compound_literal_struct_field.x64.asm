@@ -160,6 +160,8 @@ Disassembly of section .text:
                	movl	$0xb, %edi
                	movl	$0x16, %esi
                	callq	<addr>
+               	movslq	%eax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

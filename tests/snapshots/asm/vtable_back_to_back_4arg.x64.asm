@@ -19,12 +19,10 @@ Disassembly of section .text:
                	retq
 
 <g_generate>:
-               	movq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	0x8(%rdi), %rax
                	addq	$0x64, %rax
                	movl	%eax, (%rsi)
-               	movq	%rcx, %rax
+               	movslq	%edx, %rax
                	retq
 
 <driver>:
@@ -64,7 +62,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
-               	addb	%al, (%rax)
+               	retq
                	addb	%al, 0x41(%rdx)

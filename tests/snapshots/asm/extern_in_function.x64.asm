@@ -12,15 +12,18 @@ Disassembly of section .text:
 
 <wrap>:
                	imulq	$-0x1, %rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <negate>:
                	imulq	$-0x1, %rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -94,6 +94,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	sub	x0, x29, #0x20
                	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x19, [sp], #0x70
                	add	sp, sp, #0xc0

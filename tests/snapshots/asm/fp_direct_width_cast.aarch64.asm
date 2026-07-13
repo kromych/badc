@@ -16,6 +16,7 @@ Disassembly of section .text:
 
 <f2i>:
                	fcvtzs	x0, s0
+               	sxtw	x0, w0
                	ret
 
 <chain>:
@@ -64,6 +65,7 @@ Disassembly of section .text:
                	movk	x0, #0x4079, lsl #16
                	fmov	s16, w0
                	fcvtzs	x0, s16
+               	sxtw	x0, w0
                	cmp	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -74,6 +76,7 @@ Disassembly of section .text:
                	fmov	s16, w0
                	fneg	s0, s16
                	fcvtzs	x0, s0
+               	sxtw	x0, w0
                	mov	x17, #0xfffe            // =65534
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

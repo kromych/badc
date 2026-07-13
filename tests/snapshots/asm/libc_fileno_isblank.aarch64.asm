@@ -64,6 +64,7 @@ Disassembly of section .text:
                	cset	x0, eq
                	cmp	x0, #0x0
                	cset	x0, ne
+               	sxtw	x0, w0
                	ret
                	b	<addr>
 

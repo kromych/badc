@@ -14,14 +14,16 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <via_scalar_pointer>:
                	movslq	(%rdi), %rax
                	movslq	0xc(%rdi), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
@@ -38,7 +40,8 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -57,7 +60,8 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0xc(%rax), %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	cmpq	$0x32, %rax
                	je	<addr>
                	movl	$0x2, %eax

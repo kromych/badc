@@ -55,7 +55,8 @@ Disassembly of section .text:
                	sub	x3, x29, #0x20
                	bl	<addr>
                	sub	x1, x29, #0x20
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x19, [sp], #0x70
                	add	sp, sp, #0xc0

@@ -171,7 +171,8 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x20
                	ret
                	add	x0, x20, #0x1
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

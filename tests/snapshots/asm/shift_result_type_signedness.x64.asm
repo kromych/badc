@@ -23,9 +23,10 @@ Disassembly of section .text:
                	movq	%rsi, %rcx
                	sarq	%cl, %rax
                	popq	%rcx
+               	movslq	%eax, %rax
                	retq
 
 <main>:
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

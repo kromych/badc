@@ -23,7 +23,8 @@ Disassembly of section .text:
                	movk	x17, #0xf, lsl #16
                	mul	x1, x1, x17
                	add	x1, x1, x0
-               	sxtw	x1, w1
+               	sxtw	x4, w1
+               	sxtw	x1, w4
                	add	x1, x1, #0x1
                	add	x0, x2, #0x1
                	sxtw	x2, w0
@@ -44,6 +45,7 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1

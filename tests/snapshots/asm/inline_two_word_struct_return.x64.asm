@@ -152,9 +152,10 @@ Disassembly of section .text:
                	cmpq	$0x16785, %rax          # imm = 0x16785
                	jne	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

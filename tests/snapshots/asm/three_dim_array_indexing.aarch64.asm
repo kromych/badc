@@ -17,7 +17,8 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	ldrb	w0, [x0, #0x3]
                	add	x0, x1, x0
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:
@@ -33,7 +34,8 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	ldrb	w2, [x0, #0x3]
                	add	x1, x1, x2
-               	sxtw	x1, w1
+               	sxtw	x2, w1
+               	sxtw	x1, w2
                	cmp	x1, #0xa
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -48,7 +50,8 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	ldrb	w1, [x1, #0x3]
                	add	x1, x2, x1
-               	sxtw	x1, w1
+               	sxtw	x2, w1
+               	sxtw	x1, w2
                	cmp	x1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -63,7 +66,8 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	ldrb	w1, [x1, #0x3]
                	add	x1, x2, x1
-               	sxtw	x1, w1
+               	sxtw	x2, w1
+               	sxtw	x1, w2
                	cmp	x1, #0x4a
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

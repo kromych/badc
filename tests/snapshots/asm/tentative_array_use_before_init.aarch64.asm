@@ -25,6 +25,7 @@ Disassembly of section .text:
                	cmp	x3, #0x0
                	b.ne	<addr>
                	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <sum_first_four>:
@@ -45,7 +46,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1, #0xc]
                	add	x0, x0, x1
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ret
 
 <main>:

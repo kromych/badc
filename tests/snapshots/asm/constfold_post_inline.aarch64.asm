@@ -62,51 +62,61 @@ Disassembly of section .text:
 <lt_i>:
                	cmp	x0, x1
                	cset	x0, lt
+               	sxtw	x0, w0
                	ret
 
 <gt_i>:
                	cmp	x0, x1
                	cset	x0, gt
+               	sxtw	x0, w0
                	ret
 
 <le_i>:
                	cmp	x0, x1
                	cset	x0, le
+               	sxtw	x0, w0
                	ret
 
 <ge_i>:
                	cmp	x0, x1
                	cset	x0, ge
+               	sxtw	x0, w0
                	ret
 
 <lt_u>:
                	cmp	x0, x1
                	cset	x0, lo
+               	sxtw	x0, w0
                	ret
 
 <gt_u>:
                	cmp	x0, x1
                	cset	x0, hi
+               	sxtw	x0, w0
                	ret
 
 <le_u>:
                	cmp	x0, x1
                	cset	x0, ls
+               	sxtw	x0, w0
                	ret
 
 <ge_u>:
                	cmp	x0, x1
                	cset	x0, hs
+               	sxtw	x0, w0
                	ret
 
 <eq_i>:
                	cmp	x0, x1
                	cset	x0, eq
+               	sxtw	x0, w0
                	ret
 
 <ne_i>:
                	cmp	x0, x1
                	cset	x0, ne
+               	sxtw	x0, w0
                	ret
 
 <sext8>:

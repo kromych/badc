@@ -14,10 +14,12 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	orq	$-0x6e000000, %rax      # imm = 0x92000000
+               	movl	%eax, %eax
                	retq
 
 <sret>:
                	movl	%edi, %eax
+               	movslq	%eax, %rax
                	retq
 
 <hret>:
@@ -27,7 +29,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -92,60 +92,70 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdi
                	setl	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <gt_i>:
                	cmpq	%rsi, %rdi
                	setg	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <le_i>:
                	cmpq	%rsi, %rdi
                	setle	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <ge_i>:
                	cmpq	%rsi, %rdi
                	setge	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <lt_u>:
                	cmpq	%rsi, %rdi
                	setb	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <gt_u>:
                	cmpq	%rsi, %rdi
                	seta	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <le_u>:
                	cmpq	%rsi, %rdi
                	setbe	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <ge_u>:
                	cmpq	%rsi, %rdi
                	setae	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <eq_i>:
                	cmpq	%rsi, %rdi
                	sete	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <ne_i>:
                	cmpq	%rsi, %rdi
                	setne	%al
                	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	retq
 
 <sext8>:
@@ -324,5 +334,4 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

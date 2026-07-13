@@ -47,13 +47,16 @@ Disassembly of section .text:
                	movslq	%ecx, %rdx
                	cmpq	%rdi, %rdx
                	jl	<addr>
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0xa, %edi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	retq
+               	addb	%al, (%rax)

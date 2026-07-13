@@ -120,7 +120,8 @@ Disassembly of section .text:
                	mul	x1, x2, x17
                	add	x0, x0, x1
                	add	x0, x0, x3
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x19, [sp], #0x60
                	add	sp, sp, #0xc0

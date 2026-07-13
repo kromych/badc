@@ -37,6 +37,7 @@ import json
 import os
 import platform
 import shlex
+import struct
 import subprocess
 import sys
 import time
@@ -353,6 +354,26 @@ def main() -> int:
 
     binp.chmod(0o755)
     log(f"link: {link_mode}")
+    # A PIE loads correctly only when its PT_LOAD p_align is at least the
+    # runtime page size; aarch64 kernels run 4K/16K/64K pages, so the image
+    # must use the 64K max-page-size. Log both so a load failure on a large
+    # page runner is diagnosable from the run alone.
+    try:
+        with open(binp, "rb") as f:
+            hdr = f.read(64)
+            phoff = struct.unpack_from("<Q", hdr, 0x20)[0]
+            phentsize, phnum = struct.unpack_from("<HH", hdr, 0x36)
+            f.seek(phoff)
+            ph = f.read(phentsize * phnum)
+        aligns = sorted({
+            struct.unpack_from("<Q", ph, i * phentsize + 48)[0]
+            for i in range(phnum)
+            if struct.unpack_from("<I", ph, i * phentsize)[0] == 1  # PT_LOAD
+        })
+        log(f"env: page_size={os.sysconf('SC_PAGE_SIZE')} "
+            f"PT_LOAD p_align={{{', '.join(hex(a) for a in aligns)}}}")
+    except Exception as e:
+        log(f"env: page_size/p_align probe failed: {e}")
     v = subprocess.run([str(binp), "--version"], capture_output=True, text=True)
     if "QEMU emulator version" in v.stdout:
         log(f"--version: {v.stdout.strip().splitlines()[0]}")

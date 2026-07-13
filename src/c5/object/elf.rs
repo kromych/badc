@@ -151,20 +151,27 @@ const R_X86_64_RELATIVE: u64 = 8;
 const R_AARCH64_COPY: u64 = 1024;
 const R_X86_64_COPY: u64 = 5;
 
-/// `PT_LOAD` segment alignment. The kernel enforces segment
-/// permissions at page granularity, so the R+E and RW segments must
-/// land on separate pages; the alignment also drives `p_vaddr ==
-/// p_offset (mod align)`, the gap the ET_EXEC file pays once between
-/// the two segments. x86_64 is always 4K. AArch64 Linux kernels run
-/// 4K or 16K pages, and a 16K-aligned segment is also 4K-aligned, so
-/// 16K covers both; 64K-page AArch64 kernels are out of scope (they
-/// would cost a 64K hole per binary).
+/// `PT_LOAD` segment alignment. The loader mmaps each segment at
+/// `p_vaddr` rounded down to the runtime page size, so `p_align` must
+/// be at least that page size or the load bias it aligns the image to
+/// is too coarse and the file offset no longer maps to the right
+/// address. AArch64 Linux kernels run 4K, 16K, or 64K pages, so the
+/// psABI fixes max-page-size at 64K (0x10000) -- the value gcc and lld
+/// emit -- making one image loadable under any of them. A smaller
+/// value (e.g. 16K) loads on 4K/16K kernels but faults on 64K ones.
+/// x86_64 pages are always 4K.
 fn seg_align(machine: Machine) -> u64 {
     match machine {
-        Machine::Aarch64 => 0x4000,
+        Machine::Aarch64 => 0x1_0000,
         Machine::X86_64 => 0x1000,
     }
 }
+
+/// File alignment for the trailing, non-loaded region (DWARF debug
+/// sections + the section header table). These carry no PT_LOAD, so a
+/// page is ample; using [`seg_align`] here would cost a 64K hole per
+/// aarch64 binary for nothing.
+const FILE_TAIL_ALIGN: u64 = 0x1000;
 
 /// Default load address for non-PIE ET_EXEC binaries on Linux/aarch64.
 /// The kernel maps the binary at exactly this vmaddr (no slide); all
@@ -1755,7 +1762,13 @@ pub(super) fn write(
     // The PT_LOAD's p_memsz must cover `.tbss` and `.bss` even though
     // neither has file backing -- the loader zero-fills the difference.
     let segment2_memsize = segment2_filesize + tbss_size + build.bss_size as u64;
-    let segment2_end = round_up(segment2_off + segment2_filesize, seg);
+    // The DWARF / section-header tail past here carries no PT_LOAD and no
+    // SHF_ALLOC, so it needs only a modest file alignment, not the 64K
+    // load-segment alignment -- rounding it to `seg` would pad every
+    // aarch64 binary with a spurious second 64K hole (the first, at the
+    // R+E / RW boundary, is unavoidable: the two permissions must fall on
+    // different max-page-size pages).
+    let segment2_end = round_up(segment2_off + segment2_filesize, FILE_TAIL_ALIGN);
 
     // ---- VM addresses (ET_EXEC, no slide). ----
     let interp_vmaddr = TEXT_VMADDR_BASE + interp_off;
@@ -1787,7 +1800,7 @@ pub(super) fn write(
     // them, no SHF_ALLOC) -- they're metadata that lldb / gdb
     // pick up by walking the section header table. We append:
     //
-    //   <segment2_end aligned to seg>
+    //   <segment2_end aligned to FILE_TAIL_ALIGN>
     //   .debug_info | .debug_abbrev | .debug_line | .debug_str
     //   .shstrtab (the section name string table)
     //   <pad to 8>
@@ -3564,11 +3577,14 @@ mod tests {
         assert_eq!(p_memsz, 8, "single int TLS var => 8 bytes per thread");
     }
 
-    /// The R+E and RW `PT_LOAD` segments are packed at the per-arch page
-    /// size (4K x86_64, 16K aarch64), so an executable's file size tracks
-    /// its loaded content. A blanket 64K segment alignment forced a ~64K
-    /// inter-segment hole, ballooning a trivial program to ~130K of mostly
-    /// zero padding.
+    /// The R+E and RW `PT_LOAD` segments must fall on separate
+    /// max-page-size pages (4K x86_64, 64K aarch64) so the loader can set
+    /// their permissions independently -- one unavoidable page at that
+    /// boundary. The non-loaded DWARF tail past the RW segment then packs
+    /// at [`FILE_TAIL_ALIGN`], not the segment alignment. Rounding the
+    /// file to the segment alignment at *both* boundaries doubled the
+    /// aarch64 cost, ballooning a trivial program to ~130K of zero
+    /// padding; one page keeps it near gcc's ~70K.
     #[test]
     fn executable_file_size_tracks_content_not_max_page() {
         use crate::Compiler;
@@ -3583,7 +3599,7 @@ mod tests {
             (
                 Machine::Aarch64,
                 super::super::Target::LinuxAarch64,
-                64 * 1024usize,
+                96 * 1024usize,
             ),
         ] {
             let program =
@@ -3596,9 +3612,63 @@ mod tests {
             let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
             assert!(
                 bytes.len() < max_bytes,
-                "{machine:?} executable is {} bytes; per-arch page packing must keep it under {max_bytes} \
-                 (a 64K-aligned layout would push it past ~130K)",
+                "{machine:?} executable is {} bytes; a single page at the R+E/RW boundary plus a compact \
+                 tail must keep it under {max_bytes} (rounding the file to the segment alignment twice \
+                 would push it past ~130K)",
                 bytes.len(),
+            );
+        }
+    }
+
+    /// Every `PT_LOAD` must advertise `p_align` equal to the arch
+    /// max-page-size: 64K on aarch64, 4K on x86_64. The dynamic loader
+    /// aligns the image's load bias to this, so a value below the runtime
+    /// page size (a 64K-page aarch64 kernel is common in CI and on
+    /// server distros) leaves segments unmappable and faults the process
+    /// before `main`. gcc and lld emit the same values.
+    #[test]
+    fn pt_load_alignment_matches_max_page_size() {
+        use crate::Compiler;
+        let src = "int main() { return 0; }";
+        let le16 = |b: &[u8], o: usize| u16::from_le_bytes([b[o], b[o + 1]]);
+        let le32 = |b: &[u8], o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+        let le64 = |b: &[u8], o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+        for (machine, target, want_align) in [
+            (
+                Machine::Aarch64,
+                super::super::Target::LinuxAarch64,
+                0x1_0000u64,
+            ),
+            (Machine::X86_64, super::super::Target::LinuxX64, 0x1000u64),
+        ] {
+            let program =
+                Compiler::with_target(super::super::super::tests::with_prelude(src), target)
+                    .compile()
+                    .expect("compile");
+            let build =
+                super::super::lower_for(&program, target, super::super::NativeOptions::default())
+                    .expect("lower");
+            let b = write(&tiny_program(), &build, machine).expect("write ELF");
+            let (phoff, phentsize, phnum) = (
+                le64(&b, 0x20) as usize,
+                le16(&b, 0x36) as usize,
+                le16(&b, 0x38) as usize,
+            );
+            let mut loads = 0;
+            for i in 0..phnum {
+                let ph = phoff + i * phentsize;
+                if le32(&b, ph) == PT_LOAD {
+                    loads += 1;
+                    assert_eq!(
+                        le64(&b, ph + 48),
+                        want_align,
+                        "{machine:?} PT_LOAD p_align must be the {want_align:#x} max-page-size",
+                    );
+                }
+            }
+            assert!(
+                loads >= 2,
+                "{machine:?}: expected R+E and RW PT_LOADs, saw {loads}"
             );
         }
     }

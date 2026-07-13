@@ -67,10 +67,15 @@ SYS_INCLUDE = (
 DROP_EXACT = {"-c", "-pipe", "-pthread", "-w", "-g", "-MD", "-MMD", "-MP"}
 DROP_PREFIX = ("-W", "-f", "-m", "-g", "-O", "-std", "-M", "-arch", "-print", "-x")
 
-# badc has no <arm_neon.h>; a unit that needs it is retried with QEMU's portable
-# scalar path selected instead of the host-accelerated one (see transform()).
-HOST_ACCEL = "/host/include/aarch64"
+# badc provides no host SIMD-intrinsics header (<arm_neon.h> on aarch64,
+# <immintrin.h> on x86_64). A unit whose compile fails naming one is retried
+# with the per-host accel include dir /host/include/<arch> redirected to QEMU's
+# portable scalar fallbacks (see transform(); the dir is built per arch in main).
+HOST_INCLUDE = "/host/include"
 HOST_GENERIC = "/host/include/generic"
+
+# Host-accel SIMD-intrinsics headers badc lacks; naming one triggers the retry.
+HOST_ACCEL_HEADERS = ("arm_neon.h", "immintrin.h")
 
 # QEMU's kernel-header tree names the arch dir asm-<arch>; code includes <asm/*>.
 ASM_ARCH = {"aarch64": "arm64", "x86_64": "x86"}
@@ -159,20 +164,20 @@ def portable_path(p: str, orig_build: str, build_dir: Path, orig_src: str, src_d
 
 
 def transform(argv: list[str], glib_cflags: list[str], src_dir: Path, build_dir: Path,
-              orig_build: str, orig_src: str, scalar: bool) -> list[str]:
+              orig_build: str, orig_src: str, scalar: bool, host_accel: str) -> list[str]:
     """Rewrite a gcc compile command into badc flags. Drops the output/source/
     dependency args and the gcc-only optimization/warning flags; keeps the
     include + -D/-U set. Include paths captured as absolute build-box paths are
     rewritten to the bundle (portable_path) so the build uses QEMU's own
     linux-headers / host / tcg headers, not the host's; the absolute glib
     includes are dropped for the host's pkg-config set. -isystem/-iquote become
-    -I (badc searches one include list). When `scalar` is set, host-accelerated
-    dirs redirect to QEMU's portable equivalents so a unit needing <arm_neon.h>
-    builds without it."""
+    -I (badc searches one include list). When `scalar` is set, the host-accel
+    include dir `host_accel` redirects to QEMU's portable equivalent so a unit
+    needing a host SIMD-intrinsics header builds without it."""
 
     def fix(p: str) -> str:
         p = portable_path(p, orig_build, build_dir, orig_src, src_dir)
-        return p.replace(HOST_ACCEL, HOST_GENERIC) if scalar else p
+        return p.replace(host_accel, HOST_GENERIC) if scalar else p
 
     out: list[str] = []
     i = 1  # argv[0] is the compiler name
@@ -265,6 +270,7 @@ def main() -> int:
     out_dir = cache / ("objs-O" if optimize else "objs")
     out_dir.mkdir(parents=True, exist_ok=True)
     opt = ["-O"] if optimize else []
+    host_accel = f"{HOST_INCLUDE}/{arch}"
 
     def compile_one(obj: str) -> tuple[str, str]:
         entry = by_out.get(os.path.normpath(obj))
@@ -274,14 +280,14 @@ def main() -> int:
         dst.parent.mkdir(parents=True, exist_ok=True)
         argv = entry.get("arguments") or shlex.split(entry["command"])
         src_file = portable_path(entry["file"], orig_build, build_dir, orig_src, src_dir)
-        # Retry a unit that needs <arm_neon.h> with the portable path selected.
+        # Retry a unit needing a host SIMD-intrinsics header on the portable path.
         for scalar in (False, True):
-            flags = transform(argv, glib_cflags, src_dir, build_dir, orig_build, orig_src, scalar)
+            flags = transform(argv, glib_cflags, src_dir, build_dir, orig_build, orig_src, scalar, host_accel)
             cmd = [str(badc), "--gnu", "-q", *opt, "-c", "-o", str(dst), *flags, src_file]
             r = subprocess.run(cmd, cwd=build_dir, capture_output=True, text=True)
             if r.returncode == 0:
                 return (obj, "ok")
-            if scalar or "arm_neon.h" not in r.stderr:
+            if scalar or not any(h in r.stderr for h in HOST_ACCEL_HEADERS):
                 last = r.stderr.strip().splitlines()[-1] if r.stderr.strip() else "?"
                 return (obj, f"fail: {last[:120]}")
         return (obj, "fail")

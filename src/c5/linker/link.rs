@@ -1492,6 +1492,7 @@ pub fn link_native_objects_with_shared_libs(
             &debug_abbrev_bases,
             &debug_line_bases,
             &debug_str_bases,
+            &defined,
         )?;
     }
     for (i, reloc) in debug_line_relocs.iter().enumerate() {
@@ -1514,6 +1515,7 @@ pub fn link_native_objects_with_shared_libs(
             &debug_abbrev_bases,
             &debug_line_bases,
             &debug_str_bases,
+            &defined,
         )?;
     }
 
@@ -1597,38 +1599,45 @@ fn resolve_debug_reloc(
     debug_abbrev_bases: &[usize],
     debug_line_bases: &[usize],
     debug_str_bases: &[usize],
+    defined: &BTreeMap<String, MergedSymbol>,
 ) -> Result<(), C5Error> {
     let patch_off = reloc.offset as usize;
-    let unit_target_base = match sym.section {
-        NativeSymSection::Text => text_bases[unit_idx] as u64,
-        NativeSymSection::DebugAbbrev => debug_abbrev_bases[unit_idx] as u64,
-        NativeSymSection::DebugLine => debug_line_bases[unit_idx] as u64,
-        NativeSymSection::DebugStr => debug_str_bases[unit_idx] as u64,
-        other => {
+    // Resolve the reloc's symbol to a merged offset, noting whether it lands
+    // in `.text` (whose runtime base the writer commits later) and whether it
+    // is resolvable at all. A same-unit symbol uses this unit's merged section
+    // base. An `Undef` symbol -- debug info from another toolchain naming an
+    // external symbol -- resolves through the global table: a text definition
+    // defers like any text reference; a data/bss definition or a true import
+    // has no debug-usable link-time address and is left null rather than
+    // aborting the link.
+    let (merged_value, in_text, resolvable) = match sym.section {
+        NativeSymSection::Text => (text_bases[unit_idx] as u64 + sym.value, true, true),
+        NativeSymSection::DebugAbbrev => {
+            (debug_abbrev_bases[unit_idx] as u64 + sym.value, false, true)
+        }
+        NativeSymSection::DebugLine => (debug_line_bases[unit_idx] as u64 + sym.value, false, true),
+        NativeSymSection::DebugStr => (debug_str_bases[unit_idx] as u64 + sym.value, false, true),
+        NativeSymSection::Undef => match defined.get(&sym.name) {
+            Some(m) if m.section == NativeSymSection::Text => (m.value, true, true),
+            _ => (0, false, false),
+        },
+        // A data/bss definition, an absolute symbol, or a common tentative has
+        // no deferred debug-address path here (badc emits only text- and
+        // debug-section-targeting debug relocs of its own). Leave the reference
+        // null rather than aborting the link on another toolchain's debug info.
+        _ => (0, false, false),
+    };
+    let resolved = merged_value.wrapping_add(reloc.addend as u64);
+    let width = match (machine, reloc.rtype) {
+        (NativeMachine::X86_64, R_X86_64_64) | (NativeMachine::Aarch64, R_AARCH64_ABS64) => 8u8,
+        (NativeMachine::X86_64, R_X86_64_32) | (NativeMachine::Aarch64, R_AARCH64_ABS32) => 4u8,
+        _ => {
             return Err(err(&format!(
-                "link_native_objects: DWARF reloc targets {other:?}; only Text / DebugAbbrev / \
-                 DebugLine / DebugStr are supported",
+                "link_native_objects: unsupported DWARF reloc type {} for {:?}",
+                reloc.rtype, machine,
             )));
         }
     };
-    let resolved = unit_target_base
-        .wrapping_add(sym.value)
-        .wrapping_add(reloc.addend as u64);
-    let (width, is_text_targeting) =
-        match (machine, reloc.rtype, sym.section) {
-            (NativeMachine::X86_64, R_X86_64_64, NativeSymSection::Text)
-            | (NativeMachine::Aarch64, R_AARCH64_ABS64, NativeSymSection::Text) => (8u8, true),
-            (NativeMachine::X86_64, R_X86_64_32, _)
-            | (NativeMachine::Aarch64, R_AARCH64_ABS32, _) => (4u8, false),
-            (NativeMachine::X86_64, R_X86_64_64, _)
-            | (NativeMachine::Aarch64, R_AARCH64_ABS64, _) => (8u8, false),
-            _ => {
-                return Err(err(&format!(
-                    "link_native_objects: unsupported DWARF reloc type {} for {:?}",
-                    reloc.rtype, machine,
-                )));
-            }
-        };
     let end = patch_off.checked_add(width as usize).ok_or_else(|| {
         err(&format!(
             "link_native_objects: DWARF reloc offset 0x{patch_off:x} + width {width} overflows",
@@ -1641,20 +1650,26 @@ fn resolve_debug_reloc(
             section_bytes.len(),
         )));
     }
-    if is_text_targeting {
-        // Stash the section-relative placeholder so the writer can
-        // patch once `.text`'s runtime address is committed.
+    if resolvable && in_text && width == 8 {
+        // A 64-bit text reference is a runtime address: stash the placeholder
+        // so the writer can patch once `.text`'s runtime base is committed.
         text_relocs_out.push(DebugTextReloc {
             byte_offset: patch_off as u64,
             merged_text_offset: resolved,
             width,
         });
-        // Leave the placeholder cleared so a writer that ignores
-        // `debug_*_text_relocs` produces deterministic bytes.
+        // Leave it cleared so a writer that ignores `debug_*_text_relocs`
+        // produces deterministic bytes.
         section_bytes[patch_off..end].fill(0);
-    } else {
+    } else if resolvable {
+        // A section-relative offset (debug-section cross-reference, or a
+        // 32-bit slot) is already final.
         let bytes = &resolved.to_le_bytes()[..width as usize];
         section_bytes[patch_off..end].copy_from_slice(bytes);
+    } else {
+        // Unresolvable external reference (data/bss definition or a dynamic
+        // import): no debug-usable link-time address, leave it null.
+        section_bytes[patch_off..end].fill(0);
     }
     Ok(())
 }
@@ -3148,5 +3163,87 @@ mod tests {
             .expect("compile");
         let bytes = emit_native_with_options(&program, target, opts).expect("emit");
         parse_native_elf(&bytes).expect("parse")
+    }
+
+    #[test]
+    fn debug_reloc_to_external_symbol_resolves_or_nulls() {
+        // Debug info from another toolchain (gcc -g) names symbols that are
+        // Undef in the referencing unit: a text symbol defined in another unit
+        // must defer to the merged text base; a symbol defined nowhere (a libc
+        // import) has no debug-usable link-time address and is nulled. Neither
+        // may abort the link.
+        use super::super::object::{NativeReloc, NativeSymbol};
+        let base = || NativeObject {
+            machine: NativeMachine::X86_64,
+            text: alloc::vec::Vec::new(),
+            data: alloc::vec::Vec::new(),
+            data_align: 1,
+            bss_size: 0,
+            tls_data: alloc::vec::Vec::new(),
+            tls_bss_size: 0,
+            symbols: alloc::vec::Vec::new(),
+            text_relocs: alloc::vec::Vec::new(),
+            data_relocs: alloc::vec::Vec::new(),
+            init_funcs: alloc::vec::Vec::new(),
+            dylibs: alloc::vec::Vec::new(),
+            import_dylib_map: alloc::vec::Vec::new(),
+            exports: alloc::vec::Vec::new(),
+            tls_index_fixups: alloc::vec::Vec::new(),
+            macho_tlv_descriptors: alloc::vec::Vec::new(),
+            macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
+            debug_info: alloc::vec::Vec::new(),
+            debug_abbrev: alloc::vec::Vec::new(),
+            debug_line: alloc::vec::Vec::new(),
+            debug_str: alloc::vec::Vec::new(),
+            debug_info_relocs: alloc::vec::Vec::new(),
+            debug_line_relocs: alloc::vec::Vec::new(),
+        };
+        let sym = |name: &str, section| NativeSymbol {
+            name: name.to_string(),
+            section,
+            value: 0,
+            size: 0,
+            binding: 1,
+            kind: 2,
+        };
+        // Unit B defines `ext_fn` in .text.
+        let mut b = base();
+        b.text = alloc::vec![0x90u8; 16];
+        b.symbols = alloc::vec![
+            sym("", NativeSymSection::Undef),
+            sym("ext_fn", NativeSymSection::Text),
+        ];
+        // Unit A's .debug_info holds three 64-bit references: to `ext_fn`
+        // (defined in B) at offset 0, to `libc_import` (defined nowhere) at
+        // offset 8, and to its own `.data` symbol at offset 16.
+        let mut a = base();
+        a.text = alloc::vec![0xC3u8; 8];
+        a.data = alloc::vec![0u8; 8];
+        a.symbols = alloc::vec![
+            sym("", NativeSymSection::Undef),
+            sym("ext_fn", NativeSymSection::Undef),
+            sym("libc_import", NativeSymSection::Undef),
+            sym("local_data", NativeSymSection::Data),
+        ];
+        a.debug_info = alloc::vec![0u8; 24];
+        a.debug_info_relocs = alloc::vec![
+            NativeReloc { offset: 0, sym_idx: 1, rtype: R_X86_64_64, addend: 0 },
+            NativeReloc { offset: 8, sym_idx: 2, rtype: R_X86_64_64, addend: 0 },
+            NativeReloc { offset: 16, sym_idx: 3, rtype: R_X86_64_64, addend: 0 },
+        ];
+        let merged =
+            link_native_objects(&[a, b]).expect("cross-unit debug reference must not ICE");
+        let ext_off = merged.defined.get("ext_fn").expect("ext_fn defined").value;
+        // Exactly one deferred text reloc -- the cross-unit function reference,
+        // pointing where `ext_fn` landed. The import and data references defer
+        // nothing and are left null in the merged section.
+        assert_eq!(merged.debug_info_text_relocs.len(), 1);
+        assert_eq!(merged.debug_info_text_relocs[0].byte_offset, 0);
+        assert_eq!(merged.debug_info_text_relocs[0].merged_text_offset, ext_off);
+        assert_eq!(&merged.debug_info[8..24], &[0u8; 16]);
     }
 }

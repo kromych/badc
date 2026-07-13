@@ -404,19 +404,24 @@ def main() -> int:
     # backtrace + faulting instruction pin it to a function rather than
     # guessing from the exit status alone.
     if v.returncode and v.returncode < 0 and _shutil.which("gdb"):
+        # __c5_run_init_array keeps the current slot pointer `fn` at
+        # [x29,#-8]; from frame 1 that names which constructor slot faulted
+        # and whether it is a lone null or a run of nulls. info proc mappings
+        # gives the load base so the slot's link-time index can be recovered.
         g = subprocess.run(
             ["gdb", "-batch", "-nx",
-             "-ex", "run", "-ex", "bt", "-ex", "info registers pc sp",
-             "-ex", "x/4i $pc",
-             "-ex", "print (void*)&__init_array_start",
-             "-ex", "print (void*)&__init_array_end",
-             "-ex", "x/16gx &__init_array_start",
+             "-ex", "run", "-ex", "bt", "-ex", "info registers pc sp x9",
+             "-ex", "up",
+             "-ex", "set $fn = *(unsigned long *)($x29 - 8)",
+             "-ex", "printf \"fn=0x%lx *fn=0x%lx\\n\", $fn, *(unsigned long *)$fn",
+             "-ex", "x/24gx ($fn - 64)",
+             "-ex", "info proc mappings",
              "--args", str(binp), "--version"],
             capture_output=True, text=True, timeout=180)
         bt = (g.stdout + g.stderr).strip()
         if bt:
             lines.append("  gdb:")
-            lines += [f"    {ln}" for ln in bt.splitlines()[:45]]
+            lines += [f"    {ln}" for ln in bt.splitlines()[:70]]
     if os.environ.get("BADC_QEMU_REQUIRE_RUN") == "1":
         fail("\n".join(lines))
     for line in lines:

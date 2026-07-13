@@ -681,6 +681,10 @@ const R_X86_64_PLT32: u32 = 4;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
+const R_AARCH64_LDST8_ABS_LO12_NC: u32 = 284;
+const R_AARCH64_LDST16_ABS_LO12_NC: u32 = 285;
+const R_AARCH64_LDST32_ABS_LO12_NC: u32 = 286;
+const R_AARCH64_LDST64_ABS_LO12_NC: u32 = 287;
 
 fn project_aarch64_pending(
     reloc: &super::link::PendingImportReloc,
@@ -689,10 +693,14 @@ fn project_aarch64_pending(
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
     match reloc.rtype {
-        R_AARCH64_ADD_ABS_LO12_NC => {
-            // The matching ADRP entry owns the fixup; patch_adrp_add
-            // writes both halves from one DataFixup / FuncFixup /
-            // GotFixup record.
+        R_AARCH64_ADD_ABS_LO12_NC
+        | R_AARCH64_LDST8_ABS_LO12_NC
+        | R_AARCH64_LDST16_ABS_LO12_NC
+        | R_AARCH64_LDST32_ABS_LO12_NC
+        | R_AARCH64_LDST64_ABS_LO12_NC => {
+            // The matching ADRP entry owns the fixup; patch_adrp_add writes
+            // both halves -- the `add` or the scaled load/store low-12 -- from
+            // one DataFixup / FuncFixup / GotFixup record.
             Ok(())
         }
         R_AARCH64_CALL26 => Err(synth_err(

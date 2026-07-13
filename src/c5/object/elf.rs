@@ -1283,10 +1283,10 @@ fn patch_adrp_add(
     let imm21 = (page_diff >> 12) as i32;
     let in_page = (target_vmaddr & 0xFFF) as u32;
 
-    // Recover the destination register encoded by the codegen at the
-    // placeholder site. adrp/add carry the rd in the low 5 bits; the
-    // add additionally carries rn in bits 5..10. Both registers match
-    // by construction (`adrp rd; add rd, rd, #imm`).
+    // Recover the registers the codegen (or another toolchain) encoded at the
+    // placeholder site. The adrp carries rd in the low 5 bits; the second
+    // instruction is either `add rd, rn, #lo12` or an unsigned-offset
+    // load/store (`ldr/str [rn, #:lo12:sym]`), patched in place below.
     let prev_adrp = u32::from_le_bytes([
         out[adrp_file_off],
         out[adrp_file_off + 1],
@@ -1300,12 +1300,31 @@ fn patch_adrp_add(
         out[add_file_off + 3],
     ]);
     let rd = (prev_adrp & 0x1F) as u8;
-    let add_rd = (prev_add & 0x1F) as u8;
-    let add_rn = ((prev_add >> 5) & 0x1F) as u8;
     let adrp_word = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    let add_word = aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page);
     out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-    out[add_file_off..add_file_off + 4].copy_from_slice(&add_word.to_le_bytes());
+
+    // ADD (immediate) takes the low 12 bits unscaled. An unsigned-offset
+    // load/store scales the immediate by the access size (2^size, size in bits
+    // 31..30), so its opcode is preserved and only imm12 (bits 21..10) is
+    // rewritten.
+    let second = if (prev_add & 0x7F80_0000) == 0x1100_0000 {
+        let add_rd = (prev_add & 0x1F) as u8;
+        let add_rn = ((prev_add >> 5) & 0x1F) as u8;
+        aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page)
+    } else if (prev_add & 0x3B00_0000) == 0x3900_0000 {
+        let scale = 1u32 << (prev_add >> 30);
+        if in_page % scale != 0 {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "ELF: {label} low-12 offset {in_page:#x} not aligned to load/store size {scale}"
+            ))));
+        }
+        (prev_add & !(0xFFF << 10)) | (((in_page / scale) & 0xFFF) << 10)
+    } else {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+            "ELF: {label} adrp paired with an unrecognized instruction {prev_add:#010x}"
+        ))));
+    };
+    out[add_file_off..add_file_off + 4].copy_from_slice(&second.to_le_bytes());
     Ok(())
 }
 
@@ -2951,6 +2970,32 @@ fn write_phdr(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn patch_adrp_add_scales_load_store_imm12() {
+        // `adrp x0, page ; ldrh w0, [x0, #:lo12:sym]`: the ldrh keeps its
+        // opcode and gets imm12 = low-12 offset scaled by the 2-byte access.
+        // An `add` in the same slot takes the low 12 unscaled.
+        let ldrh: u32 = 0x7940_0000; // ldrh w0, [x0]
+        let mut out = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
+        out.extend_from_slice(&ldrh.to_le_bytes());
+        // code at file offset 0, vmaddr 0x1000; target 0x2008 (in-page 8).
+        patch_adrp_add(&mut out, 0, 0x1000, 0, 0x2008, "test").unwrap();
+        let ldst = u32::from_le_bytes([out[4], out[5], out[6], out[7]]);
+        assert_eq!(
+            ldst & !(0xFFF << 10),
+            ldrh & !(0xFFF << 10),
+            "load/store opcode and registers preserved"
+        );
+        assert_eq!((ldst >> 10) & 0xFFF, 4, "imm12 = 8 / 2");
+
+        let addi = aarch64::enc_add_imm(aarch64::Reg(0), aarch64::Reg(0), 0);
+        let mut out2 = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
+        out2.extend_from_slice(&addi.to_le_bytes());
+        patch_adrp_add(&mut out2, 0, 0x1000, 0, 0x2008, "test").unwrap();
+        let add = u32::from_le_bytes([out2[4], out2[5], out2[6], out2[7]]);
+        assert_eq!((add >> 10) & 0xFFF, 8, "add imm12 unscaled");
+    }
 
     /// Smallest plausible Build that exercises the writer end to end.
     /// 8 bytes of code (movz x0, #42; ret), no fixups.

@@ -1304,6 +1304,20 @@ fn run() {
                 }
             }
         }
+        // Compiler-runtime helpers (a libgcc / compiler-rt subset) join the
+        // pool on demand, after the user's archives so a real libgcc on the
+        // link line wins. Source-level target gating leaves the object empty
+        // for a target that references none of them, so it is never pulled.
+        for (name, body) in badc::embedded_compiler_rt().iter() {
+            let bytes = compile_in_memory(&format!("<compiler-rt/{name}>"), body.to_string(), &[]);
+            match badc::parse_native_elf(&bytes) {
+                Ok(o) => pending.push((format!("<compiler-rt/{name}>"), o)),
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: <compiler-rt/{name}>: {e}"));
+                    std::process::exit(1);
+                }
+            }
+        }
         // C89 6.3.2.2 link semantics: a definition anywhere in the
         // link set satisfies an implicitly declared call, so a name
         // the auto-include retry bound to a header's library binding

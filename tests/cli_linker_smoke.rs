@@ -3034,3 +3034,93 @@ fn link_defined_symbol_wins_over_auto_included_binding() {
         "hi\n"
     );
 }
+
+// A program calling the GCC aarch64 outline-atomics helpers, one per op
+// family plus a 1-byte and a matching/non-matching compare-exchange.
+const OUTLINE_ATOMICS_SRC: &str = "\
+typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long u64;\n\
+extern u64 __aarch64_ldadd8_acq_rel(u64, u64*);\n\
+extern u32 __aarch64_ldclr4_acq_rel(u32, u32*);\n\
+extern u32 __aarch64_ldset4_acq_rel(u32, u32*);\n\
+extern u32 __aarch64_ldeor4_acq_rel(u32, u32*);\n\
+extern u32 __aarch64_swp4_acq_rel(u32, u32*);\n\
+extern u32 __aarch64_cas4_acq_rel(u32, u32, u32*);\n\
+extern u8  __aarch64_cas1_acq_rel(u8, u8, u8*);\n\
+int main(void){\n\
+    u64 a=100; if(__aarch64_ldadd8_acq_rel(7,&a)!=100||a!=107) return 1;\n\
+    u32 c=0xF0; if(__aarch64_ldclr4_acq_rel(0x30,&c)!=0xF0||c!=0xC0) return 2;\n\
+    u32 s=0x01; if(__aarch64_ldset4_acq_rel(0x30,&s)!=0x01||s!=0x31) return 3;\n\
+    u32 e=0xFF; if(__aarch64_ldeor4_acq_rel(0x0F,&e)!=0xFF||e!=0xF0) return 4;\n\
+    u32 w=5;    if(__aarch64_swp4_acq_rel(9,&w)!=5||w!=9) return 5;\n\
+    u32 k=5;    if(__aarch64_cas4_acq_rel(5,42,&k)!=5||k!=42) return 6;\n\
+    u32 j=5;    if(__aarch64_cas4_acq_rel(9,42,&j)!=5||j!=5) return 7;\n\
+    u8 b=3;     if(__aarch64_cas1_acq_rel(3,7,&b)!=3||b!=7) return 8;\n\
+    return 0;\n\
+}\n";
+
+// The aarch64 outline-atomics helpers are supplied on demand by the embedded
+// compiler-rt object, so a program that calls them cross-links for
+// linux-aarch64 with no external libgcc. badc reports an undefined reference
+// otherwise, so a clean link is proof the helpers resolved.
+#[cfg(target_os = "linux")]
+#[test]
+fn outline_atomics_resolve_on_demand() {
+    let dir = tempdir("outline-atomics-link");
+    let src = write_source(&dir, "m.c", OUTLINE_ATOMICS_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-aarch64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "cross-link outline-atomics for linux-aarch64",
+    );
+    assert!(exe.exists(), "linked executable should exist");
+
+    // A program that references none of the helpers must not pull the
+    // compiler-rt object: its symbols stay out of the image.
+    let plain = write_source(&dir, "p.c", "int main(void){return 0;}\n");
+    let pexe = dir.join("p");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-aarch64")
+            .arg("-o")
+            .arg(&pexe)
+            .arg(&plain)
+            .current_dir(&dir),
+        "cross-link plain program",
+    );
+    let bytes = std::fs::read(&pexe).expect("read plain exe");
+    let needle = b"__aarch64_ldadd8_acq_rel";
+    assert!(
+        !bytes.windows(needle.len()).any(|w| w == needle),
+        "plain program must not pull compiler-rt symbols"
+    );
+}
+
+// On an aarch64 host the produced binary runs directly, checking the atomic
+// semantics of every op family the helpers cover.
+#[cfg(target_arch = "aarch64")]
+#[test]
+fn outline_atomics_run_correct() {
+    let dir = tempdir("outline-atomics-run");
+    let src = write_source(&dir, "m.c", OUTLINE_ATOMICS_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "link outline-atomics for host",
+    );
+    let out = Command::new(&exe).output().expect("run outline-atomics");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "outline-atomics semantics: stderr={:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

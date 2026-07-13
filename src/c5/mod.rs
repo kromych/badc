@@ -60,7 +60,7 @@ pub use linker::{
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]
-pub use runtime::embedded_runtime;
+pub use runtime::{embedded_compiler_rt, embedded_runtime};
 #[cfg(feature = "full")]
 pub use symbol::Linkage;
 

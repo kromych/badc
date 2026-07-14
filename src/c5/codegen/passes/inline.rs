@@ -796,15 +796,34 @@ fn splice_multi_block(
         });
         let _ = prefix_id;
 
-        // Step 3: postfix block placeholder (filled after callee splices).
-        // We need its ID stable now so the callee's Return -> Jmp(postfix)
-        // points to it; emit insts + terminator below after the callee.
-        let postfix_block_slot = new_blocks.len();
+        // Step 3: postfix block (the splice block's insts after the call).
+        // Emitted here, in block-index order, so every block's inst_range
+        // tiles `new_insts` contiguously and ascending -- the invariant the
+        // flat splice and the liveness/reg-alloc value-id ordering rely on.
+        // The call result feeds these insts; its remap is set when the
+        // callee Return is spliced (Step 6) and resolves across the
+        // emission fixpoint, one forward-reference level per pass.
+        let postfix_start = new_insts.len() as u32;
+        for pc in (call_pc + 1)..splice_block.inst_range.end {
+            emit_caller_inst(
+                pc,
+                &mut new_insts,
+                &mut new_inst_src,
+                &mut new_f32,
+                &mut remap,
+                &original,
+            );
+        }
+        let postfix_term = match splice_block.terminator {
+            Terminator::FallThrough(b) => Terminator::Jmp(shift_caller_bid(b)),
+            other => map_terminator_caller(other, &remap),
+        };
+        let postfix_exit_acc = map_v(splice_block.exit_acc, &remap);
         new_blocks.push(Block {
             start_pc: 0,
-            inst_range: 0..0,
-            terminator: Terminator::Jmp(0),
-            exit_acc: NO_VALUE,
+            inst_range: postfix_start..new_insts.len() as u32,
+            terminator: postfix_term,
+            exit_acc: postfix_exit_acc,
         });
         let _ = postfix_id;
 
@@ -929,30 +948,6 @@ fn splice_multi_block(
                 exit_acc,
             });
         }
-
-        // Step 7: fill the postfix slot now that the call's remap is set.
-        let postfix_start = new_insts.len() as u32;
-        for pc in (call_pc + 1)..splice_block.inst_range.end {
-            emit_caller_inst(
-                pc,
-                &mut new_insts,
-                &mut new_inst_src,
-                &mut new_f32,
-                &mut remap,
-                &original,
-            );
-        }
-        let postfix_term = match splice_block.terminator {
-            Terminator::FallThrough(b) => Terminator::Jmp(shift_caller_bid(b)),
-            other => map_terminator_caller(other, &remap),
-        };
-        let postfix_exit_acc = map_v(splice_block.exit_acc, &remap);
-        new_blocks[postfix_block_slot] = Block {
-            start_pc: 0,
-            inst_range: postfix_start..new_insts.len() as u32,
-            terminator: postfix_term,
-            exit_acc: postfix_exit_acc,
-        };
 
         if remap == remap_before && callee_remap == callee_remap_before {
             break;
@@ -1311,76 +1306,92 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
         }
     }
 
-    if !any_change {
+    let has_multiblock_call = caller.blocks.iter().any(|b| {
+        (b.inst_range.start..b.inst_range.end).any(|pc| {
+            matches!(&caller.insts[pc as usize],
+                Inst::Call { target_pc, args, .. }
+                if callees.get(target_pc).is_some_and(|c| c.blocks.len() > 1
+                    && args.len() >= c.n_params))
+        })
+    });
+    if !any_change && !has_multiblock_call {
         return;
     }
 
-    let mut new_blocks: Vec<Block> = Vec::with_capacity(caller.blocks.len());
-    for (block_idx, block) in caller.blocks.iter().enumerate() {
-        let start = new_block_starts[block_idx];
-        let end = if block_idx + 1 < new_block_starts.len() {
-            new_block_starts[block_idx + 1]
-        } else {
-            new_insts.len() as u32
-        };
-        let mut term = block.terminator;
-        remap_terminator(&mut term, &remap);
-        let exit_acc = map_v(block.exit_acc, &remap);
-        new_blocks.push(Block {
-            start_pc: block.start_pc,
-            inst_range: start..end,
-            terminator: term,
-            exit_acc,
-        });
-    }
+    // Commit the flat single-block splice only when it inlined something.
+    // With no flat inline the fixpoint above ran a single pass and broke,
+    // so `new_insts` carries unresolved forward references (a loop
+    // back-edge phi's incoming value stays NO_VALUE); committing it would
+    // corrupt the caller. Leave the caller body untouched in that case and
+    // let the multi-block splice loop below operate on the original body.
+    if any_change {
+        let mut new_blocks: Vec<Block> = Vec::with_capacity(caller.blocks.len());
+        for (block_idx, block) in caller.blocks.iter().enumerate() {
+            let start = new_block_starts[block_idx];
+            let end = if block_idx + 1 < new_block_starts.len() {
+                new_block_starts[block_idx + 1]
+            } else {
+                new_insts.len() as u32
+            };
+            let mut term = block.terminator;
+            remap_terminator(&mut term, &remap);
+            let exit_acc = map_v(block.exit_acc, &remap);
+            new_blocks.push(Block {
+                start_pc: block.start_pc,
+                inst_range: start..end,
+                terminator: term,
+                exit_acc,
+            });
+        }
 
-    // Retarget extern-ref tables through the caller's remap. Drop
-    // entries whose old inst was an inlined call (remap may now point
-    // at a translated callee inst that's not the original Call).
-    let retarget = |refs: &Vec<(u32, u32)>, out: &mut Vec<(u32, u32, u32)>| {
-        for &(inst_idx, sym) in refs {
-            if (inst_idx as usize) < remap.len() {
-                let new_idx = remap[inst_idx as usize];
-                if new_idx != NO_VALUE
-                    && let Some(orig) = caller.insts.get(inst_idx as usize)
-                    && let Some(new) = new_insts.get(new_idx as usize)
-                    && core::mem::discriminant(orig) == core::mem::discriminant(new)
-                {
-                    out.push((inst_idx, new_idx, sym));
+        // Retarget extern-ref tables through the caller's remap. Drop
+        // entries whose old inst was an inlined call (remap may now point
+        // at a translated callee inst that's not the original Call).
+        let retarget = |refs: &Vec<(u32, u32)>, out: &mut Vec<(u32, u32, u32)>| {
+            for &(inst_idx, sym) in refs {
+                if (inst_idx as usize) < remap.len() {
+                    let new_idx = remap[inst_idx as usize];
+                    if new_idx != NO_VALUE
+                        && let Some(orig) = caller.insts.get(inst_idx as usize)
+                        && let Some(new) = new_insts.get(new_idx as usize)
+                        && core::mem::discriminant(orig) == core::mem::discriminant(new)
+                    {
+                        out.push((inst_idx, new_idx, sym));
+                    }
                 }
             }
-        }
-    };
-    retarget(&caller.extern_call_refs, &mut extern_call_remap);
-    retarget(&caller.extern_imm_code_refs, &mut extern_imm_code_remap);
-    retarget(&caller.extern_imm_data_refs, &mut extern_imm_data_remap);
-    retarget(&caller.extern_tls_refs, &mut extern_tls_remap);
+        };
+        retarget(&caller.extern_call_refs, &mut extern_call_remap);
+        retarget(&caller.extern_imm_code_refs, &mut extern_imm_code_remap);
+        retarget(&caller.extern_imm_data_refs, &mut extern_imm_data_remap);
+        retarget(&caller.extern_tls_refs, &mut extern_tls_remap);
 
-    caller.insts = new_insts;
-    caller.inst_src = new_inst_src;
-    caller.f32_values = new_f32;
-    caller.blocks = new_blocks;
-    caller.extern_call_refs = extern_call_remap.iter().map(|(_, n, s)| (*n, *s)).collect();
-    caller.extern_imm_code_refs = extern_imm_code_remap
-        .iter()
-        .map(|(_, n, s)| (*n, *s))
-        .collect();
-    caller.extern_imm_data_refs = extern_imm_data_remap
-        .iter()
-        .map(|(_, n, s)| (*n, *s))
-        .collect();
-    caller.extern_tls_refs = extern_tls_remap.iter().map(|(_, n, s)| (*n, *s)).collect();
+        caller.insts = new_insts;
+        caller.inst_src = new_inst_src;
+        caller.f32_values = new_f32;
+        caller.blocks = new_blocks;
+        caller.extern_call_refs = extern_call_remap.iter().map(|(_, n, s)| (*n, *s)).collect();
+        caller.extern_imm_code_refs = extern_imm_code_remap
+            .iter()
+            .map(|(_, n, s)| (*n, *s))
+            .collect();
+        caller.extern_imm_data_refs = extern_imm_data_remap
+            .iter()
+            .map(|(_, n, s)| (*n, *s))
+            .collect();
+        caller.extern_tls_refs = extern_tls_remap.iter().map(|(_, n, s)| (*n, *s)).collect();
 
-    // Append the symbol references carried from spliced callee insts.
-    caller
-        .extern_imm_data_refs
-        .extend(spliced_data_refs.iter().copied());
-    caller
-        .extern_imm_code_refs
-        .extend(spliced_code_refs.iter().copied());
-    caller
-        .extern_tls_refs
-        .extend(spliced_tls_refs.iter().copied());
+        // Append the symbol references carried from spliced callee insts.
+        caller
+            .extern_imm_data_refs
+            .extend(spliced_data_refs.iter().copied());
+        caller
+            .extern_imm_code_refs
+            .extend(spliced_code_refs.iter().copied());
+        caller
+            .extern_tls_refs
+            .extend(spliced_tls_refs.iter().copied());
+    }
 
     // Single-block flat splice complete. Now find any remaining
     // multi-block inlinable Call sites and apply the multi-block
@@ -1422,6 +1433,15 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
         let Some((b_idx, pc, callee, args)) = hit else {
             break;
         };
+        #[cfg(feature = "codegen_test")]
+        if std::env::var("BADC_LOG_INLINE").is_ok() {
+            eprintln!(
+                "[inline] MULTIBLOCK splice callee={cn} ({cb} blks) into caller={n}",
+                cn = callee.name,
+                cb = callee.blocks.len(),
+                n = caller.name
+            );
+        }
         splice_multi_block(caller, callee, b_idx, pc, &args);
         steps += 1;
     }

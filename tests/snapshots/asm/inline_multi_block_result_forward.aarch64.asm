@@ -27,14 +27,14 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	lsl	x1, x1, #1
                	sxtw	x2, w1
-               	sxtw	x1, w2
-               	add	x2, x0, x0
+               	sxtw	x2, w2
+               	add	x1, x0, x0
                	cmp	x0, #0x3
                	b.le	<addr>
-               	sxtw	x0, w1
+               	sxtw	x0, w2
                	sxtw	x0, w0
                	ret
-               	add	x0, x1, x2
+               	add	x0, x2, x1
                	sxtw	x1, w0
                	sxtw	x0, w1
                	ret

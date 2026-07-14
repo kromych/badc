@@ -19,12 +19,8 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x7, %edi
-               	callq	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	popq	%rbp
+               	movl	$0x54, %eax
                	retq
+               	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

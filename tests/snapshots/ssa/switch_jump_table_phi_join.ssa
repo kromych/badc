@@ -132,8 +132,6 @@ fn ent_pc=0 n_params=3 variadic=false locals=2
     v78  Imm(17)                                          -> x2
     v79  Imm(0)                                           -> x0
     terminator Jmp(b12)   (exit_acc=v78)
-  block 25  start_pc=0
-    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=8

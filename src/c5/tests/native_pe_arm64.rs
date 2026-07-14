@@ -737,6 +737,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("switch_nested_case_in_compound.c", 0),
     ("switch_jump_table_dense.c", 0),
     ("switch_jump_table_sparse_kept.c", 0),
+    ("switch_jumptable_dead_branch_prune.c", 12),
     ("switch_jump_table_phi_join.c", 0),
     ("ternary_middle_comma.c", 0),
     ("local_init_int_to_float.c", 0),

@@ -68,7 +68,6 @@ Disassembly of section .text:
                	mov	x1, #0xd                // =13
                	mov	x2, #0x11               // =17
                	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x20, x21, [sp, #-0x30]!

@@ -72,9 +72,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x10               // =16
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
 
 <dense_negative_bias>:
                	add	x0, x0, #0x6
@@ -116,9 +113,6 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
 
 <dense_unsigned_high>:
                	mov	w0, w0
@@ -166,9 +160,6 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ret
-               	mov	x0, #0x0                // =0
-               	ret
-               	b	<addr>
 
 <main>:
                	stp	x20, x21, [sp, #-0x20]!

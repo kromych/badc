@@ -440,6 +440,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("switch_binary_search.c", 0),
     ("switch_jump_table_dense.c", 0),
     ("switch_jump_table_sparse_kept.c", 0),
+    ("switch_jumptable_dead_branch_prune.c", 12),
     ("switch_jump_table_phi_join.c", 0),
     ("switch_case_label_promoted.c", 0),
     ("int_literal_boundary_types.c", 0),

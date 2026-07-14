@@ -63,11 +63,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 18  start_pc=0
     v21  Imm(16)                                          -> x0
     terminator Return(v21)   (exit_acc=v21)
-  block 19  start_pc=0
-    v23  Imm(0)                                           -> x0
-    terminator Return(v23)   (exit_acc=v23)
-  block 20  start_pc=0
-    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=dense_negative_bias
 fn ent_pc=1 n_params=1 variadic=false locals=0
@@ -112,11 +107,6 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
   block 11  start_pc=0
     v15  Imm(-1)                                          -> x0
     terminator Return(v15)   (exit_acc=v15)
-  block 12  start_pc=0
-    v16  Imm(0)                                           -> x0
-    terminator Return(v16)   (exit_acc=v16)
-  block 13  start_pc=0
-    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=dense_unsigned_high
 fn ent_pc=2 n_params=1 variadic=false locals=0
@@ -164,11 +154,6 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
   block 12  start_pc=0
     v16  Imm(-1)                                          -> x0
     terminator Return(v16)   (exit_acc=v16)
-  block 13  start_pc=0
-    v17  Imm(0)                                           -> x0
-    terminator Return(v17)   (exit_acc=v17)
-  block 14  start_pc=0
-    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=6

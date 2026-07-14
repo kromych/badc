@@ -352,6 +352,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("switch_binary_search.c", 0),
     ("switch_jump_table_dense.c", 0),
     ("switch_jump_table_sparse_kept.c", 0),
+    ("switch_jumptable_dead_branch_prune.c", 12),
     ("switch_jump_table_phi_join.c", 0),
     ("branch_relaxation.c", 21),
     ("float_register_resident.c", 45),

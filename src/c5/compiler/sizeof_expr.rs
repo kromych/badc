@@ -362,6 +362,19 @@ impl Compiler {
         Ok(())
     }
 
+    /// GCC `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
+    /// operand folds to a constant expression, else 0. The operand is
+    /// not evaluated (no emission), so this yields a plain integer
+    /// constant like the `__builtin_types_compatible_p` result.
+    pub(super) fn parse_constant_p_builtin(&mut self) -> Result<(), C5Error> {
+        // The call dispatch consumed `__builtin_constant_p (`.
+        let v = self.eval_constant_p_operand()?;
+        self.emit_imm(v);
+        self.ty = Ty::Int as i64;
+        self.ast_emit_int_lit(v, self.ty);
+        Ok(())
+    }
+
     /// C11 6.5.3.4: `_Alignof ( type-name )`. The operand is always a
     /// parenthesized type name (an expression operand is a constraint
     /// violation), so the dual operand-shape dispatch `sizeof` needs is

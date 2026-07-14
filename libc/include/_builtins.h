@@ -8,8 +8,7 @@
 //     so the thunk forwards to it; the library name then resolves
 //     through its own header (auto-included on demand).
 //   * Hints with no code-generation effect: the value of
-//     `__builtin_expect` is its first operand, `__builtin_constant_p`
-//     conservatively reports "not a constant", and `__builtin_prefetch`
+//     `__builtin_expect` is its first operand and `__builtin_prefetch`
 //     is discarded.
 //
 // The genuine code-generation builtins (`__builtin_clz`, the byte-swap
@@ -21,7 +20,6 @@
 #pragma once
 
 #define __builtin_expect(exp, c) (exp)
-#define __builtin_constant_p(x) 0
 #define __builtin_prefetch(...) ((void) 0)
 #define __builtin_assume_aligned(p, ...) (p)
 // GCC exposes the infinity / NaN constants as builtins. The double form
@@ -40,9 +38,12 @@
 // targets carry no flag bits in the return address, so both are identity.
 #define __builtin_extract_return_addr(a) (a)
 #define __builtin_frob_return_addr(a) (a)
-// `__builtin_choose_expr` is a first-class builtin: the chosen operand
-// IS the expression, keeping its exact type (a `?:` rewrite would apply
-// the usual arithmetic conversions and widen, e.g., a chosen `bool`).
+// `__builtin_choose_expr` and `__builtin_constant_p` are first-class
+// builtins handled by the compiler: the chosen `choose_expr` operand IS
+// the expression, keeping its exact type (a `?:` rewrite would apply the
+// usual arithmetic conversions and widen, e.g., a chosen `bool`);
+// `constant_p` folds to 1 when its unevaluated operand is a constant
+// expression, else 0.
 
 #define __builtin_memcpy memcpy
 #define __builtin_memmove memmove

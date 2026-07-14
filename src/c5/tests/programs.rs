@@ -3880,8 +3880,8 @@ fn builtin_object_size() {
 fn bool_bitfield_zero_extends() {
     // C99 6.2.5p2: a `_Bool` bitfield is unsigned even at width 1, so
     // a set bit reads back as 1, not the -1 a signed 1-bit field
-    // yields. The wrong sign made `64 - 8 * param.tbi` overshoot in
-    // the AArch64 LPAE page-table walker.
+    // yields. The wrong sign made an expression like `64 - 8 * flag`
+    // overshoot when a `_Bool` bitfield feeds integer arithmetic.
     assert_eq!(run_fixture("bool_bitfield_zero_extends.c"), 0);
 }
 
@@ -3926,6 +3926,16 @@ fn builtin_choose_expr() {
     // `__builtin_choose_expr` keeps the chosen operand's exact type
     // (no `?:` conversions) and never evaluates the other operand.
     assert_eq!(run_fixture("builtin_choose_expr.c"), 0);
+}
+
+#[test]
+fn builtin_constant_p() {
+    // `__builtin_constant_p(x)` folds to 1 for a constant operand and 0
+    // for a runtime one, in both constant-expression and runtime
+    // contexts. Locks the `__builtin_constant_p`-guarded min/max macro
+    // idiom so a stubbed always-0 form can't silently collapse it to
+    // the fallback arm.
+    assert_eq!(run_fixture("builtin_constant_p.c"), 0);
 }
 
 // GCC extended inline asm with operand lists (x86_64 register-operand

@@ -374,6 +374,29 @@ impl Compiler {
         }
     }
 
+    /// Evaluate a `__builtin_constant_p(x)` operand: 1 when `x` folds to
+    /// a constant expression, else 0. On entry the opening `(` is
+    /// consumed and the current token is the operand's first; on return
+    /// the closing `)` is consumed. The operand is unevaluated (GCC does
+    /// not emit it), so the fold attempt is discarded and the lexer is
+    /// repositioned past the operand regardless of the outcome; a
+    /// non-constant operand -- including one that would error as a
+    /// constant expression -- reports 0 rather than propagating.
+    pub(super) fn eval_constant_p_operand(&mut self) -> Result<i64, C5Error> {
+        let snap = self.lex.snapshot();
+        let saved_nonconst = self.pending.const_expr_nonconst;
+        self.pending.const_expr_nonconst = false;
+        let is_const = self.parse_const_expr_cond_val().is_ok();
+        self.pending.const_expr_nonconst = saved_nonconst;
+        self.lex.restore(snap);
+        self.skip_balanced_to_comma()?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected to close `__builtin_constant_p`"));
+        }
+        self.next()?;
+        Ok(if is_const { 1 } else { 0 })
+    }
+
     /// Parse a C11 6.7.10 `_Static_assert(<const-int-expr>,
     /// "<string-literal>");` (or its C23 `static_assert` alias).
     /// On entry the current token is `Token::StaticAssert`. The
@@ -845,6 +868,22 @@ impl Compiler {
                 self.next()?;
             }
             return Ok(v);
+        }
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].name == "__builtin_constant_p"
+        {
+            // GCC `__builtin_constant_p(x)` is an integer constant
+            // expression (0 or 1): 1 when the unevaluated operand folds
+            // to a constant. Usable here so a compile-time min/max idiom
+            // -- `__builtin_choose_expr(__builtin_constant_p(a) &&
+            // __builtin_constant_p(b), ...)` -- selects its constant arm.
+            self.next()?;
+            if self.lex.tk != '(' {
+                return Err(self.compile_err("`(` expected after `__builtin_constant_p`"));
+            }
+            self.next()?;
+            let v = self.eval_constant_p_operand()?;
+            return Ok(ConstVal::int(v));
         }
         if self.lex.tk == Token::BuiltinOffsetof {
             // GCC `__builtin_offsetof(T, member)` is an integer constant

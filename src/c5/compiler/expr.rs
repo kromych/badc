@@ -738,8 +738,14 @@ impl Compiler {
                 // expression, with its exact type.
                 let is_choose_expr =
                     not_real_fn && self.symbols[id_idx].name == "__builtin_choose_expr";
+                // GCC `__builtin_constant_p(x)`: an `int` (0 or 1), 1 when
+                // the unevaluated operand folds to a constant expression.
+                let is_constant_p =
+                    not_real_fn && self.symbols[id_idx].name == "__builtin_constant_p";
                 if is_choose_expr {
                     self.parse_choose_expr_builtin()?;
+                } else if is_constant_p {
+                    self.parse_constant_p_builtin()?;
                 } else if is_object_size {
                     self.parse_object_size_builtin()?;
                 } else if is_overflow {
@@ -4228,8 +4234,8 @@ impl Compiler {
         // C99 6.7.6.2: an array type and a pointer type are never
         // compatible, even when the element / pointee coincide -- the flat
         // type collapses both to the element pointer, so distinguish them
-        // by the array flag `typeof` recorded (this is what QEMU_IS_ARRAY
-        // and ARRAY_SIZE rely on).
+        // by the array flag `typeof` recorded (the array-vs-pointer
+        // distinction a compile-time element-count macro depends on).
         Ok((generic_type_match(a, b) && a_array == b_array) as i64)
     }
 

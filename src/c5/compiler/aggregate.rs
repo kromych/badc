@@ -535,12 +535,23 @@ impl Compiler {
                 self.pending.base_is_function_type = base_field_is_function_type;
                 self.pending.typedef_fn_proto = base_field_typedef_fn_proto;
                 self.pending.fn_ptr_param_types = base_field_fn_ptr_param_types.clone();
+                // Confine `packed` to this declarator: a member-level
+                // `__attribute__((packed))` (trailing the declarator, so
+                // consumed inside `parse_declarator` or just below) sets
+                // `pending.attr_packed`; a base-type or type-level packed
+                // must not carry over to the field's own placement.
+                self.pending.attr_packed = false;
                 let (id_idx, mut field_ty, mut field_array_size) =
                     self.parse_declarator(field_base)?;
                 // A member may carry a trailing attribute
                 // (`int x __attribute__((aligned(16)));`,
-                // `int x __attribute__((deprecated));`).
+                // `int x __attribute__((deprecated));`). Member-level
+                // `packed` clamps this field's alignment to 1 (GCC: it
+                // both removes the field's leading padding and keeps it
+                // from raising the aggregate's alignment), independent of
+                // a struct-level `packed`.
                 self.skip_attribute_specifiers()?;
+                let field_packed = core::mem::take(&mut self.pending.attr_packed);
                 let m_align = core::mem::take(&mut self.pending.attr_align);
                 if m_align > 16 {
                     return Err(self.compile_err(format!(
@@ -699,7 +710,11 @@ impl Compiler {
                     // value via [`Lexer::current_pack`]; default is
                     // 8 (no-op) so unpacked structs lay out exactly
                     // as before.
-                    let pack = if packed { 1 } else { self.lex.current_pack() };
+                    let pack = if packed || field_packed {
+                        1
+                    } else {
+                        self.lex.current_pack()
+                    };
                     let elem_size = self.size_of_type(field_ty);
                     // A complete but empty `struct {}` member contributes no
                     // storage and no alignment (GCC): the following member

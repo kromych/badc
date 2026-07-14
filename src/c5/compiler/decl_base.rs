@@ -606,6 +606,9 @@ impl Compiler {
         if align > 0 {
             self.pending.attr_align = self.pending.attr_align.max(align);
         }
+        if packed {
+            self.pending.attr_packed = true;
+        }
         if vector_size > 0 {
             self.pending.attr_vector_size = vector_size;
         }

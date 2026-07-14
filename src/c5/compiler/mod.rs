@@ -688,6 +688,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// honor up to 16, anything larger (or an automatic object above
     /// the 8-byte slot alignment) is a diagnostic, never silent.
     pub attr_align: i64,
+    /// `__attribute__((packed))` seen on the declarator being parsed.
+    /// A struct member takes it to clamp that field's alignment to 1
+    /// (GCC member-level packed), independent of a struct-level `packed`.
+    /// Recorded here because the trailing member attribute is consumed
+    /// inside the declarator parse, not by the aggregate field loop.
+    pub attr_packed: bool,
     /// `__attribute__((vector_size(N)))` byte width, 0 when absent. The base
     /// type of the declaration is rebuilt into a GCC vector type of `N /
     /// sizeof(element)` lanes (modeled as an N-byte aggregate).
@@ -759,6 +765,7 @@ impl Default for Pending {
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
             attr_align: 0,
+            attr_packed: false,
             attr_vector_size: 0,
             attr_thread_local: false,
             attr_dllexport: false,

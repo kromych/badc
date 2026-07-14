@@ -928,6 +928,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
     ("packed_anon_union_layout.c", 0),
+    ("packed_member_alignment.c", 0),
     ("builtin_trap.c", 0),
     ("struct_multi_byval.c", 0),
     ("struct_arg_two_eightbyte.c", 0),

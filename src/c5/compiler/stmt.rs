@@ -388,8 +388,8 @@ impl Compiler {
             return Ok(());
         }
         // A `__attribute__((cleanup(fn)))` written before the type applies to
-        // every declarator in the list (the glib `g_auto*` / `QEMU_LOCK_GUARD`
-        // form); one written after a declarator applies to it alone.
+        // every declarator in the list (the scope-guard / auto-cleanup
+        // idiom); one written after a declarator applies to it alone.
         let leading_cleanup = self.pending.attr_cleanup.take();
         while self.lex.tk != ';' {
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
@@ -659,7 +659,7 @@ impl Compiler {
     /// stack temporary and return an lvalue-ident that reloads it. Used
     /// so a `return <expr>;` under an active cleanup evaluates the value
     /// before the cleanup functions run (C's scope-exit order): e.g.
-    /// `return g_strdup(s)` copies before a `g_autofree s` is freed.
+    /// `return dup(s)` copies before a scope-guarded local `s` is freed.
     fn spill_expr_to_temp(
         &mut self,
         value: super::super::ast::ExprId,

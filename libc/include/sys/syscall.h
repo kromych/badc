@@ -1,8 +1,8 @@
 #pragma once
 
 // Linux syscall numbers. The set is architecture-specific; only the
-// numbers reached for by the bundled demos and by QEMU's core threading /
-// util layer (via <sys/syscall.h>) are listed. glibc exposes both the
+// numbers reached for by the bundled demos and their threading / utility
+// code (via <sys/syscall.h>) are listed. glibc exposes both the
 // kernel __NR_<name> and the SYS_<name> alias (SYS_x == __NR_x); code uses
 // either, so both are provided. Values verified against the aarch64 and
 // x86_64 kernel uapi headers.

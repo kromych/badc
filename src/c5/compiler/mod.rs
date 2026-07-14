@@ -710,8 +710,8 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__attribute__((cleanup(fn)))`: the symbol index of the
     /// cleanup function. Read where a local is bound to register a call to
     /// `fn(&var)` at every exit from the variable's scope (C99 has no such
-    /// feature; this is the GCC/Clang extension glib `g_auto*` and the
-    /// `QEMU_LOCK_GUARD` family rely on).
+    /// feature; this is the GCC/Clang extension that scope-guard and
+    /// auto-cleanup idioms rely on).
     pub attr_cleanup: Option<usize>,
 }
 

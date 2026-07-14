@@ -3410,7 +3410,7 @@ mod tests {
 
     #[test]
     fn got_data_load_rewrites_lea_to_mov_against_slot() {
-        // A data import (e.g. glib's `g_ascii_table`) is referenced as a
+        // A data import (a shared-library data object, STT_OBJECT) is referenced as a
         // load of its address from the GOT slot. GOT relaxation leaves a
         // `lea rax, [rip+disp32]` (48 8D 05 ..); the writer must flip it to
         // `mov rax, [rip+disp32]` (48 8B 05 ..) loading the slot, preserving

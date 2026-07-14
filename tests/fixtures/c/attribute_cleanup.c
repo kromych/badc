@@ -3,7 +3,7 @@
 // return, break, continue -- fn(&var) runs, in reverse declaration
 // order within a scope and innermost scope first. A returned value is
 // evaluated before the cleanups run, so it observes the pre-cleanup
-// state (the guarantee glib g_auto* and lock guards rely on).
+// state (the guarantee scope-guard and auto-cleanup idioms rely on).
 
 static int events[64];
 static int ne;

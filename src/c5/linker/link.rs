@@ -95,7 +95,7 @@ pub struct MergedNative {
     /// Data-initializer slots that hold the address of an imported
     /// function: `(slot_data_offset, import_index)`. A function-pointer
     /// table entry naming a shared-library symbol (`static freefn t =
-    /// g_free;`) resolves to that import's PLT stub -- a valid function
+    /// free;`) resolves to that import's PLT stub -- a valid function
     /// pointer. The PLT pass creates the stub (even for an import
     /// referenced only from data) and turns each entry into a
     /// `Text`-target [`DataAbsReloc`] against the stub, so the PIE
@@ -917,9 +917,9 @@ pub fn link_native_objects_with_shared_libs(
                         // symbol lives in a dylib. Admit it as a flat import
                         // so the writer binds the host symbol through the GOT,
                         // rather than rejecting it as unresolved.
-                        // A shared library's data object (`g_ascii_table`)
-                        // is a data import too: its reference reaches the
-                        // object through the GOT, never a PLT stub.
+                        // A shared library's data object (a STT_OBJECT
+                        // export) is a data import too: its reference reaches
+                        // the object through the GOT, never a PLT stub.
                         let is_data_binding = data_binding_locals.contains(&sym.name)
                             || shlib_data_exports.contains(sym.name.as_str());
                         // STB_WEAK = 2. An unresolved weak reference with
@@ -1191,7 +1191,7 @@ pub fn link_native_objects_with_shared_libs(
                         }
                         // A data initializer naming an imported function
                         // (a function-pointer table entry, e.g.
-                        // `static freefn t = g_free;`). Route it to the
+                        // `static freefn t = free;`). Route it to the
                         // import's PLT stub -- a valid function pointer --
                         // recorded for the PLT pass to resolve.
                         None if shlib_exports.contains(sym.name.as_str())
@@ -2418,8 +2418,8 @@ mod tests {
     #[test]
     fn shared_library_data_object_resolves_as_data_import() {
         // A reference to a shared library's data object (a `STT_OBJECT`
-        // export, e.g. glib's `g_ascii_table`) must resolve to the
-        // object's address through the GOT -- a data import -- not to a
+        // export) must resolve to the object's address through the GOT --
+        // a data import -- not to a
         // PLT stub, whose bytes are code. The `data_exports` set drives
         // this: it routes the reference like a `#pragma binding(data ...)`
         // local so the PLT pass skips a call stub for it.
@@ -2487,8 +2487,9 @@ mod tests {
     }
 
     /// A file-scope function-pointer table entry naming a shared-library
-    /// import (`static fn t = ext_fn;`, the qemu TypeInfo shape) links
-    /// instead of erroring, and the PLT pass turns the data slot into a
+    /// import (`static fn t = ext_fn;`, an address-of-import static
+    /// initializer) links instead of erroring, and the PLT pass turns the
+    /// data slot into a
     /// stub-targeting DataAbsReloc so the slot holds a valid pointer.
     #[test]
     fn shared_library_function_pointer_in_data_resolves_via_stub() {

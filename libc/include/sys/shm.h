@@ -1,7 +1,7 @@
 // sys/shm.h -- System V shared memory. Declared so headers that include it
-// unconditionally (e.g. QEMU's osdep.h) resolve; the segment calls bind to
-// libc. Constants that reach the host libc diverge per platform and are
-// guarded accordingly.
+// unconditionally (e.g. a platform-portability header) resolve; the segment
+// calls bind to libc. Constants that reach the host libc diverge per platform
+// and are guarded accordingly.
 
 #pragma once
 

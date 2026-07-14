@@ -180,7 +180,7 @@ impl Compiler {
             return Ok(());
         }
         // `__attribute__((cleanup(fn)))` leading the declaration applies to
-        // every declarator (the glib `g_auto*` / `QEMU_LOCK_GUARD` form).
+        // every declarator (the scope-guard / auto-cleanup idiom).
         let leading_cleanup = self.pending.attr_cleanup.take();
         while self.lex.tk != ';' {
             // Re-seed the base type's function-pointer lineage for this

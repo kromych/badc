@@ -250,11 +250,11 @@ pub(crate) fn read_dynamic_symbol_names(bytes: &[u8]) -> Result<Vec<String>, C5E
 pub struct SharedLibrary {
     pub soname: String,
     pub exports: alloc::collections::BTreeSet<String>,
-    /// The subset of `exports` that are data objects (`STT_OBJECT`, e.g.
-    /// glib's `g_ascii_table`) rather than functions. A reference to one
-    /// must resolve to the object's address through the GOT, not to a
-    /// PLT stub -- a stub's bytes are code, so reading the "object"
-    /// through it returns instructions.
+    /// The subset of `exports` that are data objects (`STT_OBJECT`)
+    /// rather than functions. A reference to one must resolve to the
+    /// object's address through the GOT, not to a PLT stub -- a stub's
+    /// bytes are code, so reading the "object" through it returns
+    /// instructions.
     pub data_exports: alloc::collections::BTreeSet<String>,
 }
 

@@ -2573,9 +2573,9 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
 /// defined in the low byte per the psABI; a caller that tests the full
 /// return register (`!f()` / `if (f())`) must mask to the low byte
 /// first, or garbage high bits (e.g. a gcc `sete %al` with no
-/// zero-extend) make the branch go the wrong way. Regression for the
-/// AArch64 TCG wake path where `!qemu_cpu_is_self(cpu)` skipped the
-/// vCPU kick.
+/// zero-extend) make the branch go the wrong way. Regression for a
+/// cross-unit `_Bool`-returning call whose `!f()` test took the wrong
+/// branch on garbage high bits.
 #[test]
 fn external_bool_return_is_masked_before_branch() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};

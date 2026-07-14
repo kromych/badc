@@ -21,7 +21,7 @@ int main(void) {
     f.u = 1;
     if (f.a != 1) return 1;
     if (f.b != 0) return 2;
-    /* the shape that broke qemu's LPAE walker: 64 - 8 * bool */
+    /* arithmetic shape that overshoots with a wrong-signed field: 64 - 8 * bool */
     if (64 - 8 * f.a != 56) return 3;
     if (f.a && !f.b) {
         /* ok */

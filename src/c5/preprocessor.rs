@@ -392,7 +392,7 @@ impl Preprocessor {
     ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
-        let fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
         // GCC bit-count / byte-swap builtins are available with no header
         // (they are compiler builtins, not library functions), matching
         // gcc/clang. The call-site lowering in the walker expands each to a
@@ -525,6 +525,23 @@ impl Preprocessor {
         // `#ifdef __LITTLE_ENDIAN__` directly rather than comparing
         // `__BYTE_ORDER__`. `__BIG_ENDIAN__` stays undefined.
         macros.insert("__LITTLE_ENDIAN__".to_string(), "1".to_string());
+        // `__counted_by(m)` and its endian variants annotate a flexible
+        // array member with its element-count field (a bounds hint, GCC 15 /
+        // Clang). badc does not implement the attribute; predefine the macros
+        // empty, the same fallback the kernel UAPI headers use when the
+        // compiler lacks it (`__has_attribute(counted_by)` is likewise 0), so
+        // a header that reaches for them without its own guard still compiles.
+        for name in ["__counted_by", "__counted_by_le", "__counted_by_be"] {
+            fn_macros.insert(
+                name.to_string(),
+                FnMacro {
+                    params: alloc::vec!["m".to_string()],
+                    body: String::new(),
+                    is_variadic: false,
+                    va_name: None,
+                },
+            );
+        }
         // C11 6.10.8.3 conditional-feature macros. An implementation that
         // reports `__STDC_VERSION__ == 201112L` defines each of these for an
         // optional feature it does not provide; library code gates on them
@@ -6697,6 +6714,25 @@ int x_2 = __COUNTER__;
             "expected a warning naming `#frobnicate`; got {:?}",
             pp.warnings
         );
+    }
+
+    #[test]
+    fn counted_by_predefined_empty() {
+        // `__counted_by(m)` and its endian variants annotate a flexible array
+        // member with its count field (a bounds hint, GCC 15 / Clang). badc
+        // does not implement the attribute; the macros are predefined empty
+        // (the kernel UAPI fallback for a compiler without it), so a header
+        // reaching for them without its own guard still compiles.
+        for macro_name in ["__counted_by", "__counted_by_le", "__counted_by_be"] {
+            let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+            let src = format!("struct s {{ unsigned n; int a[] {macro_name}(n); }};\n");
+            let out = pp.process(&src).expect("preprocessor failed");
+            assert!(out.contains("int a[]"), "{out}");
+            assert!(
+                !out.contains(macro_name),
+                "{macro_name} should expand away: {out}"
+            );
+        }
     }
 
     #[test]

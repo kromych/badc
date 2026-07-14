@@ -16,9 +16,18 @@
 #ifdef __APPLE__
 #define MAP_ANON      0x1000
 #define MAP_ANONYMOUS 0x1000
+#define MAP_NORESERVE 0x40
 #else
 #define MAP_ANON      0x20
 #define MAP_ANONYMOUS 0x20
+// Linux (asm-generic/mman-common.h + mman.h) placement flags.
+#define MAP_GROWSDOWN 0x0100
+#define MAP_LOCKED    0x2000
+#define MAP_NORESERVE 0x4000
+#define MAP_POPULATE  0x8000
+#define MAP_NONBLOCK  0x10000
+#define MAP_STACK     0x20000
+#define MAP_HUGETLB   0x40000
 #endif
 #define MAP_FAILED    ((void*)-1)
 
@@ -45,6 +54,20 @@
 #define MADV_FREE 5
 #else
 #define MADV_FREE 8
+// Linux-specific madvise advice (asm-generic/mman-common.h).
+#define MADV_REMOVE      9
+#define MADV_DONTFORK    10
+#define MADV_DOFORK      11
+#define MADV_MERGEABLE   12
+#define MADV_UNMERGEABLE 13
+#define MADV_HUGEPAGE    14
+#define MADV_NOHUGEPAGE  15
+#define MADV_DONTDUMP    16
+#define MADV_DODUMP      17
+#define MADV_WIPEONFORK  18
+#define MADV_KEEPONFORK  19
+#define MADV_COLD        20
+#define MADV_PAGEOUT     21
 #endif
 
 #ifdef __APPLE__

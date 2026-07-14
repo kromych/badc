@@ -63,6 +63,16 @@
 // with __O_SYNC = 04000000. __O_SYNC is never used on its own.
 #define O_DSYNC      010000
 #define O_SYNC       04010000
+// memfd file sealing (linux/fcntl.h): F_ADD_SEALS / F_GET_SEALS apply and
+// query the seal bitmask on a memfd_create() descriptor.
+#define F_LINUX_SPECIFIC_BASE 1024
+#define F_ADD_SEALS  (F_LINUX_SPECIFIC_BASE + 9)
+#define F_GET_SEALS  (F_LINUX_SPECIFIC_BASE + 10)
+#define F_SEAL_SEAL         0x0001
+#define F_SEAL_SHRINK       0x0002
+#define F_SEAL_GROW         0x0004
+#define F_SEAL_WRITE        0x0008
+#define F_SEAL_FUTURE_WRITE 0x0010
 #endif
 #ifdef _WIN32
 #define O_CREAT      0x0100

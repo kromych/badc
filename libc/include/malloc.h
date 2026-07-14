@@ -20,4 +20,8 @@
 #ifdef __linux__
 #pragma binding(libc::malloc_usable_size, "malloc_usable_size")
 size_t malloc_usable_size(void *ptr);
+// `malloc_trim` releases free heap memory at the top of the arena back to the
+// OS (glibc extension); returns nonzero if any memory was released.
+#pragma binding(libc::malloc_trim, "malloc_trim")
+int malloc_trim(size_t pad);
 #endif

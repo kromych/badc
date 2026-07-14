@@ -2564,3 +2564,54 @@ fn init_array_stays_strictly_inside_data_at_bss_boundary() {
         );
     }
 }
+
+#[test]
+fn divmod_constant_branch_drops_its_dead_callee() {
+    // Integer `/` and `%` are integer constant expressions (C99 6.6), so a
+    // `?:` / `if` controlled by one selects its arm at translation time and
+    // the dead arm's call to an extern-declared-but-undefined function must
+    // not reach the object -- otherwise a link with no definition of it
+    // fails. `nested` reproduces the compile-time-dispatch idiom
+    // `__builtin_constant_p(K) ? <chain keyed on K> : <runtime fallback>`
+    // where the chain's conditions divide, and the final chain arm is a
+    // diagnostic stub; `guarded` is a bare `%`-controlled `if`.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         extern long build_bug_never_defined(void);\n\
+         extern unsigned long long rt_fallback(unsigned v, unsigned long long c);\n\
+         unsigned long long nested(unsigned long long c) {{\n\
+             return __builtin_constant_p(4 / 2)\n\
+                 ? ( (4 / 2) == 0 ? c\n\
+                   : (4 / 2) == 1 ? c + 1\n\
+                   : (4 / 2) == 2 ? c + 2\n\
+                   : (build_bug_never_defined(), 0) )\n\
+                 : rt_fallback(4 / 2, c);\n\
+         }}\n\
+         int guarded(void) {{\n\
+             if ((5 % 3) == 1) {{ return (int)build_bug_never_defined(); }}\n\
+             return 7;\n\
+         }}\n\
+         int main(void) {{ return (int)nested(5) + guarded() - 14; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    assert!(
+        has(b"nested") && has(b"guarded"),
+        "the live functions must survive"
+    );
+    assert!(
+        !has(b"build_bug_never_defined"),
+        "a `/`- or `%`-guarded dead branch's call to an undefined extern must be eliminated"
+    );
+    assert!(
+        !has(b"rt_fallback"),
+        "the __builtin_constant_p-false runtime fallback arm is dead and must be eliminated"
+    );
+}

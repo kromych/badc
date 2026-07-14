@@ -4,16 +4,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(184)                                         -> x0
-    v2   Imm(8)                                           -> x0
-    v3   Imm(0)                                           -> x0
-    v4   Imm(184)                                         -> x0
-    v5   Imm(23)                                          -> x0
-    v6   Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v6)
-  block 1  start_pc=0
-    v8   Imm(0)                                           -> x0
-    terminator Return(v8)   (exit_acc=v8)
+    v1   Imm(0)                                           -> x0
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

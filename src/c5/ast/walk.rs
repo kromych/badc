@@ -4119,11 +4119,21 @@ impl<'a> Walker<'a> {
                 }
             }
             Expr::Binary { op, lhs, rhs, .. } => {
-                if !imm_safe_binop(*op) {
+                // Integer `/` and `%` are integer constant expressions
+                // (C99 6.6) but are not immediate-foldable operators, so
+                // the imm-safe predicate (shared with the BinopI rvalue
+                // fold) excludes them; accept them here for the pure
+                // compile-time evaluation. A zero divisor is undefined
+                // and thus not a constant, so the fold declines it.
+                let divmod = matches!(*op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu);
+                if !imm_safe_binop(*op) && !divmod {
                     return None;
                 }
                 let l = self.const_fold_int(*lhs)?;
                 let r = self.const_fold_int(*rhs)?;
+                if divmod && r == 0 {
+                    return None;
+                }
                 Some(fold_int_binop(*op, l, r))
             }
             Expr::ShortCircuit { op, lhs, rhs, .. } => {
@@ -5076,9 +5086,9 @@ fn unsigned_narrow_mask(ty: i64) -> i64 {
 
 /// Ops whose two-constant fold and per-arch `BinopI` immediate
 /// lowering are both defined: arithmetic, bitwise, shift, and
-/// integer comparison. Excludes Div / Divu / Mod / Modu (guarded
-/// separately) and every FP op. Exactly the set `fold_int_binop`
-/// handles.
+/// integer comparison. Excludes Div / Divu / Mod / Modu (which
+/// `fold_int_binop` evaluates but the immediate path does not
+/// cover) and every FP op.
 fn imm_safe_binop(op: BinOp) -> bool {
     matches!(
         op,
@@ -5136,12 +5146,13 @@ fn narrow_const_to_ty(v: i64, ty: i64, target: Target) -> i64 {
 }
 
 /// Fold an integer binop on two constant operands. C99 6.6
-/// permits this at translation time. Caller restricts `op` to
-/// the set the per-arch BinopI lowering covers (no Div / Divu /
-/// Mod / Modu, no FP), so the only well-defined surfaces are
-/// arithmetic, bitwise, shift, and integer comparison. Shifts
-/// at out-of-range amounts produce 0 (matches what `lsl xd, xn,
-/// xm` with `xm >= 64` would land on; signed `asr` on a
+/// permits this at translation time. Covers arithmetic, bitwise,
+/// shift, integer comparison, and integer divide / modulo; FP
+/// and the non-integer opcodes are rejected. A zero divisor is
+/// the caller's responsibility (`const_fold_int` declines it);
+/// signed `INT_MIN / -1` wraps to `INT_MIN` rather than trapping.
+/// Shifts at out-of-range amounts produce 0 (matches what `lsl
+/// xd, xn, xm` with `xm >= 64` would land on; signed `asr` on a
 /// non-negative operand likewise saturates to 0, and on a
 /// negative operand to -1, so the model picks the closer of the
 /// two for the rhs's sign).
@@ -5175,7 +5186,11 @@ fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
         BinOp::Ugt => ((lhs as u64) > (rhs as u64)) as i64,
         BinOp::Ule => ((lhs as u64) <= (rhs as u64)) as i64,
         BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
-        _ => unreachable!("fold_int_binop reached on non-imm-safe op"),
+        BinOp::Div => lhs.wrapping_div(rhs),
+        BinOp::Mod => lhs.wrapping_rem(rhs),
+        BinOp::Divu => ((lhs as u64) / (rhs as u64)) as i64,
+        BinOp::Modu => ((lhs as u64) % (rhs as u64)) as i64,
+        _ => unreachable!("fold_int_binop reached on a non-integer op"),
     }
 }
 

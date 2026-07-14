@@ -191,13 +191,13 @@ generator, the block layer, the QAPI-generated marshallers, the character /
 network back ends), the widest single exercise of the C front end and object
 emitter in the demo set. badc compiles every unit, archives the utility
 library with `--ar`, and self-links the emulator with its own linker -- no
-system linker in the chain. The self-compiled, self-linked `qemu-system-aarch64`
-boots a Linux kernel plus a busybox initramfs to an interactive userspace shell
-and powers off cleanly under TCG. `qemu-system-x86_64` self-compiles every unit
-and boots an EFI-stub `bzImage` through OVMF; its self-link is pending the
-vhost-user / vduse subproject libraries. The vendored build config (no meson /
-make / configure) is per target; both the aarch64 and x86_64 Linux configs are
-captured in-repo. See [`qemu/README.md`](./qemu/README.md).
+system linker in the chain. Both self-compiled, self-linked `qemu-system-aarch64`
+and `qemu-system-x86_64` boot a Linux kernel plus a busybox initramfs to an
+interactive userspace shell and power off cleanly under TCG (aarch64 loads a raw
+`Image` on -M virt; x86_64 boots an EFI-stub `bzImage` through OVMF). The
+vendored build config (no meson / make / configure) is per target; both the
+aarch64 and x86_64 Linux configs are captured in-repo.
+See [`qemu/README.md`](./qemu/README.md).
 
 ## efi_hello/
 

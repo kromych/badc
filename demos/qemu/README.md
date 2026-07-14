@@ -2,12 +2,11 @@
 
 Builds the [QEMU](https://www.qemu.org/) 11.0.2 system emulator with badc and
 runs the result -- with badc's own linker, no system linker in the chain. badc
-self-compiles both `qemu-system-aarch64` and `qemu-system-x86_64`. aarch64 is
-driven end to end: badc compiles every unit, self-links the emulator, and it
-boots a Linux kernel plus a busybox initramfs to an interactive userspace shell
-that powers off cleanly under TCG. x86_64 self-compiles every unit and boots an
-EFI-stub kernel through OVMF; its self-link is pending the vhost-user / vduse
-subproject libraries (see Scope).
+self-compiles and self-links both `qemu-system-aarch64` and `qemu-system-x86_64`,
+end to end: it compiles every unit, its own linker lays out the emulator, and
+each boots a Linux kernel plus a busybox initramfs to an interactive userspace
+shell that powers off cleanly under TCG. aarch64 loads a raw Image on -M virt;
+x86_64 boots an EFI-stub bzImage through system OVMF (see Scope).
 
 QEMU is a large, portable C program: this demo compiles well over a thousand
 translation units per target with badc -- for aarch64, **1683 units** (1140
@@ -104,15 +103,15 @@ boot those instead; `$BADC_QEMU_APPEND` overrides the kernel command line,
 ## Scope
 
 The vendored build config is per target; both the **aarch64 Linux** and
-**x86_64 Linux** configs are captured in-repo. The config is captured with the
-lean feature set badc's toolchain supports (host SIMD intrinsics, native
-`__int128` and its 128-bit CAS, and elfutils are off, matching what a
-badc-configured meson would emit; see `adapt_config` in `smoke.py`). aarch64 is
-validated end to end -- build, self-link, and boot. On x86_64 badc compiles
-every unit; the self-link additionally needs the vhost-user / vduse subproject
-libraries built from source (TODO), and the boot runs through OVMF. The macOS
-config is not yet vendored (TODO). On a host without a captured config the smoke
-skips cleanly.
+**x86_64 Linux** configs are captured in-repo and validated end to end -- build,
+self-link, and boot. The config carries the lean feature set badc's toolchain
+supports (host SIMD intrinsics, native `__int128` and its 128-bit CAS, and
+elfutils are off, matching what a badc-configured meson would emit; see
+`adapt_config` in `smoke.py`). The x86_64 emulator additionally links its
+vhost-user / vduse subproject libraries, compiled from source, and boots through
+OVMF with the q35 option ROMs shipped in the kernel bundle. The macOS config is
+not yet vendored (TODO). On a host without a captured config the smoke skips
+cleanly.
 
 ## Requirements
 

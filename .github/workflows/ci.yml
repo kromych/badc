@@ -1234,18 +1234,14 @@ jobs:
     # it reports its version, and it boots the published kernel to a userspace
     # shell and powers off cleanly.
     #
-    # aarch64 Linux at -O0: -M virt loads a raw Image and boots to a userspace
-    # shell. setup.py fetches the source + captured meson build config (both
-    # arches) and the boot kernel from the vendor-deps release (GITHUB_TOKEN
-    # inherited from the workflow env).
-    #
-    # TODO: add the x86_64 lane. badc compiles every x86_64 unit (the vendored
-    # config disables features whose host headers badc lacks -- host SIMD
-    # intrinsics, native __int128 + its 128-bit CAS, elfutils; see smoke.py
-    # adapt_config), but the self-link still needs the vhost-user / vduse
-    # subproject libraries compiled from source (their objects are not in the
-    # per-target response file). x86_64 boots an EFI-stub bzImage through OVMF
-    # (the smoke's boot path is ready). See the x86_64-lane task.
+    # Matrix: {aarch64, x86_64} Linux at -O0. aarch64 -M virt loads a raw Image;
+    # x86_64 boots an EFI-stub bzImage through system OVMF (UEFI). The x86_64
+    # vendored config disables the features whose host headers badc lacks (host
+    # SIMD intrinsics, native __int128 + its 128-bit CAS, elfutils; see smoke.py
+    # adapt_config), its vhost-user / vduse subproject libraries are compiled
+    # from source, and the q35 option ROMs ship in the kernel bundle. setup.py
+    # fetches the source + captured meson build config (both arches) and the
+    # boot kernel from the vendor-deps release (GITHUB_TOKEN inherited).
     #
     # TODO: add the -O lanes once the inliner folds constant-argument switches.
     # At -O, QEMU maps an unreachable switch default to a declared-not-defined
@@ -1260,6 +1256,7 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-24.04-arm, label: ubuntu-arm64, optenv: "", optname: O0 }
+          - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "", optname: O0 }
     runs-on: ${{ matrix.os }}
     # badc build (warm cache) + full-unit compile + link. The compile is the
     # long pole; 30 min is a backstop it must never approach.

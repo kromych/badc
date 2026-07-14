@@ -63,7 +63,7 @@ KERNEL_BUNDLES = {
     },
     "x86_64": {
         "asset": f"kernel-x64-{KERNEL_VERSION}-{KERNEL_X64_BUILD_SHA}.tar.xz",
-        "sha256": "521cbfb0b954b5573d5608e690a88f243b5aa6e07ced59f9550db26fab9c7705",
+        "sha256": "212ca72855ab0de5fcf390777d0fa5d90d667accf58979a845ca8c829cd48a1a",
         "dir": "kernel-x64", "image": "bzImage", "initrd": None,
     },
 }
@@ -94,13 +94,21 @@ def fetch_kernel(cache: Path, arch: str, log=lambda _m: None) -> tuple[Path, Pat
     dst = cache / spec["dir"]
     image = dst / spec["image"]
     initrd = dst / spec["initrd"] if spec.get("initrd") else None
+    # Re-extract when the required files are missing or the extracted tree
+    # predates the current asset: a rotated asset can keep the same name while
+    # its contents change, and a partial tree (e.g. missing ROMs) must not be
+    # reused just because the image file happens to exist.
+    marker = dst / ".asset-sha256"
     need = [image] + ([initrd] if initrd else [])
-    if not all(p.is_file() for p in need):
+    fresh = all(p.is_file() for p in need) and marker.is_file() \
+        and marker.read_text().strip() == spec["sha256"]
+    if not fresh:
         if dst.exists():
             shutil.rmtree(dst)
         log(f"extracting {spec['asset']}")
         with tarfile.open(tar_path, "r:xz") as tf:
             _extractall(tf, cache)
+        marker.write_text(spec["sha256"])
     return (image, initrd)
 
 

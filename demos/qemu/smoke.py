@@ -236,6 +236,39 @@ def index_by_output(build_dir: Path) -> dict[str, dict]:
     return by_out
 
 
+# In-tree static libraries meson builds from a subproject and the emulator
+# links, but whose objects the per-target response file lists only as the
+# archive (not enumerated). When the link needs one, its objects are compiled
+# from source alongside the emulator's. link-test.c is a build-time check, not
+# a library member.
+SUBPROJECT_LIBS = ("libvhost-user", "libvduse")
+
+
+def subproject_objects(build_dir: Path, stem: str) -> list[str]:
+    """Object outputs for the subproject static libraries the target links,
+    derived from compile_commands. Empty when the target links none (e.g.
+    aarch64, whose config disables vhost-user)."""
+    rsp = (build_dir / f"{stem}.rsp").read_text()
+    needed = [s for s in SUBPROJECT_LIBS if s in rsp]
+    if not needed:
+        return []
+    entries = json.loads((build_dir / "compile_commands.json").read_text())
+    objs: list[str] = []
+    for e in entries:
+        f = e["file"]
+        if "link-test" in f or not any(f"subprojects/{s}" in f for s in needed):
+            continue
+        argv = e.get("arguments") or shlex.split(e["command"])
+        for i, a in enumerate(argv):
+            if a == "-o":
+                objs.append(os.path.normpath(argv[i + 1]))
+                break
+            if a.startswith("-o") and len(a) > 2:
+                objs.append(os.path.normpath(a[2:]))
+                break
+    return objs
+
+
 def adapt_config(build_dir: Path) -> int:
     """Disable the vendored config macros badc cannot honor (host SIMD opts,
     libdw) in config-host.h so units select their scalar / stub path. Idempotent;
@@ -286,7 +319,7 @@ def main() -> int:
     log(f"badc={badc} arch={arch} target=qemu-system-{arch}")
 
     drop = lambda objs: [o for o in objs if not any(d in o for d in BADC_DROP_OBJECTS)]
-    main_o = drop(read_objects(build_dir, stem))
+    main_o = drop(read_objects(build_dir, stem)) + subproject_objects(build_dir, stem)
     util_o = drop(read_objects(build_dir, "libqemuutil.a"))
     all_o = list(dict.fromkeys(main_o + util_o))
     by_out = index_by_output(build_dir)
@@ -646,6 +679,12 @@ def maybe_boot(binp: Path, arch: str) -> None:
     # cmdline reaches the stub via fw_cfg. aarch64 -M virt loads the raw Image.
     if arch == "x86_64":
         cmd += ovmf_pflash(QEMU_DIR / ".cache")
+        # The q35 machine loads a few option ROMs (kvmvapic, the linuxboot /
+        # multiboot loaders, the VGA BIOS); point -L at the ROM set shipped in
+        # the kernel bundle so the run needs nothing from the host.
+        romdir = os.path.join(os.path.dirname(kernel), "pc-bios")
+        if os.path.isdir(romdir):
+            cmd += ["-L", romdir]
     cmd += ["-kernel", kernel, "-append", append]
     if initrd:
         cmd += ["-initrd", initrd]

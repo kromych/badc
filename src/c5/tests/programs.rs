@@ -1928,6 +1928,15 @@ fn anon_union_init() {
 }
 
 #[test]
+fn packed_anon_union_layout() {
+    // A trailing `__attribute__((packed))` repacks the fields; the promoted
+    // members of an anonymous union must keep overlapping (and a nested
+    // anonymous struct keeps its in-arm offsets) instead of being laid out
+    // sequentially. Mirrors the ACPI bios-linker-loader command entry.
+    assert_eq!(run_fixture("packed_anon_union_layout.c"), 0);
+}
+
+#[test]
 fn builtin_trap() {
     // __builtin_trap() does not return; a function whose fall-through
     // path ends in it satisfies the non-void return requirement. The

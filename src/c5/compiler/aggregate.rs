@@ -826,7 +826,45 @@ impl Compiler {
         let n = self.structs[struct_id].fields.len();
         let mut bit_cursor = 0usize;
         let mut bitfields: Vec<(usize, usize)> = Vec::new();
-        for i in 0..n {
+        let mut i = 0usize;
+        while i < n {
+            // Fields promoted from one anonymous union (C11 6.7.2.1p13)
+            // keep the relative offsets the natural layout already gave
+            // them (union arms overlap; a nested anonymous struct's members
+            // stay at their in-arm offsets) and shift as a block to the
+            // packed cursor. Re-laying them sequentially would break the
+            // overlap; recomputing their offsets would wrongly repack a
+            // nested aggregate type, since `packed` applies to this
+            // struct's own members, not to a nested struct/union type.
+            // Consecutive members carrying the same group id form the union.
+            let ug = self.structs[struct_id].fields[i].anon_union_group;
+            if ug != 0 {
+                let mut j = i;
+                while j < n && self.structs[struct_id].fields[j].anon_union_group == ug {
+                    j += 1;
+                }
+                let old_base = (i..j)
+                    .map(|k| self.structs[struct_id].fields[k].offset)
+                    .min()
+                    .unwrap_or(0);
+                let group_span = (i..j)
+                    .map(|k| {
+                        self.structs[struct_id].fields[k].offset
+                            + self.packed_member_storage(struct_id, k)
+                            - old_base
+                    })
+                    .max()
+                    .unwrap_or(0);
+                let new_base = bit_cursor.div_ceil(8);
+                for k in i..j {
+                    let off = self.structs[struct_id].fields[k].offset;
+                    self.structs[struct_id].fields[k].offset = off - old_base + new_base;
+                }
+                bit_cursor = (new_base + group_span) * 8;
+                i = j;
+                continue;
+            }
+
             let (ty, array_size, bit_width) = {
                 let f = &self.structs[struct_id].fields[i];
                 (f.ty, f.array_size, f.bit_width)
@@ -840,6 +878,7 @@ impl Compiler {
                 }
                 bitfields.push((i, bit_cursor));
                 bit_cursor += bit_width as usize;
+                i += 1;
                 continue;
             }
             let offset = bit_cursor.div_ceil(8);
@@ -852,6 +891,7 @@ impl Compiler {
                 self.size_of_type(ty)
             };
             bit_cursor = (offset + storage) * 8;
+            i += 1;
         }
         let size = bit_cursor.div_ceil(8).max(1);
         // Each bitfield's addressable unit is the smallest 1/2/4/8-byte
@@ -871,6 +911,21 @@ impl Compiler {
             f.bit_unit_size = unit as u8;
         }
         self.structs[struct_id].size = size;
+    }
+
+    /// Byte storage a non-bitfield member occupies in a packed layout:
+    /// element size times count for an array, zero for a flexible-array
+    /// member, the type size otherwise.
+    fn packed_member_storage(&self, struct_id: usize, i: usize) -> usize {
+        let f = &self.structs[struct_id].fields[i];
+        let (ty, array_size) = (f.ty, f.array_size);
+        if array_size > 0 {
+            self.size_of_type(ty) * array_size as usize
+        } else if array_size < 0 {
+            0
+        } else {
+            self.size_of_type(ty)
+        }
     }
 }
 

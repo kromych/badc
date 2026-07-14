@@ -13,22 +13,20 @@ badc's and substituting the host glib include path via ``pkg-config``.
 Two units feed the emulator: the per-target objects (``qemu-system-<arch>.rsp``)
 and the utility library (``libqemuutil.a.rsp``); both are compiled with badc.
 
-The runnable emulator is produced by linking badc's objects with the system
-linker (``cc``): every object is badc's, and ``cc`` only relocates and lays out.
-badc's own linker cannot yet emit the final image for this input -- it compiles
-and archives the objects but the synthesizer lacks some aarch64 reloc types
-(TODO). The pure badc self-link is attempted as a reported, non-gating step so
-the smoke tracks progress toward full self-containment without going red.
+The runnable emulator is produced by badc's OWN linker over the 100%-badc
+objects (the pure self-link) -- no system linker anywhere in the chain. Every
+object is badc's and badc lays out the final image; a self-link failure fails
+the smoke, so full self-containment is a hard gate (no cc fallback).
 
-The gate is: badc compiles every unit, and the ``cc``-linked emulator reports
-its version. The emulator resolves its externals against the system glib /
-zlib / libfdt shared objects.
+The gate is: badc compiles every unit, self-links the emulator, and the
+emulator reports its version (and, under ``$BADC_QEMU_BOOT``, boots to a
+userspace shell and powers off cleanly). The emulator resolves its externals
+against the system glib / zlib / libfdt shared objects.
 
 Scope: the vendored config is per target; the aarch64 and x86_64 Linux
 configs are captured. Other hosts have no vendored config and are skipped.
 
-Override the badc binary via ``$BADC`` (default: ``target/release/badc[.exe]``)
-and the system linker via ``$CC`` (default: ``cc``).
+Override the badc binary via ``$BADC`` (default: ``target/release/badc[.exe]``).
 """
 
 from __future__ import annotations
@@ -99,18 +97,6 @@ def resolve_badc() -> Path:
         if c.is_file() and os.access(c, os.X_OK):
             return c
     fail("BADC binary not found; hint: cargo build --release --features full")
-    raise SystemExit(2)
-
-
-def resolve_cc() -> str:
-    """The system linker driver for the hybrid link step: ``$CC`` if set, else
-    the first of cc / gcc / clang on PATH."""
-    import shutil
-    env = os.environ.get("CC")
-    for cand in ([env] if env else []) + ["cc", "gcc", "clang"]:
-        if cand and shutil.which(cand):
-            return cand
-    fail("no system linker found (need cc / gcc / clang on PATH, or set $CC)")
     raise SystemExit(2)
 
 
@@ -319,44 +305,16 @@ def main() -> int:
     main_paths = [str(out_dir / o) for o in main_o]
     link_libs = [*glib_libs, "-lz", "-lm", "-lutil", "-lfdt"]
 
-    # Prefer the pure badc self-link: badc's own linker over 100% badc objects.
-    # It succeeds for the aarch64 config here; where the synthesizer still lacks
-    # an aarch64 reloc type (TODO) the link fails and the hybrid path below takes
-    # over, so the emulator is always produced. BADC_QEMU_NO_SELFLINK forces the
-    # hybrid path (e.g. to exercise it on a host where the self-link works).
+    # Pure badc self-link: badc's own linker over the 100%-badc objects, with
+    # badc's own --ar archive of the utility library. No system-cc fallback --
+    # full self-containment is the gate, so a link failure fails the smoke.
     binp = out_dir / f"qemu-system-{arch}"
-    link_mode = None
-    if os.environ.get("BADC_QEMU_NO_SELFLINK") != "1":
-        pure = [str(badc), *opt, *main_paths, str(lib), *link_libs, "-o", str(binp)]
-        r = subprocess.run(pure, cwd=build_dir, capture_output=True, text=True, timeout=600)
-        if r.returncode == 0 and binp.is_file():
-            link_mode = "pure badc self-link"
-        else:
-            err = ((r.stderr or "") + (r.stdout or "")).strip()
-            first = next((l for l in err.splitlines() if l.strip()), "?")
-            log(f"pure badc self-link: pending linker support -- {first[:160]}")
-
-    # Hybrid fallback: badc objects, system cc as the linker. cc supplies crt
-    # startup + libc and relocates/lays out badc's objects. The utility objects
-    # go into a system-ar archive rather than being passed directly: libqemuutil
-    # carries stub definitions (cpu_get_clock, ...) that must be pulled in only
-    # when unresolved, which is archive semantics. badc's own linker reads badc's
-    # --ar archive (the pure path above) but GNU ld does not, so cc gets a fresh
-    # archive built with the system ar.
-    if link_mode is None:
-        cc = resolve_cc()
-        ar = os.environ.get("AR") or "ar"
-        util_paths = [str(out_dir / o) for o in util_o]
-        sys_lib = out_dir / "libqemuutil-sys.a"
-        sys_lib.unlink(missing_ok=True)
-        r = subprocess.run([ar, "rcs", str(sys_lib), *util_paths], capture_output=True, text=True)
-        if r.returncode != 0 or not sys_lib.is_file():
-            fail(f"system ar of libqemuutil failed:\n{r.stderr.strip()[-800:]}")
-        hybrid = [cc, *main_paths, str(sys_lib), *link_libs, "-o", str(binp)]
-        r = subprocess.run(hybrid, cwd=build_dir, capture_output=True, text=True)
-        if r.returncode != 0 or not binp.is_file():
-            fail(f"cc link of badc objects failed:\n{r.stderr.strip()[-1500:]}")
-        link_mode = f"hybrid ({os.path.basename(cc)}-linked badc objects)"
+    pure = [str(badc), *opt, *main_paths, str(lib), *link_libs, "-o", str(binp)]
+    r = subprocess.run(pure, cwd=build_dir, capture_output=True, text=True, timeout=600)
+    if r.returncode != 0 or not binp.is_file():
+        err = ((r.stderr or "") + (r.stdout or "")).strip()
+        fail(f"pure badc self-link failed:\n{err[-1500:]}")
+    link_mode = "pure badc self-link"
 
     binp.chmod(0o755)
     log(f"link: {link_mode}")
@@ -592,12 +550,12 @@ def maybe_boot(binp: Path, arch: str) -> None:
     # No network: a boot smoke test needs none, and the default virtio-net
     # NIC pulls in a boot ROM (efi-virtio.rom) that is not staged next to the
     # freshly linked emulator, so `-nic none` keeps the run self-contained.
-    cmd = [str(binp), "-M", machine, "-cpu", cpu, "-smp", "4", "-m", "512",
+    cmd = [str(binp), "-M", machine, "-cpu", cpu, "-smp", "16", "-m", "512",
            "-nographic", "-no-reboot", "-nic", "none", "-kernel", kernel, "-append", append]
     if initrd:
         cmd += ["-initrd", initrd]
 
-    log(f"boot: {os.path.basename(kernel)} on -M {machine} -smp 4 (timeout {timeout:.0f}s)")
+    log(f"boot: {os.path.basename(kernel)} on -M {machine} -smp 16 (timeout {timeout:.0f}s)")
     t0 = time.time()
     try:
         rc, out = _drive_boot(cmd, timeout)
@@ -605,6 +563,18 @@ def maybe_boot(binp: Path, arch: str) -> None:
         _boot_result(False, f"launch failed: {e}", "", best_effort)
         return
     elapsed = time.time() - t0
+
+    # Persist the full serial log so CI can publish it as an artifact, on
+    # success and failure alike (see the qemu job's upload step).
+    log_path = os.environ.get("BADC_QEMU_BOOT_LOG") or str(
+        QEMU_DIR / ".cache" / f"boot-{arch}.log")
+    try:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "w") as fh:
+            fh.write(out)
+        log(f"boot: serial log ({len(out)} B) -> {log_path}")
+    except OSError as e:
+        log(f"boot: serial log not written: {e}")
 
     panic = next((m for m in PANIC_MARKERS if m in out), None)
     booted = any(m in out for m in BOOT_MARKERS)

@@ -1234,22 +1234,26 @@ jobs:
     # it reports its version, and it boots the published kernel to a userspace
     # shell and powers off cleanly.
     #
-    # Matrix: {aarch64, x86_64} Linux at -O0. aarch64 -M virt loads a raw Image;
-    # x86_64 boots an EFI-stub bzImage through system OVMF (UEFI). The x86_64
-    # vendored config disables the features whose host headers badc lacks (host
-    # SIMD intrinsics, native __int128 + its 128-bit CAS, elfutils; see smoke.py
-    # adapt_config), its vhost-user / vduse subproject libraries are compiled
-    # from source, and the q35 option ROMs ship in the kernel bundle. setup.py
-    # fetches the source + captured meson build config (both arches) and the
-    # boot kernel from the vendor-deps release (GITHUB_TOKEN inherited).
+    # Matrix: {aarch64, x86_64} Linux at -O0, plus x86_64 at -O. aarch64 -M virt
+    # loads a raw Image; x86_64 boots an EFI-stub bzImage through system OVMF
+    # (UEFI). The x86_64 vendored config disables the features whose host headers
+    # badc lacks (host SIMD intrinsics, native __int128 + its 128-bit CAS,
+    # elfutils; see smoke.py adapt_config), its vhost-user / vduse subproject
+    # libraries are compiled from source, and the q35 option ROMs ship in the
+    # kernel bundle. setup.py fetches the source + captured meson build config
+    # (both arches) and the boot kernel from the vendor-deps release
+    # (GITHUB_TOKEN inherited).
     #
-    # TODO: add the -O lanes once the inliner folds constant-argument switches.
-    # At -O, QEMU maps an unreachable switch default to a declared-not-defined
-    # build assert (qemu_build_not_reached_always) that the optimizer must prove
-    # dead. That relies on inlining the static-inline size helper so the
-    # constant size folds the switch; the inliner currently skips any body
-    # containing a call, so the helper's standalone definition survives and
-    # references the undefined symbol. See the inliner task.
+    # At -O, QEMU maps each unreachable path (a size-helper switch default, a
+    # const-array bound check, a noreturn-guarded branch, a build assert) to the
+    # declared-not-defined qemu_build_not_reached_always the optimizer must prove
+    # dead. The x86_64 -O lane self-links and boots: non-leaf inlining folds the
+    # size switches, const-global folding drops the array-bound check, the
+    # noreturn-CFG seal and member packing drop their asserts, and dead-block
+    # pruning of jump-table functions drops the rest. The aarch64 -O lane is not
+    # gated yet: two of its target-specific units (crypto_helper SM3TT, mps3r
+    # secondary boot) still reach the canary through a value range the optimizer
+    # does not track.
     name: qemu (${{ matrix.label }} ${{ matrix.optname }})
     strategy:
       fail-fast: false
@@ -1257,6 +1261,7 @@ jobs:
         include:
           - { os: ubuntu-24.04-arm, label: ubuntu-arm64, optenv: "", optname: O0 }
           - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "", optname: O0 }
+          - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "1", optname: O }
     runs-on: ${{ matrix.os }}
     # badc build (warm cache) + full-unit compile + link. The compile is the
     # long pole; 30 min is a backstop it must never approach.

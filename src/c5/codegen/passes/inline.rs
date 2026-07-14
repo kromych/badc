@@ -449,6 +449,11 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
             Inst::Call {
                 arg_aggs, ret_agg, ..
             } if arg_aggs.is_empty() && ret_agg.is_none() => {}
+            // A phi merging values across the callee's own blocks. The
+            // multi-block splice translates its incoming values through
+            // `callee_remap` and shifts its predecessor block ids into the
+            // caller's post-splice numbering (`shift_callee_bid`).
+            Inst::Phi { .. } => {}
             _ => {
                 say(&alloc::format!("disallowed inst {:?}", inst));
                 return false;
@@ -741,6 +746,11 @@ fn splice_multi_block(
     let mut new_blocks: Vec<Block> = Vec::with_capacity(n_caller + n_callee + 1);
     let mut remap: Vec<ValueId> = vec![NO_VALUE; original.insts.len()];
     let mut callee_remap: Vec<ValueId> = vec![NO_VALUE; callee.insts.len()];
+    // First new-inst id of the spliced callee body (Step 6, emitted last).
+    // Callee phis are shifted at emission; the post-fixpoint caller-phi
+    // shift skips this tail so it does not double-shift them. Assigned on
+    // every fixpoint pass (Step 6 precedes the loop's breaks).
+    let mut callee_insts_start: u32;
 
     let emit_caller_inst = |pc: u32,
                             new_insts: &mut Vec<Inst>,
@@ -892,11 +902,36 @@ fn splice_multi_block(
         let remapped_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
 
         // Step 6: splice every callee block.
+        callee_insts_start = new_insts.len() as u32;
         for cblock in &callee.blocks {
             let block_start = new_insts.len() as u32;
             for ce_pc in cblock.inst_range.start..cblock.inst_range.end {
                 let cinst = &callee.insts[ce_pc as usize];
                 match cinst {
+                    Inst::Phi { incoming, kind } => {
+                        // Reproduce the phi in the caller: incoming values
+                        // route through `callee_remap`; predecessor block ids
+                        // shift into the caller's post-splice numbering.
+                        let new_incoming = incoming
+                            .iter()
+                            .map(|&(pred, v)| (shift_callee_bid(pred), map_v(v, &callee_remap)))
+                            .collect();
+                        let new_id = new_insts.len() as u32;
+                        callee_remap[ce_pc as usize] = new_id;
+                        new_insts.push(Inst::Phi {
+                            incoming: new_incoming,
+                            kind: *kind,
+                        });
+                        new_inst_src.push((0, 0));
+                        new_f32.push(
+                            callee
+                                .f32_values
+                                .get(ce_pc as usize)
+                                .copied()
+                                .unwrap_or(false),
+                        );
+                        continue;
+                    }
                     Inst::ParamRef { idx, kind } => {
                         let i = *idx as usize;
                         let arg = if i < remapped_args.len() {
@@ -999,11 +1034,12 @@ fn splice_multi_block(
     // and the splice block's own out-edges now leave from the postfix
     // (splice_block_idx + 1), not the prefix. `emit_caller_inst` clones
     // phis from the original with their block ids intact, so this reads the
-    // original ids once after the emission fixpoint. Callee blocks carry no
-    // phis (the candidate filter rejects them), so every phi here is
-    // caller-origin.
+    // original ids once after the emission fixpoint. Only caller-origin
+    // phis (below `callee_insts_start`) take this shift; spliced callee
+    // phis had their predecessors mapped through `shift_callee_bid` at
+    // emission (Step 6) and must not shift again.
     let splice_bid = splice_block_idx as u32;
-    for inst in new_insts.iter_mut() {
+    for inst in new_insts[..callee_insts_start as usize].iter_mut() {
         if let Inst::Phi { incoming, .. } = inst {
             for (pred, _) in incoming.iter_mut() {
                 if *pred >= splice_bid {

@@ -254,6 +254,12 @@ pub(crate) trait EmitBackend {
         hold: u8,
         stage: u8,
     );
+    /// Load a raw integer immediate into integer register `dst`.
+    fn int_reg_load_imm(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, bits: i64);
+    /// Reinterpret integer register `src`'s bits as a floating-point value in
+    /// FP register `dst` (no numeric conversion): `fmov` / `movq`. `is_f64`
+    /// selects the 8-byte vs 4-byte form.
+    fn fp_reg_from_int_reg(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8, is_f64: bool);
 }
 
 /// Stateless backend selectors. The per-target leaf implementations live in the
@@ -477,6 +483,13 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
         // files do not alias, so the two copies are independent.
         let mut moves: alloc::vec::Vec<(Place, Place)> = alloc::vec::Vec::new();
         let mut fp_moves: alloc::vec::Vec<(Place, Place)> = alloc::vec::Vec::new();
+        // (bits, dst_place, is_f64) for a float constant feeding an FP phi.
+        // `result_kind` classes every `Imm` in the integer file, so an FP
+        // phi's only integer-file operand is a float constant; `phi_class`
+        // refuses to coalesce the class boundary and delegates the move
+        // here. Re-materialising the constant reads only reserved scratch,
+        // so it is independent of the register moves scheduled above.
+        let mut fp_const_moves: alloc::vec::Vec<(i64, Place, bool)> = alloc::vec::Vec::new();
         for id in head..end {
             let Inst::Phi { incoming, kind } = &func.insts[id as usize] else {
                 break;
@@ -495,12 +508,26 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 .copied()
                 .unwrap_or(Place::None);
             let phi_is_fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
-            if matches!(src_place, Place::None) || matches!(dst_place, Place::None) {
+            if matches!(dst_place, Place::None) {
                 continue;
             }
             if phi_is_fp {
+                if let Inst::Imm(bits) = func.insts[*src_v as usize] {
+                    fp_const_moves.push((bits, dst_place, matches!(kind, LoadKind::F64)));
+                    continue;
+                }
+                debug_assert!(
+                    !matches!(src_place, Place::IntReg(_)),
+                    "FP phi integer-file operand must be a constant"
+                );
+                if matches!(src_place, Place::None) {
+                    continue;
+                }
                 fp_moves.push((src_place, dst_place));
             } else {
+                if matches!(src_place, Place::None) {
+                    continue;
+                }
                 moves.push((src_place, dst_place));
             }
         }
@@ -508,6 +535,20 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
             return false;
         }
         schedule_fp_place_moves(b, code, &mut fp_moves, frame, fp_hold, fp_stage);
+        // After both same-file parallel copies: any FP move reading a phi's
+        // register as its source has already run, so overwriting the FP
+        // destination here cannot clobber a still-pending read.
+        for (bits, dst, is_f64) in fp_const_moves {
+            b.int_reg_load_imm(code, int_stage, bits);
+            match dst {
+                Place::FpReg(t) => b.fp_reg_from_int_reg(code, t, int_stage, is_f64),
+                Place::Spill(slot) => {
+                    b.fp_reg_from_int_reg(code, fp_stage, int_stage, is_f64);
+                    b.fp_spill_store(code, frame, slot, fp_stage);
+                }
+                _ => {}
+            }
+        }
     }
     true
 }

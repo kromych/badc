@@ -6736,6 +6736,16 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
             }
         }
     }
+    fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
+        super::encode::load_imm64(code, Reg(dst), bits as u64);
+    }
+    fn fp_reg_from_int_reg(&self, code: &mut Vec<u8>, dst: u8, src: u8, is_f64: bool) {
+        if is_f64 {
+            emit(code, super::encode::enc_fmov_x_to_d(dst, Reg(src)));
+        } else {
+            emit(code, super::encode::enc_fmov_w_to_s(dst, Reg(src)));
+        }
+    }
 }
 
 /// Place every call argument into its AAPCS64 target slot in an

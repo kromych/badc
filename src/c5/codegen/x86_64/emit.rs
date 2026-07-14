@@ -1029,6 +1029,15 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
             }
         }
     }
+    fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
+        emit_mov_r_imm64(code, Reg(dst), bits);
+    }
+    fn fp_reg_from_int_reg(&self, code: &mut Vec<u8>, dst: u8, src: u8, _is_f64: bool) {
+        // `movq xmm, r` copies all 64 bits; for an f32 the constant occupies
+        // the low 32 (the immediate load zero-extends), which a scalar-single
+        // op reads, so one form serves both widths.
+        emit_movq_xmm_r(code, Reg(dst), Reg(src));
+    }
 }
 
 /// Sequentialize a parallel copy over FP locations (xmm registers and

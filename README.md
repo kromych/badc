@@ -97,7 +97,8 @@ There are various demo's under [`demos`](./demos/):
 * [`TCL`](./demos/tcl/) - Tool command language ([tcl-lang.org](https://www.tcl-lang.org/)),
 * [`raylib`](./demos/raylib/) - Library for games, (there is also [`loderunner`](./demos/raylib/loderunner.c) game included) ([raylib.com](https://www.raylib.com/)),
 * [`curl`](./demos/curl/) - The library and the tools that handle HTTP and friends on PCs, smart phones/watches, TVs, ... ([curl.se](https://curl.se/)),
-* [`Python`](./demos/python/) - Python 3.14 ([python.org](https://www.python.org/)).
+* [`Python`](./demos/python/) - Python 3.14 ([python.org](https://www.python.org/)),
+* [`qemu`](./demos/qemu/) - the QEMU system emulator ([qemu.org](https://www.qemu.org/)); badc compiles the full source (well over a thousand translation units per target) and self-links the emulator with its own linker. Both `qemu-system-aarch64` and `qemu-system-x86_64`, self-compiled and self-linked, boot a Linux kernel + busybox initramfs to an interactive userspace shell and power off cleanly under TCG.
 
 Besides these, there are some fun test fixtures implementing Horner scheme, RK4,
 8-Queens and more.
@@ -304,7 +305,11 @@ relocatables: a `.text` section of native machine code,
 for the name table, and `.rela.text` carrying the relocations
 the linker applies once each unit's final position is known.
 The target is pinned at `-c` time, and the objects are also
-linkable by `ld` / `lld`. Archives are ar(5) with a SysV-style
+linkable by `ld` / `lld`. Executables are position-independent
+(ELF `ET_DYN` / PIE, matching Mach-O); the address of -- or a
+data load from -- an external symbol routes through the GOT, so a
+badc `-c` object links into a PIE produced by the system
+toolchain. Archives are ar(5) with a SysV-style
 symbol index. The `full` cargo feature gates the entire
 pipeline; library consumers that don't need
 multi-TU artifacts can opt out via

@@ -1,14 +1,19 @@
 # qemu demo
 
-Builds the [QEMU](https://www.qemu.org/) 11.0.2 system emulator
-(`qemu-system-aarch64`) with badc and runs the result.
+Builds the [QEMU](https://www.qemu.org/) 11.0.2 system emulator with badc and
+runs the result. badc self-compiles and self-links -- with its own linker --
+both `qemu-system-aarch64` and `qemu-system-x86_64`; each boots a Linux kernel
+plus a busybox initramfs to an interactive userspace shell and powers off
+cleanly under TCG. The vendored demo config drives the aarch64 lane end to
+end; the x86_64 lane's config vendoring is pending (see Scope).
 
-QEMU is a large, portable C program: this demo compiles **1683 translation
-units** with badc -- the 1140 emulator objects plus the 543 objects of its
-utility library -- covering device models, the TCG code generator, the block
-layer, QAPI-generated marshalling, and the character/network back ends. It is
-the widest single exercise of badc's C front end and object emitter in the demo
-set.
+QEMU is a large, portable C program: this demo compiles well over a thousand
+translation units per target with badc -- for aarch64, **1683 units** (1140
+emulator objects plus the 543 objects of its utility library); the x86_64
+emulator is a comparable **1466 units** -- covering device models, the TCG code
+generator, the block layer, QAPI-generated marshalling, and the
+character/network back ends. It is the widest single exercise of badc's C front
+end and object emitter in the demo set.
 
 ## Run
 
@@ -94,8 +99,11 @@ instead; `$BADC_QEMU_APPEND` overrides the kernel command line,
 ## Scope
 
 The vendored build config is per target. The **aarch64 Linux** config is
-captured and validated. The x86_64 Linux and macOS configs are not yet vendored
-(TODO); on a host without a captured config the smoke skips cleanly.
+captured and validated in-repo -- the smoke builds, self-links, and boots it
+end to end. badc also self-compiles, self-links, and boots the **x86_64 Linux**
+emulator to userspace, but its build config and kernel bundle are not yet
+vendored into the repo (TODO); the macOS config is likewise not vendored. On a
+host without a captured config the smoke skips cleanly.
 
 ## Requirements
 

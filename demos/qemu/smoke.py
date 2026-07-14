@@ -35,6 +35,7 @@ import json
 import os
 import platform
 import shlex
+import shutil
 import struct
 import subprocess
 import sys
@@ -77,6 +78,25 @@ HOST_ACCEL_HEADERS = ("arm_neon.h", "immintrin.h")
 
 # QEMU's kernel-header tree names the arch dir asm-<arch>; code includes <asm/*>.
 ASM_ARCH = {"aarch64": "arm64", "x86_64": "x86"}
+
+# The vendored config is captured from a meson build whose host capabilities
+# (compiler SIMD support, __int128, installed optional libraries) differ from
+# the badc toolchain's. These config macros are disabled to match what meson
+# would emit if configured with badc: no host SIMD-intrinsics header
+# (immintrin.h) so the AVX-optimized paths are off; no native __int128 support
+# so the portable struct Int128 path is used, which also rules out the
+# __int128-based 128-bit compare-and-swap (leaving QEMU's lock-based fallback);
+# no elfutils so libdw (TCG debuginfo) is off. Each has a portable fallback /
+# inline stub in QEMU, the same one the aarch64 config already selects. A no-op
+# where the config does not set them.
+BADC_DISABLED_CONFIG = ("CONFIG_AVX2_OPT", "CONFIG_AVX512BW_OPT", "CONFIG_LIBDW",
+                        "CONFIG_INT128", "CONFIG_INT128_TYPE", "CONFIG_CMPXCHG128")
+
+# Objects whose only translation unit unconditionally needs a host library badc
+# does not provide. With the gating config off (above), QEMU's header supplies
+# inline stubs to callers, so the object is dropped from the link. Substring
+# match against the response-file object path; a no-op where absent.
+BADC_DROP_OBJECTS = ("debuginfo.c.o",)
 
 
 def log(m: str) -> None:
@@ -216,6 +236,26 @@ def index_by_output(build_dir: Path) -> dict[str, dict]:
     return by_out
 
 
+def adapt_config(build_dir: Path) -> int:
+    """Disable the vendored config macros badc cannot honor (host SIMD opts,
+    libdw) in config-host.h so units select their scalar / stub path. Idempotent;
+    returns the count changed (0 where none are set, e.g. aarch64)."""
+    cfg = build_dir / "config-host.h"
+    if not cfg.is_file():
+        return 0
+    out, changed = [], 0
+    for ln in cfg.read_text().splitlines(keepends=True):
+        s = ln.strip()
+        if any(s == f"#define {m}" or s.startswith(f"#define {m} ") for m in BADC_DISABLED_CONFIG):
+            out.append(f"/* badc: {s[len('#define '):]} disabled (no host header) */\n")
+            changed += 1
+        else:
+            out.append(ln)
+    if changed:
+        cfg.write_text("".join(out))
+    return changed
+
+
 def main() -> int:
     badc = resolve_badc()
     arch = host_arch()
@@ -236,13 +276,18 @@ def main() -> int:
         log(f"no vendored QEMU build config for {arch} in this asset; skipping")
         return 0
     ensure_asm_symlink(src_dir, arch)
+    if adapt_config(build_dir):
+        log(f"config: disabled {', '.join(BADC_DISABLED_CONFIG)} not supported by badc")
 
-    glib_cflags = [a for a in pkg_config("--cflags", "glib-2.0") if a.startswith(("-I", "-D"))]
-    glib_libs = [a for a in pkg_config("--libs", "glib-2.0") if a.startswith(("-L", "-l"))]
+    # glib plus gmodule (the dynamic-module component the emulator uses).
+    glib_pkgs = ("glib-2.0", "gmodule-2.0")
+    glib_cflags = [a for a in pkg_config("--cflags", *glib_pkgs) if a.startswith(("-I", "-D"))]
+    glib_libs = [a for a in pkg_config("--libs", *glib_pkgs) if a.startswith(("-L", "-l"))]
     log(f"badc={badc} arch={arch} target=qemu-system-{arch}")
 
-    main_o = read_objects(build_dir, stem)
-    util_o = read_objects(build_dir, "libqemuutil.a")
+    drop = lambda objs: [o for o in objs if not any(d in o for d in BADC_DROP_OBJECTS)]
+    main_o = drop(read_objects(build_dir, stem))
+    util_o = drop(read_objects(build_dir, "libqemuutil.a"))
     all_o = list(dict.fromkeys(main_o + util_o))
     by_out = index_by_output(build_dir)
     # The build box's absolute source/build roots, recorded in compile_commands,
@@ -256,6 +301,11 @@ def main() -> int:
     out_dir = cache / ("objs-O" if optimize else "objs")
     out_dir.mkdir(parents=True, exist_ok=True)
     opt = ["-O"] if optimize else []
+    # QEMU forbids NDEBUG (osdep.h #error): it is built optimized but with
+    # assertions kept on. badc's -O predefines NDEBUG for release semantics, so
+    # the -O compile lane undefines it to match QEMU's build (optimization,
+    # asserts on). The link keeps plain -O.
+    opt_compile = [*opt, "-U", "NDEBUG"] if optimize else []
     host_accel = f"{HOST_INCLUDE}/{arch}"
 
     def compile_one(obj: str) -> tuple[str, str]:
@@ -269,7 +319,7 @@ def main() -> int:
         # Retry a unit needing a host SIMD-intrinsics header on the portable path.
         for scalar in (False, True):
             flags = transform(argv, glib_cflags, src_dir, build_dir, orig_build, orig_src, scalar, host_accel)
-            cmd = [str(badc), "--gnu", "-q", *opt, "-c", "-o", str(dst), *flags, src_file]
+            cmd = [str(badc), "--gnu", "-q", *opt_compile, "-c", "-o", str(dst), *flags, src_file]
             r = subprocess.run(cmd, cwd=build_dir, capture_output=True, text=True)
             if r.returncode == 0:
                 return (obj, "ok")
@@ -500,6 +550,45 @@ def _drive_boot(cmd: list[str], deadline: float) -> tuple[int | None, str]:
     return rc, out()
 
 
+# System UEFI firmware for the x86_64 boot. The EFI-stub bzImage boots through
+# OVMF (UEFI) rather than QEMU's legacy -kernel loader, so the path matches a
+# real UEFI system. Split CODE/VARS is the norm; VARS must be writable, so it is
+# copied per run. A combined image (no separate VARS) is used via -bios instead.
+OVMF_CODE_NAMES = ("OVMF_CODE.fd", "OVMF_CODE_4M.fd", "OVMF.fd")
+OVMF_VARS_NAMES = ("OVMF_VARS.fd", "OVMF_VARS_4M.fd")
+OVMF_SEARCH = ("/usr/share/OVMF", "/usr/share/edk2/ovmf",
+               "/usr/share/edk2-ovmf/x64", "/usr/share/qemu")
+
+
+def _find_firmware(env: str, names: tuple[str, ...], dirs: tuple[str, ...]) -> Path | None:
+    v = os.environ.get(env)
+    if v:
+        return Path(v)
+    for d in dirs:
+        for n in names:
+            p = Path(d) / n
+            if p.is_file():
+                return p
+    return None
+
+
+def ovmf_pflash(cache: Path) -> list[str]:
+    """Locate system OVMF and return the QEMU firmware args for a UEFI boot.
+    VARS is copied to a writable per-run file. Fails if no firmware is found."""
+    code = _find_firmware("BADC_QEMU_OVMF_CODE", OVMF_CODE_NAMES, OVMF_SEARCH)
+    if code is None:
+        fail("no OVMF firmware found for the x86_64 UEFI boot; install `ovmf` "
+             "(Debian/Ubuntu) or `edk2-ovmf` (Fedora), or set $BADC_QEMU_OVMF_CODE")
+    vars_src = _find_firmware("BADC_QEMU_OVMF_VARS", OVMF_VARS_NAMES,
+                              (str(code.parent), *OVMF_SEARCH))
+    if vars_src is None:
+        return ["-bios", str(code)]
+    vars_rw = cache / "ovmf_vars.rw.fd"
+    shutil.copyfile(vars_src, vars_rw)
+    return ["-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}",
+            "-drive", f"if=pflash,format=raw,unit=1,file={vars_rw}"]
+
+
 def maybe_boot(binp: Path, arch: str) -> None:
     """Boot the freshly built emulator on a kernel + initramfs and require a
     full round trip: the kernel boots, reaches its init process / busybox
@@ -540,7 +629,8 @@ def maybe_boot(binp: Path, arch: str) -> None:
                 fail(msg + " (BADC_QEMU_BOOT set but nothing to boot)")
             log(msg + "; skipping (best-effort)")
             return
-        kernel, initrd = str(pair[0]), str(pair[1])
+        kernel = str(pair[0])
+        initrd = str(pair[1]) if pair[1] else None
 
     timeout = float(os.environ.get("BADC_QEMU_BOOT_TIMEOUT") or 60)
     machine = "virt" if arch == "aarch64" else "q35"
@@ -551,11 +641,17 @@ def maybe_boot(binp: Path, arch: str) -> None:
     # NIC pulls in a boot ROM (efi-virtio.rom) that is not staged next to the
     # freshly linked emulator, so `-nic none` keeps the run self-contained.
     cmd = [str(binp), "-M", machine, "-cpu", cpu, "-smp", "16", "-m", "512",
-           "-nographic", "-no-reboot", "-nic", "none", "-kernel", kernel, "-append", append]
+           "-nographic", "-no-reboot", "-nic", "none"]
+    # x86_64 boots the EFI-stub kernel through system OVMF (UEFI firmware); the
+    # cmdline reaches the stub via fw_cfg. aarch64 -M virt loads the raw Image.
+    if arch == "x86_64":
+        cmd += ovmf_pflash(QEMU_DIR / ".cache")
+    cmd += ["-kernel", kernel, "-append", append]
     if initrd:
         cmd += ["-initrd", initrd]
 
-    log(f"boot: {os.path.basename(kernel)} on -M {machine} -smp 16 (timeout {timeout:.0f}s)")
+    fw = " via OVMF" if arch == "x86_64" else ""
+    log(f"boot: {os.path.basename(kernel)} on -M {machine} -smp 16{fw} (timeout {timeout:.0f}s)")
     t0 = time.time()
     try:
         rc, out = _drive_boot(cmd, timeout)

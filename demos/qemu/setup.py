@@ -39,24 +39,32 @@ VERSION = "11.0.2"
 UPSTREAM_SHA = "e545d8bb9d63e9dd61542b88463183314cff9482"
 ASSET = f"qemu-{VERSION}-{UPSTREAM_SHA[:8]}.tar.xz"
 RELEASE_TAG = "vendor-deps-v1"
-SHA256 = "9b56494bd7124e6802c551b2c5ef1b22a05c6145f99e8be8bec4baa2a5cd4776"
+SHA256 = "ebacb1a7da38e3414c5d0a089a6c7e2ff5bcf184f9c0b23f745bac09e40bd5f8"
 PREFIX = f"qemu-{VERSION}"
 
 # Boot kernel bundle, used by smoke.py's boot check. Each per-arch bundle is a
-# tar.xz of {Image, initramfs.cpio.gz, config} under a top-level `kernel-<arch>`
-# directory. The version is the kernel release; the sha suffix is the build
-# tree commit that produced the assets. Only arm64 is published; other arches
-# fetch nothing and the boot check skips. The debug symbols (vmlinux) are a
-# separate, larger asset fetched only when a boot needs symbolizing.
+# tar.xz under a top-level `kernel-<arch>` directory. arm64 ships a raw `Image`
+# plus a separate `initramfs.cpio.gz`; x86_64 ships an EFI-stub `bzImage` with
+# the initramfs embedded (no separate initrd), booted through OVMF. The version
+# is the kernel release; the sha suffix is the build tree commit that produced
+# the assets. A host without a bundle fetches nothing and the boot check skips.
+# The debug symbols (vmlinux) are a separate, larger asset fetched only when a
+# boot needs symbolizing.
 KERNEL_VERSION = "7.1.3"
-KERNEL_BUILD_SHA = "2ab297f3"
+KERNEL_ARM64_BUILD_SHA = "2ab297f3"
+KERNEL_X64_BUILD_SHA = "95f49161"
 KERNEL_BUNDLES = {
     "aarch64": {
-        "asset": f"kernel-arm64-{KERNEL_VERSION}-{KERNEL_BUILD_SHA}.tar.xz",
+        "asset": f"kernel-arm64-{KERNEL_VERSION}-{KERNEL_ARM64_BUILD_SHA}.tar.xz",
         "sha256": "7988443ca45c8b440110458451c124f342f6615be2da3956787e74553f74e9e9",
-        "dir": "kernel-arm64",
-        "vmlinux_asset": f"vmlinux-arm64-{KERNEL_VERSION}-{KERNEL_BUILD_SHA}.xz",
+        "dir": "kernel-arm64", "image": "Image", "initrd": "initramfs.cpio.gz",
+        "vmlinux_asset": f"vmlinux-arm64-{KERNEL_VERSION}-{KERNEL_ARM64_BUILD_SHA}.xz",
         "vmlinux_sha256": "0971b79f2b9620653fe66399681f80c23da0fb6a1d6ec0476e55efa2b996cd79",
+    },
+    "x86_64": {
+        "asset": f"kernel-x64-{KERNEL_VERSION}-{KERNEL_X64_BUILD_SHA}.tar.xz",
+        "sha256": "521cbfb0b954b5573d5608e690a88f243b5aa6e07ced59f9550db26fab9c7705",
+        "dir": "kernel-x64", "image": "bzImage", "initrd": None,
     },
 }
 
@@ -72,10 +80,11 @@ def host_arch() -> str:
     return m
 
 
-def fetch_kernel(cache: Path, arch: str, log=lambda _m: None) -> tuple[Path, Path] | None:
+def fetch_kernel(cache: Path, arch: str, log=lambda _m: None) -> tuple[Path, Path | None] | None:
     """Fetch + verify + extract the boot kernel bundle for `arch` into `cache`.
-    Returns (image, initrd) paths, or None when no bundle is published for the
-    arch. Idempotent: a cached bundle matching the pinned sha256 is reused."""
+    Returns (image, initrd) where initrd is None for a bundle with an embedded
+    initramfs, or None when no bundle is published for the arch. Idempotent: a
+    cached bundle matching the pinned sha256 is reused."""
     spec = KERNEL_BUNDLES.get(arch)
     if spec is None:
         return None
@@ -83,8 +92,10 @@ def fetch_kernel(cache: Path, arch: str, log=lambda _m: None) -> tuple[Path, Pat
     tar_path = cache / spec["asset"]
     _fetch.fetch_and_verify(RELEASE_TAG, spec["asset"], tar_path, spec["sha256"], log)
     dst = cache / spec["dir"]
-    image, initrd = dst / "Image", dst / "initramfs.cpio.gz"
-    if not (image.is_file() and initrd.is_file()):
+    image = dst / spec["image"]
+    initrd = dst / spec["initrd"] if spec.get("initrd") else None
+    need = [image] + ([initrd] if initrd else [])
+    if not all(p.is_file() for p in need):
         if dst.exists():
             shutil.rmtree(dst)
         log(f"extracting {spec['asset']}")

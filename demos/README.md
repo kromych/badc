@@ -190,14 +190,14 @@ well over a thousand translation units per target (device models, the TCG code
 generator, the block layer, the QAPI-generated marshallers, the character /
 network back ends), the widest single exercise of the C front end and object
 emitter in the demo set. badc compiles every unit, archives the utility
-library with `--ar`, and self-links the emulator with its own linker (a
-system-`cc` link is the fallback where an aarch64 reloc type is not yet
-supported). The self-compiled, self-linked `qemu-system-aarch64` and
-`qemu-system-x86_64` boot a Linux kernel plus a busybox initramfs to an
-interactive userspace shell and power off cleanly under TCG. The vendored
-build config (no meson / make / configure) is per target: the aarch64 lane is
-captured and validated in-repo, the x86_64 lane's config vendoring is pending.
-See [`qemu/README.md`](./qemu/README.md).
+library with `--ar`, and self-links the emulator with its own linker -- no
+system linker in the chain. The self-compiled, self-linked `qemu-system-aarch64`
+boots a Linux kernel plus a busybox initramfs to an interactive userspace shell
+and powers off cleanly under TCG. `qemu-system-x86_64` self-compiles every unit
+and boots an EFI-stub `bzImage` through OVMF; its self-link is pending the
+vhost-user / vduse subproject libraries. The vendored build config (no meson /
+make / configure) is per target; both the aarch64 and x86_64 Linux configs are
+captured in-repo. See [`qemu/README.md`](./qemu/README.md).
 
 ## efi_hello/
 

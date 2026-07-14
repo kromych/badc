@@ -1226,25 +1226,42 @@ jobs:
         run: python demos/edk2/smoke.py
 
   qemu:
-    # Compile every translation unit of QEMU 11.0.2's qemu-system-aarch64 (1683
-    # units: the emulator objects + its utility library) with badc, archive the
-    # library with badc's --ar, and link the emulator -- preferring badc's own
-    # linker and falling back to cc-linking badc's objects where the linker's
-    # aarch64 reloc support is still incomplete (TODO). The gate is that badc
-    # compiles every unit and the linked emulator reports its version.
+    # Compile every translation unit that feeds qemu-system-<arch> (the emulator
+    # objects + its utility library) with badc, archive the library with badc's
+    # --ar, and link the emulator with badc's OWN linker over the 100%-badc
+    # objects -- no system linker in the chain (a self-link failure fails the
+    # job). The gate is that badc compiles every unit, self-links the emulator,
+    # it reports its version, and it boots the published kernel to a userspace
+    # shell and powers off cleanly.
     #
-    # setup.py fetches the source + captured meson build config from the
-    # vendor-deps release (GITHUB_TOKEN inherited from the workflow env). Only
-    # the aarch64 Linux config is vendored so far; the x86_64 Linux and macOS
-    # configs are pending capture + validation (TODO), so this is a single lane.
-    name: qemu (${{ matrix.label }})
+    # aarch64 Linux at -O0: -M virt loads a raw Image and boots to a userspace
+    # shell. setup.py fetches the source + captured meson build config (both
+    # arches) and the boot kernel from the vendor-deps release (GITHUB_TOKEN
+    # inherited from the workflow env).
+    #
+    # TODO: add the x86_64 lane. badc compiles every x86_64 unit (the vendored
+    # config disables features whose host headers badc lacks -- host SIMD
+    # intrinsics, native __int128 + its 128-bit CAS, elfutils; see smoke.py
+    # adapt_config), but the self-link still needs the vhost-user / vduse
+    # subproject libraries compiled from source (their objects are not in the
+    # per-target response file). x86_64 boots an EFI-stub bzImage through OVMF
+    # (the smoke's boot path is ready). See the x86_64-lane task.
+    #
+    # TODO: add the -O lanes once the inliner folds constant-argument switches.
+    # At -O, QEMU maps an unreachable switch default to a declared-not-defined
+    # build assert (qemu_build_not_reached_always) that the optimizer must prove
+    # dead. That relies on inlining the static-inline size helper so the
+    # constant size folds the switch; the inliner currently skips any body
+    # containing a call, so the helper's standalone definition survives and
+    # references the undefined symbol. See the inliner task.
+    name: qemu (${{ matrix.label }} ${{ matrix.optname }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-24.04-arm, label: ubuntu-arm64 }
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, optenv: "", optname: O0 }
     runs-on: ${{ matrix.os }}
-    # badc build (warm cache) + ~1683-unit compile + link. The compile is the
+    # badc build (warm cache) + full-unit compile + link. The compile is the
     # long pole; 30 min is a backstop it must never approach.
     timeout-minutes: 30
     steps:
@@ -1262,6 +1279,9 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y pkg-config libglib2.0-dev zlib1g-dev libfdt-dev gdb
+      - name: install OVMF (x86_64 UEFI boot)
+        if: matrix.label == 'ubuntu-x64'
+        run: sudo apt-get install -y ovmf
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
       - name: qemu setup (fetch source + build config)
@@ -1274,8 +1294,18 @@ jobs:
         # to boot the published kernel bundle to a userspace shell and power
         # off cleanly. fetch_kernel pulls the bundle on demand (GITHUB_TOKEN is
         # inherited from the workflow env); the per-boot timeout fails a hang
-        # fast rather than approaching the job budget.
+        # fast rather than approaching the job budget. BADC_QEMU_OPT selects the
+        # -O0 / -O compile+link lane.
         env:
           BADC_QEMU_REQUIRE_RUN: "1"
           BADC_QEMU_BOOT: "gate"
+          BADC_QEMU_OPT: ${{ matrix.optenv }}
+          BADC_QEMU_BOOT_LOG: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
         run: python demos/qemu/smoke.py
+      - name: publish boot log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-boot-${{ matrix.label }}-${{ matrix.optname }}
+          path: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
+          if-no-files-found: ignore

@@ -830,6 +830,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_multi_block_only_caller.c", 42),
     ("inline_nonleaf_const_switch.c", 0),
     ("inline_multi_block_phi_caller.c", 16),
+    ("inline_const_array_field_nonnull.c", 40),
     ("sxtw_fold_source_liveness.c", 18),
     ("data_reloc_one_past_end.c", 10),
     ("variadic_libc_fnptr_static_init.c", 0),

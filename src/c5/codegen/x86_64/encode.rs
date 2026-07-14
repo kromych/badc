@@ -2029,6 +2029,12 @@ pub(crate) fn lower(
                 target.abi(),
             );
         });
+        // Prove a null comparison of a const array's relocated pointer
+        // member false, so the branch fold below deletes the unreachable
+        // arm (e.g. an inlined build-time-unreachable guard).
+        super::ssa::emit_common::time_pass("passes::const_global_fold::run (x86_64)", || {
+            crate::c5::codegen::passes::const_global_fold::run(&mut ssa_funcs, program);
+        });
         // Turn self-tail-recursion into a loop back edge on the
         // post-inline bodies, before the phi-sensitive passes below.
         super::ssa::emit_common::time_pass("passes::tailrec::run (x86_64)", || {

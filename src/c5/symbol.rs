@@ -149,6 +149,14 @@ pub(crate) struct Symbol {
     /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
     pub is_const_qualified: bool,
 
+    /// True for a file-scope array whose element type is `const`-qualified
+    /// (`static const T x[]`). Its elements -- and their members -- cannot
+    /// be written (C99 6.7.3), so a relocation the initializer planted in
+    /// the storage (a member holding another object's address) holds for
+    /// the object's lifetime. The const-global fold reads this to prove a
+    /// null comparison of such a member false.
+    pub storage_is_const: bool,
+
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition
     /// merges (C11 6.9.2): a forward `static T x;` (or the same

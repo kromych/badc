@@ -18,10 +18,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	ret
+               	brk	#0x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x5                // =5

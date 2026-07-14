@@ -32,10 +32,8 @@ Disassembly of section .text:
                	cmpq	$0xb, %rax
                	je	<addr>
                	callq	<addr>
+               	ud2
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	popq	%rbp
-               	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

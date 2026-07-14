@@ -184,6 +184,11 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 say("JumpTable terminator");
                 return false;
             }
+            // A block sealed after a `_Noreturn` call is not a return:
+            // control never reaches its end, so the splice needs no
+            // postfix merge for it. The multi-block splice preserves it
+            // as-is (it has no successor and no block-id operands).
+            Terminator::Unreachable => {}
             Terminator::Jmp(_)
             | Terminator::FallThrough(_)
             | Terminator::Bz { .. }
@@ -631,7 +636,10 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
 /// Rewrite block terminators through the caller's value remap.
 pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
     match term {
-        Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
+        Terminator::Jmp(_)
+        | Terminator::FallThrough(_)
+        | Terminator::TailExt(_)
+        | Terminator::Unreachable => {}
         Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
             *cond = map_v(*cond, remap);
         }
@@ -711,6 +719,7 @@ fn splice_multi_block(
             },
             Terminator::Return(v) => Terminator::Return(map_v(v, remap)),
             Terminator::TailExt(x) => Terminator::TailExt(x),
+            Terminator::Unreachable => Terminator::Unreachable,
             Terminator::GotoIndirect { target } => Terminator::GotoIndirect {
                 target: map_v(target, remap),
             },
@@ -951,6 +960,9 @@ fn splice_multi_block(
                     remap[call_pc as usize] = map_v(v, &callee_remap);
                     Terminator::Jmp(postfix_id)
                 }
+                // A block sealed after a noreturn call: no successor, no
+                // value; carry it through unchanged (no block id to shift).
+                Terminator::Unreachable => Terminator::Unreachable,
                 Terminator::TailExt(_) => unreachable!("filter rejects TailExt"),
                 Terminator::GotoIndirect { .. } => {
                     unreachable!("filter rejects GotoIndirect")

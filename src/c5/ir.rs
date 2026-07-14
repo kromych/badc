@@ -651,6 +651,12 @@ pub(crate) enum Terminator {
     /// that already carry it; new IR producers should use the
     /// explicit branch terminators instead.
     FallThrough(BlockId),
+    /// Control cannot reach here: the block's last real instruction
+    /// diverges (a call to a `_Noreturn` function, C11 6.7.4p8). The
+    /// block has no successor and yields no value; the per-arch
+    /// lowering emits a trap so a mis-marked non-returning call faults
+    /// rather than falling into the next block.
+    Unreachable,
 }
 
 /// A single basic block of SSA instructions plus its terminator.

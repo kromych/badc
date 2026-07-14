@@ -979,6 +979,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_nonleaf_const_switch.c", 0),
     ("inline_multi_block_phi_caller.c", 16),
     ("inline_const_array_field_nonnull.c", 43),
+    ("inline_noreturn_branch_single_return.c", 42),
     ("sxtw_fold_source_liveness.c", 18),
     ("data_reloc_one_past_end.c", 10),
     ("variadic_libc_fnptr_static_init.c", 0),

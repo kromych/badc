@@ -75,7 +75,10 @@ impl Liveness {
                     term_use(*target)
                 }
                 Terminator::Return(v) => term_use(*v),
-                Terminator::Jmp(_) | Terminator::TailExt(_) | Terminator::FallThrough(_) => {}
+                Terminator::Jmp(_)
+                | Terminator::TailExt(_)
+                | Terminator::FallThrough(_)
+                | Terminator::Unreachable => {}
             }
         }
 

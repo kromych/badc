@@ -761,6 +761,13 @@ fn run_func<H: Host>(
                     "vm_ssa: Terminator::TailExt not implemented".to_string(),
                 ));
             }
+            Terminator::Unreachable => {
+                // Sealed after a noreturn call; reaching it means the call
+                // returned when it should not have.
+                break Err(C5Error::Runtime(
+                    "vm_ssa: reached Terminator::Unreachable".to_string(),
+                ));
+            }
         }
     };
     mem.release_frame(stack_base);

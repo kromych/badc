@@ -43,6 +43,7 @@ fn push_successors(t: &Terminator, out: &mut Vec<BlockId>) {
         }
         Terminator::Return(_)
         | Terminator::TailExt(_)
+        | Terminator::Unreachable
         | Terminator::GotoIndirect { .. }
         | Terminator::JumpTable { .. } => {}
     }

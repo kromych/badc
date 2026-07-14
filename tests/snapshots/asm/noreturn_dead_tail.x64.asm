@@ -19,9 +19,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	xorq	%rax, %rax
-               	popq	%rbp
-               	retq
+               	ud2
                	leaq	<rip>, %rcx
                	movl	$0x5, %eax
                	movl	%eax, (%rcx)
@@ -49,4 +47,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

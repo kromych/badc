@@ -97,7 +97,7 @@ pub(crate) fn successors(
             }
             out
         }
-        Terminator::Return(_) | Terminator::TailExt(_) => Vec::new(),
+        Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => Vec::new(),
     }
 }
 
@@ -453,7 +453,10 @@ pub(crate) fn insert_phis(
                     remap(v);
                 }
             }
-            Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
+            Terminator::Jmp(_)
+            | Terminator::FallThrough(_)
+            | Terminator::TailExt(_)
+            | Terminator::Unreachable => {}
         }
     }
     // The per-site cross-TU relocation tables key on the value-id of
@@ -1252,7 +1255,10 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                     *v = resolve(&redirect, *v);
                 }
             }
-            Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
+            Terminator::Jmp(_)
+            | Terminator::FallThrough(_)
+            | Terminator::TailExt(_)
+            | Terminator::Unreachable => {}
         }
     }
     // Neutralize promoted stores: their id has been redirected to the

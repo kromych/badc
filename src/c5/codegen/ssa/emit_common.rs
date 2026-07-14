@@ -462,7 +462,9 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 }
                 out
             }
-            Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
+            Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => {
+                alloc::vec![]
+            }
         };
     for succ in succs {
         let head = func.blocks[succ as usize].inst_range.start;

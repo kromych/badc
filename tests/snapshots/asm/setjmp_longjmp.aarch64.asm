@@ -17,12 +17,7 @@ Disassembly of section .text:
                	str	w1, [x0, #0x200]
                	bl	<addr>
                	uxtb	w0, w0
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	ret
-
-<main>:
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x240

@@ -57,6 +57,7 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
             }
             Terminator::Return(_)
             | Terminator::TailExt(_)
+            | Terminator::Unreachable
             | Terminator::GotoIndirect { .. }
             | Terminator::JumpTable { .. } => {}
         }

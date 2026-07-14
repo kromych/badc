@@ -2025,6 +2025,13 @@ pub(crate) fn emit_function(
                     });
                     super::encode::emit_jmp_rel32(code, 0);
                 }
+                // Sealed after a noreturn call (C11 6.7.4p8): control
+                // cannot reach here. Emit ud2 so a mis-marked returning
+                // call faults rather than falling into the next block.
+                Terminator::Unreachable => {
+                    code.push(0x0F);
+                    code.push(0x0B); // ud2
+                }
             }
         }
 

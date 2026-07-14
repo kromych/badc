@@ -29,11 +29,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	uxtb	w0, w0
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x50
-               	ret
+               	brk	#0x1
                	ldursw	x0, [x29, #-0x8]
                	cmp	x0, #0x2
                	b.ne	<addr>

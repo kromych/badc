@@ -885,7 +885,10 @@ impl<'a> Walker<'a> {
                 // block: the statements after it are unreachable
                 // (C11 6.7.4p8) and the unreachable-block prune
                 // drops them, so a dead tail's calls never reach
-                // the object. The sealing return never executes.
+                // the object. Seal with `Unreachable` (not a return),
+                // so the block is not counted as a return path -- a
+                // guard like `if (x) noreturn_fn(); return v;` stays a
+                // single-return, inlinable function.
                 if let Expr::Call { callee, .. } = self.ast.expr(e)
                     && let Expr::Ident { sym, .. } = self.ast.expr(*callee)
                     && self
@@ -893,8 +896,7 @@ impl<'a> Walker<'a> {
                         .get(*sym as usize)
                         .is_some_and(|s| s.is_noreturn)
                 {
-                    let zero = b.imm(0);
-                    b.return_(zero);
+                    b.unreachable();
                     return Ok(true);
                 }
                 Ok(false)

@@ -204,9 +204,10 @@ fn successors(term: &Terminator, jump_tables: &[Vec<BlockId>]) -> Vec<BlockId> {
         // run() guards on computed_goto_targets), so an indirect branch
         // never reaches here; its successors live on the function, not
         // the terminator.
-        Terminator::GotoIndirect { .. } | Terminator::Return(_) | Terminator::TailExt(_) => {
-            Vec::new()
-        }
+        Terminator::GotoIndirect { .. }
+        | Terminator::Return(_)
+        | Terminator::TailExt(_)
+        | Terminator::Unreachable => Vec::new(),
     }
 }
 

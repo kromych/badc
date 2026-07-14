@@ -418,6 +418,7 @@ fn lay_out(
                     }
                     Terminator::Return(_)
                     | Terminator::TailExt(_)
+                    | Terminator::Unreachable
                     | Terminator::GotoIndirect { .. } => {}
                     // Case blocks chain in table order; the entries are
                     // remapped with the rest of the id surface.

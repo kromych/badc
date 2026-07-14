@@ -33,12 +33,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	uxtb	w0, w0
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	ret
-
-<main>:
+               	brk	#<addr>:
                	stp	x20, x21, [sp, #-0x30]!
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
@@ -83,16 +78,11 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
-               	mov	x21, #0x0               // =0
+               	mov	x1, #0x0                // =0
                	mov	x0, x20
-               	mov	x1, x21
                	bl	<addr>
                	uxtb	w0, w0
-               	mov	x0, x21
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
-               	ret
+               	brk	#0x1
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
@@ -145,24 +135,15 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	uxtb	w0, w0
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
-               	ret
+               	brk	#0x1
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
-               	mov	x21, #0x0               // =0
+               	mov	x1, #0x0                // =0
                	mov	x0, x20
-               	mov	x1, x21
                	bl	<addr>
                	uxtb	w0, w0
-               	mov	x0, x21
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
-               	ret
+               	brk	#0x1
                	b	<addr>
                	b	<addr>

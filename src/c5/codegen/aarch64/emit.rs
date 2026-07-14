@@ -1194,6 +1194,10 @@ pub(crate) fn emit_function(
                 };
                 super::encode::emit_got_tail_jump(code, plt_call_fixups, import_index);
             }
+            // Sealed after a noreturn call (C11 6.7.4p8): control cannot
+            // reach here. Emit a trap so a mis-marked returning call
+            // faults rather than falling into the next block.
+            Terminator::Unreachable => emit(code, 0xD420_0020), // brk #1
         }
     }
     // Patch each `&&label` ADR against its block's final offset.

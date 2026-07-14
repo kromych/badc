@@ -30,9 +30,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movzbq	%al, %rax
-               	xorq	%rax, %rax
-               	popq	%rbp
-               	retq
+               	ud2
 
 <main>:
                	pushq	%rbp
@@ -80,18 +78,12 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	xorq	%r12, %r12
+               	xorq	%rsi, %rsi
                	movq	%rbx, %rdi
-               	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movzbq	%al, %rax
-               	movq	%r12, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
+               	ud2
                	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
                	movl	%ecx, (%rax)
@@ -145,27 +137,16 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movzbq	%al, %rax
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
+               	ud2
                	leaq	<rip>, %rax
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
-               	xorq	%r12, %r12
+               	xorq	%rsi, %rsi
                	movq	%rbx, %rdi
-               	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movzbq	%al, %rax
-               	movq	%r12, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
+               	ud2
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

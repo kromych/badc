@@ -1308,6 +1308,15 @@ impl SsaBuilder {
         self.close(Terminator::Return(value), value);
     }
 
+    /// Close the current block with `Terminator::Unreachable`: the
+    /// block's last real instruction diverges (a `_Noreturn` call), so
+    /// control cannot fall off its end (C11 6.7.4p8). Unlike a sealing
+    /// `return`, this is not counted as a return path by the inliner and
+    /// lowers to a trap.
+    pub(crate) fn unreachable(&mut self) {
+        self.close(Terminator::Unreachable, NO_VALUE);
+    }
+
     /// Close the current block with `Terminator::TailExt`. Used
     /// by parser-emitted sys-trampolines whose body is a single
     /// `jmp [iat]` host instruction. The caller's own argument

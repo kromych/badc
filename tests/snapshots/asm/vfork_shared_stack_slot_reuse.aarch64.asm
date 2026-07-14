@@ -492,13 +492,4 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x0, #0x0                // =0
-               	ldr	x19, [sp, #0x50]
-               	ldr	x28, [sp, #0x40]
-               	ldp	x26, x27, [sp, #0x30]
-               	ldp	x24, x25, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x250
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	brk	#0x1

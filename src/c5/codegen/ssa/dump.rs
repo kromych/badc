@@ -295,6 +295,7 @@ fn fmt_terminator(t: Terminator) -> String {
         Terminator::JumpTable { idx, table } => {
             format!("JumpTable {{ idx=v{idx}, table={table} }}")
         }
+        Terminator::Unreachable => "Unreachable".to_string(),
     }
 }
 

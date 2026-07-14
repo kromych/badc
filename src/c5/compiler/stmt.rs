@@ -104,12 +104,22 @@ impl Compiler {
             // `ast_wrap_stmts_since` keeps only the last arena entry
             // (correct for a single nested statement, not for sibling
             // decls), which drops every initializer but the last.
+            // A statement-expression initializer interleaves its own
+            // sub-statements here (e.g. the `while` of a `qatomic_read`
+            // build-assert); skip them as `parse_block_stmt` does, else
+            // the wrapped for-init Compound lists a nested `while`'s body
+            // as a sibling and the walker runs it unconditionally.
             if init_after > init_before {
                 let ids: alloc::vec::Vec<super::super::ast::StmtId> = (init_before..init_after)
+                    .filter(|&i| !self.in_stmt_expr_range(i))
                     .map(|i| i as super::super::ast::StmtId)
                     .collect();
-                let id = self.ast_wrap_block_items(&ids);
-                init_ast = Some(super::super::ast::BlockItem::Stmt(id));
+                self.stmt_expr_arena_ranges
+                    .retain(|&(s, _)| s < init_before);
+                if !ids.is_empty() {
+                    let id = self.ast_wrap_block_items(&ids);
+                    init_ast = Some(super::super::ast::BlockItem::Stmt(id));
+                }
             }
         } else {
             let init_before = self.ast_stmts_snapshot();

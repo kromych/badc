@@ -1200,6 +1200,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("do_while.c", 5),
     ("break_continue.c", 4),
     ("for_loop.c", 10),
+    ("for_init_stmt_expr_nested_stmt.c", 6),
     ("layout_bottom_test_loop.c", 45),
     ("layout_nested_loops.c", 27),
     ("layout_goto_block_addr.c", 16),

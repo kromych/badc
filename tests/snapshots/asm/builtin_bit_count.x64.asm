@@ -10,15 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<eq>:
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
-               	cmpq	%rsi, %rdi
-               	sete	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -230,5 +221,3 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

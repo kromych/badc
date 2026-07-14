@@ -10,14 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x0, #0x0                // =0
-               	ret
-
-<caller>:
-               	mov	x0, #0x0                // =0
-               	ret
-
-<next_fn>:
                	cmp	x1, #0x64
                	b.ls	<addr>
                	mov	x0, #0x0                // =0

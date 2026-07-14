@@ -10,26 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<plus_one>:
-               	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<minus_one>:
-               	leaq	-0x1(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<plus_one_l>:
-               	leaq	0x1(%rdi), %rax
-               	retq
-
-<minus_neg_one>:
-               	leaq	0x1(%rdi), %rax
-               	retq
-
 <count_up>:
                	movslq	%edi, %rdi
                	xorq	%rax, %rax
@@ -43,12 +23,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movslq	%ecx, %rax
                	movslq	%eax, %rax
-               	retq
-
-<wrap>:
-               	movl	%edi, %eax
-               	incq	%rax
-               	movl	%eax, %eax
                	retq
 
 <main>:

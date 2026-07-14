@@ -1,25 +1,3 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
-; name=mix
-fn ent_pc=0 n_params=3 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=I64)                            -> x6
-    v4   Imm(0)                                           -> x0
-    v5   ParamRef(2, kind=I64)                            -> x2
-    v6   Imm(0)                                           -> x0
-    v7   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x0
-    v8   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
-    v9   Binop { op=and, lhs=v7, rhs=v8 }                 -> x1
-    v10  BinopI { op=xor, lhs=v7, rhs_imm=-1 }            -> x0
-    v11  BinopI { op=and, lhs=v10, rhs_imm=4294967295 }   -> x0
-    v12  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x2
-    v13  Binop { op=and, lhs=v11, rhs=v12 }               -> x0
-    v14  Binop { op=xor, lhs=v9, rhs=v13 }                -> x0
-    v15  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> x0
-    terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=digest
 fn ent_pc=1 n_params=2 variadic=false locals=8

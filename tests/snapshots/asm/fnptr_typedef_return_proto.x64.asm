@@ -16,10 +16,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	retq
 
-<via_proto>:
-               	leaq	-<rip>, %rax       # <addr>
-               	retq
-
 <pick>:
                	leaq	-<rip>, %rax       # <addr>
                	retq

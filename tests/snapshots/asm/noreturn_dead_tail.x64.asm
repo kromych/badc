@@ -10,10 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<helper>:
-               	movl	$0x5, %eax
-               	retq
-
 <f>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -53,5 +49,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

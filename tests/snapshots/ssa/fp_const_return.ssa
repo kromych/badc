@@ -34,40 +34,6 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
   block 4  start_pc=0
     v21  LoadLocal { off=-1, kind=F64 }                   -> d0
     terminator Return(v21)   (exit_acc=v21)
-; --- SSA dump (ok=true) ent_pc=1 ---
-; name=ret_zero
-fn ent_pc=1 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=2 ---
-; name=ret_one
-fn ent_pc=2 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   Imm(4607182418800017408)                         -> x0
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=3 ---
-; name=ret_half
-fn ent_pc=3 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   Imm(4602678819172646912)                         -> x0
-    terminator Return(v3)   (exit_acc=v3)
-; --- SSA dump (ok=true) ent_pc=4 ---
-; name=ret_quarter_f
-fn ent_pc=4 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   Imm(1048576000)                                  -> x0 [f32]
-    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=sum_zero
 fn ent_pc=5 n_params=2 variadic=false locals=2

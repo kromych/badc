@@ -16,18 +16,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	retq
 
-<add_cdecl>:
-               	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<add_fast>:
-               	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <record>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
@@ -75,4 +63,3 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

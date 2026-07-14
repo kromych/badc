@@ -10,18 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	ldr	s0, [x0, #0x8]
-               	ret
-
-<read_d>:
-               	ldr	d0, [x0, #0x10]
-               	ret
-
-<read_g2>:
-               	ldr	s0, [x0, #0x20]
-               	ret
-
-<bump_d>:
                	ldr	d0, [x0, #0x10]
                	mov	x1, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x1

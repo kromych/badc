@@ -1,37 +1,3 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
-; name=lt_float_int
-fn ent_pc=1 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=F64)                            -> d0
-    v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=I64)                            -> x7
-    v4   Imm(0)                                           -> x0
-    v5   LoadLocal { off=2, kind=F64 }                    -> d1
-    v6   LoadLocal { off=3, kind=I64 }                    -> x0
-    v7   FpCast { kind=IntToFp, value=v3 }                -> d1
-    v8   Binop { op=flt, lhs=v1, rhs=v7 }                 -> x0
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
-    v10  Extend { value=v8, kind=I32 }                    -> x0
-    terminator Return(v10)   (exit_acc=v10)
-; --- SSA dump (ok=true) ent_pc=2 ---
-; name=le_float_int
-fn ent_pc=2 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=F64)                            -> d0
-    v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=I64)                            -> x7
-    v4   Imm(0)                                           -> x0
-    v5   LoadLocal { off=2, kind=F64 }                    -> d1
-    v6   LoadLocal { off=3, kind=I64 }                    -> x0
-    v7   FpCast { kind=IntToFp, value=v3 }                -> d1
-    v8   Binop { op=fle, lhs=v1, rhs=v7 }                 -> x0
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
-    v10  Extend { value=v8, kind=I32 }                    -> x0
-    terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=2 variadic=false locals=4

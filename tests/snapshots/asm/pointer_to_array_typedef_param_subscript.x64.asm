@@ -99,13 +99,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	retq
 
-<first_of>:
-               	movq	%rsi, %rax
-               	shlq	$0x6, %rax
-               	addq	%rdi, %rax
-               	movq	(%rax), %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -165,3 +158,4 @@ Disassembly of section .text:
                	addq	$0x120, %rsp            # imm = 0x120
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

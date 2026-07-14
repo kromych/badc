@@ -10,18 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<add_one>:
-               	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<advance>:
-               	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <driver>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
@@ -47,3 +35,4 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

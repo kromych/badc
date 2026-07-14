@@ -25,19 +25,6 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v15  BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x0
     v16  Extend { value=v14, kind=I32 }                   -> x0
     terminator Return(v16)   (exit_acc=v16)
-; --- SSA dump (ok=true) ent_pc=2 ---
-; name=as_ushort
-fn ent_pc=2 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   LoadLocal { off=2, kind=I32 }                    -> x0
-    v4   BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x0
-    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
-    v6   Extend { value=v4, kind=I32 }                    -> x0
-    terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=28

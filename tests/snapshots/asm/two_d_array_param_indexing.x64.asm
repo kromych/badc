@@ -10,47 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sum_short_row>:
-               	movslq	%esi, %rsi
-               	movq	%rsi, %rax
-               	shlq	$0x2, %rax
-               	addq	%rdi, %rax
-               	movzwq	(%rax), %rcx
-               	movzwq	0x2(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<sum_int_row>:
-               	movslq	%esi, %rsi
-               	imulq	$0xc, %rsi, %rax
-               	addq	%rdi, %rax
-               	movslq	(%rax), %rcx
-               	movslq	0x4(%rax), %rdx
-               	addq	%rdx, %rcx
-               	movslq	0x8(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<sum_char_row>:
-               	movslq	%esi, %rsi
-               	movq	%rsi, %rax
-               	shlq	$0x2, %rax
-               	addq	%rdi, %rax
-               	movsbq	(%rax), %rcx
-               	movsbq	0x1(%rax), %rdx
-               	addq	%rdx, %rcx
-               	movsbq	0x2(%rax), %rdx
-               	addq	%rdx, %rcx
-               	movsbq	0x3(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -193,5 +152,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

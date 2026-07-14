@@ -54,16 +54,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
-<isnan>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	str	d8, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
@@ -263,12 +253,17 @@ Disassembly of section .text:
                	ret
                	fmov	d0, d8
                	bl	<addr>
-               	mov	x1, x0
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	sxtw	x1, w0
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d0, x0
                	bl	<addr>
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
                	mov	x1, #0x0                // =0
@@ -276,11 +271,16 @@ Disassembly of section .text:
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d0, x0
                	bl	<addr>
-               	mov	x1, x0
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	sxtw	x1, w0
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	fmov	d0, d8
                	bl	<addr>
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
                	cmp	x0, #0x0
@@ -290,12 +290,17 @@ Disassembly of section .text:
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d0, x0
                	bl	<addr>
-               	mov	x1, x0
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	sxtw	x1, w0
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d0, x0
                	bl	<addr>
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
                	cmp	x0, #0x0

@@ -71,12 +71,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x1, %edi
-               	movl	$0x2, %esi
-               	movl	$0x3, %edx
-               	movl	$0x4, %ecx
-               	movl	$0x5, %r8d
                	callq	<addr>
-               	movslq	%eax, %rax
+               	incq	%rax
+               	addq	$0x2, %rax
+               	addq	$0x3, %rax
+               	addq	$0x4, %rax
+               	addq	$0x5, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
                	addb	%al, (%rax)

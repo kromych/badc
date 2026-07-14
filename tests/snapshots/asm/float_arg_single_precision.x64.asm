@@ -10,15 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<scale>:
-               	mulss	%xmm1, %xmm0
-               	retq
-
-<add3>:
-               	addss	%xmm1, %xmm0
-               	addss	%xmm2, %xmm0
-               	retq
-
 <main>:
                	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
                	movl	$0x3e800000, %ecx       # imm = 0x3E800000
@@ -102,4 +93,5 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

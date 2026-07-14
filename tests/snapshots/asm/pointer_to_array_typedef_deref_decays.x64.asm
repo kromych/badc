@@ -17,10 +17,6 @@ Disassembly of section .text:
                	movq	%rcx, 0x38(%rdi)
                	retq
 
-<read_first>:
-               	movq	(%rdi), %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

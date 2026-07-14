@@ -10,31 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<notd>:
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<notf>:
-               	xorq	%rax, %rax
-               	cvtss2sd	%xmm0, %xmm0
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	movslq	%eax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

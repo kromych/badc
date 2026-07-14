@@ -10,46 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	ldrsw	x1, [x0]
-               	ldrsw	x2, [x0, #0x4]
-               	add	x1, x1, x2
-               	ldrsw	x0, [x0, #0x8]
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<sum_qualified>:
-               	ldrsw	x1, [x0]
-               	ldrsw	x2, [x0, #0x4]
-               	add	x1, x1, x2
-               	ldrsw	x0, [x0, #0x8]
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<sum_volatile>:
-               	ldrsw	x1, [x0]
-               	ldrsw	x2, [x0, #0x4]
-               	add	x1, x1, x2
-               	ldrsw	x0, [x0, #0x8]
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<first_row>:
-               	ldrsw	x1, [x0]
-               	ldrsw	x2, [x0, #0x4]
-               	add	x1, x1, x2
-               	ldrsw	x0, [x0, #0x8]
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30

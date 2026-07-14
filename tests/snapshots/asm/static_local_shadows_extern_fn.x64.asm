@@ -10,14 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sum_first_two>:
-               	movzbq	(%rdi), %rax
-               	movzbq	0x1(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <driver>:
                	movslq	%edi, %rdi
                	xorq	%rax, %rax
@@ -49,4 +41,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

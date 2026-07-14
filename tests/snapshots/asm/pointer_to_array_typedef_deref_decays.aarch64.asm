@@ -17,10 +17,6 @@ Disassembly of section .text:
                	mov	x0, x2
                	ret
 
-<read_first>:
-               	ldr	x0, [x0]
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

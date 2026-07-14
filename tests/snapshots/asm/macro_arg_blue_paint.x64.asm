@@ -15,24 +15,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
 
-<bare>:
-               	movq	(%rdi), %rax
-               	movslq	(%rax), %rax
-               	retq
-
-<single>:
-               	movq	(%rdi), %rax
-               	movslq	(%rax), %rax
-               	retq
-
-<two_arg>:
-               	movq	(%rdi), %rax
-               	movslq	(%rax), %rax
-               	addq	$0x7, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -77,3 +59,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

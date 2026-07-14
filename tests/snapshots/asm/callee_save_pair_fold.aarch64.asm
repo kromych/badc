@@ -61,11 +61,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x1                // =1
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x5                // =5
                	bl	<addr>
-               	sxtw	x0, w0
+               	add	x0, x0, #0x1
+               	add	x0, x0, #0x2
+               	add	x0, x0, #0x3
+               	add	x0, x0, #0x4
+               	add	x0, x0, #0x5
+               	sxtw	x1, w0
+               	sxtw	x1, w1
+               	sxtw	x0, w1
                	ldp	x29, x30, [sp], #0x10
                	ret

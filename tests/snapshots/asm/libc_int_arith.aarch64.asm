@@ -42,25 +42,6 @@ Disassembly of section .text:
                	ret
                	b	<addr>
 
-<imaxdiv>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
-               	sdiv	x3, x0, x1
-               	str	x3, [x2]
-               	sub	x2, x29, #0x10
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
-               	str	x0, [x2, #0x8]
-               	sub	x0, x29, #0x10
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <strtoimax>:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]

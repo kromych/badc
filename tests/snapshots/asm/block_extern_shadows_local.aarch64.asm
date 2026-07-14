@@ -10,25 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	add	x0, x0, #0x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<param_probe>:
-               	mov	x1, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<main>:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x0, [x1]

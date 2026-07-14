@@ -12,33 +12,6 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x1, x29, #0x8
-               	str	x0, [x1]
-               	sub	x0, x29, #0x8
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<read_bits>:
-               	sub	sp, sp, #0x10
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x16, x29, #0x8
-               	str	x0, [x16]
-               	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	sub	sp, sp, #0x90
                	sub	x0, x29, #0x40
                	adrp	x1, <page>

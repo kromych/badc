@@ -10,48 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	w0, w0
-               	orr	x0, x0, x1
-               	sxtw	x0, w0
-               	ret
-
-<mix_iu>:
-               	mov	w1, w1
-               	orr	x0, x0, x1
-               	sxtw	x0, w0
-               	ret
-
-<xor_ui>:
-               	mov	w0, w0
-               	eor	x0, x0, x1
-               	sxtw	x0, w0
-               	ret
-
-<and_ui>:
-               	mov	w0, w0
-               	and	x0, x0, x1
-               	sxtw	x0, w0
-               	ret
-
-<pc_advance>:
-               	mov	x2, x1
-               	ldrb	w1, [x0]
-               	lsl	x1, x1, #24
-               	mov	w3, w1
-               	ldrb	w1, [x0, #0x1]
-               	lsl	x1, x1, #16
-               	orr	x3, x3, x1
-               	ldrb	w1, [x0, #0x2]
-               	lsl	x1, x1, #8
-               	orr	x1, x3, x1
-               	ldrb	w0, [x0, #0x3]
-               	orr	x0, x1, x0
-               	sxtw	x0, w0
-               	add	x0, x2, x0
-               	sub	x0, x0, x2
-               	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30

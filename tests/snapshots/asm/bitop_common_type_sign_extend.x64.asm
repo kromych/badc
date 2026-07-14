@@ -10,47 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<mix_ui>:
-               	movl	%edi, %eax
-               	orq	%rsi, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<mix_iu>:
-               	movl	%esi, %eax
-               	orq	%rdi, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<xor_ui>:
-               	movl	%edi, %eax
-               	xorq	%rsi, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<and_ui>:
-               	movl	%edi, %eax
-               	andq	%rsi, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<pc_advance>:
-               	movzbq	(%rdi), %rax
-               	shlq	$0x18, %rax
-               	movl	%eax, %ecx
-               	movzbq	0x1(%rdi), %rax
-               	shlq	$0x10, %rax
-               	orq	%rax, %rcx
-               	movzbq	0x2(%rdi), %rax
-               	shlq	$0x8, %rax
-               	orq	%rcx, %rax
-               	movzbq	0x3(%rdi), %rcx
-               	orq	%rcx, %rax
-               	movslq	%eax, %rax
-               	addq	%rsi, %rax
-               	subq	%rsi, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

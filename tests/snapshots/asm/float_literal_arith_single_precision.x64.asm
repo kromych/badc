@@ -10,23 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<step>:
-               	movl	$0x3f800000, %eax       # imm = 0x3F800000
-               	movq	%rax, %xmm15
-               	subss	%xmm15, %xmm0
-               	retq
-
-<blend>:
-               	movl	$0x3f000000, %eax       # imm = 0x3F000000
-               	movl	$0x3e800000, %ecx       # imm = 0x3E800000
-               	movq	%rcx, %xmm15
-               	mulss	%xmm15, %xmm1
-               	movapd	%xmm0, %xmm14
-               	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

@@ -10,22 +10,11 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<bump>:
-               	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <combine>:
                	leaq	<rip>, %rcx
                	leaq	0x1(%rdi), %rax
                	movl	%eax, (%rcx)
                	leaq	(%rdi,%rsi), %rax
-               	retq
-
-<scale>:
-               	movq	%rdi, %rax
-               	shlq	$0x1, %rax
                	retq
 
 <compute>:
@@ -74,4 +63,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

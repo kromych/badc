@@ -12,11 +12,6 @@ Disassembly of section .text:
                	brk	#<addr>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ret
-
-<main>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	cmp	x0, x1

@@ -18,10 +18,6 @@ Disassembly of section .text:
                	movl	$0x32, %eax
                	retq
 
-<shadowing>:
-               	movl	$0x2a, %eax
-               	retq
-
 <adjacent_fors>:
                	movl	$0x2b, %eax
                	retq
@@ -118,4 +114,5 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

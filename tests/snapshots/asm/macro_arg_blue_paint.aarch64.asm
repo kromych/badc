@@ -14,24 +14,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ret
 
-<bare>:
-               	ldr	x0, [x0]
-               	ldrsw	x0, [x0]
-               	ret
-
-<single>:
-               	ldr	x0, [x0]
-               	ldrsw	x0, [x0]
-               	ret
-
-<two_arg>:
-               	ldr	x0, [x0]
-               	ldrsw	x0, [x0]
-               	add	x0, x0, #0x7
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

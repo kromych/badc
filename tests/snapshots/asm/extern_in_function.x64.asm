@@ -10,13 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<wrap>:
-               	imulq	$-0x1, %rdi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <negate>:
                	imulq	$-0x1, %rdi, %rax
                	movslq	%eax, %rcx
@@ -26,4 +19,4 @@ Disassembly of section .text:
 <main>:
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

@@ -33,30 +33,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<ret_zero>:
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm14
-               	movapd	%xmm14, %xmm0
-               	retq
-
-<ret_one>:
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm14
-               	movapd	%xmm14, %xmm0
-               	retq
-
-<ret_half>:
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movapd	%xmm14, %xmm0
-               	retq
-
-<ret_quarter_f>:
-               	movl	$0x3e800000, %eax       # imm = 0x3E800000
-               	movq	%rax, %xmm14
-               	movapd	%xmm14, %xmm0
-               	retq
-
 <sum_zero>:
                	movslq	%esi, %rsi
                	movslq	%esi, %rcx

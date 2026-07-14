@@ -10,17 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x0, #0x900000000000     // =158329674399744
-               	movk	x0, #0x407f, lsl #48
-               	fmov	d0, x0
-               	ret
-
-<get_negative>:
-               	mov	x0, #-0x4010000000000000 // =-4616189618054758400
-               	fmov	d0, x0
-               	ret
-
-<main>:
                	str	x19, [sp, #-0x60]!
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50

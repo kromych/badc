@@ -52,16 +52,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
 
-<fdimf>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	cvtss2sd	%xmm0, %xmm0
-               	cvtss2sd	%xmm1, %xmm1
-               	callq	<addr>
-               	cvtsd2ss	%xmm0, %xmm0
-               	popq	%rbp
-               	retq
-
 <scalbn>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -219,11 +209,14 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	movl	$0x40a00000, %edi       # imm = 0x40A00000
-               	movl	$0x40400000, %esi       # imm = 0x40400000
-               	movq	%rdi, %xmm0
-               	movq	%rsi, %xmm1
+               	movl	$0x40a00000, %eax       # imm = 0x40A00000
+               	movl	$0x40400000, %ecx       # imm = 0x40400000
+               	movq	%rax, %xmm14
+               	cvtss2sd	%xmm14, %xmm0
+               	movq	%rcx, %xmm14
+               	cvtss2sd	%xmm14, %xmm1
                	callq	<addr>
+               	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -240,5 +233,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

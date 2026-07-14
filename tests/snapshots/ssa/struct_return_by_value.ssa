@@ -1,23 +1,3 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
-; name=make_small
-fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-1)                                    -> x0
-    v4   LoadLocal { off=2, kind=I32 }                    -> x1
-    v5   Store { addr=v3, disp=0, value=v1, kind=I32 }    -> -
-    v6   LocalAddr(-1)                                    -> x1
-    v7   BinopI { op=add, lhs=v6, rhs_imm=4 }             -> x0
-    v8   LoadLocal { off=2, kind=I32 }                    -> x0
-    v9   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x2
-    v11  Extend { value=v9, kind=I32 }                    -> x2
-    v12  Store { addr=v6, disp=4, value=v9, kind=I32 }    -> -
-    v13  LocalAddr(-1)                                    -> x0
-    terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=make_big
 fn ent_pc=1 n_params=2 variadic=false locals=3
@@ -41,23 +21,6 @@ fn ent_pc=1 n_params=2 variadic=false locals=3
     v15  LocalAddr(-3)                                    -> x1
     v16  Mcpy { dst=v14, src=v15, size=24 }               -> x1
     terminator Return(v14)   (exit_acc=v14)
-; --- SSA dump (ok=true) ent_pc=2 ---
-; name=sum_small
-fn ent_pc=2 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    v2   Load { addr=v1, disp=0, kind=I32 }               -> x1
-    v3   LocalAddr(-1)                                    -> x0
-    v4   BinopI { op=add, lhs=v3, rhs_imm=4 }             -> x2
-    v5   Load { addr=v3, disp=4, kind=I32 }               -> x0
-    v6   Binop { op=add, lhs=v2, rhs=v5 }                 -> x0
-    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
-    v8   Extend { value=v6, kind=I32 }                    -> x1
-    v9   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x0
-    v10  Extend { value=v8, kind=I32 }                    -> x0
-    terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=sum_big
 fn ent_pc=3 n_params=1 variadic=false locals=3

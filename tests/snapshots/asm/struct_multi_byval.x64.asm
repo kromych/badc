@@ -95,45 +95,6 @@ Disassembly of section .text:
                	pushq	%r11
                	retq
 
-<make2>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movl	%edi, (%rax)
-               	leaq	-0x8(%rbp), %rcx
-               	leaq	0x1(%rdi), %rax
-               	movl	%eax, 0x4(%rcx)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
-<make4>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movl	%edi, (%rax)
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	0x1(%rdi), %rax
-               	movl	%eax, 0x4(%rcx)
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	0x2(%rdi), %rax
-               	movl	%eax, 0x8(%rcx)
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	0x3(%rdi), %rax
-               	movl	%eax, 0xc(%rcx)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
 <make6>:
                	popq	%r10
                	subq	$0x20, %rsp

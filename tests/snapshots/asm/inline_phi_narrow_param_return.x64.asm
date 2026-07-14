@@ -10,10 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<trunc_id>:
-               	movslq	%edi, %rax
-               	retq
-
 <phi_accumulate>:
                	movslq	%edi, %rdi
                	movl	$0x1, %ecx

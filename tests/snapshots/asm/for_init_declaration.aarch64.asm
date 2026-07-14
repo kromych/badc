@@ -17,10 +17,6 @@ Disassembly of section .text:
                	mov	x0, #0x32               // =50
                	ret
 
-<shadowing>:
-               	mov	x0, #0x2a               // =42
-               	ret
-
 <adjacent_fors>:
                	mov	x0, #0x2b               // =43
                	ret

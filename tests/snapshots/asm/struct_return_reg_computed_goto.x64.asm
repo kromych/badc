@@ -10,19 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<pick>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rdi, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
 <simple>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -114,5 +101,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

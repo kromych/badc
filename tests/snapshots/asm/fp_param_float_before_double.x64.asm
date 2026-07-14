@@ -10,30 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<pick_first>:
-               	retq
-
-<pick_second>:
-               	cvtss2sd	%xmm1, %xmm0
-               	retq
-
-<sum4>:
-               	cvtss2sd	%xmm0, %xmm0
-               	addsd	%xmm1, %xmm0
-               	cvtss2sd	%xmm2, %xmm1
-               	addsd	%xmm1, %xmm0
-               	addsd	%xmm3, %xmm0
-               	retq
-
-<dbl_then_float>:
-               	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
-               	cvtss2sd	%xmm1, %xmm1
-               	movapd	%xmm0, %xmm14
-               	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	retq
-
 <main>:
                	movl	$0x40200000, %eax       # imm = 0x40200000
                	movq	%rax, %xmm14
@@ -110,5 +86,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

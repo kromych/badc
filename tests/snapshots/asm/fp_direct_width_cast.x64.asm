@@ -10,29 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<i2f>:
-               	movslq	%edi, %rdi
-               	xorps	%xmm0, %xmm0
-               	cvtsi2ss	%rdi, %xmm0
-               	retq
-
-<f2i>:
-               	cvttss2si	%xmm0, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<chain>:
-               	movslq	%edi, %rdi
-               	xorps	%xmm0, %xmm0
-               	cvtsi2ss	%rdi, %xmm0
-               	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm0
-               	cvttss2si	%xmm0, %rax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2ss	%rax, %xmm0
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -214,3 +191,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

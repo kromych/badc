@@ -22,14 +22,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	retq
 
-<with_empty_sign>:
-               	movl	$0x2, %eax
-               	retq
-
-<with_u_sign>:
-               	movl	$0x3, %eax
-               	retq
-
 <main>:
                	leaq	<rip>, %rcx
                	movl	$0x9, %eax

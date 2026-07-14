@@ -10,15 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<rotr_var>:
-               	movslq	%esi, %rsi
-               	movq	%rdi, %rax
-               	pushq	%rcx
-               	movq	%rsi, %rcx
-               	rorq	%cl, %rax
-               	popq	%rcx
-               	retq
-
 <ref_ror>:
                	movq	%rsi, %r8
                	xorq	%rax, %rax
@@ -140,4 +131,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -10,14 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sum>:
-               	movslq	(%rdi), %rax
-               	movslq	0x4(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <first4>:
                	xorq	%rax, %rax
                	movslq	(%rdi), %rcx
@@ -273,5 +265,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

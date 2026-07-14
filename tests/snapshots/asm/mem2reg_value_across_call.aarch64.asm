@@ -13,11 +13,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x7
                	ret
 
-<noise>:
-               	lsl	x0, x0, #1
-               	add	x0, x0, #0x1
-               	ret
-
 <g>:
                	stp	x20, x21, [sp, #-0x40]!
                	stp	x22, x23, [sp, #0x10]

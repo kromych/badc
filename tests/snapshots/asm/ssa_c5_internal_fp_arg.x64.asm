@@ -10,30 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<lt_float_int>:
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rdi, %xmm1
-               	ucomisd	%xmm1, %xmm0
-               	setb	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<le_float_int>:
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rdi, %xmm1
-               	ucomisd	%xmm1, %xmm0
-               	setbe	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	movslq	%eax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -121,3 +97,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

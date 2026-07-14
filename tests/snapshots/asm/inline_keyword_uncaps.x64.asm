@@ -10,28 +10,8 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<widen>:
-               	leaq	0x1(%rdi), %rax
-               	addq	$0x2, %rax
-               	addq	$0x3, %rax
-               	addq	$0x4, %rax
-               	addq	$0x5, %rax
-               	addq	$0x6, %rax
-               	addq	$0x7, %rax
-               	addq	$0x8, %rax
-               	addq	$0x9, %rax
-               	addq	$0xa, %rax
-               	addq	$0xb, %rax
-               	addq	$0xc, %rax
-               	addq	$0xd, %rax
-               	addq	$0xe, %rax
-               	addq	$0xf, %rax
-               	addq	$0x10, %rax
-               	retq
-
 <main>:
                	xorq	%rax, %rax
                	movslq	%eax, %rax
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

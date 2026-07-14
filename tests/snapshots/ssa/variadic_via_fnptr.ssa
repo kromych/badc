@@ -47,14 +47,6 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     v41  BinopI { op=shl, lhs=v38, rhs_imm=32 }           -> x0
     v42  Extend { value=v40, kind=I32 }                   -> x0
     terminator Return(v42)   (exit_acc=v42)
-; --- SSA dump (ok=true) ent_pc=1 ---
-; name=side_effect
-fn ent_pc=1 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
-    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=6

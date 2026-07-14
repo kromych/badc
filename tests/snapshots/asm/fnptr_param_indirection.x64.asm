@@ -28,10 +28,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
 
-<load_through>:
-               	movq	(%rdi), %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

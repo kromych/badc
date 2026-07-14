@@ -18,14 +18,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
 
-<wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
-               	andq	$0xff, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -41,5 +33,4 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

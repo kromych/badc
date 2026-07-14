@@ -82,12 +82,6 @@ Disassembly of section .text:
                	add	x0, x2, x0
                	ret
 
-<first_of>:
-               	lsl	x1, x1, #6
-               	add	x0, x0, x1
-               	ldr	x0, [x0]
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

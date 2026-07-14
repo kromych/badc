@@ -10,22 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<get_b>:
-               	movslq	0x4(%rdi), %rax
-               	retq
-
-<get_c>:
-               	movq	0x8(%rdi), %rax
-               	retq
-
-<get_e>:
-               	movswq	0x10(%rdi), %rax
-               	retq
-
-<get_d>:
-               	movsbq	0x12(%rdi), %rax
-               	retq
-
 <set_b>:
                	movl	%esi, 0x4(%rdi)
                	xorq	%rax, %rax
@@ -132,3 +116,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

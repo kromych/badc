@@ -10,14 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<use>:
-               	xorq	%rax, %rax
-               	retq
-
-<caller>:
-               	xorq	%rax, %rax
-               	retq
-
 <next_fn>:
                	movq	%rdi, %rax
                	cmpq	$0x64, %rsi

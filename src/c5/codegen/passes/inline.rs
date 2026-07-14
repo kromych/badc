@@ -432,6 +432,18 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                     return false;
                 }
             }
+            // A non-leaf same-unit call is admitted only in the scalar/void
+            // shape: no by-value aggregate arguments and no aggregate
+            // return, so the splice reproduces it by copying the Call and
+            // remapping its arguments -- no caller frame slot is needed for
+            // marshaling (`rewrite_callee_inst`). `target_pc` names a
+            // same-unit function and stays valid in the caller. This lets a
+            // dispatcher whose only non-purity is per-case leaf calls inline;
+            // a constant-argument switch it wraps then folds after the
+            // splice, dropping an otherwise-live unreachable default.
+            Inst::Call {
+                arg_aggs, ret_agg, ..
+            } if arg_aggs.is_empty() && ret_agg.is_none() => {}
             _ => {
                 say(&alloc::format!("disallowed inst {:?}", inst));
                 return false;
@@ -597,6 +609,17 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
                 Inst::Mcpy { dst, src, .. } => {
                     *dst = map_v(*dst, callee_remap);
                     *src = map_v(*src, callee_remap);
+                }
+                // A non-leaf callee's own call site: remap its argument
+                // operands into the caller's value space. The candidate
+                // filter admits only the scalar/void `Call` shape (no
+                // aggregate args or return), whose sole value operands are
+                // the arguments; `target_pc` is a same-unit function index
+                // that stays valid in the caller.
+                Inst::Call { args, .. } => {
+                    for a in args.iter_mut() {
+                        *a = map_v(*a, callee_remap);
+                    }
                 }
                 _ => {}
             }
@@ -955,6 +978,26 @@ fn splice_multi_block(
         guard -= 1;
         if guard == 0 {
             break;
+        }
+    }
+
+    // Remap surviving caller phis' incoming predecessor block ids across
+    // the block-id shift the splice introduced. A predecessor at or past
+    // the splice block moves up by one: blocks after the splice shift +1,
+    // and the splice block's own out-edges now leave from the postfix
+    // (splice_block_idx + 1), not the prefix. `emit_caller_inst` clones
+    // phis from the original with their block ids intact, so this reads the
+    // original ids once after the emission fixpoint. Callee blocks carry no
+    // phis (the candidate filter rejects them), so every phi here is
+    // caller-origin.
+    let splice_bid = splice_block_idx as u32;
+    for inst in new_insts.iter_mut() {
+        if let Inst::Phi { incoming, .. } = inst {
+            for (pred, _) in incoming.iter_mut() {
+                if *pred >= splice_bid {
+                    *pred += 1;
+                }
+            }
         }
     }
 
@@ -1399,19 +1442,16 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     // blocks so the loop re-scans from scratch after every step.
     // Bounded by a generous step cap to keep runaway expansion in
     // check.
-    // `splice_multi_block` shifts caller block ids > the splice point;
-    // a surviving caller phi's incoming.0 would then name the wrong
-    // predecessor (a silent miscompile, since emit matches incoming by
-    // block id). The same shift invalidates a computed-goto caller's
-    // `Inst::BlockAddr` and `computed_goto_targets` block-id references.
-    // Skip multi-block splicing for either shape; the flat single-block
-    // path above already ran and keeps block ids fixed.
-    let block_id_shift_unsafe = !caller.computed_goto_targets.is_empty()
-        || !caller.jump_tables.is_empty()
-        || caller
-            .insts
-            .iter()
-            .any(|inst| matches!(inst, Inst::Phi { .. }));
+    // `splice_multi_block` shifts caller block ids > the splice point.
+    // Surviving caller phis are handled -- their incoming predecessor
+    // block ids are remapped inside the splice. A computed-goto or
+    // jump-table caller is not: the shift would invalidate the block-id
+    // references in `Inst::BlockAddr` / `computed_goto_targets` / the
+    // jump-table clone, which the splice does not remap. Skip those
+    // shapes; the flat single-block path above already ran and keeps
+    // block ids fixed.
+    let block_id_shift_unsafe =
+        !caller.computed_goto_targets.is_empty() || !caller.jump_tables.is_empty();
     let mut steps = 0usize;
     while steps < MAX_MULTI_BLOCK_SPLICE_STEPS && !block_id_shift_unsafe {
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>)> = None;

@@ -10,23 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sr_obj>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
-               	retq
-
 <sum_sr>:
                	movslq	%esi, %rsi
                	xorq	%rax, %rax
@@ -74,3 +57,4 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

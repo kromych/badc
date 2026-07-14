@@ -1,36 +1,3 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
-; name=lo
-fn ent_pc=0 n_params=1 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-2)                                    -> x0
-    v2   Load { addr=v1, disp=0, kind=I64 }               -> x0
-    terminator Return(v2)   (exit_acc=v2)
-; --- SSA dump (ok=true) ent_pc=1 ---
-; name=hi
-fn ent_pc=1 n_params=1 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-2)                                    -> x0
-    v2   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
-    v3   Load { addr=v1, disp=8, kind=I64 }               -> x0
-    terminator Return(v3)   (exit_acc=v3)
-; --- SSA dump (ok=true) ent_pc=2 ---
-; name=combine
-fn ent_pc=2 n_params=1 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-2)                                    -> x0
-    v2   Load { addr=v1, disp=0, kind=I64 }               -> x0
-    v3   BinopI { op=mul, lhs=v2, rhs_imm=1000 }          -> x1
-    v4   LocalAddr(-2)                                    -> x0
-    v5   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x2
-    v6   Load { addr=v4, disp=8, kind=I64 }               -> x0
-    v7   Binop { op=add, lhs=v3, rhs=v6 }                 -> x0
-    terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=3

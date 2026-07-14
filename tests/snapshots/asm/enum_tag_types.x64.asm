@@ -10,13 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<classify>:
-               	leaq	0x64(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <main>:
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

@@ -10,28 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	ret
-
-<pick_second>:
-               	fcvt	d0, s1
-               	ret
-
-<sum4>:
-               	fcvt	d0, s0
-               	fadd	d0, d0, d1
-               	fcvt	d1, s2
-               	fadd	d0, d0, d1
-               	fadd	d0, d0, d3
-               	ret
-
-<dbl_then_float>:
-               	mov	x0, #0x4024000000000000 // =4621819117588971520
-               	fcvt	d1, s1
-               	fmov	d17, x0
-               	fmadd	d0, d0, d17, d1
-               	ret
-
-<main>:
                	mov	x0, #0x40200000         // =1075838976
                	fmov	s16, w0
                	fmov	s17, w0

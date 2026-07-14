@@ -26,10 +26,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ret
 
-<load_through>:
-               	ldr	x0, [x0]
-               	ret
-
 <main>:
                	str	x20, [sp, #-0x70]!
                	str	x19, [sp, #0x10]

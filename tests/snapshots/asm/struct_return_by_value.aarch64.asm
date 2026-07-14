@@ -12,22 +12,6 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x1, x29, #0x8
-               	str	w0, [x1]
-               	sub	x1, x29, #0x8
-               	add	x0, x0, #0x1
-               	str	w0, [x1, #0x4]
-               	sub	x0, x29, #0x8
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<make_big>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	sub	sp, sp, #0x20
                	sub	x16, x29, #0x20
                	str	x8, [x16]
@@ -52,25 +36,6 @@ Disassembly of section .text:
                	mov	x0, x17
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<sum_small>:
-               	sub	sp, sp, #0x10
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x16, x29, #0x8
-               	str	x0, [x16]
-               	sub	x0, x29, #0x8
-               	ldrsw	x1, [x0]
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0, #0x4]
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <sum_big>:

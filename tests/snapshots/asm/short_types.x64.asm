@@ -25,12 +25,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	retq
 
-<as_ushort>:
-               	movq	%rdi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movslq	%eax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -123,3 +117,4 @@ Disassembly of section .text:
                	addq	$0xf0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

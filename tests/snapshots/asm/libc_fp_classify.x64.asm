@@ -91,16 +91,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<copysignf>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	cvtss2sd	%xmm0, %xmm0
-               	cvtss2sd	%xmm1, %xmm1
-               	callq	<addr>
-               	cvtsd2ss	%xmm0, %xmm0
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -160,9 +150,14 @@ Disassembly of section .text:
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
+               	movq	%rbx, %xmm14
+               	cvtss2sd	%xmm14, %xmm1
+               	cvtss2sd	%xmm0, %xmm0
+               	movapd	%xmm1, %xmm15
                	movapd	%xmm0, %xmm1
-               	movq	%rbx, %xmm0
+               	movapd	%xmm15, %xmm0
                	callq	<addr>
+               	cvtsd2ss	%xmm0, %xmm0
                	movq	%rbx, %xmm1
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15

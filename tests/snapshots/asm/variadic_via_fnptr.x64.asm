@@ -88,10 +88,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<side_effect>:
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

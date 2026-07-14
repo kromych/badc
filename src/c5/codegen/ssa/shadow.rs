@@ -110,7 +110,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
 /// is handled conservatively: any function whose address appears
 /// in `Inst::ImmCode` is already marked reachable, so an indirect
 /// dispatch cannot reach a function the marker hasn't seen.
-fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
+pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
     use crate::c5::ir::Inst;
     use crate::c5::symbol::Linkage;
     use crate::c5::token::Token;

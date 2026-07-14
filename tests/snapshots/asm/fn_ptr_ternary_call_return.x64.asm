@@ -14,16 +14,8 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	retq
 
-<fb>:
-               	movq	%rdi, %rax
-               	retq
-
 <ga>:
                	leaq	0x1(%rdi), %rax
-               	retq
-
-<gb>:
-               	leaq	0x2(%rdi), %rax
                	retq
 
 <main>:
@@ -84,4 +76,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

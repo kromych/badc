@@ -117,41 +117,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<rk4_step>:
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm2
-               	mulsd	%xmm15, %xmm2
-               	movapd	%xmm2, %xmm14
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm0, %xmm3
-               	vfmadd231sd	%xmm15, %xmm14, %xmm3 # xmm3 = (xmm14 * xmm15) + xmm3
-               	movapd	%xmm2, %xmm14
-               	movapd	%xmm3, %xmm15
-               	movapd	%xmm0, %xmm2
-               	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	movapd	%xmm1, %xmm14
-               	movapd	%xmm2, %xmm15
-               	movapd	%xmm0, %xmm4
-               	vfmadd231sd	%xmm15, %xmm14, %xmm4 # xmm4 = (xmm14 * xmm15) + xmm4
-               	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
-               	movq	%rax, %xmm15
-               	divsd	%xmm15, %xmm1
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm14
-               	movapd	%xmm3, %xmm15
-               	movapd	%xmm0, %xmm3
-               	vfmadd231sd	%xmm15, %xmm14, %xmm3 # xmm3 = (xmm14 * xmm15) + xmm3
-               	movq	%rax, %xmm14
-               	movapd	%xmm2, %xmm15
-               	movapd	%xmm3, %xmm2
-               	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	addsd	%xmm4, %xmm2
-               	movapd	%xmm1, %xmm14
-               	movapd	%xmm2, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -913,4 +878,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

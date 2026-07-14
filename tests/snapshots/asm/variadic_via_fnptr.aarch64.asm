@@ -127,10 +127,6 @@ Disassembly of section .text:
                	add	sp, sp, #0xc0
                	ret
 
-<side_effect>:
-               	mov	x0, #0x0                // =0
-               	ret
-
 <main>:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]

@@ -10,18 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<read_f>:
-               	movss	0x8(%rdi,%riz), %xmm0
-               	retq
-
-<read_d>:
-               	movsd	0x10(%rdi,%riz), %xmm0
-               	retq
-
-<read_g2>:
-               	movss	0x20(%rdi,%riz), %xmm0
-               	retq
-
 <bump_d>:
                	movsd	0x10(%rdi,%riz), %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
@@ -126,4 +114,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

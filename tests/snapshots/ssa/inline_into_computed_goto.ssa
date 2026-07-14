@@ -1,25 +1,3 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
-; name=sr_val
-fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    v2   Load { addr=v1, disp=0, kind=I64 }               -> x0
-    v3   Imm(-4)                                          -> x1
-    v4   BinopI { op=and, lhs=v2, rhs_imm=-4 }            -> x0
-    terminator Return(v4)   (exit_acc=v4)
-; --- SSA dump (ok=true) ent_pc=1 ---
-; name=dbl
-fn ent_pc=1 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   LoadLocal { off=2, kind=I64 }                    -> x0
-    v4   Binop { op=add, lhs=v1, rhs=v1 }                 -> x0
-    terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=interp
 fn ent_pc=2 n_params=2 variadic=false locals=6

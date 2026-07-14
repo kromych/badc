@@ -10,18 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<mix>:
-               	movl	%edi, %eax
-               	movl	%esi, %ecx
-               	andq	%rax, %rcx
-               	xorq	$-0x1, %rax
-               	movl	%eax, %eax
-               	movl	%edx, %edx
-               	andq	%rdx, %rax
-               	xorq	%rcx, %rax
-               	movl	%eax, %eax
-               	retq
-
 <digest>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -101,4 +89,4 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

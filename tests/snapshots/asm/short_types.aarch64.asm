@@ -25,12 +25,6 @@ Disassembly of section .text:
                	sxtw	x0, w1
                	ret
 
-<as_ushort>:
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
-               	sxtw	x0, w0
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

@@ -180,45 +180,6 @@ fn ent_pc=2 n_params=4 variadic=false locals=2
   block 2  start_pc=0
     v86  LoadLocal { off=-1, kind=F64 }                   -> d0
     terminator Return(v86)   (exit_acc=v86)
-; --- SSA dump (ok=true) ent_pc=3 ---
-; name=rk4_step
-fn ent_pc=3 n_params=2 variadic=false locals=4
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=F64)                            -> d0
-    v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=F64)                            -> d1
-    v4   Imm(0)                                           -> x0
-    v5   LoadLocal { off=2, kind=F64 }                    -> d2
-    v6   Imm(0)                                           -> x0
-    v7   LoadLocal { off=3, kind=F64 }                    -> d2
-    v8   Imm(4602678819172646912)                         -> x0
-    v9   Binop { op=fmul, lhs=v3, rhs=v8 }                -> d2
-    v10  LoadLocal { off=-1, kind=F64 }                   -> d3
-    v11  Binop { op=fmul, lhs=v9, rhs=v1 }                -> d3
-    v12  Fma { a=v9, b=v1, c=v1, neg_product=false, neg_addend=false } -> d3
-    v13  Imm(0)                                           -> x0
-    v14  LoadLocal { off=-2, kind=F64 }                   -> d4
-    v15  Binop { op=fmul, lhs=v9, rhs=v12 }               -> d4
-    v16  Fma { a=v9, b=v12, c=v1, neg_product=false, neg_addend=false } -> d2
-    v17  Imm(0)                                           -> x0
-    v18  LoadLocal { off=-3, kind=F64 }                   -> d4
-    v19  Binop { op=fmul, lhs=v3, rhs=v16 }               -> d4
-    v20  Fma { a=v3, b=v16, c=v1, neg_product=false, neg_addend=false } -> d4
-    v21  Imm(0)                                           -> x0
-    v22  Imm(4618441417868443648)                         -> x0
-    v23  Binop { op=fdiv, lhs=v3, rhs=v22 }               -> d1
-    v24  Imm(4611686018427387904)                         -> x0
-    v25  Binop { op=fmul, lhs=v24, rhs=v12 }              -> d5
-    v26  Fma { a=v24, b=v12, c=v1, neg_product=false, neg_addend=false } -> d3
-    v27  Binop { op=fmul, lhs=v24, rhs=v16 }              -> d5
-    v28  Fma { a=v24, b=v16, c=v26, neg_product=false, neg_addend=false } -> d2
-    v29  LoadLocal { off=-4, kind=F64 }                   -> d3
-    v30  Binop { op=fadd, lhs=v28, rhs=v20 }              -> d2
-    v31  Binop { op=fmul, lhs=v23, rhs=v30 }              -> d3
-    v32  Fma { a=v23, b=v30, c=v1, neg_product=false, neg_addend=false } -> d0
-    terminator Return(v32)   (exit_acc=v32)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
 fn ent_pc=4 n_params=0 variadic=false locals=31

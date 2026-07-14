@@ -10,46 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sum_static>:
-               	movslq	(%rdi), %rax
-               	movslq	0x4(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	0x8(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<sum_qualified>:
-               	movslq	(%rdi), %rax
-               	movslq	0x4(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	0x8(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<sum_volatile>:
-               	movslq	(%rdi), %rax
-               	movslq	0x4(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	0x8(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<first_row>:
-               	movslq	(%rdi), %rax
-               	movslq	0x4(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	0x8(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

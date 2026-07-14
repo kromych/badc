@@ -21,14 +21,6 @@ Disassembly of section .text:
                	sxtw	x0, w1
                	ret
 
-<with_empty_sign>:
-               	mov	x0, #0x2                // =2
-               	ret
-
-<with_u_sign>:
-               	mov	x0, #0x3                // =3
-               	ret
-
 <main>:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

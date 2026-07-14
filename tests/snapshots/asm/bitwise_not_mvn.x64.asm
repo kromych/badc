@@ -10,26 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<notx>:
-               	movq	%rdi, %rax
-               	xorq	$-0x1, %rax
-               	retq
-
-<andnot>:
-               	movq	%rdi, %rax
-               	xorq	$-0x1, %rax
-               	andq	%rsi, %rax
-               	retq
-
-<ch>:
-               	movq	%rdi, %rax
-               	andq	%rsi, %rax
-               	movq	%rdi, %rcx
-               	xorq	$-0x1, %rcx
-               	andq	%rdx, %rcx
-               	xorq	%rcx, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

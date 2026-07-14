@@ -10,10 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<user_count>:
-               	movslq	%edi, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

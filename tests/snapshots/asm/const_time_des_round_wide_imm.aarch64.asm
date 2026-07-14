@@ -10,19 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	sxtw	x1, w1
-               	mov	w0, w0
-               	lsl	x2, x0, x1
-               	mov	w2, w2
-               	mov	x3, #0x20               // =32
-               	sub	x1, x3, x1
-               	sxtw	x1, w1
-               	lsr	x0, x0, x1
-               	orr	x0, x2, x0
-               	mov	w0, w0
-               	ret
-
-<des_round>:
                	stp	x20, x21, [sp, #-0xc0]!
                	stp	x22, x23, [sp, #0x10]
                	stp	x24, x25, [sp, #0x20]

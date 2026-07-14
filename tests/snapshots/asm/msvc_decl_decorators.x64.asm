@@ -10,12 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<add1>:
-               	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <exported>:
                	movl	$0x3, %eax
                	retq
@@ -45,4 +39,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

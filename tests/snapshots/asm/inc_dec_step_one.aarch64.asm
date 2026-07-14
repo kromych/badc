@@ -10,26 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<minus_one>:
-               	sub	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<plus_one_l>:
-               	add	x0, x0, #0x1
-               	ret
-
-<minus_neg_one>:
-               	add	x0, x0, #0x1
-               	ret
-
-<count_up>:
                	mov	x3, x0
                	sxtw	x3, w3
                	mov	x0, #0x0                // =0
@@ -43,12 +23,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sxtw	x0, w1
                	sxtw	x0, w0
-               	ret
-
-<wrap>:
-               	mov	w0, w0
-               	add	x0, x0, #0x1
-               	mov	w0, w0
                	ret
 
 <main>:

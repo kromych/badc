@@ -13,12 +13,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	ret
-
-<main>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
                	mov	x17, #0x1111            // =4369
                	movk	x17, #0x1111, lsl #16
                	movk	x17, #0x1111, lsl #32

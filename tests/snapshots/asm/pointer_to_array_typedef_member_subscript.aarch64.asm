@@ -10,46 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	ldr	x0, [x0, #0x8]
-               	ldr	w1, [x1]
-               	asr	x1, x1, #6
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x3ff, lsl #16
-               	and	x1, x1, x17
-               	lsl	x1, x1, #11
-               	add	x0, x0, x1
-               	ldr	w0, [x0, #0x8]
-               	asr	x0, x0, #6
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x3ff, lsl #16
-               	and	x0, x0, x17
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<chained_via_dot>:
-               	sub	sp, sp, #0x10
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
-               	sub	x0, x29, #0x10
-               	ldr	x0, [x0, #0x8]
-               	ldr	w0, [x0, #0x80c]
-               	asr	x0, x0, #6
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x3ff, lsl #16
-               	and	x0, x0, x17
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
-               	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30

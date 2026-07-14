@@ -15,11 +15,6 @@ Disassembly of section .text:
                	sxtw	x0, w1
                	ret
 
-<via_proto>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ret
-
 <pick>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

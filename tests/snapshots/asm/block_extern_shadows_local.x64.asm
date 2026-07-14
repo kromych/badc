@@ -10,22 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<forward_probe>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x9, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<param_probe>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	%rdi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <main>:
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rax

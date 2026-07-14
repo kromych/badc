@@ -10,39 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<mkint>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movl	%edi, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x1, %ecx
-               	movq	%rcx, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
-<mkpair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rdi, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rsi, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -158,4 +125,3 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, (%rax)

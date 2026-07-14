@@ -1725,6 +1725,18 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::prune_unreachable::run (aarch64)", || {
             crate::c5::codegen::passes::prune_unreachable::run(&mut ssa_funcs);
         });
+        // Re-run static DCE: inlining a static callee into its last caller,
+        // and the branch fold dropping calls in unreachable arms, can leave
+        // a static function with no remaining references. Dropping it now
+        // keeps its body -- and any undefined symbol it alone referenced
+        // (e.g. an unreachable build-time-assert canary the fold removed
+        // from the caller) -- out of the object.
+        super::ssa::emit_common::time_pass(
+            "ssa::shadow::drop_unreachable_statics (aarch64)",
+            || {
+                crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program);
+            },
+        );
         super::ssa::emit_common::time_pass("passes::split_crit_edges::run (aarch64)", || {
             crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });

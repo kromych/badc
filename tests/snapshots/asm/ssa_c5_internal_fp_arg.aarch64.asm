@@ -10,20 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	scvtf	d1, x0
-               	fcmp	d0, d1
-               	cset	x0, mi
-               	sxtw	x0, w0
-               	ret
-
-<le_float_int>:
-               	scvtf	d1, x0
-               	fcmp	d0, d1
-               	cset	x0, ls
-               	sxtw	x0, w0
-               	ret
-
-<main>:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10

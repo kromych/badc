@@ -1,33 +1,3 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
-; name=step
-fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=F32)                            -> d0 [f32]
-    v2   Imm(0)                                           -> x0
-    v3   LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v4   Imm(1065353216)                                  -> x0 [f32]
-    v5   Binop { op=fsub, lhs=v1, rhs=v4 }                -> d0 [f32]
-    terminator Return(v5)   (exit_acc=v5)
-; --- SSA dump (ok=true) ent_pc=1 ---
-; name=blend
-fn ent_pc=1 n_params=2 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=F32)                            -> d0 [f32]
-    v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=F32)                            -> d1 [f32]
-    v4   Imm(0)                                           -> x0
-    v5   LoadLocal { off=-1, kind=F32 }                   -> d2 [f32]
-    v6   Imm(1056964608)                                  -> x0 [f32]
-    v7   Binop { op=fmul, lhs=v1, rhs=v6 }                -> d2 [f32]
-    v8   LoadLocal { off=-2, kind=F32 }                   -> d2 [f32]
-    v9   Imm(1048576000)                                  -> x1 [f32]
-    v10  Binop { op=fmul, lhs=v3, rhs=v9 }                -> d1 [f32]
-    v11  Fma { a=v1, b=v6, c=v10, neg_product=false, neg_addend=false } -> d0 [f32]
-    terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=2

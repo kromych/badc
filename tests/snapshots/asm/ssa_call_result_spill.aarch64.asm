@@ -10,26 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	sxtw	x1, w1
-               	ror	x0, x0, x1
-               	ret
-
-<ch>:
-               	and	x1, x0, x1
-               	mvn	x0, x0
-               	and	x0, x0, x2
-               	eor	x0, x1, x0
-               	ret
-
-<bs1>:
-               	ror	x1, x0, #0xe
-               	ror	x2, x0, #0x12
-               	eor	x1, x1, x2
-               	ror	x0, x0, #0x29
-               	eor	x0, x1, x0
-               	ret
-
-<main>:
                	mov	x1, #0x100              // =256
                	mov	x8, #0x200              // =512
                	mov	x7, #0x400              // =1024

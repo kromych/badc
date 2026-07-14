@@ -10,23 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<make>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x2222, %ecx           # imm = 0x2222
-               	movq	%rcx, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rdi, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	movq	0x8(%rcx), %rdx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -298,3 +281,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

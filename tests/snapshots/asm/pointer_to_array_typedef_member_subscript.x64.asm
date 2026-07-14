@@ -10,43 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<row_via_arrow>:
-               	movq	0x8(%rdi), %rax
-               	movl	(%rsi), %ecx
-               	sarq	$0x6, %rcx
-               	andq	$0x3ffffff, %rcx        # imm = 0x3FFFFFF
-               	shlq	$0xb, %rcx
-               	addq	%rcx, %rax
-               	movl	0x8(%rax), %eax
-               	sarq	$0x6, %rax
-               	andq	$0x3ffffff, %rax        # imm = 0x3FFFFFF
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
-<chained_via_dot>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	movl	0x80c(%rax), %eax
-               	sarq	$0x6, %rax
-               	andq	$0x3ffffff, %rax        # imm = 0x3FFFFFF
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -114,4 +77,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

@@ -105,25 +105,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
-<rk4_step>:
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d17, x0
-               	fmul	d2, d1, d17
-               	fmadd	d3, d2, d0, d0
-               	fmadd	d2, d2, d3, d0
-               	fmadd	d4, d1, d2, d0
-               	mov	x0, #0x4018000000000000 // =4618441417868443648
-               	fmov	d17, x0
-               	fdiv	d1, d1, d17
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d16, x0
-               	fmadd	d3, d16, d3, d0
-               	fmov	d16, x0
-               	fmadd	d2, d16, d2, d3
-               	fadd	d2, d2, d4
-               	fmadd	d0, d1, d2, d0
-               	ret
-
 <main>:
                	stp	x20, x21, [sp, #-0x120]!
                	stp	x29, x30, [sp, #0x110]

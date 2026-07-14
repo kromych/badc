@@ -10,23 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<rotl>:
-               	movslq	%esi, %rsi
-               	movl	%edi, %eax
-               	movq	%rax, %rcx
-               	movq	%rcx, %r11
-               	movq	%rsi, %rcx
-               	shlq	%cl, %r11
-               	movq	%r11, %rcx
-               	movl	%ecx, %edx
-               	movl	$0x20, %ecx
-               	subq	%rsi, %rcx
-               	movslq	%ecx, %rcx
-               	shrq	%cl, %rax
-               	orq	%rdx, %rax
-               	movl	%eax, %eax
-               	retq
-
 <des_round>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -723,3 +706,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

@@ -1,19 +1,3 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
-; name=eq
-fn ent_pc=0 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=I32)                            -> x6
-    v4   Imm(0)                                           -> x0
-    v5   LoadLocal { off=2, kind=I32 }                    -> x0
-    v6   LoadLocal { off=3, kind=I32 }                    -> x0
-    v7   Binop { op=eq, lhs=v1, rhs=v3 }                  -> x0
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
-    v9   Extend { value=v7, kind=I32 }                    -> x0
-    terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=4

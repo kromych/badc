@@ -18,15 +18,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ret
 
-<wrap>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

@@ -10,14 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<file_scope_sum>:
-               	movslq	(%rdi), %rax
-               	movslq	0x4(%rdi), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	retq
-
 <f1>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -112,5 +104,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

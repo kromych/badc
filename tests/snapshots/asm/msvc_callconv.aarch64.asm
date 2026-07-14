@@ -15,18 +15,6 @@ Disassembly of section .text:
                	sxtw	x0, w1
                	ret
 
-<add_cdecl>:
-               	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<add_fast>:
-               	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
 <record>:
                	mov	x1, x0
                	adrp	x0, <page>

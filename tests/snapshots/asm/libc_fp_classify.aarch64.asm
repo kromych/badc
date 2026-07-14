@@ -97,16 +97,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
-<copysignf>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	fcvt	d0, s0
-               	fcvt	d1, s1
-               	bl	<addr>
-               	fcvt	s0, d0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
@@ -145,9 +135,14 @@ Disassembly of section .text:
                	mov	x0, #0x40a00000         // =1084227584
                	fmov	s16, w0
                	fneg	s0, s16
+               	fmov	s16, w20
+               	fcvt	d1, s16
+               	fcvt	d0, s0
+               	fmov	d17, d1
                	fmov	d1, d0
-               	fmov	d0, x20
+               	fmov	d0, d17
                	bl	<addr>
+               	fcvt	s0, d0
                	fmov	s16, w20
                	fneg	s1, s16
                	fcmp	s0, s1

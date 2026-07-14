@@ -12,15 +12,8 @@ Disassembly of section .text:
                	brk	#<addr>:
                	ret
 
-<fb>:
-               	ret
-
 <ga>:
                	add	x0, x0, #0x1
-               	ret
-
-<gb>:
-               	add	x0, x0, #0x2
                	ret
 
 <main>:

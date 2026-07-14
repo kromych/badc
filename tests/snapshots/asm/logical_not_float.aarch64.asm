@@ -10,23 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, eq
-               	sxtw	x0, w0
-               	ret
-
-<notf>:
-               	mov	x0, #0x0                // =0
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, eq
-               	sxtw	x0, w0
-               	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10

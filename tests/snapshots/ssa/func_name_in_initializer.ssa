@@ -47,25 +47,6 @@ fn ent_pc=0 n_params=2 variadic=false locals=1
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
     v22  Extend { value=v20, kind=I32 }                   -> x0
     terminator Return(v22)   (exit_acc=v22)
-; --- SSA dump (ok=true) ent_pc=1 ---
-; name=direct
-fn ent_pc=1 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=2 ---
-; name=compound
-fn ent_pc=2 n_params=0 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-2)                                    -> x0
-    v2   ImmData(15)                                      -> x1
-    v3   Mcpy { dst=v1, src=v2, size=16 }                 -> x0
-    v4   LocalAddr(-2)                                    -> x0
-    terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=local_aggr
 fn ent_pc=3 n_params=0 variadic=false locals=2

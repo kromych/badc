@@ -41,16 +41,6 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
 
-<fdimf>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	fcvt	d0, s0
-               	fcvt	d1, s1
-               	bl	<addr>
-               	fcvt	s0, d0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <scalbn>:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
@@ -181,9 +171,12 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x40a00000         // =1084227584
                	mov	x1, #0x40400000         // =1077936128
-               	fmov	d0, x0
-               	fmov	d1, x1
+               	fmov	s16, w0
+               	fcvt	d0, s16
+               	fmov	s16, w1
+               	fcvt	d1, s16
                	bl	<addr>
+               	fcvt	s0, d0
                	mov	x0, #0x40000000         // =1073741824
                	fmov	s17, w0
                	fcmp	s0, s17

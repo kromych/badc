@@ -10,18 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<get_int_as_double>:
-               	movabsq	$0x407f900000000000, %rax # imm = 0x407F900000000000
-               	movq	%rax, %xmm14
-               	movapd	%xmm14, %xmm0
-               	retq
-
-<get_negative>:
-               	movabsq	$-0x4010000000000000, %rax # imm = 0xBFF0000000000000
-               	movq	%rax, %xmm14
-               	movapd	%xmm14, %xmm0
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -119,3 +107,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)

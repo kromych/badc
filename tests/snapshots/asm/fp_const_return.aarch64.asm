@@ -36,26 +36,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
-<ret_zero>:
-               	mov	x0, #0x0                // =0
-               	fmov	d0, x0
-               	ret
-
-<ret_one>:
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d0, x0
-               	ret
-
-<ret_half>:
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d0, x0
-               	ret
-
-<ret_quarter_f>:
-               	mov	x0, #0x3e800000         // =1048576000
-               	fmov	d0, x0
-               	ret
-
 <sum_zero>:
                	mov	x2, x0
                	sxtw	x1, w1

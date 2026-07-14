@@ -10,14 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	ldrb	w1, [x0]
-               	ldrb	w0, [x0, #0x1]
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ret
-
-<driver>:
                	mov	x1, x0
                	sxtw	x1, w1
                	mov	x0, #0x0                // =0

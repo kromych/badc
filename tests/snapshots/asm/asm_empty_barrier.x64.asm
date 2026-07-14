@@ -10,18 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<barrier_input>:
-               	xorq	%rax, %rax
-               	retq
-
-<barrier_memory>:
-               	xorq	%rax, %rax
-               	retq
-
-<barrier_bare>:
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

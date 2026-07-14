@@ -10,23 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sext>:
-               	movslq	%esi, %rsi
-               	movl	%edi, %eax
-               	pushq	%rcx
-               	movq	%rsi, %rcx
-               	shlq	%cl, %rax
-               	popq	%rcx
-               	movl	%eax, %eax
-               	movslq	%eax, %rax
-               	pushq	%rcx
-               	movq	%rsi, %rcx
-               	sarq	%cl, %rax
-               	popq	%rcx
-               	movslq	%eax, %rax
-               	retq
-
 <main>:
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)

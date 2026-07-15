@@ -330,6 +330,7 @@ impl Compiler {
         aligned: &mut bool,
         constructor: &mut bool,
         destructor: &mut bool,
+        always_inline: &mut bool,
     ) {
         // The bare `noreturn` spelling lexes as the <stdnoreturn.h>
         // keyword token, not an identifier; both name this attribute.
@@ -363,6 +364,10 @@ impl Compiler {
             } else if n == "destructor" || n == "__destructor__" {
                 // GNU `destructor` / `destructor(N)`: run after `main` returns.
                 *destructor = true;
+            } else if n == "always_inline" || n == "__always_inline__" {
+                // GNU `always_inline`: a mandatory inline request. Recorded so
+                // the inliner can warn when it cannot honor it.
+                *always_inline = true;
             }
         }
     }
@@ -396,6 +401,7 @@ impl Compiler {
         let mut vector_size: i64 = 0;
         let mut constructor = false;
         let mut destructor = false;
+        let mut always_inline = false;
         let mut init_priority: Option<u32> = None;
         loop {
             if self.lex.tk == Token::Attribute {
@@ -472,6 +478,7 @@ impl Compiler {
                             &mut saw_aligned,
                             &mut saw_constructor,
                             &mut saw_destructor,
+                            &mut always_inline,
                         );
                         self.next()?;
                         if saw_aligned {
@@ -568,6 +575,7 @@ impl Compiler {
                             &mut saw_aligned,
                             &mut saw_constructor,
                             &mut saw_destructor,
+                            &mut always_inline,
                         );
                         self.next()?;
                         if saw_aligned && self.lex.tk == '(' {
@@ -617,6 +625,11 @@ impl Compiler {
         }
         if destructor {
             self.pending.attr_destructor = true;
+        }
+        if always_inline {
+            // A mandatory inline request implies `inline`.
+            self.pending_is_inline = true;
+            self.pending_is_always_inline = true;
         }
         if let Some(p) = init_priority {
             self.pending.attr_init_priority = Some(p);
@@ -760,8 +773,11 @@ impl Compiler {
             if let Some(inner) = self.try_parse_atomic_type_specifier()? {
                 return Ok(inner);
             }
-            if self.lex.tk == Token::Inline {
+            if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                 self.pending_is_inline = true;
+                if self.lex.tk == Token::ForceInline {
+                    self.pending_is_always_inline = true;
+                }
             }
             if self.lex.tk == Token::Noreturn {
                 self.pending_noreturn = true;
@@ -902,8 +918,11 @@ impl Compiler {
                 self.skip_attribute_specifiers()?;
                 continue;
             }
-            if self.lex.tk == Token::Inline {
+            if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                 self.pending_is_inline = true;
+                if self.lex.tk == Token::ForceInline {
+                    self.pending_is_always_inline = true;
+                }
             }
             if self.lex.tk == Token::Noreturn {
                 self.pending_noreturn = true;

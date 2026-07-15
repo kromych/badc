@@ -1901,9 +1901,10 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__attribute__", Token::Attribute),
     ("__attribute", Token::Attribute),
     ("__declspec", Token::Attribute),
-    // MSVC inline spellings. `inline` semantics (a hint); badc inlines on its
-    // own heuristics, so these collapse to the C99 keyword.
-    ("__forceinline", Token::Inline),
+    // MSVC inline spellings. `__inline` / `_inline` are hints (the C99
+    // keyword); `__forceinline` is a mandatory request tracked distinctly so
+    // the inliner can diagnose a request it cannot honour.
+    ("__forceinline", Token::ForceInline),
     ("__inline", Token::Inline),
     ("_inline", Token::Inline),
     // C11 6.7.5 alignment specifier. badc caps aggregate alignment at 8

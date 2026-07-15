@@ -179,6 +179,78 @@ fn quoted_include_resolves_relative_to_including_file() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// A callee marked `always_inline` / `__forceinline` that the inliner
+// cannot substitute (here: a variadic body) draws a diagnostic naming
+// the function and the reason, so a silently-unhonored mandatory inline
+// request is visible. A body the inliner can substitute stays silent.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn always_inline_not_honored_warns() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-ai-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    let compile = |src: &std::path::Path, obj: &str| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-O")
+            .arg("-c")
+            .arg(src)
+            .arg("-o")
+            .arg(dir.join(obj))
+            .output()
+            .expect("run badc")
+    };
+
+    // Variadic always_inline: the inliner rejects it, so the request is
+    // unhonored and must warn.
+    let va = dir.join("va.c");
+    std::fs::write(
+        &va,
+        "#include <stdarg.h>\n\
+         static inline __attribute__((always_inline)) int s(int n, ...) {\n\
+         \tva_list ap; va_start(ap, n); int t = 0;\n\
+         \tfor (int i = 0; i < n; i++) t += va_arg(ap, int);\n\
+         \tva_end(ap); return t; }\n\
+         int main(void) { return s(2, 3, 4); }\n",
+    )
+    .expect("write va.c");
+    let out = compile(&va, "va.o");
+    assert!(
+        out.status.success(),
+        "compile failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("always_inline") && stderr.contains("`s`"),
+        "expected an always_inline diagnostic naming `s`, got: {stderr}"
+    );
+
+    // A body the inliner can substitute draws no warning.
+    let ok = dir.join("ok.c");
+    std::fs::write(
+        &ok,
+        "static inline __attribute__((always_inline)) int a(int x, int y) { return x + y; }\n\
+         int main(void) { return a(2, 3); }\n",
+    )
+    .expect("write ok.c");
+    let out2 = compile(&ok, "ok.o");
+    assert!(
+        out2.status.success(),
+        "compile failed: {}",
+        String::from_utf8_lossy(&out2.stderr)
+    );
+    assert!(
+        !String::from_utf8_lossy(&out2.stderr).contains("always_inline"),
+        "inlinable always_inline should be silent, got: {}",
+        String::from_utf8_lossy(&out2.stderr)
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // The optimizer has a single level; every `-O<n>` form selects it and
 // `-O0` disables it. With an inline candidate present the optimizer
 // changes the emitted object, so the byte image distinguishes

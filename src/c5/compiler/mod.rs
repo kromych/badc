@@ -865,6 +865,11 @@ pub struct Compiler {
     /// declarator only.
     pending_is_inline: bool,
 
+    /// Like [`Self::pending_is_inline`] but for a *mandatory* inline
+    /// request (`__attribute__((always_inline))` / MSVC
+    /// `__forceinline`); implies `pending_is_inline`.
+    pending_is_always_inline: bool,
+
     /// True when the most recent decl-spec parse consumed a
     /// `_Noreturn` / `noreturn` keyword. Captured at function-symbol
     /// commit time onto `Symbol::is_noreturn` and reset after, so it
@@ -1515,6 +1520,7 @@ impl Compiler {
             func_vla_decls: 0,
             stmt_expr_arena_ranges: Vec::new(),
             pending_is_inline: false,
+            pending_is_always_inline: false,
             pending_noreturn: false,
             const_unevaluated: 0,
             ast: super::ast::Ast::new(),

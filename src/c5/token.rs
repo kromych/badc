@@ -286,6 +286,12 @@ pub(crate) enum Token {
     /// flag the function symbol for the SSA inliner, which
     /// bypasses the body-size cap for inline-marked callees.
     Inline,
+    /// `__forceinline` (MSVC) -- a mandatory inline request, the
+    /// keyword equivalent of `__attribute__((always_inline))`. Parses
+    /// as an inline specifier (bypasses the body-size cap) but is
+    /// tracked distinctly so the inliner can warn when it cannot honour
+    /// the request, matching the MSVC / gcc diagnostic.
+    ForceInline,
     /// `_Noreturn` / `noreturn` (C11 6.7.4). Tracked distinctly so
     /// the parser can flag the function symbol; the reachability
     /// analysis treats a call to a `_Noreturn` function as not

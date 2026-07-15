@@ -87,32 +87,44 @@ fn slot_base_offset(func: &FunctionSsa, addr: ValueId, slot: i64) -> Option<i64>
 }
 
 /// `inst.is_inline_candidate(cap)`-style predicate. See module docs.
-fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
+fn is_inline_candidate(
+    func: &FunctionSsa,
+    cap: u32,
+    abi: Abi,
+    mut reason_out: Option<&mut alloc::string::String>,
+) -> bool {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
-    #[cfg(feature = "codegen_test")]
-    let say = |reason: &str| {
+    // Record the rejection reason both to the optional caller sink (the
+    // always_inline warning) and, under `codegen_test`, to the trace log.
+    // `format_args!` leaves the message unbuilt on the hot path where no
+    // sink is set and tracing is off.
+    let mut say = |args: core::fmt::Arguments| {
+        #[cfg(feature = "codegen_test")]
         if trace {
             eprintln!(
                 "[inline] reject {n} (ent_pc={pc}): {r}",
                 n = func.name,
                 pc = func.ent_pc,
-                r = reason
+                r = args
             );
         }
+        if let Some(out) = reason_out.as_mut() {
+            use core::fmt::Write;
+            out.clear();
+            let _ = write!(out, "{args}");
+        }
     };
-    #[cfg(not(feature = "codegen_test"))]
-    let say = |_: &str| {};
 
     if func.is_variadic {
-        say("variadic");
+        say(format_args!("variadic"));
         return false;
     }
     // A body calling a returns-twice function (setjmp family / vfork)
     // stays out of line: splicing it would silently drop the caller's
     // no-slot-share discipline (`FunctionSsa::has_returns_twice_call`).
     if func.has_returns_twice_call {
-        say("calls a returns-twice function");
+        say(format_args!("calls a returns-twice function"));
         return false;
     }
     // Host-ABI aggregates are admitted only in the shapes the splice can
@@ -128,7 +140,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
         // single-block splice; a multi-block aggregate callee would reach
         // `splice_multi_block`, which has no redirect.
         if func.blocks.len() != 1 {
-            say("multi-block aggregate");
+            say(format_args!("multi-block aggregate"));
             return false;
         }
         // Every descriptor must pass by value in integer registers. A
@@ -150,7 +162,9 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                         && regs.len() <= max_regs
                         && regs.iter().all(|r| *r == RegClass::Integer) => {}
                 _ => {
-                    say("aggregate not in one or two integer registers");
+                    say(format_args!(
+                        "aggregate not in one or two integer registers"
+                    ));
                     return false;
                 }
             }
@@ -167,21 +181,21 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
         match blk.terminator {
             Terminator::Return(_) => return_blocks += 1,
             Terminator::TailExt(_) => {
-                say("TailExt terminator");
+                say(format_args!("TailExt terminator"));
                 return false;
             }
             Terminator::GotoIndirect { .. } => {
                 // A computed goto's successors are the function's
                 // address-taken label blocks; splicing the body into a
                 // caller would shift those block ids. Keep it out of line.
-                say("GotoIndirect terminator");
+                say(format_args!("GotoIndirect terminator"));
                 return false;
             }
             Terminator::JumpTable { .. } => {
                 // Splicing shifts the callee's block ids, which the
                 // caller-side jump_tables clone would have to remap; a
                 // table dispatcher is far past the size cap anyway.
-                say("JumpTable terminator");
+                say(format_args!("JumpTable terminator"));
                 return false;
             }
             // A block sealed after a `_Noreturn` call is not a return:
@@ -196,14 +210,14 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
         }
     }
     if return_blocks != 1 {
-        say(&alloc::format!("{return_blocks} Return blocks (need 1)"));
+        say(format_args!("{return_blocks} Return blocks (need 1)"));
         return false;
     }
     // `inline` / `__attribute__((always_inline))`-marked functions
     // bypass the body-size cap (gcc / clang -O2 policy). The other
     // shape constraints still apply.
     if !func.is_inline && func.insts.len() > cap as usize {
-        say(&alloc::format!(
+        say(format_args!(
             "{n} insts > cap {c}",
             n = func.insts.len(),
             c = cap
@@ -319,17 +333,17 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
     // would be left unwritten).
     let result_slot: Option<i64> = if func.ret_agg.is_some() {
         let Terminator::Return(rv) = func.blocks[0].terminator else {
-            say("aggregate return without a Return terminator");
+            say(format_args!("aggregate return without a Return terminator"));
             return false;
         };
         match func.insts.get(rv as usize) {
             Some(Inst::LocalAddr(s)) if !param_agg_slots.contains(s) => Some(*s),
             Some(Inst::LocalAddr(_)) => {
-                say("aggregate return slot is a parameter slot");
+                say(format_args!("aggregate return slot is a parameter slot"));
                 return false;
             }
             _ => {
-                say("aggregate return not via a local slot");
+                say(format_args!("aggregate return not via a local slot"));
                 return false;
             }
         }
@@ -363,7 +377,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
             if let Some((lo, hi)) = interval
                 && (lo < 0 || hi > agg_size)
             {
-                say("aggregate return slot write out of bounds");
+                say(format_args!("aggregate return slot write out of bounds"));
                 return false;
             }
         }
@@ -402,11 +416,11 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 // caller's return slot) is admissible.
                 if reloc {
                     if *s >= 2 {
-                        say(&alloc::format!("LocalAddr of parameter cell {s}"));
+                        say(format_args!("LocalAddr of parameter cell {s}"));
                         return false;
                     }
                 } else if !param_agg_slots.contains(s) && Some(*s) != result_slot {
-                    say(&alloc::format!("LocalAddr of non-parameter slot {s}"));
+                    say(format_args!("LocalAddr of non-parameter slot {s}"));
                     return false;
                 }
             }
@@ -424,7 +438,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 if !func.agg_descs.is_empty()
                     && (result_slot.is_none() || !addr_is_slot(func, *addr, result_slot.unwrap()))
                 {
-                    say("store outside the aggregate return slot");
+                    say(format_args!("store outside the aggregate return slot"));
                     return false;
                 }
             }
@@ -441,7 +455,9 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                     let from_template =
                         matches!(func.insts.get(*src as usize), Some(Inst::ImmData(_)));
                     if !to_result || !from_template {
-                        say("mcpy outside the aggregate return slot or non-template source");
+                        say(format_args!(
+                            "mcpy outside the aggregate return slot or non-template source"
+                        ));
                         return false;
                     }
                 }
@@ -454,7 +470,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 // result is dead in the callee body.
                 let relocated = reloc && *off < 0;
                 if !relocated && used[idx] {
-                    say(&alloc::format!("live LoadLocal at v{}", idx));
+                    say(format_args!("live LoadLocal at v{}", idx));
                     return false;
                 }
             }
@@ -465,7 +481,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 // the redirected read stale.
                 let relocated = reloc && *off < 0;
                 if !relocated && param_agg_slots.contains(off) {
-                    say("StoreLocal into a struct-parameter slot");
+                    say(format_args!("StoreLocal into a struct-parameter slot"));
                     return false;
                 }
             }
@@ -487,7 +503,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
             // caller's post-splice numbering (`shift_callee_bid`).
             Inst::Phi { .. } => {}
             _ => {
-                say(&alloc::format!("disallowed inst {:?}", inst));
+                say(format_args!("disallowed inst {:?}", inst));
                 return false;
             }
         }
@@ -1176,6 +1192,7 @@ fn splice_multi_block(
         n_params: original.n_params,
         is_variadic: original.is_variadic,
         is_inline: original.is_inline,
+        is_always_inline: original.is_always_inline,
         insts: new_insts,
         inst_src: new_inst_src,
         blocks: new_blocks,
@@ -1676,7 +1693,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
         let snapshot: Vec<FunctionSsa> = funcs.to_vec();
         let mut candidates: BTreeMap<usize, &FunctionSsa> = BTreeMap::new();
         for f in &snapshot {
-            if is_inline_candidate(f, cap, abi) {
+            if is_inline_candidate(f, cap, abi, None) {
                 candidates.insert(f.ent_pc, f);
             }
         }
@@ -1736,5 +1753,111 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             break;
         }
         let _ = iter;
+    }
+    // Surface a mandatory inline request the pass could not honour. The
+    // detection is factored into `unhonoured_always_inline` so it is
+    // unit-testable without capturing stderr.
+    #[cfg(feature = "std")]
+    for (i, reason) in unhonoured_always_inline(funcs, cap, abi) {
+        eprintln!(
+            "badc: warning: `{name}` is marked always_inline but was not inlined: {reason}",
+            name = funcs[i].name,
+        );
+    }
+}
+
+/// Return `(index, reason)` for each function marked always_inline /
+/// `__forceinline` that the pass could not inline: its shape keeps it out
+/// of the candidate set and at least one call to it remains un-inlined.
+/// An uncalled callee is omitted -- nothing needed inlining. The reason
+/// mirrors the candidate filter's rejection.
+#[cfg(feature = "std")]
+fn unhonoured_always_inline(
+    funcs: &[FunctionSsa],
+    cap: u32,
+    abi: Abi,
+) -> Vec<(usize, alloc::string::String)> {
+    let mut out = Vec::new();
+    for i in 0..funcs.len() {
+        if !funcs[i].is_always_inline {
+            continue;
+        }
+        let mut reason = alloc::string::String::new();
+        if is_inline_candidate(&funcs[i], cap, abi, Some(&mut reason)) {
+            continue;
+        }
+        let ent_pc = funcs[i].ent_pc;
+        let still_called = funcs.iter().any(|g| {
+            g.insts
+                .iter()
+                .any(|inst| matches!(inst, Inst::Call { target_pc, .. } if *target_pc == ent_pc))
+        });
+        if still_called {
+            out.push((i, reason));
+        }
+    }
+    out
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use super::*;
+    use crate::c5::codegen::Target;
+
+    /// A variadic always_inline callee cannot be inlined; the candidate
+    /// filter reports the reason through the optional sink.
+    #[test]
+    fn variadic_reject_reason_is_reported() {
+        let f = FunctionSsa {
+            is_variadic: true,
+            is_always_inline: true,
+            ..Default::default()
+        };
+        let mut reason = alloc::string::String::new();
+        let ok = is_inline_candidate(&f, 32, Target::LinuxX64.abi(), Some(&mut reason));
+        assert!(!ok);
+        assert_eq!(reason, "variadic");
+    }
+
+    /// `unhonoured_always_inline` flags a called-but-uninlinable
+    /// always_inline callee with its reason and omits an uncalled one.
+    #[test]
+    fn unhonoured_flags_only_called_callees() {
+        let abi = Target::LinuxX64.abi();
+        let caller = FunctionSsa {
+            ent_pc: 1,
+            name: "use".into(),
+            insts: vec![Inst::Call {
+                target_pc: 5,
+                args: Vec::new(),
+                fixed_args: 0,
+                fp_return: false,
+                fp_arg_mask: 0,
+                arg_aggs: Vec::new(),
+                ret_agg: None,
+                ret_slot_local: 0,
+            }],
+            ..Default::default()
+        };
+        let callee = FunctionSsa {
+            ent_pc: 5,
+            name: "va".into(),
+            is_variadic: true,
+            is_always_inline: true,
+            ..Default::default()
+        };
+        let uncalled = FunctionSsa {
+            ent_pc: 9,
+            name: "va_unused".into(),
+            is_variadic: true,
+            is_always_inline: true,
+            ..Default::default()
+        };
+        let funcs = [caller, callee, uncalled];
+        let hits = unhonoured_always_inline(&funcs, 32, abi);
+        assert_eq!(hits.len(), 1);
+        let (idx, reason) = &hits[0];
+        assert_eq!(funcs[*idx].name, "va");
+        assert_eq!(reason, "variadic");
     }
 }

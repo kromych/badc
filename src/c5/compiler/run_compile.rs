@@ -181,6 +181,7 @@ impl Compiler {
             self.pending.attr_init_priority = None;
             self.pending.attr_cleanup = None;
             self.pending_is_inline = false;
+            self.pending_is_always_inline = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
@@ -212,8 +213,11 @@ impl Compiler {
                         self.pending.attr_thread_local = false;
                     }
                 } else if is_decl_modifier(self.lex.tk) {
-                    if self.lex.tk == Token::Inline {
+                    if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                         self.pending_is_inline = true;
+                        if self.lex.tk == Token::ForceInline {
+                            self.pending_is_always_inline = true;
+                        }
                     }
                     if self.lex.tk == Token::Noreturn {
                         self.pending_noreturn = true;

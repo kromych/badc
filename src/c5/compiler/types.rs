@@ -580,6 +580,7 @@ pub(super) fn is_decl_modifier(tk: Tok) -> bool {
         || tk == Token::Short
         || tk == Token::FuncSpec
         || tk == Token::Inline
+        || tk == Token::ForceInline
         || tk == Token::Noreturn
         || tk == Token::Atomic
         || tk == Token::Attribute

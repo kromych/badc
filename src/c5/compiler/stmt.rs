@@ -1022,7 +1022,10 @@ impl Compiler {
         // `goto`). Only `volatile` carries a code-generation effect
         // (it must not be elided); it rides the parsed asm block.
         let mut is_volatile = false;
-        while self.lex.tk == Token::TypeQual || self.lex.tk == Token::Inline {
+        while self.lex.tk == Token::TypeQual
+            || self.lex.tk == Token::Inline
+            || self.lex.tk == Token::ForceInline
+        {
             if self.lex.tk == Token::TypeQual {
                 is_volatile = true;
             }

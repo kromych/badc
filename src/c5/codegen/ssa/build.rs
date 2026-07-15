@@ -160,6 +160,7 @@ impl SsaBuilder {
             n_params,
             is_variadic,
             is_inline: false,
+            is_always_inline: false,
             insts: Vec::new(),
             inst_src: Vec::new(),
             blocks: Vec::new(),

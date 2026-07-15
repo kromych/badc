@@ -728,6 +728,13 @@ pub(crate) struct FunctionSsa {
     /// named functions so the path is testable.
     /// TODO: set this from the parsed `inline` function specifier.
     pub is_inline: bool,
+    /// True if the function carried a *mandatory* inline request --
+    /// `__attribute__((always_inline))` or MSVC `__forceinline` -- as
+    /// opposed to the plain `inline` hint. Implies `is_inline`. The
+    /// inliner warns when it cannot honour the request, matching the
+    /// gcc / MSVC diagnostic; a plain `inline` that stays out of line is
+    /// silent (it is only a hint).
+    pub is_always_inline: bool,
     /// Flat list of all SSA instructions in the function, indexed
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous
     /// slice of this list.

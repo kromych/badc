@@ -584,6 +584,11 @@ pub(crate) struct FinishedFunction {
     /// The walker propagates this onto `FunctionSsa::is_inline` so
     /// `inline` bypasses its body-size cap for these.
     pub is_inline: bool,
+    /// True if the declarator carried a *mandatory* inline request
+    /// (`__attribute__((always_inline))` or MSVC `__forceinline`).
+    /// Propagated onto `FunctionSsa::is_always_inline`; implies
+    /// `is_inline`.
+    pub is_always_inline: bool,
     pub n_locals: i64,
     /// Per-parameter type tags in declared order. The walker
     /// reads these to emit the C99 6.2.4 / 6.5.2.2-mandated

@@ -579,6 +579,7 @@ mod tests {
             n_params: 2,
             is_variadic: false,
             is_inline: false,
+            is_always_inline: false,
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             param_fp_mask: 0,

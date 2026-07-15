@@ -256,6 +256,7 @@ mod tests {
             n_params: 0,
             is_variadic: false,
             is_inline: false,
+            is_always_inline: false,
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
             param_fp_mask: 0,

@@ -83,11 +83,35 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(2)                                           -> x7
-    v2   Call { target_pc=4, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3   BinopI { op=shl, lhs=v2, rhs_imm=32 }            -> x1
-    v4   Extend { value=v2, kind=I32 }                    -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v1   Imm(2)                                           -> x0
+    terminator Jmp(b1)
+  block 1  start_pc=0
+    v4   Imm(2)                                           -> x0
+    v5   Imm(0)                                           -> x0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v8)
+  block 2  start_pc=0
+    v22  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v22)
+  block 3  start_pc=0
+    v24  Imm(1)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v24)
+  block 4  start_pc=0
+    v17  Imm(300)                                         -> x0
+    v18  Imm(0)                                           -> x1
+    terminator Jmp(b5)   (exit_acc=v17)
+  block 5  start_pc=0
+    v9   Phi { incoming=[b4:v17], kind=I64 }              -> x0
+    v10  Imm(300)                                         -> x0
+    v11  Imm(1288490188800)                               -> x0
+    v12  Imm(300)                                         -> x0
+    terminator Jmp(b6)   (exit_acc=v12)
+  block 6  start_pc=0
+    v2   Imm(1288490188800)                               -> x0
+    v3   Imm(300)                                         -> x0
+    terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

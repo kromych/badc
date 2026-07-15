@@ -83,9 +83,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     terminator Jmp(b2)   (exit_acc=v73)
   block 2  start_pc=0
     v77  Phi { incoming=[b1:v73], kind=I64 }              -> x0
-    v78  LoadLocal { off=-3, kind=I64 }                   -> x1
-    v79  BinopI { op=shl, lhs=v77, rhs_imm=32 }           -> x1
-    v80  Extend { value=v77, kind=I32 }                   -> x0
+    v78  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v79  Imm(0)                                           -> x0
+    v80  Imm(0)                                           -> x0
     terminator Return(v80)   (exit_acc=v80)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

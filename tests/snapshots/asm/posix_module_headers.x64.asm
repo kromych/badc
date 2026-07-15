@@ -170,16 +170,6 @@ Disassembly of section .text:
                	movq	%rax, 0x10(%rcx)
                	leaq	-0xd0(%rbp), %rcx
                	movq	%rax, (%rcx)
-               	testq	%rax, %rax
-               	je	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xc, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x3e0, %rsp            # imm = 0x3E0
-               	popq	%rbp
-               	retq
                	leaq	-0xf0(%rbp), %rax
                	xorq	%rcx, %rcx
                	movl	%ecx, (%rax)
@@ -226,7 +216,6 @@ Disassembly of section .text:
                	addq	$0x3e0, %rsp            # imm = 0x3E0
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

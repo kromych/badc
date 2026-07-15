@@ -14,6 +14,7 @@ pub(crate) mod layout;
 pub(crate) mod prune_unreachable;
 pub(crate) mod remap_blocks;
 pub(crate) mod rotate;
+pub(crate) mod simplify_branches;
 pub(crate) mod split_crit_edges;
 pub(crate) mod sroa;
 pub(crate) mod store_forward;

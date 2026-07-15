@@ -1725,13 +1725,13 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::const_global_fold::run (aarch64)", || {
             crate::c5::codegen::passes::const_global_fold::run(&mut ssa_funcs, program);
         });
-        super::ssa::emit_common::time_pass("passes::constfold_branch::run (aarch64)", || {
-            crate::c5::codegen::passes::constfold_branch::run(&mut ssa_funcs);
-        });
-        // Delete blocks the branch fold left unreachable so their calls
-        // and extern references are neither lowered nor relocated.
-        super::ssa::emit_common::time_pass("passes::prune_unreachable::run (aarch64)", || {
-            crate::c5::codegen::passes::prune_unreachable::run(&mut ssa_funcs);
+        // Fold constant-condition branches and delete the blocks that
+        // leaves unreachable (so their calls and extern references are
+        // neither lowered nor relocated), to a fixed point: pruning a
+        // folded branch's dead predecessor can collapse a merge phi and
+        // expose a fresh constant condition one level down.
+        super::ssa::emit_common::time_pass("passes::simplify_branches::run (aarch64)", || {
+            crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
         });
         // Re-run static DCE: inlining a static callee into its last caller,
         // and the branch fold dropping calls in unreachable arms, can leave

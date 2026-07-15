@@ -24,27 +24,8 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movl	$0x1, %edi
-               	movl	$0xa, %esi
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %rdx
-               	callq	<addr>
-               	movq	%rax, %r12
-               	movl	$0x14, %edx
-               	movq	%rbx, %rdi
-               	movq	%rbx, %rsi
-               	callq	<addr>
-               	addq	%r12, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	movl	$0xb, %eax
+               	movl	$0x13, %eax
+               	movl	$0x1e, %eax
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

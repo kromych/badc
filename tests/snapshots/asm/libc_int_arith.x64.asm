@@ -10,30 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<labs>:
-               	testq	%rdi, %rdi
-               	jge	<addr>
-               	imulq	$-0x1, %rdi, %rdi
-               	movq	%rdi, %rax
-               	retq
-               	jmp	<addr>
-
-<llabs>:
-               	testq	%rdi, %rdi
-               	jge	<addr>
-               	imulq	$-0x1, %rdi, %rdi
-               	movq	%rdi, %rax
-               	retq
-               	jmp	<addr>
-
-<imaxabs>:
-               	testq	%rdi, %rdi
-               	jge	<addr>
-               	imulq	$-0x1, %rdi, %rdi
-               	movq	%rdi, %rax
-               	retq
-               	jmp	<addr>
-
 <strtoimax>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -56,39 +32,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
-               	movabsq	$-0x7, %rdi
-               	callq	<addr>
-               	cmpq	$0x7, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
-               	retq
-               	movabsq	$-0x9, %rdi
-               	callq	<addr>
-               	cmpq	$0x9, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
-               	retq
-               	movabsq	$-0x80000000, %rdi      # imm = 0x80000000
-               	callq	<addr>
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
-               	retq
-               	movabsq	$-0xb, %rdi
-               	callq	<addr>
-               	cmpq	$0xb, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
-               	retq
+               	movl	$0x7, %eax
+               	movl	$0x9, %eax
+               	movl	$0x80000000, %eax       # imm = 0x80000000
+               	movl	$0xb, %eax
                	leaq	-0x48(%rbp), %rax
                	movabsq	$-0x3, %rcx
                	movq	%rcx, (%rax)

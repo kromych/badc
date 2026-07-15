@@ -86,20 +86,10 @@ Disassembly of section .text:
                	add	sp, sp, #0xc0
                	ret
 
-<shadow_in_block>:
-               	mov	x0, #0x1                // =1
-               	sxtw	x0, w0
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	bl	<addr>
-               	cmp	x0, #0x1
-               	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x3                // =3
                	mov	x1, #0xa                // =10
                	mov	x2, #0x14               // =20

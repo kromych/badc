@@ -58,30 +58,12 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %edi
-               	callq	<addr>
-               	cmpq	$0xb, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	cmpq	$0x1, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x9, %edi
-               	callq	<addr>
-               	cmpq	$-0x1, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
+               	movl	$0xa, %eax
+               	movl	$0xb, %eax
+               	xorq	%rax, %rax
+               	movl	$0x1, %eax
+               	xorq	%rax, %rax
+               	movabsq	$-0x1, %rax
                	leaq	-0x20(%rbp), %rax
                	movl	$0x7, %ecx
                	movb	%cl, (%rax)

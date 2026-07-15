@@ -23,12 +23,6 @@ use alloc::vec::Vec;
 use super::remap_blocks::remap_block_ids;
 use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
 
-pub(crate) fn run(funcs: &mut [FunctionSsa]) {
-    for func in funcs {
-        run_one(func);
-    }
-}
-
 fn push_successors(t: &Terminator, out: &mut Vec<BlockId>) {
     match *t {
         Terminator::Jmp(b) | Terminator::FallThrough(b) => out.push(b),
@@ -53,13 +47,15 @@ fn push_successors(t: &Terminator, out: &mut Vec<BlockId>) {
     }
 }
 
-fn run_one(func: &mut FunctionSsa) {
+/// Delete blocks unreachable from the entry. Returns whether any block
+/// was removed, so a driver can iterate with the branch fold.
+pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     if !func.computed_goto_targets.is_empty() {
-        return;
+        return false;
     }
     let n = func.blocks.len();
     if n == 0 {
-        return;
+        return false;
     }
     // Reachability from block 0 through terminator successors, plus a
     // jump table's target blocks (reached via its indirect dispatch,
@@ -82,7 +78,7 @@ fn run_one(func: &mut FunctionSsa) {
         }
     }
     if reachable.iter().all(|&r| r) {
-        return;
+        return false;
     }
 
     // Values defined in doomed blocks: drop their external-reference
@@ -132,6 +128,7 @@ fn run_one(func: &mut FunctionSsa) {
         .map(|&o| func.blocks[o as usize].clone())
         .collect();
     remap_block_ids(func, &new_id);
+    true
 }
 
 #[cfg(test)]

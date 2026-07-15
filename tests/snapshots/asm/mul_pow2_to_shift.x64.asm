@@ -19,7 +19,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	xorq	%rax, %rax
                	popq	%rbp
                	retq
                	addb	%al, (%rax)

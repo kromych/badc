@@ -38,10 +38,15 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x1                // =1
-               	bl	<addr>
+               	mov	x0, #0x0                // =0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrb	w1, [x0]
+               	ldrb	w0, [x0, #0x1]
+               	add	x0, x1, x0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp], #0x10
                	ret

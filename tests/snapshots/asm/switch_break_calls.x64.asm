@@ -50,10 +50,6 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	popq	%rbp
+               	movl	$0x12c, %eax            # imm = 0x12C
+               	movl	$0x12c, %eax            # imm = 0x12C
                	retq

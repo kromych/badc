@@ -45,7 +45,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x0, #0x1                // =1
-               	bl	<addr>
+               	mov	x0, #0x2                // =2
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	add	x20, x0, #0x7
                	bl	<addr>
                	add	x0, x20, x0

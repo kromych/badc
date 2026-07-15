@@ -66,20 +66,10 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<shadow_in_block>:
-               	movl	$0x1, %eax
-               	movslq	%eax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	callq	<addr>
-               	cmpq	$0x1, %rax
-               	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
                	movl	$0x3, %edi
                	movl	$0xa, %esi
                	movl	$0x14, %edx
@@ -94,3 +84,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

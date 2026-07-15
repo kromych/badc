@@ -13,25 +13,25 @@
 //! branch removes both the wasted compare-and-branch and the
 //! register-overlap hazard.
 //!
-//! The pass is a single linear walk over `func.blocks`; no
-//! fixed-point loop is needed because folding a terminator can
-//! only make code unreachable, never expose a new constant.
+//! Folding a terminator only makes code unreachable, but after
+//! `prune_unreachable` drops the not-taken predecessor a merge phi can
+//! collapse to a single incoming, exposing a fresh constant condition
+//! downstream. `fold` therefore chases single-incoming (degenerate)
+//! phis, and the driver in [`super::simplify_branches`] alternates this
+//! pass with the prune to a fixed point.
 
 use crate::c5::ir::{FunctionSsa, Inst, Terminator};
 
-pub(crate) fn run(funcs: &mut [FunctionSsa]) {
-    for func in funcs {
-        run_one(func);
-    }
-}
-
-fn run_one(func: &mut FunctionSsa) {
+/// Fold every constant-condition terminator in `func`. Returns whether
+/// any terminator changed, so a driver can iterate with the prune.
+pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     // Skip computed-goto functions: branch folding may drop or
     // renumber blocks, invalidating `Inst::BlockAddr` / the
     // computed_goto_targets block ids.
     if !func.computed_goto_targets.is_empty() {
-        return;
+        return false;
     }
+    let mut changed = false;
     for block in func.blocks.iter_mut() {
         let new_term = match block.terminator {
             Terminator::Bz {
@@ -60,21 +60,30 @@ fn run_one(func: &mut FunctionSsa) {
         };
         if let Some(t) = new_term {
             block.terminator = t;
+            changed = true;
         }
     }
+    changed
 }
 
-/// Resolve `v` to a constant if it names an `Inst::Imm`. Returns
-/// `None` for any other producer or for `NO_VALUE`.
+/// Resolve `v` to a constant. Names an `Inst::Imm` directly, or reaches
+/// one through a chain of single-incoming phis: a phi with one
+/// predecessor always takes that value, so the constant reaches the
+/// condition. The chase is bounded by the instruction count so a phi
+/// cycle cannot loop. Returns `None` for any other producer or for
+/// `NO_VALUE`.
 fn fold(insts: &[Inst], v: crate::c5::ir::ValueId) -> Option<i64> {
-    let v = v as usize;
-    if v >= insts.len() {
-        return None;
+    let mut v = v as usize;
+    for _ in 0..insts.len() {
+        match insts.get(v)? {
+            Inst::Imm(k) => return Some(*k),
+            Inst::Phi { incoming, .. } if incoming.len() == 1 => {
+                v = incoming[0].1 as usize;
+            }
+            _ => return None,
+        }
     }
-    match insts[v] {
-        Inst::Imm(k) => Some(k),
-        _ => None,
-    }
+    None
 }
 
 #[cfg(test)]
@@ -190,6 +199,69 @@ mod tests {
         );
         run_one(&mut f);
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(1)));
+    }
+
+    #[test]
+    fn bz_through_single_incoming_phi_folds() {
+        // A degenerate phi (one incoming) collapses to its value: the
+        // branch resolves as if the immediate were the condition.
+        let mut f = fresh(
+            vec![
+                Inst::Imm(1),
+                Inst::Phi {
+                    incoming: vec![(0, 0)],
+                    kind: crate::c5::ir::LoadKind::I64,
+                },
+            ],
+            vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Jmp(1),
+                    exit_acc: 0,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 1..2,
+                    terminator: Terminator::Bz {
+                        cond: 1,
+                        target: 2,
+                        fall_through: 3,
+                    },
+                    exit_acc: 1,
+                },
+            ],
+        );
+        run_one(&mut f);
+        // cond resolves to 1 (nonzero) -> Bz takes the fall-through.
+        assert!(matches!(f.blocks[1].terminator, Terminator::Jmp(3)));
+    }
+
+    #[test]
+    fn bz_through_two_incoming_phi_is_left_untouched() {
+        // A real merge (two incomings) is not a constant; leave it.
+        let mut f = fresh(
+            vec![
+                Inst::Imm(1),
+                Inst::Imm(0),
+                Inst::Phi {
+                    incoming: vec![(0, 0), (1, 1)],
+                    kind: crate::c5::ir::LoadKind::I64,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Bz {
+                    cond: 2,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 2,
+            }],
+        );
+        run_one(&mut f);
+        assert!(matches!(f.blocks[0].terminator, Terminator::Bz { .. }));
     }
 
     #[test]

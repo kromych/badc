@@ -14,9 +14,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x0, #0x0                // =0
-               	add	x0, x0, #0x1
-               	add	x0, x0, #0x2
-               	add	x0, x0, #0x4
+               	mov	x0, #0x7                // =7
                	sxtw	x1, w0
                	cmp	x1, #0x7
                	b.eq	<addr>
@@ -34,9 +32,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	mov	x0, #0x1064             // =4196
-               	add	x0, x0, #0x1
-               	add	x0, x0, #0x2
-               	add	x0, x0, #0x4
+               	mov	x0, #0x106b             // =4203
                	sxtw	x1, w0
                	mov	x17, #0x106b            // =4203
                	cmp	x1, x17

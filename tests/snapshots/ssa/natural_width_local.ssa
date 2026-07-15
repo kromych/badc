@@ -94,9 +94,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     terminator Jmp(b6)   (exit_acc=v92)
   block 6  start_pc=0
     v98  Phi { incoming=[b5:v90], kind=I64 }              -> x0
-    v99  Extend { value=v98, kind=I32 }                   -> x1
-    v100 BinopI { op=shl, lhs=v98, rhs_imm=32 }           -> x0
-    v101 Extend { value=v99, kind=I32 }                   -> x0
+    v99  Imm(0)                                           -> x0
+    v100 Imm(0)                                           -> x0
+    v101 Imm(0)                                           -> x0
     terminator Return(v101)   (exit_acc=v101)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

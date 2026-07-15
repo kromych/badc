@@ -11,8 +11,6 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	mov	x0, #0x14               // =20
-               	add	x0, x0, #0x5
-               	sxtw	x0, w0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	mov	x0, #0x19               // =25
+               	mov	x0, #0x19               // =25
                	ret

@@ -10,29 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<streq>:
-               	movsbq	(%rdi), %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movsbq	(%rdi), %rax
-               	movsbq	(%rsi), %rcx
-               	cmpq	%rcx, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	incq	%rdi
-               	incq	%rsi
-               	jmp	<addr>
-               	jmp	<addr>
-               	movsbq	(%rdi), %rax
-               	movsbq	(%rsi), %rcx
-               	cmpq	%rcx, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	retq
-
 <local_aggr>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -55,9 +32,28 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	callq	<addr>
+               	leaq	<rip>, %rax
+               	leaq	<rip>, %rcx
+               	movsbq	(%rax), %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	movsbq	(%rax), %rdx
+               	movsbq	(%rcx), %rsi
+               	cmpq	%rsi, %rdx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	incq	%rax
+               	incq	%rcx
+               	jmp	<addr>
+               	jmp	<addr>
+               	movsbq	(%rax), %rax
+               	movsbq	(%rcx), %rcx
+               	cmpq	%rcx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
@@ -73,9 +69,28 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
                	leaq	-0x30(%rbp), %rax
-               	movq	(%rax), %rdi
-               	leaq	<rip>, %rsi
-               	callq	<addr>
+               	movq	(%rax), %rax
+               	leaq	<rip>, %rcx
+               	movsbq	(%rax), %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	movsbq	(%rax), %rdx
+               	movsbq	(%rcx), %rsi
+               	cmpq	%rsi, %rdx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	incq	%rax
+               	incq	%rcx
+               	jmp	<addr>
+               	jmp	<addr>
+               	movsbq	(%rax), %rax
+               	movsbq	(%rcx), %rcx
+               	cmpq	%rcx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
@@ -83,9 +98,27 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movq	%rax, %rdi
-               	leaq	<rip>, %rsi
-               	callq	<addr>
+               	leaq	<rip>, %rcx
+               	movsbq	(%rax), %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	movsbq	(%rax), %rdx
+               	movsbq	(%rcx), %rsi
+               	cmpq	%rsi, %rdx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	incq	%rax
+               	incq	%rcx
+               	jmp	<addr>
+               	jmp	<addr>
+               	movsbq	(%rax), %rax
+               	movsbq	(%rcx), %rcx
+               	cmpq	%rcx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x3, %eax
@@ -96,5 +129,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

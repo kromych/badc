@@ -14,9 +14,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorq	%rax, %rax
-               	incq	%rax
-               	addq	$0x2, %rax
-               	addq	$0x4, %rax
+               	movl	$0x7, %eax
                	movslq	%eax, %rcx
                	cmpq	$0x7, %rcx
                	je	<addr>
@@ -30,9 +28,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movl	$0x1064, %eax           # imm = 0x1064
-               	incq	%rax
-               	addq	$0x2, %rax
-               	addq	$0x4, %rax
+               	movl	$0x106b, %eax           # imm = 0x106B
                	movslq	%eax, %rcx
                	cmpq	$0x106b, %rcx           # imm = 0x106B
                	je	<addr>

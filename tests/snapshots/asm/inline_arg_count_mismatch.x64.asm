@@ -22,7 +22,7 @@ Disassembly of section .text:
                	movl	$0x7, %edi
                	callq	<addr>
                	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	xorq	%rax, %rax
                	popq	%rbp
                	retq
                	addb	%al, (%rax)

@@ -114,13 +114,6 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x20
                	ret
                	mov	x0, #0x14               // =20
-               	sxtw	x0, w0
-               	cmp	x0, #0x14
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

@@ -21,11 +21,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x12c, %edi            # imm = 0x12C
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	popq	%rbp
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)

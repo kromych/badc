@@ -10,8 +10,7 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<phi_accumulate>:
-               	movslq	%edi, %rdi
+<main>:
                	movl	$0x1, %ecx
                	xorq	%rax, %rax
                	jmp	<addr>
@@ -22,22 +21,14 @@ Disassembly of section .text:
                	incq	%rcx
                	leaq	0x1(%rdx), %rax
                	movslq	%eax, %rdx
-               	cmpq	%rdi, %rdx
+               	cmpq	$0x32, %rdx
                	jl	<addr>
-               	movq	%rcx, %rax
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x32, %edi
-               	callq	<addr>
-               	cmpq	$-0x4728dfba, %rax      # imm = 0xB8D72046
+               	cmpq	$-0x4728dfba, %rcx      # imm = 0xB8D72046
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
-               	popq	%rbp
                	retq
                	movl	$0x1, %eax
+               	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)

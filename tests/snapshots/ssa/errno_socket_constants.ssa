@@ -51,7 +51,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
   block 5  start_pc=0
     v31  Phi { incoming=[b2:v29, b4:v36], kind=I64 }      -> x0
     v32  Extend { value=v31, kind=I32 }                   -> x1
-    v33  Imm(16)                                          -> x6
+    v33  LoadLocal { off=-9, kind=I32 }                   -> x6
     v34  BinopI { op=lt, lhs=v32, rhs_imm=16 }            -> x6
     terminator Bnz { cond=v34, target=b3, fall=b6 }   (exit_acc=v34)
   block 6  start_pc=0
@@ -62,7 +62,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
   block 7  start_pc=0
     v11  Phi { incoming=[b0:v6, b6:v16], kind=I64 }       -> x7
     v12  Extend { value=v11, kind=I32 }                   -> x2
-    v13  Imm(16)                                          -> x0
+    v13  LoadLocal { off=-9, kind=I32 }                   -> x0
     v14  BinopI { op=lt, lhs=v12, rhs_imm=16 }            -> x0
     terminator Bnz { cond=v14, target=b1, fall=b8 }   (exit_acc=v14)
   block 8  start_pc=0

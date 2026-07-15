@@ -34,10 +34,15 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x1, %edi
-               	callq	<addr>
+               	xorq	%rax, %rax
+               	leaq	<rip>, %rax
+               	movzbq	(%rax), %rcx
+               	movzbq	0x1(%rax), %rax
+               	addq	%rcx, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	movslq	%eax, %rax
-               	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

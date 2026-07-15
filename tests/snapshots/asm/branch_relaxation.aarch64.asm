@@ -40,10 +40,30 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0xa                // =10
-               	bl	<addr>
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
+               	b	<addr>
+               	mov	x3, #0x3                // =3
+               	sdiv	x17, x2, x3
+               	msub	x3, x17, x3, x2
+               	cmp	x3, #0x0
+               	b.ne	<addr>
+               	add	x0, x0, x1
+               	b	<addr>
+               	mov	x3, #0x3                // =3
+               	sdiv	x17, x2, x3
+               	msub	x3, x17, x3, x2
+               	cmp	x3, #0x1
+               	b.ne	<addr>
+               	sub	x0, x0, #0x1
+               	b	<addr>
+               	add	x0, x0, #0x2
+               	b	<addr>
+               	add	x1, x2, #0x1
+               	sxtw	x2, w1
+               	cmp	x2, #0xa
+               	b.lt	<addr>
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp], #0x10
                	ret

@@ -49,10 +49,6 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x2                // =2
-               	bl	<addr>
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x12c              // =300
+               	mov	x0, #0x12c              // =300
                	ret

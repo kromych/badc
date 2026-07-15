@@ -10,44 +10,59 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<streq>:
-               	movsbq	(%rdi), %rax
-               	testq	%rax, %rax
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	leaq	<rip>, %rax
+               	leaq	<rip>, %rcx
+               	movsbq	(%rax), %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
-               	movsbq	(%rdi), %rax
-               	movsbq	(%rsi), %rcx
-               	cmpq	%rcx, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movsbq	(%rax), %rdx
+               	movsbq	(%rcx), %rsi
+               	cmpq	%rsi, %rdx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
-               	incq	%rdi
-               	incq	%rsi
+               	incq	%rax
+               	incq	%rcx
                	jmp	<addr>
                	jmp	<addr>
-               	movsbq	(%rdi), %rax
-               	movsbq	(%rsi), %rcx
+               	movsbq	(%rax), %rax
+               	movsbq	(%rcx), %rcx
                	cmpq	%rcx, %rax
                	sete	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rsi
-               	callq	<addr>
+               	leaq	<rip>, %rax
+               	leaq	<rip>, %rcx
+               	movsbq	(%rax), %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	movsbq	(%rax), %rdx
+               	movsbq	(%rcx), %rsi
+               	cmpq	%rsi, %rdx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	incq	%rax
+               	incq	%rcx
+               	jmp	<addr>
+               	jmp	<addr>
+               	movsbq	(%rax), %rax
+               	movsbq	(%rcx), %rcx
+               	cmpq	%rcx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -92,4 +107,5 @@ Disassembly of section .text:
 <label>:
                	leaq	<rip>, %rax
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

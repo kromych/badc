@@ -92,9 +92,9 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     // tails sealed off behind `noreturn` calls -- so a dead arm's
     // calls neither pin a static function here nor lower into calls
     // and relocations against symbols the program never references.
-    // The -O pipeline reruns both post-inline.
-    crate::c5::codegen::passes::constfold_branch::run(&mut out);
-    crate::c5::codegen::passes::prune_unreachable::run(&mut out);
+    // The fixed point also resolves a merge phi that a pruned branch
+    // collapses to one incoming. The -O pipeline reruns this post-inline.
+    crate::c5::codegen::passes::simplify_branches::run(&mut out);
     drop_unreachable_statics(&mut out, program);
     Ok(out)
 }

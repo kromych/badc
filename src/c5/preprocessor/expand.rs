@@ -378,7 +378,7 @@ impl<'a> Exp<'a> {
         }
     }
 
-    /// `hs ∪ {name}`; the empty-set case (every top-level fire) is
+    /// `hs + {name}`; the empty-set case (every top-level fire) is
     /// served from the preprocessor's per-name singleton cache.
     fn hs_with_name(&mut self, hs: u32, name: &str) -> u32 {
         if hs == 0 {

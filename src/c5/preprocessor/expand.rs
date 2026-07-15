@@ -140,10 +140,18 @@ fn hs_union(a: &Rc<Hideset>, b: &Rc<Hideset>) -> Rc<Hideset> {
 
 /// Union `hs` into every token's hideset. Tokens of one prior
 /// expansion share a set, so the union is memoized per distinct
-/// source set.
+/// source set. Only tokens whose hideset is ever consulted get one:
+/// the expansion scan reads it for identifiers (may they fire?) and
+/// for `)` (the invocation-hideset intersection); on every other
+/// token it is dead weight, and arguments here can be huge.
 fn hs_add_all(toks: &mut [Tok], hs: &Rc<Hideset>) {
     let mut memo: Vec<(*const Hideset, Rc<Hideset>)> = Vec::new();
     for t in toks {
+        let consulted = t.kind == TokKind::Ident
+            || (t.kind == TokKind::Punct && t.end - t.start == 1 && t.first_byte() == b')');
+        if !consulted {
+            continue;
+        }
         let merged = match &t.hs {
             None => hs.clone(),
             Some(old) => {
@@ -395,13 +403,12 @@ fn stringize_toks(toks: &[Tok], space: bool) -> Tok {
 /// entries the invocation consumed -- or `None` when the parens don't
 /// close, in which case nothing is consumed (C99 6.10.3p10: the name
 /// alone is not an invocation).
-fn scan_args(rest: &[Tok]) -> Option<(Vec<Vec<Tok>>, Option<Rc<Hideset>>, usize)> {
+fn scan_args(rest: &mut Vec<Tok>) -> Option<(Vec<Vec<Tok>>, Option<Rc<Hideset>>)> {
+    // Find the extent first (no copies), then move the tokens out.
     let n = rest.len();
-    let mut args: Vec<Vec<Tok>> = Vec::new();
-    let mut cur: Vec<Tok> = Vec::new();
     let mut depth = 1usize;
     let mut k = n.checked_sub(2)?;
-    loop {
+    let close = loop {
         let t = &rest[k];
         if t.kind == TokKind::Punct {
             match t.text() {
@@ -409,27 +416,45 @@ fn scan_args(rest: &[Tok]) -> Option<(Vec<Vec<Tok>>, Option<Rc<Hideset>>, usize)
                 ")" => {
                     depth -= 1;
                     if depth == 0 {
-                        args.push(cur);
-                        return Some((args, t.hs.clone(), n - k));
+                        break k;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if k == 0 {
+            return None;
+        }
+        k -= 1;
+    };
+    let rp_hs = rest[close].hs.clone();
+    // `tail` holds `( args... )` in reverse; pop to walk forward.
+    let mut tail = rest.split_off(close);
+    tail.pop(); // the `(`
+    let mut args: Vec<Vec<Tok>> = Vec::new();
+    let mut cur: Vec<Tok> = Vec::new();
+    let mut depth = 1usize;
+    while let Some(t) = tail.pop() {
+        if t.kind == TokKind::Punct {
+            match t.text() {
+                "(" => depth += 1,
+                ")" => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
                     }
                 }
                 "," if depth == 1 => {
                     args.push(core::mem::take(&mut cur));
-                    if k == 0 {
-                        return None;
-                    }
-                    k -= 1;
                     continue;
                 }
                 _ => {}
             }
         }
-        cur.push(t.clone());
-        if k == 0 {
-            return None;
-        }
-        k -= 1;
+        cur.push(t);
     }
+    args.push(cur);
+    Some((args, rp_hs))
 }
 
 /// The variadic tail (C99 6.10.3.1p2): arguments past the named
@@ -563,9 +588,8 @@ impl Preprocessor {
                 // Function-like: an invocation only when `(` follows
                 // (C99 6.10.3p10) and closes within the line.
                 if rest.last().is_some_and(|t| t.is_punct("(")) {
-                    if let Some((raw_args, rp_hs, consumed)) = scan_args(&rest) {
+                    if let Some((raw_args, rp_hs)) = scan_args(&mut rest) {
                         self.check_macro_arity(tok.text(), def, &raw_args, filename, line_no);
-                        rest.truncate(rest.len() - consumed);
                         let inv = hs_insert(&hs_intersect(&tok.hs, &rp_hs), tok.text());
                         let mut sub = self.subst(def, &raw_args, &inv, filename, line_no, depth);
                         if let Some(f) = sub.first_mut() {
@@ -615,6 +639,21 @@ impl Preprocessor {
         let mut body = Vec::new();
         lex_into(&bbuf, &mut body);
         let nfixed = def.params.len();
+
+        // Plain-position use count per parameter: the memoized
+        // expansion is moved out on its last use instead of cloned
+        // (arguments can be huge).
+        let mut plain_uses: Vec<u32> = alloc::vec![0; raw_args.len()];
+        for (bi, bt) in body.iter().enumerate() {
+            if bt.kind == TokKind::Ident
+                && !body.get(bi + 1).is_some_and(|n| n.is_punct("##"))
+                && !(bi > 0 && (body[bi - 1].is_punct("##") || body[bi - 1].is_punct("#")))
+                && let Some(idx) = def.params.iter().position(|p| p == bt.text())
+                && idx < plain_uses.len()
+            {
+                plain_uses[idx] += 1;
+            }
+        }
 
         let raw_va: Vec<Tok> = if def.is_variadic {
             join_va(raw_args, nfixed, |a| a.clone())
@@ -725,16 +764,20 @@ impl Preprocessor {
                     let src = if followed_by_paste {
                         raw_args.get(idx).cloned().unwrap_or_default()
                     } else if idx < raw_args.len() {
-                        exp_args[idx]
-                            .get_or_insert_with(|| {
-                                self.expand_tokens(
-                                    raw_args[idx].clone(),
-                                    filename,
-                                    line_no,
-                                    depth + 1,
-                                )
-                            })
-                            .clone()
+                        if exp_args[idx].is_none() {
+                            exp_args[idx] = Some(self.expand_tokens(
+                                raw_args[idx].clone(),
+                                filename,
+                                line_no,
+                                depth + 1,
+                            ));
+                        }
+                        plain_uses[idx] = plain_uses[idx].saturating_sub(1);
+                        if plain_uses[idx] == 0 {
+                            exp_args[idx].take().unwrap()
+                        } else {
+                            exp_args[idx].as_ref().unwrap().clone()
+                        }
                     } else {
                         Vec::new()
                     };

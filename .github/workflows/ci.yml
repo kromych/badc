@@ -1260,6 +1260,7 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-24.04-arm, label: ubuntu-arm64, optenv: "", optname: O0 }
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, optenv: "1", optname: O }
           - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "", optname: O0 }
           - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "1", optname: O }
     runs-on: ${{ matrix.os }}

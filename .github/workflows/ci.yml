@@ -1205,16 +1205,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: edk2-${{ matrix.label }}
-      - name: fall back to the Azure apt mirror (arm64 runners)
-        if: runner.arch == 'ARM64'
+      - name: apt resilience (Linux arm64 runners)
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
         # ports.ubuntu.com (the only default arm64 archive) has hour-long
-        # outages that fail the lane before any project code runs; the
-        # Azure-hosted mirror serves the same pool from the runner's own
-        # network. Retries cover the residual blips.
+        # outages that fail the lane before any project code runs. Retry
+        # transient errors, and only when the index refresh itself fails
+        # swap to the Azure-hosted mirror (resolves to a runner-local pool
+        # on most arm64 pools) and refresh again.
         run: |
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
-          sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
-            /etc/apt/sources.list $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+          if ! sudo apt-get update -y; then
+            sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+              /etc/apt/sources.list $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+            sudo apt-get update -y
+          fi
       - name: install QEMU + OVMF/AAVMF firmware (Linux only)
         if: matrix.qemu
         run: |
@@ -1286,16 +1290,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: qemu-${{ matrix.label }}
-      - name: fall back to the Azure apt mirror (arm64 runners)
-        if: runner.arch == 'ARM64'
+      - name: apt resilience (Linux arm64 runners)
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
         # ports.ubuntu.com (the only default arm64 archive) has hour-long
-        # outages that fail the lane before any project code runs; the
-        # Azure-hosted mirror serves the same pool from the runner's own
-        # network. Retries cover the residual blips.
+        # outages that fail the lane before any project code runs. Retry
+        # transient errors, and only when the index refresh itself fails
+        # swap to the Azure-hosted mirror (resolves to a runner-local pool
+        # on most arm64 pools) and refresh again.
         run: |
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
-          sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
-            /etc/apt/sources.list $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+          if ! sudo apt-get update -y; then
+            sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+              /etc/apt/sources.list $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+            sudo apt-get update -y
+          fi
       - name: install QEMU compile + link deps
         # glib headers (no badc shim), and the zlib / libfdt shared objects the
         # emulator links against; their headers come from the demo's shim.

@@ -708,6 +708,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("dead_local_load_frame_elide.c", 0),
     ("narrow_param_entry_extend.c", 0),
     ("qsort_scan_extend_dedup.c", 0),
+    ("tailcall_return_extension.c", 0),
     ("call_arg_extend_drop.c", 0),
     ("indirect_call_narrow_scalar_args.c", 0),
     ("indirect_call_ten_scalar_args.c", 0),

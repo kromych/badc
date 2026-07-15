@@ -1430,6 +1430,7 @@ pub(crate) fn emit_function(
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     tls_total_size: usize,
     fn_unwind: &mut Vec<super::FnUnwind>,
 ) -> bool {
@@ -1646,7 +1647,7 @@ pub(crate) fn emit_function(
             // epilogue; ret`. Saves one call+ret pair per recursion level
             // and removes the post-call rax-to-place mov. See
             // `detect_tail_call` for the safety preconditions.
-            let tail_call = detect_tail_call(func, block, abi, variadic_targets);
+            let tail_call = detect_tail_call(func, block, abi, variadic_targets, ret_tags, target);
             for v in block.inst_range.clone() {
                 let inst = &func.insts[v as usize];
                 let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
@@ -7694,6 +7695,8 @@ fn detect_tail_call<'a>(
     block: &super::super::ir::Block,
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    ret_tags: &alloc::collections::BTreeMap<usize, i64>,
+    target: Target,
 ) -> Option<(usize, usize, &'a [u32])> {
     let Terminator::Return(v) = block.terminator else {
         return None;
@@ -7734,6 +7737,19 @@ fn detect_tail_call<'a>(
     // tail conversion's `marshal_args` would deliver garbage. The
     // regular `emit_call` path branches on this same flag.
     if variadic_targets.contains(&target_pc) {
+        return None;
+    }
+    // The callee's epilogue extends a sub-word integer return per its
+    // own declared type, and the jmp skips this function's return
+    // staging, so the two extension recipes must agree (an `int`
+    // callee leaves a sign-extended accumulator that an `unsigned`
+    // caller's contract does not allow). An unknown callee -- a
+    // cross-unit placeholder pc -- has no recorded contract; keep the
+    // regular call-then-return path.
+    let &callee_tag = ret_tags.get(&target_pc)?;
+    if super::return_extension(callee_tag, target)
+        != super::return_extension(func.ret_type_tag, target)
+    {
         return None;
     }
     // Any `LocalAddr` -- whether to a user-local (negative `off`) or

@@ -1215,6 +1215,7 @@ fn splice_multi_block(
         param_local_slots: original.param_local_slots,
         ret_agg: original.ret_agg,
         ret_is_fp: original.ret_is_fp,
+        ret_type_tag: original.ret_type_tag,
         indirect_result_slot: original.indirect_result_slot,
         computed_goto_targets: original.computed_goto_targets,
         // Multi-block splicing is skipped for jump-table callers and

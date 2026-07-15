@@ -2155,6 +2155,12 @@ pub(crate) fn lower(
         .filter(|f| f.is_variadic)
         .map(|f| f.ent_pc)
         .collect();
+    // Per-callee declared return type, read by the tail-call
+    // conversion to compare extension contracts.
+    let ret_tags: alloc::collections::BTreeMap<usize, i64> = ssa_funcs
+        .iter()
+        .map(|f| (f.ent_pc, f.ret_type_tag))
+        .collect();
     // Cross-TU extern variadic callees too: see the matching
     // comment on the aarch64 lowering's `variadic_targets`.
     {
@@ -2227,6 +2233,7 @@ pub(crate) fn lower(
                 &extern_tls_names,
                 imports,
                 &variadic_targets,
+                &ret_tags,
                 program.tls_data.len(),
                 &mut fn_unwind,
             )

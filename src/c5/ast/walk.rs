@@ -121,6 +121,7 @@ pub(crate) fn walk_function(
         b.set_ret_agg(idx);
     }
     b.set_ret_is_fp(is_floating_scalar(return_ty));
+    b.set_ret_type_tag(return_ty);
     // A function returning > 16 bytes saves the incoming x8 result
     // pointer into a dedicated local for the codegen prologue; the
     // `return` lowering writes the value through it.

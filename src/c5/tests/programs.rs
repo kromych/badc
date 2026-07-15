@@ -3331,6 +3331,13 @@ fn qsort_scan_extend_dedup() {
 }
 
 #[test]
+fn tailcall_return_extension() {
+    // int-returning tail callee under an unsigned-returning caller:
+    // the widened value must zero-extend (bit 31 set).
+    assert_eq!(run_fixture("tailcall_return_extension.c"), 0);
+}
+
+#[test]
 fn call_arg_extend_drop() {
     // The caller-side re-extension of a direct-call argument drops
     // only when the callee re-derives the parameter from the low bits.

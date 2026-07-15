@@ -437,6 +437,7 @@ def main() -> int:
     v = subprocess.run([str(binp), "--version"], capture_output=True, text=True)
     if "QEMU emulator version" in v.stdout:
         log(f"--version: {v.stdout.strip().splitlines()[0]}")
+        _shutdown_check(binp, arch)
         maybe_boot(binp, arch)
         log(f"smoke OK [{lane}] (badc compiled {ok}/{len(all_o)} units; emulator runs)")
         return 0
@@ -620,6 +621,36 @@ def ovmf_pflash(cache: Path) -> list[str]:
     shutil.copyfile(vars_src, vars_rw)
     return ["-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}",
             "-drive", f"if=pflash,format=raw,unit=1,file={vars_rw}"]
+
+
+def _shutdown_check(binp: Path, arch: str) -> None:
+    """Exercise the host-initiated shutdown path: start the machine with no
+    devices, issue a QMP `quit`, and require a clean exit. This runs the QMP
+    dispatcher teardown a dropped store in QEMU_LOCK_GUARD's compound literal
+    once left with a null unlock pointer, SIGSEGV'ing on quit. No kernel or
+    firmware is needed (`-nodefaults`), so it is cheap and always runs. A
+    signal death here is an unambiguous codegen regression and is fatal; an
+    ambiguous non-clean exit is reported best-effort, matching the run gate."""
+    machine = "virt" if arch == "aarch64" else "q35"
+    cmd = [str(binp), "-M", machine, "-display", "none", "-serial", "null",
+           "-qmp", "stdio", "-nodefaults"]
+    qmp = b'{"execute":"qmp_capabilities"}\n{"execute":"quit"}\n'
+    try:
+        p = subprocess.run(cmd, input=qmp, capture_output=True, timeout=40)
+    except subprocess.TimeoutExpired:
+        log(f"shutdown check [{machine}]: no exit on QMP quit within 40s "
+            "(best-effort)")
+        return
+    out = p.stdout.decode(errors="replace")
+    if p.returncode < 0:
+        fail(f"shutdown check [{machine}]: qemu died from signal "
+             f"{-p.returncode} on QMP quit -- the host-initiated shutdown "
+             f"path faulted\n{out[-800:]}")
+    if p.returncode == 0 and '"event": "SHUTDOWN"' in out:
+        log(f"shutdown OK [{machine}]: QMP quit reached SHUTDOWN, clean exit")
+    else:
+        log(f"shutdown check [{machine}]: QMP quit did not confirm cleanly "
+            f"(rc={p.returncode}); best-effort\n  {out[-300:]}")
 
 
 def maybe_boot(binp: Path, arch: str) -> None:

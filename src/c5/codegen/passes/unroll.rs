@@ -153,7 +153,7 @@ fn shape_inst_count(func: &FunctionSsa, s: &LoopShape) -> usize {
 fn try_shape(
     func: &FunctionSsa,
     header: BlockId,
-    body: &BTreeSet<BlockId>,
+    body: &[BlockId],
     preds: &[Vec<BlockId>],
 ) -> Option<LoopShape> {
     let h = header;
@@ -176,7 +176,10 @@ fn try_shape(
         } => (cond, target, fall_through, false),
         _ => return None,
     };
-    let (enter, exit) = match (body.contains(&s1), body.contains(&s2)) {
+    let (enter, exit) = match (
+        body.binary_search(&s1).is_ok(),
+        body.binary_search(&s2).is_ok(),
+    ) {
         (true, false) => (s1, s2),
         (false, true) => (s2, s1),
         _ => return None,
@@ -195,7 +198,7 @@ fn try_shape(
             _ => return None,
         };
     }
-    if chain.len() + 1 != body.len() || chain.iter().any(|b| !body.contains(b)) {
+    if chain.len() + 1 != body.len() || chain.iter().any(|b| body.binary_search(b).is_err()) {
         return None;
     }
     let latch = *chain.last()?;
@@ -211,7 +214,7 @@ fn try_shape(
         (false, true) => hp[0],
         _ => return None,
     };
-    if body.contains(&pre) {
+    if body.binary_search(&pre).is_ok() {
         return None;
     }
     let mut phis: Vec<(ValueId, ValueId, ValueId)> = Vec::new();

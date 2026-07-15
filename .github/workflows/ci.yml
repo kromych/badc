@@ -1205,6 +1205,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: edk2-${{ matrix.label }}
+      - name: fall back to the Azure apt mirror (arm64 runners)
+        if: runner.arch == 'ARM64'
+        # ports.ubuntu.com (the only default arm64 archive) has hour-long
+        # outages that fail the lane before any project code runs; the
+        # Azure-hosted mirror serves the same pool from the runner's own
+        # network. Retries cover the residual blips.
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
+          sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+            /etc/apt/sources.list $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
       - name: install QEMU + OVMF/AAVMF firmware (Linux only)
         if: matrix.qemu
         run: |
@@ -1276,6 +1286,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: qemu-${{ matrix.label }}
+      - name: fall back to the Azure apt mirror (arm64 runners)
+        if: runner.arch == 'ARM64'
+        # ports.ubuntu.com (the only default arm64 archive) has hour-long
+        # outages that fail the lane before any project code runs; the
+        # Azure-hosted mirror serves the same pool from the runner's own
+        # network. Retries cover the residual blips.
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
+          sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+            /etc/apt/sources.list $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
       - name: install QEMU compile + link deps
         # glib headers (no badc shim), and the zlib / libfdt shared objects the
         # emulator links against; their headers come from the demo's shim.

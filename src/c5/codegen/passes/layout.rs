@@ -310,26 +310,21 @@ struct LoopForest {
 
 impl LoopForest {
     fn build(n_blocks: usize, loops: &[NaturalLoop]) -> LoopForest {
-        let smallest_containing = |b: BlockId, exclude: Option<usize>| -> Option<usize> {
-            let mut best: Option<usize> = None;
-            for (li, l) in loops.iter().enumerate() {
-                if Some(li) == exclude || !l.body.contains(&b) {
-                    continue;
-                }
-                if best.is_none_or(|bi| l.body.len() < loops[bi].body.len()) {
-                    best = Some(li);
-                }
+        // Stamp bodies from the outermost in; the last (smallest) loop
+        // to touch a block is its innermost, and a loop's parent is
+        // whatever contained its header before its own stamp. Size
+        // ties keep the lowest loop index, as a full smallest-scan
+        // would. Linear in the bodies' total size.
+        let mut order: Vec<usize> = (0..loops.len()).collect();
+        order.sort_unstable_by(|&a, &b| (loops[b].body.len(), b).cmp(&(loops[a].body.len(), a)));
+        let mut innermost: Vec<Option<usize>> = alloc::vec![None; n_blocks];
+        let mut parent: Vec<Option<usize>> = alloc::vec![None; loops.len()];
+        for li in order {
+            parent[li] = innermost[loops[li].header as usize];
+            for &b in &loops[li].body {
+                innermost[b as usize] = Some(li);
             }
-            best
-        };
-        let innermost = (0..n_blocks)
-            .map(|b| smallest_containing(b as BlockId, None))
-            .collect();
-        let parent = loops
-            .iter()
-            .enumerate()
-            .map(|(li, l)| smallest_containing(l.header, Some(li)))
-            .collect();
+        }
         LoopForest { innermost, parent }
     }
 

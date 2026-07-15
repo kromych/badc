@@ -1,4 +1,5 @@
 use alloc::string::String;
+use alloc::string::ToString;
 
 /// Phase-3 comment removal: strip `/* ... */` block comments and
 /// `// ...` line comments from the entire source. Each comment is

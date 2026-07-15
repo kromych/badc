@@ -420,9 +420,7 @@ impl<'a> Exp<'a> {
             if !consulted {
                 continue;
             }
-            t.hs = if t.hs == 0 {
-                hs
-            } else if t.hs == hs {
+            t.hs = if t.hs == 0 || t.hs == hs {
                 hs
             } else {
                 match memo.iter().find(|(k, _)| *k == t.hs) {
@@ -654,20 +652,20 @@ impl<'a> Exp<'a> {
                 let def = pp.fn_macros.get(name).unwrap();
                 // Function-like: an invocation only when `(` follows
                 // (C99 6.10.3p10) and closes within the line.
-                if rest.last().is_some_and(|&t| self.is_punct(t, "(")) {
-                    if let Some((raw_args, rp_hs)) = self.scan_args(&mut rest) {
-                        pp.check_macro_arity(name, def, &raw_args, self.filename, self.line_no);
-                        let common = self.hs_intersect(tok.hs, rp_hs);
-                        let inv = self.hs_with_name(common, name);
-                        let mut sub = self.subst(name, def, &raw_args, inv, depth);
-                        if let Some(f) = sub.first_mut() {
-                            f.space = tok.space;
-                        }
-                        sub.reverse();
-                        rest.append(&mut sub);
-                        self.put_vec(sub);
-                        continue;
+                if rest.last().is_some_and(|&t| self.is_punct(t, "("))
+                    && let Some((raw_args, rp_hs)) = self.scan_args(&mut rest)
+                {
+                    pp.check_macro_arity(name, def, &raw_args, self.filename, self.line_no);
+                    let common = self.hs_intersect(tok.hs, rp_hs);
+                    let inv = self.hs_with_name(common, name);
+                    let mut sub = self.subst(name, def, &raw_args, inv, depth);
+                    if let Some(f) = sub.first_mut() {
+                        f.space = tok.space;
                     }
+                    sub.reverse();
+                    rest.append(&mut sub);
+                    self.put_vec(sub);
+                    continue;
                 }
                 out.push(tok);
                 continue;

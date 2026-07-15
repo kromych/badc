@@ -1,6 +1,7 @@
 use crate::c5::error::C5Error;
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 pub(super) struct CondFrame {
     /// Whether the enclosing branch was active at the time of

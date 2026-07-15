@@ -785,7 +785,7 @@ fn splice_multi_block(
         }
     };
 
-    let original = core::mem::take(caller);
+    let mut original = core::mem::take(caller);
     let splice_block = original.blocks[splice_block_idx].clone();
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(original.insts.len() + callee.insts.len());
@@ -798,14 +798,14 @@ fn splice_multi_block(
     // Callee phis are shifted at emission; the post-fixpoint caller-phi
     // shift skips this tail so it does not double-shift them. Assigned on
     // every fixpoint pass (Step 6 precedes the loop's breaks).
-    let mut callee_insts_start: u32;
+    let callee_insts_start: u32;
 
     let emit_caller_inst = |pc: u32,
                             new_insts: &mut Vec<Inst>,
                             new_inst_src: &mut Vec<(u32, u32)>,
                             new_f32: &mut Vec<bool>,
                             remap: &mut [ValueId],
-                            original: &FunctionSsa| {
+                            original: &mut FunctionSsa| {
         let src = original
             .inst_src
             .get(pc as usize)
@@ -816,9 +816,13 @@ fn splice_multi_block(
             .get(pc as usize)
             .copied()
             .unwrap_or(false);
-        let mut mapped = original.insts[pc as usize].clone();
+        // The emission runs once and `original` is dropped afterward:
+        // move the instruction out rather than deep-cloning its
+        // operand vectors.
+        let mut mapped = core::mem::replace(&mut original.insts[pc as usize], Inst::Imm(0));
         remap_caller_inst(&mut mapped, remap);
         let new_id = new_insts.len() as u32;
+        debug_assert_eq!(remap[pc as usize], new_id);
         remap[pc as usize] = new_id;
         new_insts.push(mapped);
         new_inst_src.push(src);
@@ -828,41 +832,101 @@ fn splice_multi_block(
     // Neither block array is ordered definitions-before-uses, and the
     // call result's mapping only materializes when the callee's Return
     // is spliced (Step 6) -- after Step 4 already emitted the caller
-    // blocks that follow the splice point. Run the emission to a fixed
-    // point, as the flat single-block splice does: emission is
-    // structurally identical across passes, so every inst keeps its new
-    // id and the maps converge one forward-reference level per pass.
-    let mut guard = original.insts.len() + callee.insts.len() + 2;
-    loop {
-        new_insts.clear();
-        new_inst_src.clear();
-        new_f32.clear();
-        new_blocks.clear();
-        let remap_before = remap.clone();
-        let callee_remap_before = callee_remap.clone();
-
+    // blocks that follow the splice point. The emission order and the
+    // per-site emit counts never depend on mapped values, so every new
+    // id is position arithmetic: assign the complete value maps up
+    // front, then emit once. The emission re-derives each id and
+    // debug-asserts it matches the assignment.
+    {
+        let mut at: u32 = 0;
+        let count = |pc: u32, remap: &mut [ValueId], at: &mut u32| {
+            remap[pc as usize] = *at;
+            *at += 1;
+        };
+        for block in original.blocks.iter().take(splice_block_idx) {
+            for pc in block.inst_range.clone() {
+                count(pc, &mut remap, &mut at);
+            }
+        }
+        for pc in splice_block.inst_range.start..call_pc {
+            count(pc, &mut remap, &mut at);
+        }
+        for pc in (call_pc + 1)..splice_block.inst_range.end {
+            count(pc, &mut remap, &mut at);
+        }
+        for block in original.blocks.iter().skip(splice_block_idx + 1) {
+            for pc in block.inst_range.clone() {
+                count(pc, &mut remap, &mut at);
+            }
+        }
+        let counted_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
+        for cblock in &callee.blocks {
+            for ce_pc in cblock.inst_range.clone() {
+                match &callee.insts[ce_pc as usize] {
+                    Inst::ParamRef { idx, kind } => {
+                        let arg = counted_args.get(*idx as usize).copied().unwrap_or(NO_VALUE);
+                        callee_remap[ce_pc as usize] = match kind {
+                            LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => {
+                                at += 1;
+                                at - 1
+                            }
+                            _ => arg,
+                        };
+                    }
+                    Inst::LocalAddr(s) if *s < 0 => {
+                        callee_remap[ce_pc as usize] = at;
+                        at += 1;
+                    }
+                    Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } if *off < 0 => {
+                        callee_remap[ce_pc as usize] = at;
+                        at += 1;
+                    }
+                    Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
+                        callee_remap[ce_pc as usize] = NO_VALUE;
+                    }
+                    _ => {
+                        callee_remap[ce_pc as usize] = at;
+                        at += 1;
+                    }
+                }
+            }
+        }
+        // Last Return wins, as at emission; the map is complete here.
+        for cblock in &callee.blocks {
+            if let Terminator::Return(v) = cblock.terminator {
+                remap[call_pc as usize] = map_v(v, &callee_remap);
+            }
+        }
+    }
+    {
         // Step 1: caller blocks 0..splice_block_idx (unchanged).
-        for (b_idx, block) in original.blocks.iter().enumerate().take(splice_block_idx) {
+        for b_idx in 0..splice_block_idx {
+            let blk = &original.blocks[b_idx];
+            let (rng, term0, exit0, start_pc) = (
+                blk.inst_range.clone(),
+                blk.terminator,
+                blk.exit_acc,
+                blk.start_pc,
+            );
             let block_start = new_insts.len() as u32;
-            for pc in block.inst_range.start..block.inst_range.end {
+            for pc in rng {
                 emit_caller_inst(
                     pc,
                     &mut new_insts,
                     &mut new_inst_src,
                     &mut new_f32,
                     &mut remap,
-                    &original,
+                    &mut original,
                 );
             }
-            let term = map_terminator_caller(block.terminator, &remap);
-            let exit_acc = map_v(block.exit_acc, &remap);
+            let term = map_terminator_caller(term0, &remap);
+            let exit_acc = map_v(exit0, &remap);
             new_blocks.push(Block {
-                start_pc: block.start_pc,
+                start_pc,
                 inst_range: block_start..new_insts.len() as u32,
                 terminator: term,
                 exit_acc,
             });
-            let _ = b_idx;
         }
 
         // Step 2: prefix (caller's splice block, insts up to call).
@@ -874,7 +938,7 @@ fn splice_multi_block(
                 &mut new_inst_src,
                 &mut new_f32,
                 &mut remap,
-                &original,
+                &mut original,
             );
         }
         let callee_entry_new_id = callee_block_base;
@@ -901,7 +965,7 @@ fn splice_multi_block(
                 &mut new_inst_src,
                 &mut new_f32,
                 &mut remap,
-                &original,
+                &mut original,
             );
         }
         let postfix_term = match splice_block.terminator {
@@ -918,32 +982,33 @@ fn splice_multi_block(
         let _ = postfix_id;
 
         // Step 4: caller blocks splice_block_idx+1..n_caller (shifted +1).
-        for (b_idx, block) in original
-            .blocks
-            .iter()
-            .enumerate()
-            .skip(splice_block_idx + 1)
-        {
+        for b_idx in (splice_block_idx + 1)..original.blocks.len() {
+            let blk = &original.blocks[b_idx];
+            let (rng, term0, exit0, start_pc) = (
+                blk.inst_range.clone(),
+                blk.terminator,
+                blk.exit_acc,
+                blk.start_pc,
+            );
             let block_start = new_insts.len() as u32;
-            for pc in block.inst_range.start..block.inst_range.end {
+            for pc in rng {
                 emit_caller_inst(
                     pc,
                     &mut new_insts,
                     &mut new_inst_src,
                     &mut new_f32,
                     &mut remap,
-                    &original,
+                    &mut original,
                 );
             }
-            let term = map_terminator_caller(block.terminator, &remap);
-            let exit_acc = map_v(block.exit_acc, &remap);
+            let term = map_terminator_caller(term0, &remap);
+            let exit_acc = map_v(exit0, &remap);
             new_blocks.push(Block {
-                start_pc: block.start_pc,
+                start_pc,
                 inst_range: block_start..new_insts.len() as u32,
                 terminator: term,
                 exit_acc,
             });
-            let _ = b_idx;
         }
 
         // Step 5: remap the call's args through the caller's now-built remap.
@@ -1117,14 +1182,6 @@ fn splice_multi_block(
                 terminator: new_term,
                 exit_acc,
             });
-        }
-
-        if remap == remap_before && callee_remap == callee_remap_before {
-            break;
-        }
-        guard -= 1;
-        if guard == 0 {
-            break;
         }
     }
 

@@ -10,15 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<bump_d>:
-               	movsd	0x10(%rdi,%riz), %xmm0
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm0
-               	movsd	%xmm0, 0x10(%rdi,%riz)
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -92,8 +83,12 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x28(%rbp), %rdi
-               	callq	<addr>
+               	leaq	-0x28(%rbp), %rax
+               	movsd	0x10(%rax,%riz), %xmm0
+               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
+               	movq	%rcx, %xmm15
+               	addsd	%xmm15, %xmm0
+               	movsd	%xmm0, 0x10(%rax,%riz)
                	leaq	-0x28(%rbp), %rax
                	movsd	0x10(%rax,%riz), %xmm0
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
@@ -114,3 +109,4 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

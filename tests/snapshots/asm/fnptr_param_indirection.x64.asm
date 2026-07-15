@@ -23,11 +23,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	retq
 
-<store_through>:
-               	movq	%rsi, (%rdi)
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -35,10 +30,9 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	xorq	%rax, %rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	-0x8(%rbp), %rax
                	leaq	-<rip>, %rbx       # <addr>
-               	movq	%rbx, %rsi
-               	callq	<addr>
+               	movq	%rbx, (%rax)
                	movq	-0x8(%rbp), %rax
                	leaq	-<rip>, %rcx       # <addr>
                	cmpq	%rcx, %rax

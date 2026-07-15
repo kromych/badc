@@ -21,11 +21,6 @@ Disassembly of section .text:
                	sxtw	x0, w1
                	ret
 
-<store_through>:
-               	str	x1, [x0]
-               	mov	x0, #0x0                // =0
-               	ret
-
 <main>:
                	str	x20, [sp, #-0x70]!
                	str	x19, [sp, #0x10]
@@ -36,8 +31,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
-               	mov	x1, x20
-               	bl	<addr>
+               	str	x20, [x0]
                	ldur	x0, [x29, #-0x8]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

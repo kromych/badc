@@ -395,12 +395,19 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 }
             }
             Inst::Store { addr, .. } => {
-                // A write is admitted only into the aggregate-return
-                // result slot (it redirects to the caller's return slot).
-                // A write elsewhere -- through a parameter address, an
-                // escaped pointer, or arbitrary memory -- has no caller
-                // equivalent and is rejected.
-                if result_slot.is_none() || !addr_is_slot(func, *addr, result_slot.unwrap()) {
+                // With no aggregate parameter or return, a store either
+                // addresses a callee frame slot -- whose `LocalAddr` the arm
+                // above already rejects (no caller equivalent) -- or writes
+                // through a pointer value the splice reproduces by remapping
+                // the address operand (`rewrite_callee_inst`). Either way it
+                // is admissible. With aggregates present, a store could reach
+                // a by-value parameter's frame copy, whose slot redirects to
+                // the caller's argument, so the write would corrupt the
+                // caller; keep the strict result-slot gate (the redirect to
+                // the caller's return slot is the only reproducible write).
+                if !func.agg_descs.is_empty()
+                    && (result_slot.is_none() || !addr_is_slot(func, *addr, result_slot.unwrap()))
+                {
                     say("store outside the aggregate return slot");
                     return false;
                 }

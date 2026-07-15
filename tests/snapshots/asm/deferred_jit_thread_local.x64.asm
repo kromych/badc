@@ -10,18 +10,13 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<s_local_to_force_layout_shift>:
-               	movslq	%edi, %rdi
-               	leaq	<rip>, %rax
-               	movl	%edi, (%rax,%rdi,4)
-               	movslq	(%rax,%rdi,4), %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rdi, %rdi
-               	callq	<addr>
+               	xorq	%rcx, %rcx
+               	leaq	<rip>, %rax
+               	leaq	(%rax), %rdx
+               	movl	%ecx, (%rdx)
                	movq	%fs:0x0, %rcx
                	addq	$-0x10, %rcx
                	movslq	(%rcx), %rax
@@ -53,4 +48,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

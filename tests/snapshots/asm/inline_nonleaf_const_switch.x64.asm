@@ -10,26 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<put1>:
-               	movl	%esi, %eax
-               	andq	$0xff, %rax
-               	movb	%al, (%rdi)
-               	xorq	%rax, %rax
-               	retq
-
-<put2>:
-               	movl	%esi, %eax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movw	%ax, (%rdi)
-               	xorq	%rax, %rax
-               	retq
-
-<put4>:
-               	movl	%esi, %eax
-               	movl	%eax, (%rdi)
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -39,17 +19,14 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	movl	%eax, -0x18(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	movl	$0x11223344, %esi       # imm = 0x11223344
-               	movq	%rax, %rdi
-               	callq	<addr>
+               	movl	$0x11223344, %ecx       # imm = 0x11223344
+               	movl	%ecx, (%rax)
                	leaq	-0x10(%rbp), %rax
-               	movl	$0x11223344, %esi       # imm = 0x11223344
-               	movq	%rax, %rdi
-               	callq	<addr>
+               	movl	$0x3344, %ecx           # imm = 0x3344
+               	movw	%cx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	movl	$0x11223344, %esi       # imm = 0x11223344
-               	movq	%rax, %rdi
-               	callq	<addr>
+               	movl	$0x44, %ecx
+               	movb	%cl, (%rax)
                	movl	-0x8(%rbp), %eax
                	xorq	$0x11223344, %rax       # imm = 0x11223344
                	movl	-0x10(%rbp), %ecx

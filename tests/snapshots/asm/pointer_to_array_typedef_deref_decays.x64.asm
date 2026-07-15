@@ -10,13 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<store_through>:
-               	xorq	%rax, %rax
-               	movq	%rsi, (%rdi)
-               	leaq	0x1(%rsi), %rcx
-               	movq	%rcx, 0x38(%rdi)
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -30,9 +23,11 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rcx
                	movq	%rcx, (%rax)
                	leaq	-0x48(%rbp), %rax
-               	movq	(%rax), %rdi
-               	movl	$0x1234567, %esi        # imm = 0x1234567
-               	callq	<addr>
+               	movq	(%rax), %rax
+               	movl	$0x1234567, %ecx        # imm = 0x1234567
+               	movq	%rcx, (%rax)
+               	movl	$0x1234568, %ecx        # imm = 0x1234568
+               	movq	%rcx, 0x38(%rax)
                	leaq	-0x40(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	$0x1234567, %rax        # imm = 0x1234567

@@ -25,11 +25,9 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x5, %edi
-               	callq	<addr>
-               	movq	%rax, %rcx
+               	leaq	<rip>, %rcx
+               	movl	$0xa, %eax
+               	movl	%eax, (%rcx)
                	testq	%rcx, %rcx
                	sete	%al
                	movzbq	%al, %rax
@@ -42,11 +40,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

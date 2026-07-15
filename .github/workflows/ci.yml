@@ -1216,7 +1216,8 @@ jobs:
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
           if ! sudo apt-get update -y; then
             sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
-              /etc/apt/sources.list $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+              /etc/apt/sources.list /etc/apt/apt-mirrors.txt \
+              $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
             sudo apt-get update -y
           fi
       - name: install QEMU + OVMF/AAVMF firmware (Linux only)
@@ -1301,7 +1302,8 @@ jobs:
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
           if ! sudo apt-get update -y; then
             sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
-              /etc/apt/sources.list $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+              /etc/apt/sources.list /etc/apt/apt-mirrors.txt \
+              $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
             sudo apt-get update -y
           fi
       - name: install QEMU compile + link deps

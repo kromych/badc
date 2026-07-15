@@ -62,7 +62,6 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	xorq	%rax, %rax
                	movl	$0x1, %eax
-               	xorq	%rax, %rax
                	movabsq	$-0x1, %rax
                	leaq	-0x20(%rbp), %rax
                	movl	$0x7, %ecx
@@ -99,4 +98,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

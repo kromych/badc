@@ -20,7 +20,7 @@
 //! phis, and the driver in [`super::simplify_branches`] alternates this
 //! pass with the prune to a fixed point.
 
-use crate::c5::ir::{FunctionSsa, Inst, Terminator};
+use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
 
 /// Fold every constant-condition terminator in `func`. Returns whether
 /// any terminator changed, so a driver can iterate with the prune.
@@ -32,35 +32,86 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         return false;
     }
     let mut changed = false;
-    for block in func.blocks.iter_mut() {
+    // Out-edges the fold deletes: (source block, successor it no longer
+    // reaches). Folding a Bz/Bnz/JumpTable to a Jmp drops the not-taken
+    // out-edges; the source block usually stays reachable (the taken edge,
+    // or another path in), so `prune_unreachable` -- which only removes
+    // wholly unreachable blocks -- would leave the successor's phi with a
+    // stale incoming from this block. Drop it here so the phi reflects the
+    // real predecessor set and can collapse to a single incoming, which
+    // `fold` then resolves.
+    let mut removed_edges: alloc::vec::Vec<(BlockId, BlockId)> = alloc::vec::Vec::new();
+    for (bidx, block) in func.blocks.iter_mut().enumerate() {
+        let self_id = bidx as BlockId;
+        let mut dropped: alloc::vec::Vec<BlockId> = alloc::vec::Vec::new();
         let new_term = match block.terminator {
             Terminator::Bz {
                 cond,
                 target,
                 fall_through,
-            } => fold(func.insts.as_slice(), cond)
-                .map(|k| Terminator::Jmp(if k == 0 { target } else { fall_through })),
+            } => fold(func.insts.as_slice(), cond).map(|k| {
+                let (taken, not_taken) = if k == 0 {
+                    (target, fall_through)
+                } else {
+                    (fall_through, target)
+                };
+                if not_taken != taken {
+                    dropped.push(not_taken);
+                }
+                Terminator::Jmp(taken)
+            }),
             Terminator::Bnz {
                 cond,
                 target,
                 fall_through,
-            } => fold(func.insts.as_slice(), cond)
-                .map(|k| Terminator::Jmp(if k != 0 { target } else { fall_through })),
+            } => fold(func.insts.as_slice(), cond).map(|k| {
+                let (taken, not_taken) = if k != 0 {
+                    (target, fall_through)
+                } else {
+                    (fall_through, target)
+                };
+                if not_taken != taken {
+                    dropped.push(not_taken);
+                }
+                Terminator::Jmp(taken)
+            }),
             // A constant in-range index selects one table entry; out of
             // range the terminator is unreachable (the lowering's bounds
-            // check precedes it) and is left alone.
+            // check precedes it) and is left alone. Every distinct target
+            // other than the taken one loses this block as a predecessor.
             Terminator::JumpTable { idx, table } => fold(func.insts.as_slice(), idx)
                 .and_then(|k| {
                     func.jump_tables[table as usize]
                         .get(k as u64 as usize)
                         .copied()
                 })
-                .map(Terminator::Jmp),
+                .map(|taken| {
+                    for &t in &func.jump_tables[table as usize] {
+                        if t != taken && !dropped.contains(&t) {
+                            dropped.push(t);
+                        }
+                    }
+                    Terminator::Jmp(taken)
+                }),
             _ => None,
         };
         if let Some(t) = new_term {
             block.terminator = t;
+            for nt in dropped {
+                removed_edges.push((self_id, nt));
+            }
             changed = true;
+        }
+    }
+    // Drop each deleted edge's incoming from the successor's phis.
+    for (from, to) in removed_edges {
+        let Some(block) = func.blocks.get(to as usize) else {
+            continue;
+        };
+        for i in block.inst_range.clone() {
+            if let Inst::Phi { incoming, .. } = &mut func.insts[i as usize] {
+                incoming.retain(|&(pred, _)| pred != from);
+            }
         }
     }
     changed
@@ -235,6 +286,67 @@ mod tests {
         run_one(&mut f);
         // cond resolves to 1 (nonzero) -> Bz takes the fall-through.
         assert!(matches!(f.blocks[1].terminator, Terminator::Jmp(3)));
+    }
+
+    #[test]
+    fn folded_edge_drops_stale_phi_incoming() {
+        // b0 Bz{Imm(1)} folds to Jmp(fall=b2); the b0 -> b1 (target) edge is
+        // gone, so b1's merge phi -- which listed b0 and b3 as predecessors --
+        // must drop the b0 incoming even though b0 stays reachable.
+        let mut f = fresh(
+            vec![
+                Inst::Imm(1), // v0  b0 condition
+                Inst::Imm(5), // v1  b2's value
+                Inst::Phi {
+                    incoming: vec![(0, 0), (3, 1)],
+                    kind: crate::c5::ir::LoadKind::I64,
+                }, // v2  b1 merge phi (from b0 and b3)
+            ],
+            vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Bz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                    exit_acc: 0,
+                }, // b0
+                Block {
+                    start_pc: 0,
+                    inst_range: 2..3,
+                    terminator: Terminator::Return(2),
+                    exit_acc: 2,
+                }, // b1
+                Block {
+                    start_pc: 0,
+                    inst_range: 1..2,
+                    terminator: Terminator::Return(1),
+                    exit_acc: 1,
+                }, // b2
+                Block {
+                    start_pc: 0,
+                    inst_range: 3..3,
+                    terminator: Terminator::Jmp(1),
+                    exit_acc: NO_VALUE as ValueId,
+                }, // b3 -> b1
+            ],
+        );
+        run_one(&mut f);
+        assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(2)));
+        let Inst::Phi { incoming, .. } = &f.insts[2] else {
+            panic!("expected phi");
+        };
+        assert_eq!(
+            incoming.len(),
+            1,
+            "the removed b0 edge's incoming is dropped"
+        );
+        assert_eq!(
+            incoming[0].0, 3,
+            "only the surviving b3 predecessor remains"
+        );
     }
 
     #[test]

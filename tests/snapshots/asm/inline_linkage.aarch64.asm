@@ -16,14 +16,8 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x0                // =0
                	mov	x0, #0x1                // =1
-               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
+               	mov	x0, #0x0                // =0
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>
-               	b	<addr>

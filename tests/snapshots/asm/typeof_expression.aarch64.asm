@@ -11,18 +11,10 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	mov	x0, #0x3                // =3
-               	mov	x0, #0x0                // =0
                	mov	x0, #0x7                // =7
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x5                // =5
-               	ret
                	mov	x0, #0x4                // =4
-               	mov	x0, #0x0                // =0
                	mov	x0, #0xa                // =10
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x6                // =6
-               	ret
                	mov	x0, #0x0                // =0
                	ret

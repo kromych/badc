@@ -41,7 +41,6 @@ Disassembly of section .text:
                	andq	$-0x1d, %rcx
                	orq	$0x14, %rcx
                	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
                	leaq	-0x8(%rbp), %rax
                	movl	(%rax), %eax
                	sarq	$0x2, %rax
@@ -103,7 +102,6 @@ Disassembly of section .text:
                	andq	$-0x1e1, %rcx           # imm = 0xFE1F
                	orq	$0x1a0, %rcx            # imm = 0x1A0
                	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
                	leaq	-0x8(%rbp), %rax
                	movl	(%rax), %eax
                	sarq	$0x5, %rax
@@ -124,4 +122,5 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

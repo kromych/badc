@@ -161,12 +161,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0xa                // =10
-               	add	sp, sp, #0x110
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	sub	x0, x29, #0xa0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

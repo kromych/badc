@@ -115,14 +115,7 @@ Disassembly of section .text:
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	mov	x0, x1
-               	cbz	x0, <addr>
-               	mov	x0, #0x12               // =18
-               	add	sp, sp, #0xa0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10

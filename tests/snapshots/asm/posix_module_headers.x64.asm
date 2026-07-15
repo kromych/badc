@@ -141,18 +141,8 @@ Disassembly of section .text:
                	addq	$0x3e0, %rsp            # imm = 0x3E0
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
                	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
                	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x9, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x3e0, %rsp            # imm = 0x3E0
-               	popq	%rbp
-               	retq
                	movl	$0x4, %edi
                	leaq	-0xb0(%rbp), %rsi
                	xorl	%eax, %eax
@@ -220,5 +210,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	addb	%al, (%rax)

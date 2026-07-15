@@ -50,18 +50,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x90
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	sub	x0, x29, #0x68
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

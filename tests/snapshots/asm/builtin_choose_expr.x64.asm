@@ -49,20 +49,6 @@ Disassembly of section .text:
                	subq	$0x90, %rsp
                	xorq	%rax, %rax
                	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
                	leaq	-0x68(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx

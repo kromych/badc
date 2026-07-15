@@ -79,31 +79,11 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
-               	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	ret
-               	mov	x0, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	ret
-               	mov	x0, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	ret
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
+               	b	<addr>
+               	b	<addr>

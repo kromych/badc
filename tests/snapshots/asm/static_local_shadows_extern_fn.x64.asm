@@ -34,7 +34,6 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	xorq	%rax, %rax
                	leaq	<rip>, %rax
                	movzbq	(%rax), %rcx
                	movzbq	0x1(%rax), %rax
@@ -45,4 +44,3 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

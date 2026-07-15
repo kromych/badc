@@ -36,7 +36,6 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
                	leaq	-0x40(%rbp), %rax
                	addq	$0x10, %rax
                	leaq	-0x40(%rbp), %rcx
@@ -50,7 +49,6 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
                	leaq	-0x60(%rbp), %rax
                	addq	$0x10, %rax
                	leaq	-0x60(%rbp), %rcx
@@ -95,4 +93,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

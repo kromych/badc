@@ -16,50 +16,17 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	mov	x0, #0xc                // =12
-               	lsl	x1, x0, #1
-               	mov	x17, #0x1               // =1
-               	and	x0, x0, x17
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	sxtw	x0, w0
-               	cmp	x0, #0x18
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ret
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	mov	x0, #0x1                // =1
-               	lsl	x1, x0, #1
-               	mov	x17, #0x1               // =1
-               	and	x0, x0, x17
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	sxtw	x0, w0
-               	cmp	x0, #0x3
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
                	mov	x0, #0x3                // =3
                	mov	x0, #0xfff1             // =65521
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	mov	x0, #0xf                // =15
-               	lsl	x1, x0, #1
-               	mov	x17, #0x1               // =1
-               	and	x0, x0, x17
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	sxtw	x0, w0
-               	cmp	x0, #0x1f
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	ret
                	mov	x3, #0x0                // =0
                	mov	x2, #0xfffc             // =65532
                	movk	x2, #0xffff, lsl #16

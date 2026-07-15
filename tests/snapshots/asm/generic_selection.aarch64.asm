@@ -26,12 +26,11 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	w0, [x1]
-               	mov	x0, #0x0                // =0
-               	ldrsw	x0, [x1]
+               	mov	x1, #0x0                // =0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	w1, [x0]
+               	ldrsw	x0, [x0]
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>

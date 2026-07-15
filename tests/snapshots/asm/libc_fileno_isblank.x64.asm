@@ -80,30 +80,11 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	movl	$0x1, %eax
-               	movl	$0x1, %eax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x1, %eax
                	xorq	%rax, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x1, %eax
                	xorq	%rax, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	jmp	<addr>
+               	jmp	<addr>
                	addb	%al, 0x41(%rdx)

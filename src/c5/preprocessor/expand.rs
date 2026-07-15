@@ -7,6 +7,10 @@
 //! result token that meets a `(` from the rest of the line forms a
 //! new invocation, and self-referential definitions terminate without
 //! any textual re-walk of already-expanded argument text.
+//!
+//! Tokens are 20-byte `Copy` values: buffer and hideset live in a
+//! per-line arena ([`Exp`]) and tokens hold indices, so splicing and
+//! rescanning move plain bytes with no reference-count traffic.
 
 use alloc::format;
 use alloc::rc::Rc;
@@ -29,46 +33,17 @@ pub(super) enum TokKind {
     Other,
 }
 
-/// One preprocessing token: a span of a shared buffer, its kind,
-/// whether white space preceded it, and its hideset.
-#[derive(Clone)]
+/// One preprocessing token: a span of an arena buffer, its kind,
+/// whether white space preceded it, and its arena hideset id (0 =
+/// empty set).
+#[derive(Clone, Copy)]
 pub(super) struct Tok {
-    buf: Rc<str>,
     start: u32,
     end: u32,
+    buf: u32,
+    hs: u32,
     kind: TokKind,
     space: bool,
-    hs: Option<Rc<Hideset>>,
-}
-
-impl Tok {
-    fn text(&self) -> &str {
-        &self.buf[self.start as usize..self.end as usize]
-    }
-
-    fn first_byte(&self) -> u8 {
-        self.buf.as_bytes()[self.start as usize]
-    }
-
-    fn is(&self, s: &str) -> bool {
-        self.text() == s
-    }
-
-    fn is_punct(&self, s: &str) -> bool {
-        self.kind == TokKind::Punct && self.text() == s
-    }
-}
-
-fn synth(text: String, kind: TokKind, space: bool) -> Tok {
-    let end = text.len() as u32;
-    Tok {
-        buf: Rc::from(text),
-        start: 0,
-        end,
-        kind,
-        space,
-        hs: None,
-    }
 }
 
 /// Sorted macro-name set shared behind `Rc`: every token of one
@@ -78,42 +53,13 @@ pub(super) struct Hideset {
     names: Vec<Rc<str>>,
 }
 
-fn hs_contains(hs: &Option<Rc<Hideset>>, name: &str) -> bool {
-    hs.as_ref()
-        .is_some_and(|h| h.names.binary_search_by(|n| (**n).cmp(name)).is_ok())
-}
-
-fn hs_insert(hs: &Option<Rc<Hideset>>, name: &str) -> Rc<Hideset> {
-    let mut names: Vec<Rc<str>> = match hs {
-        None => Vec::with_capacity(1),
-        Some(h) => h.names.clone(),
-    };
-    if let Err(at) = names.binary_search_by(|n| (**n).cmp(name)) {
-        names.insert(at, Rc::from(name));
-    }
-    Rc::new(Hideset { names })
-}
-
-/// C99 6.10.3.4: a function-like invocation's new hideset is the
-/// intersection of the name's and the closing paren's, plus the name.
-fn hs_intersect(a: &Option<Rc<Hideset>>, b: &Option<Rc<Hideset>>) -> Option<Rc<Hideset>> {
-    let (Some(a), Some(b)) = (a, b) else {
-        return None;
-    };
-    let names: Vec<Rc<str>> = a
-        .names
-        .iter()
-        .filter(|n| b.names.binary_search_by(|m| (**m).cmp(n)).is_ok())
-        .cloned()
-        .collect();
-    if names.is_empty() {
-        None
-    } else {
-        Some(Rc::new(Hideset { names }))
+impl Hideset {
+    fn contains(&self, name: &str) -> bool {
+        self.names.binary_search_by(|n| (**n).cmp(name)).is_ok()
     }
 }
 
-fn hs_union(a: &Rc<Hideset>, b: &Rc<Hideset>) -> Rc<Hideset> {
+fn hs_union(a: &Hideset, b: &Hideset) -> Hideset {
     let mut names = Vec::with_capacity(a.names.len() + b.names.len());
     let (mut i, mut j) = (0, 0);
     while i < a.names.len() && j < b.names.len() {
@@ -135,39 +81,15 @@ fn hs_union(a: &Rc<Hideset>, b: &Rc<Hideset>) -> Rc<Hideset> {
     }
     names.extend_from_slice(&a.names[i..]);
     names.extend_from_slice(&b.names[j..]);
-    Rc::new(Hideset { names })
+    Hideset { names }
 }
 
-/// Union `hs` into every token's hideset. Tokens of one prior
-/// expansion share a set, so the union is memoized per distinct
-/// source set. Only tokens whose hideset is ever consulted get one:
-/// the expansion scan reads it for identifiers (may they fire?) and
-/// for `)` (the invocation-hideset intersection); on every other
-/// token it is dead weight, and arguments here can be huge.
-fn hs_add_all(toks: &mut [Tok], hs: &Rc<Hideset>) {
-    let mut memo: Vec<(*const Hideset, Rc<Hideset>)> = Vec::new();
-    for t in toks {
-        let consulted = t.kind == TokKind::Ident
-            || (t.kind == TokKind::Punct && t.end - t.start == 1 && t.first_byte() == b')');
-        if !consulted {
-            continue;
-        }
-        let merged = match &t.hs {
-            None => hs.clone(),
-            Some(old) => {
-                let key = Rc::as_ptr(old);
-                match memo.iter().find(|(k, _)| *k == key) {
-                    Some((_, u)) => u.clone(),
-                    None => {
-                        let u = hs_union(old, hs);
-                        memo.push((key, u.clone()));
-                        u
-                    }
-                }
-            }
-        };
-        t.hs = Some(merged);
-    }
+/// A macro body lexed once (token spans relative to `body`, `buf`
+/// left 0); validated against the live body text so a redefinition
+/// re-lexes instead of serving stale tokens.
+pub(super) struct CachedBody {
+    body: Rc<str>,
+    toks: Rc<Vec<Tok>>,
 }
 
 /// Length of the punctuator starting at `at`, longest match first
@@ -256,8 +178,8 @@ fn skip_literal(bytes: &[u8], at: usize) -> usize {
     i
 }
 
-fn lex_into(buf: &Rc<str>, out: &mut Vec<Tok>) {
-    let bytes = buf.as_bytes();
+fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>) {
+    let bytes = text.as_bytes();
     let mut i = 0;
     let mut space = false;
     while i < bytes.len() {
@@ -313,34 +235,14 @@ fn lex_into(buf: &Rc<str>, out: &mut Vec<Tok>) {
             }
         }
         out.push(Tok {
-            buf: buf.clone(),
             start: start as u32,
             end: i as u32,
+            buf,
+            hs: 0,
             kind,
             space,
-            hs: None,
         });
         space = false;
-    }
-}
-
-/// Render tokens back to text: one space where the source had white
-/// space, plus a separating space wherever two adjacent tokens would
-/// otherwise re-lex as one (C99 6.10.3.3 reserves pasting for `##`).
-fn serialize_into(toks: &[Tok], out: &mut String) {
-    let mut cap = toks.len();
-    for t in toks {
-        cap += t.text().len();
-    }
-    out.reserve(cap);
-    let first_at = out.len();
-    for t in toks {
-        if out.len() > first_at
-            && (t.space || pp_tokens_would_merge(*out.as_bytes().last().unwrap(), t.first_byte()))
-        {
-            out.push(' ');
-        }
-        out.push_str(t.text());
     }
 }
 
@@ -353,132 +255,678 @@ fn splice(out: &mut Vec<Tok>, mut src: Vec<Tok>, space: bool) {
     out.extend(src);
 }
 
-/// Paste two tokens (C99 6.10.3.3). The concatenation is re-lexed: a
-/// valid paste yields one token; anything else keeps the re-lexed
-/// pieces, matching a textual rescan of the joined spelling.
-fn glue_toks(left: &Tok, right: &Tok) -> Vec<Tok> {
-    let mut text = String::with_capacity(left.text().len() + right.text().len());
-    text.push_str(left.text());
-    text.push_str(right.text());
-    let buf: Rc<str> = Rc::from(text);
-    let mut toks = Vec::new();
-    lex_into(&buf, &mut toks);
-    if let Some(f) = toks.first_mut() {
-        f.space = left.space;
-    }
-    toks
+/// Arena storage reused across lines: the vectors keep their
+/// capacity, only the contents are cleared per line.
+#[derive(Default)]
+pub(super) struct ExpScratch {
+    bufs: Vec<Rc<str>>,
+    sets: Vec<Rc<Hideset>>,
+    /// Emptied token vectors for reuse; capacity survives.
+    pool: Vec<Vec<Tok>>,
 }
 
-/// `#param` (C99 6.10.3.2): the argument's spelling as a string
-/// literal, interior white space collapsed to single spaces, `\` and
-/// `"` escaped within character constants and string literals.
-fn stringize_toks(toks: &[Tok], space: bool) -> Tok {
-    let mut s = String::from("\"");
-    let mut first = true;
-    for t in toks {
-        if !first && t.space {
-            s.push(' ');
+/// Per-line expansion state: the scan needs the macro registries
+/// (through `pp`) plus the arena the tokens index into.
+struct Exp<'a> {
+    pp: &'a Preprocessor,
+    filename: &'a str,
+    line_no: usize,
+    ar: &'a mut ExpScratch,
+}
+
+impl<'a> Exp<'a> {
+    fn new(pp: &'a Preprocessor, filename: &'a str, line_no: usize, ar: &'a mut ExpScratch) -> Self {
+        ar.bufs.clear();
+        ar.sets.clear();
+        Exp {
+            pp,
+            filename,
+            line_no,
+            ar,
         }
-        let text = t.text();
-        if matches!(t.kind, TokKind::Str | TokKind::Char) {
-            for c in text.chars() {
-                match c {
-                    '"' => s.push_str("\\\""),
-                    '\\' => s.push_str("\\\\"),
-                    _ => s.push(c),
-                }
+    }
+
+    fn take_vec(&mut self) -> Vec<Tok> {
+        self.ar.pool.pop().unwrap_or_default()
+    }
+
+    fn put_vec(&mut self, mut v: Vec<Tok>) {
+        if self.ar.pool.len() < 64 {
+            v.clear();
+            self.ar.pool.push(v);
+        }
+    }
+
+    fn set(&self, id: u32) -> &Rc<Hideset> {
+        &self.ar.sets[(id - 1) as usize]
+    }
+
+    fn text(&self, t: Tok) -> &str {
+        &self.ar.bufs[t.buf as usize][t.start as usize..t.end as usize]
+    }
+
+    fn first_byte(&self, t: Tok) -> u8 {
+        self.ar.bufs[t.buf as usize].as_bytes()[t.start as usize]
+    }
+
+    fn is_punct(&self, t: Tok, s: &str) -> bool {
+        t.kind == TokKind::Punct && self.text(t) == s
+    }
+
+    fn add_buf(&mut self, buf: Rc<str>) -> u32 {
+        self.ar.bufs.push(buf);
+        (self.ar.bufs.len() - 1) as u32
+    }
+
+    /// Arena id of a shared buffer, registered once per line
+    /// (pointer identity; the per-line buffer count is small).
+    fn buf_id(&mut self, buf: &Rc<str>) -> u32 {
+        for (i, b) in self.ar.bufs.iter().enumerate() {
+            if Rc::ptr_eq(b, buf) {
+                return i as u32;
             }
+        }
+        self.add_buf(buf.clone())
+    }
+
+    fn synth(&mut self, text: String, kind: TokKind, space: bool) -> Tok {
+        let end = text.len() as u32;
+        let buf = self.add_buf(Rc::from(text));
+        Tok {
+            start: 0,
+            end,
+            buf,
+            hs: 0,
+            kind,
+            space,
+        }
+    }
+
+    fn intern_set(&mut self, s: Rc<Hideset>) -> u32 {
+        self.ar.sets.push(s);
+        self.ar.sets.len() as u32
+    }
+
+    fn hs_contains(&self, hs: u32, name: &str) -> bool {
+        hs != 0 && self.set(hs).contains(name)
+    }
+
+    /// C99 6.10.3.4: a function-like invocation's new hideset is the
+    /// intersection of the name's and the closing paren's, plus the
+    /// name.
+    fn hs_intersect(&mut self, a: u32, b: u32) -> u32 {
+        if a == 0 || b == 0 {
+            return 0;
+        }
+        if a == b {
+            return a;
+        }
+        let (sa, sb) = (self.set(a), self.set(b));
+        let names: Vec<Rc<str>> = sa
+            .names
+            .iter()
+            .filter(|n| sb.contains(n))
+            .cloned()
+            .collect();
+        if names.is_empty() {
+            0
         } else {
-            s.push_str(text);
+            self.intern_set(Rc::new(Hideset { names }))
         }
-        first = false;
     }
-    s.push('"');
-    synth(s, TokKind::Str, space)
-}
 
-/// Parse an argument list from the scan stack (`rest` is reversed;
-/// its last element is the `(`). Returns the arguments (depth-1
-/// commas dropped), the closing paren's hideset, and how many stack
-/// entries the invocation consumed -- or `None` when the parens don't
-/// close, in which case nothing is consumed (C99 6.10.3p10: the name
-/// alone is not an invocation).
-fn scan_args(rest: &mut Vec<Tok>) -> Option<(Vec<Vec<Tok>>, Option<Rc<Hideset>>)> {
-    // Find the extent first (no copies), then move the tokens out.
-    let n = rest.len();
-    let mut depth = 1usize;
-    let mut k = n.checked_sub(2)?;
-    let close = loop {
-        let t = &rest[k];
-        if t.kind == TokKind::Punct {
-            match t.text() {
-                "(" => depth += 1,
-                ")" => {
-                    depth -= 1;
-                    if depth == 0 {
-                        break k;
+    /// `hs ∪ {name}`; the empty-set case (every top-level fire) is
+    /// served from the preprocessor's per-name singleton cache.
+    fn hs_with_name(&mut self, hs: u32, name: &str) -> u32 {
+        if hs == 0 {
+            let s = self.pp.hs_singleton(name);
+            return self.intern_set(s);
+        }
+        let set = self.set(hs);
+        if set.contains(name) {
+            return hs;
+        }
+        let mut names = set.names.clone();
+        if let Err(at) = names.binary_search_by(|n| (**n).cmp(name)) {
+            names.insert(at, Rc::from(name));
+        }
+        self.intern_set(Rc::new(Hideset { names }))
+    }
+
+    /// Union `hs` into every token whose hideset is ever consulted:
+    /// the scan reads it for identifiers (may they fire?) and for `)`
+    /// (the invocation-hideset intersection); on every other token it
+    /// is dead weight, and arguments here can be huge. Tokens of one
+    /// prior expansion share a set, so the union is memoized per
+    /// distinct source id.
+    fn hs_add_all(&mut self, toks: &mut [Tok], hs: u32) {
+        if hs == 0 {
+            return;
+        }
+        let mut memo: Vec<(u32, u32)> = Vec::new();
+        for t in toks {
+            let consulted = t.kind == TokKind::Ident
+                || (t.kind == TokKind::Punct
+                    && t.end - t.start == 1
+                    && self.first_byte(*t) == b')');
+            if !consulted {
+                continue;
+            }
+            t.hs = if t.hs == 0 {
+                hs
+            } else if t.hs == hs {
+                hs
+            } else {
+                match memo.iter().find(|(k, _)| *k == t.hs) {
+                    Some((_, u)) => *u,
+                    None => {
+                        let u = hs_union(self.set(t.hs), self.set(hs));
+                        let id = self.intern_set(Rc::new(u));
+                        memo.push((t.hs, id));
+                        id
                     }
                 }
-                _ => {}
+            };
+        }
+    }
+
+    /// Render tokens back to text: one space where the source had
+    /// white space, plus a separating space wherever two adjacent
+    /// tokens would otherwise re-lex as one (C99 6.10.3.3 reserves
+    /// pasting for `##`).
+    fn serialize_into(&self, toks: &[Tok], out: &mut String) {
+        let mut cap = toks.len();
+        for &t in toks {
+            cap += (t.end - t.start) as usize;
+        }
+        out.reserve(cap);
+        let first_at = out.len();
+        for &t in toks {
+            if out.len() > first_at
+                && (t.space
+                    || pp_tokens_would_merge(*out.as_bytes().last().unwrap(), self.first_byte(t)))
+            {
+                out.push(' ');
+            }
+            out.push_str(self.text(t));
+        }
+    }
+
+    /// Paste two tokens (C99 6.10.3.3). The concatenation is re-lexed:
+    /// a valid paste yields one token; anything else keeps the
+    /// re-lexed pieces, matching a textual rescan of the joined
+    /// spelling.
+    fn glue(&mut self, left: Tok, right: Tok) -> Vec<Tok> {
+        let mut text =
+            String::with_capacity(((left.end - left.start) + (right.end - right.start)) as usize);
+        text.push_str(self.text(left));
+        text.push_str(self.text(right));
+        let buf = self.add_buf(Rc::from(text));
+        let mut toks = Vec::new();
+        lex_into(&self.ar.bufs[buf as usize].clone(), buf, &mut toks);
+        if let Some(f) = toks.first_mut() {
+            f.space = left.space;
+        }
+        toks
+    }
+
+    /// `#param` (C99 6.10.3.2): the argument's spelling as a string
+    /// literal, interior white space collapsed to single spaces, `\`
+    /// and `"` escaped within character constants and string literals.
+    fn stringize(&mut self, toks: &[Tok], space: bool) -> Tok {
+        let mut s = String::from("\"");
+        let mut first = true;
+        for &t in toks {
+            if !first && t.space {
+                s.push(' ');
+            }
+            let text = self.text(t);
+            if matches!(t.kind, TokKind::Str | TokKind::Char) {
+                for c in text.chars() {
+                    match c {
+                        '"' => s.push_str("\\\""),
+                        '\\' => s.push_str("\\\\"),
+                        _ => s.push(c),
+                    }
+                }
+            } else {
+                s.push_str(text);
+            }
+            first = false;
+        }
+        s.push('"');
+        self.synth(s, TokKind::Str, space)
+    }
+
+    /// The variadic tail (C99 6.10.3.1p2): arguments past the named
+    /// parameters joined with commas, each expanded when `expand` is
+    /// set (the plain-position form) or spliced raw (`#`/`##`
+    /// operands).
+    fn join_va(
+        &mut self,
+        raw_args: &[Vec<Tok>],
+        nfixed: usize,
+        expand: bool,
+        depth: usize,
+    ) -> Vec<Tok> {
+        let mut v: Vec<Tok> = Vec::new();
+        for (k, a) in raw_args.iter().enumerate().skip(nfixed) {
+            if k > nfixed {
+                let comma = self.synth(",".to_string(), TokKind::Punct, false);
+                v.push(comma);
+            }
+            let mut e = if expand {
+                self.expand_tokens(a.clone(), depth + 1)
+            } else {
+                a.clone()
+            };
+            if let Some(first) = e.first_mut() {
+                first.space = k > nfixed;
+            }
+            v.append(&mut e);
+        }
+        v
+    }
+
+    /// Parse an argument list from the scan stack (`rest` is
+    /// reversed; its last element is the `(`). Returns the arguments
+    /// (depth-1 commas dropped) and the closing paren's hideset, or
+    /// `None` -- consuming nothing -- when the parens don't close
+    /// (C99 6.10.3p10: the name alone is not an invocation).
+    fn scan_args(&self, rest: &mut Vec<Tok>) -> Option<(Vec<Vec<Tok>>, u32)> {
+        // Find the extent first (no copies), then move the tokens out.
+        let n = rest.len();
+        let mut depth = 1usize;
+        let mut k = n.checked_sub(2)?;
+        let close = loop {
+            let t = rest[k];
+            if t.kind == TokKind::Punct && t.end - t.start == 1 {
+                match self.first_byte(t) {
+                    b'(' => depth += 1,
+                    b')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break k;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if k == 0 {
+                return None;
+            }
+            k -= 1;
+        };
+        let rp_hs = rest[close].hs;
+        // `tail` holds `( args... )` in reverse; pop to walk forward.
+        let mut tail = rest.split_off(close);
+        tail.pop(); // the `(`
+        let mut args: Vec<Vec<Tok>> = Vec::new();
+        let mut cur: Vec<Tok> = Vec::new();
+        let mut depth = 1usize;
+        while let Some(t) = tail.pop() {
+            if t.kind == TokKind::Punct && t.end - t.start == 1 {
+                match self.first_byte(t) {
+                    b'(' => depth += 1,
+                    b')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    b',' if depth == 1 => {
+                        args.push(core::mem::take(&mut cur));
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+            cur.push(t);
+        }
+        args.push(cur);
+        Some((args, rp_hs))
+    }
+
+    /// The macro body's tokens mapped into this arena.
+    fn body_toks(&mut self, name: &str, body: &str) -> Vec<Tok> {
+        let (bbuf, toks) = self.pp.cached_body(name, body);
+        let bid = self.buf_id(&bbuf);
+        let mut out = self.take_vec();
+        out.reserve(toks.len());
+        out.extend(toks.iter().map(|t| Tok { buf: bid, ..*t }));
+        out
+    }
+
+    /// The C99 6.10.3.4 scan: pop the next token; a live macro name
+    /// substitutes and its result is pushed back for rescanning, so
+    /// chained and nested expansions need no special cases. Hidden
+    /// names (their own expansion in flight) pass through verbatim.
+    fn expand_tokens(&mut self, toks: Vec<Tok>, depth: usize) -> Vec<Tok> {
+        // Bound the argument-expansion recursion; past the bound the
+        // tokens pass through unexpanded rather than overflowing the
+        // native stack.
+        if depth > MAX_MACRO_DEPTH {
+            return toks;
+        }
+        let pp = self.pp;
+        let mut rest = toks;
+        rest.reverse();
+        let mut out: Vec<Tok> = self.take_vec();
+        out.reserve(rest.len());
+        while let Some(tok) = rest.pop() {
+            if tok.kind != TokKind::Ident {
+                out.push(tok);
+                continue;
+            }
+            // Dynamic predefines all start with `_`; then the registry
+            // probe -- most identifiers are neither, and only macro
+            // names need the hideset check.
+            if self.first_byte(tok) == b'_' && self.dynamic_predefine(tok, &mut out) {
+                continue;
+            }
+            let (is_fn, is_obj) = {
+                let name = self.text(tok);
+                (pp.fn_macros.contains_key(name), pp.macros.contains_key(name))
+            };
+            if !is_fn && !is_obj {
+                out.push(tok);
+                continue;
+            }
+            // The name outlives the arena mutations below.
+            let nbuf = self.ar.bufs[tok.buf as usize].clone();
+            let name = &nbuf[tok.start as usize..tok.end as usize];
+            if self.hs_contains(tok.hs, name) {
+                out.push(tok);
+                continue;
+            }
+            if is_fn {
+                let def = pp.fn_macros.get(name).unwrap();
+                // Function-like: an invocation only when `(` follows
+                // (C99 6.10.3p10) and closes within the line.
+                if rest.last().is_some_and(|&t| self.is_punct(t, "(")) {
+                    if let Some((raw_args, rp_hs)) = self.scan_args(&mut rest) {
+                        pp.check_macro_arity(name, def, &raw_args, self.filename, self.line_no);
+                        let common = self.hs_intersect(tok.hs, rp_hs);
+                        let inv = self.hs_with_name(common, name);
+                        let mut sub = self.subst(name, def, &raw_args, inv, depth);
+                        if let Some(f) = sub.first_mut() {
+                            f.space = tok.space;
+                        }
+                        sub.reverse();
+                        rest.append(&mut sub);
+                        self.put_vec(sub);
+                        continue;
+                    }
+                }
+                out.push(tok);
+                continue;
+            }
+            let body = pp.macros.get(name).unwrap();
+            let hs = self.hs_with_name(tok.hs, name);
+            let mut btoks = self.body_toks(name, body);
+            self.hs_add_all(&mut btoks, hs);
+            if let Some(f) = btoks.first_mut() {
+                f.space = tok.space;
+            }
+            btoks.reverse();
+            rest.append(&mut btoks);
+            self.put_vec(btoks);
+        }
+        self.put_vec(rest);
+        out
+    }
+
+    /// C99 6.10.8 dynamic predefines (plus the `__COUNTER__`
+    /// extension); true when `tok` was one and its expansion pushed.
+    fn dynamic_predefine(&mut self, tok: Tok, out: &mut Vec<Tok>) -> bool {
+        let (line_no, filename) = (self.line_no, self.filename);
+        match self.text(tok) {
+            "__LINE__" => {
+                let t = self.synth(format!("{line_no}"), TokKind::Number, tok.space);
+                out.push(t);
+            }
+            "__FILE__" => {
+                let t = self.synth(format!("\"{filename}\""), TokKind::Str, tok.space);
+                out.push(t);
+            }
+            // Extension: each use expands to the next integer.
+            "__COUNTER__" => {
+                let n = self.pp.counter.get();
+                self.pp.counter.set(n + 1);
+                let t = self.synth(format!("{n}"), TokKind::Number, tok.space);
+                out.push(t);
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    /// Replacement-list substitution (C99 6.10.3.1-6.10.3.3): `#` and
+    /// `##` operands read the unexpanded argument, ordinary parameter
+    /// positions read the argument expanded once (memoized, moved on
+    /// the last use), an empty argument is a placemarker for adjacent
+    /// `##`. The invocation hideset is added to the whole result.
+    fn subst(
+        &mut self,
+        name: &str,
+        def: &FnMacro,
+        raw_args: &[Vec<Tok>],
+        inv_hs: u32,
+        depth: usize,
+    ) -> Vec<Tok> {
+        let body = self.body_toks(name, &def.body);
+        let nfixed = def.params.len();
+
+        let raw_va: Vec<Tok> = if def.is_variadic {
+            self.join_va(raw_args, nfixed, false, depth)
+        } else {
+            Vec::new()
+        };
+        let mut exp_args: Vec<Option<Vec<Tok>>> = raw_args.iter().map(|_| None).collect();
+        let mut exp_va: Option<Vec<Tok>> = None;
+
+        // Plain-position use count per parameter: the memoized
+        // expansion is moved out on its last use instead of cloned
+        // (arguments can be huge).
+        let mut plain_uses: Vec<u32> = alloc::vec![0; raw_args.len()];
+        for (bi, &bt) in body.iter().enumerate() {
+            if bt.kind == TokKind::Ident
+                && !body.get(bi + 1).is_some_and(|&n| self.is_punct(n, "##"))
+                && !(bi > 0
+                    && (self.is_punct(body[bi - 1], "##") || self.is_punct(body[bi - 1], "#")))
+                && let Some(idx) = self.param_index(def, bt)
+                && idx < plain_uses.len()
+            {
+                plain_uses[idx] += 1;
             }
         }
-        if k == 0 {
-            return None;
-        }
-        k -= 1;
-    };
-    let rp_hs = rest[close].hs.clone();
-    // `tail` holds `( args... )` in reverse; pop to walk forward.
-    let mut tail = rest.split_off(close);
-    tail.pop(); // the `(`
-    let mut args: Vec<Vec<Tok>> = Vec::new();
-    let mut cur: Vec<Tok> = Vec::new();
-    let mut depth = 1usize;
-    while let Some(t) = tail.pop() {
-        if t.kind == TokKind::Punct {
-            match t.text() {
-                "(" => depth += 1,
-                ")" => {
-                    depth -= 1;
-                    if depth == 0 {
-                        break;
+
+        let mut out: Vec<Tok> = self.take_vec();
+        out.reserve(body.len());
+        // A parameter that substituted to nothing leaves a placemarker
+        // (C99 6.10.3.3): a following `##` must not glue the token
+        // before it to the right operand.
+        let mut last_empty = false;
+        let mut i = 0;
+        while i < body.len() {
+            let t = body[i];
+            if self.is_punct(t, "#")
+                && let Some(&next) = body.get(i + 1)
+                && next.kind == TokKind::Ident
+                && let Some(raw) = self.raw_of(def, raw_args, &raw_va, next)
+            {
+                let s = self.stringize(&raw, t.space);
+                out.push(s);
+                last_empty = false;
+                i += 2;
+                continue;
+            }
+            if self.is_punct(t, "##") {
+                let Some(&next) = body.get(i + 1) else {
+                    // A trailing `##` violates C99 6.10.3.3p1; drop it.
+                    i += 2;
+                    continue;
+                };
+                // GNU `, ## __VA_ARGS__`: an empty tail deletes the
+                // comma; a non-empty tail keeps comma and tail.
+                if self.is_va(def, next) && out.last().is_some_and(|&p| self.is_punct(p, ",")) {
+                    if raw_va.is_empty() {
+                        out.pop();
+                    } else {
+                        let va = match &exp_va {
+                            Some(v) => v.clone(),
+                            None => {
+                                let v = self.join_va(raw_args, nfixed, true, depth);
+                                exp_va = Some(v.clone());
+                                v
+                            }
+                        };
+                        splice(&mut out, va, true);
                     }
-                }
-                "," if depth == 1 => {
-                    args.push(core::mem::take(&mut cur));
+                    i += 2;
                     continue;
                 }
-                _ => {}
+                let right: Vec<Tok> = match self.raw_of(def, raw_args, &raw_va, next) {
+                    Some(raw) => raw,
+                    None => alloc::vec![next],
+                };
+                if right.is_empty() {
+                    // `x ## <placemarker>`: x stays; a placemarker on
+                    // the left survives a chain of empty pastes.
+                    i += 2;
+                    continue;
+                }
+                if last_empty {
+                    // `<placemarker> ## x` is x.
+                    splice(&mut out, right, false);
+                } else if let Some(left) = out.pop() {
+                    let mut glued = self.glue(left, right[0]);
+                    out.append(&mut glued);
+                    out.extend_from_slice(&right[1..]);
+                } else {
+                    splice(&mut out, right, false);
+                }
+                last_empty = false;
+                i += 2;
+                continue;
             }
+            if t.kind == TokKind::Ident {
+                let followed_by_paste = body.get(i + 1).is_some_and(|&n| self.is_punct(n, "##"));
+                if self.is_va(def, t) {
+                    let src = if followed_by_paste {
+                        raw_va.clone()
+                    } else {
+                        match &exp_va {
+                            Some(v) => v.clone(),
+                            None => {
+                                let v = self.join_va(raw_args, nfixed, true, depth);
+                                exp_va = Some(v.clone());
+                                v
+                            }
+                        }
+                    };
+                    last_empty = src.is_empty();
+                    splice(&mut out, src, t.space);
+                    i += 1;
+                    continue;
+                }
+                if let Some(idx) = self.param_index(def, t) {
+                    let src = if followed_by_paste {
+                        raw_args.get(idx).cloned().unwrap_or_default()
+                    } else if idx < raw_args.len() {
+                        if exp_args[idx].is_none() {
+                            let e = self.expand_tokens(raw_args[idx].clone(), depth + 1);
+                            exp_args[idx] = Some(e);
+                        }
+                        plain_uses[idx] = plain_uses[idx].saturating_sub(1);
+                        if plain_uses[idx] == 0 {
+                            exp_args[idx].take().unwrap()
+                        } else {
+                            exp_args[idx].as_ref().unwrap().clone()
+                        }
+                    } else {
+                        Vec::new()
+                    };
+                    last_empty = src.is_empty();
+                    splice(&mut out, src, t.space);
+                    i += 1;
+                    continue;
+                }
+            }
+            out.push(t);
+            last_empty = false;
+            i += 1;
         }
-        cur.push(t);
+        self.hs_add_all(&mut out, inv_hs);
+        self.put_vec(body);
+        out
     }
-    args.push(cur);
-    Some((args, rp_hs))
-}
 
-/// The variadic tail (C99 6.10.3.1p2): arguments past the named
-/// parameters, mapped through `f`, joined with commas.
-fn join_va(
-    raw_args: &[Vec<Tok>],
-    nfixed: usize,
-    mut f: impl FnMut(&Vec<Tok>) -> Vec<Tok>,
-) -> Vec<Tok> {
-    let mut v: Vec<Tok> = Vec::new();
-    for (k, a) in raw_args.iter().enumerate().skip(nfixed) {
-        if k > nfixed {
-            v.push(synth(",".to_string(), TokKind::Punct, false));
-        }
-        let mut e = f(a);
-        if let Some(first) = e.first_mut() {
-            first.space = k > nfixed;
-        }
-        v.append(&mut e);
+    fn param_index(&self, def: &FnMacro, t: Tok) -> Option<usize> {
+        let name = self.text(t);
+        def.params.iter().position(|p| p == name)
     }
-    v
+
+    fn is_va(&self, def: &FnMacro, t: Tok) -> bool {
+        def.is_variadic && is_va_token(def, self.text(t))
+    }
+
+    /// Raw tokens when the ident is a parameter or the variadic tail;
+    /// `None` for any other identifier.
+    fn raw_of(
+        &self,
+        def: &FnMacro,
+        raw_args: &[Vec<Tok>],
+        raw_va: &[Tok],
+        t: Tok,
+    ) -> Option<Vec<Tok>> {
+        if self.is_va(def, t) {
+            Some(raw_va.to_vec())
+        } else {
+            self.param_index(def, t)
+                .map(|idx| raw_args.get(idx).cloned().unwrap_or_default())
+        }
+    }
 }
 
 impl Preprocessor {
+    /// The body's buffer and token list, lexed on first use per
+    /// definition (token `buf` ids are 0; callers remap into their
+    /// arena).
+    fn cached_body(&self, name: &str, body: &str) -> (Rc<str>, Rc<Vec<Tok>>) {
+        let mut cache = self.body_toks.borrow_mut();
+        if let Some(c) = cache.get(name)
+            && &*c.body == body
+        {
+            return (c.body.clone(), c.toks.clone());
+        }
+        let buf: Rc<str> = Rc::from(body);
+        let mut toks = Vec::new();
+        lex_into(&buf, 0, &mut toks);
+        let toks = Rc::new(toks);
+        cache.insert(
+            name.to_string(),
+            CachedBody {
+                body: buf.clone(),
+                toks: toks.clone(),
+            },
+        );
+        (buf, toks)
+    }
+
+    /// The shared one-name hideset `{name}`.
+    fn hs_singleton(&self, name: &str) -> Rc<Hideset> {
+        let mut singles = self.hs_singletons.borrow_mut();
+        if let Some(s) = singles.get(name) {
+            return s.clone();
+        }
+        let s = Rc::new(Hideset {
+            names: alloc::vec![Rc::from(name)],
+        });
+        singles.insert(name.to_string(), s.clone());
+        s
+    }
+
     /// Substitute every macro invocation in `line`. `filename` and
     /// `line_no` feed `__FILE__` / `__LINE__`, whose expansion changes
     /// per line and so can't live in the static macro table.
@@ -486,15 +934,19 @@ impl Preprocessor {
         if !self.line_mentions_macro(line) {
             return line.to_string();
         }
-        let buf: Rc<str> = Rc::from(line);
-        let mut toks = Vec::with_capacity(line.len() / 4 + 4);
-        lex_into(&buf, &mut toks);
-        let expanded = self.expand_tokens(toks, filename, line_no, 0);
+        let mut scratch = self.exp_scratch.borrow_mut();
+        let mut ex = Exp::new(self, filename, line_no, &mut scratch);
+        let bid = ex.add_buf(Rc::from(line));
+        let mut toks = ex.take_vec();
+        toks.reserve(line.len() / 4 + 4);
+        lex_into(&ex.ar.bufs[bid as usize].clone(), bid, &mut toks);
+        let expanded = ex.expand_tokens(toks, 0);
         // Keep the line's own indentation: warning echoes and `-E`
         // output quote it.
         let indent = &line[..line.len() - line.trim_start().len()];
         let mut out = String::from(indent);
-        serialize_into(&expanded, &mut out);
+        ex.serialize_into(&expanded, &mut out);
+        ex.put_vec(expanded);
         out
     }
 
@@ -537,262 +989,6 @@ impl Preprocessor {
             i += 1;
         }
         false
-    }
-
-    /// The C99 6.10.3.4 scan: pop the next token; a live macro name
-    /// substitutes and its result is pushed back for rescanning, so
-    /// chained and nested expansions need no special cases. Hidden
-    /// names (their own expansion in flight) pass through verbatim.
-    fn expand_tokens(
-        &self,
-        toks: Vec<Tok>,
-        filename: &str,
-        line_no: usize,
-        depth: usize,
-    ) -> Vec<Tok> {
-        // Bound the argument-expansion recursion; past the bound the
-        // tokens pass through unexpanded rather than overflowing the
-        // native stack.
-        if depth > MAX_MACRO_DEPTH {
-            return toks;
-        }
-        let mut rest = toks;
-        rest.reverse();
-        let mut out: Vec<Tok> = Vec::with_capacity(rest.len());
-        while let Some(tok) = rest.pop() {
-            if tok.kind != TokKind::Ident {
-                out.push(tok);
-                continue;
-            }
-            // C99 6.10.8 dynamic predefines.
-            if tok.is("__LINE__") {
-                out.push(synth(format!("{line_no}"), TokKind::Number, tok.space));
-                continue;
-            }
-            if tok.is("__FILE__") {
-                out.push(synth(format!("\"{filename}\""), TokKind::Str, tok.space));
-                continue;
-            }
-            // Extension: each use expands to the next integer.
-            if tok.is("__COUNTER__") {
-                let n = self.counter.get();
-                self.counter.set(n + 1);
-                out.push(synth(format!("{n}"), TokKind::Number, tok.space));
-                continue;
-            }
-            if hs_contains(&tok.hs, tok.text()) {
-                out.push(tok);
-                continue;
-            }
-            if let Some(def) = self.fn_macros.get(tok.text()) {
-                // Function-like: an invocation only when `(` follows
-                // (C99 6.10.3p10) and closes within the line.
-                if rest.last().is_some_and(|t| t.is_punct("(")) {
-                    if let Some((raw_args, rp_hs)) = scan_args(&mut rest) {
-                        self.check_macro_arity(tok.text(), def, &raw_args, filename, line_no);
-                        let inv = hs_insert(&hs_intersect(&tok.hs, &rp_hs), tok.text());
-                        let mut sub = self.subst(def, &raw_args, &inv, filename, line_no, depth);
-                        if let Some(f) = sub.first_mut() {
-                            f.space = tok.space;
-                        }
-                        sub.reverse();
-                        rest.append(&mut sub);
-                        continue;
-                    }
-                }
-                out.push(tok);
-                continue;
-            }
-            if let Some(body) = self.macros.get(tok.text()) {
-                let hs = hs_insert(&tok.hs, tok.text());
-                let bbuf: Rc<str> = Rc::from(body.as_str());
-                let mut btoks = Vec::new();
-                lex_into(&bbuf, &mut btoks);
-                hs_add_all(&mut btoks, &hs);
-                if let Some(f) = btoks.first_mut() {
-                    f.space = tok.space;
-                }
-                btoks.reverse();
-                rest.append(&mut btoks);
-                continue;
-            }
-            out.push(tok);
-        }
-        out
-    }
-
-    /// Replacement-list substitution (C99 6.10.3.1-6.10.3.3): `#` and
-    /// `##` operands read the unexpanded argument, ordinary parameter
-    /// positions read the argument expanded once (memoized), an empty
-    /// argument is a placemarker for adjacent `##`. The invocation
-    /// hideset is added to the whole result.
-    fn subst(
-        &self,
-        def: &FnMacro,
-        raw_args: &[Vec<Tok>],
-        inv_hs: &Rc<Hideset>,
-        filename: &str,
-        line_no: usize,
-        depth: usize,
-    ) -> Vec<Tok> {
-        let bbuf: Rc<str> = Rc::from(def.body.as_str());
-        let mut body = Vec::new();
-        lex_into(&bbuf, &mut body);
-        let nfixed = def.params.len();
-
-        // Plain-position use count per parameter: the memoized
-        // expansion is moved out on its last use instead of cloned
-        // (arguments can be huge).
-        let mut plain_uses: Vec<u32> = alloc::vec![0; raw_args.len()];
-        for (bi, bt) in body.iter().enumerate() {
-            if bt.kind == TokKind::Ident
-                && !body.get(bi + 1).is_some_and(|n| n.is_punct("##"))
-                && !(bi > 0 && (body[bi - 1].is_punct("##") || body[bi - 1].is_punct("#")))
-                && let Some(idx) = def.params.iter().position(|p| p == bt.text())
-                && idx < plain_uses.len()
-            {
-                plain_uses[idx] += 1;
-            }
-        }
-
-        let raw_va: Vec<Tok> = if def.is_variadic {
-            join_va(raw_args, nfixed, |a| a.clone())
-        } else {
-            Vec::new()
-        };
-        let mut exp_args: Vec<Option<Vec<Tok>>> = raw_args.iter().map(|_| None).collect();
-        let mut exp_va: Option<Vec<Tok>> = None;
-
-        let param_index = |name: &str| def.params.iter().position(|p| p == name);
-        let is_va = |t: &Tok| def.is_variadic && is_va_token(def, t.text());
-        // Raw tokens when the ident is a parameter or the variadic
-        // tail; `None` for any other identifier.
-        let raw_of = |t: &Tok, raw_va: &Vec<Tok>| -> Option<Vec<Tok>> {
-            if is_va(t) {
-                Some(raw_va.clone())
-            } else {
-                param_index(t.text()).map(|idx| raw_args.get(idx).cloned().unwrap_or_default())
-            }
-        };
-
-        let mut out: Vec<Tok> = Vec::new();
-        // A parameter that substituted to nothing leaves a placemarker
-        // (C99 6.10.3.3): a following `##` must not glue the token
-        // before it to the right operand.
-        let mut last_empty = false;
-        let mut i = 0;
-        while i < body.len() {
-            let t = &body[i];
-            if t.is_punct("#")
-                && let Some(next) = body.get(i + 1)
-                && next.kind == TokKind::Ident
-                && let Some(raw) = raw_of(next, &raw_va)
-            {
-                out.push(stringize_toks(&raw, t.space));
-                last_empty = false;
-                i += 2;
-                continue;
-            }
-            if t.is_punct("##") {
-                let Some(next) = body.get(i + 1) else {
-                    // A trailing `##` violates C99 6.10.3.3p1; drop it.
-                    i += 2;
-                    continue;
-                };
-                // GNU `, ## __VA_ARGS__`: an empty tail deletes the
-                // comma; a non-empty tail keeps comma and tail.
-                if is_va(next) && out.last().is_some_and(|p| p.is_punct(",")) {
-                    if raw_va.is_empty() {
-                        out.pop();
-                    } else {
-                        let va = exp_va
-                            .get_or_insert_with(|| {
-                                join_va(raw_args, nfixed, |a| {
-                                    self.expand_tokens(a.clone(), filename, line_no, depth + 1)
-                                })
-                            })
-                            .clone();
-                        splice(&mut out, va, true);
-                    }
-                    i += 2;
-                    continue;
-                }
-                let right: Vec<Tok> = match raw_of(next, &raw_va) {
-                    Some(raw) => raw,
-                    None => alloc::vec![next.clone()],
-                };
-                if right.is_empty() {
-                    // `x ## <placemarker>`: x stays; a placemarker on
-                    // the left survives a chain of empty pastes.
-                    i += 2;
-                    continue;
-                }
-                if last_empty {
-                    // `<placemarker> ## x` is x.
-                    splice(&mut out, right, false);
-                } else if let Some(left) = out.pop() {
-                    let mut glued = glue_toks(&left, &right[0]);
-                    out.append(&mut glued);
-                    out.extend(right[1..].iter().cloned());
-                } else {
-                    splice(&mut out, right, false);
-                }
-                last_empty = false;
-                i += 2;
-                continue;
-            }
-            if t.kind == TokKind::Ident {
-                let followed_by_paste = body.get(i + 1).is_some_and(|n| n.is_punct("##"));
-                if is_va(t) {
-                    let src = if followed_by_paste {
-                        raw_va.clone()
-                    } else {
-                        exp_va
-                            .get_or_insert_with(|| {
-                                join_va(raw_args, nfixed, |a| {
-                                    self.expand_tokens(a.clone(), filename, line_no, depth + 1)
-                                })
-                            })
-                            .clone()
-                    };
-                    last_empty = src.is_empty();
-                    splice(&mut out, src, t.space);
-                    i += 1;
-                    continue;
-                }
-                if let Some(idx) = param_index(t.text()) {
-                    let src = if followed_by_paste {
-                        raw_args.get(idx).cloned().unwrap_or_default()
-                    } else if idx < raw_args.len() {
-                        if exp_args[idx].is_none() {
-                            exp_args[idx] = Some(self.expand_tokens(
-                                raw_args[idx].clone(),
-                                filename,
-                                line_no,
-                                depth + 1,
-                            ));
-                        }
-                        plain_uses[idx] = plain_uses[idx].saturating_sub(1);
-                        if plain_uses[idx] == 0 {
-                            exp_args[idx].take().unwrap()
-                        } else {
-                            exp_args[idx].as_ref().unwrap().clone()
-                        }
-                    } else {
-                        Vec::new()
-                    };
-                    last_empty = src.is_empty();
-                    splice(&mut out, src, t.space);
-                    i += 1;
-                    continue;
-                }
-            }
-            out.push(t.clone());
-            last_empty = false;
-            i += 1;
-        }
-        hs_add_all(&mut out, inv_hs);
-        out
     }
 
     /// C99 6.10.3p4: the invocation's argument count must match the

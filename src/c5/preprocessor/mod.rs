@@ -287,6 +287,15 @@ pub(crate) struct Preprocessor {
     /// returns a `String`, so the error is parked here and drained by the
     /// Result-returning caller (`process_named`, `eval_condition`).
     pending_error: RefCell<Option<C5Error>>,
+    /// Lexed-body cache for the expansion engine, keyed by macro
+    /// name and validated against the current body text, so a
+    /// redefinition never serves stale tokens.
+    body_toks: RefCell<hashbrown::HashMap<String, expand::CachedBody>>,
+    /// One-name hidesets by macro name; a top-level invocation's
+    /// result set is always `{name}`, shared here across fires.
+    hs_singletons: RefCell<hashbrown::HashMap<String, alloc::rc::Rc<expand::Hideset>>>,
+    /// Expansion-arena storage reused across lines.
+    exp_scratch: RefCell<expand::ExpScratch>,
     /// MSVC-style `#pragma warning(disable : N)` IDs currently
     /// suppressed. Push/pop variants nest via `warning_stack`.
     /// c5 doesn't number its own warnings, so the IDs in here
@@ -697,6 +706,9 @@ impl Preprocessor {
             subsystem: None,
             counter: Cell::new(0),
             pending_error: RefCell::new(None),
+            body_toks: RefCell::new(hashbrown::HashMap::new()),
+            hs_singletons: RefCell::new(hashbrown::HashMap::new()),
+            exp_scratch: RefCell::new(expand::ExpScratch::default()),
             warning_disabled: BTreeSet::new(),
             warning_stack: Vec::new(),
             warn_disabled: BTreeSet::new(),

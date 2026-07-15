@@ -445,6 +445,50 @@ impl Liveness {
     }
 }
 
+/// LSD radix sort by 16-bit digits: the packed interference pairs
+/// run to millions of keys, where counting passes beat comparison
+/// sorting. Passes above the maximum key's width are skipped.
+fn radix_sort_u64(keys: &mut [u64]) {
+    if keys.len() < 64 {
+        keys.sort_unstable();
+        return;
+    }
+    let max = keys.iter().copied().max().unwrap_or(0);
+    let mut scratch = alloc::vec![0u64; keys.len()];
+    let mut counts = alloc::vec![0u32; 1 << 16];
+    let mut src_is_keys = true;
+    for pass in 0..4 {
+        let shift = pass * 16;
+        if max >> shift == 0 {
+            break;
+        }
+        counts.iter_mut().for_each(|c| *c = 0);
+        let (src, dst): (&[u64], &mut [u64]) = if src_is_keys {
+            (keys, &mut scratch)
+        } else {
+            (&scratch, keys)
+        };
+        for &k in src {
+            counts[((k >> shift) & 0xffff) as usize] += 1;
+        }
+        let mut sum = 0u32;
+        for c in counts.iter_mut() {
+            let v = *c;
+            *c = sum;
+            sum += v;
+        }
+        for &k in src {
+            let d = ((k >> shift) & 0xffff) as usize;
+            dst[counts[d] as usize] = k;
+            counts[d] += 1;
+        }
+        src_is_keys = !src_is_keys;
+    }
+    if !src_is_keys {
+        keys.copy_from_slice(&scratch);
+    }
+}
+
 /// The values live at a sweep point, tracked at two granularities:
 /// membership as a bit vector (the `live_out` rows' own shape) and
 /// the distinct register-allocation nodes those values belong to as
@@ -553,7 +597,7 @@ impl Interference {
     /// Build the CSR rows from canonicalized `(low << 32) | high`
     /// pairs, duplicates welcome.
     fn from_pairs(n: usize, mut pairs: Vec<u64>) -> Self {
-        pairs.sort_unstable();
+        radix_sort_u64(&mut pairs);
         pairs.dedup();
         let unpack = |p: u64| ((p >> 32) as usize, (p & 0xffff_ffff) as usize);
         let mut deg = alloc::vec![0u32; n];

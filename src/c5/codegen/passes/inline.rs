@@ -368,6 +368,14 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
             }
         }
     }
+    // A callee's own local slots are relocated into the caller's frame only
+    // on the multi-block splice path (`splice_multi_block`), which the flat
+    // `inline_caller` delegates every multi-block callee to. A no-aggregate
+    // multi-block callee is therefore the only shape whose address-taken
+    // locals (a `LocalAddr` / `LoadLocal` / `StoreLocal` / `Mcpy` on a
+    // negative slot) the splice reproduces; a single-block or aggregate
+    // callee keeps the strict gates.
+    let reloc = func.agg_descs.is_empty() && func.blocks.len() > 1;
     for (idx, inst) in func.insts.iter().enumerate() {
         match inst {
             Inst::Imm(_)
@@ -385,11 +393,19 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. } => {}
             Inst::LocalAddr(s) => {
-                // A register-passed struct parameter's slot redirects to
-                // the caller's argument address; the aggregate-return
-                // result slot redirects to the caller's return slot. Any
-                // other `LocalAddr` has no caller equivalent.
-                if !param_agg_slots.contains(s) && Some(*s) != result_slot {
+                // A callee's own local slot (negative) is relocated into the
+                // caller's frame by the splice when the callee has no
+                // aggregate parameter or return; a parameter cell address
+                // (off >= 2) has no caller equivalent. With aggregates only a
+                // struct-parameter slot (redirects to the caller's argument)
+                // or the aggregate-return result slot (redirects to the
+                // caller's return slot) is admissible.
+                if reloc {
+                    if *s >= 2 {
+                        say(&alloc::format!("LocalAddr of parameter cell {s}"));
+                        return false;
+                    }
+                } else if !param_agg_slots.contains(s) && Some(*s) != result_slot {
                     say(&alloc::format!("LocalAddr of non-parameter slot {s}"));
                     return false;
                 }
@@ -413,33 +429,42 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32, abi: Abi) -> bool {
                 }
             }
             Inst::Mcpy { dst, src, .. } => {
-                // Only the compound-literal template init (an `ImmData`
-                // template copied into the result slot) is admitted.
-                let to_result =
-                    result_slot.is_some() && addr_is_slot(func, *dst, result_slot.unwrap());
-                let from_template = matches!(func.insts.get(*src as usize), Some(Inst::ImmData(_)));
-                if !to_result || !from_template {
-                    say("mcpy outside the aggregate return slot or non-template source");
-                    return false;
+                // For a no-aggregate callee an Mcpy is reproducible: the splice
+                // remaps its dst / src operands (`rewrite_callee_inst`), and a
+                // dst / src that names a relocated local slot rides the
+                // LocalAddr relocation. With aggregates present only the
+                // compound-literal template init (an `ImmData` template copied
+                // into the result slot) is admitted.
+                if !reloc {
+                    let to_result =
+                        result_slot.is_some() && addr_is_slot(func, *dst, result_slot.unwrap());
+                    let from_template =
+                        matches!(func.insts.get(*src as usize), Some(Inst::ImmData(_)));
+                    if !to_result || !from_template {
+                        say("mcpy outside the aggregate return slot or non-template source");
+                        return false;
+                    }
                 }
             }
-            Inst::LoadLocal { .. } => {
-                // The splice drops every LoadLocal because the
-                // caller's frame has no matching slot. That is only
-                // safe when the load's result is dead inside the
-                // callee body -- a live read would lose data.
-                if used[idx] {
+            Inst::LoadLocal { off, .. } => {
+                // A negative slot in a no-aggregate callee is a relocated
+                // local read the splice keeps. Otherwise the splice drops the
+                // read -- a parameter cell arrives as a value and the caller's
+                // frame has no matching slot -- which is safe only when the
+                // result is dead in the callee body.
+                let relocated = reloc && *off < 0;
+                if !relocated && used[idx] {
                     say(&alloc::format!("live LoadLocal at v{}", idx));
                     return false;
                 }
             }
             Inst::StoreLocal { off, .. } => {
-                // StoreLocal has no result; the splice drops it. A drop
-                // is unobservable only when no surviving read sees the
-                // slot. A struct-parameter slot is now read by address
-                // (the redirected LocalAddr), so a dropped write into it
-                // would leave that read stale -- reject.
-                if param_agg_slots.contains(off) {
+                // A negative slot in a no-aggregate callee is a relocated
+                // local write the splice keeps. Otherwise the store is
+                // dropped; a drop into a struct-parameter slot would leave
+                // the redirected read stale.
+                let relocated = reloc && *off < 0;
+                if !relocated && param_agg_slots.contains(off) {
                     say("StoreLocal into a struct-parameter slot");
                     return false;
                 }
@@ -956,6 +981,58 @@ fn splice_multi_block(
                         );
                         continue;
                     }
+                    // A relocated callee local (negative slot): keep the
+                    // access, shifting the slot below the caller's own locals.
+                    // A multi-block splice callee has no aggregate parameter or
+                    // return (the candidate filter rejects those), so every
+                    // negative slot is one of the callee's own locals. A
+                    // parameter cell (off >= 0) and the alloca-arena init carry
+                    // no live value into the body and are dropped.
+                    Inst::LocalAddr(s) if *s < 0 => {
+                        callee_remap[ce_pc as usize] = new_insts.len() as u32;
+                        new_insts.push(Inst::LocalAddr(s - original.locals));
+                        new_inst_src.push((0, 0));
+                        new_f32.push(false);
+                        continue;
+                    }
+                    Inst::LoadLocal {
+                        off,
+                        kind,
+                        volatile,
+                    } if *off < 0 => {
+                        callee_remap[ce_pc as usize] = new_insts.len() as u32;
+                        new_insts.push(Inst::LoadLocal {
+                            off: off - original.locals,
+                            kind: *kind,
+                            volatile: *volatile,
+                        });
+                        new_inst_src.push((0, 0));
+                        new_f32.push(
+                            callee
+                                .f32_values
+                                .get(ce_pc as usize)
+                                .copied()
+                                .unwrap_or(false),
+                        );
+                        continue;
+                    }
+                    Inst::StoreLocal {
+                        off,
+                        value,
+                        kind,
+                        volatile,
+                    } if *off < 0 => {
+                        callee_remap[ce_pc as usize] = new_insts.len() as u32;
+                        new_insts.push(Inst::StoreLocal {
+                            off: off - original.locals,
+                            value: map_v(*value, &callee_remap),
+                            kind: *kind,
+                            volatile: *volatile,
+                        });
+                        new_inst_src.push((0, 0));
+                        new_f32.push(false);
+                        continue;
+                    }
                     Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
                         callee_remap[ce_pc as usize] = NO_VALUE;
                         continue;
@@ -1081,11 +1158,21 @@ fn splice_multi_block(
     carry(&original.extern_tls_refs, &remap, &mut tls_refs);
     carry(&callee.extern_tls_refs, &callee_remap, &mut tls_refs);
 
+    // Relocate the callee's own local slots into fresh caller frame slots
+    // below the caller's locals (Step 6 shifts each slot by `original.locals`);
+    // grow the frame and carry the callee's multi-cell (struct/union) slot
+    // records at their shifted ids. A callee with no locals leaves both alone.
+    let merged_locals = original.locals + callee.locals;
+    let mut merged_multi_cell = original.multi_cell_slots;
+    for &(slot, size) in &callee.multi_cell_slots {
+        merged_multi_cell.push((slot - original.locals, size));
+    }
+
     *caller = FunctionSsa {
         name: original.name,
         ent_pc: original.ent_pc,
         end_pc: original.end_pc,
-        locals: original.locals,
+        locals: merged_locals,
         n_params: original.n_params,
         is_variadic: original.is_variadic,
         is_inline: original.is_inline,
@@ -1118,7 +1205,7 @@ fn splice_multi_block(
         // empty here.
         jump_tables: original.jump_tables,
         synthetic_base: original.synthetic_base,
-        multi_cell_slots: original.multi_cell_slots,
+        multi_cell_slots: merged_multi_cell,
         // The candidate filter rejects returns-twice callees, so only
         // the caller's own flag can be set here.
         has_returns_twice_call: original.has_returns_twice_call,

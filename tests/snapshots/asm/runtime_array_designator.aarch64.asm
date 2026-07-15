@@ -89,12 +89,23 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
 
-<check_override>:
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sxtw	x1, w1
-               	sub	x2, x29, #0x10
+               	sub	sp, sp, #0x50
+               	mov	x0, #0x7                // =7
+               	mov	x1, #0x3                // =3
+               	mov	x2, #0x5                // =5
+               	bl	<addr>
+               	cbz	x0, <addr>
+               	sxtw	x1, w0
+               	sxtw	x0, w1
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x4                // =4
+               	mov	x1, #0x9                // =9
+               	sub	x2, x29, #0x30
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -109,58 +120,41 @@ Disassembly of section .text:
                	ldrb	w10, [x3, #0xb]
                	strb	w10, [x2, #0xb]
                	ldr	x10, [sp], #0x10
-               	sub	x2, x29, #0x10
+               	sub	x2, x29, #0x30
                	str	w0, [x2]
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x30
                	str	w1, [x0]
-               	sub	x2, x29, #0x10
+               	sub	x1, x29, #0x30
                	mov	x0, #0x0                // =0
-               	ldrsw	x2, [x2]
-               	cmp	x2, x1
+               	ldrsw	x1, [x1]
+               	cmp	x1, #0x9
                	cset	x1, eq
                	cbz	x1, <addr>
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x30
                	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0x0
                	cset	x0, eq
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x30
                	ldrsw	x0, [x0, #0x8]
                	cmp	x0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
-               	add	sp, sp, #0x30
+               	cbz	x0, <addr>
+               	sxtw	x1, w0
+               	sxtw	x0, w1
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2                // =2
                	b	<addr>
                	b	<addr>
                	b	<addr>
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x7                // =7
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x5                // =5
-               	bl	<addr>
-               	cbz	x0, <addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x4                // =4
-               	mov	x1, #0x9                // =9
-               	bl	<addr>
-               	cbz	x0, <addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp], #0x10
-               	ret

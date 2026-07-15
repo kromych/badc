@@ -603,6 +603,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("constfold_branch_through_phi.c", 0),
     ("constfold_or_dispatch_inline.c", 0),
     ("inline_pointer_write_helper.c", 0),
+    ("inline_local_array_callee.c", 0),
     ("hex_float_literal.c", 0),
     ("bool_normalize_c99.c", 0),
     ("compound_literal_block.c", 0),

@@ -21,4 +21,3 @@ Disassembly of section .text:
 <main>:
                	mov	x0, #0x54               // =84
                	ret
-               	b	<addr>

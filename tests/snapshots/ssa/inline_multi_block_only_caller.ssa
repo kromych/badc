@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=run
-fn ent_pc=1 n_params=2 variadic=false locals=3
+fn ent_pc=1 n_params=2 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -27,14 +27,15 @@ fn ent_pc=1 n_params=2 variadic=false locals=3
     v29  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x2
     v30  Extend { value=v28, kind=I32 }                   -> x2
     v31  Imm(0)                                           -> x7
-    v32  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x1
-    v33  Extend { value=v30, kind=I32 }                   -> x1
-    terminator Jmp(b3)   (exit_acc=v33)
+    v32  LoadLocal { off=-4, kind=I32 }                   -> x7
+    v33  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x1
+    v34  Extend { value=v30, kind=I32 }                   -> x1
+    terminator Jmp(b3)   (exit_acc=v34)
   block 3  start_pc=0
     v14  Imm(0)                                           -> x2
     v15  LoadLocal { off=-1, kind=I32 }                   -> x2
-    v16  Extend { value=v33, kind=I32 }                   -> x2
-    v17  Binop { op=add, lhs=v10, rhs=v33 }               -> x0
+    v16  Extend { value=v34, kind=I32 }                   -> x2
+    v17  Binop { op=add, lhs=v10, rhs=v34 }               -> x0
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x1
     v19  Extend { value=v17, kind=I32 }                   -> x1
     v20  LoadLocal { off=3, kind=I32 }                    -> x1
@@ -46,7 +47,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=3
     terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=2
+fn ent_pc=2 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -73,9 +74,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v32  Imm(25769803776)                                 -> x0
     v33  Imm(6)                                           -> x0
     v34  Imm(0)                                           -> x0
-    v35  Imm(25769803776)                                 -> x0
-    v36  Imm(6)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v36)
+    v35  LoadLocal { off=-3, kind=I32 }                   -> x0
+    v36  Imm(25769803776)                                 -> x0
+    v37  Imm(6)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v37)
   block 3  start_pc=0
     v14  Imm(0)                                           -> x0
     v15  Imm(6)                                           -> x0

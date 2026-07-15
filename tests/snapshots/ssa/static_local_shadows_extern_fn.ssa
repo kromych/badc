@@ -48,7 +48,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=2
     terminator Jmp(b3)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=1
+fn ent_pc=2 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

@@ -36,7 +36,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=3
+fn ent_pc=3 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -109,6 +109,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     terminator Jmp(b7)   (exit_acc=v68)
   block 7  start_pc=0
     v70  Phi { incoming=[b9:v55, b6:v68], kind=I64 }      -> x2
+    v71  LoadLocal { off=-4, kind=I64 }                   -> x6
     terminator Bz { cond=v70, target=b10, fall=b8 }   (exit_acc=v70)
   block 8  start_pc=0
     v57  BinopI { op=add, lhs=v53, rhs_imm=1 }            -> x0

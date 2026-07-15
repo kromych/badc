@@ -287,7 +287,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x1f0, %rsp            # imm = 0x1F0
+               	subq	$0x260, %rsp            # imm = 0x260
                	movq	%rbx, (%rsp)
                	xorq	%rax, %rax
                	movq	%rax, %rcx
@@ -467,12 +467,12 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x1f0, %rsp            # imm = 0x1F0
+               	addq	$0x260, %rsp            # imm = 0x260
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x1f0, %rsp            # imm = 0x1F0
+               	addq	$0x260, %rsp            # imm = 0x260
                	popq	%rbp
                	retq
                	jmp	<addr>
@@ -482,6 +482,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	addb	%al, (%rax)

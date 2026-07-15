@@ -120,7 +120,7 @@ fn ent_pc=7 n_params=3 variadic=false locals=5
     terminator Return(v58)   (exit_acc=v58)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=quicksort
-fn ent_pc=8 n_params=3 variadic=false locals=4
+fn ent_pc=8 n_params=3 variadic=false locals=9
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -246,7 +246,7 @@ fn ent_pc=8 n_params=3 variadic=false locals=4
     terminator Return(v28)   (exit_acc=v28)
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=main
-fn ent_pc=9 n_params=0 variadic=false locals=5
+fn ent_pc=9 n_params=0 variadic=false locals=282
   spill_count=8 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

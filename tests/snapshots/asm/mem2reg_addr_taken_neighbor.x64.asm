@@ -36,8 +36,24 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	$0x7, %edi
-               	callq	<addr>
-               	movslq	%eax, %rax
+               	subq	$0x30, %rsp
+               	xorq	%rcx, %rcx
+               	movl	%ecx, -0x10(%rbp)
+               	leaq	-0x10(%rbp), %rax
+               	movslq	(%rax), %rcx
+               	addq	$0xe, %rcx
+               	movl	%ecx, (%rax)
+               	movslq	%ecx, %rcx
+               	addq	$0xe, %rcx
+               	movl	%ecx, (%rax)
+               	movslq	%ecx, %rcx
+               	addq	$0xe, %rcx
+               	movl	%ecx, (%rax)
+               	movslq	-0x10(%rbp), %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

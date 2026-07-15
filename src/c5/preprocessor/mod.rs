@@ -1310,18 +1310,20 @@ impl Preprocessor {
                 // buffer; directive lines never become argument text.
                 let mut join_stack: Vec<CondFrame> = Vec::new();
                 let mut join_active = true;
+                // The scan state advances over appended bytes only;
+                // re-scanning the grown buffer per joined line is
+                // quadratic in the invocation length.
+                let mut join = JoinScan::new();
+                join.feed(&buffer, &self.fn_macros, &self.macros);
                 while idx + consumed < lines.len()
-                    && (macro_call_unclosed(&buffer, &self.fn_macros, &self.macros)
+                    && (join.unclosed()
                         // A function-like macro name at the end of a line with
                         // its `(` on the next line is still an invocation (C99
                         // 6.10.3: white space, including newlines, may separate
                         // the name from its `(`). Join when the next line opens
                         // with `(` so the substitution sees the whole call.
-                        || (buffer_ends_with_pending_fn_macro(
-                            &buffer,
-                            &self.fn_macros,
-                            &self.macros,
-                        ) && lines[idx + consumed].trim_start().starts_with('(')))
+                        || (join.pending_head()
+                            && lines[idx + consumed].trim_start().starts_with('(')))
                 {
                     let cont = lines[idx + consumed];
                     consumed += 1;
@@ -1410,8 +1412,10 @@ impl Preprocessor {
                             _ => {}
                         }
                     } else if join_active {
+                        let appended = buffer.len();
                         buffer.push('\n');
                         buffer.push_str(cont);
+                        join.feed(&buffer[appended..], &self.fn_macros, &self.macros);
                     }
                 }
                 // `__LINE__` reflects the presumed line (`source_line`),
@@ -1484,7 +1488,7 @@ use directive::{
     apply_elif, apply_else, apply_endif, elif_eligible, format_line_marker, parse_directive,
     CondFrame, Directive,
 };
-use expand::{buffer_ends_with_pending_fn_macro, macro_call_unclosed};
+use expand::JoinScan;
 use pragma::{parse_pragma_directive, pragma_is_pack, PragmaDirective};
 use text::{is_ident, strip_c_comments, unfold_line_continuations};
 

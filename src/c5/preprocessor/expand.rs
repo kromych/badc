@@ -291,10 +291,13 @@ impl<'a> Exp<'a> {
     }
 
     fn put_vec(&mut self, mut v: Vec<Tok>) {
-        if self.ar.pool.len() < 64 {
-            v.clear();
-            self.ar.pool.push(v);
+        // Cap what the pool may pin: a giant joined line's vectors
+        // would otherwise stay allocated for the whole run.
+        if v.capacity() > (1 << 16) || self.ar.pool.len() >= 64 {
+            return;
         }
+        v.clear();
+        self.ar.pool.push(v);
     }
 
     fn set(&self, id: u32) -> &Rc<Hideset> {
@@ -1095,213 +1098,163 @@ pub(super) fn pp_tokens_would_merge(prev: u8, next: u8) -> bool {
         )
 }
 
-/// Split a `( ... )` argument list in raw text. Used by the driver's
-/// multi-line join scan, which runs before any lexing; expansion
-/// itself collects arguments from the token stream (`scan_args`).
-pub(super) fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
-    let bytes = s.as_bytes();
-    if bytes.is_empty() || bytes[0] != b'(' {
-        return None;
+/// Incremental joiner state: decides whether the logical line still
+/// needs the next source line appended -- a function-like invocation
+/// whose `)` has not arrived yet, or a candidate macro name at the
+/// end of the buffer whose `(` may open the next line (C99 6.10.3:
+/// white space, including newlines, may separate the name from its
+/// `(`). Feeding only the appended bytes keeps a many-thousand-line
+/// argument list linear; re-scanning the grown buffer per joined
+/// line is quadratic in the invocation length.
+pub(super) struct JoinScan {
+    /// Paren depth of the open invocation; 0 = none open.
+    depth: usize,
+    /// Quote byte of the literal open inside the invocation, else 0.
+    quote: u8,
+    /// The buffer ends with a candidate name plus optional white
+    /// space; only a following `(` makes it an invocation.
+    pending: bool,
+}
+
+impl JoinScan {
+    pub(super) fn new() -> Self {
+        JoinScan {
+            depth: 0,
+            quote: 0,
+            pending: false,
+        }
     }
-    let mut args: Vec<String> = Vec::new();
-    let mut current = String::new();
-    let mut depth = 1usize;
-    let mut i = 1;
-    while i < bytes.len() {
-        let c = bytes[i];
-        match c {
-            b'(' => {
-                depth += 1;
-                current.push('(');
-                i += 1;
-            }
-            b')' => {
-                depth -= 1;
-                if depth == 0 {
-                    // The closing paren ends the final argument. C99
-                    // 6.10.3p4: `m()` is a single empty argument, so a
-                    // one-parameter macro substitutes its parameter with
-                    // nothing rather than leaving the parameter name to
-                    // be rescanned. A zero-parameter macro ignores the
-                    // spare empty argument at expansion.
-                    args.push(current.trim().to_string());
-                    return Some((args, i + 1));
-                }
-                current.push(')');
-                i += 1;
-            }
-            b',' if depth == 1 => {
-                args.push(current.trim().to_string());
-                current.clear();
-                i += 1;
-            }
-            b'"' | b'\'' => {
-                // Copy the whole literal (including escapes) so commas
-                // / parens inside don't perturb the depth counter. Use a
-                // UTF-8 slice so a multibyte sequence stays intact.
-                let quote = c;
-                let lit_start = i;
-                i += 1;
-                while i < bytes.len() && bytes[i] != quote {
-                    if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                        i += 2;
-                    } else {
+
+    /// An invocation's argument list is still open.
+    pub(super) fn unclosed(&self) -> bool {
+        self.depth > 0
+    }
+
+    /// A candidate name ends the buffer; join if `(` opens the next
+    /// line.
+    pub(super) fn pending_head(&self) -> bool {
+        self.pending
+    }
+
+    /// Advance the scan over newly appended text.
+    pub(super) fn feed(
+        &mut self,
+        text: &str,
+        fn_macros: &HashMap<String, FnMacro>,
+        obj_macros: &HashMap<String, String>,
+    ) {
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        loop {
+            if self.depth > 0 {
+                // Inside `( ...`: literal-aware paren counting.
+                while i < bytes.len() {
+                    let c = bytes[i];
+                    if self.quote != 0 {
+                        if c == b'\\' && i + 1 < bytes.len() {
+                            i += 2;
+                            continue;
+                        }
+                        if c == self.quote {
+                            self.quote = 0;
+                        }
                         i += 1;
+                        continue;
+                    }
+                    match c {
+                        b'"' | b'\'' => {
+                            self.quote = c;
+                            i += 1;
+                        }
+                        b'(' => {
+                            self.depth += 1;
+                            i += 1;
+                        }
+                        b')' => {
+                            self.depth -= 1;
+                            i += 1;
+                            if self.depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => i += 1,
                     }
                 }
-                if i < bytes.len() {
+                if self.depth > 0 {
+                    self.pending = false;
+                    return;
+                }
+            }
+            if self.pending {
+                while i < bytes.len() && bytes[i].is_ascii_whitespace() {
                     i += 1;
                 }
-                match core::str::from_utf8(&bytes[lit_start..i]) {
-                    Ok(s) => current.push_str(s),
-                    Err(_) => {
-                        for &b in &bytes[lit_start..i] {
-                            current.push(b as char);
-                        }
-                    }
+                if i >= bytes.len() {
+                    return;
                 }
-            }
-            _ => {
-                // Bulk-copy the run up to the next structural byte.
-                // Arguments here can be megabytes (a generated table
-                // wrapped in nested macro calls); per-byte pushes make
-                // argument collection the dominant compile cost.
-                //
-                // A `,` below depth 1 falls through the guarded arm
-                // above into this one while also being a stop byte:
-                // copy it directly or the scan cannot advance.
-                let start = i;
-                if c == b',' {
-                    current.push(',');
+                self.pending = false;
+                if bytes[i] == b'(' {
+                    self.depth = 1;
                     i += 1;
                     continue;
                 }
-                while i < bytes.len() && !matches!(bytes[i], b'(' | b')' | b',' | b'"' | b'\'') {
-                    i += 1;
+            }
+            // Find the next candidate invocation head.
+            while i < bytes.len() {
+                let c = bytes[i];
+                if c == b'"' || c == b'\'' {
+                    i = skip_literal(bytes, i);
+                    continue;
                 }
-                match core::str::from_utf8(&bytes[start..i]) {
-                    Ok(run) => current.push_str(run),
-                    Err(_) => {
-                        for &b in &bytes[start..i] {
-                            current.push(b as char);
-                        }
+                // Skip a pp-number whole (C99 6.4.8) so its
+                // identifier-shaped tail is not read as a head.
+                let np = pp_number_len(bytes, i);
+                if np > 0 {
+                    i += np;
+                    continue;
+                }
+                if c.is_ascii_alphabetic() || c == b'_' {
+                    let start = i;
+                    i += 1;
+                    while i < bytes.len() && is_ident_byte(bytes[i]) {
+                        i += 1;
                     }
+                    if !join_head(&text[start..i], fn_macros, obj_macros) {
+                        continue;
+                    }
+                    let mut j = i;
+                    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    if j >= bytes.len() {
+                        self.pending = true;
+                        return;
+                    }
+                    if bytes[j] == b'(' {
+                        self.depth = 1;
+                        i = j + 1;
+                        break;
+                    }
+                    continue;
                 }
+                i += 1;
+            }
+            if self.depth == 0 {
+                return;
             }
         }
     }
-    None
 }
 
-/// True if `buffer` contains a known function-like macro name
-/// followed by `(` and the matching `)` is *not* in the buffer.
-/// Used by the preprocessor's main driver to decide whether the
-/// next source line should be appended to the current logical
-/// line so a multi-line `assert(\n  expr\n)` call expands. Quotes
-/// and char literals are skipped so `"foo("` doesn't trigger.
-///
-/// Also accepts an object-like macro whose expansion is a single
-/// identifier that *is* a function-like macro -- the C99
-/// 6.10.3.4 rescan makes such an alias head a call whose argument
-/// list may close on a later line; without joining the source
-/// lines here the substitution only sees the first line and can't
-/// find the matching `)`.
-pub(super) fn macro_call_unclosed(
-    buffer: &str,
+/// A name that heads a joinable invocation: a function-like macro,
+/// or an object-like macro whose single-identifier body is one (the
+/// C99 6.10.3.4 rescan makes such an alias head a call whose
+/// argument list may close on a later line).
+fn join_head(
+    name: &str,
     fn_macros: &HashMap<String, FnMacro>,
     obj_macros: &HashMap<String, String>,
 ) -> bool {
-    let bytes = buffer.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        let c = bytes[i];
-        if c == b'"' || c == b'\'' {
-            let q = c;
-            i += 1;
-            while i < bytes.len() && bytes[i] != q {
-                if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            if i < bytes.len() {
-                i += 1;
-            }
-            continue;
-        }
-        // Skip a pp-number whole (C99 6.4.8) so its identifier-shaped
-        // tail is not read as a macro invocation head.
-        let np = pp_number_len(bytes, i);
-        if np > 0 {
-            i += np;
-            continue;
-        }
-        if c.is_ascii_alphabetic() || c == b'_' {
-            let start = i;
-            i += 1;
-            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
-                i += 1;
-            }
-            let name = &buffer[start..i];
-            let direct_fn = fn_macros.contains_key(name);
-            // Object-like macro that resolves to a fn-like-macro
-            // identifier (single-word body). One level of
-            // indirection is enough for the canonical
-            // `#define ALIAS Y` followed by `Y(args)` shape;
-            // deeper chains are vanishingly rare in real headers.
-            let indirect_fn = !direct_fn && {
-                obj_macros
-                    .get(name)
-                    .map(|body| {
-                        let t = body.trim();
-                        !t.is_empty()
-                            && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
-                            && t.bytes().next().is_some_and(|b| !b.is_ascii_digit())
-                            && fn_macros.contains_key(t)
-                    })
-                    .unwrap_or(false)
-            };
-            if direct_fn || indirect_fn {
-                let mut j = i;
-                while j < bytes.len()
-                    && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n')
-                {
-                    j += 1;
-                }
-                if j < bytes.len() && bytes[j] == b'(' && parse_macro_args(&buffer[j..]).is_none() {
-                    return true;
-                }
-            }
-            continue;
-        }
-        i += 1;
-    }
-    false
-}
-
-/// True if `buffer`'s trailing token is a function-like macro name (directly,
-/// or via a single-word object-like alias) with nothing but white space after
-/// it. Used to decide whether to join the next line: a function-like macro
-/// name whose `(` sits on the following line is still an invocation (C99
-/// 6.10.3), which the byte-at-end-of-buffer check in `macro_call_unclosed`
-/// cannot see on its own.
-pub(super) fn buffer_ends_with_pending_fn_macro(
-    buffer: &str,
-    fn_macros: &HashMap<String, FnMacro>,
-    obj_macros: &HashMap<String, String>,
-) -> bool {
-    let trimmed = buffer.trim_end();
-    let bytes = trimmed.as_bytes();
-    let mut start = bytes.len();
-    while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
-        start -= 1;
-    }
-    // Require a real trailing identifier: non-empty and not a number.
-    if start == bytes.len() || bytes[start].is_ascii_digit() {
-        return false;
-    }
-    let name = &trimmed[start..];
     if fn_macros.contains_key(name) {
         return true;
     }

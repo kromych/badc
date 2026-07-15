@@ -1373,3 +1373,35 @@ fn include_next_skips_a_later_path_aliasing_the_current_dir() {
         "include_next must skip the aliased dir and reach the next foo.h; got: {out}"
     );
 }
+
+#[test]
+fn expansion_result_meets_source_parens() {
+    // C99 6.10.3.4: the replacement joins the rest of the source, so
+    // a trailing function-like name in a multi-token result takes the
+    // following source `(...)` as its arguments (gcc/clang parity).
+    let out = process("#define f(a) a*g\n#define g(a) f(a)\nint x = f(2)(9);\n");
+    assert!(out.contains("2*9*g"), "{out}");
+}
+
+#[test]
+fn expanded_arg_tail_meets_arg_parens() {
+    // An argument's own pre-expansion is a single scan too: a name
+    // produced at the tail of a nested expansion combines with the
+    // parens that follow inside the same argument.
+    let out = process("#define TAIL x F\n#define F(a) [a]\n#define M(y) y\nint q = M(TAIL (7));\n");
+    assert!(out.contains("x [7]"), "{out}");
+}
+
+#[test]
+fn cross_expansion_invocation_hideset_is_strict() {
+    // A doubly-spliced argument juxtaposes one copy's trailing macro
+    // name with the next copy's parens. What C99 6.10.3.4 hides for
+    // that invocation is unspecified; the strict per-token reading
+    // keeps the intersection of the name's and the paren's hidesets,
+    // so the mutual partner stays painted (gcc/clang scope disabling
+    // to each expansion buffer and re-fire it once more).
+    let out = process(
+        "#define TWICE(...) __VA_ARGS__ __VA_ARGS__\n#define R(a) a*S\n#define S(a) R(a)\nTWICE(R(()))\n",
+    );
+    assert!(out.contains("()*R()*S"), "{out}");
+}

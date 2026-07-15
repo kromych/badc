@@ -532,8 +532,7 @@ fn variadic_macro_expands_va_args() {
 
 #[test]
 fn variadic_macro_with_fixed_param() {
-    let out =
-        process("#define LOG(level, ...) printf(level, __VA_ARGS__)\nLOG(\"x\", 1, 2);\n");
+    let out = process("#define LOG(level, ...) printf(level, __VA_ARGS__)\nLOG(\"x\", 1, 2);\n");
     assert!(
         out.contains("printf(\"x\", 1, 2);"),
         "fixed param + __VA_ARGS__ should both substitute:\n{out}"
@@ -646,8 +645,7 @@ fn if_inequality_negates() {
 
 #[test]
 fn nested_conditionals_respect_parent() {
-    let src =
-        "#ifdef ABSENT\n#ifdef __BADC_VERSION__\nint inner;\n#endif\n#endif\nint outer;\n";
+    let src = "#ifdef ABSENT\n#ifdef __BADC_VERSION__\nint inner;\n#endif\n#endif\nint outer;\n";
     let out = process(src);
     assert!(!out.contains("int inner;"));
     assert!(out.contains("int outer;"));
@@ -1151,10 +1149,7 @@ fn include_parent_dir_resolves_bare_filename_to_cwd() {
     // so a quoted include in it must search the cwd (empty dir,
     // joined cwd-relative by find_include), not be skipped.
     assert_eq!(include_parent_dir("src.c"), Some(String::new()));
-    assert_eq!(
-        include_parent_dir("dir/src.c"),
-        Some("dir".to_string())
-    );
+    assert_eq!(include_parent_dir("dir/src.c"), Some("dir".to_string()));
     assert_eq!(
         include_parent_dir("/abs/dir/src.c"),
         Some("/abs/dir".to_string())
@@ -1214,7 +1209,8 @@ fn macro_args_split_across_an_enclosing_conditional() {
     // with no locally opened frame belongs to the enclosing
     // conditional: the joiner must apply it to the outer stack, skip
     // the inactive branch's lines, and leave the block terminated.
-    let src = "#define m(a,b) a+b\n#define A 1\n#if A\nint x = m(1,\n#else\nint x = m(2,\n#endif\n3);\n";
+    let src =
+        "#define m(a,b) a+b\n#define A 1\n#if A\nint x = m(1,\n#else\nint x = m(2,\n#endif\n3);\n";
     let out = process(src);
     assert!(out.contains("1+3"), "{out}");
     assert!(!out.contains("2+"), "{out}");

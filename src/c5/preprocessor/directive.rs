@@ -1,6 +1,6 @@
+use crate::c5::error::C5Error;
 use alloc::format;
 use alloc::string::String;
-use crate::c5::error::C5Error;
 
 pub(super) struct CondFrame {
     /// Whether the enclosing branch was active at the time of
@@ -16,7 +16,6 @@ pub(super) struct CondFrame {
     pub(super) saw_else: bool,
 }
 
-
 impl CondFrame {
     // Suppress the unused field warning on `this_branch_taken` --
     // it's part of the struct's vocabulary and might be reached by
@@ -27,11 +26,14 @@ impl CondFrame {
     }
 }
 
-
 /// `#else` state transition on the innermost frame; returns the new
 /// active state. Shared by the main directive loop and the
 /// macro-argument line joiner so both agree on the semantics.
-pub(super) fn apply_else(stack: &mut [CondFrame], filename: &str, line_no: usize) -> Result<bool, C5Error> {
+pub(super) fn apply_else(
+    stack: &mut [CondFrame],
+    filename: &str,
+    line_no: usize,
+) -> Result<bool, C5Error> {
     let frame = stack.last_mut().ok_or_else(|| {
         C5Error::Compile(crate::c5::error::fmt_compile_err(
             filename,
@@ -53,12 +55,15 @@ pub(super) fn apply_else(stack: &mut [CondFrame], filename: &str, line_no: usize
     Ok(taken)
 }
 
-
 /// Whether an `#elif` on the innermost frame is eligible to take
 /// (parent branch active, no earlier arm taken). C99 6.10.1p3: the
 /// controlling expression of an ineligible group is not evaluated,
 /// so the caller evaluates only when this returns true.
-pub(super) fn elif_eligible(stack: &[CondFrame], filename: &str, line_no: usize) -> Result<bool, C5Error> {
+pub(super) fn elif_eligible(
+    stack: &[CondFrame],
+    filename: &str,
+    line_no: usize,
+) -> Result<bool, C5Error> {
     let frame = stack.last().ok_or_else(|| {
         C5Error::Compile(crate::c5::error::fmt_compile_err(
             filename,
@@ -68,7 +73,6 @@ pub(super) fn elif_eligible(stack: &[CondFrame], filename: &str, line_no: usize)
     })?;
     Ok(frame.parent_active && !frame.any_branch_taken)
 }
-
 
 /// `#elif` state transition with the already-evaluated condition;
 /// returns the new active state.
@@ -97,7 +101,6 @@ pub(super) fn apply_elif(
     Ok(cond)
 }
 
-
 /// `#endif` pops the innermost frame; returns the restored active state.
 pub(super) fn apply_endif(
     stack: &mut Vec<CondFrame>,
@@ -113,7 +116,6 @@ pub(super) fn apply_endif(
     })?;
     Ok(frame.parent_active)
 }
-
 
 pub(super) enum Directive<'a> {
     /// Object-like macro: `#define NAME body`.
@@ -178,7 +180,6 @@ pub(super) enum Directive<'a> {
     Other,
 }
 
-
 /// Format a GNU-style line marker (`# N "file"\n`) for the lexer.
 /// Filenames get the minimum C-string escape (`\\` and `\"` are
 /// escaped, everything else passes through). The lexer's
@@ -198,7 +199,6 @@ pub(super) fn format_line_marker(line: usize, file: &str) -> String {
     }
     format!("# {line} \"{escaped}\"\n")
 }
-
 
 pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
     if let Some(after) = rest.strip_prefix("define") {
@@ -392,7 +392,6 @@ pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
     Directive::Other
 }
 
-
 /// Split off the leading identifier in `s`, returning `(ident,
 /// rest)`. Used to peel the macro name from its replacement text.
 pub(super) fn split_ident(s: &str) -> (&str, &str) {
@@ -403,4 +402,3 @@ pub(super) fn split_ident(s: &str) -> (&str, &str) {
     }
     (&s[..end], &s[end..])
 }
-

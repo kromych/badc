@@ -1,9 +1,9 @@
 use super::text::{is_ident, is_ident_byte};
+use super::{Binding, DylibSpec, Preprocessor, Subsystem};
+use crate::c5::error::C5Error;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use crate::c5::error::C5Error;
-use super::{Binding, DylibSpec, Preprocessor, Subsystem};
 
 impl Preprocessor {
     /// Process C99 6.10.9 `_Pragma` operators in already-macro-expanded
@@ -114,7 +114,12 @@ impl Preprocessor {
     /// `export`, `intrinsic`, `entrypoint`, `subsystem`). `pack`
     /// and `once` are handled elsewhere and bypass this function.
     /// Any other directive is accepted with a warning.
-    pub(super) fn parse_pragma(&mut self, args: &str, line_no: usize, filename: &str) -> Result<(), C5Error> {
+    pub(super) fn parse_pragma(
+        &mut self,
+        args: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
         let args = args.trim();
         // MSVC and others allow whitespace between a pragma keyword and
         // its argument list -- `#pragma warning ( disable : N )`. Collapse
@@ -857,7 +862,6 @@ pub(super) fn parse_msvc_pragma_args(text: &str, start: usize) -> Option<(String
     None
 }
 
-
 /// Parse the `( string-literal )` operand of a `_Pragma` operator,
 /// starting at `start` (just past the `_Pragma` keyword). Returns the
 /// destringized pragma text and the byte index just past the closing
@@ -915,7 +919,6 @@ pub(super) fn parse_pragma_operator_args(text: &str, start: usize) -> Option<(St
     Some((content, i))
 }
 
-
 /// Sub-classification of `#pragma` payloads. `dylib(...)` /
 /// `binding(...)` go to [`Preprocessor::parse_pragma`] and live in
 /// the dylib registry; `once` is structural (it tags the *current*
@@ -925,7 +928,6 @@ pub(super) enum PragmaDirective {
     Other,
 }
 
-
 pub(super) fn parse_pragma_directive(args: &str) -> PragmaDirective {
     if args.trim() == "once" {
         PragmaDirective::Once
@@ -933,7 +935,6 @@ pub(super) fn parse_pragma_directive(args: &str) -> PragmaDirective {
         PragmaDirective::Other
     }
 }
-
 
 /// True when `args` is the head of a `pack(...)` pragma -- the
 /// preprocessor passes those through verbatim so the lexer can
@@ -949,4 +950,3 @@ pub(super) fn pragma_is_pack(args: &str) -> bool {
     // pragma the preprocessor still wants to silently swallow.
     rest.trim_start().starts_with('(')
 }
-

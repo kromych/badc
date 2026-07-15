@@ -1470,7 +1470,6 @@ impl Preprocessor {
             None => Ok(()),
         }
     }
-
 }
 
 mod cond;
@@ -1485,10 +1484,9 @@ mod tests;
 
 use cond::is_builtin_operator_name;
 use directive::{
-    apply_elif, apply_else, apply_endif, elif_eligible, format_line_marker, parse_directive,
-    CondFrame, Directive,
+    CondFrame, Directive, apply_elif, apply_else, apply_endif, elif_eligible, format_line_marker,
+    parse_directive,
 };
 use expand::JoinScan;
-use pragma::{parse_pragma_directive, pragma_is_pack, PragmaDirective};
+use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack};
 use text::{is_ident, strip_c_comments, unfold_line_continuations};
-

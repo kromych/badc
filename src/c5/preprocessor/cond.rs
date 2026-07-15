@@ -1,9 +1,9 @@
+use super::Preprocessor;
 use super::include::include_parent_dir;
 use super::text::strip_c_comments;
+use crate::c5::error::C5Error;
 use alloc::format;
 use alloc::string::{String, ToString};
-use crate::c5::error::C5Error;
-use super::Preprocessor;
 
 impl Preprocessor {
     /// Pre-pass for `#if` evaluation: protect every `defined(NAME)`
@@ -169,7 +169,12 @@ impl Preprocessor {
         replace_has_operators(&strip_c_comments(&substituted))
     }
 
-    pub(super) fn eval_condition(&self, expr: &str, line_no: usize, filename: &str) -> Result<bool, C5Error> {
+    pub(super) fn eval_condition(
+        &self,
+        expr: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<bool, C5Error> {
         // Full c99 `#if` expression evaluator: integer constants,
         // identifiers (treated as 0 if undefined), `defined(X)`,
         // unary `!`, comparisons, and boolean operators with
@@ -202,7 +207,6 @@ impl Preprocessor {
         }
         Ok(v.truthy())
     }
-
 }
 
 /// Substitute `params` for `args` in a function-like macro body.
@@ -234,7 +238,6 @@ pub(super) enum IfValue {
     },
     Str(String),
 }
-
 
 impl IfValue {
     fn signed(v: i64) -> IfValue {
@@ -268,7 +271,6 @@ impl IfValue {
     }
 }
 
-
 /// Tiny recursive-descent parser for `#if` expressions. Mirrors the
 /// c99 precedence (top to bottom):
 ///
@@ -287,7 +289,6 @@ impl IfValue {
 /// parentheses deep; past the bound, deeply nested or generator-produced
 /// input yields a diagnostic instead of a stack-overflow abort.
 pub(super) const MAX_IF_EXPR_DEPTH: usize = 100;
-
 
 pub(super) struct IfExprParser<'a> {
     src: &'a str,
@@ -1002,7 +1003,6 @@ impl<'a> IfExprParser<'a> {
     }
 }
 
-
 pub(super) fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
     match (a, b) {
         (IfValue::Int { val: x, .. }, IfValue::Int { val: y, .. }) => x == y,
@@ -1016,7 +1016,6 @@ pub(super) fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
     }
 }
 
-
 /// C99 6.3.1.8 usual arithmetic conversions: `a < b` compares unsigned
 /// when either operand is unsigned, signed otherwise. Strings coerce to
 /// their signed `as_int` value (0 unless numeric).
@@ -1027,7 +1026,6 @@ pub(super) fn if_value_lt(a: &IfValue, b: &IfValue) -> bool {
         a.as_int() < b.as_int()
     }
 }
-
 
 /// True when badc provides the named GCC/Clang compiler builtin (with the
 /// `__builtin_` prefix), so `__has_builtin(NAME)` reports 1. Names not
@@ -1076,7 +1074,6 @@ pub(super) fn is_known_builtin(name: &str) -> bool {
             | "__builtin_mul_overflow"
     )
 }
-
 
 /// Replace every `__has_builtin(NAME)` / `__has_attribute(NAME)` in `s`
 /// with `1` or `0`. Run after macro substitution as well as before, so a
@@ -1137,7 +1134,6 @@ pub(super) fn replace_has_operators(s: &str) -> String {
     out
 }
 
-
 /// The built-in feature-test operators badc provides. They are not
 /// macros, but `#ifdef` / `defined(...)` on their names reports true so
 /// headers can guard `#ifdef __has_attribute` before using the operator.
@@ -1147,7 +1143,6 @@ pub(super) fn is_builtin_operator_name(name: &str) -> bool {
         "__has_include" | "__has_include_next" | "__has_builtin" | "__has_attribute"
     )
 }
-
 
 /// True when badc recognizes the GCC/Clang attribute NAME, so
 /// `__has_attribute(NAME)` reports 1. The name may be spelled bare or
@@ -1205,4 +1200,3 @@ pub(super) fn is_known_attribute(name: &str) -> bool {
             | "unavailable"
     )
 }
-

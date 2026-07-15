@@ -275,7 +275,12 @@ struct Exp<'a> {
 }
 
 impl<'a> Exp<'a> {
-    fn new(pp: &'a Preprocessor, filename: &'a str, line_no: usize, ar: &'a mut ExpScratch) -> Self {
+    fn new(
+        pp: &'a Preprocessor,
+        filename: &'a str,
+        line_no: usize,
+        ar: &'a mut ExpScratch,
+    ) -> Self {
         ar.bufs.clear();
         ar.sets.clear();
         Exp {
@@ -629,7 +634,10 @@ impl<'a> Exp<'a> {
             }
             let (is_fn, is_obj) = {
                 let name = self.text(tok);
-                (pp.fn_macros.contains_key(name), pp.macros.contains_key(name))
+                (
+                    pp.fn_macros.contains_key(name),
+                    pp.macros.contains_key(name),
+                )
             };
             if !is_fn && !is_obj {
                 out.push(tok);

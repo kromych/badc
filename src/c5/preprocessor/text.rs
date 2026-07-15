@@ -72,7 +72,6 @@ pub(super) fn strip_c_comments(source: &str) -> String {
     out
 }
 
-
 /// Report whether `s` (a partially assembled logical line with its
 /// newlines already removed) ends inside an unterminated `/* */` block
 /// comment. String and character literals and `//` line comments are
@@ -137,7 +136,6 @@ pub(super) fn ends_in_open_block_comment(s: &str) -> bool {
     in_block
 }
 
-
 /// Phase-2 line-continuation collapse: every line ending in `\\`
 /// joins with the next, preserving total line count by emitting
 /// blank padding lines. The c99 spec runs this before all other
@@ -175,7 +173,6 @@ pub(super) fn unfold_line_continuations(source: &str) -> String {
     out
 }
 
-
 /// Identifier check: ASCII letter or `_` to start, alnum or `_`
 /// after. Used to reject `#pragma dylib(123foo, ...)` and similar
 /// up-front so the codegen never has to worry about quirks in the
@@ -204,7 +201,6 @@ pub(super) fn literal_prefix_len(bytes: &[u8], at: usize) -> Option<usize> {
     }
 }
 
-
 pub(super) fn is_ident(s: &str) -> bool {
     let mut bytes = s.bytes();
     let Some(first) = bytes.next() else {
@@ -216,11 +212,9 @@ pub(super) fn is_ident(s: &str) -> bool {
     bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
-
 pub(super) fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
-
 
 /// Length of the C99 6.4.8 preprocessing number starting at `at` (a
 /// digit, or `.` followed by a digit), else 0. A pp-number is one
@@ -250,4 +244,3 @@ pub(super) fn pp_number_len(bytes: &[u8], at: usize) -> usize {
     }
     i - at
 }
-

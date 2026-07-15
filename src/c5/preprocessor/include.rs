@@ -1,9 +1,9 @@
+use super::Preprocessor;
 use crate::c5::codegen::Target;
-use alloc::format;
-use alloc::string::{String, ToString};
 use crate::c5::error::C5Error;
 use crate::c5::headers::embedded_header;
-use super::Preprocessor;
+use alloc::format;
+use alloc::string::{String, ToString};
 
 impl Preprocessor {
     /// `#include <name>` / `#include "name"` -- splice the named
@@ -152,7 +152,11 @@ impl Preprocessor {
     /// paths (`-I` plus built-in defaults), then the embedded
     /// registry. The resolved path is the filesystem candidate that
     /// matched, or `name` for an embedded header.
-    pub(super) fn find_include(&self, name: &str, source_dir: Option<&str>) -> Option<(String, String)> {
+    pub(super) fn find_include(
+        &self,
+        name: &str,
+        source_dir: Option<&str>,
+    ) -> Option<(String, String)> {
         #[cfg(feature = "std")]
         {
             let join = |dir: &str| -> String {
@@ -233,7 +237,11 @@ impl Preprocessor {
     /// probe the remaining paths and finally the embedded registry. When
     /// the directive's file came from the embedded registry (no filesystem
     /// directory), there is nothing after it, so resolution yields none.
-    pub(super) fn find_include_next(&self, name: &str, current_file: &str) -> Option<(String, String)> {
+    pub(super) fn find_include_next(
+        &self,
+        name: &str,
+        current_file: &str,
+    ) -> Option<(String, String)> {
         #[cfg(feature = "std")]
         {
             // Skip the search-path entries up to and including the one whose
@@ -277,7 +285,6 @@ impl Preprocessor {
         let _ = current_file;
         embedded_header(name).map(|s| (s.to_string(), name.to_string()))
     }
-
 }
 
 /// Parent directory of an include path, or `None` when the path has
@@ -297,7 +304,6 @@ pub(super) fn include_parent_dir(filename: &str) -> Option<alloc::string::String
     }
 }
 
-
 /// Whether two directory paths name the same directory. Canonicalizes
 /// both when possible (so `a/b` and `./a/b` and an absolute spelling
 /// compare equal); falls back to a trailing-slash-insensitive string
@@ -310,4 +316,3 @@ pub(super) fn path_dirs_equal(a: &str, b: &str) -> bool {
         _ => a.trim_end_matches(['/', '\\']) == b.trim_end_matches(['/', '\\']),
     }
 }
-

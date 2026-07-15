@@ -15,7 +15,6 @@
 //! range. The phi-congruence builder uses this to decide which phi
 //! operands may share a register with the phi result.
 
-use alloc::collections::BTreeSet;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -302,36 +301,38 @@ impl Liveness {
     /// counted in the predecessors' live-out, so they are not added
     /// here. The cost is linear in code size times the live-set width,
     /// not quadratic in the value count.
+    /// The live set is a bit vector (the `live_out` rows' own shape)
+    /// and the nodes currently live ride a counted sparse set, so a
+    /// definition point emits each (def-node, live-node) edge exactly
+    /// once with no per-edge allocation; the pair list is sorted,
+    /// deduplicated, and laid out as a CSR row per node at the end.
     #[allow(dead_code)]
     pub(crate) fn interference(&self, func: &FunctionSsa, node_of: &[ValueId]) -> Interference {
         let n = func.insts.len();
-        let mut adj: Vec<BTreeSet<ValueId>> = (0..n).map(|_| BTreeSet::new()).collect();
+        // Edges packed (low << 32) | high: one-word sort + dedup.
+        let mut pairs: Vec<u64> = Vec::new();
+        let mut live = LiveNodeSet::new(n, self.words);
         for (b, blk) in func.blocks.iter().enumerate() {
-            let mut live: BTreeSet<ValueId> = BTreeSet::new();
-            let base = b * self.words;
-            for w in 0..self.words {
-                let mut bits = self.live_out[base + w];
-                while bits != 0 {
-                    live.insert((w as u32) * 64 + bits.trailing_zeros());
-                    bits &= bits - 1;
-                }
-            }
+            live.seed(
+                &self.live_out[b * self.words..(b + 1) * self.words],
+                node_of,
+            );
             if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
-                live.insert(blk.exit_acc);
+                live.insert(blk.exit_acc, node_of);
             }
             match &blk.terminator {
                 Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
                     if (*cond as usize) < n {
-                        live.insert(*cond);
+                        live.insert(*cond, node_of);
                     }
                 }
                 Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
                     if (*target as usize) < n =>
                 {
-                    live.insert(*target);
+                    live.insert(*target, node_of);
                 }
                 Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
-                    live.insert(*v);
+                    live.insert(*v, node_of);
                 }
                 _ => {}
             }
@@ -339,25 +340,23 @@ impl Liveness {
                 let inst = &func.insts[idx as usize];
                 if super::reg_alloc::produces_value(inst) {
                     let di = node_of[idx as usize];
-                    for &x in &live {
-                        let xi = node_of[x as usize];
-                        if di != xi {
-                            adj[di as usize].insert(xi);
-                            adj[xi as usize].insert(di);
+                    for &nd in &live.nodes {
+                        if nd != di {
+                            pairs.push(((di.min(nd) as u64) << 32) | di.max(nd) as u64);
                         }
                     }
-                    live.remove(&idx);
+                    live.remove(idx, node_of);
                 }
                 if !matches!(inst, Inst::Phi { .. }) {
                     super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
-                            live.insert(op);
+                            live.insert(op, node_of);
                         }
                     });
                 }
             }
         }
-        Interference { adj }
+        Interference::from_pairs(n, pairs)
     }
 
     /// Per-value flag: true when the value's live range spans a call,
@@ -385,32 +384,27 @@ impl Liveness {
     ) -> Vec<bool> {
         let n = func.insts.len();
         let mut out = vec![false; n];
+        let mut live: Vec<u64> = vec![0; self.words];
+        let set = |live: &mut [u64], v: ValueId| live[v as usize / 64] |= 1 << (v % 64);
         for (b, blk) in func.blocks.iter().enumerate() {
-            let mut live: BTreeSet<ValueId> = BTreeSet::new();
             let base = b * self.words;
-            for w in 0..self.words {
-                let mut bits = self.live_out[base + w];
-                while bits != 0 {
-                    live.insert((w as u32) * 64 + bits.trailing_zeros());
-                    bits &= bits - 1;
-                }
-            }
+            live.copy_from_slice(&self.live_out[base..base + self.words]);
             if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
-                live.insert(blk.exit_acc);
+                set(&mut live, blk.exit_acc);
             }
             match &blk.terminator {
                 Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
                     if (*cond as usize) < n {
-                        live.insert(*cond);
+                        set(&mut live, *cond);
                     }
                 }
                 Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
                     if (*target as usize) < n =>
                 {
-                    live.insert(*target);
+                    set(&mut live, *target);
                 }
                 Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
-                    live.insert(*v);
+                    set(&mut live, *v);
                 }
                 _ => {}
             }
@@ -422,21 +416,26 @@ impl Liveness {
                 ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
                     || super::reg_alloc::is_setjmp_barrier(inst);
                 if super::reg_alloc::produces_value(inst) {
-                    live.remove(&idx);
+                    live[idx as usize / 64] &= !(1 << (idx % 64));
                 }
                 // After removing the call's own result (its definition
                 // point), `live` holds exactly the values live at the
                 // point just after the call returns. Each such value's
                 // range spans the call.
                 if is_call {
-                    for &x in &live {
-                        out[x as usize] = true;
+                    for (w, &word) in live.iter().enumerate() {
+                        let mut bits = word;
+                        while bits != 0 {
+                            let v = (w as u32) * 64 + bits.trailing_zeros();
+                            bits &= bits - 1;
+                            out[v as usize] = true;
+                        }
                     }
                 }
                 if !matches!(inst, Inst::Phi { .. }) {
                     super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
-                            live.insert(op);
+                            set(&mut live, op);
                         }
                     });
                 }
@@ -446,35 +445,153 @@ impl Liveness {
     }
 }
 
+/// The values live at a sweep point, tracked at two granularities:
+/// membership as a bit vector (the `live_out` rows' own shape) and
+/// the distinct register-allocation nodes those values belong to as
+/// a counted sparse set, so a definition can enumerate live nodes
+/// without touching per-value state.
+struct LiveNodeSet {
+    bits: Vec<u64>,
+    /// Live-value count per node; a node leaves `nodes` at zero.
+    count: Vec<u32>,
+    /// Compact list of nodes with a nonzero count.
+    nodes: Vec<ValueId>,
+    /// Position of a live node in `nodes` (swap-removed on exit).
+    pos: Vec<u32>,
+}
+
+impl LiveNodeSet {
+    fn new(n: usize, words: usize) -> Self {
+        LiveNodeSet {
+            bits: alloc::vec![0; words],
+            count: alloc::vec![0; n],
+            nodes: Vec::new(),
+            pos: alloc::vec![u32::MAX; n],
+        }
+    }
+
+    /// Reset to a block's live-out row.
+    fn seed(&mut self, live_out: &[u64], node_of: &[ValueId]) {
+        for &nd in &self.nodes {
+            self.count[nd as usize] = 0;
+            self.pos[nd as usize] = u32::MAX;
+        }
+        self.nodes.clear();
+        self.bits.copy_from_slice(live_out);
+        for (w, &word) in live_out.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let v = (w as u32) * 64 + bits.trailing_zeros();
+                bits &= bits - 1;
+                self.enter(node_of[v as usize]);
+            }
+        }
+    }
+
+    fn enter(&mut self, nd: ValueId) {
+        let c = &mut self.count[nd as usize];
+        if *c == 0 {
+            self.pos[nd as usize] = self.nodes.len() as u32;
+            self.nodes.push(nd);
+        }
+        *c += 1;
+    }
+
+    fn insert(&mut self, v: ValueId, node_of: &[ValueId]) {
+        let (w, m) = (v as usize / 64, 1u64 << (v % 64));
+        if self.bits[w] & m != 0 {
+            return;
+        }
+        self.bits[w] |= m;
+        self.enter(node_of[v as usize]);
+    }
+
+    fn remove(&mut self, v: ValueId, node_of: &[ValueId]) {
+        let (w, m) = (v as usize / 64, 1u64 << (v % 64));
+        if self.bits[w] & m == 0 {
+            return;
+        }
+        self.bits[w] &= !m;
+        let nd = node_of[v as usize] as usize;
+        self.count[nd] -= 1;
+        if self.count[nd] == 0 {
+            let at = self.pos[nd] as usize;
+            let last = self.nodes.pop().unwrap();
+            if at < self.nodes.len() {
+                self.nodes[at] = last;
+                self.pos[last as usize] = at as u32;
+            }
+            self.pos[nd] = u32::MAX;
+        }
+    }
+}
+
 /// Interference graph over register-allocation nodes (phi-congruence
-/// roots). `adj[node]` lists the nodes that must not share a register
-/// with `node`. Non-node value ids have empty entries.
+/// roots), stored as one CSR row of neighbors per node. Non-node
+/// value ids have empty rows.
 pub(crate) struct Interference {
-    adj: Vec<BTreeSet<ValueId>>,
+    offsets: Vec<u32>,
+    edges: Vec<ValueId>,
 }
 
 #[allow(dead_code)]
 impl Interference {
-    /// Nodes that interfere with `node`.
-    pub(crate) fn neighbors(&self, node: ValueId) -> &BTreeSet<ValueId> {
-        &self.adj[node as usize]
+    /// Nodes that interfere with `node`, ascending.
+    pub(crate) fn neighbors(&self, node: ValueId) -> &[ValueId] {
+        let (a, b) = (
+            self.offsets[node as usize] as usize,
+            self.offsets[node as usize + 1] as usize,
+        );
+        &self.edges[a..b]
     }
 
     /// Number of nodes that interfere with `node`.
     pub(crate) fn degree(&self, node: ValueId) -> usize {
-        self.adj[node as usize].len()
+        self.neighbors(node).len()
+    }
+
+    /// Build the CSR rows from canonicalized `(low << 32) | high`
+    /// pairs, duplicates welcome.
+    fn from_pairs(n: usize, mut pairs: Vec<u64>) -> Self {
+        pairs.sort_unstable();
+        pairs.dedup();
+        let unpack = |p: u64| ((p >> 32) as usize, (p & 0xffff_ffff) as usize);
+        let mut deg = alloc::vec![0u32; n];
+        for &p in &pairs {
+            let (a, b) = unpack(p);
+            deg[a] += 1;
+            deg[b] += 1;
+        }
+        let mut offsets = alloc::vec![0u32; n + 1];
+        for i in 0..n {
+            offsets[i + 1] = offsets[i] + deg[i];
+        }
+        let mut cursor: Vec<u32> = offsets[..n].to_vec();
+        let mut edges = alloc::vec![0 as ValueId; offsets[n] as usize];
+        // Pairs are sorted and each row's second-position entries (all
+        // below the node id) fill before its first-position entries
+        // (all above it), so every row comes out ascending.
+        for &p in &pairs {
+            let (a, b) = unpack(p);
+            edges[cursor[a] as usize] = b as ValueId;
+            cursor[a] += 1;
+            edges[cursor[b] as usize] = a as ValueId;
+            cursor[b] += 1;
+        }
+        Self { offsets, edges }
     }
 
     /// Build a graph directly from an edge list, for unit tests that
     /// exercise coloring without constructing a whole function.
     #[cfg(test)]
     pub(crate) fn from_edges(n: usize, edges: &[(ValueId, ValueId)]) -> Self {
-        let mut adj: Vec<BTreeSet<ValueId>> = (0..n).map(|_| BTreeSet::new()).collect();
-        for &(a, b) in edges {
-            adj[a as usize].insert(b);
-            adj[b as usize].insert(a);
-        }
-        Self { adj }
+        Self::from_pairs(
+            n,
+            edges
+                .iter()
+                .map(|&(a, b)| ((a.min(b) as u64) << 32) | a.max(b) as u64)
+                .collect(),
+        )
     }
 }
 

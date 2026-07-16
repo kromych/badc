@@ -3,6 +3,12 @@
 # The compat header is force-included FIRST so its va-builtin aliases exist
 # before edk2's -include AutoGen.h pulls in Base.h. Helper paths resolve
 # relative to this script so no fixed /tmp copy is required.
+#
+# -D__STDC_NO_ATOMICS__: OpenSSL's refcount / tsan headers include
+# <stdatomic.h> under C11. edk2's CryptoPkg CRT shadows <stdint.h> with a
+# shim that omits the int_leastN_t types badc's <stdatomic.h> needs, so the
+# C11 path fails to build. UEFI firmware is single-threaded, so signalling
+# no C11 atomics routes OpenSSL to its non-atomic refcount fallback.
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec python3 "$here/badc_cc.py" --target=windows-x64 --freestanding \
-  -include "$here/badc_efi_compat.h" "$@"
+  -D__STDC_NO_ATOMICS__ -include "$here/badc_efi_compat.h" "$@"

@@ -164,6 +164,15 @@ fn wide_string_struct_member() {
 }
 
 #[test]
+fn init_paren_conditional_arith() {
+    // A parenthesized constant conditional followed by arithmetic
+    // (`(cond ? a : b) * N`) in an aggregate initializer folds correctly
+    // instead of misreading the trailing operators as extra elements
+    // (OpenSSL cipher tables use this form).
+    assert_eq!(run_fixture("init_paren_conditional_arith.c"), 0);
+}
+
+#[test]
 fn offsetof_runtime_subscript() {
     // GCC extension: `__builtin_offsetof(T, m[i])` with a non-constant `i`
     // yields the runtime offset `offsetof(T, m) + i * stride` (edk2 firmware

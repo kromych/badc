@@ -1259,8 +1259,22 @@ impl Compiler {
             // address-valued arm's relocation, so select the arm here and
             // keep its reloc. Falls through when the parens hold a plain
             // arithmetic expression.
-            if let Some(res) = self.try_const_cond_init_value()? {
-                return Ok(res);
+            if let Some((v, reloc)) = self.try_const_cond_init_value()? {
+                // A pure-integer parenthesized conditional may be followed by
+                // arithmetic (`(cond ? a : b) * N`, as OpenSSL's cipher tables
+                // use); continue the const-expr chain so the trailing
+                // operators are absorbed rather than left for the brace list
+                // to misread as extra elements. `parse_const_expr_add_from`
+                // returns the seed unchanged when no operator follows. An
+                // address-valued arm is returned as-is.
+                if matches!(reloc, InitElemReloc::None) {
+                    let folded = self.parse_const_expr_add_from(ConstVal::Int {
+                        val: v,
+                        ty: Ty::Int as i64,
+                    })?;
+                    return Ok((folded.as_int(), InitElemReloc::None));
+                }
+                return Ok((v, reloc));
             }
             // A parenthesised relocation-bearing leaf -- `(func)`,
             // `(&global)`, possibly multiply parenthesised, as produced

@@ -126,9 +126,12 @@ def main() -> int:
 
     # edksetup.sh regenerates Conf/tools_def.txt from the template; register
     # the BADC tag afterwards so it survives. The CC wrapper resolves its
-    # helpers relative to its own directory.
+    # helpers relative to its own directory. edk2's build invokes it as an
+    # executable, so ensure the execute bit is set even if a checkout / sync
+    # dropped it.
     wrapper = HERE / "badc-efi-cc"
     compat = HERE / "badc_efi_compat.h"
+    os.chmod(wrapper, os.stat(wrapper).st_mode | 0o111)
     register = (
         f'python3 {HERE / "badc_toolchain.py"} '
         f'Conf/tools_def.txt {wrapper} {compat}')

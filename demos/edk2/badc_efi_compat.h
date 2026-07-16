@@ -20,9 +20,23 @@
 typedef void *__builtin_ms_va_list;
 typedef void *__builtin_va_list;
 
-/* badc's __builtin_va_start / _arg / _end / _copy take the address of the
-   va_list storage (the windows cursor form); _arg yields a pointer to the
-   fetched slot. Mirror badc's own <stdarg.h> macros. */
+/* Declare badc's variadic intrinsics -- normally advertised by badc's own
+   <stdarg.h>, which this header no longer pulls in. edk2's VA_ARG expands
+   to `__builtin_va_arg (Marker, TYPE)` directly, so the intrinsic must be
+   recognized (its second argument is a type, not an expression) without
+   the shim. Signatures mirror badc's <stdarg.h>; the cursor is a void*. */
+#pragma intrinsic("__builtin_va_start")
+#pragma intrinsic("__builtin_va_arg")
+#pragma intrinsic("__builtin_va_end")
+#pragma intrinsic("__builtin_va_copy")
+void  __builtin_va_start(void **ap, void *last_addr);
+void *__builtin_va_arg(void **ap, ...);
+void  __builtin_va_end(void **ap);
+void  __builtin_va_copy(void **dst, void **src);
+
+/* The ms-variant builtins edk2's Base.h uses for VA_START / VA_END / VA_COPY.
+   badc's intrinsics take the address of the va_list storage (the windows
+   cursor form). VA_ARG uses the plain __builtin_va_arg above. */
 #define __builtin_ms_va_start(ap, last) __builtin_va_start(&(ap), (void *)&(last))
 #define __builtin_ms_va_arg(ap, t)      (*(t *)__builtin_va_arg(&(ap), t))
 #define __builtin_ms_va_end(ap)         __builtin_va_end(&(ap))

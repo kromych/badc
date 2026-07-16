@@ -164,6 +164,14 @@ fn wide_string_struct_member() {
 }
 
 #[test]
+fn offsetof_runtime_subscript() {
+    // GCC extension: `__builtin_offsetof(T, m[i])` with a non-constant `i`
+    // yields the runtime offset `offsetof(T, m) + i * stride` (edk2 firmware
+    // uses it). A constant subscript still folds.
+    assert_eq!(run_fixture("offsetof_runtime_subscript.c"), 0);
+}
+
+#[test]
 fn decl_specifier_order() {
     // C99 6.7.1: declaration specifiers may appear in any order. A
     // storage-class specifier after the type (`INTN STATIC f()`, the edk2

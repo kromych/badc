@@ -889,7 +889,11 @@ impl Compiler {
             // GCC `__builtin_offsetof(T, member)` is an integer constant
             // expression (the member's byte offset).
             self.next()?;
-            let v = self.parse_builtin_offsetof()?;
+            // A constant context: a runtime array subscript is rejected
+            // (allow_runtime = false), so the result is always `Some`.
+            let v = self
+                .parse_builtin_offsetof(false)?
+                .expect("offsetof without a runtime subscript folds to a constant");
             return Ok(ConstVal::Int {
                 val: v,
                 ty: self.size_t_ty(),

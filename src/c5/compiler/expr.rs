@@ -649,13 +649,22 @@ impl Compiler {
             self.ty = Ty::Int as i64;
             self.ast_emit_int_lit(v, self.ty);
         } else if self.lex.tk == Token::BuiltinOffsetof {
-            // GCC `__builtin_offsetof(T, member)`: the member's byte offset,
-            // a `size_t`-typed integer constant.
+            // GCC `__builtin_offsetof(T, member)`: the member's byte offset, a
+            // `size_t`-typed integer. Constant unless the designator carries a
+            // runtime array subscript (a GCC extension), which the parser then
+            // emits onto the accumulator directly.
             self.next()?;
-            let v = self.parse_builtin_offsetof()?;
-            self.emit_imm(v);
-            self.ty = self.size_t_ty();
-            self.ast_emit_int_lit(v, self.ty);
+            match self.parse_builtin_offsetof(true)? {
+                Some(v) => {
+                    self.emit_imm(v);
+                    self.ty = self.size_t_ty();
+                    self.ast_emit_int_lit(v, self.ty);
+                }
+                None => {
+                    // Runtime offset already emitted; the type is size_t.
+                    self.ty = self.size_t_ty();
+                }
+            }
         } else if self.is_func_name_ident() {
             // C99 6.4.2.2: __func__ is implicitly declared as
             // `static const char __func__[] = "function-name";` at the
@@ -4268,7 +4277,18 @@ impl Compiler {
     /// offset. The leading keyword has been consumed. The member designator
     /// is an identifier followed by a chain of `.field` and `[constant]`
     /// steps (C11 7.19). The offset is a compile-time constant.
-    pub(super) fn parse_builtin_offsetof(&mut self) -> Result<i64, C5Error> {
+    /// Parse `__builtin_offsetof(T, member-designator)`. Returns `Some(off)`
+    /// when the whole designator folds to a constant byte offset. A GCC
+    /// extension allows a non-constant array subscript (`m[i]` with runtime
+    /// `i`); when `allow_runtime` is set and such a subscript appears, the
+    /// offset `const_base + i * stride` is emitted onto the accumulator (value
+    /// stack + AST) as a `size_t` and `None` is returned. In a constant
+    /// context `allow_runtime` is false and a runtime subscript is an error.
+    pub(super) fn parse_builtin_offsetof(
+        &mut self,
+        allow_runtime: bool,
+    ) -> Result<Option<i64>, C5Error> {
+        use super::super::ir::BinOp;
         self.consume(b'(', "`(` expected after `__builtin_offsetof`")?;
         let ty = self.parse_generic_type_name()?;
         if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
@@ -4288,6 +4308,9 @@ impl Compiler {
             }
         };
         let mut offset: i64 = 0;
+        // Set once a non-constant subscript has been emitted onto the
+        // accumulator; the constant `offset` is added to it at the end.
+        let mut have_runtime = false;
         let mut sid = struct_id_of(ty);
         let f = self.offsetof_member(sid)?;
         offset += f.offset as i64;
@@ -4308,8 +4331,6 @@ impl Compiler {
                 cur_dims = field_dims(&f);
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
-                let idx = self.parse_constant_int()?;
-                self.consume(b']', "`]` expected after `__builtin_offsetof` subscript")?;
                 if cur_dims.is_empty() {
                     return Err(
                         self.compile_err("`[...]` in `__builtin_offsetof` on a non-array member")
@@ -4318,14 +4339,42 @@ impl Compiler {
                 // Row stride: the product of the dimensions below this one
                 // times the element size.
                 let inner: i64 = cur_dims[1..].iter().product::<i64>().max(1);
-                offset += idx * inner * self.size_of_type(cur_ty) as i64;
+                let stride = inner * self.size_of_type(cur_ty) as i64;
+                match self.try_parse_constant_dim()? {
+                    Some(idx) => offset += idx * stride,
+                    None => {
+                        // GCC extension: a runtime array subscript. The offset
+                        // is `const_base + i * stride`, a runtime value.
+                        if !allow_runtime {
+                            return Err(self.compile_err(
+                                "constant integer expected in `__builtin_offsetof` subscript",
+                            ));
+                        }
+                        if have_runtime {
+                            return Err(self.compile_err(
+                                "`__builtin_offsetof` supports at most one runtime array subscript",
+                            ));
+                        }
+                        self.expr(Token::Assign as i64)?;
+                        self.emit_binop_with_imm(BinOp::Mul, stride);
+                        have_runtime = true;
+                    }
+                }
+                self.consume(b']', "`]` expected after `__builtin_offsetof` subscript")?;
                 cur_dims.remove(0);
             } else {
                 break;
             }
         }
         self.consume(b')', "`)` expected after `__builtin_offsetof`")?;
-        Ok(offset)
+        if have_runtime {
+            if offset != 0 {
+                self.emit_binop_with_imm(BinOp::Add, offset);
+            }
+            self.ty = self.size_t_ty();
+            return Ok(None);
+        }
+        Ok(Some(offset))
     }
 
     /// Consume one member name and return its `StructField` in struct `sid`.

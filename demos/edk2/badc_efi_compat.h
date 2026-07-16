@@ -21,10 +21,15 @@ typedef void *__builtin_ms_va_list;
 typedef void *__builtin_va_list;
 
 /* Declare badc's variadic intrinsics -- normally advertised by badc's own
-   <stdarg.h>, which this header no longer pulls in. edk2's VA_ARG expands
-   to `__builtin_va_arg (Marker, TYPE)` directly, so the intrinsic must be
-   recognized (its second argument is a type, not an expression) without
-   the shim. Signatures mirror badc's <stdarg.h>; the cursor is a void*. */
+   <stdarg.h>, which this header no longer pulls in. badc's __builtin_va_arg
+   takes the ADDRESS of the va_list storage and returns the address of the
+   next argument slot; the caller dereferences it (badc <stdarg.h> contract).
+   edk2's Base.h VA_ARG instead expands to `(TYPE)(__builtin_va_arg (Marker,
+   TYPE))`: it passes the VA_LIST by name and does not dereference. Bridge the
+   two with a function-like macro named after the intrinsic -- it rewrites each
+   use to `*(TYPE *)__builtin_va_arg(&Marker, TYPE)`. The macro name is not
+   re-expanded inside its own body (C99 6.10.3.4), so the inner reference
+   reaches the intrinsic. */
 #pragma intrinsic("__builtin_va_start")
 #pragma intrinsic("__builtin_va_arg")
 #pragma intrinsic("__builtin_va_end")
@@ -34,11 +39,13 @@ void *__builtin_va_arg(void **ap, ...);
 void  __builtin_va_end(void **ap);
 void  __builtin_va_copy(void **dst, void **src);
 
+#define __builtin_va_arg(Marker, TYPE)  (*(TYPE *)__builtin_va_arg(&(Marker), TYPE))
+
 /* The ms-variant builtins edk2's Base.h uses for VA_START / VA_END / VA_COPY.
    badc's intrinsics take the address of the va_list storage (the windows
-   cursor form). VA_ARG uses the plain __builtin_va_arg above. */
+   cursor form). VA_ARG defers to the bridged __builtin_va_arg above. */
 #define __builtin_ms_va_start(ap, last) __builtin_va_start(&(ap), (void *)&(last))
-#define __builtin_ms_va_arg(ap, t)      (*(t *)__builtin_va_arg(&(ap), t))
+#define __builtin_ms_va_arg(ap, t)      __builtin_va_arg(ap, t)
 #define __builtin_ms_va_end(ap)         __builtin_va_end(&(ap))
 #define __builtin_ms_va_copy(d, s)      __builtin_va_copy(&(d), &(s))
 

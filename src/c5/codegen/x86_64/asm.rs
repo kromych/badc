@@ -49,6 +49,14 @@ pub(crate) enum Mnemonic {
     In,
     /// Port output `out dx, al/ax/eax` (variable-port form).
     Out,
+    /// Software interrupt `int $imm` (int3 breakpoint is `int $3`).
+    Int,
+    /// Spin-loop hint `pause`.
+    Pause,
+    /// Push the 64-bit RFLAGS, `pushfq`.
+    Pushfq,
+    /// Pop a 64-bit register, `pop reg`.
+    Pop,
 }
 
 /// One symbolic operand of a template instruction.
@@ -188,6 +196,10 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "nop" => Mnemonic::Nop,
         "in" => Mnemonic::In,
         "out" => Mnemonic::Out,
+        "int" => Mnemonic::Int,
+        "pause" => Mnemonic::Pause,
+        "pushfq" => Mnemonic::Pushfq,
+        "pop" => Mnemonic::Pop,
         _ => return None,
     })
 }
@@ -354,6 +366,33 @@ pub(crate) fn encode(
         }
         Mnemonic::Rdtscp => {
             code.extend_from_slice(&[0x0F, 0x01, 0xF9]);
+            Ok(())
+        }
+        Mnemonic::Pause => {
+            code.extend_from_slice(&[0xF3, 0x90]);
+            Ok(())
+        }
+        Mnemonic::Pushfq => {
+            code.push(0x9C);
+            Ok(())
+        }
+        Mnemonic::Int => {
+            // `int $imm`: int3 (imm 3) is the one-byte 0xCC breakpoint;
+            // any other vector is 0xCD ib.
+            match ops.first() {
+                Some(Concrete::Imm(3)) => code.push(0xCC),
+                Some(Concrete::Imm(n)) => code.extend_from_slice(&[0xCD, *n as u8]),
+                _ => return Err(String::from("inline asm: `int` needs an immediate vector")),
+            }
+            Ok(())
+        }
+        Mnemonic::Pop => {
+            // `pop reg` (64-bit): 0x58+reg, REX.B for r8..r15.
+            let (reg, _) = reg_operand(ops.first(), suffix)?;
+            if reg >= 8 {
+                code.push(rex(false, false, false, true));
+            }
+            code.push(0x58 + (reg & 7));
             Ok(())
         }
         Mnemonic::In | Mnemonic::Out => {
@@ -591,6 +630,28 @@ mod tests {
             [0x66, 0xEF]
         );
         assert_eq!(enc(Mnemonic::Out, Some(AsmRegSize::Long), &[]), [0xEF]);
+    }
+
+    #[test]
+    fn system_ops_encoding() {
+        assert_eq!(enc(Mnemonic::Pause, None, &[]), [0xF3, 0x90]);
+        assert_eq!(enc(Mnemonic::Pushfq, None, &[]), [0x9C]);
+        assert_eq!(enc(Mnemonic::Int, None, &[Concrete::Imm(3)]), [0xCC]);
+        assert_eq!(
+            enc(Mnemonic::Int, None, &[Concrete::Imm(0x20)]),
+            [0xCD, 0x20]
+        );
+        // pop rax = 0x58; pop r8 = REX.B 0x58.
+        let rax = Concrete::Reg {
+            reg: 0,
+            size: AsmRegSize::Quad,
+        };
+        let r8 = Concrete::Reg {
+            reg: 8,
+            size: AsmRegSize::Quad,
+        };
+        assert_eq!(enc(Mnemonic::Pop, None, &[rax]), [0x58]);
+        assert_eq!(enc(Mnemonic::Pop, None, &[r8]), [0x41, 0x58]);
     }
 
     #[test]

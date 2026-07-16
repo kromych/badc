@@ -2089,6 +2089,13 @@ fn run_inline_asm(
             Mnemonic::Out => {
                 // Port write is a no-op: no hardware to receive it.
             }
+            Mnemonic::Pause | Mnemonic::Pushfq | Mnemonic::Int => {
+                // Spin-hint / flags-push / breakpoint: no observable effect
+                // on the VM's register model (a debugger is not attached).
+            }
+            Mnemonic::Pop => {
+                // No modelled machine stack; leave the destination as-is.
+            }
             Mnemonic::Shld | Mnemonic::Shrd => {
                 let (count, _) = value_of(&ops[0], &xregs);
                 let (src, _) = value_of(&ops[1], &xregs);

@@ -615,24 +615,40 @@ pub(crate) fn encode(
             // (that selects the XMM form), no REX.W (movd is 32-bit).
             let [a, b] = two(ops)?;
             let mmx = |c: &Concrete| matches!(c, Concrete::Reg { reg, .. } if (MMX_BASE..MMX_BASE + 8).contains(reg));
-            let (mm, gp, opcode) = if mmx(&a) {
+            let (mm, other, opcode) = if mmx(&a) {
                 (a, b, 0x7E)
             } else if mmx(&b) {
                 (b, a, 0x6E)
             } else {
                 return Err(String::from("inline asm: `movd` needs one MMX operand"));
             };
-            let (Concrete::Reg { reg: mm_reg, .. }, Concrete::Reg { reg: gp_reg, .. }) = (mm, gp)
-            else {
-                return Err(String::from(
-                    "inline asm: `movd` operands must be registers",
-                ));
+            let Concrete::Reg { reg: mm_reg, .. } = mm else {
+                return Err(String::from("inline asm: `movd` MMX operand expected"));
             };
-            if gp_reg >= 8 {
-                code.push(rex(false, false, false, true)); // REX.B for the GPR r/m
+            let mm_field = mm_reg - MMX_BASE;
+            match other {
+                // r/m = a GPR (register-direct) or a memory reference
+                // (`movd m32, mm` / `movd mm, m32`, the `"m"` operand form).
+                Concrete::Reg { reg: gp_reg, .. } => {
+                    if gp_reg >= 8 {
+                        code.push(rex(false, false, false, true)); // REX.B
+                    }
+                    code.extend_from_slice(&[0x0F, opcode]);
+                    code.push(modrm_reg(mm_field, gp_reg));
+                }
+                Concrete::Mem { base, .. } => {
+                    if base >= 8 {
+                        code.push(rex(false, false, false, true)); // REX.B for base
+                    }
+                    code.extend_from_slice(&[0x0F, opcode]);
+                    modrm_mem(code, mm_field, base);
+                }
+                Concrete::Imm(_) => {
+                    return Err(String::from(
+                        "inline asm: `movd` operand must be a register or memory",
+                    ));
+                }
             }
-            code.extend_from_slice(&[0x0F, opcode]);
-            code.push(modrm_reg(mm_reg - MMX_BASE, gp_reg));
             Ok(())
         }
         Mnemonic::In | Mnemonic::Out => {

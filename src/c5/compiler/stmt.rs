@@ -384,6 +384,25 @@ impl Compiler {
             is_static = true;
         }
         let lbt = self.parse_decl_base_type()?;
+        // C99 6.7.1: a storage-class specifier may trail the type specifier
+        // (`INTN STATIC x;`), so consume any that follow the base type. The
+        // leading run above handles the usual `static INTN x;` order.
+        while self.lex.tk == Token::Extern
+            || self.lex.tk == Token::Static
+            || self.lex.tk == Token::ThreadLocal
+        {
+            if self.lex.tk == Token::Static {
+                is_static = true;
+            } else if self.lex.tk == Token::Extern {
+                is_extern = true;
+            } else {
+                is_thread_local = true;
+            }
+            self.next()?;
+        }
+        if is_thread_local && !is_extern {
+            is_static = true;
+        }
         // A function-pointer typedef base type contributes its lineage to
         // every declarator in the list; the per-declarator symbol creation
         // consumes these pending fields, so capture and re-seed each one.

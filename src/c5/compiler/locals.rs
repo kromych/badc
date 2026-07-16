@@ -158,11 +158,37 @@ impl Compiler {
         // that carries a storage-class or qualifier but no type names an
         // int object. Only applies after an explicit specifier so a
         // mistyped type name still surfaces as an error.
-        let lbt = if !self.lex_is_type_start() && saw_specifier {
+        let base = if !self.lex_is_type_start() && saw_specifier {
             Ty::Int as i64
         } else {
             self.parse_decl_base_type()?
-        } | qual_bits;
+        };
+        // C99 6.7.1: a storage-class or qualifier specifier may trail the
+        // type specifier (`INTN STATIC x;`, `int const y;`). Consume any that
+        // follow the base type; the leading run handles the usual order.
+        while self.lex.tk == Token::Extern
+            || self.lex.tk == Token::Static
+            || self.lex.tk == Token::ThreadLocal
+            || self.lex.tk == Token::FuncSpec
+            || self.lex.tk == Token::TypeQual
+        {
+            if self.lex.tk == Token::Static {
+                is_static = true;
+            }
+            if self.lex.tk == Token::Extern {
+                is_extern = true;
+            }
+            if self.lex.tk == Token::ThreadLocal {
+                is_thread_local = true;
+            }
+            qual_bits |= self.lex_volatile_bit();
+            self.pending.base_is_const |= self.lex_is_const_qual();
+            self.next()?;
+        }
+        if is_thread_local && !is_extern {
+            is_static = true;
+        }
+        let lbt = base | qual_bits;
         // A function-pointer typedef base type contributes its lineage to
         // every declarator in the list (`fn_t a, b;` makes both a and b
         // function pointers). The per-declarator symbol creation consumes

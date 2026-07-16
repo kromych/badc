@@ -164,6 +164,15 @@ fn wide_string_struct_member() {
 }
 
 #[test]
+fn decl_specifier_order() {
+    // C99 6.7.1: declaration specifiers may appear in any order. A
+    // storage-class specifier after the type (`INTN STATIC f()`, the edk2
+    // firmware form) is accepted at file and block scope; internal linkage
+    // still applies.
+    assert_eq!(run_fixture("decl_specifier_order.c"), 0);
+}
+
+#[test]
 fn wide_string_pointer_array() {
     // C99 6.7.8: `wchar_t *names[] = { L"a", L"b" }` is a brace list of
     // pointer initializers, not a brace-wrapped string. The wide brace-wrap

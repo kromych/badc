@@ -343,6 +343,43 @@ impl Compiler {
                 let n = core::mem::take(&mut self.pending.attr_vector_size);
                 bt = self.make_vector_type(bt, n);
             }
+
+            // C99 6.7.1: declaration specifiers may appear in any order, so a
+            // storage-class specifier, type qualifier, or function specifier
+            // may trail the type specifier (`INTN STATIC f (...)`,
+            // `int const x`). Consume any that follow the base type before the
+            // declarator; a following `*` or identifier ends the run.
+            loop {
+                if self.lex.tk == Token::Static {
+                    static_seen = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::Extern {
+                    extern_seen = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::ThreadLocal {
+                    thread_local = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
+                    self.pending_is_inline = true;
+                    if self.lex.tk == Token::ForceInline {
+                        self.pending_is_always_inline = true;
+                    }
+                    self.next()?;
+                } else if self.lex.tk == Token::Noreturn {
+                    self.pending_noreturn = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::TypeQual {
+                    qual_bits |= self.lex_volatile_bit();
+                    self.pending.base_is_const |= self.lex_is_const_qual();
+                    self.next()?;
+                } else if self.lex.tk == Token::Attribute
+                    || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+                {
+                    self.skip_attribute_specifiers()?;
+                } else {
+                    break;
+                }
+            }
             bt |= qual_bits;
 
             // A function-pointer typedef base type contributes its lineage

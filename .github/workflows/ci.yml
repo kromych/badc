@@ -1196,7 +1196,7 @@ jobs:
           - { os: windows-11-arm, label: windows-arm64 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    needs: ovmf
+    needs: [firmware-x64, firmware-arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -1256,25 +1256,41 @@ jobs:
           BADC_EDK2_BOOT_OPTIONAL: "1"
         run: python demos/edk2/smoke.py
 
-  ovmf:
-    # Build the QEMU virt UEFI firmware from a pinned edk2 release and publish
-    # it as an artifact downstream lanes boot through, instead of the
-    # apt-packaged firmware: x86_64 OVMF (booted by the qemu x86_64 kernel
-    # lane and the edk2 x64 app lane) and AArch64 ArmVirtQemu / AAVMF (booted
-    # by the edk2 aarch64 app lane). Both firmwares are then produced and
-    # exercised by this workflow end to end. The qemu aarch64 lane keeps its
-    # direct -kernel boot -- the aarch64 kernel needs no UEFI firmware, and
-    # the firmware's own boot is proven by the edk2 app lane instead.
-    name: ovmf (${{ matrix.platform }} firmware build)
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-24.04,     platform: ovmf,  artifact: ovmf-x64,
-              images: "OVMF_CODE.fd OVMF_VARS.fd" }
-          - { os: ubuntu-24.04-arm, platform: aavmf, artifact: aavmf-arm64,
-              images: "QEMU_EFI-pflash.raw QEMU_VARS-pflash.raw" }
-    runs-on: ${{ matrix.os }}
+  firmware-x64:
+    # Build x86_64 OVMF from a pinned edk2 release and publish it as an
+    # artifact; the qemu x86_64 kernel lane and the edk2 x64 app lane boot
+    # through it instead of the apt-packaged firmware. A separate job from the
+    # aarch64 firmware so an aarch64 build issue cannot skip the x86_64 lanes.
+    name: ovmf (x64 firmware build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: install edk2 build deps
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential uuid-dev iasl nasm python3-venv
+      - name: build OVMF X64
+        run: python demos/edk2/build_ovmf.py --platform ovmf --work "$RUNNER_TEMP/fw" --jobs 4
+      - name: publish OVMF firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovmf-x64
+          path: |
+            ${{ runner.temp }}/fw/fv/OVMF_CODE.fd
+            ${{ runner.temp }}/fw/fv/OVMF_VARS.fd
+          if-no-files-found: error
+
+  firmware-arm64:
+    # Build AArch64 ArmVirtQemu (AAVMF) from the same pinned edk2 release; the
+    # edk2 aarch64 app lane boots its UEFI application through it. Independent
+    # of the x64 firmware job.
+    name: ovmf (aavmf firmware build)
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -1282,7 +1298,6 @@ jobs:
         with:
           python-version: '3.x'
       - name: apt resilience (Linux arm64 runners)
-        if: runner.os == 'Linux' && runner.arch == 'ARM64'
         run: |
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
           if ! sudo apt-get update -y; then
@@ -1292,30 +1307,20 @@ jobs:
             sudo apt-get update -y
           fi
       - name: install edk2 build deps
-        run: |
-          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
-          sudo apt-get update -y
-          sudo apt-get install -y build-essential uuid-dev iasl nasm python3-venv
-      - name: build the firmware
-        run: >-
-          python demos/edk2/build_ovmf.py --platform ${{ matrix.platform }}
-          --work "$RUNNER_TEMP/fw" --jobs 4
-      - name: stage the published images
-        run: |
-          mkdir -p "$RUNNER_TEMP/pub"
-          for img in ${{ matrix.images }}; do
-            cp "$RUNNER_TEMP/fw/fv/$img" "$RUNNER_TEMP/pub/"
-          done
-          ls -la "$RUNNER_TEMP/pub"
-      - name: publish the firmware
+        run: sudo apt-get install -y build-essential uuid-dev iasl nasm python3-venv
+      - name: build AAVMF (ArmVirtQemu)
+        run: python demos/edk2/build_ovmf.py --platform aavmf --work "$RUNNER_TEMP/fw" --jobs 4
+      - name: publish AAVMF firmware
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ runner.temp }}/pub/*
+          name: aavmf-arm64
+          path: |
+            ${{ runner.temp }}/fw/fv/QEMU_EFI-pflash.raw
+            ${{ runner.temp }}/fw/fv/QEMU_VARS-pflash.raw
           if-no-files-found: error
 
   qemu:
-    needs: ovmf
+    needs: firmware-x64
     # Compile every translation unit that feeds qemu-system-<arch> (the emulator
     # objects + its utility library) with badc, archive the library with badc's
     # --ar, and link the emulator with badc's OWN linker over the 100%-badc

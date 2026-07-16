@@ -1240,7 +1240,39 @@ jobs:
           BADC_EDK2_BOOT_OPTIONAL: "1"
         run: python demos/edk2/smoke.py
 
+  ovmf:
+    # Build the x86_64 OVMF UEFI firmware from a pinned edk2 release, and
+    # publish OVMF_CODE.fd / OVMF_VARS.fd as an artifact the qemu x86_64
+    # lanes boot through -- instead of the apt-packaged `ovmf`. This makes
+    # the emulator boot the firmware this workflow produced end to end.
+    # X64 only: the qemu aarch64 lane boots -M virt with -kernel and needs
+    # no UEFI firmware.
+    name: ovmf (x64 firmware build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: install edk2 build deps
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential uuid-dev iasl nasm python3-venv
+      - name: build OVMF X64
+        run: python demos/edk2/build_ovmf.py --work "$RUNNER_TEMP/ovmf" --jobs 4
+      - name: publish OVMF firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovmf-x64
+          path: |
+            ${{ runner.temp }}/ovmf/fv/OVMF_CODE.fd
+            ${{ runner.temp }}/ovmf/fv/OVMF_VARS.fd
+          if-no-files-found: error
+
   qemu:
+    needs: ovmf
     # Compile every translation unit that feeds qemu-system-<arch> (the emulator
     # objects + its utility library) with badc, archive the library with badc's
     # --ar, and link the emulator with badc's OWN linker over the 100%-badc
@@ -1312,9 +1344,12 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y pkg-config libglib2.0-dev zlib1g-dev libfdt-dev gdb
-      - name: install OVMF (x86_64 UEFI boot)
+      - name: fetch the ovmf-lane firmware (x86_64 UEFI boot)
         if: matrix.label == 'ubuntu-x64'
-        run: sudo apt-get install -y ovmf
+        uses: actions/download-artifact@v4
+        with:
+          name: ovmf-x64
+          path: ${{ runner.temp }}/ovmf
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
       - name: qemu setup (fetch source + build config)
@@ -1334,6 +1369,10 @@ jobs:
           BADC_QEMU_BOOT: "gate"
           BADC_QEMU_OPT: ${{ matrix.optenv }}
           BADC_QEMU_BOOT_LOG: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
+          # x86_64 boots the firmware the ovmf lane built (the aarch64 lane
+          # uses -kernel and reads neither).
+          BADC_QEMU_OVMF_CODE: ${{ runner.temp }}/ovmf/OVMF_CODE.fd
+          BADC_QEMU_OVMF_VARS: ${{ runner.temp }}/ovmf/OVMF_VARS.fd
         run: python demos/qemu/smoke.py
       - name: publish boot log
         if: always()

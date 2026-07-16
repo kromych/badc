@@ -597,7 +597,13 @@ OVMF_SEARCH = ("/usr/share/OVMF", "/usr/share/edk2/ovmf",
 def _find_firmware(env: str, names: tuple[str, ...], dirs: tuple[str, ...]) -> Path | None:
     v = os.environ.get(env)
     if v:
-        return Path(v)
+        # An explicit override must resolve: a set-but-missing path means
+        # the producer (the ovmf CI lane) did not deliver its artifact, and
+        # silently falling back to a system image would mask that.
+        p = Path(v)
+        if not p.is_file():
+            fail(f"${env} points at `{v}`, which is not a readable file")
+        return p
     for d in dirs:
         for n in names:
             p = Path(d) / n

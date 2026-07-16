@@ -398,16 +398,19 @@ impl Compiler {
             let data_snap = self.data.len();
             self.next()?;
             // Only a one-dimensional character array (narrow string) or
-            // `wchar_t` array (wide string) takes a brace-wrapped
-            // string. A pointer array (`char *names[] = {"a", "b"}`) or
-            // a multi-dimensional char array (`char c[2][6] = {"a",
-            // "b"}`, one string per row) has a string as its first
-            // element and must stay a brace list.
+            // `wchar_t`-width array (wide string) takes a brace-wrapped
+            // string. A pointer array (`char *names[] = {"a", "b"}` or
+            // `CHAR16 *names[] = {L"a", L"b"}`) or a multi-dimensional char
+            // array (`char c[2][6] = {"a", "b"}`, one string per row) has a
+            // string as its first element and must stay a brace list. The
+            // wide case mirrors the char case: the element is a scalar of the
+            // wide-char width, not a pointer whose value happens to be a
+            // string literal.
             let is_char_array = (elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64;
-            if inner_dims.is_empty()
-                && self.lex.tk == '"'
-                && (self.lex.str_is_wide || is_char_array)
-            {
+            let is_wchar_array = self.lex.str_is_wide
+                && !is_pointer_ty(elem_ty)
+                && self.size_of_type(elem_ty) == self.lex.str_elem_bytes;
+            if inner_dims.is_empty() && self.lex.tk == '"' && (is_wchar_array || is_char_array) {
                 brace_wrapped = true;
             } else {
                 self.lex.restore(snap);

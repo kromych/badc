@@ -164,6 +164,15 @@ fn wide_string_struct_member() {
 }
 
 #[test]
+fn wide_string_pointer_array() {
+    // C99 6.7.8: `wchar_t *names[] = { L"a", L"b" }` is a brace list of
+    // pointer initializers, not a brace-wrapped string. The wide brace-wrap
+    // now requires a wchar_t-width scalar element, so a pointer array stays a
+    // brace list (the edk2 `CHAR16 *mDeviceTypeStr[]` form).
+    assert_eq!(run_fixture("wide_string_pointer_array.c"), 0);
+}
+
+#[test]
 fn compound_literal_pointer_field() {
     // C99 6.5.2.5: a pointer struct field taking the address of an
     // array-of-struct compound literal in a static initializer (a

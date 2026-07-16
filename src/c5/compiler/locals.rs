@@ -506,6 +506,15 @@ impl Compiler {
                         return Err(self.compile_err("array initializer must start with `{{`"));
                     }
                     let sid = struct_id_of(ty);
+                    // Elements below the outer (deferred) dimension: for a 2D
+                    // struct array `T xs[][M]` each top-level brace is a row of
+                    // `inner_dim` structs. 1 for a plain `T xs[]`.
+                    let inner_dim: i64 = self.symbols[loc_idx]
+                        .array_dims
+                        .get(1..)
+                        .map(|s| s.iter().product::<i64>())
+                        .unwrap_or(1)
+                        .max(1);
                     // C99 6.7.8p20 brace elision: with no per-element
                     // braces the flat value list fills consecutive struct
                     // elements, each consuming the struct's slot count.
@@ -523,8 +532,51 @@ impl Compiler {
                     self.align_data_to_8();
                     let off = self.data.len() as i64;
                     self.symbols[loc_idx].val = off;
-                    for _ in 0..(count * elem_size as i64) {
+                    for _ in 0..(count * inner_dim * elem_size as i64) {
                         self.data.push(0);
+                    }
+                    // 2D struct array: each top-level brace is a row of
+                    // `inner_dim` fully-braced structs; the 1D loop below would
+                    // misread a row as one struct.
+                    if inner_dim > 1 {
+                        let mut row: i64 = 0;
+                        while self.lex.tk != '}' {
+                            if self.lex.tk != '{' {
+                                return Err(self.compile_err(
+                                    "row of a 2D struct array must be brace-enclosed",
+                                ));
+                            }
+                            self.next()?; // row `{`
+                            let mut j: i64 = 0;
+                            while self.lex.tk != '}' {
+                                if j >= inner_dim {
+                                    return Err(self
+                                        .compile_err("too many initializers in struct-array row"));
+                                }
+                                let here = off + (row * inner_dim + j) * elem_size as i64;
+                                if self.lex.tk == '{' {
+                                    self.collect_struct_initializer(sid, here)?;
+                                } else {
+                                    self.fill_struct_fields(sid, here, false)?;
+                                }
+                                j += 1;
+                                self.accept(',')?;
+                            }
+                            self.next()?; // row `}`
+                            row += 1;
+                            self.accept(',')?;
+                        }
+                        self.next()?; // outer `}`
+                        self.symbols[loc_idx].array_size = count * inner_dim;
+                        if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
+                            && *first == 0
+                        {
+                            *first = count;
+                        }
+                        while !self.data.len().is_multiple_of(8) {
+                            self.data.push(0);
+                        }
+                        return Ok(());
                     }
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {

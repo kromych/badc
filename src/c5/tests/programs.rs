@@ -164,6 +164,15 @@ fn wide_string_struct_member() {
 }
 
 #[test]
+fn init_2d_struct_array() {
+    // A 2D array of structs with an inferred outer dimension
+    // (`struct T xs[][M] = { { {...}, ... }, ... }`, OpenSSL's OSSL_PARAM
+    // tables) descends the rows instead of misreading a row as one struct.
+    // Covers file-scope and static-local; 1D and fixed-size regress.
+    assert_eq!(run_fixture("init_2d_struct_array.c"), 0);
+}
+
+#[test]
 fn init_paren_conditional_arith() {
     // A parenthesized constant conditional followed by arithmetic
     // (`(cond ? a : b) * N`) in an aggregate initializer folds correctly

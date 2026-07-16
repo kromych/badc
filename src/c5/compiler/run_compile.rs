@@ -1731,6 +1731,16 @@ impl Compiler {
                                 );
                             }
                             let sid = struct_id_of(ty);
+                            // Elements below the outer (deferred) dimension:
+                            // for a 2D struct array `T xs[][M]` each top-level
+                            // brace is a row of `inner_dim` structs. 1 for a
+                            // plain `T xs[]`.
+                            let inner_dim: i64 = self.symbols[id_idx]
+                                .array_dims
+                                .get(1..)
+                                .map(|s| s.iter().product::<i64>())
+                                .unwrap_or(1)
+                                .max(1);
                             // C99 6.7.8p20 brace elision: when no element
                             // carries its own braces, the flat value list
                             // fills consecutive struct elements, each
@@ -1769,7 +1779,7 @@ impl Compiler {
                             // bytes: a deferred-size tentative (`T x[];`)
                             // reserves one element, so a larger initializer must
                             // allocate fresh rather than overrun later globals.
-                            let needed = count * elem_size as i64;
+                            let needed = count * inner_dim * elem_size as i64;
                             let off = if was_tentative_glo
                                 && needed <= self.symbols[id_idx].reserved_data_bytes
                             {
@@ -1784,6 +1794,65 @@ impl Compiler {
                                 fresh
                             };
                             self.symbols[id_idx].val = off;
+                            // 2D struct array `T xs[][M] = { { {...}, ... }, ...
+                            // }`: each top-level brace is a row of `inner_dim`
+                            // structs. The 1D loop below fills one struct per
+                            // top-level brace, so a row would be misread; walk
+                            // the rows here instead. (Fully-braced rows, which
+                            // is how nested aggregates are written.)
+                            if inner_dim > 1 {
+                                let mut row: i64 = 0;
+                                while self.lex.tk != '}' {
+                                    if self.lex.tk != '{' {
+                                        return Err(self.compile_err(
+                                            "row of a 2D struct array must be brace-enclosed",
+                                        ));
+                                    }
+                                    self.next()?; // row `{`
+                                    let mut j: i64 = 0;
+                                    while self.lex.tk != '}' {
+                                        if j >= inner_dim {
+                                            return Err(self.compile_err(
+                                                "too many initializers in struct-array row",
+                                            ));
+                                        }
+                                        let here = off + (row * inner_dim + j) * elem_size as i64;
+                                        self.skip_opt_compound_literal_cast()?;
+                                        let cl_parens = core::mem::take(
+                                            &mut self.pending.compound_lit_close_parens,
+                                        );
+                                        if self.lex.tk == '{' {
+                                            self.collect_struct_initializer(sid, here)?;
+                                        } else {
+                                            self.fill_struct_fields(sid, here, false)?;
+                                        }
+                                        for _ in 0..cl_parens {
+                                            self.accept(')')?;
+                                        }
+                                        j += 1;
+                                        self.accept(',')?;
+                                    }
+                                    self.next()?; // row `}`
+                                    row += 1;
+                                    self.accept(',')?;
+                                }
+                                self.next()?; // outer `}`
+                                let total = count * inner_dim;
+                                self.symbols[id_idx].array_size = total;
+                                self.symbols[id_idx].is_zero_len_array = total == 0;
+                                if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
+                                    && *first == 0
+                                {
+                                    *first = count;
+                                }
+                                while !self.data.len().is_multiple_of(8) {
+                                    self.data.push(0);
+                                }
+                                self.symbols[id_idx].has_initializer = true;
+                                self.symbols[id_idx].defined_here = true;
+                                self.accept(',')?;
+                                continue;
+                            }
                             let mut i: i64 = 0;
                             while self.lex.tk != '}' {
                                 // C99 6.7.8p7 array designator on a

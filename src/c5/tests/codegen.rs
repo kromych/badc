@@ -2629,3 +2629,28 @@ fn fxsave_fxrstor_inline_asm_x64() {
     assert!(has(0), "expected an `fxsave m` (0F AE /0) encoding");
     assert!(has(1), "expected an `fxrstor m` (0F AE /1) encoding");
 }
+
+#[test]
+fn movd_mmx_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reads/writes the MMX registers through
+    // `asm("movd %%mm0, %0")` / `asm("movd %0, %%mm3")`; the x86_64 emit
+    // lowers them to `movd r/m32, mm` (0F 7E /r) and `movd mm, r/m32`
+    // (0F 6E /r) with the mm index in ModRM.reg and no 0x66 prefix.
+    let program = super::compile_str_bare(
+        "typedef unsigned long long U64;\n\
+         U64 rd(void){ U64 d; __asm__ __volatile__(\"movd %%mm0, %0\":\"=r\"(d)); return d; }\n\
+         void wr(U64 v){ __asm__ __volatile__(\"movd %0, %%mm3\"::\"r\"(v)); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has = |op: u8| bytes.windows(2).any(|w| w[0] == 0x0F && w[1] == op);
+    assert!(has(0x7E), "expected a `movd r/m32, mm` (0F 7E) encoding");
+    assert!(has(0x6E), "expected a `movd mm, r/m32` (0F 6E) encoding");
+    // The XMM form (0x66 0F 6E/7E) must NOT be emitted for MMX movd.
+    let has_66 = bytes
+        .windows(3)
+        .any(|w| w[0] == 0x66 && w[1] == 0x0F && (w[2] == 0x6E || w[2] == 0x7E));
+    assert!(!has_66, "MMX movd must not carry the 0x66 (XMM) prefix");
+}

@@ -57,6 +57,9 @@ pub(crate) enum Mnemonic {
     Pushfq,
     /// Pop a 64-bit register, `pop reg`.
     Pop,
+    /// `movd` between an MMX register and a GPR / memory (no operand-size
+    /// prefix -- the 0x66-prefixed form is the XMM variant).
+    Movd,
 }
 
 /// One symbolic operand of a template instruction.
@@ -126,8 +129,21 @@ pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
     if let Some(i) = b.iter().position(|&r| r == n) {
         return Some((i as u8, Byte));
     }
+    // MMX registers mm0..mm7. Marked with register numbers 16..24 so they
+    // never collide with the 0..16 GPRs; only `movd` reads them, masking
+    // the mark back to the 0..8 ModRM.reg field.
+    if let Some(rest) = n.strip_prefix("mm")
+        && let Ok(i) = rest.parse::<u8>()
+        && i < 8
+    {
+        return Some((16 + i, Quad));
+    }
     None
 }
+
+/// The register number a `reg_by_name` result carries for `mm0`; MMX
+/// registers occupy `MMX_BASE..MMX_BASE+8`.
+const MMX_BASE: u8 = 16;
 
 /// Assign an x86 register number to each register operand of an
 /// extended-asm statement, per its constraint. Returns a vector
@@ -200,6 +216,7 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "pause" => Mnemonic::Pause,
         "pushfq" => Mnemonic::Pushfq,
         "pop" => Mnemonic::Pop,
+        "movd" => Mnemonic::Movd,
         _ => return None,
     })
 }
@@ -393,6 +410,34 @@ pub(crate) fn encode(
                 code.push(rex(false, false, false, true));
             }
             code.push(0x58 + (reg & 7));
+            Ok(())
+        }
+        Mnemonic::Movd => {
+            // One operand is an MMX register (marked reg MMX_BASE..+8), the
+            // other a GPR. `movd %%mm, %gp` stores the mm register to the
+            // GPR (0F 7E /r); `movd %gp, %%mm` loads it (0F 6E /r). The mm
+            // register is the ModRM.reg field, the GPR the r/m; no 66 prefix
+            // (that selects the XMM form), no REX.W (movd is 32-bit).
+            let [a, b] = two(ops)?;
+            let mmx = |c: &Concrete| matches!(c, Concrete::Reg { reg, .. } if (MMX_BASE..MMX_BASE + 8).contains(reg));
+            let (mm, gp, opcode) = if mmx(&a) {
+                (a, b, 0x7E)
+            } else if mmx(&b) {
+                (b, a, 0x6E)
+            } else {
+                return Err(String::from("inline asm: `movd` needs one MMX operand"));
+            };
+            let (Concrete::Reg { reg: mm_reg, .. }, Concrete::Reg { reg: gp_reg, .. }) = (mm, gp)
+            else {
+                return Err(String::from(
+                    "inline asm: `movd` operands must be registers",
+                ));
+            };
+            if gp_reg >= 8 {
+                code.push(rex(false, false, false, true)); // REX.B for the GPR r/m
+            }
+            code.extend_from_slice(&[0x0F, opcode]);
+            code.push(modrm_reg(mm_reg - MMX_BASE, gp_reg));
             Ok(())
         }
         Mnemonic::In | Mnemonic::Out => {

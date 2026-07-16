@@ -2096,6 +2096,16 @@ fn run_inline_asm(
             Mnemonic::Pop => {
                 // No modelled machine stack; leave the destination as-is.
             }
+            Mnemonic::Movd => {
+                // No modelled MMX register file. A read into a GPR (the AT&T
+                // destination is a GPR: reg < 16) yields zero; a write into an
+                // MMX register is a no-op.
+                if let Some(r) = dst_reg(&ops[1])
+                    && r < 16
+                {
+                    xregs[r] = 0;
+                }
+            }
             Mnemonic::Shld | Mnemonic::Shrd => {
                 let (count, _) = value_of(&ops[0], &xregs);
                 let (src, _) = value_of(&ops[1], &xregs);

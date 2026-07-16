@@ -4,6 +4,12 @@
 # convention (the tools_def AARCH64 flags carry it, not an ms_abi attribute).
 # The compat header is force-included FIRST so its va-builtin bridges exist
 # before edk2's -include AutoGen.h pulls in Base.h.
+# -U_WIN32 -U_WIN64: badc predefines these for the windows-arm64 target, but a
+# freestanding UEFI image is not a Windows-OS host. edk2's GCC5 X64 flags
+# already undefine them (mingw/MSVC define them); the AArch64 flags do not,
+# because a real aarch64 gcc never predefines them. Without this, OpenSSL's
+# async_local.h pulls in <windows.h>, whose GUID clashes with edk2's.
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec python3 "$here/badc_cc.py" --target=windows-arm64 --freestanding \
-  -D__STDC_NO_ATOMICS__ -include "$here/badc_efi_compat.h" "$@"
+  -U_WIN32 -U_WIN64 -D__STDC_NO_ATOMICS__ \
+  -include "$here/badc_efi_compat.h" "$@"

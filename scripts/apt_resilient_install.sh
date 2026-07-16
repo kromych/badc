@@ -5,7 +5,11 @@
 # usually transient over a couple of minutes and rarely hit both at once.
 # Usage: apt_resilient_install.sh <pkg> [pkg ...]
 set -e
-echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries >/dev/null
+# ForceIPv4: the runners' IPv6 route to the Ubuntu ports archive is often
+# dead ("Network is unreachable" on 2620: addresses), which otherwise burns
+# retry attempts on instant failures before the IPv4 path is even tried.
+printf 'Acquire::Retries "3";\nAcquire::ForceIPv4 "true";\n' \
+    | sudo tee /etc/apt/apt.conf.d/80-badc-retries >/dev/null
 
 DEFAULT='http://ports.ubuntu.com/ubuntu-ports'
 AZURE='http://azure.ports.ubuntu.com/ubuntu-ports'
@@ -26,7 +30,7 @@ while :; do
     if sudo apt-get install -y --fix-missing "$@"; then
         exit 0
     fi
-    if [ "$attempt" -ge 4 ]; then
+    if [ "$attempt" -ge 6 ]; then
         echo "apt install still failing after $attempt attempts" >&2
         exit 1
     fi

@@ -51,6 +51,26 @@ const INLINE_FIXPOINT_ITERS: usize = 8;
 /// expansion when a caller has many distinct multi-block call sites.
 const MAX_MULTI_BLOCK_SPLICE_STEPS: usize = 64;
 
+/// Instruction count past which a caller stops absorbing size-driven
+/// candidates. The per-callee body cap bounds each inlined fragment, but
+/// across the candidacy fixpoint many small fragments otherwise compound
+/// into a function that is large in both code and stack frame. Once a
+/// caller reaches this size only callees the source explicitly marked
+/// `inline` are still inlined into it (they bypass the body-size cap for
+/// the same reason). Mirrors gcc's large-function-growth limit.
+const CALLER_INST_BUDGET: usize = 2048;
+
+/// Local-slot count past which a *self-recursive* caller stops absorbing
+/// size-driven candidates. A recursive frame is paid once per recursion
+/// level, so inlining that inflates it multiplies stack use by the depth
+/// and can overflow a small (firmware / kernel) stack. The threshold is
+/// well above the frame a leaf helper contributes -- a recursion that
+/// only inlines a swap / partition-sized body stays small and is
+/// unaffected -- but far below the runaway growth an inline fixpoint can
+/// otherwise reach. Mirrors gcc's large-stack-frame limit. Each slot is
+/// 8 bytes, so this caps the inlined-frame growth at 256 bytes.
+const RECURSIVE_FRAME_SLOTS: i64 = 32;
+
 fn store_width(kind: StoreKind) -> i64 {
     match kind {
         StoreKind::I8 => 1,
@@ -1782,6 +1802,25 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             // the caller's ent_pc is the loop guard.
             let mut local = candidates.clone();
             local.remove(&caller.ent_pc);
+            // A self-recursive caller's frame is paid once per recursion
+            // level, so inlining that inflates it costs stack in proportion
+            // to the depth -- a per-callee body cap is not enough. Once such
+            // a caller's frame has grown past RECURSIVE_FRAME_SLOTS, keep
+            // only callees the source explicitly marked `inline`; a shallow
+            // recursion that only absorbs a leaf-sized helper stays under
+            // the threshold and is unaffected. A non-recursive caller is
+            // bounded by the cumulative code-growth budget instead, so small
+            // fragments cannot compound across the fixpoint into a function
+            // whose frame overflows a small stack.
+            let recursive = caller
+                .insts
+                .iter()
+                .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == caller.ent_pc));
+            if (recursive && caller.locals > RECURSIVE_FRAME_SLOTS)
+                || caller.insts.len() > CALLER_INST_BUDGET
+            {
+                local.retain(|_, c| c.is_inline);
+            }
             if local.is_empty() {
                 continue;
             }

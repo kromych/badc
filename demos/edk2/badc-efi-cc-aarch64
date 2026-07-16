@@ -1,0 +1,9 @@
+#!/bin/sh
+# edk2 CC wrapper: badc as the compiler for UEFI AArch64 (AAPCS64/PE-native).
+# Mirrors badc-efi-cc but targets windows-arm64; EFIAPI is the default AArch64
+# convention (the tools_def AARCH64 flags carry it, not an ms_abi attribute).
+# The compat header is force-included FIRST so its va-builtin bridges exist
+# before edk2's -include AutoGen.h pulls in Base.h.
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec python3 "$here/badc_cc.py" --target=windows-arm64 --freestanding \
+  -D__STDC_NO_ATOMICS__ -include "$here/badc_efi_compat.h" "$@"

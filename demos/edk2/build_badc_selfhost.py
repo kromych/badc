@@ -43,6 +43,7 @@ SUBMODULES = (
 # Platform -> (arch, DSC). A single -m module can be passed to stop early.
 PLATFORMS = {
     "ovmf": ("X64", "OvmfPkg/OvmfPkgX64.dsc"),
+    "aavmf": ("AARCH64", "ArmVirtPkg/ArmVirtQemu.dsc"),
 }
 
 
@@ -159,7 +160,8 @@ def main() -> int:
         run(["make", "-C", "BaseTools", f"-j{args.jobs}",
              f"EXTRA_OPTFLAGS={relax}"], cwd=src)
 
-    patch_fv_layout(src)
+    if arch == "X64":
+        patch_fv_layout(src)
 
     env = os.environ.copy()
     env["WORKSPACE"] = str(src)
@@ -167,6 +169,14 @@ def main() -> int:
     env["BADC"] = args.badc
     if os.environ.get("NASM_PREFIX"):
         env["NASM_PREFIX"] = os.environ["NASM_PREFIX"]
+    # The BADC tag clones GCC5's tool paths, so its cloned-but-unmodified tools
+    # (SLINK / ASM / DLINK -- still gcc) reference ENV(BADC_<arch>_PREFIX) rather
+    # than ENV(GCC5_<arch>_PREFIX). Mirror the cross-tool prefixes so those
+    # resolve to the right cross gcc (e.g. AARCH64's `.S` assembler).
+    for a in ("X64", "IA32", "ARM", "AARCH64"):
+        pfx = os.environ.get(f"GCC5_{a}_PREFIX")
+        if pfx is not None:
+            env[f"BADC_{a}_PREFIX"] = pfx
 
     # edksetup.sh regenerates Conf/tools_def.txt from the template; register
     # the BADC tag afterwards so it survives. The CC wrapper resolves its
@@ -174,11 +184,13 @@ def main() -> int:
     # executable, so ensure the execute bit is set even if a checkout / sync
     # dropped it.
     wrapper = HERE / "badc-efi-cc"
+    wrapper_aarch64 = HERE / "badc-efi-cc-aarch64"
     compat = HERE / "badc_efi_compat.h"
     os.chmod(wrapper, os.stat(wrapper).st_mode | 0o111)
+    os.chmod(wrapper_aarch64, os.stat(wrapper_aarch64).st_mode | 0o111)
     register = (
         f'python3 {HERE / "badc_toolchain.py"} '
-        f'Conf/tools_def.txt {wrapper} {compat}')
+        f'Conf/tools_def.txt {wrapper} {wrapper_aarch64} {compat}')
     module = f"-m {args.module}" if args.module else ""
     build = (
         f". ./edksetup.sh && {register} && "

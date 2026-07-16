@@ -235,6 +235,10 @@ demos/edk2/*
 !demos/edk2/AutoGenGlue.c
 !demos/edk2/MyApp.c
 !demos/edk2/MiniAutoGen.h
+!demos/edk2/build_ovmf.py
+!demos/edk2/badc_cc.py
+# The firmware build tree the scripts create stays ignored.
+demos/edk2/.ovmf-build/
 
 # qemu -- QEMU 11.0.2 system emulator. `setup.py` fetches the trimmed source and
 # the captured meson build config from the vendor-deps mirror into `.cache/`.

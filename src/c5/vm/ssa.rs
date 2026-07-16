@@ -2079,6 +2079,16 @@ fn run_inline_asm(
                     xregs[r] = sw;
                 }
             }
+            Mnemonic::In => {
+                // No I/O ports under the VM (port access is firmware, never
+                // a sandboxed fixture): a read yields zero in the accumulator.
+                if let Some(r) = dst_reg(&ops[0]) {
+                    xregs[r] = 0;
+                }
+            }
+            Mnemonic::Out => {
+                // Port write is a no-op: no hardware to receive it.
+            }
             Mnemonic::Shld | Mnemonic::Shrd => {
                 let (count, _) = value_of(&ops[0], &xregs);
                 let (src, _) = value_of(&ops[1], &xregs);

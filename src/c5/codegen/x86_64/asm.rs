@@ -12,9 +12,10 @@
 //!
 //! The mnemonic catalogue is deliberately small: the register-operand
 //! instructions C code reaches through extended asm (double-precision
-//! shifts, byte-swap, the timestamp-counter read sequence, and the
-//! shift / or used to assemble a 64-bit value). Adding an instruction
-//! is one arm in [`encode`] and one in the interpreter -- the standard
+//! shifts, byte-swap, the timestamp-counter read sequence, the shift /
+//! or used to assemble a 64-bit value, and the `in` / `out` port I/O a
+//! firmware hardware-access layer needs). Adding an instruction is one
+//! arm in [`encode`] and one in the interpreter -- the standard
 //! per-mnemonic assembler table, not per-call special casing.
 
 use alloc::format;
@@ -42,6 +43,12 @@ pub(crate) enum Mnemonic {
     Rdtscp,
     Rdtsc,
     Nop,
+    /// Port input `in al/ax/eax, dx` (variable-port form). The
+    /// accumulator and DX are implicit; the operands' `a`/`d`
+    /// constraints tie the values there.
+    In,
+    /// Port output `out dx, al/ax/eax` (variable-port form).
+    Out,
 }
 
 /// One symbolic operand of a template instruction.
@@ -179,6 +186,8 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "rdtscp" => Mnemonic::Rdtscp,
         "rdtsc" => Mnemonic::Rdtsc,
         "nop" => Mnemonic::Nop,
+        "in" => Mnemonic::In,
+        "out" => Mnemonic::Out,
         _ => return None,
     })
 }
@@ -345,6 +354,46 @@ pub(crate) fn encode(
         }
         Mnemonic::Rdtscp => {
             code.extend_from_slice(&[0x0F, 0x01, 0xF9]);
+            Ok(())
+        }
+        Mnemonic::In | Mnemonic::Out => {
+            // Variable-port form: `in accumulator, dx` / `out dx,
+            // accumulator`. Registers are implicit (AL/AX/EAX + DX),
+            // fixed by the operands' constraints, so only the operation
+            // width selects the opcode. Width comes from the AT&T suffix
+            // (inb/inw/inl), else the accumulator operand.
+            let acc = if matches!(mnemonic, Mnemonic::In) {
+                ops.first()
+            } else {
+                ops.get(1)
+            };
+            let size = suffix
+                .or(acc.and_then(|o| match o {
+                    Concrete::Reg { size, .. } => Some(*size),
+                    _ => None,
+                }))
+                .unwrap_or(AsmRegSize::Long);
+            if size == AsmRegSize::Word {
+                code.push(0x66);
+            }
+            let byte = size == AsmRegSize::Byte;
+            let opcode = match mnemonic {
+                Mnemonic::In => {
+                    if byte {
+                        0xEC
+                    } else {
+                        0xED
+                    }
+                }
+                _ => {
+                    if byte {
+                        0xEE
+                    } else {
+                        0xEF
+                    }
+                }
+            };
+            code.push(opcode);
             Ok(())
         }
         Mnemonic::Bswap => {
@@ -516,5 +565,49 @@ fn one_or_two(ops: &[Concrete]) -> Result<(Option<Concrete>, Concrete), String> 
         [dst] => Ok((None, *dst)),
         [count, dst] => Ok((Some(*count), *dst)),
         _ => Err(String::from("inline asm: shift needs one or two operands")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn enc(m: Mnemonic, suffix: Option<AsmRegSize>, ops: &[Concrete]) -> Vec<u8> {
+        let mut c = Vec::new();
+        encode(&mut c, m, suffix, ops).unwrap();
+        c
+    }
+
+    #[test]
+    fn port_io_variable_form() {
+        // `in`/`out` DX-port form: width from the AT&T suffix; word takes
+        // the 0x66 prefix. Registers are implicit (accumulator + DX).
+        assert_eq!(enc(Mnemonic::In, Some(AsmRegSize::Byte), &[]), [0xEC]);
+        assert_eq!(enc(Mnemonic::In, Some(AsmRegSize::Word), &[]), [0x66, 0xED]);
+        assert_eq!(enc(Mnemonic::In, Some(AsmRegSize::Long), &[]), [0xED]);
+        assert_eq!(enc(Mnemonic::Out, Some(AsmRegSize::Byte), &[]), [0xEE]);
+        assert_eq!(
+            enc(Mnemonic::Out, Some(AsmRegSize::Word), &[]),
+            [0x66, 0xEF]
+        );
+        assert_eq!(enc(Mnemonic::Out, Some(AsmRegSize::Long), &[]), [0xEF]);
+    }
+
+    #[test]
+    fn port_io_mnemonic_parse() {
+        // AT&T `inb`/`inw`/`inl`, `outb`/... split to (In/Out, size).
+        assert_eq!(
+            split_mnemonic("inb"),
+            Some((Mnemonic::In, Some(AsmRegSize::Byte)))
+        );
+        assert_eq!(
+            split_mnemonic("inl"),
+            Some((Mnemonic::In, Some(AsmRegSize::Long)))
+        );
+        assert_eq!(
+            split_mnemonic("outb"),
+            Some((Mnemonic::Out, Some(AsmRegSize::Byte)))
+        );
+        assert_eq!(split_mnemonic("in"), Some((Mnemonic::In, None)));
     }
 }

@@ -67,6 +67,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("atomic128_ldst.c", "linux-x64"), // aarch64 128-bit ldp/stp, ldxp/stxp
     ("divq_udiv_qrnnd.c", "linux-aarch64"), // x86-64 128/64 divq
     ("rdtsc_host_ticks.c", "linux-aarch64"), // x86-64 rdtsc
+    ("inline_asm_memory_operand.c", "linux-aarch64"), // x86-64 lock cmpxchg/xadd
 ];
 
 #[test]

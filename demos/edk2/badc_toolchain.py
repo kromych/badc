@@ -4,7 +4,8 @@ X64 CC to the badc cc-shim (LTO dropped, EFI compat header force-included).
 SLINK/DLINK/GenFw/NASM stay GCC5's tools -- badc is the compiler; the
 linker/image-gen stay standard for this rung."""
 import re, sys
-conf, shim = sys.argv[1], sys.argv[2]
+# argv: <tools_def.txt> <cc-shim-path> <compat-header-path>
+conf, shim, compat = sys.argv[1], sys.argv[2], sys.argv[3]
 lines = open(conf).read().splitlines()
 badc = []
 for ln in lines:
@@ -19,7 +20,7 @@ for ln in lines:
        re.search(r'DEFINE BADC_(X64|IA32_X64)_(CC|DLINK)_FLAGS\b', b):
         b = b.replace('-flto', '').replace('-DUSING_LTO', '')
     if re.search(r'_BADC_X64_CC_FLAGS\b', b) or re.search(r'DEFINE BADC_X64_CC_FLAGS\b', b):
-        b += ' -include /tmp/badc_efi_compat.h'
+        b += f' -include {compat}'
     badc.append(b)
 open(conf, 'a').write('\n\n' + '\n'.join(badc) + '\n')
 print(f'cloned {len(badc)} GCC5 lines as BADC')

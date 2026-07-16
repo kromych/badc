@@ -7031,6 +7031,50 @@ fn emit_intrinsic(
             code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
             true
         }
+        I::X86Sgdt
+        | I::X86Sidt
+        | I::X86Sldt
+        | I::X86Str
+        | I::X86Lgdt
+        | I::X86Lidt
+        | I::X86Lldt
+        | I::X86Clflush => {
+            // Single-memory-operand descriptor-table / clflush forms. The one
+            // argument is the operand address; force it into r10 so the ModRM
+            // needs no SIB / disp (same shape as the fxsave forms above). The
+            // secondary opcode and ModRM.reg field select the instruction:
+            //   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
+            //   sldt/str  = 0F 00 /0,/1 ; lldt = 0F 00 /2 ; clflush = 0F AE /7.
+            if args.len() != 1 {
+                bail_msg("descriptor-table intrinsic expects 1 arg");
+                return false;
+            }
+            let Some(place) = alloc.places.get(args[0] as usize).copied() else {
+                bail_msg("descriptor-table intrinsic: arg place missing");
+                return false;
+            };
+            let Some(addr) = materialize_int(code, place, SCRATCH_R10, frame) else {
+                bail_msg("descriptor-table intrinsic: arg not an int register");
+                return false;
+            };
+            if addr.0 != SCRATCH_R10.0 {
+                super::encode::emit_mov_rr(code, SCRATCH_R10, addr);
+            }
+            let (op2, reg_field): (u8, u8) = match intrinsic {
+                I::X86Sgdt => (0x01, 0),
+                I::X86Sidt => (0x01, 1),
+                I::X86Lgdt => (0x01, 2),
+                I::X86Lidt => (0x01, 3),
+                I::X86Sldt => (0x00, 0),
+                I::X86Str => (0x00, 1),
+                I::X86Lldt => (0x00, 2),
+                _ => (0xAE, 7), // clflush
+            };
+            code.push(0x41); // REX.B for r10
+            code.extend_from_slice(&[0x0F, op2]);
+            code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
+            true
+        }
         I::Cpuid | I::Xgetbv => {
             // cpuid (0F A2) reads eax (leaf) + ecx (subleaf) and writes
             // eax/ebx/ecx/edx; xgetbv (0F 01 D0) reads ecx and writes

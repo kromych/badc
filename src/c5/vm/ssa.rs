@@ -2040,7 +2040,10 @@ fn run_inline_asm(
     let value_of = |o: &AsmOpnd, xregs: &[i64; 16]| -> (i64, AsmRegSize) {
         match *o {
             AsmOpnd::Imm(v) => (v, AsmRegSize::Long),
-            AsmOpnd::Reg { reg, size } => (xregs[reg as usize], size),
+            // Only the 16 GPRs are modelled; MMX / control / debug / segment
+            // registers (marked with register numbers >= 16) read as zero.
+            AsmOpnd::Reg { reg, size } if (reg as usize) < 16 => (xregs[reg as usize], size),
+            AsmOpnd::Reg { size, .. } => (0, size),
             AsmOpnd::Ref { idx, size } => {
                 let sz = size.unwrap_or(AsmRegSize::from_width(asm.operands[idx as usize].width));
                 match op_reg[idx as usize] {
@@ -2053,7 +2056,9 @@ fn run_inline_asm(
     // The model register a destination operand writes into.
     let dst_reg = |o: &AsmOpnd| -> Option<usize> {
         match *o {
-            AsmOpnd::Reg { reg, .. } => Some(reg as usize),
+            // A write into an unmodelled register (MMX / control / debug /
+            // segment, marked >= 16) has no modelled slot: no-op.
+            AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
             AsmOpnd::Imm(_) => None,
         }
@@ -2105,6 +2110,22 @@ fn run_inline_asm(
                 {
                     xregs[r] = 0;
                 }
+            }
+            Mnemonic::Rdmsr | Mnemonic::Rdpmc => {
+                // No MSRs / performance counters under the VM: the eax:edx
+                // result reads as zero.
+                xregs[0] = 0;
+                xregs[2] = 0;
+            }
+            Mnemonic::Cli
+            | Mnemonic::Sti
+            | Mnemonic::Invd
+            | Mnemonic::Wbinvd
+            | Mnemonic::Wrmsr
+            | Mnemonic::Monitor
+            | Mnemonic::Mwait => {
+                // Interrupt-flag / cache / MSR-write / monitor-wait control:
+                // no observable effect on the VM's register model.
             }
             Mnemonic::Shld | Mnemonic::Shrd => {
                 let (count, _) = value_of(&ops[0], &xregs);
@@ -2396,6 +2417,26 @@ fn run_intrinsic(
         Intrinsic::X86FxSave | Intrinsic::X86FxRestore => {
             // No modelled x87/SSE register file to save or restore; the
             // interpreter evaluates floats with host doubles.
+            Ok(())
+        }
+        Intrinsic::X86Sgdt | Intrinsic::X86Sidt | Intrinsic::X86Sldt | Intrinsic::X86Str => {
+            // Store forms: no modelled descriptor tables. Zero the operand so
+            // a caller reads a defined result. sgdt/sidt write a 10-byte
+            // pseudo-descriptor (2-byte limit + 8-byte base); sldt/str write a
+            // 2-byte selector.
+            let addr = frame.regs[args[0] as usize] as usize;
+            let width = match intr {
+                Intrinsic::X86Sgdt | Intrinsic::X86Sidt => 10,
+                _ => 2,
+            };
+            for off in 0..width {
+                store_to_memory(mem, addr + off, 0, StoreKind::I8)?;
+            }
+            Ok(())
+        }
+        Intrinsic::X86Lgdt | Intrinsic::X86Lidt | Intrinsic::X86Lldt | Intrinsic::X86Clflush => {
+            // Load a descriptor-table register / flush a cache line: no
+            // observable effect on the interpreter's memory or register model.
             Ok(())
         }
         Intrinsic::Cpuid => {

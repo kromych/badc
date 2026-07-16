@@ -1050,22 +1050,55 @@ impl Compiler {
         let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
-        let tmpl_lc = core::str::from_utf8(&template)
-            .unwrap_or("")
-            .trim()
-            .trim_end_matches(';')
-            .trim()
-            .to_ascii_lowercase();
-        let x87_kind = match tmpl_lc.as_str() {
+        // Collapse interior whitespace runs to a single space so templates
+        // that differ only in spacing (`"sidt  %0"` vs `"sidt %0"`) match one
+        // canonical form.
+        let tmpl_lc: alloc::string::String = {
+            let raw = core::str::from_utf8(&template)
+                .unwrap_or("")
+                .trim()
+                .trim_end_matches(';')
+                .trim()
+                .to_ascii_lowercase();
+            let mut s = alloc::string::String::with_capacity(raw.len());
+            let mut prev_space = false;
+            for ch in raw.chars() {
+                if ch.is_ascii_whitespace() {
+                    if !prev_space {
+                        s.push(' ');
+                    }
+                    prev_space = true;
+                } else {
+                    s.push(ch);
+                    prev_space = false;
+                }
+            }
+            s
+        };
+        // Single-operand forms whose intrinsic takes the operand's *address*
+        // (memory / register-held destination or source object).
+        let by_addr_kind = match tmpl_lc.as_str() {
             "fnstcw %0" => Some(super::super::op::Intrinsic::X87StoreControlWord),
             "fldcw %0" => Some(super::super::op::Intrinsic::X87LoadControlWord),
             "fxsave %0" => Some(super::super::op::Intrinsic::X86FxSave),
             "fxrstor %0" => Some(super::super::op::Intrinsic::X86FxRestore),
+            "sgdt %0" => Some(super::super::op::Intrinsic::X86Sgdt),
+            "sidt %0" => Some(super::super::op::Intrinsic::X86Sidt),
+            "sldt %0" => Some(super::super::op::Intrinsic::X86Sldt),
+            "str %0" => Some(super::super::op::Intrinsic::X86Str),
+            "lgdt %0" => Some(super::super::op::Intrinsic::X86Lgdt),
+            "lidt %0" => Some(super::super::op::Intrinsic::X86Lidt),
+            "lldtw %0" => Some(super::super::op::Intrinsic::X86Lldt),
             _ => None,
         };
-        if let Some(kind) = x87_kind {
+        if let Some(kind) = by_addr_kind {
             self.data.truncate(tstart);
-            return self.parse_x87_control_word_asm(kind);
+            return self.parse_single_operand_asm(kind, true);
+        }
+        // `clflush (%0)`: the `"r"(ptr)` operand value is itself the address.
+        if tmpl_lc == "clflush (%0)" {
+            self.data.truncate(tstart);
+            return self.parse_single_operand_asm(super::super::op::Intrinsic::X86Clflush, false);
         }
         // `cpuid` / `xgetbv` carry register-constrained operands. The
         // template is just the mnemonic (the PIC `xchg`-wrapped form is
@@ -1440,33 +1473,38 @@ impl Compiler {
         None
     }
 
-    /// `asm("fnstcw %0":"=m"(cw))` / `asm("fldcw %0"::"m"(cw))` -- the two
-    /// x87 control-word forms floating-point code reaches for. Parse the
-    /// single memory operand, take its address, and emit the matching
-    /// intrinsic. The constraint text is ignored: both forms reach the
-    /// op as the operand's address.
-    fn parse_x87_control_word_asm(
+    /// The single-memory-operand asm forms (`fnstcw`/`fldcw`, `fxsave`,
+    /// `sgdt`/`sidt`/`lgdt`/`lidt`/`sldt`/`str`, `clflush`). Each parses one
+    /// `(operand)`; the intrinsic receives an address. When `by_address` is
+    /// set the operand is a memory / register-held object and the op takes its
+    /// address (the `m`/`=m`/`=r`/`=g` forms); otherwise the operand value is
+    /// itself the address (`clflush`'s `"r"(ptr)` with a `(%0)` reference).
+    /// Any constraint text is ignored.
+    fn parse_single_operand_asm(
         &mut self,
         kind: super::super::op::Intrinsic,
+        by_address: bool,
     ) -> Result<(), C5Error> {
         // Skip the colons and constraint strings up to the `(operand)`.
         while self.lex.tk != '(' as i64 && self.lex.tk != ')' as i64 {
             if self.lex.tk == ':' as i64 || self.lex.tk == ',' as i64 || self.lex.tk == '"' as i64 {
                 self.next()?;
             } else {
-                return Err(self.compile_err("unsupported x87 control-word asm operand"));
+                return Err(self.compile_err("unsupported single-operand asm operand"));
             }
         }
         if self.lex.tk != '(' as i64 {
-            return Err(self.compile_err("x87 control-word asm expects a memory operand"));
+            return Err(self.compile_err("single-operand asm expects one operand"));
         }
         self.next()?; // consume '('
         self.ast_psh();
         self.expr(Token::Assign as i64)?;
-        self.ty += Ty::Ptr as i64;
-        self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
+        if by_address {
+            self.ty += Ty::Ptr as i64;
+            self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
+        }
         let addr_id = self.ast_acc.take();
-        self.consume(b')', "`)` expected after x87 asm operand")?;
+        self.consume(b')', "`)` expected after asm operand")?;
         // Consume any remaining `: inputs : clobbers` up to the close.
         while self.lex.tk != ')' as i64 {
             self.next()?;
@@ -1474,7 +1512,7 @@ impl Compiler {
         self.next()?; // consume ')'
         self.consume(b';', "`;` expected after `asm(...)`")?;
         let Some(addr) = addr_id else {
-            return Err(self.compile_err("x87 control-word asm operand missing"));
+            return Err(self.compile_err("single-operand asm operand missing"));
         };
         self.mark_emit_other();
         self.ty = Ty::Int as i64;

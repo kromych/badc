@@ -3563,6 +3563,19 @@ fn emit_intrinsic(
             bail_msg("fxsave / fxrstor intrinsic is x86-only");
             false
         }
+        I::X86Sgdt
+        | I::X86Sidt
+        | I::X86Sldt
+        | I::X86Str
+        | I::X86Lgdt
+        | I::X86Lidt
+        | I::X86Lldt
+        | I::X86Clflush => {
+            // x86 descriptor-table / clflush forms; AArch64 has no equivalent
+            // and the source gates them on the target.
+            bail_msg("descriptor-table intrinsic is x86-only");
+            false
+        }
         I::Cpuid | I::Xgetbv => {
             // cpuid / xgetbv are x86-only; the source gates them on
             // MA_X86 / MA_X64, so AArch64 never reaches them.

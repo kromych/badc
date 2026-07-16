@@ -60,6 +60,20 @@ pub(crate) enum Mnemonic {
     /// `movd` between an MMX register and a GPR / memory (no operand-size
     /// prefix -- the 0x66-prefixed form is the XMM variant).
     Movd,
+    /// Privileged / model-specific operandless forms (operands, where any,
+    /// ride fixed registers via the statement's constraints). `cli` / `sti`
+    /// clear / set the interrupt flag; `invd` / `wbinvd` invalidate caches;
+    /// `rdmsr` / `wrmsr` / `rdpmc` access MSRs / performance counters;
+    /// `monitor` / `mwait` arm the monitor-wait pair.
+    Cli,
+    Sti,
+    Invd,
+    Wbinvd,
+    Rdmsr,
+    Wrmsr,
+    Rdpmc,
+    Monitor,
+    Mwait,
 }
 
 /// One symbolic operand of a template instruction.
@@ -138,12 +152,40 @@ pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
     {
         return Some((16 + i, Quad));
     }
+    // Control (cr0..cr15) and debug (dr0..dr7) registers, marked with the
+    // bases below so they never collide with the GPRs. Only `mov` reads /
+    // writes them, masking the mark back to the 0..16 ModRM.reg field. They
+    // are inherently 64-bit in long mode.
+    if let Some(rest) = n.strip_prefix("cr")
+        && let Ok(i) = rest.parse::<u8>()
+        && i < 16
+    {
+        return Some((CR_BASE + i, Quad));
+    }
+    if let Some(rest) = n.strip_prefix("dr")
+        && let Ok(i) = rest.parse::<u8>()
+        && i < 8
+    {
+        return Some((DR_BASE + i, Quad));
+    }
+    // Segment registers, marked with SEG_BASE + the architectural Sreg code
+    // (ES=0, CS=1, SS=2, DS=3, FS=4, GS=5) used as the ModRM.reg field of the
+    // `mov Sreg, r/m` (8C) / `mov r/m, Sreg` (8E) forms.
+    let seg = ["es", "cs", "ss", "ds", "fs", "gs"];
+    if let Some(i) = seg.iter().position(|&r| r == n) {
+        return Some((SEG_BASE + i as u8, Word));
+    }
     None
 }
 
 /// The register number a `reg_by_name` result carries for `mm0`; MMX
 /// registers occupy `MMX_BASE..MMX_BASE+8`.
 const MMX_BASE: u8 = 16;
+/// Control / debug / segment registers occupy the ranges below; each is
+/// marked so it never collides with the 0..16 GPRs or the MMX marks.
+const CR_BASE: u8 = 24;
+const DR_BASE: u8 = 40;
+const SEG_BASE: u8 = 48;
 
 /// Assign an x86 register number to each register operand of an
 /// extended-asm statement, per its constraint. Returns a vector
@@ -217,6 +259,15 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "pushfq" => Mnemonic::Pushfq,
         "pop" => Mnemonic::Pop,
         "movd" => Mnemonic::Movd,
+        "cli" => Mnemonic::Cli,
+        "sti" => Mnemonic::Sti,
+        "invd" => Mnemonic::Invd,
+        "wbinvd" => Mnemonic::Wbinvd,
+        "rdmsr" => Mnemonic::Rdmsr,
+        "wrmsr" => Mnemonic::Wrmsr,
+        "rdpmc" => Mnemonic::Rdpmc,
+        "monitor" => Mnemonic::Monitor,
+        "mwait" => Mnemonic::Mwait,
         _ => return None,
     })
 }
@@ -387,6 +438,42 @@ pub(crate) fn encode(
         }
         Mnemonic::Pause => {
             code.extend_from_slice(&[0xF3, 0x90]);
+            Ok(())
+        }
+        Mnemonic::Cli => {
+            code.push(0xFA);
+            Ok(())
+        }
+        Mnemonic::Sti => {
+            code.push(0xFB);
+            Ok(())
+        }
+        Mnemonic::Invd => {
+            code.extend_from_slice(&[0x0F, 0x08]);
+            Ok(())
+        }
+        Mnemonic::Wbinvd => {
+            code.extend_from_slice(&[0x0F, 0x09]);
+            Ok(())
+        }
+        Mnemonic::Rdmsr => {
+            code.extend_from_slice(&[0x0F, 0x32]);
+            Ok(())
+        }
+        Mnemonic::Wrmsr => {
+            code.extend_from_slice(&[0x0F, 0x30]);
+            Ok(())
+        }
+        Mnemonic::Rdpmc => {
+            code.extend_from_slice(&[0x0F, 0x33]);
+            Ok(())
+        }
+        Mnemonic::Monitor => {
+            code.extend_from_slice(&[0x0F, 0x01, 0xC8]);
+            Ok(())
+        }
+        Mnemonic::Mwait => {
+            code.extend_from_slice(&[0x0F, 0x01, 0xC9]);
             Ok(())
         }
         Mnemonic::Pushfq => {
@@ -569,6 +656,61 @@ pub(crate) fn encode(
         | Mnemonic::Mov => {
             // AT&T `op src, dst` -> Intel `op dst, src`.
             let [src, dst] = two(ops)?;
+            // Control / debug / segment register moves: exactly one operand is
+            // a special register (marked by its base), the other a GPR.
+            //   read  cr/dr/seg -> gpr : 0F 20 / 0F 21 / 8C
+            //   write gpr -> cr/dr/seg : 0F 22 / 0F 23 / 8E
+            if mnemonic == Mnemonic::Mov {
+                let class = |c: &Concrete| -> Option<(u8, u8)> {
+                    let Concrete::Reg { reg, .. } = c else {
+                        return None;
+                    };
+                    if (CR_BASE..CR_BASE + 16).contains(reg) {
+                        Some((reg - CR_BASE, b'c'))
+                    } else if (DR_BASE..DR_BASE + 8).contains(reg) {
+                        Some((reg - DR_BASE, b'd'))
+                    } else if (SEG_BASE..SEG_BASE + 6).contains(reg) {
+                        Some((reg - SEG_BASE, b's'))
+                    } else {
+                        None
+                    }
+                };
+                let special = match (class(&src), class(&dst)) {
+                    (Some(s), None) => Some((s.0, s.1, true)),
+                    (None, Some(d)) => Some((d.0, d.1, false)),
+                    (Some(_), Some(_)) => {
+                        return Err(String::from(
+                            "inline asm: mov between two special registers",
+                        ));
+                    }
+                    (None, None) => None,
+                };
+                if let Some((spec_idx, kind, spec_is_src)) = special {
+                    let (gp, gp_size) = as_reg(if spec_is_src { dst } else { src })?;
+                    if gp >= MMX_BASE {
+                        return Err(String::from(
+                            "inline asm: mov special-register GPR expected",
+                        ));
+                    }
+                    if kind == b's' {
+                        // 8C stores a segment selector to r/m, 8E loads one.
+                        prefix_rex(code, gp_size, spec_idx, gp);
+                        code.push(if spec_is_src { 0x8C } else { 0x8E });
+                    } else {
+                        // Control / debug moves are inherently 64-bit; REX.W is
+                        // unused. REX.R extends the special register (cr8+),
+                        // REX.B the GPR.
+                        let base: u8 = if kind == b'c' { 0x20 } else { 0x21 };
+                        if spec_idx >= 8 || gp >= 8 {
+                            code.push(rex(false, spec_idx >= 8, false, gp >= 8));
+                        }
+                        code.push(0x0F);
+                        code.push(if spec_is_src { base } else { base + 2 });
+                    }
+                    code.push(modrm_reg(spec_idx, gp));
+                    return Ok(());
+                }
+            }
             let (dst_reg, dsz) = as_reg(dst)?;
             let size = suffix.unwrap_or(dsz);
             match src {

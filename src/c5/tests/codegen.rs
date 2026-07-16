@@ -2654,3 +2654,132 @@ fn movd_mmx_inline_asm_x64() {
         .any(|w| w[0] == 0x66 && w[1] == 0x0F && (w[2] == 0x6E || w[2] == 0x7E));
     assert!(!has_66, "MMX movd must not carry the 0x66 (XMM) prefix");
 }
+
+#[test]
+fn operandless_privileged_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reaches the operandless privileged instructions through
+    // bare `asm("sti")` / `asm("cli")` / etc. The general x86_64 asm path
+    // encodes each from its mnemonic with no operands.
+    let program = super::compile_str_bare(
+        "void e_sti(void){ __asm__ __volatile__(\"sti\":::\"memory\"); }\n\
+         void e_cli(void){ __asm__ __volatile__(\"cli\":::\"memory\"); }\n\
+         void e_wbinvd(void){ __asm__ __volatile__(\"wbinvd\":::\"memory\"); }\n\
+         void e_invd(void){ __asm__ __volatile__(\"invd\":::\"memory\"); }\n\
+         unsigned long long e_rdmsr(unsigned int i){ unsigned int lo,hi;\
+           __asm__ __volatile__(\"rdmsr\":\"=a\"(lo),\"=d\"(hi):\"c\"(i));\
+           return ((unsigned long long)hi<<32)|lo; }\n\
+         void e_wrmsr(unsigned int i,unsigned int lo,unsigned int hi){\
+           __asm__ __volatile__(\"wrmsr\"::\"c\"(i),\"a\"(lo),\"d\"(hi)); }\n\
+         void e_monitor(void*p,unsigned int e,unsigned int h){\
+           __asm__ __volatile__(\"monitor\"::\"a\"(p),\"c\"(e),\"d\"(h)); }\n\
+         void e_mwait(unsigned int e,unsigned int h){\
+           __asm__ __volatile__(\"mwait\"::\"a\"(e),\"c\"(h)); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has1 = |op: u8| bytes.contains(&op);
+    let has2 = |a: u8, b: u8| bytes.windows(2).any(|w| w[0] == a && w[1] == b);
+    let has3 = |a: u8, b: u8, c: u8| {
+        bytes
+            .windows(3)
+            .any(|w| w[0] == a && w[1] == b && w[2] == c)
+    };
+    assert!(has1(0xFB), "expected `sti` (FB)");
+    assert!(has1(0xFA), "expected `cli` (FA)");
+    assert!(has2(0x0F, 0x09), "expected `wbinvd` (0F 09)");
+    assert!(has2(0x0F, 0x08), "expected `invd` (0F 08)");
+    assert!(has2(0x0F, 0x32), "expected `rdmsr` (0F 32)");
+    assert!(has2(0x0F, 0x30), "expected `wrmsr` (0F 30)");
+    assert!(has3(0x0F, 0x01, 0xC8), "expected `monitor` (0F 01 C8)");
+    assert!(has3(0x0F, 0x01, 0xC9), "expected `mwait` (0F 01 C9)");
+}
+
+#[test]
+fn descriptor_table_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reads/writes the descriptor-table registers and flushes
+    // cache lines through single-memory-operand asm. The x86_64 emit forces
+    // the operand address into r10 and selects the form by opcode + ModRM.reg:
+    //   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
+    //   sldt/str  = 0F 00 /0,/1 ; clflush   = 0F AE /7.
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned short limit; unsigned long base; } DESC;\n\
+         void sgdt(DESC*g){ __asm__ __volatile__(\"sgdt %0\":\"=m\"(*g)); }\n\
+         void lgdt(DESC*g){ __asm__ __volatile__(\"lgdt %0\"::\"m\"(*g)); }\n\
+         void sidt(DESC*g){ __asm__ __volatile__(\"sidt  %0\":\"=m\"(*g)); }\n\
+         void lidt(DESC*g){ __asm__ __volatile__(\"lidt %0\"::\"m\"(*g)); }\n\
+         unsigned short str_(void){ unsigned short d;\
+           __asm__ __volatile__(\"str  %0\":\"=r\"(d)); return d; }\n\
+         unsigned short sldt(void){ unsigned short d;\
+           __asm__ __volatile__(\"sldt  %0\":\"=g\"(d)); return d; }\n\
+         void lldt(unsigned short v){ __asm__ __volatile__(\"lldtw  %0\"::\"g\"(v)); }\n\
+         void* clflush(void*p){ __asm__ __volatile__(\"clflush (%0)\"::\"r\"(p):\"memory\");\
+           return p; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    // REX.B(0x41) 0F <op2> ModRM(reg=field, rm=010): a memory operand in r10.
+    let modrm = |field: u8| (field << 3) | 0x02;
+    let has = |op2: u8, field: u8| {
+        bytes
+            .windows(4)
+            .any(|w| w[0] == 0x41 && w[1] == 0x0F && w[2] == op2 && w[3] == modrm(field))
+    };
+    assert!(has(0x01, 0), "expected `sgdt m` (0F 01 /0)");
+    assert!(has(0x01, 2), "expected `lgdt m` (0F 01 /2)");
+    assert!(has(0x01, 1), "expected `sidt m` (0F 01 /1)");
+    assert!(has(0x01, 3), "expected `lidt m` (0F 01 /3)");
+    assert!(has(0x00, 1), "expected `str m` (0F 00 /1)");
+    assert!(has(0x00, 0), "expected `sldt m` (0F 00 /0)");
+    assert!(has(0x00, 2), "expected `lldt m` (0F 00 /2)");
+    assert!(has(0xAE, 7), "expected `clflush m` (0F AE /7)");
+}
+
+#[test]
+fn control_debug_segment_mov_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reads/writes the control (cr0..cr4) and debug (dr0..dr7)
+    // registers and reads the segment registers through `mov` with a special
+    // register named in the template. The x86_64 emit selects:
+    //   read  cr/dr -> gpr : 0F 20 / 0F 21 ; write gpr -> cr/dr : 0F 22 / 0F 23
+    //   read  seg   -> gpr : 8C.
+    let program = super::compile_str_bare(
+        "typedef unsigned long UN;\n\
+         UN rcr0(void){ UN d; __asm__ __volatile__(\"mov  %%cr0,%0\":\"=r\"(d)); return d; }\n\
+         UN rcr3(void){ UN d; __asm__ __volatile__(\"mov  %%cr3,  %0\":\"=r\"(d)); return d; }\n\
+         void wcr0(UN v){ __asm__ __volatile__(\"mov  %0, %%cr0\"::\"r\"(v)); }\n\
+         void wcr4(UN v){ __asm__ __volatile__(\"mov  %0, %%cr4\"::\"r\"(v)); }\n\
+         UN rdr0(void){ UN d; __asm__ __volatile__(\"mov  %%dr0, %0\":\"=r\"(d)); return d; }\n\
+         UN rdr7(void){ UN d; __asm__ __volatile__(\"mov  %%dr7, %0\":\"=r\"(d)); return d; }\n\
+         void wdr0(UN v){ __asm__ __volatile__(\"mov  %0, %%dr0\"::\"r\"(v)); }\n\
+         void wdr7(UN v){ __asm__ __volatile__(\"mov  %0, %%dr7\"::\"r\"(v)); }\n\
+         unsigned short rcs(void){ unsigned short d;\
+           __asm__ __volatile__(\"mov   %%cs, %0\":\"=a\"(d)); return d; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    // 0F <op2> ModRM(mod=11, reg=cr/dr index, rm=gpr). Match by opcode + the
+    // ModRM.reg field so a specific register index is asserted.
+    let has_special = |op2: u8, reg: u8| {
+        bytes
+            .windows(3)
+            .any(|w| w[0] == 0x0F && w[1] == op2 && w[2] >> 6 == 3 && (w[2] >> 3) & 7 == reg)
+    };
+    assert!(has_special(0x20, 0), "expected `mov cr0, r` (0F 20 reg=0)");
+    assert!(has_special(0x20, 3), "expected `mov cr3, r` (0F 20 reg=3)");
+    assert!(has_special(0x22, 0), "expected `mov r, cr0` (0F 22 reg=0)");
+    assert!(has_special(0x22, 4), "expected `mov r, cr4` (0F 22 reg=4)");
+    assert!(has_special(0x21, 0), "expected `mov dr0, r` (0F 21 reg=0)");
+    assert!(has_special(0x21, 7), "expected `mov dr7, r` (0F 21 reg=7)");
+    assert!(has_special(0x23, 0), "expected `mov r, dr0` (0F 23 reg=0)");
+    assert!(has_special(0x23, 7), "expected `mov r, dr7` (0F 23 reg=7)");
+    // Segment read: 8C /r with ModRM.reg = the Sreg code (cs = 1).
+    let has_seg = bytes
+        .windows(2)
+        .any(|w| w[0] == 0x8C && w[1] >> 6 == 3 && (w[1] >> 3) & 7 == 1);
+    assert!(has_seg, "expected `mov cs, r` (8C reg=1)");
+}

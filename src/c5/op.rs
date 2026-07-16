@@ -280,6 +280,22 @@ pub enum Intrinsic {
     /// the 512-byte memory operand. Codegen emits `fxrstor m` (0F AE /1,
     /// x86_64 only). A no-op in the interpreter.
     X86FxRestore = 72,
+    /// x86 descriptor-table / clflush forms, each with a single memory
+    /// operand (the op takes its address, like the x87 control-word forms).
+    /// `sgdt`/`sidt`/`sldt`/`str` store the GDTR/IDTR/LDTR/TR; `lgdt`/`lidt`
+    /// load the GDTR/IDTR; `clflush` flushes a cache line. All x86_64 only;
+    /// the interpreter stores zero (loads / flushes are no-ops).
+    X86Sgdt = 73,
+    X86Sidt = 74,
+    X86Sldt = 75,
+    X86Str = 76,
+    X86Lgdt = 77,
+    X86Lidt = 78,
+    X86Clflush = 79,
+    /// `asm("lldtw %0" : : "g"(Ldtr))` -- load the LDTR from the 16-bit
+    /// operand (0F 00 /2). The op takes the operand's address; the
+    /// interpreter treats it as a no-op (no modelled LDTR).
+    X86Lldt = 80,
 }
 
 impl Intrinsic {
@@ -357,6 +373,14 @@ impl Intrinsic {
             70 => Some(Intrinsic::Atomic128StoreInsert),
             71 => Some(Intrinsic::X86FxSave),
             72 => Some(Intrinsic::X86FxRestore),
+            73 => Some(Intrinsic::X86Sgdt),
+            74 => Some(Intrinsic::X86Sidt),
+            75 => Some(Intrinsic::X86Sldt),
+            76 => Some(Intrinsic::X86Str),
+            77 => Some(Intrinsic::X86Lgdt),
+            78 => Some(Intrinsic::X86Lidt),
+            79 => Some(Intrinsic::X86Clflush),
+            80 => Some(Intrinsic::X86Lldt),
             _ => None,
         }
     }

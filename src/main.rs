@@ -1619,7 +1619,14 @@ fn run() {
                     Ok(b) => b,
                     Err(()) => return (log, Err(())),
                 };
-                let out = std::path::Path::new(src).with_extension("o");
+                // `-c` without `-o` names the object after the source in
+                // the current directory, as the other C compilers do; a
+                // makefile links `foo.o` from wherever it ran the compile.
+                let out = std::path::Path::new(src)
+                    .with_extension("o")
+                    .file_name()
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|| std::path::Path::new(src).with_extension("o"));
                 match std::fs::write(&out, &bytes) {
                     Ok(()) => {
                         if !cfg.quiet {

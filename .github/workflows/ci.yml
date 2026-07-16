@@ -1297,17 +1297,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - name: apt resilience (Linux arm64 runners)
+      - name: install edk2 build deps (mirror-resilient)
+        # ports.ubuntu.com (the default arm64 archive) has recurring outages
+        # that fail the fetch even after a good `update`. Try the install; on
+        # failure rotate to the Azure mirror, refresh, and retry.
         run: |
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
-          if ! sudo apt-get update -y; then
+          pkgs="build-essential uuid-dev iasl nasm python3-venv"
+          sudo apt-get update -y || true
+          if ! sudo apt-get install -y $pkgs; then
             sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
               /etc/apt/sources.list /etc/apt/apt-mirrors.txt \
               $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
             sudo apt-get update -y
+            sudo apt-get install -y --fix-missing $pkgs
           fi
-      - name: install edk2 build deps
-        run: sudo apt-get install -y build-essential uuid-dev iasl nasm python3-venv
       - name: build AAVMF (ArmVirtQemu)
         run: python demos/edk2/build_ovmf.py --platform aavmf --work "$RUNNER_TEMP/fw" --jobs 4
       - name: publish AAVMF firmware

@@ -21,15 +21,17 @@ typedef void *__builtin_ms_va_list;
 typedef void *__builtin_va_list;
 
 /* Declare badc's variadic intrinsics -- normally advertised by badc's own
-   <stdarg.h>, which this header no longer pulls in. badc's __builtin_va_arg
-   takes the ADDRESS of the va_list storage and returns the address of the
-   next argument slot; the caller dereferences it (badc <stdarg.h> contract).
-   edk2's Base.h VA_ARG instead expands to `(TYPE)(__builtin_va_arg (Marker,
-   TYPE))`: it passes the VA_LIST by name and does not dereference. Bridge the
-   two with a function-like macro named after the intrinsic -- it rewrites each
-   use to `*(TYPE *)__builtin_va_arg(&Marker, TYPE)`. The macro name is not
-   re-expanded inside its own body (C99 6.10.3.4), so the inner reference
-   reaches the intrinsic. */
+   <stdarg.h>, which this header no longer pulls in. Each takes the ADDRESS of
+   the va_list storage; __builtin_va_arg returns the address of the next
+   argument slot and the caller dereferences it (badc <stdarg.h> contract).
+   edk2's Base.h uses these builtins BY NAME: the x64 MS-ABI path through
+   __builtin_ms_va_start + __builtin_va_arg(Marker, TYPE), the AArch64 GCC path
+   through __builtin_va_start / _arg / _end / _copy (Marker, ...) directly --
+   passing the VA_LIST rather than its address (and VA_ARG without a
+   dereference). Bridge each with a function-like macro named after the
+   intrinsic: it rewrites the use to pass &Marker (and, for VA_ARG, to
+   dereference). A macro name is not re-expanded inside its own body
+   (C99 6.10.3.4), so the inner reference reaches the intrinsic. */
 #pragma intrinsic("__builtin_va_start")
 #pragma intrinsic("__builtin_va_arg")
 #pragma intrinsic("__builtin_va_end")
@@ -39,14 +41,15 @@ void *__builtin_va_arg(void **ap, ...);
 void  __builtin_va_end(void **ap);
 void  __builtin_va_copy(void **dst, void **src);
 
-#define __builtin_va_arg(Marker, TYPE)  (*(TYPE *)__builtin_va_arg(&(Marker), TYPE))
+#define __builtin_va_start(Marker, Parameter)  __builtin_va_start(&(Marker), (void *)&(Parameter))
+#define __builtin_va_arg(Marker, TYPE)         (*(TYPE *)__builtin_va_arg(&(Marker), TYPE))
+#define __builtin_va_end(Marker)               __builtin_va_end(&(Marker))
+#define __builtin_va_copy(Dest, Start)         __builtin_va_copy(&(Dest), &(Start))
 
-/* The ms-variant builtins edk2's Base.h uses for VA_START / VA_END / VA_COPY.
-   badc's intrinsics take the address of the va_list storage (the windows
-   cursor form). VA_ARG defers to the bridged __builtin_va_arg above. */
-#define __builtin_ms_va_start(ap, last) __builtin_va_start(&(ap), (void *)&(last))
-#define __builtin_ms_va_arg(ap, t)      __builtin_va_arg(ap, t)
-#define __builtin_ms_va_end(ap)         __builtin_va_end(&(ap))
-#define __builtin_ms_va_copy(d, s)      __builtin_va_copy(&(d), &(s))
+/* The ms-variants (x64 Base.h path) defer to the bridged builtins above. */
+#define __builtin_ms_va_start(ap, last)  __builtin_va_start(ap, last)
+#define __builtin_ms_va_arg(ap, t)       __builtin_va_arg(ap, t)
+#define __builtin_ms_va_end(ap)          __builtin_va_end(ap)
+#define __builtin_ms_va_copy(d, s)       __builtin_va_copy(d, s)
 
 #endif /* BADC_EFI_COMPAT_H */

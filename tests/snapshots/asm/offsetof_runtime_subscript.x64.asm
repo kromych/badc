@@ -39,6 +39,17 @@ Disassembly of section .text:
                	cmpq	$0x4, %rcx
                	jl	<addr>
                	xorq	%rax, %rax
+               	jmp	<addr>
+               	leaq	0x88(%rcx), %rdx
+               	cmpq	%rdx, %rdx
+               	jne	<addr>
+               	leaq	0x1(%rcx), %rax
+               	movslq	%eax, %rcx
+               	cmpq	$0x5, %rcx
+               	jl	<addr>
+               	xorq	%rax, %rax
+               	retq
+               	movl	$0x7, %eax
                	retq
                	movl	$0x3, %eax
                	retq
@@ -46,6 +57,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	retq
+               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)

@@ -12,6 +12,10 @@ struct S {
     char  tag[16];
     long  v[8];
     short m[4][6];
+    /* A zero-length trailing array records no dimension; offsetof still
+       subscripts it, striding by the element size (edk2's UDF descriptor
+       ends in `UINT8 Data[0]`). */
+    char  data[0];
 };
 
 #define OF(member) __builtin_offsetof(struct S, member)
@@ -34,5 +38,13 @@ int main(void) {
         return 4;
     if (OF(v[2]) != OF(v) + 2 * sizeof(long))
         return 5;
+    /* Zero-length trailing array: subscripting strides by the element size,
+       and `data[0]` is the array's own offset. */
+    if (OF(data[0]) != OF(data))
+        return 6;
+    for (int i = 0; i < 5; i++) {
+        if (OF(data[i]) != OF(data) + (unsigned long)i)
+            return 7;
+    }
     return 0;
 }

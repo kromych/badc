@@ -4331,14 +4331,16 @@ impl Compiler {
                 cur_dims = field_dims(&f);
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
-                if cur_dims.is_empty() {
-                    return Err(
-                        self.compile_err("`[...]` in `__builtin_offsetof` on a non-array member")
-                    );
-                }
                 // Row stride: the product of the dimensions below this one
-                // times the element size.
-                let inner: i64 = cur_dims[1..].iter().product::<i64>().max(1);
+                // times the element size. A flexible / zero-length trailing
+                // array (`UINT8 Data[0]`, which edk2 subscripts as `Data[i]`
+                // in offsetof) records no dimension, but its element is the
+                // field type, so the stride is that element's size.
+                let inner: i64 = if cur_dims.is_empty() {
+                    1
+                } else {
+                    cur_dims[1..].iter().product::<i64>().max(1)
+                };
                 let stride = inner * self.size_of_type(cur_ty) as i64;
                 match self.try_parse_constant_dim()? {
                     Some(idx) => offset += idx * stride,
@@ -4361,7 +4363,9 @@ impl Compiler {
                     }
                 }
                 self.consume(b']', "`]` expected after `__builtin_offsetof` subscript")?;
-                cur_dims.remove(0);
+                if !cur_dims.is_empty() {
+                    cur_dims.remove(0);
+                }
             } else {
                 break;
             }

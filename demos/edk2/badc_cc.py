@@ -16,10 +16,30 @@ import subprocess
 import sys
 
 
+def expand_response_files(argv: list[str]) -> list[str]:
+    """Expand gcc `@file` response-file arguments in place. edk2 switches to
+    a response file once a compile command line grows long (the OpenSSL
+    sources carry a large `-I` / `-D` set), passing `$(CC) @cc_resp.txt`.
+    Tokens are shell-quoted (`shlex`), so a flag like `"-DEFIAPI=..."` stays
+    one argument. Recurse so a nested `@file` expands too; an unreadable
+    `@file` is left as a literal argument, matching gcc."""
+    out: list[str] = []
+    for a in argv:
+        if a.startswith("@"):
+            try:
+                with open(a[1:]) as f:
+                    out.extend(expand_response_files(shlex.split(f.read())))
+                continue
+            except OSError:
+                pass
+        out.append(a)
+    return out
+
+
 def main() -> int:
     badc = os.environ.get("BADC", "badc")
     out: list[str] = ["--gnu"]
-    args = sys.argv[1:]
+    args = expand_response_files(sys.argv[1:])
     i = 0
     while i < len(args):
         a = args[i]

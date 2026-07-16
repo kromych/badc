@@ -1,0 +1,6 @@
+#!/bin/sh
+# edk2 CC wrapper: badc as the compiler for UEFI x64 (MS-ABI/PE-native).
+# The compat header is force-included FIRST so its va-builtin aliases exist
+# before edk2's -include AutoGen.h pulls in Base.h.
+exec python3 /tmp/badc_cc.py --target=windows-x64 --freestanding \
+  -include /tmp/badc_efi_compat.h "$@"

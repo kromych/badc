@@ -23,8 +23,11 @@ def main() -> int:
     i = 0
     while i < len(args):
         a = args[i]
-        if a in ("-MD", "-nostdlib", "-pipe", "-s"):
+        if a in ("-MD", "-MMD", "-MP", "-nostdlib", "-pipe", "-s"):
             pass
+        elif a in ("-MF", "-MT", "-MQ"):
+            # gcc dependency-file flags: drop the flag and its argument.
+            i += 1
         elif a.startswith(("-W", "-f", "-m", "-std")):
             pass
         elif a == "-Os" or (a.startswith("-O") and len(a) <= 3):

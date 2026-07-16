@@ -2123,9 +2123,51 @@ fn run_inline_asm(
             | Mnemonic::Wbinvd
             | Mnemonic::Wrmsr
             | Mnemonic::Monitor
-            | Mnemonic::Mwait => {
-                // Interrupt-flag / cache / MSR-write / monitor-wait control:
-                // no observable effect on the VM's register model.
+            | Mnemonic::Mwait
+            | Mnemonic::Hlt
+            | Mnemonic::Lock => {
+                // Interrupt-flag / cache / MSR-write / monitor-wait / halt
+                // control and the lock prefix: no observable effect on the
+                // VM's register model.
+            }
+            Mnemonic::Inc | Mnemonic::Dec => {
+                let (v, sz) = value_of(&ops[0], &xregs);
+                let w = insn.suffix.unwrap_or(sz);
+                let res = if insn.mnemonic == Mnemonic::Inc {
+                    v.wrapping_add(1)
+                } else {
+                    v.wrapping_sub(1)
+                };
+                if let Some(r) = dst_reg(&ops[0]) {
+                    xregs[r] = mask_width(res, w);
+                }
+            }
+            Mnemonic::Xadd => {
+                // `xadd src, dst`: dst gets dst+src, src gets the old dst.
+                let (src, ssz) = value_of(&ops[0], &xregs);
+                let (dst, dsz) = value_of(&ops[1], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let sum = mask_width(dst.wrapping_add(src), w);
+                if let Some(r) = dst_reg(&ops[1]) {
+                    xregs[r] = sum;
+                }
+                if let Some(r) = dst_reg(&ops[0]) {
+                    xregs[r] = mask_width(dst, insn.suffix.unwrap_or(ssz));
+                }
+            }
+            Mnemonic::Cmpxchg => {
+                // `cmpxchg src, dst`: if the accumulator equals dst, dst gets
+                // src; otherwise the accumulator gets dst.
+                let (src, _) = value_of(&ops[0], &xregs);
+                let (dst, dsz) = value_of(&ops[1], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                if mask_width(xregs[0], w) == mask_width(dst, w) {
+                    if let Some(r) = dst_reg(&ops[1]) {
+                        xregs[r] = mask_width(src, w);
+                    }
+                } else {
+                    xregs[0] = mask_width(dst, w);
+                }
             }
             Mnemonic::Shld | Mnemonic::Shrd => {
                 let (count, _) = value_of(&ops[0], &xregs);

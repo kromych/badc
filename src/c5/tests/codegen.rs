@@ -2783,3 +2783,46 @@ fn control_debug_segment_mov_inline_asm_x64() {
         .any(|w| w[0] == 0x8C && w[1] >> 6 == 3 && (w[1] >> 3) & 7 == 1);
     assert!(has_seg, "expected `mov cs, r` (8C reg=1)");
 }
+
+#[test]
+fn interlocked_and_halt_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseSynchronizationLib / BaseCpuLib reach the atomic primitives
+    // and the halt through `lock`-prefixed multi-line asm blocks. The general
+    // asm path encodes each line: lock = F0, xadd = 0F C1, cmpxchg = 0F B1,
+    // inc/dec = FF /0,/1, hlt = F4.
+    let program = super::compile_str_bare(
+        "typedef unsigned int U32;\n\
+         void sleep(void){ __asm__ __volatile__(\"hlt\":::\"memory\"); }\n\
+         U32 inc(U32 *v){ U32 r; __asm__ __volatile__(\
+           \"movl $1, %%eax \\n\\t\" \"lock \\n\\t\" \"xadd %%eax, %1 \\n\\t\" \"inc %%eax \\n\\t\"\
+           : \"=&a\"(r), \"+m\"(*v) : : \"memory\",\"cc\"); return r; }\n\
+         U32 dec(U32 *v){ U32 r; __asm__ __volatile__(\
+           \"movl $-1, %%eax \\n\\t\" \"lock \\n\\t\" \"xadd %%eax, %1 \\n\\t\" \"dec %%eax \\n\\t\"\
+           : \"=&a\"(r), \"+m\"(*v) : : \"memory\",\"cc\"); return r; }\n\
+         U32 cx(U32 *v,U32 c,U32 x){ U32 r; __asm__ __volatile__(\
+           \"lock \\n\\t\" \"cmpxchgl %2, %1 \\n\\t\"\
+           : \"=a\"(r),\"+m\"(*v) : \"q\"(x),\"0\"(c) : \"memory\",\"cc\"); return r; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    assert!(bytes.contains(&0xF4), "expected `hlt` (F4)");
+    assert!(bytes.contains(&0xF0), "expected the `lock` prefix (F0)");
+    // xadd r/m32, r: 0F C1 with ModRM.mod = 11 (register form).
+    let has2m = |a: u8, b: u8| {
+        bytes
+            .windows(3)
+            .any(|w| w[0] == a && w[1] == b && w[2] >> 6 == 3)
+    };
+    assert!(has2m(0x0F, 0xC1), "expected `xadd r, r/m` (0F C1)");
+    assert!(has2m(0x0F, 0xB1), "expected `cmpxchg r, r/m` (0F B1)");
+    // inc/dec r/m32: FF /0 and FF /1, register form.
+    let has_ff = |field: u8| {
+        bytes
+            .windows(2)
+            .any(|w| w[0] == 0xFF && w[1] >> 6 == 3 && (w[1] >> 3) & 7 == field)
+    };
+    assert!(has_ff(0), "expected `inc r/m` (FF /0)");
+    assert!(has_ff(1), "expected `dec r/m` (FF /1)");
+}

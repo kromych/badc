@@ -74,6 +74,21 @@ pub(crate) enum Mnemonic {
     Rdpmc,
     Monitor,
     Mwait,
+    /// Halt, `hlt`.
+    Hlt,
+    /// `lock` prefix on its own template line; emits 0xF0 so the following
+    /// instruction (in a multi-line block) becomes its locked form.
+    Lock,
+    /// `xadd r, r/m` (0F C0/C1): exchange-and-add, the atomic primitive of
+    /// the interlocked increment / decrement.
+    Xadd,
+    /// `cmpxchg r, r/m` (0F B0/B1): compare-and-exchange against the
+    /// accumulator, the atomic primitive of interlocked compare-exchange.
+    Cmpxchg,
+    /// `inc r/m` / `dec r/m` (FF /0, /1). The single-byte 0x40+r forms are
+    /// REX prefixes in 64-bit mode, so the ModRM forms are always used.
+    Inc,
+    Dec,
 }
 
 /// One symbolic operand of a template instruction.
@@ -268,6 +283,12 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "rdpmc" => Mnemonic::Rdpmc,
         "monitor" => Mnemonic::Monitor,
         "mwait" => Mnemonic::Mwait,
+        "hlt" => Mnemonic::Hlt,
+        "lock" => Mnemonic::Lock,
+        "xadd" => Mnemonic::Xadd,
+        "cmpxchg" => Mnemonic::Cmpxchg,
+        "inc" => Mnemonic::Inc,
+        "dec" => Mnemonic::Dec,
         _ => return None,
     })
 }
@@ -474,6 +495,45 @@ pub(crate) fn encode(
         }
         Mnemonic::Mwait => {
             code.extend_from_slice(&[0x0F, 0x01, 0xC9]);
+            Ok(())
+        }
+        Mnemonic::Hlt => {
+            code.push(0xF4);
+            Ok(())
+        }
+        Mnemonic::Lock => {
+            // Prefix byte; the following template line encodes the locked op.
+            code.push(0xF0);
+            Ok(())
+        }
+        Mnemonic::Inc | Mnemonic::Dec => {
+            // `inc/dec r/m` = FF /0 (inc), FF /1 (dec). One r/m operand.
+            let (reg, size) = reg_operand(ops.first(), suffix)?;
+            let ext: u8 = if mnemonic == Mnemonic::Inc { 0 } else { 1 };
+            prefix_rex(code, size, ext, reg);
+            code.push(if size == AsmRegSize::Byte { 0xFE } else { 0xFF });
+            code.push(modrm_reg(ext, reg));
+            Ok(())
+        }
+        Mnemonic::Xadd | Mnemonic::Cmpxchg => {
+            // AT&T `xadd/cmpxchg src, dst`: source register in ModRM.reg,
+            // destination r/m. xadd = 0F C0/C1, cmpxchg = 0F B0/B1 (the /C0
+            // /B0 byte forms, /C1 /B1 otherwise).
+            let [src, dst] = two(ops)?;
+            let (src_reg, ssz) = as_reg(src)?;
+            let (dst_reg, _) = as_reg(dst)?;
+            let size = suffix.unwrap_or(ssz);
+            let byte = size == AsmRegSize::Byte;
+            let op: u8 = match (mnemonic, byte) {
+                (Mnemonic::Xadd, true) => 0xC0,
+                (Mnemonic::Xadd, false) => 0xC1,
+                (_, true) => 0xB0,
+                (_, false) => 0xB1,
+            };
+            prefix_rex(code, size, src_reg, dst_reg);
+            code.push(0x0F);
+            code.push(op);
+            code.push(modrm_reg(src_reg, dst_reg));
             Ok(())
         }
         Mnemonic::Pushfq => {

@@ -1196,6 +1196,7 @@ jobs:
           - { os: windows-11-arm, label: windows-arm64 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    needs: ovmf
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -1220,55 +1221,97 @@ jobs:
               $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
             sudo apt-get update -y
           fi
-      - name: install QEMU + OVMF/AAVMF firmware (Linux only)
+      - name: install QEMU (Linux only; firmware comes from the ovmf lane)
         if: matrix.qemu
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y qemu-system-x86 qemu-system-arm ovmf qemu-efi-aarch64
+          sudo apt-get install -y qemu-system-x86 qemu-system-arm
+      - name: fetch the ovmf-lane firmware (x86_64 UEFI app boot)
+        if: matrix.label == 'ubuntu-x64'
+        uses: actions/download-artifact@v4
+        with:
+          name: ovmf-x64
+          path: ${{ runner.temp }}/ovmf
+      - name: fetch the ovmf-lane firmware (aarch64 UEFI app boot)
+        if: matrix.label == 'ubuntu-arm64'
+        uses: actions/download-artifact@v4
+        with:
+          name: aavmf-arm64
+          path: ${{ runner.temp }}/aavmf
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
       - name: edk2 setup (fetch the MdePkg subset)
         run: python demos/edk2/setup.py
       - name: edk2 smoke (build the UEFI app for X64 + AArch64; boot where QEMU is present)
+        # The UEFI app boots under the firmware this workflow's ovmf lane built
+        # (OVMF on x64, ArmVirtQemu/AAVMF on aarch64) -- the app writes through
+        # the firmware ConOut, so a correct boot proves the built firmware runs
+        # a real UEFI payload to serial. The build is the hard gate; the boot is
+        # best-effort until observed green, then gated.
         env:
-          OVMF_CODE: /usr/share/OVMF/OVMF_CODE.fd
-          OVMF_VARS: /usr/share/OVMF/OVMF_VARS.fd
-          AAVMF_CODE: /usr/share/AAVMF/AAVMF_CODE.fd
-          AAVMF_VARS: /usr/share/AAVMF/AAVMF_VARS.fd
-          # The build is the hard gate; the OVMF boot is best-effort until the
-          # runner firmware paths + QEMU stability are confirmed.
+          OVMF_CODE: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
+          OVMF_VARS: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
+          AAVMF_CODE: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
+          AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
           BADC_EDK2_BOOT_OPTIONAL: "1"
         run: python demos/edk2/smoke.py
 
   ovmf:
-    # Build the x86_64 OVMF UEFI firmware from a pinned edk2 release, and
-    # publish OVMF_CODE.fd / OVMF_VARS.fd as an artifact the qemu x86_64
-    # lanes boot through -- instead of the apt-packaged `ovmf`. This makes
-    # the emulator boot the firmware this workflow produced end to end.
-    # X64 only: the qemu aarch64 lane boots -M virt with -kernel and needs
-    # no UEFI firmware.
-    name: ovmf (x64 firmware build)
-    runs-on: ubuntu-24.04
+    # Build the QEMU virt UEFI firmware from a pinned edk2 release and publish
+    # it as an artifact downstream lanes boot through, instead of the
+    # apt-packaged firmware: x86_64 OVMF (booted by the qemu x86_64 kernel
+    # lane and the edk2 x64 app lane) and AArch64 ArmVirtQemu / AAVMF (booted
+    # by the edk2 aarch64 app lane). Both firmwares are then produced and
+    # exercised by this workflow end to end. The qemu aarch64 lane keeps its
+    # direct -kernel boot -- the aarch64 kernel needs no UEFI firmware, and
+    # the firmware's own boot is proven by the edk2 app lane instead.
+    name: ovmf (${{ matrix.platform }} firmware build)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04,     platform: ovmf,  artifact: ovmf-x64,
+              images: "OVMF_CODE.fd OVMF_VARS.fd" }
+          - { os: ubuntu-24.04-arm, platform: aavmf, artifact: aavmf-arm64,
+              images: "QEMU_EFI-pflash.raw QEMU_VARS-pflash.raw" }
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      - name: apt resilience (Linux arm64 runners)
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
+          if ! sudo apt-get update -y; then
+            sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+              /etc/apt/sources.list /etc/apt/apt-mirrors.txt \
+              $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+            sudo apt-get update -y
+          fi
       - name: install edk2 build deps
         run: |
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
           sudo apt-get update -y
           sudo apt-get install -y build-essential uuid-dev iasl nasm python3-venv
-      - name: build OVMF X64
-        run: python demos/edk2/build_ovmf.py --work "$RUNNER_TEMP/ovmf" --jobs 4
-      - name: publish OVMF firmware
+      - name: build the firmware
+        run: >-
+          python demos/edk2/build_ovmf.py --platform ${{ matrix.platform }}
+          --work "$RUNNER_TEMP/fw" --jobs 4
+      - name: stage the published images
+        run: |
+          mkdir -p "$RUNNER_TEMP/pub"
+          for img in ${{ matrix.images }}; do
+            cp "$RUNNER_TEMP/fw/fv/$img" "$RUNNER_TEMP/pub/"
+          done
+          ls -la "$RUNNER_TEMP/pub"
+      - name: publish the firmware
         uses: actions/upload-artifact@v4
         with:
-          name: ovmf-x64
-          path: |
-            ${{ runner.temp }}/ovmf/fv/OVMF_CODE.fd
-            ${{ runner.temp }}/ovmf/fv/OVMF_VARS.fd
+          name: ${{ matrix.artifact }}
+          path: ${{ runner.temp }}/pub/*
           if-no-files-found: error
 
   qemu:

@@ -6332,7 +6332,7 @@ fn emit_inline_asm(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
-    use super::super::ir::{AsmRegSize, Inst};
+    use super::super::ir::{AsmConstraint, AsmRegSize, Inst};
     use super::asm::{AsmOpnd, Concrete};
     let insns = match super::asm::parse_template(&asm.template) {
         Ok(i) => i,
@@ -6379,11 +6379,14 @@ fn emit_inline_asm(
     // not move again until the block finishes.
     let cap_off = |i: usize| -> i32 { ((n - 1 - i) * 8) as i32 };
     // Load inputs into their registers; a `+` output loads its current
-    // value from the destination address.
+    // value from the destination address. A memory operand instead loads its
+    // captured address into the register -- the instruction dereferences it.
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
         let reg = Reg(r);
-        if !op.is_output {
+        if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
+            // A memory operand loads its captured address; a plain input
+            // loads its value. Both come from the captured slot.
             super::encode::emit_mov_r_mem(code, reg, Reg::RSP, cap_off(i));
         } else if op.is_rw {
             super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
@@ -6402,6 +6405,14 @@ fn emit_inline_asm(
                     let width = asm.operands[idx as usize].width;
                     let size = size.unwrap_or(AsmRegSize::from_width(width));
                     match op_reg[idx as usize] {
+                        Some(r)
+                            if matches!(
+                                asm.operands[idx as usize].constraint,
+                                AsmConstraint::Mem
+                            ) =>
+                        {
+                            Concrete::Mem { base: r, size }
+                        }
                         Some(r) => Concrete::Reg { reg: r, size },
                         // A `%N` naming an immediate-only operand: use its
                         // constant value.
@@ -6422,9 +6433,10 @@ fn emit_inline_asm(
             return false;
         }
     }
-    // Store the outputs back through their captured addresses.
+    // Store the register outputs back through their captured addresses. A
+    // memory operand needs no store-back: the instruction wrote memory.
     for (i, op) in asm.operands.iter().enumerate() {
-        if !op.is_output {
+        if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
             continue;
         }
         let Some(r) = op_reg[i] else { continue };

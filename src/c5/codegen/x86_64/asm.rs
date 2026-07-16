@@ -116,7 +116,16 @@ pub(crate) struct AsmInsn {
 /// once the operand's register assignment (or constant value) is known.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Concrete {
-    Reg { reg: u8, size: AsmRegSize },
+    Reg {
+        reg: u8,
+        size: AsmRegSize,
+    },
+    /// A memory reference `(%base)`: `base` holds the operand's address.
+    /// Produced for a memory-constrained (`m`) template operand.
+    Mem {
+        base: u8,
+        size: AsmRegSize,
+    },
     Imm(i64),
 }
 
@@ -223,10 +232,11 @@ pub(crate) fn assign_operand_regs(
             used[r as usize] = true;
         }
     }
-    // `r` operands take free pool registers (rax rbx rcx rdx rsi rdi r8 r9).
+    // `r` operands take free pool registers (rax rbx rcx rdx rsi rdi r8 r9);
+    // a memory operand takes one too, to hold its address.
     let pool = [0u8, 3, 1, 2, 6, 7, 8, 9];
     for (i, op) in operands.iter().enumerate() {
-        if matches!(op.constraint, C::Reg) {
+        if matches!(op.constraint, C::Reg | C::Mem) {
             let r = pool
                 .iter()
                 .copied()
@@ -418,6 +428,24 @@ fn modrm_reg(reg: u8, rm: u8) -> u8 {
     0xC0 | ((reg & 7) << 3) | (rm & 7)
 }
 
+/// Emit a ModR/M (plus SIB / disp8 as the base register requires) for a
+/// `(%base)` memory reference with ModRM.reg = `reg`. REX.B for `base >= 8`
+/// and any operand-size prefix are emitted by the caller.
+fn modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8) {
+    let rm = base & 7;
+    if rm == 5 {
+        // rbp / r13: mod=00 rm=101 is RIP-relative, so use mod=01 disp8=0.
+        code.push(0x40 | ((reg & 7) << 3) | rm);
+        code.push(0x00);
+    } else if rm == 4 {
+        // rsp / r12: rm=100 selects a SIB byte; encode base with no index.
+        code.push(((reg & 7) << 3) | rm);
+        code.push(0x24);
+    } else {
+        code.push(((reg & 7) << 3) | rm);
+    }
+}
+
 /// Emit any needed operand-size / REX prefix for an instruction whose
 /// operands are `size`-wide and use ModR/M.reg = `reg`, r/m = `rm`.
 /// The 16-bit operand-size prefix (0x66) precedes REX per the SDM.
@@ -507,9 +535,17 @@ pub(crate) fn encode(
             Ok(())
         }
         Mnemonic::Inc | Mnemonic::Dec => {
-            // `inc/dec r/m` = FF /0 (inc), FF /1 (dec). One r/m operand.
-            let (reg, size) = reg_operand(ops.first(), suffix)?;
+            // `inc/dec r/m` = FF /0 (inc), FF /1 (dec). One r/m operand
+            // (register or memory).
             let ext: u8 = if mnemonic == Mnemonic::Inc { 0 } else { 1 };
+            if let Some(Concrete::Mem { base, size }) = ops.first() {
+                let sz = suffix.unwrap_or(*size);
+                prefix_rex(code, sz, ext, *base);
+                code.push(if sz == AsmRegSize::Byte { 0xFE } else { 0xFF });
+                modrm_mem(code, ext, *base);
+                return Ok(());
+            }
+            let (reg, size) = reg_operand(ops.first(), suffix)?;
             prefix_rex(code, size, ext, reg);
             code.push(if size == AsmRegSize::Byte { 0xFE } else { 0xFF });
             code.push(modrm_reg(ext, reg));
@@ -517,11 +553,12 @@ pub(crate) fn encode(
         }
         Mnemonic::Xadd | Mnemonic::Cmpxchg => {
             // AT&T `xadd/cmpxchg src, dst`: source register in ModRM.reg,
-            // destination r/m. xadd = 0F C0/C1, cmpxchg = 0F B0/B1 (the /C0
-            // /B0 byte forms, /C1 /B1 otherwise).
+            // destination r/m (register or memory). xadd = 0F C0/C1, cmpxchg =
+            // 0F B0/B1 (the /C0 /B0 byte forms, /C1 /B1 otherwise). A `lock`
+            // prefix (emitted by its own template line) requires the memory
+            // form, which the `"m"` operand constraint selects.
             let [src, dst] = two(ops)?;
             let (src_reg, ssz) = as_reg(src)?;
-            let (dst_reg, _) = as_reg(dst)?;
             let size = suffix.unwrap_or(ssz);
             let byte = size == AsmRegSize::Byte;
             let op: u8 = match (mnemonic, byte) {
@@ -530,10 +567,21 @@ pub(crate) fn encode(
                 (_, true) => 0xB0,
                 (_, false) => 0xB1,
             };
-            prefix_rex(code, size, src_reg, dst_reg);
-            code.push(0x0F);
-            code.push(op);
-            code.push(modrm_reg(src_reg, dst_reg));
+            match dst {
+                Concrete::Mem { base, .. } => {
+                    prefix_rex(code, size, src_reg, base);
+                    code.push(0x0F);
+                    code.push(op);
+                    modrm_mem(code, src_reg, base);
+                }
+                _ => {
+                    let (dst_reg, _) = as_reg(dst)?;
+                    prefix_rex(code, size, src_reg, dst_reg);
+                    code.push(0x0F);
+                    code.push(op);
+                    code.push(modrm_reg(src_reg, dst_reg));
+                }
+            }
             Ok(())
         }
         Mnemonic::Pushfq => {
@@ -672,6 +720,9 @@ pub(crate) fn encode(
                     code.push(op_cl);
                     code.push(modrm_reg(src_reg, dst_reg));
                 }
+                Concrete::Mem { .. } => {
+                    return Err(String::from("inline asm: double-shift count in memory"));
+                }
             }
             Ok(())
         }
@@ -704,6 +755,9 @@ pub(crate) fn encode(
                     }
                     code.push(0xD3);
                     code.push(modrm_reg(ext, dst_reg));
+                }
+                Some(Concrete::Mem { .. }) => {
+                    return Err(String::from("inline asm: shift count in memory"));
                 }
             }
             Ok(())
@@ -771,6 +825,68 @@ pub(crate) fn encode(
                     return Ok(());
                 }
             }
+            // Memory operand (`"m"`): the r/m side is `(%base)`. AT&T
+            // `op src, dst`: a memory `dst` stores, a memory `src` loads.
+            if let Concrete::Mem { base, size } = dst {
+                let sz = suffix.unwrap_or(size);
+                match src {
+                    Concrete::Reg { reg: src_reg, .. } => {
+                        let opcode: u8 = match mnemonic {
+                            Mnemonic::Or => 0x09,
+                            Mnemonic::And => 0x21,
+                            Mnemonic::Add => 0x01,
+                            Mnemonic::Sub => 0x29,
+                            Mnemonic::Xor => 0x31,
+                            Mnemonic::Mov => 0x89,
+                            _ => unreachable!(),
+                        };
+                        prefix_rex(code, sz, src_reg, base);
+                        code.push(opcode);
+                        modrm_mem(code, src_reg, base);
+                    }
+                    Concrete::Imm(v) => {
+                        let ext: u8 = match mnemonic {
+                            Mnemonic::Mov => 0,
+                            Mnemonic::Or => 1,
+                            Mnemonic::And => 4,
+                            Mnemonic::Add => 0,
+                            Mnemonic::Sub => 5,
+                            Mnemonic::Xor => 6,
+                            _ => unreachable!(),
+                        };
+                        prefix_rex(code, sz, ext, base);
+                        code.push(if mnemonic == Mnemonic::Mov {
+                            0xC7
+                        } else {
+                            0x81
+                        });
+                        modrm_mem(code, ext, base);
+                        code.extend_from_slice(&(v as i32).to_le_bytes());
+                    }
+                    Concrete::Mem { .. } => {
+                        return Err(String::from("inline asm: memory-to-memory operand"));
+                    }
+                }
+                return Ok(());
+            }
+            if let Concrete::Mem { base, size } = src {
+                let (dst_reg, _) = as_reg(dst)?;
+                let sz = suffix.unwrap_or(size);
+                // Load form: /r with the register as ModRM.reg, memory as r/m.
+                let opcode: u8 = match mnemonic {
+                    Mnemonic::Or => 0x0B,
+                    Mnemonic::And => 0x23,
+                    Mnemonic::Add => 0x03,
+                    Mnemonic::Sub => 0x2B,
+                    Mnemonic::Xor => 0x33,
+                    Mnemonic::Mov => 0x8B,
+                    _ => unreachable!(),
+                };
+                prefix_rex(code, sz, dst_reg, base);
+                code.push(opcode);
+                modrm_mem(code, dst_reg, base);
+                return Ok(());
+            }
             let (dst_reg, dsz) = as_reg(dst)?;
             let size = suffix.unwrap_or(dsz);
             match src {
@@ -790,6 +906,7 @@ pub(crate) fn encode(
                     code.push(modrm_reg(src_reg, dst_reg));
                     Ok(())
                 }
+                Concrete::Mem { .. } => unreachable!("memory src handled above"),
                 Concrete::Imm(v) => {
                     // `op r/m, imm32` form (`mov` uses its own opcode).
                     if mnemonic == Mnemonic::Mov {
@@ -820,6 +937,7 @@ pub(crate) fn encode(
 fn as_reg(op: Concrete) -> Result<(u8, AsmRegSize), String> {
     match op {
         Concrete::Reg { reg, size } => Ok((reg, size)),
+        Concrete::Mem { .. } => Err(String::from("inline asm: unexpected memory operand")),
         Concrete::Imm(_) => Err(String::from("inline asm: register operand expected")),
     }
 }

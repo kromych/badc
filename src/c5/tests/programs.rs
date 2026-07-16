@@ -164,6 +164,15 @@ fn wide_string_struct_member() {
 }
 
 #[test]
+fn inline_asm_memory_operand() {
+    // An inline-asm `"m"` / `"+m"` operand is a memory reference: the
+    // interlocked `lock cmpxchg` / `lock xadd` (edk2 BaseSynchronizationLib)
+    // read and write the memory object, not a register (a `lock` on a
+    // register destination is an invalid encoding that faults at runtime).
+    assert_eq!(run_fixture("inline_asm_memory_operand.c"), 0);
+}
+
+#[test]
 fn init_2d_struct_array() {
     // A 2D array of structs with an inferred outer dimension
     // (`struct T xs[][M] = { { {...}, ... }, ... }`, OpenSSL's OSSL_PARAM

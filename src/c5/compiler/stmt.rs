@@ -1380,8 +1380,9 @@ impl Compiler {
             self.next()?; // consume `(`
             self.expr(Token::Assign as i64)?;
             let width = self.size_of_type(self.ty).min(8) as u8;
-            if is_output {
-                // Store back through the destination's address.
+            // Outputs pass the destination address; a memory operand (input or
+            // output) is likewise reached through its address.
+            if is_output || matches!(constraint, AsmConstraint::Mem) {
                 self.ty += Ty::Ptr as i64;
                 self.ast_apply_unary(UnOp::AddrOf);
             }
@@ -1474,6 +1475,18 @@ impl Compiler {
             })
         };
         let has_imm = body.contains(['i', 'n']);
+        // A memory-only constraint (`m`, `=m`, `+m`): the operand is accessed
+        // through a memory reference. `g` / `rm` also permit memory but prefer
+        // a register, which the register path below handles.
+        if body.contains('m')
+            && !body.contains(['r', 'q', 'g'])
+            && !has_imm
+            && !body
+                .chars()
+                .any(|c| matches!(c, 'a' | 'b' | 'c' | 'd' | 'S' | 'D'))
+        {
+            return Some((AsmConstraint::Mem, is_rw));
+        }
         let has_reg = body.contains(['r', 'm', 'g', 'q']);
         // A specific-register letter (possibly combined with `i` as in
         // `ci`: the value takes that register, or an immediate).

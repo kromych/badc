@@ -2790,7 +2790,9 @@ fn interlocked_and_halt_inline_asm_x64() {
     // edk2's BaseSynchronizationLib / BaseCpuLib reach the atomic primitives
     // and the halt through `lock`-prefixed multi-line asm blocks. The general
     // asm path encodes each line: lock = F0, xadd = 0F C1, cmpxchg = 0F B1,
-    // inc/dec = FF /0,/1, hlt = F4.
+    // inc/dec = FF /0,/1, hlt = F4. The `"+m"` destinations are memory
+    // references (`(%reg)`, ModRM mod != 11); a `lock` prefix on a register
+    // destination is an invalid encoding that faults at runtime (#UD).
     let program = super::compile_str_bare(
         "typedef unsigned int U32;\n\
          void sleep(void){ __asm__ __volatile__(\"hlt\":::\"memory\"); }\n\
@@ -2809,14 +2811,18 @@ fn interlocked_and_halt_inline_asm_x64() {
         .expect("emit LinuxX64");
     assert!(bytes.contains(&0xF4), "expected `hlt` (F4)");
     assert!(bytes.contains(&0xF0), "expected the `lock` prefix (F0)");
-    // xadd r/m32, r: 0F C1 with ModRM.mod = 11 (register form).
-    let has2m = |a: u8, b: u8| {
+    // xadd / cmpxchg to a `"+m"` destination: 0F C1 / 0F B1 with ModRM.mod
+    // != 11 (a memory reference), so the preceding `lock` is a valid form.
+    let has_mem = |a: u8, b: u8| {
         bytes
             .windows(3)
-            .any(|w| w[0] == a && w[1] == b && w[2] >> 6 == 3)
+            .any(|w| w[0] == a && w[1] == b && w[2] >> 6 != 3)
     };
-    assert!(has2m(0x0F, 0xC1), "expected `xadd r, r/m` (0F C1)");
-    assert!(has2m(0x0F, 0xB1), "expected `cmpxchg r, r/m` (0F B1)");
+    assert!(has_mem(0x0F, 0xC1), "expected `xadd r, m` (0F C1, memory)");
+    assert!(
+        has_mem(0x0F, 0xB1),
+        "expected `cmpxchg r, m` (0F B1, memory)"
+    );
     // inc/dec r/m32: FF /0 and FF /1, register form.
     let has_ff = |field: u8| {
         bytes

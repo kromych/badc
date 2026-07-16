@@ -570,6 +570,11 @@ pub(crate) enum AsmConstraint {
     RegOrImm(u8),
     /// Immediate-only (`i`, `n`).
     Imm,
+    /// A memory operand (`m`, `=m`, `+m`): the operand argument is the
+    /// object's address, and the template `%N` is a memory reference
+    /// through it (not a register). Assigned a register to hold the
+    /// address; the instruction dereferences that register.
+    Mem,
 }
 
 /// One operand of a GCC extended-asm statement.

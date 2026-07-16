@@ -3338,6 +3338,12 @@ fn tailcall_return_extension() {
 }
 
 #[test]
+fn fnptr_array_call() {
+    // `(*arr[i])()` and struct-returning K&R fn-pointer array elements.
+    assert_eq!(run_fixture("fnptr_array_call.c"), 0);
+}
+
+#[test]
 fn call_arg_extend_drop() {
     // The caller-side re-extension of a direct-call argument drops
     // only when the callee re-derives the parameter from the low bits.

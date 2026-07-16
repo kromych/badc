@@ -1605,6 +1605,15 @@ impl Compiler {
                     // parameter types so a following `arr[i](args)` narrows
                     // each argument to its declared type. Empty params means
                     // the element is not a prototyped function pointer.
+                    // The element's function-pointer decay depth rides
+                    // along as well: `(*arr[i])(...)` must treat the
+                    // `*` as the C99 6.3.2.1p4 no-op rather than load
+                    // through the code address (the subscript consumes
+                    // an array level, not an indirection level).
+                    let fpi = self.symbols[id_idx].fn_ptr_indirection;
+                    if fpi > 0 {
+                        self.pending.fn_ptr_chain_depth = fpi - 1;
+                    }
                     if !self.symbols[id_idx].params.is_empty() {
                         self.pending.indirect_callee_params =
                             Some(self.symbols[id_idx].params.clone());
@@ -3654,14 +3663,20 @@ impl Compiler {
                 // element's callee parameters captured at the array decay;
                 // the index expression is a separate evaluation that must
                 // not consume or clear them. Park them across the parse.
+                // The function-pointer decay depth is parked the same way:
+                // for a function-pointer array element, a following unary
+                // `*` must stay the C99 6.3.2.1p4 no-op rather than load
+                // through the code address.
                 let saved_callee_params = self.pending.indirect_callee_params.take();
                 let saved_callee_variadic =
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let saved_fn_ptr_chain = self.pending.fn_ptr_chain_depth;
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
                 let idx_ast = self.ast_acc;
                 self.pending.indirect_callee_params = saved_callee_params;
                 self.pending.indirect_callee_is_variadic = saved_callee_variadic;
+                self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
                 // Restore the queue and shift one level down so
                 // the next `[i]` sees the stride for that level
                 // in `pending_index_stride` and the rest in the
@@ -3737,6 +3752,15 @@ impl Compiler {
                         is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                     if !elem_is_struct_value {
                         self.mark_emit_scalar_load();
+                        // The load marking cleared the function-pointer
+                        // decay depth; a subscript consumes an array
+                        // level, not an indirection level, so the depth
+                        // parked before the index parse still applies
+                        // (`(*fparr[i])()` must treat the `*` as the
+                        // C99 6.3.2.1p4 no-op).
+                        if saved_fn_ptr_chain >= 0 {
+                            self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
+                        }
                     }
                     // Build a canonical `Expr::Index { array,
                     // idx, ty }` so the walker emits a single

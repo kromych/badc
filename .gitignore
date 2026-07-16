@@ -237,6 +237,7 @@ demos/edk2/*
 !demos/edk2/MiniAutoGen.h
 !demos/edk2/build_ovmf.py
 !demos/edk2/badc_cc.py
+!demos/edk2/badc_efi_compat.h
 # The firmware build tree the scripts create stays ignored.
 demos/edk2/.ovmf-build/
 

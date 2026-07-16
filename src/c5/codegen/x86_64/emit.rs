@@ -7001,6 +7001,36 @@ fn emit_intrinsic(
             code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
             true
         }
+        I::X86FxSave | I::X86FxRestore => {
+            // `fxsave m` (0F AE /0) / `fxrstor m` (0F AE /1): save / restore
+            // the 512-byte x87+SSE state. The single argument is the buffer
+            // address; force it into r10 so the ModRM needs no SIB / disp
+            // (same shape as the x87 control-word forms above).
+            if args.len() != 1 {
+                bail_msg("fxsave / fxrstor intrinsic expects 1 arg");
+                return false;
+            }
+            let Some(place) = alloc.places.get(args[0] as usize).copied() else {
+                bail_msg("fxsave / fxrstor intrinsic: arg place missing");
+                return false;
+            };
+            let Some(addr) = materialize_int(code, place, SCRATCH_R10, frame) else {
+                bail_msg("fxsave / fxrstor intrinsic: arg not an int register");
+                return false;
+            };
+            if addr.0 != SCRATCH_R10.0 {
+                super::encode::emit_mov_rr(code, SCRATCH_R10, addr);
+            }
+            let reg_field: u8 = if matches!(intrinsic, I::X86FxSave) {
+                0
+            } else {
+                1
+            };
+            code.push(0x41); // REX.B for r10
+            code.extend_from_slice(&[0x0F, 0xAE]);
+            code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
+            true
+        }
         I::Cpuid | I::Xgetbv => {
             // cpuid (0F A2) reads eax (leaf) + ecx (subleaf) and writes
             // eax/ebx/ecx/edx; xgetbv (0F 01 D0) reads ecx and writes

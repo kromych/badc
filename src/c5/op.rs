@@ -271,6 +271,15 @@ pub enum Intrinsic {
     /// pointer and the value and mask halves (`vl`, `vh`, `ml`, `mh`) as
     /// inputs; there is no result. AArch64 only.
     Atomic128StoreInsert = 70,
+    /// `asm("fxsave %0" : "=m"(buf))` -- save the x87/SSE state to the
+    /// 512-byte memory operand. The op takes the operand's address;
+    /// codegen emits `fxsave m` (0F AE /0, x86_64 only). A no-op in the
+    /// interpreter (no modelled FPU/SSE state).
+    X86FxSave = 71,
+    /// `asm("fxrstor %0" : : "m"(buf))` -- restore the x87/SSE state from
+    /// the 512-byte memory operand. Codegen emits `fxrstor m` (0F AE /1,
+    /// x86_64 only). A no-op in the interpreter.
+    X86FxRestore = 72,
 }
 
 impl Intrinsic {
@@ -346,6 +355,8 @@ impl Intrinsic {
             68 => Some(Intrinsic::Atomic128StoreEx),
             69 => Some(Intrinsic::ReturnAddress),
             70 => Some(Intrinsic::Atomic128StoreInsert),
+            71 => Some(Intrinsic::X86FxSave),
+            72 => Some(Intrinsic::X86FxRestore),
             _ => None,
         }
     }

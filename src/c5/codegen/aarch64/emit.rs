@@ -3557,6 +3557,12 @@ fn emit_intrinsic(
             bail_msg("x87 control word intrinsic is x86-only");
             false
         }
+        I::X86FxSave | I::X86FxRestore => {
+            // fxsave / fxrstor are x86-only; the AArch64 firmware path uses
+            // its own FP state save and never reaches these.
+            bail_msg("fxsave / fxrstor intrinsic is x86-only");
+            false
+        }
         I::Cpuid | I::Xgetbv => {
             // cpuid / xgetbv are x86-only; the source gates them on
             // MA_X86 / MA_X64, so AArch64 never reaches them.

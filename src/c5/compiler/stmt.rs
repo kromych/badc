@@ -1059,6 +1059,8 @@ impl Compiler {
         let x87_kind = match tmpl_lc.as_str() {
             "fnstcw %0" => Some(super::super::op::Intrinsic::X87StoreControlWord),
             "fldcw %0" => Some(super::super::op::Intrinsic::X87LoadControlWord),
+            "fxsave %0" => Some(super::super::op::Intrinsic::X86FxSave),
+            "fxrstor %0" => Some(super::super::op::Intrinsic::X86FxRestore),
             _ => None,
         };
         if let Some(kind) = x87_kind {

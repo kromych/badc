@@ -2383,6 +2383,11 @@ fn run_intrinsic(
             // arithmetic.
             Ok(())
         }
+        Intrinsic::X86FxSave | Intrinsic::X86FxRestore => {
+            // No modelled x87/SSE register file to save or restore; the
+            // interpreter evaluates floats with host doubles.
+            Ok(())
+        }
         Intrinsic::Cpuid => {
             // No host CPUID; zero the four output words so a caller reads a
             // defined (feature-absent) result rather than uninitialized data.

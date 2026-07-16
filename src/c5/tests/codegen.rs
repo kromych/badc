@@ -2605,3 +2605,27 @@ fn external_bool_return_is_masked_before_branch() {
         "expected the external _Bool return to be masked to its low byte before use"
     );
 }
+
+#[test]
+fn fxsave_fxrstor_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reaches x87/SSE state save/restore through
+    // `asm("fxsave %0")` / `asm("fxrstor %0")`; the x86_64 emit lowers
+    // them to `fxsave m` (0F AE /0) and `fxrstor m` (0F AE /1).
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned char b[512]; } FXBUF;\n\
+         void save(FXBUF *p){ __asm__ __volatile__(\"fxsave %0\":\"=m\"(*p)); }\n\
+         void restore(FXBUF *p){ __asm__ __volatile__(\"fxrstor %0\"::\"m\"(*p)); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    // fxsave m: 0F AE with ModRM reg field 0 (mod=00); fxrstor: reg field 1.
+    let has = |reg: u8| {
+        bytes
+            .windows(3)
+            .any(|w| w[0] == 0x0F && w[1] == 0xAE && (w[2] >> 3) & 7 == reg && w[2] >> 6 == 0)
+    };
+    assert!(has(0), "expected an `fxsave m` (0F AE /0) encoding");
+    assert!(has(1), "expected an `fxrstor m` (0F AE /1) encoding");
+}

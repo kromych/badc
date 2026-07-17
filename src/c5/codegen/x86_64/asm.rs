@@ -89,6 +89,12 @@ pub(crate) enum Mnemonic {
     /// REX prefixes in 64-bit mode, so the ModRM forms are always used.
     Inc,
     Dec,
+    /// Literal machine bytes, carried in [`AsmInsn::bytes`]. Produced for a
+    /// template piece that is a run of hex-byte tokens (`CC; C3; 90`) or a
+    /// `.byte` / `.word` / `.long` / `.quad` directive. An escape hatch for
+    /// instructions the mnemonic catalogue does not cover; the bytes are
+    /// emitted verbatim.
+    RawBytes,
 }
 
 /// One symbolic operand of a template instruction.
@@ -109,6 +115,8 @@ pub(crate) struct AsmInsn {
     pub mnemonic: Mnemonic,
     pub suffix: Option<AsmRegSize>,
     pub operands: Vec<AsmOpnd>,
+    /// Literal bytes for a [`Mnemonic::RawBytes`] piece; empty otherwise.
+    pub bytes: Vec<u8>,
 }
 
 /// A resolved operand: a concrete register (with its access size) or an
@@ -367,6 +375,53 @@ fn parse_int(s: &str) -> Option<i64> {
     Some(if neg { -v } else { v })
 }
 
+/// Literal machine bytes for a raw-byte template piece, or `None` when the
+/// piece is a mnemonic instruction. Two forms are recognised:
+///
+/// * a run of bare 2-hex-digit tokens (`CC C3 90`), each a byte value, and
+/// * a `.byte` / `.word` / `.long` / `.quad` directive whose comma-separated
+///   arguments are integer constants emitted little-endian at the directive's
+///   width (the assembler idiom for hand-placed data).
+///
+/// The bare form reads its tokens as hexadecimal (so `90` is `0x90`); the
+/// directive form reads C-style integer constants (`0x`-prefixed or decimal).
+fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
+    let width = match piece.split_whitespace().next()? {
+        ".byte" => Some(1usize),
+        ".word" | ".2byte" => Some(2),
+        ".long" | ".4byte" => Some(4),
+        ".quad" | ".8byte" => Some(8),
+        _ => None,
+    };
+    if let Some(w) = width {
+        let args = piece[piece.find(char::is_whitespace).unwrap()..].trim();
+        let mut out = Vec::new();
+        for a in args.split(',') {
+            let a = a.trim();
+            let Some(v) = parse_int(a) else {
+                return Some(Err(format!("inline asm: bad `.byte`-directive value `{a}`")));
+            };
+            out.extend_from_slice(&(v as u64).to_le_bytes()[..w]);
+        }
+        return Some(Ok(out));
+    }
+    // Bare hex-byte run: every whitespace-delimited token must be exactly two
+    // hex digits, so a normal mnemonic (letters) is never mistaken for one.
+    let tokens: Vec<&str> = piece.split_whitespace().collect();
+    if !tokens.is_empty()
+        && tokens
+            .iter()
+            .all(|t| t.len() == 2 && t.bytes().all(|b| b.is_ascii_hexdigit()))
+    {
+        let bytes = tokens
+            .iter()
+            .map(|t| u8::from_str_radix(t, 16).unwrap())
+            .collect();
+        return Some(Ok(bytes));
+    }
+    None
+}
+
 /// Parse an AT&T inline-asm template into its instruction sequence.
 /// Instructions are separated by `;` or newlines; operands by commas.
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
@@ -376,6 +431,17 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
     for piece in text.split([';', '\n']) {
         let piece = piece.trim();
         if piece.is_empty() {
+            continue;
+        }
+        // A raw-byte piece (hex-byte run or `.byte`-family directive) emits its
+        // bytes verbatim with no operands.
+        if let Some(bytes) = parse_raw_bytes(piece) {
+            insns.push(AsmInsn {
+                mnemonic: Mnemonic::RawBytes,
+                suffix: None,
+                operands: Vec::new(),
+                bytes: bytes?,
+            });
             continue;
         }
         // Mnemonic is the first whitespace-delimited token; the operand
@@ -396,6 +462,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             mnemonic,
             suffix,
             operands,
+            bytes: Vec::new(),
         });
     }
     Ok(insns)
@@ -473,6 +540,9 @@ pub(crate) fn encode(
     ops: &[Concrete],
 ) -> Result<(), String> {
     match mnemonic {
+        // Raw bytes carry their payload on the `AsmInsn`, not in `ops`; the
+        // caller emits them directly and never routes them here.
+        Mnemonic::RawBytes => Err(String::from("inline asm: raw bytes not routed through encode")),
         Mnemonic::Nop => {
             code.push(0x90);
             Ok(())
@@ -996,6 +1066,38 @@ mod tests {
         let mut c = Vec::new();
         encode(&mut c, m, suffix, ops).unwrap();
         c
+    }
+
+    fn raw(tmpl: &[u8]) -> Vec<u8> {
+        // Concatenate the bytes of every piece; `;`-separated hex bytes parse
+        // as one raw-byte piece each.
+        let mut out = Vec::new();
+        for i in parse_template(tmpl).unwrap() {
+            assert_eq!(i.mnemonic, Mnemonic::RawBytes);
+            out.extend_from_slice(&i.bytes);
+        }
+        out
+    }
+
+    #[test]
+    fn raw_byte_templates() {
+        // Bare hex-byte run: each token is one byte (read as hex, so `90` is
+        // 0x90). `;` and whitespace both separate.
+        assert_eq!(raw(b"CC; C3; 90"), [0xCC, 0xC3, 0x90]);
+        assert_eq!(raw(b"cc c3 90"), [0xCC, 0xC3, 0x90]);
+        // `.byte` / `.word` / `.long` / `.quad` directives, little-endian at
+        // the directive width; C-style integer constants.
+        assert_eq!(raw(b".byte 0x48, 0x89, 0xd8"), [0x48, 0x89, 0xd8]);
+        assert_eq!(raw(b".word 0x1234"), [0x34, 0x12]);
+        assert_eq!(raw(b".long 0xdeadbeef"), [0xef, 0xbe, 0xad, 0xde]);
+        assert_eq!(raw(b".byte 144"), [0x90]); // decimal in the directive form
+        // A run of hex bytes and a mnemonic can share one template.
+        let mixed = parse_template(b".byte 0x90; nop").unwrap();
+        assert_eq!(mixed.len(), 2);
+        assert_eq!(mixed[0].mnemonic, Mnemonic::RawBytes);
+        assert_eq!(mixed[1].mnemonic, Mnemonic::Nop);
+        // A single alphabetic token stays a mnemonic, not a raw byte.
+        assert_eq!(parse_template(b"nop").unwrap()[0].mnemonic, Mnemonic::Nop);
     }
 
     #[test]

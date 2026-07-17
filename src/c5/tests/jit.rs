@@ -54,6 +54,23 @@ fn return_42() {
     assert_eq!(jit_exit("int main() { return 42; }", &["jit-ret42"]), 42);
 }
 
+/// Raw-byte inline asm executes natively: the literal bytes `B8 25 00 00 00`
+/// are `mov eax, 0x25`, and the `"=a"` output ties the result to the return
+/// value. x86_64 host only -- the bytes are x86 machine code, and the VM
+/// (which cannot model opaque bytes) is bypassed by the JIT path.
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn raw_byte_inline_asm_executes() {
+    let src = r#"
+        int main() {
+            int x = 1;
+            __asm__ volatile(".byte 0xb8, 0x25, 0x00, 0x00, 0x00" : "=a"(x));
+            return x;
+        }
+    "#;
+    assert_eq!(jit_exit(src, &["jit-raw-bytes"]), 0x25);
+}
+
 #[test]
 fn external_int_return_is_sign_extended() {
     // C99 6.3.1.1 + AAPCS64: a callee returning `int` leaves only the low

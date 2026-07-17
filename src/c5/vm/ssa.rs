@@ -2067,6 +2067,9 @@ fn run_inline_asm(
     for insn in &insns {
         let ops = &insn.operands;
         match insn.mnemonic {
+            // Literal machine bytes are opaque to the register model, like the
+            // privileged / port ops below: no modelled effect under the VM.
+            Mnemonic::RawBytes => {}
             Mnemonic::Nop | Mnemonic::Rdtsc | Mnemonic::Rdtscp => {
                 // No host clock: the timestamp read produces zero in the
                 // registers it defines (rax/rdx, and rcx for rdtscp).

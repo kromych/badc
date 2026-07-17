@@ -6396,6 +6396,11 @@ fn emit_inline_asm(
     // Encode each template instruction with its operands resolved to the
     // assigned registers, explicit registers, and immediates.
     for insn in &insns {
+        // A raw-byte piece emits its literal bytes with no operand resolution.
+        if insn.mnemonic == super::asm::Mnemonic::RawBytes {
+            code.extend_from_slice(&insn.bytes);
+            continue;
+        }
         let mut concrete: alloc::vec::Vec<Concrete> = alloc::vec::Vec::new();
         for o in &insn.operands {
             let c = match *o {

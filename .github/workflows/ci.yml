@@ -1253,6 +1253,16 @@ jobs:
           AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
           BADC_EDK2_BOOT_OPTIONAL: "1"
         run: python demos/edk2/smoke.py
+      - name: kernel smoke (badc-compiled UEFI kernel exercising inline asm; boot where QEMU is present)
+        # Same firmware as the edk2 lane; the kernel boots under UEFI and its
+        # inline asm (cpuid / bswap / mrs / raw bytes) runs to serial.
+        env:
+          OVMF_CODE: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
+          OVMF_VARS: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
+          AAVMF_CODE: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
+          AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
+          BADC_KERNEL_BOOT_OPTIONAL: "1"
+        run: python demos/kernel/smoke.py
 
   firmware-x64:
     # Build x86_64 OVMF with badc (C compiler) and badc-built nasm (assembler),

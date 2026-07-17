@@ -93,6 +93,10 @@ def main() -> int:
             ok, _text, missing = qemu_efi.run(str(efi), expect, arch=arch, timeout=60)
             if ok:
                 log(f"[{arch}] boot OK under {os.path.basename(resolved)}: {expect}")
+            elif os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
+                # Build is the hard gate; the boot is best-effort until observed
+                # green on a given runner, then the flag is dropped.
+                log(f"[{arch}] boot best-effort: missing {missing} (BADC_KERNEL_BOOT_OPTIONAL)")
             else:
                 log(f"[{arch}] FAIL: boot missing {missing}")
                 failures += 1

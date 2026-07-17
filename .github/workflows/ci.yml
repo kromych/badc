@@ -1306,7 +1306,7 @@ jobs:
           if-no-files-found: error
 
   qemu:
-    needs: firmware-x64
+    needs: [firmware-x64, firmware-arm64]
     # Compile every translation unit that feeds qemu-system-<arch> (the emulator
     # objects + its utility library) with badc, archive the library with badc's
     # --ar, and link the emulator with badc's OWN linker over the 100%-badc
@@ -1315,9 +1315,11 @@ jobs:
     # it reports its version, and it boots the published kernel to a userspace
     # shell and powers off cleanly.
     #
-    # Matrix: {aarch64, x86_64} Linux at -O0, plus x86_64 at -O. aarch64 -M virt
-    # loads a raw Image; x86_64 boots an EFI-stub bzImage through system OVMF
-    # (UEFI). The x86_64 vendored config disables the features whose host headers
+    # Matrix: {aarch64, x86_64} Linux at -O0, plus x86_64 at -O. Both arches boot
+    # the EFI-stub kernel THROUGH the firmware the ovmf lane built (OVMF on
+    # x86_64, ArmVirtQemu/AAVMF on aarch64; aarch64 adds acpi=off so the kernel
+    # probes the PL011 as ttyAMA0). The x86_64 vendored config disables the
+    # features whose host headers
     # badc lacks (host SIMD intrinsics, native __int128 + its 128-bit CAS,
     # elfutils; see smoke.py adapt_config), its vhost-user / vduse subproject
     # libraries are compiled from source, and the q35 option ROMs ship in the
@@ -1382,6 +1384,12 @@ jobs:
         with:
           name: ovmf-x64
           path: ${{ runner.temp }}/ovmf
+      - name: fetch the ovmf-lane firmware (aarch64 UEFI boot)
+        if: matrix.label == 'ubuntu-arm64'
+        uses: actions/download-artifact@v4
+        with:
+          name: aavmf-arm64
+          path: ${{ runner.temp }}/aavmf
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
       - name: qemu setup (fetch source + build config)
@@ -1401,10 +1409,13 @@ jobs:
           BADC_QEMU_BOOT: "gate"
           BADC_QEMU_OPT: ${{ matrix.optenv }}
           BADC_QEMU_BOOT_LOG: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
-          # x86_64 boots the firmware the ovmf lane built (the aarch64 lane
-          # uses -kernel and reads neither).
+          # Both arches boot the EFI-stub kernel THROUGH the firmware the ovmf
+          # lane built: x86_64 through OVMF, aarch64 through AAVMF (smoke.py adds
+          # acpi=off there so the kernel probes the PL011 as ttyAMA0).
           BADC_QEMU_OVMF_CODE: ${{ runner.temp }}/ovmf/OVMF_CODE.fd
           BADC_QEMU_OVMF_VARS: ${{ runner.temp }}/ovmf/OVMF_VARS.fd
+          BADC_QEMU_AAVMF_CODE: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
+          BADC_QEMU_AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
         run: python demos/qemu/smoke.py
       - name: publish boot log
         if: always()

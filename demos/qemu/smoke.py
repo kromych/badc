@@ -593,6 +593,15 @@ OVMF_VARS_NAMES = ("OVMF_VARS.fd", "OVMF_VARS_4M.fd")
 OVMF_SEARCH = ("/usr/share/OVMF", "/usr/share/edk2/ovmf",
                "/usr/share/edk2-ovmf/x64", "/usr/share/qemu")
 
+# AArch64 ArmVirtQemu (AAVMF) firmware for the aarch64 boot. When present the
+# EFI-stub Image boots THROUGH the firmware (the firmware picks up QEMU's fw_cfg
+# -kernel), matching the x86_64 OVMF path; absent, the aarch64 boot falls back to
+# -M virt's legacy -kernel loader. The pflash pair is the QEMU_EFI/QEMU_VARS the
+# -M virt machine expects.
+AAVMF_CODE_NAMES = ("QEMU_EFI-pflash.raw", "AAVMF_CODE.fd", "QEMU_EFI.fd")
+AAVMF_VARS_NAMES = ("QEMU_VARS-pflash.raw", "AAVMF_VARS.fd")
+AAVMF_SEARCH = ("/usr/share/AAVMF", "/usr/share/edk2/aarch64", "/usr/share/qemu-efi-aarch64")
+
 
 def _find_firmware(env: str, names: tuple[str, ...], dirs: tuple[str, ...]) -> Path | None:
     v = os.environ.get(env)
@@ -627,6 +636,24 @@ def ovmf_pflash(cache: Path) -> list[str]:
     shutil.copyfile(vars_src, vars_rw)
     return ["-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}",
             "-drive", f"if=pflash,format=raw,unit=1,file={vars_rw}"]
+
+
+def aavmf_pflash(cache: Path) -> list[str] | None:
+    """AArch64 AAVMF firmware pflash args for a UEFI boot, or None when none is
+    configured (the aarch64 boot then uses the legacy -kernel loader). VARS is
+    copied to a writable per-run file. Unlike OVMF this is optional: the env is
+    only set on the lane that publishes the badc-built firmware."""
+    code = _find_firmware("BADC_QEMU_AAVMF_CODE", AAVMF_CODE_NAMES, AAVMF_SEARCH)
+    if code is None:
+        return None
+    args = ["-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}"]
+    vars_src = _find_firmware("BADC_QEMU_AAVMF_VARS", AAVMF_VARS_NAMES,
+                              (str(code.parent), *AAVMF_SEARCH))
+    if vars_src is not None:
+        vars_rw = cache / "aavmf_vars.rw.fd"
+        shutil.copyfile(vars_src, vars_rw)
+        args += ["-drive", f"if=pflash,format=raw,unit=1,file={vars_rw}"]
+    return args
 
 
 def _shutdown_check(binp: Path, arch: str) -> None:
@@ -705,6 +732,13 @@ def maybe_boot(binp: Path, arch: str) -> None:
     timeout = float(os.environ.get("BADC_QEMU_BOOT_TIMEOUT") or 60)
     machine = "virt" if arch == "aarch64" else "q35"
     cpu = "cortex-a57" if arch == "aarch64" else "qemu64"
+    # aarch64 boots THROUGH the AAVMF firmware when it is published (env set),
+    # matching the x86_64 OVMF path. acpi=off forces the device tree so the
+    # kernel probes the PL011 as ttyAMA0: QEMU's ACPI provides only an SPCR
+    # earlycon, which leaves init with no /dev/console and hangs the boot.
+    aavmf = aavmf_pflash(QEMU_DIR / ".cache") if arch == "aarch64" else None
+    if aavmf is not None:
+        machine = "virt,acpi=off"
     console = "ttyAMA0" if arch == "aarch64" else "ttyS0"
     append = os.environ.get("BADC_QEMU_APPEND") or f"rdinit=/sbin/init console={console}"
     # No network: a boot smoke test needs none, and the default virtio-net
@@ -712,8 +746,9 @@ def maybe_boot(binp: Path, arch: str) -> None:
     # freshly linked emulator, so `-nic none` keeps the run self-contained.
     cmd = [str(binp), "-M", machine, "-cpu", cpu, "-smp", "16", "-m", "512",
            "-nographic", "-no-reboot", "-nic", "none"]
-    # x86_64 boots the EFI-stub kernel through system OVMF (UEFI firmware); the
-    # cmdline reaches the stub via fw_cfg. aarch64 -M virt loads the raw Image.
+    # x86_64 boots the EFI-stub kernel through OVMF; aarch64 boots it through
+    # AAVMF when published, else -M virt's legacy -kernel loader. The cmdline +
+    # initrd reach the stub via fw_cfg either way.
     if arch == "x86_64":
         cmd += ovmf_pflash(QEMU_DIR / ".cache")
         # The q35 machine loads a few option ROMs (kvmvapic, the linuxboot /
@@ -722,11 +757,13 @@ def maybe_boot(binp: Path, arch: str) -> None:
         romdir = os.path.join(os.path.dirname(kernel), "pc-bios")
         if os.path.isdir(romdir):
             cmd += ["-L", romdir]
+    elif aavmf is not None:
+        cmd += aavmf
     cmd += ["-kernel", kernel, "-append", append]
     if initrd:
         cmd += ["-initrd", initrd]
 
-    fw = " via OVMF" if arch == "x86_64" else ""
+    fw = " via OVMF" if arch == "x86_64" else (" via AAVMF" if aavmf else "")
     log(f"boot: {os.path.basename(kernel)} on -M {machine} -smp 16{fw} (timeout {timeout:.0f}s)")
     t0 = time.time()
     try:

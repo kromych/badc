@@ -5,8 +5,10 @@ runs the result -- with badc's own linker, no system linker in the chain. badc
 self-compiles and self-links both `qemu-system-aarch64` and `qemu-system-x86_64`,
 end to end: it compiles every unit, its own linker lays out the emulator, and
 each boots a Linux kernel plus a busybox initramfs to an interactive userspace
-shell that powers off cleanly under TCG. aarch64 loads a raw Image on -M virt;
-x86_64 boots an EFI-stub bzImage through system OVMF (see Scope).
+shell that powers off cleanly under TCG. Both boot the EFI-stub kernel *through*
+UEFI firmware -- OVMF on x86_64, ArmVirtQemu/AAVMF on aarch64 (with `acpi=off` so
+the kernel probes the PL011 as `ttyAMA0`); in CI the firmware is badc's own build
+(see Scope).
 
 QEMU is a large, portable C program: this demo compiles well over a thousand
 translation units per target with badc -- for aarch64, **1683 units** (1140
@@ -76,9 +78,11 @@ the serial log showing a boot marker (`Linux version` / `Booting Linux`) and
 userspace (`Run /sbin/init`), no fault marker (`Kernel panic`, `Unable to
 handle`, `Oops`, ...), and a clean power-down (the smoke sends `poweroff -f`
 over the console and the guest exits rc 0). The boot runs with `-smp 16`,
-`-nographic`, a 60s timeout, and `-no-reboot`. aarch64 `-M virt` loads a raw
-`Image`; x86_64 `-M q35` boots an EFI-stub `bzImage` through system OVMF (UEFI
-firmware), matching a real UEFI system.
+`-nographic`, a 60s timeout, and `-no-reboot`. aarch64 `-M virt` and x86_64
+`-M q35` boot the EFI-stub kernel through UEFI firmware when one is configured --
+AAVMF (aarch64, with `acpi=off` so the PL011 probes as `ttyAMA0`) and OVMF
+(x86_64) -- matching a real UEFI system; without a configured firmware aarch64
+falls back to `-M virt`'s legacy `-kernel` loader.
 
 `$BADC_QEMU_BOOT` drives it:
 
@@ -97,8 +101,10 @@ holds a raw `Image`, a busybox `initramfs.cpio.gz`, and the kernel `config`; the
 x86_64 bundle holds an EFI-stub `bzImage` with the initramfs embedded, plus its
 `config`. Point `$BADC_QEMU_KERNEL` / `$BADC_QEMU_INITRD` at your own images to
 boot those instead; `$BADC_QEMU_APPEND` overrides the kernel command line,
-`$BADC_QEMU_BOOT_TIMEOUT` the timeout. For x86_64, `$BADC_QEMU_OVMF_CODE` /
-`$BADC_QEMU_OVMF_VARS` override the firmware paths.
+`$BADC_QEMU_BOOT_TIMEOUT` the timeout. `$BADC_QEMU_OVMF_CODE` /
+`$BADC_QEMU_OVMF_VARS` (x86_64) and `$BADC_QEMU_AAVMF_CODE` /
+`$BADC_QEMU_AAVMF_VARS` (aarch64) point at the firmware images -- set in CI to
+the ovmf lane's badc-built firmware.
 
 ## Scope
 

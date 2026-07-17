@@ -10,13 +10,12 @@
 //! evaluate the semantics, so both paths agree on operand order and
 //! width.
 //!
-//! The mnemonic catalogue is deliberately small: the register-operand
-//! instructions C code reaches through extended asm (double-precision
-//! shifts, byte-swap, the timestamp-counter read sequence, the shift /
-//! or used to assemble a 64-bit value, and the `in` / `out` port I/O a
-//! firmware hardware-access layer needs). Adding an instruction is one
-//! arm in [`encode`] and one in the interpreter -- the standard
-//! per-mnemonic assembler table, not per-call special casing.
+//! [`encode`] routes the general-purpose and system mnemonics through the
+//! shared table encoder ([`super::table`]) via [`to_table`], transposing the
+//! AT&T (`src, dst`) operands to the table's Intel (`dst, src`) order. What
+//! stays here is what the table does not cover: the double-precision shifts,
+//! the port I/O and privileged prefix forms, the MMX and control / debug /
+//! segment register moves, and the interrupt / stack ops.
 
 use alloc::format;
 use alloc::string::String;
@@ -545,8 +544,8 @@ fn to_table(
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],
 ) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
-    use Mnemonic as M;
     use super::table::Opnd;
+    use Mnemonic as M;
     let name = match mnemonic {
         M::Add => "add",
         M::Sub => "sub",
@@ -597,8 +596,19 @@ fn to_table(
         }
     };
     let tops: Vec<Opnd> = match mnemonic {
-        M::Rdtsc | M::Rdtscp | M::Nop | M::Cli | M::Sti | M::Invd | M::Wbinvd | M::Rdmsr
-        | M::Wrmsr | M::Rdpmc | M::Monitor | M::Mwait | M::Hlt => Vec::new(),
+        M::Rdtsc
+        | M::Rdtscp
+        | M::Nop
+        | M::Cli
+        | M::Sti
+        | M::Invd
+        | M::Wbinvd
+        | M::Rdmsr
+        | M::Wrmsr
+        | M::Rdpmc
+        | M::Monitor
+        | M::Mwait
+        | M::Hlt => Vec::new(),
         M::Bswap | M::Inc | M::Dec => match ops {
             [rm] => alloc::vec![cvt(rm)],
             _ => return None,
@@ -645,115 +655,13 @@ pub(crate) fn encode(
         Mnemonic::RawBytes => Err(String::from(
             "inline asm: raw bytes not routed through encode",
         )),
-        Mnemonic::Nop => {
-            code.push(0x90);
-            Ok(())
-        }
-        Mnemonic::Rdtsc => {
-            code.extend_from_slice(&[0x0F, 0x31]);
-            Ok(())
-        }
-        Mnemonic::Rdtscp => {
-            code.extend_from_slice(&[0x0F, 0x01, 0xF9]);
-            Ok(())
-        }
         Mnemonic::Pause => {
             code.extend_from_slice(&[0xF3, 0x90]);
-            Ok(())
-        }
-        Mnemonic::Cli => {
-            code.push(0xFA);
-            Ok(())
-        }
-        Mnemonic::Sti => {
-            code.push(0xFB);
-            Ok(())
-        }
-        Mnemonic::Invd => {
-            code.extend_from_slice(&[0x0F, 0x08]);
-            Ok(())
-        }
-        Mnemonic::Wbinvd => {
-            code.extend_from_slice(&[0x0F, 0x09]);
-            Ok(())
-        }
-        Mnemonic::Rdmsr => {
-            code.extend_from_slice(&[0x0F, 0x32]);
-            Ok(())
-        }
-        Mnemonic::Wrmsr => {
-            code.extend_from_slice(&[0x0F, 0x30]);
-            Ok(())
-        }
-        Mnemonic::Rdpmc => {
-            code.extend_from_slice(&[0x0F, 0x33]);
-            Ok(())
-        }
-        Mnemonic::Monitor => {
-            code.extend_from_slice(&[0x0F, 0x01, 0xC8]);
-            Ok(())
-        }
-        Mnemonic::Mwait => {
-            code.extend_from_slice(&[0x0F, 0x01, 0xC9]);
-            Ok(())
-        }
-        Mnemonic::Hlt => {
-            code.push(0xF4);
             Ok(())
         }
         Mnemonic::Lock => {
             // Prefix byte; the following template line encodes the locked op.
             code.push(0xF0);
-            Ok(())
-        }
-        Mnemonic::Inc | Mnemonic::Dec => {
-            // `inc/dec r/m` = FF /0 (inc), FF /1 (dec). One r/m operand
-            // (register or memory).
-            let ext: u8 = if mnemonic == Mnemonic::Inc { 0 } else { 1 };
-            if let Some(Concrete::Mem { base, size }) = ops.first() {
-                let sz = suffix.unwrap_or(*size);
-                prefix_rex(code, sz, ext, *base);
-                code.push(if sz == AsmRegSize::Byte { 0xFE } else { 0xFF });
-                modrm_mem(code, ext, *base);
-                return Ok(());
-            }
-            let (reg, size) = reg_operand(ops.first(), suffix)?;
-            prefix_rex(code, size, ext, reg);
-            code.push(if size == AsmRegSize::Byte { 0xFE } else { 0xFF });
-            code.push(modrm_reg(ext, reg));
-            Ok(())
-        }
-        Mnemonic::Xadd | Mnemonic::Cmpxchg => {
-            // AT&T `xadd/cmpxchg src, dst`: source register in ModRM.reg,
-            // destination r/m (register or memory). xadd = 0F C0/C1, cmpxchg =
-            // 0F B0/B1 (the /C0 /B0 byte forms, /C1 /B1 otherwise). A `lock`
-            // prefix (emitted by its own template line) requires the memory
-            // form, which the `"m"` operand constraint selects.
-            let [src, dst] = two(ops)?;
-            let (src_reg, ssz) = as_reg(src)?;
-            let size = suffix.unwrap_or(ssz);
-            let byte = size == AsmRegSize::Byte;
-            let op: u8 = match (mnemonic, byte) {
-                (Mnemonic::Xadd, true) => 0xC0,
-                (Mnemonic::Xadd, false) => 0xC1,
-                (_, true) => 0xB0,
-                (_, false) => 0xB1,
-            };
-            match dst {
-                Concrete::Mem { base, .. } => {
-                    prefix_rex(code, size, src_reg, base);
-                    code.push(0x0F);
-                    code.push(op);
-                    modrm_mem(code, src_reg, base);
-                }
-                _ => {
-                    let (dst_reg, _) = as_reg(dst)?;
-                    prefix_rex(code, size, src_reg, dst_reg);
-                    code.push(0x0F);
-                    code.push(op);
-                    code.push(modrm_reg(src_reg, dst_reg));
-                }
-            }
             Ok(())
         }
         Mnemonic::Pushfq => {
@@ -863,23 +771,6 @@ pub(crate) fn encode(
             code.push(opcode);
             Ok(())
         }
-        Mnemonic::Bswap => {
-            // `bswap reg`; size from the suffix, else the operand.
-            let (reg, size) = reg_operand(ops.first(), suffix)?;
-            let size = if matches!(size, AsmRegSize::Byte | AsmRegSize::Word) {
-                // BSWAP is defined for 32- and 64-bit operands only.
-                AsmRegSize::Long
-            } else {
-                size
-            };
-            let w = size == AsmRegSize::Quad;
-            if w || reg >= 8 {
-                code.push(rex(w, false, false, reg >= 8));
-            }
-            code.push(0x0F);
-            code.push(0xC8 + (reg & 7));
-            Ok(())
-        }
         Mnemonic::Shld | Mnemonic::Shrd => {
             // AT&T `shld count, src, dst` -> Intel `SHLD dst, src, count`.
             let [count, src, dst] = three(ops)?;
@@ -914,55 +805,13 @@ pub(crate) fn encode(
             }
             Ok(())
         }
-        Mnemonic::Shl | Mnemonic::Shr | Mnemonic::Sar => {
-            // AT&T `shl count, dst` (count = imm / CL) or `shl dst` (by 1).
-            let ext: u8 = match mnemonic {
-                Mnemonic::Shl => 4,
-                Mnemonic::Shr => 5,
-                _ => 7,
-            };
-            let (count, dst) = one_or_two(ops)?;
-            let (dst_reg, dsz) = as_reg(dst)?;
-            let size = suffix.unwrap_or(dsz);
-            prefix_rex(code, size, 0, dst_reg);
-            match count {
-                None => {
-                    code.push(0xD1);
-                    code.push(modrm_reg(ext, dst_reg));
-                }
-                Some(Concrete::Imm(v)) => {
-                    code.push(0xC1);
-                    code.push(modrm_reg(ext, dst_reg));
-                    code.push((v & 0xFF) as u8);
-                }
-                Some(Concrete::Reg { reg, .. }) => {
-                    if reg != 1 {
-                        return Err(String::from(
-                            "inline asm: shift count must be CL or immediate",
-                        ));
-                    }
-                    code.push(0xD3);
-                    code.push(modrm_reg(ext, dst_reg));
-                }
-                Some(Concrete::Mem { .. }) => {
-                    return Err(String::from("inline asm: shift count in memory"));
-                }
-            }
-            Ok(())
-        }
-        Mnemonic::Or
-        | Mnemonic::And
-        | Mnemonic::Add
-        | Mnemonic::Sub
-        | Mnemonic::Xor
-        | Mnemonic::Mov => {
-            // AT&T `op src, dst` -> Intel `op dst, src`.
+        // Only control / debug / segment register moves reach here; the general
+        // register / memory / immediate moves route through the table encoder.
+        //   read  cr/dr/seg -> gpr : 0F 20 / 0F 21 / 8C
+        //   write gpr -> cr/dr/seg : 0F 22 / 0F 23 / 8E
+        Mnemonic::Mov => {
             let [src, dst] = two(ops)?;
-            // Control / debug / segment register moves: exactly one operand is
-            // a special register (marked by its base), the other a GPR.
-            //   read  cr/dr/seg -> gpr : 0F 20 / 0F 21 / 8C
-            //   write gpr -> cr/dr/seg : 0F 22 / 0F 23 / 8E
-            if mnemonic == Mnemonic::Mov {
+            {
                 let class = |c: &Concrete| -> Option<(u8, u8)> {
                     let Concrete::Reg { reg, .. } = c else {
                         return None;
@@ -1013,112 +862,13 @@ pub(crate) fn encode(
                     return Ok(());
                 }
             }
-            // Memory operand (`"m"`): the r/m side is `(%base)`. AT&T
-            // `op src, dst`: a memory `dst` stores, a memory `src` loads.
-            if let Concrete::Mem { base, size } = dst {
-                let sz = suffix.unwrap_or(size);
-                match src {
-                    Concrete::Reg { reg: src_reg, .. } => {
-                        let opcode: u8 = match mnemonic {
-                            Mnemonic::Or => 0x09,
-                            Mnemonic::And => 0x21,
-                            Mnemonic::Add => 0x01,
-                            Mnemonic::Sub => 0x29,
-                            Mnemonic::Xor => 0x31,
-                            Mnemonic::Mov => 0x89,
-                            _ => unreachable!(),
-                        };
-                        prefix_rex(code, sz, src_reg, base);
-                        code.push(opcode);
-                        modrm_mem(code, src_reg, base);
-                    }
-                    Concrete::Imm(v) => {
-                        let ext: u8 = match mnemonic {
-                            Mnemonic::Mov => 0,
-                            Mnemonic::Or => 1,
-                            Mnemonic::And => 4,
-                            Mnemonic::Add => 0,
-                            Mnemonic::Sub => 5,
-                            Mnemonic::Xor => 6,
-                            _ => unreachable!(),
-                        };
-                        prefix_rex(code, sz, ext, base);
-                        code.push(if mnemonic == Mnemonic::Mov {
-                            0xC7
-                        } else {
-                            0x81
-                        });
-                        modrm_mem(code, ext, base);
-                        code.extend_from_slice(&(v as i32).to_le_bytes());
-                    }
-                    Concrete::Mem { .. } => {
-                        return Err(String::from("inline asm: memory-to-memory operand"));
-                    }
-                }
-                return Ok(());
-            }
-            if let Concrete::Mem { base, size } = src {
-                let (dst_reg, _) = as_reg(dst)?;
-                let sz = suffix.unwrap_or(size);
-                // Load form: /r with the register as ModRM.reg, memory as r/m.
-                let opcode: u8 = match mnemonic {
-                    Mnemonic::Or => 0x0B,
-                    Mnemonic::And => 0x23,
-                    Mnemonic::Add => 0x03,
-                    Mnemonic::Sub => 0x2B,
-                    Mnemonic::Xor => 0x33,
-                    Mnemonic::Mov => 0x8B,
-                    _ => unreachable!(),
-                };
-                prefix_rex(code, sz, dst_reg, base);
-                code.push(opcode);
-                modrm_mem(code, dst_reg, base);
-                return Ok(());
-            }
-            let (dst_reg, dsz) = as_reg(dst)?;
-            let size = suffix.unwrap_or(dsz);
-            match src {
-                Concrete::Reg { reg: src_reg, .. } => {
-                    // `op r/m, r` form: /r with reg = source.
-                    let opcode: u8 = match mnemonic {
-                        Mnemonic::Or => 0x09,
-                        Mnemonic::And => 0x21,
-                        Mnemonic::Add => 0x01,
-                        Mnemonic::Sub => 0x29,
-                        Mnemonic::Xor => 0x31,
-                        Mnemonic::Mov => 0x89,
-                        _ => unreachable!(),
-                    };
-                    prefix_rex(code, size, src_reg, dst_reg);
-                    code.push(opcode);
-                    code.push(modrm_reg(src_reg, dst_reg));
-                    Ok(())
-                }
-                Concrete::Mem { .. } => unreachable!("memory src handled above"),
-                Concrete::Imm(v) => {
-                    // `op r/m, imm32` form (`mov` uses its own opcode).
-                    if mnemonic == Mnemonic::Mov {
-                        prefix_rex(code, size, 0, dst_reg);
-                        code.push(0xC7);
-                        code.push(modrm_reg(0, dst_reg));
-                    } else {
-                        let ext: u8 = match mnemonic {
-                            Mnemonic::Or => 1,
-                            Mnemonic::And => 4,
-                            Mnemonic::Add => 0,
-                            Mnemonic::Sub => 5,
-                            Mnemonic::Xor => 6,
-                            _ => unreachable!(),
-                        };
-                        prefix_rex(code, size, 0, dst_reg);
-                        code.push(0x81);
-                        code.push(modrm_reg(ext, dst_reg));
-                    }
-                    code.extend_from_slice(&(v as i32).to_le_bytes());
-                    Ok(())
-                }
-            }
+            Err(String::from("inline asm: unsupported mov operands"))
         }
+        // The delegated general-purpose / system mnemonics are handled by the
+        // table encoder above and never reach here.
+        _ => Err(format!(
+            "inline asm: unsupported instruction `{mnemonic:?}`"
+        )),
     }
 }
 
@@ -1150,14 +900,6 @@ fn three(ops: &[Concrete]) -> Result<[Concrete; 3], String> {
         return Err(String::from("inline asm: instruction needs three operands"));
     }
     Ok([ops[0], ops[1], ops[2]])
-}
-
-fn one_or_two(ops: &[Concrete]) -> Result<(Option<Concrete>, Concrete), String> {
-    match ops {
-        [dst] => Ok((None, *dst)),
-        [count, dst] => Ok((Some(*count), *dst)),
-        _ => Err(String::from("inline asm: shift needs one or two operands")),
-    }
 }
 
 #[cfg(test)]

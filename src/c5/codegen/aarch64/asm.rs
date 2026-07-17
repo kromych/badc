@@ -39,6 +39,9 @@ pub(crate) enum AsmOpndA64 {
     /// A memory reference `[base, #off]` (the `off` defaults to 0). The base is
     /// an operand reference or an explicit register.
     Mem { base: MemBase, off: i64 },
+    /// A condition code (`eq`, `ne`, ...) as its 4-bit encoding, for the
+    /// conditional-select forms.
+    Cond(u8),
 }
 
 /// The base register of a memory operand.
@@ -106,6 +109,29 @@ pub(crate) struct AsmInsnA64 {
     pub operands: Vec<AsmOpndA64>,
     /// Literal bytes for a raw-byte piece; empty for a mnemonic.
     pub bytes: Vec<u8>,
+}
+
+/// A condition-code mnemonic to its 4-bit encoding.
+fn cond_code(name: &str) -> Option<u8> {
+    Some(match name {
+        "eq" => 0,
+        "ne" => 1,
+        "cs" | "hs" => 2,
+        "cc" | "lo" => 3,
+        "mi" => 4,
+        "pl" => 5,
+        "vs" => 6,
+        "vc" => 7,
+        "hi" => 8,
+        "ls" => 9,
+        "ge" => 10,
+        "lt" => 11,
+        "gt" => 12,
+        "le" => 13,
+        "al" => 14,
+        "nv" => 15,
+        _ => return None,
+    })
 }
 
 fn parse_reg(tok: &str) -> Option<(u8, bool)> {
@@ -222,6 +248,10 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     // A system-register name (for mrs / msr).
     if let Some(field) = sysreg_field(tok) {
         return Ok(AsmOpndA64::SysReg(field));
+    }
+    // A condition code (for csel and other conditional forms).
+    if let Some(c) = cond_code(tok) {
+        return Ok(AsmOpndA64::Cond(c));
     }
     Err(format!("inline asm: unsupported operand `{tok}`"))
 }
@@ -414,5 +444,15 @@ mod tests {
         );
         assert_eq!(insns[1].mnemonic, "msr");
         assert!(matches!(insns[1].operands[0], AsmOpndA64::SysReg(_)));
+    }
+
+    #[test]
+    fn parse_condition_operand() {
+        assert_eq!(cond_code("lt"), Some(11));
+        assert_eq!(cond_code("hs"), Some(2)); // alias of cs
+        assert_eq!(cond_code("xyz"), None);
+        let insns = parse_template(b"csel %0, %1, %2, ne").unwrap();
+        assert_eq!(insns[0].mnemonic, "csel");
+        assert_eq!(insns[0].operands[3], AsmOpndA64::Cond(1));
     }
 }

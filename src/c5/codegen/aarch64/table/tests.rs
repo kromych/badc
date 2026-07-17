@@ -72,6 +72,17 @@ fn load_store_immediate() {
 }
 
 #[test]
+fn multiply_and_conditional_select() {
+    // mul = madd with the zero register as addend.
+    assert_eq!(enc("mul", &[x(0), x(1), x(2)]), 0x9B027C20); // mul x0, x1, x2
+    assert_eq!(enc("mul", &[w(0), w(1), w(2)]), 0x1B027C20); // mul w0, w1, w2
+    // csel Xd, Xn, Xm, <cond>: the 4-bit condition sits at bit 12.
+    assert_eq!(enc("csel", &[x(0), x(1), x(2), Opnd::Cond(1)]), 0x9A821020); // ne
+    assert_eq!(enc("csel", &[x(3), x(4), x(5), Opnd::Cond(0)]), 0x9A850083); // eq
+    assert_eq!(enc("csel", &[w(0), w(1), w(2), Opnd::Cond(12)]), 0x1A82C020); // gt
+}
+
+#[test]
 fn system_register_move() {
     // mrs Xt, <sysreg> = 0xD5300000 | field<<5 | Rt; msr <sysreg>, Xt =
     // 0xD5100000 | field<<5 | Rt. CTR_EL0 field 0x5801 is cross-checked against

@@ -2121,6 +2121,10 @@ fn emit_inline_asm_aarch64(
                     emit(code, super::encode::enc_ldrh_imm(Reg(r), Reg(16), 0));
                     true
                 }
+                1 => {
+                    emit(code, super::encode::enc_ldrb_imm(Reg(r), Reg(16), 0));
+                    true
+                }
                 _ => false,
             };
             if !ok {
@@ -2168,6 +2172,7 @@ fn emit_inline_asm_aarch64(
                         off: off as u32,
                     }
                 }
+                AsmOpndA64::Cond(c) => Opnd::Cond(c),
             };
             ops.push(opnd);
         }
@@ -2191,6 +2196,7 @@ fn emit_inline_asm_aarch64(
             8 => emit(code, enc_str_imm(Reg(r), Reg(16), 0)),
             4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
             2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
+            1 => emit(code, super::encode::enc_strb_imm(Reg(r), Reg(16), 0)),
             _ => {
                 bail_msg("aarch64 inline asm: unsupported output width");
                 return false;

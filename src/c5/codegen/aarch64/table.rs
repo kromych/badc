@@ -87,6 +87,8 @@ pub(crate) enum Opnd {
         base: u8,
         off: u32,
     },
+    /// A 4-bit condition code for the conditional-select forms.
+    Cond(u8),
 }
 
 /// AArch64 logical-immediate (bitmask) encoder. Returns the 13-bit field
@@ -209,6 +211,40 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             });
         }
         return Err(String::from("inline asm: bad ldr/str operands"));
+    }
+    // Multiply `mul Xd, Xn, Xm` (the `madd Xd, Xn, Xm, xzr` alias) and
+    // conditional-select `csel Xd, Xn, Xm, <cond>`. Both take three registers of
+    // one width; csel adds the 4-bit condition.
+    if mnemonic == "mul" || mnemonic == "csel" {
+        let (rd, is64, rn, rm, cond) = match (mnemonic, ops) {
+            (
+                "mul",
+                [
+                    Opnd::Reg { num: d, is64 },
+                    Opnd::Reg { num: n, is64: n1 },
+                    Opnd::Reg { num: m, is64: n2 },
+                ],
+            ) if is64 == n1 && is64 == n2 => (*d, *is64, *n, *m, None),
+            (
+                "csel",
+                [
+                    Opnd::Reg { num: d, is64 },
+                    Opnd::Reg { num: n, is64: n1 },
+                    Opnd::Reg { num: m, is64: n2 },
+                    Opnd::Cond(c),
+                ],
+            ) if is64 == n1 && is64 == n2 => (*d, *is64, *n, *m, Some(*c)),
+            _ => return Err(String::from("inline asm: bad mul/csel operands")),
+        };
+        let rd = (rd as u32) & 31;
+        let rn = (rn as u32 & 31) << 5;
+        let rm = (rm as u32 & 31) << 16;
+        return Ok(match cond {
+            None if is64 => 0x9B00_7C00 | rm | rn | rd,
+            None => 0x1B00_7C00 | rm | rn | rd,
+            Some(c) if is64 => 0x9A80_0000 | rm | ((c as u32 & 15) << 12) | rn | rd,
+            Some(c) => 0x1A80_0000 | rm | ((c as u32 & 15) << 12) | rn | rd,
+        });
     }
     for f in super::isa_a64_table::FORMS {
         if f.mnemonic != mnemonic {

@@ -10,13 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<fma3>:
-               	movapd	%xmm0, %xmm14
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm2, %xmm0
-               	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -156,7 +149,9 @@ Disassembly of section .text:
                	movss	%xmm0, -0x8(%rbp,%riz)
                	movss	-0x8(%rbp,%riz), %xmm0
                	cvttss2si	%xmm0, %rax
+               	movslq	%eax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

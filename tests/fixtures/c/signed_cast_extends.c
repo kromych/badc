@@ -1,7 +1,7 @@
 // Casts to a signed integer type narrower than 8 bytes must
 // truncate-and-sign-extend per C99 6.3.1.3, even when the
-// source operand is the same width but unsigned. Sqlite's
-// `ONE_BYTE_INT(x) ((i8)(x)[0])` macro depends on this:
+// source operand is the same width but unsigned. A common
+// one-byte signed-load idiom `((i8)(x)[0])` depends on this:
 // `x` is `unsigned char[]`, so `(x)[0]` is an unsigned char
 // value 0..255, and `(i8)` has to flip values >= 0x80 to
 // negative.
@@ -66,7 +66,7 @@ int main() {
     int r11 = (signed char)sc;
     if (r11 != -42) return 11;
 
-    // ONE_BYTE_INT shape: `(i8)(arr[0])` where arr is
+    // One-byte signed-load shape: `(i8)(arr[0])` where arr is
     // unsigned char[].
     unsigned char arr[3];
     arr[0] = 0xFF;

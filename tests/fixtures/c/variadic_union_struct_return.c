@@ -5,7 +5,7 @@
 // stack-placed variadic arguments must both be correct: a prior version
 // placed the variadic arguments in registers, so the callee's va_start read
 // past them. The shape mirrors a printf-style helper returning a tagged
-// value (a union plus a tag), as quickjs's error throwers do.
+// value (a union plus a tag), a common real-world shape.
 
 #include <stdarg.h>
 #include <string.h>

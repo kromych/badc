@@ -10,40 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sum4>:
-               	leaq	(%rdi,%rsi), %rax
-               	addq	%rdx, %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<widen>:
-               	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
-               	retq
-
-<sgn>:
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	setl	%al
-               	movzbq	%al, %rax
-               	retq
-
-<pick>:
-               	leaq	(%rsi,%rdx), %rax
-               	movslq	%eax, %rax
-               	movslq	(%rdi,%rax,4), %rax
-               	retq
-
-<uwrap>:
-               	movl	%edi, %eax
-               	movl	%esi, %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, %eax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -78,3 +44,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

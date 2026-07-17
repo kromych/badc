@@ -2,8 +2,8 @@
 // a constant expression. When the arms are address constants, the
 // selected arm's relocation must survive into the static initializer --
 // the integer constant evaluator can fold the value but not carry the
-// address. Surfaced by CPython's clinic tables (`_Py_LATIN1_CHR`), which
-// initialize a pointer array with `(ch < 128 ? &a[ch] : &b[ch-128])`.
+// address. A real-world shape is a pointer array initialized with
+// `(ch < 128 ? &a[ch] : &b[ch-128])`.
 
 struct Cell {
     int tag;
@@ -19,7 +19,7 @@ static struct Cell cells[3] = {
 
 // Each element selects an address constant through a constant condition;
 // the parenthesised arms mix a plain `&`, a cast, and a member/index
-// chain (the shapes the clinic tables produce).
+// chain (shapes that appear in real code).
 static int *int_ptrs[3] = {
     (1 ? &nums[2] : &nums[0]),
     (0 ? &nums[1] : &nums[3]),

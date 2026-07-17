@@ -20,13 +20,16 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rdi, %rax
                	subq	%rsi, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
                	decq	%rdx
                	xchgq	%rsi, %rdi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
+               	retq
 
 <main>:
                	pushq	%rbp
@@ -62,3 +65,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -122,6 +122,12 @@ pub(crate) enum AtomicKind {
     /// GCC `__sync_bool_compare_and_swap(p, old, new)` -- as `SyncCasVal`
     /// but yield 1 on a swap, 0 otherwise.
     SyncCasBool,
+    /// GCC generic `__atomic_load(p, ret, memorder)` -- atomically load
+    /// `*p` and write it through `ret`. `args` are `[p, ret]`; no value.
+    LoadInto,
+    /// GCC generic `__atomic_store(p, val, memorder)` -- atomically store
+    /// `*val` into `*p`. `args` are `[p, val]`; no value.
+    StoreFrom,
 }
 
 /// Storage-unit width + bit position for a bitfield reference. The
@@ -204,12 +210,15 @@ pub(crate) enum Expr {
         rhs: ExprId,
         ty: i64,
     },
-    /// `cond ? then_e : else_e` (C99 6.5.15).
+    /// `cond ? then_e : else_e` (C99 6.5.15). `elvis` marks the GNU
+    /// `cond ?: else_e` form (omitted middle operand): the walker
+    /// evaluates `cond` once and reuses its value as `then_e`.
     Ternary {
         cond: ExprId,
         then_e: ExprId,
         else_e: ExprId,
         ty: i64,
+        elvis: bool,
     },
     /// `callee(args...)`. Variadic calls go through the same
     /// variant; the parser records the variadic boundary by the
@@ -307,6 +316,12 @@ pub(crate) enum Expr {
         args: Vec<ExprId>,
         ty: i64,
     },
+    /// GCC extended inline asm with operands. The payload is an index
+    /// into [`Ast::asm_blocks`]; the descriptor there holds the
+    /// template, per-operand constraints, clobbers, and the operand
+    /// expressions. As a statement it yields no value (`void`); the
+    /// walker lowers it to `Inst::InlineAsm`.
+    InlineAsm(u32),
     /// C11 7.17 atomic operation (`atomic_load`, `atomic_store`,
     /// `atomic_exchange`, `atomic_fetch_*`,
     /// `atomic_compare_exchange_strong`). `args` holds the pointer
@@ -349,6 +364,28 @@ pub(crate) enum Expr {
     /// `Decl::Vla` stored into `size_slot` (C99 6.5.3.4p2: for a VLA
     /// the operand is evaluated and the result is a runtime value).
     VlaSizeof { size_slot: i64 },
+    /// GCC statement expression `({ ... })` (Annex J.5 common
+    /// extension). `block` is the enclosed compound statement (or,
+    /// for a single-item block, the bare statement `ast_wrap_block_items`
+    /// yields). The value and type are those of the last
+    /// expression-statement; `ty` is `Ty::Void` when the trailing
+    /// block-item is not an expression statement.
+    #[allow(clippy::enum_variant_names)]
+    StmtExpr { block: StmtId, ty: i64 },
+    /// GCC checked-arithmetic builtin
+    /// `__builtin_{add,sub,mul}_overflow(a, b, dst)`. `op` is 0 = add,
+    /// 1 = sub, 2 = mul. `dst` is the result pointer; `elem_ty` is its
+    /// pointee type, which drives the operation width and signedness.
+    /// The walker stores the wrapped `a op b` through `dst` and yields
+    /// the `int` overflow flag (`ty`).
+    CheckedArith {
+        op: i64,
+        a: ExprId,
+        b: ExprId,
+        dst: ExprId,
+        elem_ty: i64,
+        ty: i64,
+    },
 }
 
 /// One item inside a compound statement. C99 6.8.2's
@@ -392,7 +429,10 @@ pub(crate) enum Stmt {
     /// statement that contains the case labels.
     Switch { disc: ExprId, body: StmtId },
     /// `case val: body` (C99 6.8.1).
-    Case { val: i64, body: StmtId },
+    /// `case val: body`, or the GNU range `case val ... hi: body`
+    /// (`hi == val` for a single label). The walker maps every value in
+    /// `[val, hi]` to this case's block.
+    Case { val: i64, hi: i64, body: StmtId },
     /// `default: body` (C99 6.8.1).
     Default { body: StmtId },
     /// `break;` (C99 6.8.6.3).
@@ -433,12 +473,16 @@ pub(crate) enum Stmt {
 /// One stored element in a runtime aggregate initializer.
 /// `offset` is the byte offset into the local; `value` is the
 /// element's expression; `ty` is the destination type that
-/// drives the walker's `store_kind_for` pick.
+/// drives the walker's `store_kind_for` pick. `bitfield`, when set,
+/// makes the walker emit a load-clear-shift-or-store into the
+/// storage unit at `offset` instead of a full-width store (a
+/// bitfield member with a non-constant initializer).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeInitElement {
     pub offset: i64,
     pub value: ExprId,
     pub ty: i64,
+    pub bitfield: Option<BitfieldDesc>,
 }
 
 /// Initializer shape on a `Decl::Local`. C99 6.7.8 admits four
@@ -540,6 +584,11 @@ pub(crate) struct FinishedFunction {
     /// The walker propagates this onto `FunctionSsa::is_inline` so
     /// `inline` bypasses its body-size cap for these.
     pub is_inline: bool,
+    /// True if the declarator carried a *mandatory* inline request
+    /// (`__attribute__((always_inline))` or MSVC `__forceinline`).
+    /// Propagated onto `FunctionSsa::is_always_inline`; implies
+    /// `is_inline`.
+    pub is_always_inline: bool,
     pub n_locals: i64,
     /// Per-parameter type tags in declared order. The walker
     /// reads these to emit the C99 6.2.4 / 6.5.2.2-mandated
@@ -585,11 +634,25 @@ pub(crate) struct FinishedFunction {
 
 /// Per-function AST. One instance lives on the active function in
 /// [`super::compiler::Compiler`]; dropped at function exit.
+/// A GCC extended-asm statement as parsed, before the walker evaluates
+/// its operands. `block` carries the template, constraints, and
+/// clobbers; `operand_exprs` is parallel to `block.operands` and holds
+/// each operand's parenthesised expression (an lvalue for an output, an
+/// rvalue for an input). Referenced by index from [`Expr::InlineAsm`].
+#[derive(Debug, Clone)]
+pub(crate) struct AsmBlockAst {
+    pub block: crate::c5::ir::AsmBlock,
+    pub operand_exprs: Vec<ExprId>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Ast {
     pub exprs: Vec<Expr>,
     pub stmts: Vec<Stmt>,
     pub decls: Vec<Decl>,
+    /// Extended inline-asm descriptors, indexed by [`Expr::InlineAsm`].
+    /// Sparse: empty unless a function uses operand-carrying asm.
+    pub asm_blocks: Vec<AsmBlockAst>,
     /// Source position columns. Same length as the matching arena;
     /// `expr_src[ExprId as usize]` is the position of that node.
     pub expr_src: Vec<SrcPos>,
@@ -662,6 +725,14 @@ impl Ast {
 
     pub(crate) fn expr(&self, id: ExprId) -> &Expr {
         &self.exprs[id as usize]
+    }
+
+    /// Value type of an expression node, falling back to `Ty::Int`
+    /// for a node the type helper does not classify. Used by the
+    /// statement-expression parser to type `({ ...; expr; })` from
+    /// its last expression-statement.
+    pub(crate) fn expr_value_ty(&self, id: ExprId) -> i64 {
+        walk::expr_ty(self.expr(id)).unwrap_or(crate::c5::token::Ty::Int as i64)
     }
 
     pub(crate) fn stmt(&self, id: StmtId) -> &Stmt {
@@ -904,7 +975,9 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::ShortCircuit { ty, .. }
         | Expr::Intrinsic { ty, .. }
         | Expr::Atomic { ty, .. }
-        | Expr::VlaBase { ty, .. } => f(ty),
+        | Expr::VlaBase { ty, .. }
+        | Expr::StmtExpr { ty, .. }
+        | Expr::CheckedArith { ty, .. } => f(ty),
         Expr::VlaSizeof { .. } => {}
         Expr::Cast { to_ty, .. } => f(to_ty),
         Expr::CompoundLiteral { ty, init, .. } => {
@@ -918,6 +991,8 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         Expr::Sizeof(_) => {}
         // No `ty` field; `&&label` is always a `void *`.
         Expr::LabelAddr(_) => {}
+        // No `ty` field; the operand expressions carry their own.
+        Expr::InlineAsm(_) => {}
     }
 }
 

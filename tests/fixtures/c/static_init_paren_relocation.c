@@ -1,6 +1,6 @@
 // A relocation-bearing initializer leaf -- a function or a `&global` --
-// may be wrapped in redundant parentheses and casts, the shape produced
-// by Python's method-table macros: `(PyCFunction)(((void(*)(void))((fn))))`.
+// may be wrapped in redundant parentheses and casts, a real-world shape
+// produced by method-table macros: `(target)(((void(*)(void))((fn))))`.
 // The function pointers are exercised by calling through them, which
 // resolves the code address at the call site on every execution backend;
 // the data address is compared directly.

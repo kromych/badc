@@ -24,7 +24,7 @@ int main(void) {
     if (and_rr(5, 7) != 1) return 4;         // 5 && 7 -> 1 (not 7)
     if (and_rr(5, 0) != 0) return 5;         // 5 && 0 -> 0
 
-    // As an array index: the original sqlite crash shape.
+    // As an array index: the original crash shape.
     int t[2] = {10, 20};
     if (t[or_ll(p, 0)] != 20) return 6;      // index must be 1
     if (t[and_ll((void *)0, 9)] != 10) return 7;

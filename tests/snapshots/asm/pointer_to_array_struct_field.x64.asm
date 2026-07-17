@@ -164,7 +164,8 @@ Disassembly of section .text:
                	shlq	$0x3, %rcx
                	addq	$0xa, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	movq	(%rsp), %rbx
                	addq	$0x30, %rsp
                	popq	%rbp
@@ -172,3 +173,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

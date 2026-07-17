@@ -114,6 +114,15 @@ impl Compiler {
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
         let line = self.lex.line;
+        // C11 6.5.1.1 generic selection as a static initializer element:
+        // select the association, initialize this slot from the winning
+        // expression, then resume past the `_Generic(...)`.
+        if self.lex.tk == Token::Generic {
+            let after = self.generic_select_to_winner()?;
+            self.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)?;
+            self.lex.restore(after);
+            return Ok(());
+        }
         // C99 6.7.8p11 allows a scalar initializer to be enclosed
         // in a single pair of braces: `int x = { 42 };`. Adjacent
         // string-literal concatenation may produce a multi-piece
@@ -367,15 +376,7 @@ impl Compiler {
                         "compound literal of non-struct type is not yet supported in global init",
                     ));
                 }
-                self.align_data_to_8();
-                let size = self.size_of_type(cl_ty);
-                let aligned = size.div_ceil(8) * 8;
-                let off = self.data.len() as i64;
-                for _ in 0..aligned {
-                    self.data.push(0);
-                }
-                let new_idx = self.intern_compound_literal_symbol(off, cl_ty);
-                self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
+                let (off, new_idx) = self.emit_compound_literal_body(cl_ty)?;
                 let bytes = (off as u64).to_le_bytes();
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.data_relocs.push(crate::c5::program::DataReloc {
@@ -577,8 +578,9 @@ impl Compiler {
         // Constant expression, evaluated at compile time. Handles
         // integer literals, unary `+`/`-`, casts (`(size_t)expr`),
         // arithmetic, parens, identifiers bound as `Token::Num`
-        // (enum / `#define`d constants), and the offsetof shape.
-        let cv = self.parse_const_expr_or_val()?;
+        // (enum / `#define`d constants), the conditional operator
+        // (`static int n = A > B ? A : B;`), and the offsetof shape.
+        let cv = self.parse_const_expr_cond_val()?;
 
         // C99 6.7.8p11 / 6.3.1.4: a constant initializing a floating
         // object takes the floating value. Coerce the ConstVal to f64

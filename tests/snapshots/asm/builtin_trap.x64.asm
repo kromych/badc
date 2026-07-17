@@ -13,10 +13,10 @@ Disassembly of section .text:
 <clamp_low>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	movslq	%edi, %rdi
+               	testq	%rdi, %rdi
                	jl	<addr>
+               	movslq	%edi, %rax
                	popq	%rbp
                	retq
                	ud2

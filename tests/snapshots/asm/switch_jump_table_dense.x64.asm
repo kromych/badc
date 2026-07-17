@@ -76,9 +76,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x10, %eax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <dense_negative_bias>:
                	leaq	0x6(%rdi), %rax
@@ -122,9 +119,6 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x1, %rax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <dense_unsigned_high>:
                	movl	%edi, %eax
@@ -175,9 +169,6 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x1, %rax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -398,3 +389,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

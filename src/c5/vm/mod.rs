@@ -70,6 +70,15 @@ pub struct Vm<H: Host> {
     /// `target_ent_pc` of every static-initializer function
     /// pointer, checked against `extern_fn_names` at `run`.
     code_reloc_pcs: Vec<usize>,
+    /// Constructor entry pcs (`__attribute__((constructor))`), ordered as
+    /// they run before the entry: prioritized ascending, then
+    /// unprioritized. The native path runs these through `.init_array`;
+    /// the VM calls them itself before `main`.
+    init_pcs: Vec<usize>,
+    /// Destructor entry pcs, in the same order; the VM runs them in
+    /// reverse after the entry returns (a direct `exit()` bypasses them,
+    /// as the VM has no atexit chain).
+    fini_pcs: Vec<usize>,
 }
 
 /// `Vm::new` is only available with the `std` feature; it picks the
@@ -121,21 +130,37 @@ impl<H: Host> Vm<H> {
             .iter()
             .map(|r| r.target_ent_pc as usize)
             .collect();
+        // Constructors / destructors, ordered as the native `.init_array`
+        // path runs them: prioritized ascending, then unprioritized (a
+        // stable sort keeps source order within a priority).
+        let order_init = |dtor: bool| -> Vec<usize> {
+            let mut v: Vec<&crate::c5::program::InitFunc> = program
+                .init_funcs
+                .iter()
+                .filter(|f| f.is_destructor == dtor)
+                .collect();
+            v.sort_by_key(|f| (f.priority.is_none(), f.priority.unwrap_or(0)));
+            v.into_iter().map(|f| f.ent_pc).collect()
+        };
+        let init_pcs = order_init(false);
+        let fini_pcs = order_init(true);
         // Concatenate the TLS block onto the data segment so
         // `Inst::TlsAddr` resolutions ride the existing data-side
         // access checks. The starting offset is captured before
         // the TLS bytes are appended.
         let mut data = program.data;
-        // Apply CodeReloc entries: function-pointer initializers in
-        // the data segment store `CODE_BASE + ent_pc` so the
-        // indirect-call dispatch recognises the slot's value as a
-        // code address. The
-        // compiler can't bake this in directly because the VM's
-        // CODE_BASE constant lives in this crate; we patch each
+        // Apply CodeReloc entries: a function-pointer initializer in
+        // the data segment is patched to `CODE_ADDR_TAG | ent_pc` --
+        // the same encoding an `Inst::ImmCode` materializes and a
+        // runtime store of a function reference writes -- so a value
+        // loaded from the slot compares equal to the function symbol
+        // and the indirect-call dispatch recognises it as a code
+        // address. The compiler emits a placeholder plus a CodeReloc
+        // because the tag constant lives in this crate; we patch each
         // slot here at VM construction time.
         for r in &program.code_relocs {
             let off = r.data_offset as usize;
-            let runtime = (super::CODE_BASE as u64).wrapping_add(r.target_ent_pc);
+            let runtime = ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc;
             data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
         }
         let tls_base = data.len();
@@ -154,6 +179,8 @@ impl<H: Host> Vm<H> {
             symbol_defs,
             data_binding_locals,
             code_reloc_pcs,
+            init_pcs,
+            fini_pcs,
         }
     }
 
@@ -267,6 +294,8 @@ impl<H: Host> Vm<H> {
             &mut self.host,
             &self.args,
             self.track_pointers,
+            &self.init_pcs,
+            &self.fini_pcs,
         )
     }
 }

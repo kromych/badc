@@ -44,6 +44,10 @@ pub(crate) fn compile_function_to_bytes(
     let alloc = super::reg_alloc::allocate(func, target);
     let imports = ResolvedImports::default();
     let variadic_targets: BTreeSet<usize> = BTreeSet::new();
+    // Single-function compile: no same-image callees are resolvable,
+    // so the tail-call conversion sees no known return contracts.
+    let ret_tags: alloc::collections::BTreeMap<usize, i64> =
+        core::iter::once((func.ent_pc, func.ret_type_tag)).collect();
     let mut pc_to_native: Vec<usize> = alloc::vec![0usize; func.end_pc + 1];
     let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
@@ -156,6 +160,7 @@ pub(crate) fn compile_function_to_bytes(
                     &extern_tls_names,
                     &imports,
                     &variadic_targets,
+                    &ret_tags,
                     0,
                     &mut fn_unwind,
                 )

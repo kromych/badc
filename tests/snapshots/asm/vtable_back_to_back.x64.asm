@@ -19,10 +19,9 @@ Disassembly of section .text:
                	retq
 
 <my_generate>:
-               	movq	%rdx, %rax
-               	movslq	%eax, %rax
-               	movslq	0x8(%rdi), %rcx
-               	movl	%ecx, (%rsi)
+               	movslq	0x8(%rdi), %rax
+               	movl	%eax, (%rsi)
+               	movslq	%edx, %rax
                	retq
 
 <main>:
@@ -61,4 +60,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

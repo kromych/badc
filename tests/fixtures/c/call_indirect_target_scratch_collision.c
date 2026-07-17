@@ -4,7 +4,7 @@
 // allocator placements where R11 also holds an argument (the
 // shape exposed by relaxing the calls_after_def upper bound)
 // the target staging overwrites the arg before the marshal
-// reads it. This fixture mirrors sqlite3OsOpen: forward five
+// reads it. This fixture mirrors a real-world open() dispatch: forward five
 // parameters into an indirect call, with one argument computed
 // as `flags & mask` so the BinopI result is the natural target
 // for whatever scratch register the call also uses.

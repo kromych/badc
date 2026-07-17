@@ -14,12 +14,6 @@ Disassembly of section .text:
                	leaq	0x7(%rdi), %rax
                	retq
 
-<noise>:
-               	movq	%rdi, %rax
-               	shlq	$0x1, %rax
-               	incq	%rax
-               	retq
-
 <g>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -58,7 +52,8 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	callq	<addr>
                	andq	$0x7f, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
                	addb	%al, 0x41(%rdx)

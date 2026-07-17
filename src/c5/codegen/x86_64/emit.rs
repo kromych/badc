@@ -1029,6 +1029,15 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
             }
         }
     }
+    fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
+        emit_mov_r_imm64(code, Reg(dst), bits);
+    }
+    fn fp_reg_from_int_reg(&self, code: &mut Vec<u8>, dst: u8, src: u8, _is_f64: bool) {
+        // `movq xmm, r` copies all 64 bits; for an f32 the constant occupies
+        // the low 32 (the immediate load zero-extends), which a scalar-single
+        // op reads, so one form serves both widths.
+        emit_movq_xmm_r(code, Reg(dst), Reg(src));
+    }
 }
 
 /// Sequentialize a parallel copy over FP locations (xmm registers and
@@ -1421,6 +1430,7 @@ pub(crate) fn emit_function(
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     tls_total_size: usize,
     fn_unwind: &mut Vec<super::FnUnwind>,
 ) -> bool {
@@ -1637,7 +1647,7 @@ pub(crate) fn emit_function(
             // epilogue; ret`. Saves one call+ret pair per recursion level
             // and removes the post-call rax-to-place mov. See
             // `detect_tail_call` for the safety preconditions.
-            let tail_call = detect_tail_call(func, block, abi, variadic_targets);
+            let tail_call = detect_tail_call(func, block, abi, variadic_targets, ret_tags, target);
             for v in block.inst_range.clone() {
                 let inst = &func.insts[v as usize];
                 let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
@@ -2024,6 +2034,13 @@ pub(crate) fn emit_function(
                         is_addr: false,
                     });
                     super::encode::emit_jmp_rel32(code, 0);
+                }
+                // Sealed after a noreturn call (C11 6.7.4p8): control
+                // cannot reach here. Emit ud2 so a mis-marked returning
+                // call faults rather than falling into the next block.
+                Terminator::Unreachable => {
+                    code.push(0x0F);
+                    code.push(0x0B); // ud2
                 }
             }
         }
@@ -3107,6 +3124,7 @@ fn emit_inst(
             abi,
             *current_alloca_top,
         ),
+        Inst::InlineAsm { asm, args } => emit_inline_asm(code, asm, args, func, alloc, frame),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {
             a,
@@ -3190,6 +3208,7 @@ fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
         Inst::AtomicRmw { .. } => "AtomicRmw",
         Inst::AtomicCas { .. } => "AtomicCas",
         Inst::Intrinsic { .. } => "Intrinsic",
+        Inst::InlineAsm { .. } => "InlineAsm",
         Inst::AllocaInit(_) => "AllocaInit",
         Inst::ParamRef { .. } => "ParamRef",
         Inst::Phi { .. } => "Phi",
@@ -3229,11 +3248,16 @@ fn emit_tls_addr(
             // the linker re-patches it against the merged layout when more
             // than one unit contributes TLS storage.
             let extern_sym = extern_tls_names.get(&v).cloned();
+            // Variant-2 TPOFF is negative: the block sits below the
+            // thread pointer, `var = fs:[0] + (offset - tls_total)`.
+            // Emitting an `add` with the signed immediate (rather than
+            // a `sub` of the magnitude) keeps the field patchable with
+            // the standard negative TPOFF value.
             let tpoff = if extern_sym.is_some() {
                 0
             } else {
-                let t = (tls_total_size as i64) - offset;
-                if !(0..=i32::MAX as i64).contains(&t) {
+                let t = offset - (tls_total_size as i64);
+                if !(i32::MIN as i64..=0).contains(&t) {
                     bail_msg("TlsAddr: tpoff out of i32 range");
                     return false;
                 }
@@ -3251,15 +3275,15 @@ fn emit_tls_addr(
             code.push(0x04 | ((rd.0 & 7) << 3));
             code.push(0x25);
             code.extend_from_slice(&0u32.to_le_bytes());
-            // sub rd, imm32
+            // add rd, imm32
             //   REX.W=1, REX.B = (rd >= 8);
-            //   opcode 81 /5;
-            //   ModR/M mod=11 reg=5 rm=rd.lo;
+            //   opcode 81 /0;
+            //   ModR/M mod=11 reg=0 rm=rd.lo;
             //   imm32 = tpoff (patched by the linker per the fixup).
-            let rex_sub = 0x48 | ((rd.0 >> 3) & 1);
-            code.push(rex_sub);
+            let rex_add = 0x48 | ((rd.0 >> 3) & 1);
+            code.push(rex_add);
             code.push(0x81);
-            code.push(0xE8 | (rd.0 & 7));
+            code.push(0xC0 | (rd.0 & 7));
             let imm_offset = code.len();
             code.extend_from_slice(&(tpoff as i32).to_le_bytes());
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
@@ -6292,6 +6316,163 @@ fn emit_va_arg_sysv(
     true
 }
 
+/// Lower an `Inst::InlineAsm` (GCC extended asm with operands). Assigns
+/// each register operand a machine register per its constraint, saves
+/// the registers it and the clobber list overwrite, loads the inputs,
+/// encodes the register-concrete template, and stores the outputs back
+/// through their addresses. Operand values / addresses are captured to
+/// the stack first (via r10) so an operand living in a register the asm
+/// then overwrites is read before it is clobbered -- the shape the
+/// register-tied intrinsics above use, generalised over the constraints.
+fn emit_inline_asm(
+    code: &mut Vec<u8>,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::super::ir::{AsmConstraint, AsmRegSize, Inst};
+    use super::asm::{AsmOpnd, Concrete};
+    let insns = match super::asm::parse_template(&asm.template) {
+        Ok(i) => i,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let op_reg = match super::asm::assign_operand_regs(&asm.operands) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    // Registers the asm overwrites: the operand registers plus the
+    // explicit clobber list. Save and restore them around the block.
+    let mut used = asm.clobber_regs;
+    for r in op_reg.iter().flatten() {
+        used |= 1 << r;
+    }
+    let save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| used & (1 << r) != 0).collect();
+    for &r in &save_list {
+        super::encode::emit_push_r(code, Reg(r));
+    }
+    // Capture each operand's value (input) / address (output) into a
+    // stack slot via r10, before any asm register is written.
+    let n = asm.operands.len();
+    for &a in args.iter() {
+        let Some(place) = alloc.places.get(a as usize).copied() else {
+            bail_msg("inline asm: operand place missing");
+            return false;
+        };
+        let Some(r) = materialize_int(code, place, SCRATCH_R10, frame) else {
+            bail_msg("inline asm: operand not an integer place");
+            return false;
+        };
+        if r.0 != SCRATCH_R10.0 {
+            emit_mov_rr(code, SCRATCH_R10, r);
+        }
+        super::encode::emit_push_r(code, SCRATCH_R10);
+    }
+    // The i-th captured slot now sits at `[rsp + (n-1-i)*8]`; rsp does
+    // not move again until the block finishes.
+    let cap_off = |i: usize| -> i32 { ((n - 1 - i) * 8) as i32 };
+    // Load inputs into their registers; a `+` output loads its current
+    // value from the destination address. A memory operand instead loads its
+    // captured address into the register -- the instruction dereferences it.
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        let reg = Reg(r);
+        if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
+            // A memory operand loads its captured address; a plain input
+            // loads its value. Both come from the captured slot.
+            super::encode::emit_mov_r_mem(code, reg, Reg::RSP, cap_off(i));
+        } else if op.is_rw {
+            super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
+            emit_asm_load_width(code, reg, SCRATCH_R11, op.width);
+        }
+    }
+    // Encode each template instruction with its operands resolved to the
+    // assigned registers, explicit registers, and immediates.
+    for insn in &insns {
+        let mut concrete: alloc::vec::Vec<Concrete> = alloc::vec::Vec::new();
+        for o in &insn.operands {
+            let c = match *o {
+                AsmOpnd::Imm(val) => Concrete::Imm(val),
+                AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
+                AsmOpnd::Ref { idx, size } => {
+                    let width = asm.operands[idx as usize].width;
+                    let size = size.unwrap_or(AsmRegSize::from_width(width));
+                    match op_reg[idx as usize] {
+                        Some(r)
+                            if matches!(
+                                asm.operands[idx as usize].constraint,
+                                AsmConstraint::Mem
+                            ) =>
+                        {
+                            Concrete::Mem { base: r, size }
+                        }
+                        Some(r) => Concrete::Reg { reg: r, size },
+                        // A `%N` naming an immediate-only operand: use its
+                        // constant value.
+                        None => match func.insts.get(args[idx as usize] as usize) {
+                            Some(Inst::Imm(v)) => Concrete::Imm(*v),
+                            _ => {
+                                bail_msg("inline asm: non-constant immediate operand");
+                                return false;
+                            }
+                        },
+                    }
+                }
+            };
+            concrete.push(c);
+        }
+        if let Err(m) = super::asm::encode(code, insn.mnemonic, insn.suffix, &concrete) {
+            bail_msg(&m);
+            return false;
+        }
+    }
+    // Store the register outputs back through their captured addresses. A
+    // memory operand needs no store-back: the instruction wrote memory.
+    for (i, op) in asm.operands.iter().enumerate() {
+        if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
+            continue;
+        }
+        let Some(r) = op_reg[i] else { continue };
+        super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
+        emit_asm_store_width(code, SCRATCH_R11, Reg(r), op.width);
+    }
+    // Discard the captured slots and restore the saved registers.
+    if n > 0 {
+        super::encode::emit_add_r_imm32(code, Reg::RSP, (n * 8) as i32);
+    }
+    for &r in save_list.iter().rev() {
+        super::encode::emit_pop_r(code, Reg(r));
+    }
+    true
+}
+
+/// Load the low `width` bytes at `[base]` into `dst` (zero-extended).
+fn emit_asm_load_width(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
+    match width {
+        1 => super::encode::emit_movzx_r_mem8(code, dst, base, 0),
+        2 => super::encode::emit_movzx_r_mem16(code, dst, base, 0),
+        4 => super::encode::emit_mov_r_mem32(code, dst, base, 0),
+        _ => super::encode::emit_mov_r_mem(code, dst, base, 0),
+    }
+}
+
+/// Store the low `width` bytes of `src` to `[base]`.
+fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
+    match width {
+        1 => super::encode::emit_mov_mem_r8(code, base, 0, src),
+        2 => super::encode::emit_mov_mem_r16(code, base, 0, src),
+        4 => super::encode::emit_mov_mem_r32(code, base, 0, src),
+        _ => super::encode::emit_mov_mem_r(code, base, 0, src),
+    }
+}
+
 fn emit_intrinsic(
     code: &mut Vec<u8>,
     kind: i64,
@@ -6832,6 +7013,80 @@ fn emit_intrinsic(
             code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
             true
         }
+        I::X86FxSave | I::X86FxRestore => {
+            // `fxsave m` (0F AE /0) / `fxrstor m` (0F AE /1): save / restore
+            // the 512-byte x87+SSE state. The single argument is the buffer
+            // address; force it into r10 so the ModRM needs no SIB / disp
+            // (same shape as the x87 control-word forms above).
+            if args.len() != 1 {
+                bail_msg("fxsave / fxrstor intrinsic expects 1 arg");
+                return false;
+            }
+            let Some(place) = alloc.places.get(args[0] as usize).copied() else {
+                bail_msg("fxsave / fxrstor intrinsic: arg place missing");
+                return false;
+            };
+            let Some(addr) = materialize_int(code, place, SCRATCH_R10, frame) else {
+                bail_msg("fxsave / fxrstor intrinsic: arg not an int register");
+                return false;
+            };
+            if addr.0 != SCRATCH_R10.0 {
+                super::encode::emit_mov_rr(code, SCRATCH_R10, addr);
+            }
+            let reg_field: u8 = if matches!(intrinsic, I::X86FxSave) {
+                0
+            } else {
+                1
+            };
+            code.push(0x41); // REX.B for r10
+            code.extend_from_slice(&[0x0F, 0xAE]);
+            code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
+            true
+        }
+        I::X86Sgdt
+        | I::X86Sidt
+        | I::X86Sldt
+        | I::X86Str
+        | I::X86Lgdt
+        | I::X86Lidt
+        | I::X86Lldt
+        | I::X86Clflush => {
+            // Single-memory-operand descriptor-table / clflush forms. The one
+            // argument is the operand address; force it into r10 so the ModRM
+            // needs no SIB / disp (same shape as the fxsave forms above). The
+            // secondary opcode and ModRM.reg field select the instruction:
+            //   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
+            //   sldt/str  = 0F 00 /0,/1 ; lldt = 0F 00 /2 ; clflush = 0F AE /7.
+            if args.len() != 1 {
+                bail_msg("descriptor-table intrinsic expects 1 arg");
+                return false;
+            }
+            let Some(place) = alloc.places.get(args[0] as usize).copied() else {
+                bail_msg("descriptor-table intrinsic: arg place missing");
+                return false;
+            };
+            let Some(addr) = materialize_int(code, place, SCRATCH_R10, frame) else {
+                bail_msg("descriptor-table intrinsic: arg not an int register");
+                return false;
+            };
+            if addr.0 != SCRATCH_R10.0 {
+                super::encode::emit_mov_rr(code, SCRATCH_R10, addr);
+            }
+            let (op2, reg_field): (u8, u8) = match intrinsic {
+                I::X86Sgdt => (0x01, 0),
+                I::X86Sidt => (0x01, 1),
+                I::X86Lgdt => (0x01, 2),
+                I::X86Lidt => (0x01, 3),
+                I::X86Sldt => (0x00, 0),
+                I::X86Str => (0x00, 1),
+                I::X86Lldt => (0x00, 2),
+                _ => (0xAE, 7), // clflush
+            };
+            code.push(0x41); // REX.B for r10
+            code.extend_from_slice(&[0x0F, op2]);
+            code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
+            true
+        }
         I::Cpuid | I::Xgetbv => {
             // cpuid (0F A2) reads eax (leaf) + ecx (subleaf) and writes
             // eax/ebx/ecx/edx; xgetbv (0F 01 D0) reads ecx and writes
@@ -6916,6 +7171,114 @@ fn emit_intrinsic(
             super::encode::emit_pop_r(code, RAX);
             true
         }
+        I::Divq128 => {
+            // Unsigned 128/64 division (`udiv_qrnnd`). The dividend is
+            // rdx:rax = n1:n0, the divisor is `d`; `div` leaves the
+            // quotient in rax and the remainder in rdx. args:
+            // [q_addr, rem_addr, n0, n1, d].
+            const RAX: Reg = Reg(0);
+            const RDX: Reg = Reg(2);
+            const R10: Reg = Reg(10);
+            const R11: Reg = Reg(11);
+            if args.len() != 5 {
+                bail_msg("divq: wrong operand count");
+                return false;
+            }
+            let materialize = |code: &mut Vec<u8>, idx: usize, scratch: Reg| -> Option<Reg> {
+                let place = alloc.places.get(args[idx] as usize).copied()?;
+                let r = materialize_int(code, place, scratch, frame)?;
+                if r.0 != scratch.0 {
+                    super::encode::emit_mov_rr(code, scratch, r);
+                }
+                Some(scratch)
+            };
+            // `div` clobbers rax and rdx.
+            super::encode::emit_push_r(code, RAX);
+            super::encode::emit_push_r(code, RDX);
+            // Push the output addresses (quotient then remainder, so the
+            // remainder address is popped first below).
+            if materialize(code, 0, R10).is_none() {
+                bail_msg("divq: quotient output not an address");
+                return false;
+            }
+            super::encode::emit_push_r(code, R10);
+            if materialize(code, 1, R10).is_none() {
+                bail_msg("divq: remainder output not an address");
+                return false;
+            }
+            super::encode::emit_push_r(code, R10);
+            // Divisor -> r10, dividend high -> r11, then load rax/rdx last
+            // so an input the allocator placed in rax/rdx is read first.
+            if materialize(code, 4, R10).is_none() {
+                bail_msg("divq: divisor operand missing");
+                return false;
+            }
+            if materialize(code, 3, R11).is_none() {
+                bail_msg("divq: dividend-high operand missing");
+                return false;
+            }
+            if materialize(code, 2, RAX).is_none() {
+                bail_msg("divq: dividend-low operand missing");
+                return false;
+            }
+            super::encode::emit_mov_rr(code, RDX, R11); // rdx = n1
+            // div r10  (REX.W + REX.B, F7 /6 -> unsigned divide).
+            code.push(0x49);
+            code.push(0xF7);
+            code.push(0xF2);
+            // Store quotient (rax) and remainder (rdx) to the popped
+            // addresses (remainder is on top of the stack).
+            super::encode::emit_pop_r(code, R11);
+            super::encode::emit_mov_mem_r(code, R11, 0, RDX);
+            super::encode::emit_pop_r(code, R11);
+            super::encode::emit_mov_mem_r(code, R11, 0, RAX);
+            super::encode::emit_pop_r(code, RDX);
+            super::encode::emit_pop_r(code, RAX);
+            true
+        }
+        I::Rdtsc => {
+            // Read timestamp counter into edx:eax (high:low). args:
+            // [low_addr, high_addr]. rdtsc zeroes the upper 32 bits of
+            // rax/rdx, so the 32-bit stores are complete.
+            const RAX: Reg = Reg(0);
+            const RDX: Reg = Reg(2);
+            const R10: Reg = Reg(10);
+            if args.len() != 2 {
+                bail_msg("rdtsc: wrong operand count");
+                return false;
+            }
+            let materialize = |code: &mut Vec<u8>, idx: usize, scratch: Reg| -> Option<Reg> {
+                let place = alloc.places.get(args[idx] as usize).copied()?;
+                let r = materialize_int(code, place, scratch, frame)?;
+                if r.0 != scratch.0 {
+                    super::encode::emit_mov_rr(code, scratch, r);
+                }
+                Some(scratch)
+            };
+            super::encode::emit_push_r(code, RAX);
+            super::encode::emit_push_r(code, RDX);
+            if materialize(code, 0, R10).is_none() {
+                bail_msg("rdtsc: low output not an address");
+                return false;
+            }
+            super::encode::emit_push_r(code, R10);
+            if materialize(code, 1, R10).is_none() {
+                bail_msg("rdtsc: high output not an address");
+                return false;
+            }
+            super::encode::emit_push_r(code, R10);
+            // rdtsc (0F 31).
+            code.push(0x0F);
+            code.push(0x31);
+            // Store edx -> *high (top of stack), eax -> *low.
+            super::encode::emit_pop_r(code, R10);
+            super::encode::emit_mov_mem_r32(code, R10, 0, RDX);
+            super::encode::emit_pop_r(code, R10);
+            super::encode::emit_mov_mem_r32(code, R10, 0, RAX);
+            super::encode::emit_pop_r(code, RDX);
+            super::encode::emit_pop_r(code, RAX);
+            true
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs
@@ -6943,12 +7306,29 @@ fn emit_intrinsic(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
+        I::ReturnAddress => {
+            // __builtin_return_address(0): the return address the call
+            // pushed, at [rbp + 8] above the saved rbp. Level 0 only.
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("ReturnAddress: dst not int reg / spill");
+                return false;
+            };
+            emit_mov_r_mem(code, rd, Reg::RBP, 8);
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
+        }
         I::Clz
         | I::Ctz
         | I::Popcount
         | I::Clzll
         | I::Ctzll
         | I::Popcountll
+        | I::Clrsb
+        | I::Clrsbll
+        | I::Parity
+        | I::Parityll
+        | I::Ffs
+        | I::Ffsll
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64 => {
@@ -6971,6 +7351,32 @@ fn emit_intrinsic(
             // read-modify-write at the call site; they never reach
             // codegen as an `Inst::Intrinsic`.
             bail_msg("intrinsic: atomic op reached codegen");
+            false
+        }
+        I::AArch64ReadCacheType
+        | I::AArch64DcCvau
+        | I::AArch64IcIvau
+        | I::AArch64DsbIsh
+        | I::AArch64Isb => {
+            // AArch64 cache maintenance and barriers; the source gates them
+            // on `__aarch64__`, so x86-64 never reaches them.
+            bail_msg("aarch64 cache / barrier intrinsic is aarch64-only");
+            false
+        }
+        I::Atomic128CmpXchg
+        | I::Atomic128Xchg
+        | I::Atomic128FetchAnd
+        | I::Atomic128FetchOr
+        | I::Atomic128Load
+        | I::Atomic128Store
+        | I::Atomic128LoadEx
+        | I::Atomic128StoreEx
+        | I::Atomic128StoreInsert => {
+            // The 128-bit atomic ldaxp/stlxp and ldp/stp, ldxp/stxp shapes
+            // are aarch64-only; the source selects them via the aarch64
+            // host-include path, so x86-64 (which has native `cmpxchg16b`)
+            // never reaches them.
+            bail_msg("128-bit atomic asm shape is aarch64-only");
             false
         }
     }
@@ -7375,6 +7781,8 @@ fn detect_tail_call<'a>(
     block: &super::super::ir::Block,
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    ret_tags: &alloc::collections::BTreeMap<usize, i64>,
+    target: Target,
 ) -> Option<(usize, usize, &'a [u32])> {
     let Terminator::Return(v) = block.terminator else {
         return None;
@@ -7415,6 +7823,19 @@ fn detect_tail_call<'a>(
     // tail conversion's `marshal_args` would deliver garbage. The
     // regular `emit_call` path branches on this same flag.
     if variadic_targets.contains(&target_pc) {
+        return None;
+    }
+    // The callee's epilogue extends a sub-word integer return per its
+    // own declared type, and the jmp skips this function's return
+    // staging, so the two extension recipes must agree (an `int`
+    // callee leaves a sign-extended accumulator that an `unsigned`
+    // caller's contract does not allow). An unknown callee -- a
+    // cross-unit placeholder pc -- has no recorded contract; keep the
+    // regular call-then-return path.
+    let &callee_tag = ret_tags.get(&target_pc)?;
+    if super::return_extension(callee_tag, target)
+        != super::return_extension(func.ret_type_tag, target)
+    {
         return None;
     }
     // Any `LocalAddr` -- whether to a user-local (negative `off`) or

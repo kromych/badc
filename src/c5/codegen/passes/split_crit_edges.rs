@@ -5,8 +5,8 @@
 //! per-arch emit places phi-moves for `succ`'s phis at the end of
 //! `pred`, before the conditional branch. Along the alternate
 //! successor's edge, those moves still execute and clobber any
-//! register that is live on the alternate path -- the
-//! tdefl_flush_output_buffer shape under PHI_PROMOTE.
+//! register that is live on the alternate path, a clobber that
+//! surfaces under PHI_PROMOTE.
 //!
 //! The fix: for every critical edge, insert a synthetic empty block
 //! that lives only on that edge. It holds the phi-moves and an
@@ -204,9 +204,10 @@ fn successors(term: &Terminator, jump_tables: &[Vec<BlockId>]) -> Vec<BlockId> {
         // run() guards on computed_goto_targets), so an indirect branch
         // never reaches here; its successors live on the function, not
         // the terminator.
-        Terminator::GotoIndirect { .. } | Terminator::Return(_) | Terminator::TailExt(_) => {
-            Vec::new()
-        }
+        Terminator::GotoIndirect { .. }
+        | Terminator::Return(_)
+        | Terminator::TailExt(_)
+        | Terminator::Unreachable => Vec::new(),
     }
 }
 
@@ -225,6 +226,7 @@ mod tests {
             n_params: 0,
             is_variadic: false,
             is_inline: false,
+            is_always_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
@@ -233,6 +235,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
+            ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             jump_tables: Vec::new(),

@@ -199,6 +199,27 @@ mod jit_impl {
         0
     }
 
+    /// Run `__attribute__((constructor))` functions before the JIT'd
+    /// entry and arrange for the destructors, on the worker thread.
+    /// `init_addrs` / `fini_addrs` are absolute code addresses in
+    /// `.init_array` layout order. Destructors are registered on the
+    /// atexit chain (drained LIFO after `main`), so they fire in reverse
+    /// of that layout -- matching a C library's `.fini_array` walk -- and
+    /// after any handler a constructor installs with `atexit`.
+    fn run_ctors_register_dtors(init_addrs: &[usize], fini_addrs: &[usize]) {
+        for &addr in fini_addrs {
+            // A no-arg destructor is ABI-compatible with the `(void*)`
+            // atexit handler shape; the extra argument register is unread.
+            let dtor: extern "C" fn(*mut c_void) =
+                unsafe { core::mem::transmute(addr as *const ()) };
+            push_atexit_entry(dtor, core::ptr::null_mut());
+        }
+        for &addr in init_addrs {
+            let ctor: extern "C" fn() = unsafe { core::mem::transmute(addr as *const ()) };
+            ctor();
+        }
+    }
+
     /// Replacement for libc's `exit` when JIT'd code resolves the
     /// symbol through `dlsym`. C99 7.20.4.3p2: `exit` runs the
     /// registered atexit handlers first. `atexit` was intercepted
@@ -443,6 +464,27 @@ mod jit_impl {
             argv_cstrings.iter().map(|cs| cs.as_ptr()).collect();
         argv_ptrs.push(std::ptr::null());
 
+        // Constructor / destructor addresses in `.init_array` layout
+        // order (prioritized ascending, then unprioritized). Resolved
+        // through `pc_to_native`; DCE keeps these functions (they are
+        // roots), so a present entry is expected.
+        let region_base = region.as_ptr() as usize;
+        let ordered_addrs = |dtor: bool| -> Vec<usize> {
+            let mut v: Vec<&crate::c5::program::InitFunc> = program
+                .init_funcs
+                .iter()
+                .filter(|f| f.is_destructor == dtor)
+                .collect();
+            v.sort_by_key(|f| (f.priority.is_none(), f.priority.unwrap_or(0)));
+            v.iter()
+                .filter_map(|f| build.pc_to_native.get(f.ent_pc).copied())
+                .filter(|&off| off != usize::MAX)
+                .map(|off| region_base + off)
+                .collect()
+        };
+        let init_addrs = ordered_addrs(false);
+        let fini_addrs = ordered_addrs(true);
+
         let entry_ptr = unsafe { region.as_ptr().add(build.entry_offset) };
         // SAFETY: the JIT'd main was lowered with extern "C" / System V
         // ABI conventions and reachable via a normal `call`-equivalent
@@ -467,6 +509,8 @@ mod jit_impl {
             args.len() as c_int,
             argv_ptrs.as_ptr(),
             argv_cstrings,
+            init_addrs,
+            fini_addrs,
         )?;
         Ok(exit_code)
     }
@@ -477,6 +521,8 @@ mod jit_impl {
         argc: c_int,
         argv: *const *const c_char,
         _argv_owned: Vec<CString>,
+        init_addrs: Vec<usize>,
+        fini_addrs: Vec<usize>,
     ) -> Result<i32, C5Error> {
         // pthread_t is an opaque pointer on Linux and macOS (8 bytes
         // on every supported host arch).
@@ -497,11 +543,15 @@ mod jit_impl {
             entry_addr: usize,
             argc: c_int,
             argv: *const *const c_char,
+            init_addrs: Vec<usize>,
+            fini_addrs: Vec<usize>,
         }
         let payload = Box::new(Payload {
             entry_addr: entry_ptr as usize,
             argc,
             argv,
+            init_addrs,
+            fini_addrs,
         });
 
         unsafe extern "C" fn worker(arg: *mut c_void) -> *mut c_void {
@@ -509,6 +559,7 @@ mod jit_impl {
             // produced via `Box::into_raw`. Boxing it back hands the
             // payload's lifetime to this thread.
             let payload = unsafe { Box::from_raw(arg as *mut Payload) };
+            run_ctors_register_dtors(&payload.init_addrs, &payload.fini_addrs);
             let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
                 unsafe { std::mem::transmute::<usize, _>(payload.entry_addr) };
             let rc = main_fn(payload.argc, payload.argv);
@@ -548,6 +599,8 @@ mod jit_impl {
         argc: c_int,
         argv: *const *const c_char,
         _argv_owned: Vec<CString>,
+        init_addrs: Vec<usize>,
+        fini_addrs: Vec<usize>,
     ) -> Result<i32, C5Error> {
         // Windows kernel32 thread API. HANDLE is a pointer-sized
         // opaque token; DWORD is 32-bit. The thread entry shape is
@@ -573,15 +626,20 @@ mod jit_impl {
             entry_addr: usize,
             argc: c_int,
             argv: *const *const c_char,
+            init_addrs: Vec<usize>,
+            fini_addrs: Vec<usize>,
         }
         let payload = Box::new(Payload {
             entry_addr: entry_ptr as usize,
             argc,
             argv,
+            init_addrs,
+            fini_addrs,
         });
 
         unsafe extern "system" fn worker(arg: *mut c_void) -> u32 {
             let payload = unsafe { Box::from_raw(arg as *mut Payload) };
+            run_ctors_register_dtors(&payload.init_addrs, &payload.fini_addrs);
             let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
                 unsafe { std::mem::transmute::<usize, _>(payload.entry_addr) };
             let rc = main_fn(payload.argc, payload.argv);

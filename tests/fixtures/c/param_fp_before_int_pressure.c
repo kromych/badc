@@ -9,7 +9,7 @@
 // scratch -- clobbering, in `draw` below, the `d` pointer before it is
 // stored.
 //
-// `draw` mirrors stb_easy_font's inner writer: two leading float
+// `draw` mirrors an inner writer: two leading float
 // parameters then six integer parameters, one of them a pointer that is
 // dereferenced and used as a store base. Under a capped register bank the
 // pre-fix allocator wrote a non-pointer parameter into the pointer's slot,

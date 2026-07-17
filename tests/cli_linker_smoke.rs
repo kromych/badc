@@ -539,12 +539,11 @@ fn static_inline_helper_in_shared_header_links_across_tus() {
 /// emit's return path only staged `Place::IntReg` returns into rcx
 /// before the GPR restore, so spill-resident returns left rax with
 /// whatever the body parked there (typically the last libc call's
-/// `int` return). Surfaced as lua's `io` global being `nil` after
-/// `luaL_openlibs`: `luaopen_io` runs to completion, but its
-/// `return 1` -- the C-function-result count `lua_call` reads --
-/// reached the caller as zero, so the registered module was
-/// silently the empty stack tail (nil) instead of the `iolib`
-/// table.
+/// `int` return). Surfaced as a module-registration function whose
+/// `return 1` -- a result count the caller reads to know how many
+/// values were produced -- reached the caller as zero, so the
+/// registration saw an empty result and recorded nothing instead
+/// of the intended table.
 #[cfg(target_arch = "x86_64")]
 #[test]
 fn int_literal_return_survives_libc_call_in_body() {
@@ -674,7 +673,7 @@ fn qsort_with_cross_tu_compare() {
 
 // stdio buffers were lost when the writer's `_start` stub
 // called `exit_group` via syscall, bypassing libc's atexit
-// chain. The embedded runtime (`lib/runtime.c`) now exports
+// chain. The embedded runtime (`libc/lib/runtime.c`) now exports
 // `__c5_exit` which calls libc `exit`; the writer's stub
 // routes the tail through it when the symbol is present.
 // Redirecting stdout to a file forces full buffering, so the
@@ -2384,7 +2383,7 @@ fn compile_only_writes_relocatable_elf() {
     assert!(
         bytes.len() > 64 && &bytes[0..4] == b"\x7fELF",
         "expected ELF magic; got {:?}",
-        &bytes.get(..16),
+        bytes.get(..16),
     );
     // ELF64 ET_REL (e_type = 1) at offset 0x10.
     let e_type = u16::from_le_bytes([bytes[16], bytes[17]]);
@@ -2447,9 +2446,9 @@ fn debug_info_is_off_by_default_and_enabled_by_g() {
 /// preprocessor. A prior CLI build seeded the per-TU compile
 /// with `CompileOptions::default()`, dropping every flag --
 /// the preprocessor then never expanded `#include` directives
-/// nor saw the user's `-D` macros, and a typedef chain like
-/// miniz's `sizeof(uint16_t) == 2 ? 1 : -1` array probe
-/// folded against an undefined typedef. C99 6.10.2 requires
+/// nor saw the user's `-D` macros, and a typedef chain like a
+/// `sizeof(uint16_t) == 2 ? 1 : -1` array probe folded against
+/// an undefined typedef. C99 6.10.2 requires
 /// the include search path to be the implementation-defined
 /// set the driver was invoked with.
 #[test]
@@ -2483,7 +2482,7 @@ fn compile_only_propagates_preprocessor_flags() {
     assert!(
         bytes.len() > 64 && &bytes[0..4] == b"\x7fELF",
         "expected ELF magic; got {:?}",
-        &bytes.get(..16),
+        bytes.get(..16),
     );
 }
 
@@ -2507,7 +2506,7 @@ fn compile_only_with_minus_o_writes_named_object() {
     assert!(
         bytes.len() > 4 && &bytes[0..4] == b"\x7fELF",
         "expected ELF magic; got {:?}",
-        &bytes.get(..16)
+        bytes.get(..16)
     );
 }
 
@@ -3033,5 +3032,168 @@ fn link_defined_symbol_wins_over_auto_included_binding() {
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).replace('\r', ""),
         "hi\n"
+    );
+}
+
+// A program calling the GCC aarch64 outline-atomics helpers, one per op
+// family plus a 1-byte and a matching/non-matching compare-exchange.
+// Used only by the two tests below; gate the const to their combined cfg so
+// targets that compile neither (e.g. windows-x64) do not see it as dead code.
+#[cfg(any(target_os = "linux", target_arch = "aarch64"))]
+const OUTLINE_ATOMICS_SRC: &str = "\
+typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long u64;\n\
+extern u64 __aarch64_ldadd8_acq_rel(u64, u64*);\n\
+extern u32 __aarch64_ldclr4_acq_rel(u32, u32*);\n\
+extern u32 __aarch64_ldset4_acq_rel(u32, u32*);\n\
+extern u32 __aarch64_ldeor4_acq_rel(u32, u32*);\n\
+extern u32 __aarch64_swp4_acq_rel(u32, u32*);\n\
+extern u32 __aarch64_cas4_acq_rel(u32, u32, u32*);\n\
+extern u8  __aarch64_cas1_acq_rel(u8, u8, u8*);\n\
+int main(void){\n\
+    u64 a=100; if(__aarch64_ldadd8_acq_rel(7,&a)!=100||a!=107) return 1;\n\
+    u32 c=0xF0; if(__aarch64_ldclr4_acq_rel(0x30,&c)!=0xF0||c!=0xC0) return 2;\n\
+    u32 s=0x01; if(__aarch64_ldset4_acq_rel(0x30,&s)!=0x01||s!=0x31) return 3;\n\
+    u32 e=0xFF; if(__aarch64_ldeor4_acq_rel(0x0F,&e)!=0xFF||e!=0xF0) return 4;\n\
+    u32 w=5;    if(__aarch64_swp4_acq_rel(9,&w)!=5||w!=9) return 5;\n\
+    u32 k=5;    if(__aarch64_cas4_acq_rel(5,42,&k)!=5||k!=42) return 6;\n\
+    u32 j=5;    if(__aarch64_cas4_acq_rel(9,42,&j)!=5||j!=5) return 7;\n\
+    u8 b=3;     if(__aarch64_cas1_acq_rel(3,7,&b)!=3||b!=7) return 8;\n\
+    return 0;\n\
+}\n";
+
+// The aarch64 outline-atomics helpers are supplied on demand by the embedded
+// compiler-rt object, so a program that calls them cross-links for
+// linux-aarch64 with no external libgcc. badc reports an undefined reference
+// otherwise, so a clean link is proof the helpers resolved.
+#[cfg(target_os = "linux")]
+#[test]
+fn outline_atomics_resolve_on_demand() {
+    let dir = tempdir("outline-atomics-link");
+    let src = write_source(&dir, "m.c", OUTLINE_ATOMICS_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-aarch64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "cross-link outline-atomics for linux-aarch64",
+    );
+    assert!(exe.exists(), "linked executable should exist");
+
+    // A program that references none of the helpers must not pull the
+    // compiler-rt object: its symbols stay out of the image.
+    let plain = write_source(&dir, "p.c", "int main(void){return 0;}\n");
+    let pexe = dir.join("p");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-aarch64")
+            .arg("-o")
+            .arg(&pexe)
+            .arg(&plain)
+            .current_dir(&dir),
+        "cross-link plain program",
+    );
+    let bytes = std::fs::read(&pexe).expect("read plain exe");
+    let needle = b"__aarch64_ldadd8_acq_rel";
+    assert!(
+        !bytes.windows(needle.len()).any(|w| w == needle),
+        "plain program must not pull compiler-rt symbols"
+    );
+}
+
+// On an aarch64 host the produced binary runs directly, checking the atomic
+// semantics of every op family the helpers cover.
+#[cfg(target_arch = "aarch64")]
+#[test]
+fn outline_atomics_run_correct() {
+    let dir = tempdir("outline-atomics-run");
+    let src = write_source(&dir, "m.c", OUTLINE_ATOMICS_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "link outline-atomics for host",
+    );
+    let out = Command::new(&exe).output().expect("run outline-atomics");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "outline-atomics semantics: stderr={:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+// A program using the glibc entry points that live only in the static
+// libc_nonshared.a: atexit, at_quick_exit, pthread_atfork. The atexit handler
+// prints a marker so a run confirms it was registered and invoked.
+#[cfg(target_os = "linux")]
+const GLIBC_NONSHARED_SRC: &str = "\
+extern int atexit(void (*)(void));\n\
+extern int at_quick_exit(void (*)(void));\n\
+extern int pthread_atfork(void (*)(void), void (*)(void), void (*)(void));\n\
+extern int puts(const char *);\n\
+static void bye(void) { puts(\"ATEXIT_RAN\"); }\n\
+static void nop(void) {}\n\
+int main(void) {\n\
+    pthread_atfork(nop, nop, nop);\n\
+    at_quick_exit(nop);\n\
+    atexit(bye);\n\
+    puts(\"MAIN\");\n\
+    return 0;\n\
+}\n";
+
+// badc supplies these from compiler-rt (wrapping the shared-library entry
+// points), so a glibc program links against libc.so alone -- no host
+// libc_nonshared.a. Cross-linking both arches exercises the resolution
+// without needing to run.
+#[cfg(target_os = "linux")]
+#[test]
+fn glibc_nonshared_wrappers_resolve() {
+    for (tag, target) in [
+        ("x64", "--target=linux-x64"),
+        ("arm", "--target=linux-aarch64"),
+    ] {
+        let dir = tempdir(&format!("glibc-nonshared-{tag}"));
+        let src = write_source(&dir, "m.c", GLIBC_NONSHARED_SRC);
+        let exe = dir.join("m");
+        run(
+            Command::new(badc())
+                .arg(target)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            "cross-link glibc-nonshared wrappers",
+        );
+        assert!(exe.exists(), "{tag}: linked executable should exist");
+    }
+}
+
+// On a Linux host the produced binary runs: the atexit handler must fire.
+#[cfg(target_os = "linux")]
+#[test]
+fn glibc_nonshared_atexit_runs() {
+    let dir = tempdir("glibc-nonshared-run");
+    let src = write_source(&dir, "m.c", GLIBC_NONSHARED_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "link glibc-nonshared wrappers for host",
+    );
+    let out = Command::new(&exe).output().expect("run glibc-nonshared");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "program exits cleanly");
+    assert!(
+        stdout.contains("MAIN") && stdout.contains("ATEXIT_RAN"),
+        "atexit handler must run: stdout={stdout:?}"
     );
 }

@@ -20,8 +20,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_ty, round_up, struct_id_of,
-    struct_ptr_depth, struct_ty_for,
+    UNSIGNED_BIT, is_decl_modifier, is_struct_ty, round_up, struct_id_of, struct_ptr_depth,
+    struct_ty_for,
 };
 use super::{Compiler, StructDef, StructField};
 
@@ -88,6 +88,7 @@ impl Compiler {
                     align: 1,
                     fields: Vec::new(),
                     is_union,
+                    is_vector: false,
                 });
                 let id = self.structs.len() - 1;
                 if let Some(scope) = self.tag_scopes.last_mut() {
@@ -162,17 +163,23 @@ impl Compiler {
             // synthesised tag stays a regular nested-struct type.
             let mut anon_aggregate_inner_id: Option<usize> = None;
             let mut atomic_field_base: Option<i64> = None;
+            // `__attribute__((aligned(N)))` before the declarator raises the
+            // alignment of every field in the group; a per-declarator one
+            // (below) adds to it. Applied at field placement, not dropped.
+            let mut group_align: usize = 0;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
-                    // Member layout uses 8-byte alignment at most; a
-                    // larger request would change the struct layout
-                    // silently, so it is a diagnostic.
+                    // Member alignment is honored up to 16 (the aggregate's
+                    // own alignment); a larger request is a diagnostic.
                     let m_align = core::mem::take(&mut self.pending.attr_align);
-                    if m_align > 8 {
+                    if m_align > 16 {
                         return Err(self.compile_err(format!(
-                            "member alignment {m_align} is not supported (at most 8)"
+                            "member alignment {m_align} is not supported (at most 16)"
                         )));
+                    }
+                    if m_align > 0 {
+                        group_align = group_align.max(m_align as usize);
                     }
                     continue;
                 }
@@ -278,13 +285,19 @@ impl Compiler {
                 };
                 struct_ty_for(inner_id)
             } else if self.lex.tk == Token::Enum {
-                // C99 6.7.2.2: an `enum X` field collapses to `int`; the
-                // shared parse_enum_decl captures the tag + body for
-                // DWARF. An enum bitfield reads unsigned, so
-                // field_base_is_enum drives the zero-extend.
-                self.parse_enum_decl()?;
+                // C99 6.7.2.2: an `enum X` field is `int`, or the packed
+                // underlying type for `enum __attribute__((packed))`; the
+                // shared parse_enum_decl captures the tag + body for DWARF.
+                // An enum bitfield reads unsigned, so field_base_is_enum
+                // drives the zero-extend.
+                let enum_field_ty = self.parse_enum_decl()?;
                 field_base_is_enum = true;
-                Ty::Int as i64
+                enum_field_ty
+            } else if self.is_lex_int128_spelling() {
+                // GCC `__int128` / `__uint128_t` field: a 16-byte type.
+                // Needed for kernel-UAPI structs (`asm/sigcontext.h`).
+                self.next()?;
+                self.builtin_int128_tag()
             } else if !mods.saw_int_mod && self.is_lex_typedef_name() {
                 // Guarded by `!saw_int_mod`: C99 6.7.2p2 forbids
                 // combining a typedef-name with `unsigned`/`short`/
@@ -522,17 +535,32 @@ impl Compiler {
                 self.pending.base_is_function_type = base_field_is_function_type;
                 self.pending.typedef_fn_proto = base_field_typedef_fn_proto;
                 self.pending.fn_ptr_param_types = base_field_fn_ptr_param_types.clone();
+                // Confine `packed` to this declarator: a member-level
+                // `__attribute__((packed))` (trailing the declarator, so
+                // consumed inside `parse_declarator` or just below) sets
+                // `pending.attr_packed`; a base-type or type-level packed
+                // must not carry over to the field's own placement.
+                self.pending.attr_packed = false;
                 let (id_idx, mut field_ty, mut field_array_size) =
                     self.parse_declarator(field_base)?;
                 // A member may carry a trailing attribute
-                // (`int x __attribute__((deprecated));`).
+                // (`int x __attribute__((aligned(16)));`,
+                // `int x __attribute__((deprecated));`). Member-level
+                // `packed` clamps this field's alignment to 1 (GCC: it
+                // both removes the field's leading padding and keeps it
+                // from raising the aggregate's alignment), independent of
+                // a struct-level `packed`.
                 self.skip_attribute_specifiers()?;
+                let field_packed = core::mem::take(&mut self.pending.attr_packed);
                 let m_align = core::mem::take(&mut self.pending.attr_align);
-                if m_align > 8 {
+                if m_align > 16 {
                     return Err(self.compile_err(format!(
-                        "member alignment {m_align} is not supported (at most 8)"
+                        "member alignment {m_align} is not supported (at most 16)"
                     )));
                 }
+                // Alignment for this declarator only (a comma-list peer
+                // without its own attribute keeps the group alignment).
+                let decl_align = if m_align > 0 { m_align as usize } else { 0 };
                 // A typedef whose alias is an array contributes
                 // its dimension when the declarator stayed at the
                 // typedef's element type (`jmp_buf b;` ->
@@ -545,7 +573,10 @@ impl Compiler {
                 // carrier is reset when the next field's base
                 // type is parsed.
                 let typedef_dim = self.pending.typedef_base_array_size;
-                if typedef_dim > 0 && field_array_size == 0 && !is_pointer_ty(field_ty) {
+                if typedef_dim > 0
+                    && field_array_size == 0
+                    && self.pending.declarator_leading_ptr_count == 0
+                {
                     field_array_size = typedef_dim;
                 }
                 // Capture the fn-pointer lineage tag from the
@@ -571,10 +602,16 @@ impl Compiler {
                 let field_is_variadic = !field_params.is_empty()
                     && matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
-                if is_aggregate_value
-                    && field_array_size == 0
-                    && self.structs[struct_id_of(field_ty)].fields.is_empty()
-                {
+                if is_aggregate_value && field_array_size == 0 && {
+                    let sd = &self.structs[struct_id_of(field_ty)];
+                    // C99 6.7.2.1: a member must have complete type. A
+                    // forward-declared struct is incomplete: it has no fields
+                    // and its size is still 0. A fully-defined struct is
+                    // complete and accepted -- including an empty `struct {}`
+                    // (a GCC extension, size 1) and a struct whose only member
+                    // is a flexible / zero-length array (has a field, size 0).
+                    sd.fields.is_empty() && sd.size == 0
+                } {
                     return Err(self.compile_err("aggregate-value field of incomplete type"));
                 }
                 let field_name = self.symbols[id_idx].name.clone();
@@ -673,9 +710,22 @@ impl Compiler {
                     // value via [`Lexer::current_pack`]; default is
                     // 8 (no-op) so unpacked structs lay out exactly
                     // as before.
-                    let pack = if packed { 1 } else { self.lex.current_pack() };
+                    let pack = if packed || field_packed {
+                        1
+                    } else {
+                        self.lex.current_pack()
+                    };
                     let elem_size = self.size_of_type(field_ty);
-                    let field_storage = if field_array_size > 0 {
+                    // A complete but empty `struct {}` member contributes no
+                    // storage and no alignment (GCC): the following member
+                    // shares its offset, which is what the `__DECLARE_FLEX_ARRAY`
+                    // idiom (`struct {} __empty; T arr[];`) relies on.
+                    let is_empty_aggregate = is_struct_ty(field_ty)
+                        && struct_ptr_depth(field_ty) == 0
+                        && self.structs[struct_id_of(field_ty)].fields.is_empty();
+                    let field_storage = if is_empty_aggregate {
+                        0
+                    } else if field_array_size > 0 {
                         elem_size * field_array_size as usize
                     } else if field_array_size < 0 {
                         // Flexible array member (`T v[]`, C99
@@ -686,7 +736,14 @@ impl Compiler {
                     } else {
                         elem_size
                     };
-                    let field_align = self.align_of_type(field_ty).min(pack);
+                    let mut field_align = if is_empty_aggregate {
+                        1
+                    } else {
+                        self.align_of_type(field_ty).min(pack)
+                    };
+                    // `aligned(N)` raises the field's alignment above its
+                    // natural alignment and above `#pragma pack`.
+                    field_align = field_align.max(group_align).max(decl_align);
                     if field_align > struct_align {
                         struct_align = field_align;
                     }
@@ -738,23 +795,17 @@ impl Compiler {
         self.next()?; // consume `}`
         self.pending.typedef_base_array_size = saved_typedef_base_array_size;
 
-        // Cap struct alignment at 8 -- the rest of the IR slots
-        // 8-wide and never asks for stricter alignment, so going
-        // above 8 buys nothing (and would force structurally
-        // identical code to handle 16-byte SIMD-style aligns).
-        // `#pragma pack(N)` further clamps the cap; field-level
-        // clamping above already prevents struct_align from
-        // exceeding pack, but cap here too so an empty struct
-        // under `pack(1)` still ends up with align=1.
-        // TODO: honor `_Alignas(N)` / `__attribute__((aligned(N)))`
-        // for N > 8. The attribute specifiers are parsed and consumed
-        // (`skip_attribute_specifiers`) but the requested alignment is
-        // dropped here; supporting it requires over-aligned stack
-        // slots and global placement, which the 8-wide slot model does
-        // not yet represent.
+        // Struct alignment tops out at 16 -- the widest the data section
+        // and static-object placement honor. `#pragma pack(N)` further
+        // clamps the cap; field-level clamping above already prevents
+        // struct_align from exceeding pack, but cap here too so an empty
+        // struct under `pack(1)` still ends up with align=1.
+        // NOTE: an automatic (stack) object of a 16-aligned type is still
+        // rejected at its declaration -- the frame uses 8-byte slots.
+        // Struct layout, static locals, and globals honor 16.
         let struct_align =
             struct_align
-                .min(8)
+                .min(16)
                 .min(if packed { 1 } else { self.lex.current_pack() });
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural
@@ -790,7 +841,45 @@ impl Compiler {
         let n = self.structs[struct_id].fields.len();
         let mut bit_cursor = 0usize;
         let mut bitfields: Vec<(usize, usize)> = Vec::new();
-        for i in 0..n {
+        let mut i = 0usize;
+        while i < n {
+            // Fields promoted from one anonymous union (C11 6.7.2.1p13)
+            // keep the relative offsets the natural layout already gave
+            // them (union arms overlap; a nested anonymous struct's members
+            // stay at their in-arm offsets) and shift as a block to the
+            // packed cursor. Re-laying them sequentially would break the
+            // overlap; recomputing their offsets would wrongly repack a
+            // nested aggregate type, since `packed` applies to this
+            // struct's own members, not to a nested struct/union type.
+            // Consecutive members carrying the same group id form the union.
+            let ug = self.structs[struct_id].fields[i].anon_union_group;
+            if ug != 0 {
+                let mut j = i;
+                while j < n && self.structs[struct_id].fields[j].anon_union_group == ug {
+                    j += 1;
+                }
+                let old_base = (i..j)
+                    .map(|k| self.structs[struct_id].fields[k].offset)
+                    .min()
+                    .unwrap_or(0);
+                let group_span = (i..j)
+                    .map(|k| {
+                        self.structs[struct_id].fields[k].offset
+                            + self.packed_member_storage(struct_id, k)
+                            - old_base
+                    })
+                    .max()
+                    .unwrap_or(0);
+                let new_base = bit_cursor.div_ceil(8);
+                for k in i..j {
+                    let off = self.structs[struct_id].fields[k].offset;
+                    self.structs[struct_id].fields[k].offset = off - old_base + new_base;
+                }
+                bit_cursor = (new_base + group_span) * 8;
+                i = j;
+                continue;
+            }
+
             let (ty, array_size, bit_width) = {
                 let f = &self.structs[struct_id].fields[i];
                 (f.ty, f.array_size, f.bit_width)
@@ -804,6 +893,7 @@ impl Compiler {
                 }
                 bitfields.push((i, bit_cursor));
                 bit_cursor += bit_width as usize;
+                i += 1;
                 continue;
             }
             let offset = bit_cursor.div_ceil(8);
@@ -816,6 +906,7 @@ impl Compiler {
                 self.size_of_type(ty)
             };
             bit_cursor = (offset + storage) * 8;
+            i += 1;
         }
         let size = bit_cursor.div_ceil(8).max(1);
         // Each bitfield's addressable unit is the smallest 1/2/4/8-byte
@@ -835,6 +926,21 @@ impl Compiler {
             f.bit_unit_size = unit as u8;
         }
         self.structs[struct_id].size = size;
+    }
+
+    /// Byte storage a non-bitfield member occupies in a packed layout:
+    /// element size times count for an array, zero for a flexible-array
+    /// member, the type size otherwise.
+    fn packed_member_storage(&self, struct_id: usize, i: usize) -> usize {
+        let f = &self.structs[struct_id].fields[i];
+        let (ty, array_size) = (f.ty, f.array_size);
+        if array_size > 0 {
+            self.size_of_type(ty) * array_size as usize
+        } else if array_size < 0 {
+            0
+        } else {
+            self.size_of_type(ty)
+        }
     }
 }
 

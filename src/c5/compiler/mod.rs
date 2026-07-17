@@ -33,6 +33,13 @@ mod type_layout;
 pub(crate) use type_layout::{StructReturnAbi, host_abi_agg_desc, struct_return_abi};
 pub(crate) mod types;
 
+/// Largest alignment (in bytes) honored on a static object via C11
+/// `_Alignas` / the GCC `aligned` attribute. Static objects are placed at
+/// this alignment in `.data`; automatic objects stay capped lower because
+/// stack-frame realignment is not implemented. A page covers the common
+/// cache-line (64) and page-aligned requests.
+pub(crate) const MAX_STATIC_ALIGN: usize = 4096;
+
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
 /// enums collapse to `int` in c5 -- the tag carries no semantic
 /// weight at the type level -- but preserving the (name, value)
@@ -67,6 +74,12 @@ pub struct StructDef {
     /// size is `max(field size)` instead of the sum. Member
     /// access otherwise reuses the struct path verbatim.
     pub is_union: bool,
+    /// `true` for the synthesized aggregate that models a GCC vector type
+    /// (`__attribute__((vector_size(N)))`). It has one array field of the
+    /// element type; the flag lets the cast and binary-operator paths treat it
+    /// as a vector (reinterpret casts, element-wise operators) rather than a
+    /// plain struct.
+    pub is_vector: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -174,6 +187,15 @@ pub struct CompileOptions {
     /// `-I path` -- filesystem search paths probed before the
     /// bundled in-binary headers on `#include`.
     pub include_paths: Vec<String>,
+    /// `-iquote path` -- search paths for `#include "..."` only,
+    /// probed after the including file's directory and before the
+    /// `-I` paths (gcc scope).
+    pub quote_include_paths: Vec<String>,
+    /// System header directories probed only after the bundled headers
+    /// (the driver's implicit system include path for a hosted native
+    /// build). A third-party header the embedded set lacks (`zlib.h`)
+    /// resolves here without shadowing a standard header.
+    pub system_include_paths: Vec<String>,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
     /// Filename string used in compiler diagnostics
@@ -252,6 +274,17 @@ impl CompileOptions {
         self.include_paths = include_paths;
         self
     }
+    /// Replace the `-iquote` (quoted-include-only) search-path list.
+    pub fn with_quote_include_paths(mut self, paths: Vec<String>) -> Self {
+        self.quote_include_paths = paths;
+        self
+    }
+    /// Replace the system header directories (probed after the bundled
+    /// headers).
+    pub fn with_system_include_paths(mut self, paths: Vec<String>) -> Self {
+        self.system_include_paths = paths;
+        self
+    }
     /// Replace the `-include FILE` force-include list.
     pub fn with_force_includes(mut self, force_includes: Vec<String>) -> Self {
         self.force_includes = force_includes;
@@ -328,6 +361,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// function's symbol is set when the flag is true *and* the
     /// declarator added no leading `*`s.
     pub base_was_void: bool,
+
+    /// Side channel from `parse_decl_base_type`: the base specifiers
+    /// included a `const` qualifier. The declaration path reads it to mark
+    /// a plain integer-scalar object `const`-qualified so a later constant
+    /// expression can fold its value (C99 6.6 leaves this to the
+    /// implementation; GCC and common practice fold `const int N = ...`).
+    pub base_is_const: bool,
 
     /// Side channel from `parse_decl_base_type` to the function-
     /// prototype path: the base type was spelled `long double`,
@@ -443,6 +483,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array length. Cleared by every base-type parse
     /// (`0` means "not from an array typedef").
     pub typedef_base_array_size: i64,
+    /// Count of leading `*` levels the most recent declarator added.
+    /// A use of an array typedef folds the typedef's dimension onto the
+    /// object (`typedef T A[N]; A x;` -> `x` is `T[N]`) unless the
+    /// declarator turned it into a pointer (`A *p` -> pointer to `T[N]`);
+    /// that is `> 0` here, distinct from the typedef's own element type
+    /// being a pointer (`typedef T *A[N]; A x;` still folds).
+    pub declarator_leading_ptr_count: i64,
     /// Set true while parsing a block-scope object declarator, where
     /// a non-constant array dimension is a C99 6.7.6.2 variable-length
     /// array. Elsewhere (file scope, struct member, typedef, cast,
@@ -514,6 +561,14 @@ pub(in crate::c5::compiler) struct Pending {
     /// the same as `RET (*name)(args)`.
     pub param_decl_context: bool,
     pub last_array_decay_size: i64,
+
+    /// Set by `parse_typeof_specifier` to true when its operand was an
+    /// array type (a bare array expression or an array-shaped type name).
+    /// `__builtin_types_compatible_p` reads it so `typeof(arr)` compares
+    /// unequal to `typeof(&arr[0])` (C99 6.7.6.2 array vs pointer), which
+    /// the flat type system otherwise collapses through array-to-pointer
+    /// decay. Consumed and reset by each `parse_generic_type_name` reader.
+    pub typeof_operand_was_array: bool,
 
     /// Companion to `last_array_decay_size` for cases where the
     /// row's byte size is known directly but its shape can't be
@@ -633,6 +688,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// honor up to 16, anything larger (or an automatic object above
     /// the 8-byte slot alignment) is a diagnostic, never silent.
     pub attr_align: i64,
+    /// `__attribute__((packed))` seen on the declarator being parsed.
+    /// A struct member takes it to clamp that field's alignment to 1
+    /// (GCC member-level packed), independent of a struct-level `packed`.
+    /// Recorded here because the trailing member attribute is consumed
+    /// inside the declarator parse, not by the aggregate field loop.
+    pub attr_packed: bool,
+    /// `__attribute__((vector_size(N)))` byte width, 0 when absent. The base
+    /// type of the declaration is rebuilt into a GCC vector type of `N /
+    /// sizeof(element)` lanes (modeled as an N-byte aggregate).
+    pub attr_vector_size: i64,
     /// A consumed `__declspec(thread)`. Read by the declaration parse to mark
     /// the declared object thread-local (the storage class `_Thread_local`
     /// reaches the same flag through the keyword path).
@@ -640,12 +705,27 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__declspec(dllexport)`. Read after the declarator to add the
     /// declared name to the export list -- the equivalent of `#pragma export`.
     pub attr_dllexport: bool,
+    /// A consumed `__attribute__((constructor))`. Read at function-body
+    /// close to record the function in `Compiler::init_funcs`.
+    pub attr_constructor: bool,
+    /// A consumed `__attribute__((destructor))`.
+    pub attr_destructor: bool,
+    /// Explicit priority from `constructor(N)` / `destructor(N)`; `None`
+    /// for the bare form. Applies to whichever of the two above is set.
+    pub attr_init_priority: Option<u32>,
+    /// A consumed `__attribute__((cleanup(fn)))`: the symbol index of the
+    /// cleanup function. Read where a local is bound to register a call to
+    /// `fn(&var)` at every exit from the variable's scope (C99 has no such
+    /// feature; this is the GCC/Clang extension that scope-guard and
+    /// auto-cleanup idioms rely on).
+    pub attr_cleanup: Option<usize>,
 }
 
 impl Default for Pending {
     fn default() -> Self {
         Self {
             base_was_void: false,
+            base_is_const: false,
             base_was_long_double: false,
             fn_params: None,
             fn_ptr_indirection: None,
@@ -658,6 +738,7 @@ impl Default for Pending {
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
+            declarator_leading_ptr_count: 0,
             vla_allowed: false,
             vla_dim_expr: None,
             sizeof_vla_size_slot: None,
@@ -669,6 +750,7 @@ impl Default for Pending {
             parsing_fn_ptr_proto: false,
             param_decl_context: false,
             last_array_decay_size: 0,
+            typeof_operand_was_array: false,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.
@@ -683,8 +765,14 @@ impl Default for Pending {
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
             attr_align: 0,
+            attr_packed: false,
+            attr_vector_size: 0,
             attr_thread_local: false,
             attr_dllexport: false,
+            attr_constructor: false,
+            attr_destructor: false,
+            attr_init_priority: None,
+            attr_cleanup: None,
         }
     }
 }
@@ -712,6 +800,10 @@ pub struct Compiler {
     /// `__func__`) recorded as they are placed in `data`, for static
     /// DCE object boundaries. See `Program::data_object_starts`.
     data_object_starts: Vec<i64>,
+    /// Element count the most recent flexible array member fill wrote.
+    /// Read by the speculative pass that sizes a FAM-bearing object's
+    /// storage before the real fill runs; `None` between measurements.
+    flex_array_measured_count: Option<usize>,
     /// Type of the current expression -- set by `expr` callees, read by callers
     /// to decide between byte and word loads/stores and for pointer scaling.
     ty: i64,
@@ -720,6 +812,14 @@ pub struct Compiler {
     /// (parse_function_args) bumps it temporarily for each in-flight call's
     /// reverse-push temp slots and then restores it.
     loc_offs: i64,
+    /// Per-function floor the call-argument staging recycle may not drop
+    /// below. A block-scope compound literal reserves storage that lasts to
+    /// the end of the enclosing block (C99 6.5.2.5p5); when it is evaluated
+    /// inside a call argument, that storage sits above the recycle's saved
+    /// `loc_offs`. Raising this to the literal's top keeps the recycle from
+    /// reclaiming it for a later full-expression's temporaries. Reset per
+    /// function.
+    committed_loc_offs: i64,
     /// Per-function high-water mark of `loc_offs` -- the SSA
     /// builder uses it to size the function's local slot count
     /// so the prologue reserves enough stack for every nested-call
@@ -747,12 +847,28 @@ pub struct Compiler {
     /// exit. Reset on each new function definition.
     func_vla_decls: usize,
 
+    /// Half-open `self.ast.stmts` ranges owned by statement
+    /// expressions `({ ... })` parsed in the current function. A
+    /// statement expression pushes its block's statements into the
+    /// shared statement arena, but those are sub-statements of the
+    /// expression, not top-level block items; the decl-path capture
+    /// in `parse_block_stmt` / the function-body loop skips any id
+    /// inside one of these ranges so the statements are walked only
+    /// once (through the `Expr::StmtExpr` node). Pruned as each
+    /// enclosing declaration is captured; cleared per function.
+    stmt_expr_arena_ranges: Vec<(usize, usize)>,
+
     /// True when the most recent decl-spec parse consumed an
     /// `inline` / `__inline` / `__inline__` keyword. Captured at
     /// function-symbol commit time onto `FinishedFunction::is_inline`
     /// and reset after, so it scopes to the immediately following
     /// declarator only.
     pending_is_inline: bool,
+
+    /// Like [`Self::pending_is_inline`] but for a *mandatory* inline
+    /// request (`__attribute__((always_inline))` / MSVC
+    /// `__forceinline`); implies `pending_is_inline`.
+    pending_is_always_inline: bool,
 
     /// True when the most recent decl-spec parse consumed a
     /// `_Noreturn` / `noreturn` keyword. Captured at function-symbol
@@ -967,6 +1083,11 @@ pub struct Compiler {
     /// ent_pc. Empty for executables that don't reach
     /// for the directive.
     pending_exports: Vec<String>,
+    /// Functions defined with `__attribute__((constructor))` /
+    /// `((destructor))`, accumulated in source order and copied onto
+    /// `Program::init_funcs`. Populated at each function-body close
+    /// when `pending.attr_constructor` / `attr_destructor` is set.
+    init_funcs: Vec<crate::c5::program::InitFunc>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -1002,6 +1123,11 @@ pub struct Compiler {
     /// codegen's hardcoded knowledge of which libc symbols live
     /// where.
     dylibs: Vec<DylibSpec>,
+
+    /// Symbol indices of callees already reported as used without a
+    /// return-type prototype (implicit int). Dedupes the diagnostic to
+    /// one per callee.
+    warned_implicit_ret: alloc::collections::BTreeSet<usize>,
 
     /// The native target this compilation is producing for.
     /// Drives data-model picks: `long` is 8 bytes on LP64
@@ -1080,6 +1206,17 @@ pub struct Compiler {
     /// entry PC. The entries flatten into function scope; precise
     /// `DW_TAG_lexical_block` ranges are not emitted yet (TODO).
     pending_block_locals: Vec<crate::c5::program::VariableInfo>,
+    /// Stack of block scopes carrying `__attribute__((cleanup(fn)))`
+    /// variables, innermost last. Each entry is `(var_sym, cleanup_fn_sym)`
+    /// in declaration order. A block exit emits `fn(&var)` in reverse order
+    /// (C++-style, matching GCC) on every path out: fall-through, `return`,
+    /// `break`, and `continue`.
+    cleanup_scopes: Vec<Vec<(usize, usize)>>,
+    /// `cleanup_scopes` depth at each enclosing `break` target (loop or
+    /// `switch`) and `continue` target (loop only), innermost last. A
+    /// `break` / `continue` cleans the scopes above the recorded depth.
+    break_cleanup_depths: Vec<usize>,
+    continue_cleanup_depths: Vec<usize>,
     /// Name of the C function whose body is currently being
     /// emitted. Set on function-entry emit and cleared on the
     /// closing return.
@@ -1225,6 +1362,12 @@ impl Compiler {
         for path in &opts.include_paths {
             pp.add_search_path(path);
         }
+        for path in &opts.quote_include_paths {
+            pp.add_quote_path(path);
+        }
+        for path in &opts.system_include_paths {
+            pp.add_system_fallback_path(path);
+        }
         for name in &opts.force_includes {
             pp.add_force_include(name);
         }
@@ -1252,6 +1395,13 @@ impl Compiler {
             self.max_loc_offs = self.loc_offs;
         }
         -self.loc_offs
+    }
+
+    /// Mark the block-lifetime storage based at `base` (the most negative
+    /// slot of the object) as committed, so the call-argument staging
+    /// recycle cannot reclaim it while evaluating an enclosing expression.
+    pub(super) fn commit_block_slot(&mut self, base: i64) {
+        self.committed_loc_offs = self.committed_loc_offs.max(-base);
     }
 
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
@@ -1355,17 +1505,22 @@ impl Compiler {
             symbol_index,
             deferred_error,
             dylibs,
+            warned_implicit_ret: alloc::collections::BTreeSet::new(),
             target,
             next_ent_pc: 0,
             data,
             data_object_starts: Vec::new(),
+            flex_array_measured_count: None,
             ty: 0,
             loc_offs: 0,
+            committed_loc_offs: 0,
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
+            stmt_expr_arena_ranges: Vec::new(),
             pending_is_inline: false,
+            pending_is_always_inline: false,
             pending_noreturn: false,
             const_unevaluated: 0,
             ast: super::ast::Ast::new(),
@@ -1398,6 +1553,7 @@ impl Compiler {
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             pending_exports,
+            init_funcs: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
             pending: Pending::default(),
@@ -1411,6 +1567,9 @@ impl Compiler {
             source_label: opts.source_label.clone(),
             variables: Vec::new(),
             pending_block_locals: Vec::new(),
+            cleanup_scopes: Vec::new(),
+            break_cleanup_depths: Vec::new(),
+            continue_cleanup_depths: Vec::new(),
             current_function_name: String::new(),
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
@@ -1524,8 +1683,8 @@ impl Compiler {
         // For a `--shared` build, export every non-static function
         // defined in this unit, matching the default visibility a
         // system toolchain gives a shared library: a runtime `dlopen`
-        // consumer resolves an entry point (e.g. quickjs's
-        // `js_init_module`) by name without a source-level pragma.
+        // consumer resolves an entry point (e.g. a module init
+        // function) by name without a source-level pragma.
         // Functions named by `#pragma export` above are skipped here to
         // avoid duplicate export entries.
         if self.export_all_functions {
@@ -1795,6 +1954,7 @@ impl Compiler {
             // codegen sees the walker as the source of truth.
             user_ssa_funcs: Vec::new(),
             extern_function_imports: extern_imports,
+            init_funcs: self.init_funcs,
         })
     }
 }

@@ -12,12 +12,6 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x80000000, %eax       # imm = 0x80000000
-               	movq	%rax, %rcx
-               	movl	%ecx, %ecx
-               	cmpq	%rax, %rcx
-               	je	<addr>
-               	movl	$0x4, %eax
-               	retq
                	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)

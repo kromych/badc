@@ -10,36 +10,30 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<helper_one>:
-               	leaq	(%rdi,%rdi), %rax
-               	movslq	%eax, %rax
-               	retq
-
-<helper_two>:
-               	movslq	%edi, %rdi
-               	movq	%rdi, %rax
-               	shlq	$0x1, %rax
-               	movslq	%eax, %rax
-               	retq
-
 <test>:
                	movslq	%edi, %rdi
                	movslq	%edi, %rax
                	shlq	$0x1, %rax
-               	movslq	%eax, %rax
-               	leaq	(%rdi,%rdi), %rcx
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rcx
+               	leaq	(%rdi,%rdi), %rax
                	cmpq	$0x3, %rdi
                	jle	<addr>
+               	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	retq
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x5, %edi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
+               	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

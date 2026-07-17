@@ -187,7 +187,10 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
         Inst::Extend { value, .. } => f(value),
         Inst::FpCast { value, .. } => f(value),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Call { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. }
+        | Inst::InlineAsm { args, .. } => {
             for a in args {
                 f(a);
             }
@@ -239,6 +242,7 @@ mod tests {
             n_params: 0,
             is_variadic: false,
             is_inline: false,
+            is_always_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
@@ -247,6 +251,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
+            ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             jump_tables: Vec::new(),

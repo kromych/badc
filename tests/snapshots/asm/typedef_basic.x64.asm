@@ -10,11 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<add_u32>:
-               	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

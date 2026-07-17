@@ -10,10 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<peek_via_extern>:
-               	leaq	<rip>, %rax
-               	retq
-
 <main>:
                	leaq	<rip>, %rax
                	leaq	<rip>, %rcx

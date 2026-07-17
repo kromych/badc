@@ -2,9 +2,9 @@
 //
 // dev_t is 4 bytes on macOS (int32_t) and Windows (unsigned int), 8 on
 // Linux (glibc __dev_t is unsigned long). The width matters in struct
-// layout: CPython's per-runtime urandom cache holds `int fd; dev_t
-// st_dev; ino_t st_ino;`, and a dlopen'd extension reads later fields of
-// _PyRuntime against the host's layout. A too-narrow dev_t shifts them.
+// layout: a cache struct holding `int fd; dev_t st_dev; ino_t st_ino;`
+// is read back by a separately-compiled module against the host's
+// layout. A too-narrow dev_t shifts every later field.
 
 #include <sys/types.h>
 

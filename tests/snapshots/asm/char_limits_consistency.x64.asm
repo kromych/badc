@@ -12,17 +12,6 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	retq
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
-               	xorq	%rax, %rax
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)

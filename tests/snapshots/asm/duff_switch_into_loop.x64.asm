@@ -82,21 +82,20 @@ Disassembly of section .text:
                	jmpq	*%r10
                	pushq	%rbp
                	<unknown>
-               	decl	(%rsi)
+               	decl	(%rcx)
                	addb	%al, (%rax)
-               	pushq	%rax
+               	addb	%al, (%r8)
+               	addb	%dl, (%rax)
                	addb	%al, (%rax)
-               	addb	%dl, (%rbp)
+               	pushq	%rbp
                	addb	%al, (%rax)
-               	popq	%rdx
+               	addb	%bl, (%rdx)
                	addb	%al, (%rax)
-               	addb	%bl, (%rdi)
+               	popq	%rdi
                	addb	%al, (%rax)
-               	addb	%al, %fs:(%rax)
-               	addb	%ch, (%rcx)
-               	addb	%al, (%rax)
-               	jmp	<addr>
-               	leaq	0x1(%rcx), %rdi
+               	addb	%ah, (%rax,%rax)
+               	addb	%cl, -0x73(%rax)
+               	jns	<addr>
                	leaq	0x1(%rdx), %rsi
                	movsbq	(%rdx), %rdx
                	movb	%dl, (%rcx)
@@ -161,4 +160,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

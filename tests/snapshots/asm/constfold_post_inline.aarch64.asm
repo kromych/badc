@@ -6,195 +6,23 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x220              // =544
+               	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	add	x0, x0, x1
-               	ret
-
-<mul_u>:
-               	mul	x0, x0, x1
-               	ret
-
-<sub_i>:
-               	sub	x0, x0, x1
-               	ret
-
-<shl_u>:
-               	sxtw	x1, w1
-               	lsl	x0, x0, x1
-               	ret
-
-<shr_u>:
-               	sxtw	x1, w1
-               	lsr	x0, x0, x1
-               	ret
-
-<shr_i>:
-               	sxtw	x1, w1
-               	asr	x0, x0, x1
-               	ret
-
-<div_u>:
-               	udiv	x0, x0, x1
-               	ret
-
-<mod_u>:
-               	udiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
-               	ret
-
-<div_i>:
-               	sdiv	x0, x0, x1
-               	ret
-
-<mod_i>:
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
-               	ret
-
-<ror_u>:
-               	sxtw	x1, w1
-               	ror	x0, x0, x1
-               	ret
-
-<lt_i>:
-               	cmp	x0, x1
-               	cset	x0, lt
-               	ret
-
-<gt_i>:
-               	cmp	x0, x1
-               	cset	x0, gt
-               	ret
-
-<le_i>:
-               	cmp	x0, x1
-               	cset	x0, le
-               	ret
-
-<ge_i>:
-               	cmp	x0, x1
-               	cset	x0, ge
-               	ret
-
-<lt_u>:
-               	cmp	x0, x1
-               	cset	x0, lo
-               	ret
-
-<gt_u>:
-               	cmp	x0, x1
-               	cset	x0, hi
-               	ret
-
-<le_u>:
-               	cmp	x0, x1
-               	cset	x0, ls
-               	ret
-
-<ge_u>:
-               	cmp	x0, x1
-               	cset	x0, hs
-               	ret
-
-<eq_i>:
-               	cmp	x0, x1
-               	cset	x0, eq
-               	ret
-
-<ne_i>:
-               	cmp	x0, x1
-               	cset	x0, ne
-               	ret
-
-<sext8>:
-               	sxtb	x0, w0
-               	ret
-
-<sext16>:
-               	sxth	x0, w0
-               	ret
-
-<sext32>:
-               	sxtw	x0, w0
-               	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x14               // =20
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x15               // =21
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x16               // =22
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x17               // =23
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x18               // =24
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x19               // =25
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x1a               // =26
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x1b               // =27
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x1c               // =28
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x1d               // =29
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0xcdef             // =52719
                	movk	x0, #0x89ab, lsl #16
                	movk	x0, #0x4567, lsl #32

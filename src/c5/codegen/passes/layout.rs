@@ -26,7 +26,7 @@
 //! loop (a retreating edge whose target does not dominate its
 //! source) keep their source order.
 
-use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use super::super::ssa::mem2reg::{dominators, predecessors, successors};
@@ -217,7 +217,14 @@ fn is_irreducible(func: &FunctionSsa, idom: &[BlockId], rpo: &[usize]) -> bool {
 /// edge's source without passing through the header.
 pub(super) struct NaturalLoop {
     pub(super) header: BlockId,
-    pub(super) body: BTreeSet<BlockId>,
+    /// Member blocks, ascending.
+    pub(super) body: Vec<BlockId>,
+}
+
+impl NaturalLoop {
+    pub(super) fn contains(&self, b: BlockId) -> bool {
+        self.body.binary_search(&b).is_ok()
+    }
 }
 
 /// Natural loops keyed by header, merging the bodies of multiple back
@@ -229,7 +236,11 @@ pub(super) fn natural_loops(
     preds: &[Vec<BlockId>],
     rpo: &[usize],
 ) -> Vec<NaturalLoop> {
-    let mut bodies: BTreeMap<BlockId, BTreeSet<BlockId>> = BTreeMap::new();
+    // Membership rides one bitset row per header (merging the bodies
+    // of multiple back edges); the rows convert to sorted lists at
+    // the end.
+    let words = func.blocks.len().div_ceil(64).max(1);
+    let mut bodies: BTreeMap<BlockId, Vec<u64>> = BTreeMap::new();
     for (b, block) in func.blocks.iter().enumerate() {
         if rpo[b] == usize::MAX {
             continue;
@@ -238,31 +249,42 @@ pub(super) fn natural_loops(
         for s in successors(&block.terminator, &[], &func.jump_tables) {
             // `b -> s` is a back edge iff the header `s` dominates `b`.
             if dominates(s, b, idom) {
-                let body = bodies.entry(s).or_default();
+                let body = bodies.entry(s).or_insert_with(|| alloc::vec![0u64; words]);
                 collect_loop_body(s, b, preds, body);
             }
         }
     }
     bodies
         .into_iter()
-        .map(|(header, body)| NaturalLoop { header, body })
+        .map(|(header, bits)| {
+            let mut body: Vec<BlockId> = Vec::new();
+            for (w, &word) in bits.iter().enumerate() {
+                let mut rest = word;
+                while rest != 0 {
+                    body.push((w as u32) * 64 + rest.trailing_zeros());
+                    rest &= rest - 1;
+                }
+            }
+            NaturalLoop { header, body }
+        })
         .collect()
 }
 
 /// Add the header and every block reaching `back_src` without passing
-/// through the header to `body`.
-fn collect_loop_body(
-    header: BlockId,
-    back_src: BlockId,
-    preds: &[Vec<BlockId>],
-    body: &mut BTreeSet<BlockId>,
-) {
-    body.insert(header);
-    if body.insert(back_src) {
+/// through the header to the `body` bitset.
+fn collect_loop_body(header: BlockId, back_src: BlockId, preds: &[Vec<BlockId>], body: &mut [u64]) {
+    let insert = |v: BlockId, body: &mut [u64]| {
+        let (w, m) = (v as usize / 64, 1u64 << (v % 64));
+        let fresh = body[w] & m == 0;
+        body[w] |= m;
+        fresh
+    };
+    insert(header, body);
+    if insert(back_src, body) {
         let mut stack = alloc::vec![back_src];
         while let Some(n) = stack.pop() {
             for &p in &preds[n as usize] {
-                if body.insert(p) {
+                if insert(p, body) {
                     stack.push(p);
                 }
             }
@@ -310,26 +332,21 @@ struct LoopForest {
 
 impl LoopForest {
     fn build(n_blocks: usize, loops: &[NaturalLoop]) -> LoopForest {
-        let smallest_containing = |b: BlockId, exclude: Option<usize>| -> Option<usize> {
-            let mut best: Option<usize> = None;
-            for (li, l) in loops.iter().enumerate() {
-                if Some(li) == exclude || !l.body.contains(&b) {
-                    continue;
-                }
-                if best.is_none_or(|bi| l.body.len() < loops[bi].body.len()) {
-                    best = Some(li);
-                }
+        // Stamp bodies from the outermost in; the last (smallest) loop
+        // to touch a block is its innermost, and a loop's parent is
+        // whatever contained its header before its own stamp. Size
+        // ties keep the lowest loop index, as a full smallest-scan
+        // would. Linear in the bodies' total size.
+        let mut order: Vec<usize> = (0..loops.len()).collect();
+        order.sort_unstable_by(|&a, &b| (loops[b].body.len(), b).cmp(&(loops[a].body.len(), a)));
+        let mut innermost: Vec<Option<usize>> = alloc::vec![None; n_blocks];
+        let mut parent: Vec<Option<usize>> = alloc::vec![None; loops.len()];
+        for li in order {
+            parent[li] = innermost[loops[li].header as usize];
+            for &b in &loops[li].body {
+                innermost[b as usize] = Some(li);
             }
-            best
-        };
-        let innermost = (0..n_blocks)
-            .map(|b| smallest_containing(b as BlockId, None))
-            .collect();
-        let parent = loops
-            .iter()
-            .enumerate()
-            .map(|(li, l)| smallest_containing(l.header, Some(li)))
-            .collect();
+        }
         LoopForest { innermost, parent }
     }
 
@@ -364,7 +381,7 @@ fn rotatable(func: &FunctionSsa, l: &NaturalLoop) -> bool {
             target,
             fall_through,
             ..
-        } => l.body.contains(&target) != l.body.contains(&fall_through),
+        } => l.contains(target) != l.contains(fall_through),
         _ => false,
     }
 }
@@ -384,7 +401,7 @@ fn lay_out(
     placed: &mut [bool],
     out: &mut Vec<BlockId>,
 ) {
-    let in_level = |b: BlockId| level.is_none_or(|li| loops[li].body.contains(&b));
+    let in_level = |b: BlockId| level.is_none_or(|li| loops[li].contains(b));
     // Chunks in placement order: a single block, or a whole inner
     // loop. Kept separate so rotation and the latch move reorder
     // units without breaking a unit's internal fallthroughs.
@@ -418,6 +435,7 @@ fn lay_out(
                     }
                     Terminator::Return(_)
                     | Terminator::TailExt(_)
+                    | Terminator::Unreachable
                     | Terminator::GotoIndirect { .. } => {}
                     // Case blocks chain in table order; the entries are
                     // remapped with the rest of the id surface.
@@ -446,7 +464,7 @@ fn lay_out(
                     for s in
                         successors(&func.blocks[cb as usize].terminator, &[], &func.jump_tables)
                     {
-                        if !loops[li].body.contains(&s) && !exits.contains(&s) {
+                        if !loops[li].contains(s) && !exits.contains(&s) {
                             exits.push(s);
                         }
                     }
@@ -609,7 +627,7 @@ mod tests {
                         worst = worst.max(count);
                         break;
                     }
-                    if !l.body.contains(&cur) {
+                    if !l.contains(cur) {
                         break;
                     }
                 }
@@ -918,7 +936,7 @@ mod tests {
         let loops = natural_loops(&f, &idom, &preds, &rpo);
         assert_eq!(loops.len(), 2);
         let inner = loops.iter().min_by_key(|l| l.body.len()).unwrap();
-        let ids: Vec<u32> = inner.body.iter().copied().collect();
+        let ids: Vec<u32> = inner.body.to_vec();
         let span = *ids.last().unwrap() - ids[0] + 1;
         assert_eq!(span as usize, ids.len(), "inner loop must be contiguous");
     }

@@ -335,6 +335,20 @@ pub(crate) enum Inst {
     /// setjmp's 0-on-initial-call); longjmp does not return at
     /// all.
     Intrinsic { kind: i64, args: Vec<ValueId> },
+    /// GCC extended inline asm with operands (`asm(template : outputs :
+    /// inputs : clobbers)`). `asm` carries the template, per-operand
+    /// constraints, and clobbers; `args` is parallel to `asm.operands`
+    /// and holds each operand's SSA value -- the destination address for
+    /// an output, the value for an input. Every arg is a read for
+    /// liveness; the instruction defines no SSA value (outputs are
+    /// stored through their addresses). The per-arch lowering assigns a
+    /// machine register to each register operand per its constraint,
+    /// loads the inputs, encodes the register-concrete template, and
+    /// stores the outputs back through their addresses.
+    InlineAsm {
+        asm: alloc::boxed::Box<AsmBlock>,
+        args: Vec<ValueId>,
+    },
     /// Per-frame alloca arena bookkeeping setup. Slot index is
     /// the alloca-top FP-slot offset. Produces no SSA value;
     /// emitted purely for the side effect.
@@ -507,6 +521,96 @@ pub(crate) enum FpCastKind {
     F64ToF32,
 }
 
+/// Register-name size for an inline-asm template `%`-reference, from a
+/// GCC operand-size modifier (`%b`/`%w`/`%k`/`%q` -> byte/word/long/quad
+/// sub-register name). Absent modifier defaults to the operand's width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmRegSize {
+    Byte,
+    Word,
+    Long,
+    Quad,
+}
+
+impl AsmRegSize {
+    pub(crate) fn from_width(width: u8) -> AsmRegSize {
+        match width {
+            1 => AsmRegSize::Byte,
+            2 => AsmRegSize::Word,
+            4 => AsmRegSize::Long,
+            _ => AsmRegSize::Quad,
+        }
+    }
+    pub(crate) fn bytes(self) -> u8 {
+        match self {
+            AsmRegSize::Byte => 1,
+            AsmRegSize::Word => 2,
+            AsmRegSize::Long => 4,
+            AsmRegSize::Quad => 8,
+        }
+    }
+}
+
+/// Constraint on one GCC extended-asm operand (x86_64 register classes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmConstraint {
+    /// Any allocatable general register (`r`, or the register arm of
+    /// `rm`/`g`).
+    Reg,
+    /// A specific general register named by a class letter (`a`->rax,
+    /// `b`->rbx, `c`->rcx, `d`->rdx, `S`->rsi, `D`->rdi); the value is
+    /// the architectural register number.
+    Fixed(u8),
+    /// Matching constraint (`"0".."9"`): shares the register assigned to
+    /// the operand at that index (an earlier output).
+    Match(u8),
+    /// Immediate-or-register (`ci`): a compile-time-constant operand is
+    /// used as an immediate, otherwise the value is loaded into the
+    /// register of the given class.
+    RegOrImm(u8),
+    /// Immediate-only (`i`, `n`).
+    Imm,
+    /// A memory operand (`m`, `=m`, `+m`): the operand argument is the
+    /// object's address, and the template `%N` is a memory reference
+    /// through it (not a register). Assigned a register to hold the
+    /// address; the instruction dereferences that register.
+    Mem,
+}
+
+/// One operand of a GCC extended-asm statement.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AsmOperand {
+    pub constraint: AsmConstraint,
+    /// `=`/`+` output: the operand argument is the destination address.
+    pub is_output: bool,
+    /// `+` read-write output: the current value is loaded into the
+    /// operand register before the instruction and stored after.
+    pub is_rw: bool,
+    /// Operand access width in bytes (from the C operand type). Drives
+    /// the default register-name size of a `%N` reference and the width
+    /// of the load / store through an output address.
+    pub width: u8,
+}
+
+/// A parsed GCC extended-asm statement (`asm(template : outputs :
+/// inputs : clobbers)`). The template's `%N` / `%<size>N` references
+/// are substituted with the operands' assigned registers at emit time.
+#[derive(Debug, Clone)]
+pub(crate) struct AsmBlock {
+    /// Template bytes, adjacent-literal concatenation already resolved.
+    pub template: Vec<u8>,
+    /// Operands in `%N` numbering order (outputs first, then inputs).
+    pub operands: Vec<AsmOperand>,
+    /// Registers preserved across the statement (explicit clobbers plus
+    /// the operand registers), as a bitmask over register numbers 0..15.
+    pub clobber_regs: u32,
+    /// A `"memory"` clobber was listed: an ordering barrier for memory
+    /// accesses (C practice for `asm volatile("" ::: "memory")`).
+    pub clobber_memory: bool,
+    /// The statement carried the `volatile` qualifier.
+    pub volatile: bool,
+}
+
 /// A basic block's terminator. Drives the block's control-flow
 /// successor edges.
 #[derive(Debug, Clone, Copy)]
@@ -552,6 +656,12 @@ pub(crate) enum Terminator {
     /// that already carry it; new IR producers should use the
     /// explicit branch terminators instead.
     FallThrough(BlockId),
+    /// Control cannot reach here: the block's last real instruction
+    /// diverges (a call to a `_Noreturn` function, C11 6.7.4p8). The
+    /// block has no successor and yields no value; the per-arch
+    /// lowering emits a trap so a mis-marked non-returning call faults
+    /// rather than falling into the next block.
+    Unreachable,
 }
 
 /// A single basic block of SSA instructions plus its terminator.
@@ -623,6 +733,13 @@ pub(crate) struct FunctionSsa {
     /// named functions so the path is testable.
     /// TODO: set this from the parsed `inline` function specifier.
     pub is_inline: bool,
+    /// True if the function carried a *mandatory* inline request --
+    /// `__attribute__((always_inline))` or MSVC `__forceinline` -- as
+    /// opposed to the plain `inline` hint. Implies `is_inline`. The
+    /// inliner warns when it cannot honour the request, matching the
+    /// gcc / MSVC diagnostic; a plain `inline` that stays out of line is
+    /// silent (it is only a hint).
+    pub is_always_inline: bool,
     /// Flat list of all SSA instructions in the function, indexed
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous
     /// slice of this list.
@@ -715,6 +832,13 @@ pub(crate) struct FunctionSsa {
     /// insufficient because a bare FP constant materializes as an
     /// integer immediate in a GPR.
     pub ret_is_fp: bool,
+    /// Declared return type tag (`Ty` encoding, unsigned bit OR'd in;
+    /// 0 when not recorded). A function's epilogue extends a sub-word
+    /// integer return to 64 bits per this type, and a caller reading
+    /// the accumulator relies on that; the emit-time tail-call
+    /// conversion compares the caller's and callee's recipes and
+    /// keeps the regular call-then-extend path when they differ.
+    pub ret_type_tag: i64,
     /// Negative frame slot holding the caller-supplied indirect-result
     /// address (AAPCS64 x8) for a function returning an aggregate
     /// larger than 16 bytes. The prologue stores x8 here; the callee
@@ -772,7 +896,7 @@ pub(crate) struct FunctionSsa {
 /// External functions that may return twice into the caller's frame:
 /// the setjmp family (C99 7.13.1.1) plus vfork(2). Matched on the
 /// c5-side symbol name; `__c5_msvcrt_setjmp` is the target of the
-/// Windows x86_64 `setjmp` macro (headers/include/setjmp.h). The
+/// Windows x86_64 `setjmp` macro (libc/include/setjmp.h). The
 /// AArch64 inline setjmp is an intrinsic, recognised structurally by
 /// `codegen::ssa::reg_alloc::is_setjmp_barrier`.
 pub(crate) fn returns_twice_fn_name(name: &str) -> bool {

@@ -10,18 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<ret_bool>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
-               	setne	%al
-               	movzbq	%al, %rax
-               	retq
-
-<take_bool>:
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -141,15 +129,7 @@ Disassembly of section .text:
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
                	xorq	%rax, %rax
-               	movq	%rcx, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x12, %eax
-               	addq	$0xa0, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
                	addq	$0xa0, %rsp
                	popq	%rbp
@@ -157,4 +137,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

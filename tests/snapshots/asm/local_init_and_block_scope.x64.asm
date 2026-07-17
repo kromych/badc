@@ -10,12 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sum_three>:
-               	leaq	(%rdi,%rsi), %rax
-               	addq	%rdx, %rax
-               	movslq	%eax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -51,6 +45,7 @@ Disassembly of section .text:
                	addq	$0x2, %rax
                	addq	$0x3, %rax
                	movslq	%eax, %rcx
+               	movslq	%ecx, %rcx
                	movslq	%ecx, %rdx
                	cmpq	$0x6, %rdx
                	je	<addr>

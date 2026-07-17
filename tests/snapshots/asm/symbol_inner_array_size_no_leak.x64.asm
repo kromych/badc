@@ -10,35 +10,27 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<build_one>:
-               	movq	%rsi, %r8
-               	movslq	%r8d, %r8
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	leaq	(%rcx,%rcx,2), %rdx
-               	movslq	%edx, %rsi
-               	movw	%si, (%rdi,%rcx,2)
-               	incq	%rax
-               	movslq	%eax, %rcx
-               	cmpq	%r8, %rcx
-               	jl	<addr>
-               	leaq	-0x1(%r8), %rax
-               	movslq	%eax, %rax
-               	movswq	(%rdi,%rax,2), %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	leaq	-0x10(%rbp), %rdi
-               	movl	$0x8, %esi
-               	callq	<addr>
-               	movslq	%eax, %rax
+               	subq	$0x40, %rsp
+               	leaq	-0x10(%rbp), %rsi
+               	xorq	%rax, %rax
+               	jmp	<addr>
+               	leaq	(%rcx,%rcx,2), %rdx
+               	movslq	%edx, %rdi
+               	movw	%di, (%rsi,%rcx,2)
+               	incq	%rax
+               	movslq	%eax, %rcx
+               	cmpq	$0x8, %rcx
+               	jl	<addr>
+               	movswq	0xe(%rsi), %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	cmpq	$0x15, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x30, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rax
@@ -56,7 +48,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x30, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x28(%rbp), %rax
@@ -67,12 +59,12 @@ Disassembly of section .text:
                	cmpq	$0x63, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x30, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x30, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

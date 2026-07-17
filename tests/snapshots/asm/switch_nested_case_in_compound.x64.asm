@@ -14,36 +14,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorq	%rax, %rax
-               	incq	%rax
-               	addq	$0x2, %rax
-               	addq	$0x4, %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x7, %rcx
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movslq	%eax, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	xorq	%rax, %rax
+               	movl	$0x7, %eax
                	movl	$0x1064, %eax           # imm = 0x1064
-               	incq	%rax
-               	addq	$0x2, %rax
-               	addq	$0x4, %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x106b, %rcx           # imm = 0x106B
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movslq	%eax, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x2, %eax
-               	popq	%rbp
-               	retq
+               	movl	$0x106b, %eax           # imm = 0x106B
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

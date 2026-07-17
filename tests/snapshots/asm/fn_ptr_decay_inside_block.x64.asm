@@ -12,7 +12,8 @@ Disassembly of section .text:
 
 <adder>:
                	leaq	0x64(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
@@ -49,6 +50,7 @@ Disassembly of section .text:
                	cmpq	$0x19a, %rax            # imm = 0x19A
                	jne	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	addq	$0x70, %rsp
@@ -56,5 +58,4 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %eax
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

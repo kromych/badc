@@ -6,7 +6,7 @@
 // (load through fp -- *garbage from function code*)` and then
 // SIGBUS the moment the call site read that as the call target.
 //
-// sqlite3 reaches for `(*fp)(args)` and `(**fp)(args)` shapes in
+// Real-world code reaches for `(*fp)(args)` and `(**fp)(args)` shapes in
 // dozens of places, so this fixture pins three legitimate
 // dereference depths against the same callee:
 //   * direct call             `fp(arg)`

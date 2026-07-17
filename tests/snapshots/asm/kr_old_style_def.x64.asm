@@ -11,11 +11,11 @@ Disassembly of section .text:
                	ud2
 
 <mix>:
-               	movslq	%edi, %rdi
                	movsbq	%sil, %rsi
                	movq	%rdi, %rax
                	subq	%rdx, %rax
                	addq	%rsi, %rax
+               	movslq	%eax, %rax
                	retq
 
 <first>:

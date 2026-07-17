@@ -13,7 +13,7 @@
 //! `#pragma binding(...)`. That keeps the user-visible header set
 //! cross-platform even though the underlying dylib is per-OS.
 //!
-//! Adding a header: drop the file under `headers/include/`, add a
+//! Adding a header: drop the file under `libc/include/`, add a
 //! `match` arm here, and (if it's a real header) document the bound
 //! symbols at the top of the file.
 
@@ -49,396 +49,364 @@ pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
 pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     (
         "_builtins.h",
-        include_str!("../../headers/include/_builtins.h"),
+        include_str!("../../libc/include/_builtins.h"),
     ),
-    (
-        "stdalign.h",
-        include_str!("../../headers/include/stdalign.h"),
-    ),
-    ("stddef.h", include_str!("../../headers/include/stddef.h")),
-    ("stdint.h", include_str!("../../headers/include/stdint.h")),
-    (
-        "inttypes.h",
-        include_str!("../../headers/include/inttypes.h"),
-    ),
-    ("setjmp.h", include_str!("../../headers/include/setjmp.h")),
-    ("limits.h", include_str!("../../headers/include/limits.h")),
-    ("string.h", include_str!("../../headers/include/string.h")),
-    ("sched.h", include_str!("../../headers/include/sched.h")),
-    ("spawn.h", include_str!("../../headers/include/spawn.h")),
-    ("stdio.h", include_str!("../../headers/include/stdio.h")),
-    ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
-    ("alloca.h", include_str!("../../headers/include/alloca.h")),
-    ("malloc.h", include_str!("../../headers/include/malloc.h")),
-    ("stdarg.h", include_str!("../../headers/include/stdarg.h")),
-    ("stdbool.h", include_str!("../../headers/include/stdbool.h")),
+    ("stdalign.h", include_str!("../../libc/include/stdalign.h")),
+    ("stddef.h", include_str!("../../libc/include/stddef.h")),
+    ("stdint.h", include_str!("../../libc/include/stdint.h")),
+    ("inttypes.h", include_str!("../../libc/include/inttypes.h")),
+    ("setjmp.h", include_str!("../../libc/include/setjmp.h")),
+    ("limits.h", include_str!("../../libc/include/limits.h")),
+    ("string.h", include_str!("../../libc/include/string.h")),
+    ("sched.h", include_str!("../../libc/include/sched.h")),
+    ("spawn.h", include_str!("../../libc/include/spawn.h")),
+    ("stdio.h", include_str!("../../libc/include/stdio.h")),
+    ("stdlib.h", include_str!("../../libc/include/stdlib.h")),
+    ("alloca.h", include_str!("../../libc/include/alloca.h")),
+    ("malloc.h", include_str!("../../libc/include/malloc.h")),
+    ("stdarg.h", include_str!("../../libc/include/stdarg.h")),
+    ("stdbool.h", include_str!("../../libc/include/stdbool.h")),
     (
         "stdnoreturn.h",
-        include_str!("../../headers/include/stdnoreturn.h"),
+        include_str!("../../libc/include/stdnoreturn.h"),
     ),
     (
         "stdatomic.h",
-        include_str!("../../headers/include/stdatomic.h"),
+        include_str!("../../libc/include/stdatomic.h"),
     ),
-    ("ctype.h", include_str!("../../headers/include/ctype.h")),
-    ("math.h", include_str!("../../headers/include/math.h")),
-    ("float.h", include_str!("../../headers/include/float.h")),
-    ("locale.h", include_str!("../../headers/include/locale.h")),
-    ("signal.h", include_str!("../../headers/include/signal.h")),
-    ("errno.h", include_str!("../../headers/include/errno.h")),
-    ("endian.h", include_str!("../../headers/include/endian.h")),
+    ("ctype.h", include_str!("../../libc/include/ctype.h")),
+    ("math.h", include_str!("../../libc/include/math.h")),
+    ("float.h", include_str!("../../libc/include/float.h")),
+    ("locale.h", include_str!("../../libc/include/locale.h")),
+    ("signal.h", include_str!("../../libc/include/signal.h")),
+    ("errno.h", include_str!("../../libc/include/errno.h")),
+    ("endian.h", include_str!("../../libc/include/endian.h")),
     (
         "sys/endian.h",
-        include_str!("../../headers/include/sys/endian.h"),
+        include_str!("../../libc/include/sys/endian.h"),
     ),
     (
         "machine/endian.h",
-        include_str!("../../headers/include/machine/endian.h"),
+        include_str!("../../libc/include/machine/endian.h"),
     ),
-    ("assert.h", include_str!("../../headers/include/assert.h")),
-    ("time.h", include_str!("../../headers/include/time.h")),
-    ("utime.h", include_str!("../../headers/include/utime.h")),
+    ("assert.h", include_str!("../../libc/include/assert.h")),
+    ("time.h", include_str!("../../libc/include/time.h")),
+    ("utime.h", include_str!("../../libc/include/utime.h")),
     (
         "sys/utime.h",
-        include_str!("../../headers/include/sys/utime.h"),
+        include_str!("../../libc/include/sys/utime.h"),
     ),
-    ("netdb.h", include_str!("../../headers/include/netdb.h")),
+    ("netdb.h", include_str!("../../libc/include/netdb.h")),
+    ("err.h", include_str!("../../libc/include/err.h")),
+    ("ucontext.h", include_str!("../../libc/include/ucontext.h")),
+    (
+        "sys/prctl.h",
+        include_str!("../../libc/include/sys/prctl.h"),
+    ),
+    (
+        "sys/epoll.h",
+        include_str!("../../libc/include/sys/epoll.h"),
+    ),
+    (
+        "sys/signalfd.h",
+        include_str!("../../libc/include/sys/signalfd.h"),
+    ),
+    (
+        "sys/reboot.h",
+        include_str!("../../libc/include/sys/reboot.h"),
+    ),
+    (
+        "sys/inotify.h",
+        include_str!("../../libc/include/sys/inotify.h"),
+    ),
     (
         "sys/utsname.h",
-        include_str!("../../headers/include/sys/utsname.h"),
+        include_str!("../../libc/include/sys/utsname.h"),
     ),
-    ("grp.h", include_str!("../../headers/include/grp.h")),
-    (
-        "langinfo.h",
-        include_str!("../../headers/include/langinfo.h"),
-    ),
+    ("grp.h", include_str!("../../libc/include/grp.h")),
+    ("langinfo.h", include_str!("../../libc/include/langinfo.h")),
     (
         "netinet/in.h",
-        include_str!("../../headers/include/netinet/in.h"),
+        include_str!("../../libc/include/netinet/in.h"),
     ),
     (
         "netinet/tcp.h",
-        include_str!("../../headers/include/netinet/tcp.h"),
+        include_str!("../../libc/include/netinet/tcp.h"),
     ),
     (
         "arpa/inet.h",
-        include_str!("../../headers/include/arpa/inet.h"),
+        include_str!("../../libc/include/arpa/inet.h"),
     ),
-    ("dirent.h", include_str!("../../headers/include/dirent.h")),
-    ("ftw.h", include_str!("../../headers/include/ftw.h")),
-    ("fts.h", include_str!("../../headers/include/fts.h")),
-    ("pwd.h", include_str!("../../headers/include/pwd.h")),
-    ("unistd.h", include_str!("../../headers/include/unistd.h")),
-    ("fcntl.h", include_str!("../../headers/include/fcntl.h")),
-    ("syslog.h", include_str!("../../headers/include/syslog.h")),
-    (
-        "execinfo.h",
-        include_str!("../../headers/include/execinfo.h"),
-    ),
+    ("dirent.h", include_str!("../../libc/include/dirent.h")),
+    ("ftw.h", include_str!("../../libc/include/ftw.h")),
+    ("fts.h", include_str!("../../libc/include/fts.h")),
+    ("pwd.h", include_str!("../../libc/include/pwd.h")),
+    ("unistd.h", include_str!("../../libc/include/unistd.h")),
+    ("getopt.h", include_str!("../../libc/include/getopt.h")),
+    ("fcntl.h", include_str!("../../libc/include/fcntl.h")),
+    ("syslog.h", include_str!("../../libc/include/syslog.h")),
+    ("execinfo.h", include_str!("../../libc/include/execinfo.h")),
     (
         "sys/types.h",
-        include_str!("../../headers/include/sys/types.h"),
+        include_str!("../../libc/include/sys/types.h"),
     ),
-    ("sys/uio.h", include_str!("../../headers/include/sys/uio.h")),
-    ("sys/un.h", include_str!("../../headers/include/sys/un.h")),
-    ("net/if.h", include_str!("../../headers/include/net/if.h")),
+    ("sys/uio.h", include_str!("../../libc/include/sys/uio.h")),
+    ("sys/shm.h", include_str!("../../libc/include/sys/shm.h")),
+    ("sys/un.h", include_str!("../../libc/include/sys/un.h")),
+    ("net/if.h", include_str!("../../libc/include/net/if.h")),
     (
         "net/ethernet.h",
-        include_str!("../../headers/include/net/ethernet.h"),
+        include_str!("../../libc/include/net/ethernet.h"),
     ),
-    (
-        "sys/file.h",
-        include_str!("../../headers/include/sys/file.h"),
-    ),
+    ("sys/file.h", include_str!("../../libc/include/sys/file.h")),
     (
         "sys/cdefs.h",
-        include_str!("../../headers/include/sys/cdefs.h"),
+        include_str!("../../libc/include/sys/cdefs.h"),
     ),
     (
         "CoreFoundation/CoreFoundation.h",
-        include_str!("../../headers/include/CoreFoundation/CoreFoundation.h"),
+        include_str!("../../libc/include/CoreFoundation/CoreFoundation.h"),
     ),
     (
         "SystemConfiguration/SCDynamicStoreCopySpecific.h",
-        include_str!("../../headers/include/SystemConfiguration/SCDynamicStoreCopySpecific.h"),
+        include_str!("../../libc/include/SystemConfiguration/SCDynamicStoreCopySpecific.h"),
     ),
-    (
-        "sys/attr.h",
-        include_str!("../../headers/include/sys/attr.h"),
-    ),
+    ("sys/attr.h", include_str!("../../libc/include/sys/attr.h")),
     (
         "libkern/OSByteOrder.h",
-        include_str!("../../headers/include/libkern/OSByteOrder.h"),
+        include_str!("../../libc/include/libkern/OSByteOrder.h"),
     ),
     (
         "sys/paths.h",
-        include_str!("../../headers/include/sys/paths.h"),
+        include_str!("../../libc/include/sys/paths.h"),
     ),
     (
         "sys/param.h",
-        include_str!("../../headers/include/sys/param.h"),
+        include_str!("../../libc/include/sys/param.h"),
     ),
     (
         "sys/syslimits.h",
-        include_str!("../../headers/include/sys/syslimits.h"),
+        include_str!("../../libc/include/sys/syslimits.h"),
     ),
-    (
-        "copyfile.h",
-        include_str!("../../headers/include/copyfile.h"),
-    ),
+    ("copyfile.h", include_str!("../../libc/include/copyfile.h")),
     (
         "mach/mach_time.h",
-        include_str!("../../headers/include/mach/mach_time.h"),
+        include_str!("../../libc/include/mach/mach_time.h"),
     ),
     (
         "mach/mach.h",
-        include_str!("../../headers/include/mach/mach.h"),
+        include_str!("../../libc/include/mach/mach.h"),
     ),
     (
         "mach/task.h",
-        include_str!("../../headers/include/mach/task.h"),
+        include_str!("../../libc/include/mach/task.h"),
     ),
-    (
-        "sysexits.h",
-        include_str!("../../headers/include/sysexits.h"),
-    ),
+    ("sysexits.h", include_str!("../../libc/include/sysexits.h")),
     (
         "sys/sys_domain.h",
-        include_str!("../../headers/include/sys/sys_domain.h"),
+        include_str!("../../libc/include/sys/sys_domain.h"),
     ),
     (
         "sys/sysctl.h",
-        include_str!("../../headers/include/sys/sysctl.h"),
+        include_str!("../../libc/include/sys/sysctl.h"),
     ),
     (
         "mach-o/dyld.h",
-        include_str!("../../headers/include/mach-o/dyld.h"),
+        include_str!("../../libc/include/mach-o/dyld.h"),
     ),
     (
         "mach-o/loader.h",
-        include_str!("../../headers/include/mach-o/loader.h"),
+        include_str!("../../libc/include/mach-o/loader.h"),
     ),
-    (
-        "sys/stat.h",
-        include_str!("../../headers/include/sys/stat.h"),
-    ),
-    (
-        "sys/mman.h",
-        include_str!("../../headers/include/sys/mman.h"),
-    ),
+    ("sys/stat.h", include_str!("../../libc/include/sys/stat.h")),
+    ("sys/mman.h", include_str!("../../libc/include/sys/mman.h")),
     (
         "sys/random.h",
-        include_str!("../../headers/include/sys/random.h"),
+        include_str!("../../libc/include/sys/random.h"),
     ),
     (
         "sys/syscall.h",
-        include_str!("../../headers/include/sys/syscall.h"),
+        include_str!("../../libc/include/sys/syscall.h"),
     ),
-    ("libintl.h", include_str!("../../headers/include/libintl.h")),
-    ("elf.h", include_str!("../../headers/include/elf.h")),
-    ("link.h", include_str!("../../headers/include/link.h")),
+    ("libintl.h", include_str!("../../libc/include/libintl.h")),
+    ("elf.h", include_str!("../../libc/include/elf.h")),
+    ("link.h", include_str!("../../libc/include/link.h")),
     (
         "linux/random.h",
-        include_str!("../../headers/include/linux/random.h"),
+        include_str!("../../libc/include/linux/random.h"),
     ),
     (
         "linux/auxvec.h",
-        include_str!("../../headers/include/linux/auxvec.h"),
+        include_str!("../../libc/include/linux/auxvec.h"),
     ),
-    (
-        "linux/fs.h",
-        include_str!("../../headers/include/linux/fs.h"),
-    ),
+    ("linux/fs.h", include_str!("../../libc/include/linux/fs.h")),
     (
         "linux/sched.h",
-        include_str!("../../headers/include/linux/sched.h"),
+        include_str!("../../libc/include/linux/sched.h"),
     ),
     (
         "linux/wait.h",
-        include_str!("../../headers/include/linux/wait.h"),
+        include_str!("../../libc/include/linux/wait.h"),
     ),
     (
         "linux/memfd.h",
-        include_str!("../../headers/include/linux/memfd.h"),
+        include_str!("../../libc/include/linux/memfd.h"),
+    ),
+    (
+        "linux/futex.h",
+        include_str!("../../libc/include/linux/futex.h"),
+    ),
+    (
+        "linux/ioctl.h",
+        include_str!("../../libc/include/linux/ioctl.h"),
+    ),
+    (
+        "linux/types.h",
+        include_str!("../../libc/include/linux/types.h"),
     ),
     (
         "linux/limits.h",
-        include_str!("../../headers/include/linux/limits.h"),
+        include_str!("../../libc/include/linux/limits.h"),
     ),
-    (
-        "sys/auxv.h",
-        include_str!("../../headers/include/sys/auxv.h"),
-    ),
+    ("sys/auxv.h", include_str!("../../libc/include/sys/auxv.h")),
     (
         "sys/pidfd.h",
-        include_str!("../../headers/include/sys/pidfd.h"),
+        include_str!("../../libc/include/sys/pidfd.h"),
     ),
-    ("pty.h", include_str!("../../headers/include/pty.h")),
-    ("utmp.h", include_str!("../../headers/include/utmp.h")),
+    ("pty.h", include_str!("../../libc/include/pty.h")),
+    ("utmp.h", include_str!("../../libc/include/utmp.h")),
     (
         "sys/timerfd.h",
-        include_str!("../../headers/include/sys/timerfd.h"),
+        include_str!("../../libc/include/sys/timerfd.h"),
     ),
     (
         "sys/sendfile.h",
-        include_str!("../../headers/include/sys/sendfile.h"),
+        include_str!("../../libc/include/sys/sendfile.h"),
     ),
     (
         "sys/eventfd.h",
-        include_str!("../../headers/include/sys/eventfd.h"),
+        include_str!("../../libc/include/sys/eventfd.h"),
     ),
     (
         "sys/sysmacros.h",
-        include_str!("../../headers/include/sys/sysmacros.h"),
+        include_str!("../../libc/include/sys/sysmacros.h"),
     ),
     (
         "sys/xattr.h",
-        include_str!("../../headers/include/sys/xattr.h"),
+        include_str!("../../libc/include/sys/xattr.h"),
     ),
     (
         "sys/mount.h",
-        include_str!("../../headers/include/sys/mount.h"),
+        include_str!("../../libc/include/sys/mount.h"),
     ),
     (
         "sys/statvfs.h",
-        include_str!("../../headers/include/sys/statvfs.h"),
+        include_str!("../../libc/include/sys/statvfs.h"),
     ),
+    ("sys/vfs.h", include_str!("../../libc/include/sys/vfs.h")),
     (
         "sys/socket.h",
-        include_str!("../../headers/include/sys/socket.h"),
+        include_str!("../../libc/include/sys/socket.h"),
     ),
     (
         "sys/select.h",
-        include_str!("../../headers/include/sys/select.h"),
+        include_str!("../../libc/include/sys/select.h"),
     ),
-    (
-        "sys/wait.h",
-        include_str!("../../headers/include/sys/wait.h"),
-    ),
+    ("sys/wait.h", include_str!("../../libc/include/sys/wait.h")),
     (
         "sys/resource.h",
-        include_str!("../../headers/include/sys/resource.h"),
+        include_str!("../../libc/include/sys/resource.h"),
     ),
-    ("wctype.h", include_str!("../../headers/include/wctype.h")),
+    ("wctype.h", include_str!("../../libc/include/wctype.h")),
     (
         "sys/ioctl.h",
-        include_str!("../../headers/include/sys/ioctl.h"),
+        include_str!("../../libc/include/sys/ioctl.h"),
     ),
-    (
-        "sys/time.h",
-        include_str!("../../headers/include/sys/time.h"),
-    ),
+    ("sys/time.h", include_str!("../../libc/include/sys/time.h")),
     (
         "sys/times.h",
-        include_str!("../../headers/include/sys/times.h"),
+        include_str!("../../libc/include/sys/times.h"),
     ),
-    ("termios.h", include_str!("../../headers/include/termios.h")),
-    ("poll.h", include_str!("../../headers/include/poll.h")),
+    ("termios.h", include_str!("../../libc/include/termios.h")),
+    ("poll.h", include_str!("../../libc/include/poll.h")),
     (
         "malloc/malloc.h",
-        include_str!("../../headers/include/malloc/malloc.h"),
+        include_str!("../../libc/include/malloc/malloc.h"),
     ),
-    ("strings.h", include_str!("../../headers/include/strings.h")),
-    ("libgen.h", include_str!("../../headers/include/libgen.h")),
-    ("util.h", include_str!("../../headers/include/util.h")),
-    ("glob.h", include_str!("../../headers/include/glob.h")),
-    ("pthread.h", include_str!("../../headers/include/pthread.h")),
+    ("strings.h", include_str!("../../libc/include/strings.h")),
+    ("libgen.h", include_str!("../../libc/include/libgen.h")),
+    ("util.h", include_str!("../../libc/include/util.h")),
+    ("glob.h", include_str!("../../libc/include/glob.h")),
+    ("pthread.h", include_str!("../../libc/include/pthread.h")),
     (
         "semaphore.h",
-        include_str!("../../headers/include/semaphore.h"),
+        include_str!("../../libc/include/semaphore.h"),
     ),
-    ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
-    ("fenv.h", include_str!("../../headers/include/fenv.h")),
-    ("io.h", include_str!("../../headers/include/io.h")),
-    ("direct.h", include_str!("../../headers/include/direct.h")),
-    ("intrin.h", include_str!("../../headers/include/intrin.h")),
-    ("bcrypt.h", include_str!("../../headers/include/bcrypt.h")),
+    ("dlfcn.h", include_str!("../../libc/include/dlfcn.h")),
+    ("fenv.h", include_str!("../../libc/include/fenv.h")),
+    ("io.h", include_str!("../../libc/include/io.h")),
+    ("direct.h", include_str!("../../libc/include/direct.h")),
+    ("intrin.h", include_str!("../../libc/include/intrin.h")),
+    ("bcrypt.h", include_str!("../../libc/include/bcrypt.h")),
     (
         "TargetConditionals.h",
-        include_str!("../../headers/include/TargetConditionals.h"),
+        include_str!("../../libc/include/TargetConditionals.h"),
     ),
     (
         "AvailabilityMacros.h",
-        include_str!("../../headers/include/AvailabilityMacros.h"),
+        include_str!("../../libc/include/AvailabilityMacros.h"),
     ),
-    ("os/log.h", include_str!("../../headers/include/os/log.h")),
-    ("os/lock.h", include_str!("../../headers/include/os/lock.h")),
+    ("os/log.h", include_str!("../../libc/include/os/log.h")),
+    ("os/lock.h", include_str!("../../libc/include/os/lock.h")),
     (
         "crt_externs.h",
-        include_str!("../../headers/include/crt_externs.h"),
+        include_str!("../../libc/include/crt_externs.h"),
     ),
-    ("windows.h", include_str!("../../headers/include/windows.h")),
-    ("winbase.h", include_str!("../../headers/include/winbase.h")),
-    (
-        "winioctl.h",
-        include_str!("../../headers/include/winioctl.h"),
-    ),
-    ("pathcch.h", include_str!("../../headers/include/pathcch.h")),
-    ("psapi.h", include_str!("../../headers/include/psapi.h")),
+    ("windows.h", include_str!("../../libc/include/windows.h")),
+    ("winbase.h", include_str!("../../libc/include/winbase.h")),
+    ("winioctl.h", include_str!("../../libc/include/winioctl.h")),
+    ("pathcch.h", include_str!("../../libc/include/pathcch.h")),
+    ("psapi.h", include_str!("../../libc/include/psapi.h")),
     (
         "versionhelpers.h",
-        include_str!("../../headers/include/versionhelpers.h"),
+        include_str!("../../libc/include/versionhelpers.h"),
     ),
-    ("crtdbg.h", include_str!("../../headers/include/crtdbg.h")),
-    ("aclapi.h", include_str!("../../headers/include/aclapi.h")),
-    ("lmcons.h", include_str!("../../headers/include/lmcons.h")),
-    ("sddl.h", include_str!("../../headers/include/sddl.h")),
-    ("shlwapi.h", include_str!("../../headers/include/shlwapi.h")),
+    ("crtdbg.h", include_str!("../../libc/include/crtdbg.h")),
+    ("aclapi.h", include_str!("../../libc/include/aclapi.h")),
+    ("lmcons.h", include_str!("../../libc/include/lmcons.h")),
+    ("sddl.h", include_str!("../../libc/include/sddl.h")),
+    ("shlwapi.h", include_str!("../../libc/include/shlwapi.h")),
     (
         "sys/locking.h",
-        include_str!("../../headers/include/sys/locking.h"),
+        include_str!("../../libc/include/sys/locking.h"),
     ),
-    (
-        "wincrypt.h",
-        include_str!("../../headers/include/wincrypt.h"),
-    ),
-    ("tchar.h", include_str!("../../headers/include/tchar.h")),
+    ("wincrypt.h", include_str!("../../libc/include/wincrypt.h")),
+    ("tchar.h", include_str!("../../libc/include/tchar.h")),
     (
         "winapifamily.h",
-        include_str!("../../headers/include/winapifamily.h"),
+        include_str!("../../libc/include/winapifamily.h"),
     ),
     (
         "sdkddkver.h",
-        include_str!("../../headers/include/sdkddkver.h"),
+        include_str!("../../libc/include/sdkddkver.h"),
     ),
-    ("cpuid.h", include_str!("../../headers/include/cpuid.h")),
-    (
-        "winerror.h",
-        include_str!("../../headers/include/winerror.h"),
-    ),
-    ("process.h", include_str!("../../headers/include/process.h")),
-    ("conio.h", include_str!("../../headers/include/conio.h")),
-    (
-        "winsock2.h",
-        include_str!("../../headers/include/winsock2.h"),
-    ),
-    (
-        "ws2tcpip.h",
-        include_str!("../../headers/include/ws2tcpip.h"),
-    ),
-    ("mstcpip.h", include_str!("../../headers/include/mstcpip.h")),
-    ("mswsock.h", include_str!("../../headers/include/mswsock.h")),
-    (
-        "iphlpapi.h",
-        include_str!("../../headers/include/iphlpapi.h"),
-    ),
-    ("ws2bth.h", include_str!("../../headers/include/ws2bth.h")),
-    ("Rpc.h", include_str!("../../headers/include/rpc.h")),
-    ("rpc.h", include_str!("../../headers/include/rpc.h")),
-    (
-        "hvsocket.h",
-        include_str!("../../headers/include/hvsocket.h"),
-    ),
-    (
-        "pshpack1.h",
-        include_str!("../../headers/include/pshpack1.h"),
-    ),
-    ("poppack.h", include_str!("../../headers/include/poppack.h")),
-    (
-        "winternl.h",
-        include_str!("../../headers/include/winternl.h"),
-    ),
-    ("wchar.h", include_str!("../../headers/include/wchar.h")),
+    ("cpuid.h", include_str!("../../libc/include/cpuid.h")),
+    ("winerror.h", include_str!("../../libc/include/winerror.h")),
+    ("process.h", include_str!("../../libc/include/process.h")),
+    ("conio.h", include_str!("../../libc/include/conio.h")),
+    ("winsock2.h", include_str!("../../libc/include/winsock2.h")),
+    ("ws2tcpip.h", include_str!("../../libc/include/ws2tcpip.h")),
+    ("mstcpip.h", include_str!("../../libc/include/mstcpip.h")),
+    ("mswsock.h", include_str!("../../libc/include/mswsock.h")),
+    ("iphlpapi.h", include_str!("../../libc/include/iphlpapi.h")),
+    ("ws2bth.h", include_str!("../../libc/include/ws2bth.h")),
+    ("Rpc.h", include_str!("../../libc/include/rpc.h")),
+    ("rpc.h", include_str!("../../libc/include/rpc.h")),
+    ("hvsocket.h", include_str!("../../libc/include/hvsocket.h")),
+    ("pshpack1.h", include_str!("../../libc/include/pshpack1.h")),
+    ("poppack.h", include_str!("../../libc/include/poppack.h")),
+    ("winternl.h", include_str!("../../libc/include/winternl.h")),
+    ("wchar.h", include_str!("../../libc/include/wchar.h")),
     // Opt-in MSVC-shape predefines: no `#pragma binding`
     // here, just `#define _MSC_VER 1900`, `#define __int64 long
     // long`, the `__declspec(x)` family of empty-decorator
@@ -446,22 +414,76 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     // shaped C against the Windows backend opt in via
     // `badc -include msvc_compat.h ...`. Internally guarded by
     // `#ifdef _WIN32` so the same command line stays valid on
+    ("scsi/sg.h", include_str!("../../libc/include/scsi/sg.h")),
+    (
+        "linux/magic.h",
+        include_str!("../../libc/include/linux/magic.h"),
+    ),
+    (
+        "linux/falloc.h",
+        include_str!("../../libc/include/linux/falloc.h"),
+    ),
+    (
+        "linux/ppdev.h",
+        include_str!("../../libc/include/linux/ppdev.h"),
+    ),
+    (
+        "linux/parport.h",
+        include_str!("../../libc/include/linux/parport.h"),
+    ),
+    (
+        "linux/vm_sockets.h",
+        include_str!("../../libc/include/linux/vm_sockets.h"),
+    ),
+    (
+        "linux/time_types.h",
+        include_str!("../../libc/include/linux/time_types.h"),
+    ),
+    (
+        "linux/errqueue.h",
+        include_str!("../../libc/include/linux/errqueue.h"),
+    ),
+    (
+        "linux/blkzoned.h",
+        include_str!("../../libc/include/linux/blkzoned.h"),
+    ),
+    (
+        "linux/cdrom.h",
+        include_str!("../../libc/include/linux/cdrom.h"),
+    ),
+    (
+        "linux/dm-ioctl.h",
+        include_str!("../../libc/include/linux/dm-ioctl.h"),
+    ),
+    (
+        "linux/hdreg.h",
+        include_str!("../../libc/include/linux/hdreg.h"),
+    ),
+    ("linux/fd.h", include_str!("../../libc/include/linux/fd.h")),
+    (
+        "linux/can.h",
+        include_str!("../../libc/include/linux/can.h"),
+    ),
+    (
+        "linux/can/raw.h",
+        include_str!("../../libc/include/linux/can/raw.h"),
+    ),
     // every host.
     (
         "msvc_compat.h",
-        include_str!("../../headers/include/msvc_compat.h"),
+        include_str!("../../libc/include/msvc_compat.h"),
     ),
     // Legacy alias: <memory.h> predates POSIX's consolidation of
     // mem*/str* under <string.h>. Mapped from `embedded_header` but
     // not enumerated here -- the suggestion path would otherwise
     // emit two header names for any `mem*` symbol.
     #[allow(dead_code)]
-    ("memory.h", include_str!("../../headers/include/memory.h")),
+    ("memory.h", include_str!("../../libc/include/memory.h")),
 ];
 
 // Build-time-generated `&[(name, header)]` sorted by name. Produced
 // by `build.rs`'s `emit_binding_to_header_index`, which walks
-// `headers/include/*.h` once per build and harvests every
+// `libc/include/*.h` once per build and harvests every
 // `#pragma binding(<dylib>::<name>, ...)` local symbol plus every
 // file-scope function-prototype identifier. First-occurrence-wins
 // per name in lexicographic header order; a duplicate declaration
@@ -513,9 +535,9 @@ mod tests {
 
     #[test]
     fn header_declaring_finds_pread64() {
-        // glibc large-file variants. sqlite's os_unix layer references
-        // them by name under USE_PREAD64; without the prototype they are
-        // implicitly declared and the address-of trampoline forwards no
+        // glibc large-file variants. Some code references them by name
+        // (e.g. under a USE_PREAD64 build flag); without the prototype they
+        // are implicitly declared and the address-of trampoline forwards no
         // arguments.
         assert_eq!(header_declaring("pread64"), Some("unistd.h"));
         assert_eq!(header_declaring("pwrite64"), Some("unistd.h"));

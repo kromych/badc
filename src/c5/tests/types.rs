@@ -2,7 +2,7 @@
 //! error) on type mismatches, and a C-style cast should silence the
 //! warning. Variadic functions skip type-check past the fixed prefix.
 
-use super::{compile_fixture, run_fixture};
+use super::{compile_fixture, compile_str, run_fixture};
 
 /// C99 6.4.4.4p11: a wide character constant (`L'x'`) has type `wchar_t`,
 /// whose width the target fixes -- 2 bytes on Windows (UTF-16) and 4 on
@@ -72,6 +72,66 @@ fn warn_return_type_mismatch() {
     assert!(
         !has("ret_null") && !has("ret_ok"),
         "unexpected warning on a well-typed return: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn call_without_return_prototype_warns_implicit_int() {
+    use crate::{Compiler, Target};
+    // A `#pragma binding` seen without an accompanying prototype leaves
+    // the callee's return type at the implicit `int` default. A call
+    // warns once: the result truncates to 32 bits if the function really
+    // returns a pointer or wider type. Target-fixed so the bound dylib
+    // name (`libc`) is the same regardless of the host.
+    let src = "#pragma dylib(libc, \"libc.so.6\")\n\
+               #pragma binding(libc::mystery, \"getenv\")\n\
+               int main(void) { return mystery(\"PATH\") ? 0 : 1; }\n";
+    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    assert!(
+        p.warnings
+            .iter()
+            .any(|w| w.contains("mystery") && w.contains("without a return-type prototype")),
+        "expected implicit-int warning, got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn call_with_return_prototype_is_silent() {
+    use crate::{Compiler, Target};
+    // Declaring the return type clears the implicit-`int` default, so
+    // the same call produces no warning.
+    let src = "#pragma dylib(libc, \"libc.so.6\")\n\
+               #pragma binding(libc::mystery, \"getenv\")\n\
+               char *mystery(char *name);\n\
+               int main(void) { return mystery(\"PATH\") ? 0 : 1; }\n";
+    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    assert!(
+        !p.warnings.iter().any(|w| w.contains("mystery")),
+        "expected no warning for a prototyped binding, got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn shadowing_fnptr_param_does_not_clobber_signature() {
+    // A prototype whose fn-ptr parameter reuses a bound library
+    // function's name must not replace that function's recorded
+    // signature: a later 1-arg `exit(0)` would otherwise be checked
+    // against the parameter's own prototype (C99 6.2.1p4).
+    let p = compile_str(
+        "struct Obj { int x; };\n\
+         void takes(void (*exit)(struct Obj *o, int code));\n\
+         int main(void) { exit(0); }\n",
+    );
+    assert!(
+        !p.warnings.iter().any(|w| w.contains("exit")),
+        "shadowed `exit` signature leaked, got: {:?}",
         p.warnings
     );
 }

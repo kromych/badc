@@ -13,7 +13,8 @@ Disassembly of section .text:
 <doer>:
                	movq	%rdi, %rax
                	imulq	%rsi, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
@@ -84,3 +85,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

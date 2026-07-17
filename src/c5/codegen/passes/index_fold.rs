@@ -94,7 +94,10 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
                 bump(target, &mut counts)
             }
             Terminator::Return(v) => bump(v, &mut counts),
-            Terminator::Jmp(_) | Terminator::TailExt(_) | Terminator::FallThrough(_) => {}
+            Terminator::Jmp(_)
+            | Terminator::TailExt(_)
+            | Terminator::FallThrough(_)
+            | Terminator::Unreachable => {}
         }
         if block.exit_acc != NO_VALUE {
             bump(block.exit_acc, &mut counts);

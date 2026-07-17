@@ -4,14 +4,13 @@
 // value must be truncated to the lvalue's storage width so a
 // surrounding test such as `(++p) == 0` observes the wraparound.
 //
-// Sqlite's insertCellFast carry pattern relies on this exactly:
-//   if ((++data[hdrOffset+4]) == 0) data[hdrOffset+3]++;
+// A common multi-byte carry pattern relies on this exactly:
+//   if ((++data[k]) == 0) data[k-1]++;
 // where data is u8*; when the low byte rolls 0xFF -> 0x00 the
 // expression must compare equal to zero so the high byte carries.
 // Skipping the narrowing leaves the in-register sum at 0x100
-// which never equals zero -- sqlite then writes the wrong nCell
-// encoding to the page, surfaces as SQLITE_CORRUPT after the
-// first multi-page B-tree split.
+// which never equals zero, so the carry into the high byte is
+// lost and the stored multi-byte value is corrupted.
 //
 // The same defect affects all narrow-lvalue compound-assignment
 // expressions (`+=`, `-=`, etc.) because they share the

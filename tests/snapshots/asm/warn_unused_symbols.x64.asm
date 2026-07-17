@@ -10,14 +10,7 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<live_static>:
-               	movq	%rdi, %rax
-               	shlq	$0x1, %rax
-               	movslq	%eax, %rax
-               	retq
-
 <main>:
                	movl	$0xc, %eax
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

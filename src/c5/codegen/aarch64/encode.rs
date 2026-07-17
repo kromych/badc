@@ -398,6 +398,12 @@ pub(crate) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x8A00_0000, rd, rn, rm)
 }
 
+/// `BIC <Xd>, <Xn>, <Xm>` -- bit clear: `Xn & ~Xm`. The logical
+/// shifted-register `AND` form with `N=1` (bit 21) complements `Xm`.
+pub(crate) fn enc_bic_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x8A20_0000, rd, rn, rm)
+}
+
 /// `AND <Xd>, <Xn>, #~15` -- mask off the low four bits so the
 /// result is a multiple of 16. Used by the alloca lowering to
 /// round the requested size up to the platform's stack-alignment
@@ -1214,6 +1220,51 @@ pub(crate) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
         | (rt.0 as u32)
 }
 
+/// `LDAXP <Xt1>, <Xt2>, [<Xn|SP>]` -- load-acquire exclusive pair of
+/// 64-bit registers, the load half of a 128-bit exclusive access.
+pub(crate) fn enc_ldaxp(rt: Reg, rt2: Reg, rn: Reg) -> u32 {
+    0xC87F_8000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STLXP <Ws>, <Xt1>, <Xt2>, [<Xn|SP>]` -- store-release exclusive
+/// pair of 64-bit registers. `rs` receives 0 on success and 1 when the
+/// monitor was lost.
+pub(crate) fn enc_stlxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> u32 {
+    0xC820_8000
+        | ((rs.0 as u32) << 16)
+        | ((rt2.0 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
+/// `LDXP <Xt1>, <Xt2>, [<Xn|SP>]` -- load exclusive pair, the non-acquire
+/// counterpart of [`enc_ldaxp`] (the acquire `o0` bit 15 cleared).
+pub(crate) fn enc_ldxp(rt: Reg, rt2: Reg, rn: Reg) -> u32 {
+    0xC87F_0000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STXP <Ws>, <Xt1>, <Xt2>, [<Xn|SP>]` -- store exclusive pair, the
+/// non-release counterpart of [`enc_stlxp`] (the release `o0` bit 15
+/// cleared). `rs` receives 0 on success and 1 when the monitor was lost.
+pub(crate) fn enc_stxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> u32 {
+    0xC820_0000
+        | ((rs.0 as u32) << 16)
+        | ((rt2.0 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
+/// `CCMP <Xn>, <Xm>, #<nzcv>, <cond>` -- conditional compare (register),
+/// 64-bit. When `cond` holds, compare `Xn` with `Xm`; otherwise set the
+/// flags directly from `nzcv`. Used to fuse a two-word equality test.
+pub(crate) fn enc_ccmp(rn: Reg, rm: Reg, nzcv: u8, cond: Cond) -> u32 {
+    0xFA40_0000
+        | ((rm.0 as u32) << 16)
+        | ((cond as u32) << 12)
+        | ((rn.0 as u32) << 5)
+        | (nzcv as u32 & 0xF)
+}
+
 // ---- Loads / stores (unscaled 9-bit signed offset). Used for negative
 //      stack-frame offsets (locals at fp - N*8).
 
@@ -1666,14 +1717,34 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::fma::run (aarch64)", || {
             crate::c5::codegen::passes::fma::run(&mut ssa_funcs);
         });
-        super::ssa::emit_common::time_pass("passes::constfold_branch::run (aarch64)", || {
-            crate::c5::codegen::passes::constfold_branch::run(&mut ssa_funcs);
+        // Prove a null comparison of a const array's relocated pointer
+        // member false. Runs after constfold has folded the constant
+        // member offset (`ARRAY_SIZE(a) - 1` -> a fixed index), so the
+        // branch fold below deletes the unreachable arm (e.g. an inlined
+        // build-time-unreachable guard).
+        super::ssa::emit_common::time_pass("passes::const_global_fold::run (aarch64)", || {
+            crate::c5::codegen::passes::const_global_fold::run(&mut ssa_funcs, program);
         });
-        // Delete blocks the branch fold left unreachable so their calls
-        // and extern references are neither lowered nor relocated.
-        super::ssa::emit_common::time_pass("passes::prune_unreachable::run (aarch64)", || {
-            crate::c5::codegen::passes::prune_unreachable::run(&mut ssa_funcs);
+        // Fold constant-condition branches and delete the blocks that
+        // leaves unreachable (so their calls and extern references are
+        // neither lowered nor relocated), to a fixed point: pruning a
+        // folded branch's dead predecessor can collapse a merge phi and
+        // expose a fresh constant condition one level down.
+        super::ssa::emit_common::time_pass("passes::simplify_branches::run (aarch64)", || {
+            crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
         });
+        // Re-run static DCE: inlining a static callee into its last caller,
+        // and the branch fold dropping calls in unreachable arms, can leave
+        // a static function with no remaining references. Dropping it now
+        // keeps its body -- and any undefined symbol it alone referenced
+        // (e.g. an unreachable build-time-assert canary the fold removed
+        // from the caller) -- out of the object.
+        super::ssa::emit_common::time_pass(
+            "ssa::shadow::drop_unreachable_statics (aarch64)",
+            || {
+                crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program);
+            },
+        );
         super::ssa::emit_common::time_pass("passes::split_crit_edges::run (aarch64)", || {
             crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });
@@ -1996,6 +2067,7 @@ pub(crate) fn lower(
         data: program.data.clone(),
         data_align: program.data_align,
         bss_size: 0,
+        init_fini_arrays: Default::default(),
         entry_offset,
         got_fixups,
         data_fixups,
@@ -2615,5 +2687,31 @@ mod tests {
         assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 4), 0x8800_FC41);
         assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 2), 0x4800_FC41);
         assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 1), 0x0800_FC41);
+    }
+
+    // Cross-checked against `clang -c` + `otool -t` (aarch64):
+    //   ldaxp x1,x2,[x3]=c87f8861  ldaxp x5,x6,[x7]=c87f98e5
+    //   stlxp w0,x1,x2,[x3]=c8208861  stlxp w4,x5,x6,[x7]=c82498e5
+    //   ccmp x11,x13,#0,eq=fa4d0160
+    #[test]
+    fn ldaxp_stlxp_ccmp() {
+        assert_eq!(enc_ldaxp(Reg(1), Reg(2), Reg(3)), 0xC87F_8861);
+        assert_eq!(enc_ldaxp(Reg(5), Reg(6), Reg(7)), 0xC87F_98E5);
+        assert_eq!(enc_stlxp(Reg(0), Reg(1), Reg(2), Reg(3)), 0xC820_8861);
+        assert_eq!(enc_stlxp(Reg(4), Reg(5), Reg(6), Reg(7)), 0xC824_98E5);
+        assert_eq!(enc_ccmp(Reg(11), Reg(13), 0, Cond::Eq), 0xFA4D_0160);
+    }
+
+    // Cross-checked against `clang -c` + `otool -t` (aarch64). The plain
+    // LDP / STP forms are the same fixed encodings [`enc_ldp_off`] /
+    // [`enc_stp_off`] produce at a zero offset:
+    //   ldxp x1,x2,[x3]=c87f0861  stxp w0,x1,x2,[x3]=c8200861
+    //   ldp x1,x2,[x3]=a9400861   stp x1,x2,[x3]=a9000861
+    #[test]
+    fn ldxp_stxp_ldp_stp() {
+        assert_eq!(enc_ldxp(Reg(1), Reg(2), Reg(3)), 0xC87F_0861);
+        assert_eq!(enc_stxp(Reg(0), Reg(1), Reg(2), Reg(3)), 0xC820_0861);
+        assert_eq!(enc_ldp_off(Reg(1), Reg(2), Reg(3), 0), 0xA940_0861);
+        assert_eq!(enc_stp_off(Reg(1), Reg(2), Reg(3), 0), 0xA900_0861);
     }
 }

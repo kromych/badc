@@ -65,7 +65,10 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
                 bump(target)
             }
             Terminator::Return(v) => bump(v),
-            Terminator::Jmp(_) | Terminator::TailExt(_) | Terminator::FallThrough(_) => {}
+            Terminator::Jmp(_)
+            | Terminator::TailExt(_)
+            | Terminator::FallThrough(_)
+            | Terminator::Unreachable => {}
         }
         if block.exit_acc != crate::c5::ir::NO_VALUE {
             bump(block.exit_acc);

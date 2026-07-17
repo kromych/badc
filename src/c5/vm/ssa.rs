@@ -23,7 +23,10 @@ use super::eval::{self, round_if_f32};
 /// `Inst::CallIndirect` can distinguish a function pointer from
 /// a real memory address. The low bits hold the callee's
 /// `ent_pc`; the tag is cleared before `Program::lookup`.
-const CODE_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
+/// `Vm::with_host` patches static-initializer function pointers in
+/// the data image with the same tag so a value loaded from data
+/// compares equal to one materialized from an `Inst::ImmCode`.
+pub(super) const CODE_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
 const CODE_ADDR_MASK: i64 = 0x4000_0000_0000_0000;
 
 /// `Inst::ImmExtCode` results carry this bit so `Inst::CallIndirect`
@@ -482,6 +485,8 @@ pub(super) fn run_program_with_args<H: Host>(
         host,
         args,
         false,
+        &[],
+        &[],
     )
 }
 
@@ -499,12 +504,28 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     host: &mut H,
     args: &[alloc::string::String],
     track_pointers: bool,
+    init_pcs: &[usize],
+    fini_pcs: &[usize],
 ) -> Result<i64, C5Error> {
     let prog = Program::new(funcs)
         .with_bindings(binding_names)
         .with_tls_base(tls_base);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
     let mut mem = Memory::new(&data_with_argv).with_track_pointers(track_pointers);
+    // `__attribute__((constructor))` functions run before the entry, in
+    // the native `.init_array` order the caller already sorted. An
+    // `exit()` from a constructor short-circuits to the exit status.
+    for &pc in init_pcs {
+        let ctor = prog
+            .lookup(pc)
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no constructor at ent_pc {pc}")))?;
+        if let Err(e) = run_func(&prog, &mut mem, host, ctor, &[]) {
+            return match exit_status_of(&e) {
+                Some(status) => Ok(status),
+                None => Err(e),
+            };
+        }
+    }
     let entry = prog.lookup(entry_pc).ok_or_else(|| {
         C5Error::Runtime(format!(
             "vm_ssa: run_program: no function at ent_pc {entry_pc}",
@@ -516,13 +537,28 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     } else {
         &entry_args
     };
-    match run_func(&prog, &mut mem, host, entry, slice) {
+    let status = match run_func(&prog, &mut mem, host, entry, slice) {
         Err(e) => match exit_status_of(&e) {
-            Some(status) => Ok(status),
-            None => Err(e),
+            Some(status) => status,
+            None => return Err(e),
         },
-        ok => ok,
+        Ok(v) => v,
+    };
+    // `__attribute__((destructor))` functions run in reverse after the
+    // entry returns. The VM has no atexit chain, so an `exit()` path
+    // does not reach these (documented in `Vm::fini_pcs`).
+    for &pc in fini_pcs.iter().rev() {
+        let dtor = prog
+            .lookup(pc)
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no destructor at ent_pc {pc}")))?;
+        if let Err(e) = run_func(&prog, &mut mem, host, dtor, &[]) {
+            match exit_status_of(&e) {
+                Some(s) => return Ok(s),
+                None => return Err(e),
+            }
+        }
     }
+    Ok(status)
 }
 
 /// `exit(status)` unwinds the interpreter through the `Result`
@@ -723,6 +759,13 @@ fn run_func<H: Host>(
             Terminator::TailExt(_) => {
                 break Err(C5Error::Runtime(
                     "vm_ssa: Terminator::TailExt not implemented".to_string(),
+                ));
+            }
+            Terminator::Unreachable => {
+                // Sealed after a noreturn call; reaching it means the call
+                // returned when it should not have.
+                break Err(C5Error::Runtime(
+                    "vm_ssa: reached Terminator::Unreachable".to_string(),
                 ));
             }
         }
@@ -1138,6 +1181,10 @@ fn run_inst<H: Host>(
         Inst::TailExt(_) => "TailExt",
         Inst::Intrinsic { kind, args } => {
             run_intrinsic(mem, frame, v, *kind, args)?;
+            return Ok(());
+        }
+        Inst::InlineAsm { asm, args } => {
+            run_inline_asm(mem, frame, asm, args)?;
             return Ok(());
         }
         Inst::AllocaInit(_) => {
@@ -1955,6 +2002,319 @@ fn libc_size(name: &str, raw: Option<i64>) -> Result<usize, C5Error> {
 /// * `VaCopy(&dst, &src)` -- `*dst = *src`.
 /// * AArch64 setjmp / longjmp intrinsics return "not implemented";
 ///   they only land in JIT / AOT output.
+/// Evaluate a GCC extended-asm statement (`Inst::InlineAsm`) in the
+/// interpreter. The template is parsed into instructions and executed
+/// against a 16-entry model register file seeded from the operand
+/// values; the results are stored through the output addresses. This
+/// reproduces the semantics the native encoding runs on hardware, so a
+/// fixture round-trips identically on any host. Non-deterministic reads
+/// (timestamp counter) yield zero, matching the native fallback in
+/// value tests.
+fn run_inline_asm(
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    asm: &crate::c5::ir::AsmBlock,
+    args: &[ValueId],
+) -> Result<(), C5Error> {
+    use crate::c5::codegen::x86_64::asm::{AsmOpnd, Mnemonic, parse_template};
+    use crate::c5::ir::AsmRegSize;
+
+    let insns = parse_template(&asm.template).map_err(C5Error::Runtime)?;
+    let op_reg = crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands)
+        .map_err(C5Error::Runtime)?;
+    // Model register file; operand `%N` reads / writes its assigned slot.
+    let mut xregs = [0i64; 16];
+    // Seed input registers, and the current value of a `+` (read-write)
+    // output loaded from its destination address.
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        if !op.is_output {
+            xregs[r as usize] = frame.regs[args[i] as usize];
+        } else if op.is_rw {
+            let addr = frame.regs[args[i] as usize] as usize;
+            xregs[r as usize] = load_from_memory(mem, addr, width_load_kind(op.width))?;
+        }
+    }
+
+    // Resolve one template operand to its current value and its width.
+    let value_of = |o: &AsmOpnd, xregs: &[i64; 16]| -> (i64, AsmRegSize) {
+        match *o {
+            AsmOpnd::Imm(v) => (v, AsmRegSize::Long),
+            // Only the 16 GPRs are modelled; MMX / control / debug / segment
+            // registers (marked with register numbers >= 16) read as zero.
+            AsmOpnd::Reg { reg, size } if (reg as usize) < 16 => (xregs[reg as usize], size),
+            AsmOpnd::Reg { size, .. } => (0, size),
+            AsmOpnd::Ref { idx, size } => {
+                let sz = size.unwrap_or(AsmRegSize::from_width(asm.operands[idx as usize].width));
+                match op_reg[idx as usize] {
+                    Some(r) => (xregs[r as usize], sz),
+                    None => (frame.regs[args[idx as usize] as usize], sz),
+                }
+            }
+        }
+    };
+    // The model register a destination operand writes into.
+    let dst_reg = |o: &AsmOpnd| -> Option<usize> {
+        match *o {
+            // A write into an unmodelled register (MMX / control / debug /
+            // segment, marked >= 16) has no modelled slot: no-op.
+            AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
+            AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
+            AsmOpnd::Imm(_) => None,
+        }
+    };
+
+    for insn in &insns {
+        let ops = &insn.operands;
+        match insn.mnemonic {
+            Mnemonic::Nop | Mnemonic::Rdtsc | Mnemonic::Rdtscp => {
+                // No host clock: the timestamp read produces zero in the
+                // registers it defines (rax/rdx, and rcx for rdtscp).
+                if !matches!(insn.mnemonic, Mnemonic::Nop) {
+                    xregs[0] = 0;
+                    xregs[2] = 0;
+                    xregs[1] = 0;
+                }
+            }
+            Mnemonic::Bswap => {
+                let (val, size) = value_of(&ops[0], &xregs);
+                let w = insn.suffix.unwrap_or(size);
+                let sw = byte_swap(val, w);
+                if let Some(r) = dst_reg(&ops[0]) {
+                    xregs[r] = sw;
+                }
+            }
+            Mnemonic::In => {
+                // No I/O ports under the VM (port access is firmware, never
+                // a sandboxed fixture): a read yields zero in the accumulator.
+                if let Some(r) = dst_reg(&ops[0]) {
+                    xregs[r] = 0;
+                }
+            }
+            Mnemonic::Out => {
+                // Port write is a no-op: no hardware to receive it.
+            }
+            Mnemonic::Pause | Mnemonic::Pushfq | Mnemonic::Int => {
+                // Spin-hint / flags-push / breakpoint: no observable effect
+                // on the VM's register model (a debugger is not attached).
+            }
+            Mnemonic::Pop => {
+                // No modelled machine stack; leave the destination as-is.
+            }
+            Mnemonic::Movd => {
+                // No modelled MMX register file. A read into a GPR (the AT&T
+                // destination is a GPR: reg < 16) yields zero; a write into an
+                // MMX register is a no-op.
+                if let Some(r) = dst_reg(&ops[1])
+                    && r < 16
+                {
+                    xregs[r] = 0;
+                }
+            }
+            Mnemonic::Rdmsr | Mnemonic::Rdpmc => {
+                // No MSRs / performance counters under the VM: the eax:edx
+                // result reads as zero.
+                xregs[0] = 0;
+                xregs[2] = 0;
+            }
+            Mnemonic::Cli
+            | Mnemonic::Sti
+            | Mnemonic::Invd
+            | Mnemonic::Wbinvd
+            | Mnemonic::Wrmsr
+            | Mnemonic::Monitor
+            | Mnemonic::Mwait
+            | Mnemonic::Hlt
+            | Mnemonic::Lock => {
+                // Interrupt-flag / cache / MSR-write / monitor-wait / halt
+                // control and the lock prefix: no observable effect on the
+                // VM's register model.
+            }
+            Mnemonic::Inc | Mnemonic::Dec => {
+                let (v, sz) = value_of(&ops[0], &xregs);
+                let w = insn.suffix.unwrap_or(sz);
+                let res = if insn.mnemonic == Mnemonic::Inc {
+                    v.wrapping_add(1)
+                } else {
+                    v.wrapping_sub(1)
+                };
+                if let Some(r) = dst_reg(&ops[0]) {
+                    xregs[r] = mask_width(res, w);
+                }
+            }
+            Mnemonic::Xadd => {
+                // `xadd src, dst`: dst gets dst+src, src gets the old dst.
+                let (src, ssz) = value_of(&ops[0], &xregs);
+                let (dst, dsz) = value_of(&ops[1], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let sum = mask_width(dst.wrapping_add(src), w);
+                if let Some(r) = dst_reg(&ops[1]) {
+                    xregs[r] = sum;
+                }
+                if let Some(r) = dst_reg(&ops[0]) {
+                    xregs[r] = mask_width(dst, insn.suffix.unwrap_or(ssz));
+                }
+            }
+            Mnemonic::Cmpxchg => {
+                // `cmpxchg src, dst`: if the accumulator equals dst, dst gets
+                // src; otherwise the accumulator gets dst.
+                let (src, _) = value_of(&ops[0], &xregs);
+                let (dst, dsz) = value_of(&ops[1], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                if mask_width(xregs[0], w) == mask_width(dst, w) {
+                    if let Some(r) = dst_reg(&ops[1]) {
+                        xregs[r] = mask_width(src, w);
+                    }
+                } else {
+                    xregs[0] = mask_width(dst, w);
+                }
+            }
+            Mnemonic::Shld | Mnemonic::Shrd => {
+                let (count, _) = value_of(&ops[0], &xregs);
+                let (src, _) = value_of(&ops[1], &xregs);
+                let (dst, dsz) = value_of(&ops[2], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let res = double_shift(insn.mnemonic == Mnemonic::Shld, dst, src, count, w);
+                if let Some(r) = dst_reg(&ops[2]) {
+                    xregs[r] = res;
+                }
+            }
+            Mnemonic::Shl | Mnemonic::Shr | Mnemonic::Sar => {
+                let (dst, dsz) = value_of(ops.last().unwrap(), &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let count = if ops.len() == 2 {
+                    value_of(&ops[0], &xregs).0
+                } else {
+                    1
+                };
+                let res = single_shift(insn.mnemonic, dst, count, w);
+                if let Some(r) = dst_reg(ops.last().unwrap()) {
+                    xregs[r] = mask_width(res, w);
+                }
+            }
+            Mnemonic::Or
+            | Mnemonic::And
+            | Mnemonic::Add
+            | Mnemonic::Sub
+            | Mnemonic::Xor
+            | Mnemonic::Mov => {
+                let (src, _) = value_of(&ops[0], &xregs);
+                let (dst, dsz) = value_of(&ops[1], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let res = match insn.mnemonic {
+                    Mnemonic::Or => dst | src,
+                    Mnemonic::And => dst & src,
+                    Mnemonic::Add => dst.wrapping_add(src),
+                    Mnemonic::Sub => dst.wrapping_sub(src),
+                    Mnemonic::Xor => dst ^ src,
+                    _ => src,
+                };
+                if let Some(r) = dst_reg(&ops[1]) {
+                    xregs[r] = mask_width(res, w);
+                }
+            }
+        }
+    }
+
+    // Store the outputs back through their destination addresses.
+    for (i, op) in asm.operands.iter().enumerate() {
+        if op.is_output
+            && let Some(r) = op_reg[i]
+        {
+            let addr = frame.regs[args[i] as usize] as usize;
+            store_to_memory(mem, addr, xregs[r as usize], width_store_kind(op.width))?;
+        }
+    }
+    Ok(())
+}
+
+/// Mask a value to `w`'s low bits (an infinite-precision result is
+/// truncated to the operand width before it lands in a register).
+fn mask_width(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    match w.bytes() {
+        1 => v & 0xFF,
+        2 => v & 0xFFFF,
+        4 => v & 0xFFFF_FFFF,
+        _ => v,
+    }
+}
+
+/// Byte-reverse the low `w` bytes of `v` (BSWAP).
+fn byte_swap(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    match w.bytes() {
+        8 => v.swap_bytes(),
+        _ => (v as u32).swap_bytes() as i64,
+    }
+}
+
+/// Double-precision shift (SHLD / SHRD): shift `dst` by `count`,
+/// feeding in bits from `src`. `w` is the operand bit width.
+fn double_shift(left: bool, dst: i64, src: i64, count: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    let bits = (w.bytes() as u32) * 8;
+    let n = (count as u64 as u32) % bits;
+    let dst = mask_width(dst, w) as u64;
+    let src = mask_width(src, w) as u64;
+    if n == 0 {
+        return mask_width(dst as i64, w);
+    }
+    let r = if left {
+        (dst << n) | (src >> (bits - n))
+    } else {
+        (dst >> n) | (src << (bits - n))
+    };
+    mask_width(r as i64, w)
+}
+
+/// Single-operand shift (SHL / SHR / SAR).
+fn single_shift(
+    m: crate::c5::codegen::x86_64::asm::Mnemonic,
+    dst: i64,
+    count: i64,
+    w: crate::c5::ir::AsmRegSize,
+) -> i64 {
+    use crate::c5::codegen::x86_64::asm::Mnemonic;
+    let bits = (w.bytes() as u32) * 8;
+    let n = (count as u64 as u32) & (bits - 1);
+    let val = mask_width(dst, w) as u64;
+    match m {
+        Mnemonic::Shl => (val << n) as i64,
+        Mnemonic::Shr => (val >> n) as i64,
+        _ => {
+            // Arithmetic: sign-extend from the operand width, then shift.
+            let signed = sign_extend(dst, w);
+            signed >> n
+        }
+    }
+}
+
+/// Sign-extend the low `w` bits of `v` to a full i64.
+fn sign_extend(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    match w.bytes() {
+        1 => v as i8 as i64,
+        2 => v as i16 as i64,
+        4 => v as i32 as i64,
+        _ => v,
+    }
+}
+
+fn width_load_kind(width: u8) -> LoadKind {
+    match width {
+        1 => LoadKind::U8,
+        2 => LoadKind::U16,
+        4 => LoadKind::U32,
+        _ => LoadKind::I64,
+    }
+}
+
+fn width_store_kind(width: u8) -> StoreKind {
+    match width {
+        1 => StoreKind::I8,
+        2 => StoreKind::I16,
+        4 => StoreKind::I32,
+        _ => StoreKind::I64,
+    }
+}
+
 fn run_intrinsic(
     mem: &mut Memory,
     frame: &mut Frame<'_>,
@@ -2096,6 +2456,31 @@ fn run_intrinsic(
             // arithmetic.
             Ok(())
         }
+        Intrinsic::X86FxSave | Intrinsic::X86FxRestore => {
+            // No modelled x87/SSE register file to save or restore; the
+            // interpreter evaluates floats with host doubles.
+            Ok(())
+        }
+        Intrinsic::X86Sgdt | Intrinsic::X86Sidt | Intrinsic::X86Sldt | Intrinsic::X86Str => {
+            // Store forms: no modelled descriptor tables. Zero the operand so
+            // a caller reads a defined result. sgdt/sidt write a 10-byte
+            // pseudo-descriptor (2-byte limit + 8-byte base); sldt/str write a
+            // 2-byte selector.
+            let addr = frame.regs[args[0] as usize] as usize;
+            let width = match intr {
+                Intrinsic::X86Sgdt | Intrinsic::X86Sidt => 10,
+                _ => 2,
+            };
+            for off in 0..width {
+                store_to_memory(mem, addr + off, 0, StoreKind::I8)?;
+            }
+            Ok(())
+        }
+        Intrinsic::X86Lgdt | Intrinsic::X86Lidt | Intrinsic::X86Lldt | Intrinsic::X86Clflush => {
+            // Load a descriptor-table register / flush a cache line: no
+            // observable effect on the interpreter's memory or register model.
+            Ok(())
+        }
         Intrinsic::Cpuid => {
             // No host CPUID; zero the four output words so a caller reads a
             // defined (feature-absent) result rather than uninitialized data.
@@ -2112,12 +2497,145 @@ fn run_intrinsic(
             }
             Ok(())
         }
+        Intrinsic::Divq128 => {
+            // Unsigned 128/64 division. args: [q_addr, rem_addr, n0, n1, d].
+            // Dividend = (n1 << 64) | n0; quotient -> *q, remainder -> *r.
+            let q_addr = frame.regs[args[0] as usize] as usize;
+            let rem_addr = frame.regs[args[1] as usize] as usize;
+            let n0 = frame.regs[args[2] as usize] as u64 as u128;
+            let n1 = frame.regs[args[3] as usize] as u64 as u128;
+            let d = frame.regs[args[4] as usize] as u64 as u128;
+            if d == 0 {
+                return Err(C5Error::Runtime("vm_ssa: divq divide by zero".to_string()));
+            }
+            let num = (n1 << 64) | n0;
+            let quot = (num / d) as u64 as i64;
+            let rem = (num % d) as u64 as i64;
+            store_to_memory(mem, q_addr, quot, StoreKind::I64)?;
+            store_to_memory(mem, rem_addr, rem, StoreKind::I64)?;
+            Ok(())
+        }
+        Intrinsic::Atomic128CmpXchg
+        | Intrinsic::Atomic128Xchg
+        | Intrinsic::Atomic128FetchAnd
+        | Intrinsic::Atomic128FetchOr => {
+            // args: [ptr, &oldl, &oldh, in...]. Load the current 128-bit
+            // value, publish it through &oldl / &oldh, then store the
+            // computed value. Single-threaded, so the exclusive access is
+            // an ordinary load / store pair.
+            let ptr = frame.regs[args[0] as usize] as usize;
+            let oldl_addr = frame.regs[args[1] as usize] as usize;
+            let oldh_addr = frame.regs[args[2] as usize] as usize;
+            let cur_l = load_from_memory(mem, ptr, LoadKind::I64)?;
+            let cur_h = load_from_memory(mem, ptr + 8, LoadKind::I64)?;
+            store_to_memory(mem, oldl_addr, cur_l, StoreKind::I64)?;
+            store_to_memory(mem, oldh_addr, cur_h, StoreKind::I64)?;
+            let (store, new_l, new_h) = match intr {
+                Intrinsic::Atomic128CmpXchg => {
+                    let cmpl = frame.regs[args[3] as usize];
+                    let cmph = frame.regs[args[4] as usize];
+                    let newl = frame.regs[args[5] as usize];
+                    let newh = frame.regs[args[6] as usize];
+                    (cur_l == cmpl && cur_h == cmph, newl, newh)
+                }
+                Intrinsic::Atomic128Xchg => (
+                    true,
+                    frame.regs[args[3] as usize],
+                    frame.regs[args[4] as usize],
+                ),
+                Intrinsic::Atomic128FetchAnd => (
+                    true,
+                    cur_l & frame.regs[args[3] as usize],
+                    cur_h & frame.regs[args[4] as usize],
+                ),
+                _ => (
+                    true,
+                    cur_l | frame.regs[args[3] as usize],
+                    cur_h | frame.regs[args[4] as usize],
+                ),
+            };
+            if store {
+                store_to_memory(mem, ptr, new_l, StoreKind::I64)?;
+                store_to_memory(mem, ptr + 8, new_h, StoreKind::I64)?;
+            }
+            Ok(())
+        }
+        Intrinsic::Atomic128Load | Intrinsic::Atomic128LoadEx => {
+            // args: [ptr, &l, &h]. Read the 128-bit object and publish its
+            // two halves. Single-threaded, so the exclusive form is a plain
+            // load.
+            let ptr = frame.regs[args[0] as usize] as usize;
+            let l_addr = frame.regs[args[1] as usize] as usize;
+            let h_addr = frame.regs[args[2] as usize] as usize;
+            let cur_l = load_from_memory(mem, ptr, LoadKind::I64)?;
+            let cur_h = load_from_memory(mem, ptr + 8, LoadKind::I64)?;
+            store_to_memory(mem, l_addr, cur_l, StoreKind::I64)?;
+            store_to_memory(mem, h_addr, cur_h, StoreKind::I64)?;
+            Ok(())
+        }
+        Intrinsic::Atomic128Store | Intrinsic::Atomic128StoreEx => {
+            // args: [ptr, l, h]. Store the 128-bit value.
+            let ptr = frame.regs[args[0] as usize] as usize;
+            let l = frame.regs[args[1] as usize];
+            let h = frame.regs[args[2] as usize];
+            store_to_memory(mem, ptr, l, StoreKind::I64)?;
+            store_to_memory(mem, ptr + 8, h, StoreKind::I64)?;
+            Ok(())
+        }
+        Intrinsic::Atomic128StoreInsert => {
+            // args: [ptr, vl, vh, ml, mh]. Masked insert:
+            // *mem = (*mem & ~msk) | val.
+            let ptr = frame.regs[args[0] as usize] as usize;
+            let vl = frame.regs[args[1] as usize];
+            let vh = frame.regs[args[2] as usize];
+            let ml = frame.regs[args[3] as usize];
+            let mh = frame.regs[args[4] as usize];
+            let cur_l = load_from_memory(mem, ptr, LoadKind::I64)?;
+            let cur_h = load_from_memory(mem, ptr + 8, LoadKind::I64)?;
+            store_to_memory(mem, ptr, (cur_l & !ml) | vl, StoreKind::I64)?;
+            store_to_memory(mem, ptr + 8, (cur_h & !mh) | vh, StoreKind::I64)?;
+            Ok(())
+        }
+        Intrinsic::Rdtsc => {
+            // No host clock; zero the low/high output words so a caller
+            // reads a defined result rather than uninitialized data.
+            for &a in &args[0..2] {
+                let addr = frame.regs[a as usize] as usize;
+                store_to_memory(mem, addr, 0, StoreKind::I32)?;
+            }
+            Ok(())
+        }
+        Intrinsic::AArch64DsbIsh | Intrinsic::AArch64Isb => {
+            // Barriers have no observable effect in the single-threaded
+            // interpreter.
+            Ok(())
+        }
+        Intrinsic::AArch64DcCvau | Intrinsic::AArch64IcIvau => {
+            // Cache maintenance is a no-op against the interpreter's flat
+            // memory; the pointer argument is evaluated but unused.
+            Ok(())
+        }
+        Intrinsic::AArch64ReadCacheType => {
+            // No host CTR_EL0; return a fixed value with 64-byte data and
+            // instruction cache lines (D/IminLine = 4) so a caller
+            // computing line sizes gets a sane, non-zero result.
+            let addr = frame.regs[args[0] as usize] as usize;
+            store_to_memory(mem, addr, 0x8444_C004, StoreKind::I64)?;
+            Ok(())
+        }
         Intrinsic::FrameAddress => {
             // The interpreter has no native frame pointer; return this
             // frame's base in the byte arena. It is non-zero, stable
             // within a frame, and distinct across nested calls -- enough
             // for a stack-depth comparison. (The arena grows up, so a
             // deeper frame has a larger address than on a native stack.)
+            frame.regs[v as usize] = frame.stack_base as i64;
+            Ok(())
+        }
+        Intrinsic::ReturnAddress => {
+            // No native return address in the interpreter; return a stable
+            // non-zero per-frame proxy, enough for callers that only store
+            // or compare it.
             frame.regs[v as usize] = frame.stack_base as i64;
             Ok(())
         }
@@ -2130,6 +2648,12 @@ fn run_intrinsic(
         | Intrinsic::Clzll
         | Intrinsic::Ctzll
         | Intrinsic::Popcountll
+        | Intrinsic::Clrsb
+        | Intrinsic::Clrsbll
+        | Intrinsic::Parity
+        | Intrinsic::Parityll
+        | Intrinsic::Ffs
+        | Intrinsic::Ffsll
         | Intrinsic::Bswap16
         | Intrinsic::Bswap32
         | Intrinsic::Bswap64 => Err(C5Error::Runtime(

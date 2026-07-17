@@ -80,7 +80,7 @@ There are various demo's under [`demos`](./demos/):
 * [`gui_hello`](./demos/gui_hello/) - GUI demos for macOS, Linux and Windows,
 * [`wdm_driver`](./demos/wdm_driver/), [`nt_hello`](./demos/nt_hello/), [`nt_loader`](./demos/nt_loader/) - examples of the Windows native (NT) executable, Windows driver,
 * [`efi_hello`](./demos/efi_hello/) - a UEFI binary,
-* [`edk2`](./demos/edk2/) - a UEFI application from TianoCore EDK II's MdePkg, linked with badc's own linker into a PE32+ EFI image and booted under OVMF ([tianocore/edk2](https://github.com/tianocore/edk2)),
+* [`edk2`](./demos/edk2/) - TianoCore EDK II ([tianocore/edk2](https://github.com/tianocore/edk2)): a UEFI application from MdePkg linked with badc's own linker into a PE32+ EFI image, and -- the self-host rung (`build_badc_selfhost.py`) -- badc compiling the full **UEFI firmware** from edk2 source into a bootable OVMF (x86_64) / ArmVirtQemu AAVMF (aarch64) image. The CI app + `qemu` Linux boots now run under this badc-built firmware (a badc-built nasm assembles the x86 firmware); the standard GCC5 build (`build_ovmf.py`) remains as an alternate path,
 * [`sqlite3`](./demos/sqlite3/) - the most famous embedded database ([sqlite.org](https://sqlite.org)),
 * [`miniz`](./demos/miniz/) - compression, CRC32, integers, bit twiddling ([richgel999/miniz](https://github.com/richgel999/miniz)),
 * [`kissfft`](./demos/kissfft/) - floating points, Fast Fourier Transform ([mborgerding/kissfft](https://github.com/mborgerding/kissfft)),
@@ -97,7 +97,8 @@ There are various demo's under [`demos`](./demos/):
 * [`TCL`](./demos/tcl/) - Tool command language ([tcl-lang.org](https://www.tcl-lang.org/)),
 * [`raylib`](./demos/raylib/) - Library for games, (there is also [`loderunner`](./demos/raylib/loderunner.c) game included) ([raylib.com](https://www.raylib.com/)),
 * [`curl`](./demos/curl/) - The library and the tools that handle HTTP and friends on PCs, smart phones/watches, TVs, ... ([curl.se](https://curl.se/)),
-* [`Python`](./demos/python/) - Python 3.14 ([python.org](https://www.python.org/)).
+* [`Python`](./demos/python/) - Python 3.14 ([python.org](https://www.python.org/)),
+* [`qemu`](./demos/qemu/) - the QEMU system emulator ([qemu.org](https://www.qemu.org/)); badc compiles the full source (well over a thousand translation units per target) and self-links the emulator with its own linker. Both `qemu-system-aarch64` and `qemu-system-x86_64`, self-compiled and self-linked, boot a Linux kernel + busybox initramfs **through UEFI firmware** (OVMF on x86_64, ArmVirtQemu/AAVMF on aarch64) to an interactive userspace shell, and power off cleanly under TCG. The CI boot runs badc's own build of that firmware -- the self-host rung (see the `edk2` demo), with a badc-built nasm assembling the x86 firmware -- so the gated boot is badc end to end.
 
 Besides these, there are some fun test fixtures implementing Horner scheme, RK4,
 8-Queens and more.
@@ -304,7 +305,11 @@ relocatables: a `.text` section of native machine code,
 for the name table, and `.rela.text` carrying the relocations
 the linker applies once each unit's final position is known.
 The target is pinned at `-c` time, and the objects are also
-linkable by `ld` / `lld`. Archives are ar(5) with a SysV-style
+linkable by `ld` / `lld`. Executables are position-independent
+(ELF `ET_DYN` / PIE, matching Mach-O); the address of -- or a
+data load from -- an external symbol routes through the GOT, so a
+badc `-c` object links into a PIE produced by the system
+toolchain. Archives are ar(5) with a SysV-style
 symbol index. The `full` cargo feature gates the entire
 pipeline; library consumers that don't need
 multi-TU artifacts can opt out via
@@ -347,7 +352,7 @@ extension over C99, which restricts a `#if` controlling expression to an
 integer constant expression (see `std-conformance.md`).
 
 The MSVC/MinGW mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64`
-/ `__declspec` / etc.) lives in `headers/include/msvc_compat.h`
+/ `__declspec` / etc.) lives in `libc/include/msvc_compat.h`
 and is opted into per translation unit with `-include msvc_compat.h`.
 
 ### Headers and bindings

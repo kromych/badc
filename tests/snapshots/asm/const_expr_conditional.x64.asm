@@ -37,8 +37,10 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movslq	0xc(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

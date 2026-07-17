@@ -1210,6 +1210,18 @@ pub(crate) enum DynamicExportSection {
     Data,
 }
 
+/// `.init_array` / `.fini_array` placement in the merged data segment.
+/// Each is `(byte offset within `data`, byte length)`, or `None` when the
+/// program declares no constructors / destructors. The dynamic-ELF writer
+/// converts the offset to a vaddr and emits the matching DT_INIT_ARRAY /
+/// DT_FINI_ARRAY (plus the size tags) so the dynamic loader runs the
+/// pointer arrays; the slots themselves carry R_*_RELATIVE from the link.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct InitFiniArrays {
+    pub init: Option<(u64, u64)>,
+    pub fini: Option<(u64, u64)>,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Build {
     /// Machine code, ready to be placed in `__TEXT,__text`.
@@ -1236,6 +1248,9 @@ pub(crate) struct Build {
     /// `VirtualSize > SizeOfRawData`, Mach-O `vmsize > filesize`). A data
     /// offset at or past `data.len()` names a byte in this region.
     pub bss_size: i64,
+    /// `.init_array` / `.fini_array` placement in `data`. Consumed by the
+    /// dynamic-ELF writer to emit DT_INIT_ARRAY / DT_FINI_ARRAY.
+    pub init_fini_arrays: InitFiniArrays,
     /// Offset (within `text`) of the program's entry point. Becomes
     /// the entry address of `LC_MAIN`.
     pub entry_offset: usize,

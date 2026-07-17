@@ -12,27 +12,9 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x1, %eax
-               	cmpq	$0x1, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	retq
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	retq
                	movabsq	$-0x1, %rax
-               	cmpq	$-0x1, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	retq
                	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)

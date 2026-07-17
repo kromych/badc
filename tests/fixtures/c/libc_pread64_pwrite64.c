@@ -1,12 +1,11 @@
 // glibc large-file variants pread64 / pwrite64 (_LARGEFILE64_SOURCE).
-// A program configured with USE_PREAD64 -- sqlite's os_unix layer
-// reaches them through aSyscall[index].pCurrent -- references these
-// names directly. Both the direct call and the function-pointer-table
-// cast shape must reach libc and report the transferred byte count.
-// Without a prototype the name is implicitly declared, the address-of
-// trampoline forwards no arguments, and the indirect call returns
-// garbage. The body is guarded to Linux, where the binding exists; on
-// other targets main is a no-op so the fixture stays green everywhere.
+// Code that references these names directly -- both the direct call and
+// the function-pointer-table cast shape -- must reach libc and report the
+// transferred byte count. Without a prototype the name is implicitly
+// declared, the address-of trampoline forwards no arguments, and the
+// indirect call returns garbage. The body is guarded to Linux, where the
+// binding exists; on other targets main is a no-op so the fixture stays
+// green everywhere.
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
@@ -17,7 +16,7 @@ typedef long (*pread64_fn)(int, void *, unsigned long, long);
 typedef long (*pwrite64_fn)(int, const void *, unsigned long, long);
 
 // A table of opaque function pointers cast back to the real arity at
-// the call site, mirroring sqlite's `struct unix_syscall aSyscall[]`.
+// the call site, a common syscall-dispatch table shape.
 struct vec {
     const char *name;
     void (*fn)(void);

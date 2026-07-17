@@ -160,6 +160,7 @@ impl SsaBuilder {
             n_params,
             is_variadic,
             is_inline: false,
+            is_always_inline: false,
             insts: Vec::new(),
             inst_src: Vec::new(),
             blocks: Vec::new(),
@@ -174,6 +175,7 @@ impl SsaBuilder {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
+            ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             jump_tables: Vec::new(),
@@ -308,6 +310,12 @@ impl SsaBuilder {
     /// [`FunctionSsa::ret_is_fp`].
     pub(crate) fn set_ret_is_fp(&mut self, is_fp: bool) {
         self.func.ret_is_fp = is_fp;
+    }
+
+    /// Record the declared return type. See
+    /// [`FunctionSsa::ret_type_tag`].
+    pub(crate) fn set_ret_type_tag(&mut self, tag: i64) {
+        self.func.ret_type_tag = tag;
     }
 
     /// The accumulated per-parameter FP mask. See
@@ -1195,6 +1203,21 @@ impl SsaBuilder {
         id
     }
 
+    /// `Inst::InlineAsm` -- GCC extended asm with operands. The block
+    /// carries the template and constraints; `args` is parallel to its
+    /// operands (an output's destination address, an input's value).
+    /// Conservative like a call: clear the CSE cache, since the asm may
+    /// write through the output addresses or (with a `"memory"` clobber)
+    /// order surrounding accesses.
+    pub(crate) fn inline_asm(
+        &mut self,
+        asm: alloc::boxed::Box<crate::c5::ir::AsmBlock>,
+        args: Vec<ValueId>,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::InlineAsm { asm, args })
+    }
+
     /// Record that the function calls a returns-twice function (the
     /// setjmp family / vfork). See
     /// [`FunctionSsa::has_returns_twice_call`].
@@ -1291,6 +1314,15 @@ impl SsaBuilder {
     /// Close the current block with `Terminator::Return`.
     pub(crate) fn return_(&mut self, value: ValueId) {
         self.close(Terminator::Return(value), value);
+    }
+
+    /// Close the current block with `Terminator::Unreachable`: the
+    /// block's last real instruction diverges (a `_Noreturn` call), so
+    /// control cannot fall off its end (C11 6.7.4p8). Unlike a sealing
+    /// `return`, this is not counted as a return path by the inliner and
+    /// lowers to a trap.
+    pub(crate) fn unreachable(&mut self) {
+        self.close(Terminator::Unreachable, NO_VALUE);
     }
 
     /// Close the current block with `Terminator::TailExt`. Used

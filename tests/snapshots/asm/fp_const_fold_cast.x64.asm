@@ -10,12 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<use_f>:
-               	retq
-
-<use_d>:
-               	retq
-
 <main>:
                	movl	$0x40c00000, %eax       # imm = 0x40C00000
                	movq	%rax, %xmm14
@@ -159,3 +153,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, (%rax)

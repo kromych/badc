@@ -1405,7 +1405,7 @@ pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
                 f(a);
             }
         }
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } => {
+        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::InlineAsm { args, .. } => {
             for &a in args {
                 f(a);
             }
@@ -1548,6 +1548,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
             }
         }
         AllocaInit(_) => ResultKind::None,
+        // Extended asm stores its results through the output addresses;
+        // it defines no register value the allocator must place.
+        InlineAsm { .. } => ResultKind::None,
     }
 }
 
@@ -1702,8 +1705,7 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
     //     no call between it and the terminator. Straight-line
     //     control flow means there is no back-edge / phi-merge gap
     //     that the broader per-value relaxation otherwise surfaces
-    //     (see task #197 -- the lua regression on broader relaxations
-    //     does not appear in straight-line shapes).
+    //     as a regression, absent in straight-line shapes.
     let has_call = func.insts.iter().any(|inst| {
         matches!(
             inst,
@@ -2875,9 +2877,10 @@ int main(void) { return 0; }
     /// range) was missed and the value was left in a caller-saved
     /// register the call clobbered. `compute_calls_after_def` must use
     /// the CFG live range, where the value is live across the call
-    /// regardless of pc order. This is the block-layout shape
-    /// `luaV_execute` hits: a promoted value defined in a late-laid-out
-    /// block, live into an earlier-laid-out block that makes a call.
+    /// regardless of pc order. This is the block-layout shape a
+    /// computed-dispatch loop hits: a promoted value defined in a
+    /// late-laid-out block, live into an earlier-laid-out block that
+    /// makes a call.
     #[test]
     fn calls_after_def_flags_value_across_call_at_lower_pc() {
         use crate::c5::codegen::ssa::build::SsaBuilder;
@@ -3112,6 +3115,7 @@ int main(void) { return 0; }
             n_params: 0,
             is_variadic: false,
             is_inline: false,
+            is_always_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
@@ -3120,6 +3124,7 @@ int main(void) { return 0; }
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
+            ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             jump_tables: Vec::new(),

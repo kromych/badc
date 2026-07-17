@@ -9,7 +9,7 @@
 // the inner dims. Without this, `tbl[j][k] = val` walked off
 // at sizeof(short*) per step instead of sizeof(short[8]) for
 // the first index, and the second index loaded 8 bytes
-// where stb_vorbis (and similar pointer-to-array shapes)
+// where such pointer-to-array shapes
 // expected a 2-byte short. The test pins both the read and
 // the write path.
 
@@ -42,7 +42,7 @@ int main(void) {
         }
     }
 
-    /* Plain `-1` sentinel write (stb_vorbis's actual shape). */
+    /* Plain `-1` sentinel write. */
     r.tbl[0][0] = -1;
     if (r.tbl[0][0] != -1) return 99;
 

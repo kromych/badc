@@ -274,3 +274,22 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
     assert_eq!(sym.class, Token::Sys as i64);
     assert_eq!(sym.val, 0, "first binding gets flat-index 0");
 }
+
+#[test]
+fn line_text_by_number_honours_line_markers() {
+    // The diagnostic echo resolves (file, line) through the `#line`
+    // markers the preprocessor embeds; the first occurrence of a
+    // (file, line) pair wins when an include re-enters a file. The
+    // lookup is indexed (a trial-parse diagnostic must not re-scan
+    // the buffer), so the semantics are locked here.
+    use crate::c5::lexer::Lexer;
+    let src = "# 1 \"a.h\"\nint alpha;\nint beta;\n# 7 \"b.h\"\nint gamma;\n# 2 \"a.h\"\nint alpha_again;\n";
+    let mut lex = Lexer::new(src.into());
+    lex.file = "a.h".into();
+    assert_eq!(lex.line_text_by_number(2), Some("int beta;"));
+    // First occurrence wins: a.h line 2 was already indexed above.
+    assert_eq!(lex.line_text_by_number(1), Some("int alpha;"));
+    lex.file = "b.h".into();
+    assert_eq!(lex.line_text_by_number(7), Some("int gamma;"));
+    assert_eq!(lex.line_text_by_number(99), None);
+}

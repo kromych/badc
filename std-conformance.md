@@ -104,7 +104,12 @@ is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
   (correct for one thread, not atomic against concurrent access).
   Memory-order arguments are not modelled; only the non-`_explicit` forms
   are recognized.
-- `_Thread_local` (init limited to scalars + NULL).
+- `_Thread_local`, and the GNU `__thread` spelling, at file and block scope
+  (a block-scope `static _Thread_local` gets one per-thread instance). Backed
+  by ELF thread-local storage: variables land in `.tdata` / `.tbss`, their
+  symbols are typed `STT_TLS`, and TLS-relative relocations let a badc object
+  link against external TLS through the system linker. Initializers are
+  limited to scalars and NULL.
 - Anonymous `struct` / `union` members (C11 6.7.2.1p13).
 - Binary integer literals `0b...` / `0B...` (C23 / GCC), with the same
   `u` / `l` suffix handling as hex and decimal.
@@ -112,7 +117,7 @@ is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
 ### POSIX
 
 - The `<dlfcn.h>`, `<pthread.h>`, `<dirent.h>`, `<setjmp.h>`, and related
-  surfaces in `headers/include/`; `struct dirent` matches the host libc
+  surfaces in `libc/include/`; `struct dirent` matches the host libc
   byte layout so `readdir` reads `d_name` at its real offset.
 - `fseeko` / `ftello` (the `off_t` seek/tell pair), and the glibc
   `malloc_usable_size` and `sighandler_t` on Linux.
@@ -133,11 +138,17 @@ is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
 - `__FUNCTION__` / `__PRETTY_FUNCTION__` (alongside the C99 `__func__`).
 - The GNU `# N "file"` line-marker shape (alongside C99 `#line N "file"`).
 - Inline asm (`asm` / `__asm__`, a common extension listed in C99 Annex
-  J.5.10), in its operand-free forms only: an empty template (a compiler
-  barrier, no instruction emitted, weaker than a hardware memory barrier)
-  and the `pause` / `yield` spin-loop hint. Operand constraints and
-  arbitrary instruction text are rejected -- c5 emits machine code directly
-  and has no assembler for an arbitrary template.
+  J.5.10). On x86_64 the extended form
+  `asm(template : outputs : inputs : clobbers)` is supported partially,
+  for some selected forms.
+- `__attribute__((...))` / `__declspec(...)` / C23 `[[...]]` decorators. The
+  honored ones: `packed` (struct / union packing; an anonymous union inside a
+  packed struct keeps its members overlapping), `aligned(N)` / `_Alignas`,
+  `cleanup(fn)` (the function runs on scope exit), `constructor` /
+  `destructor` (run before / after `main`, optional priority), `noreturn`,
+  `unused` / `maybe_unused`, `vector_size(N)` (modeled as an aggregate), and
+  the MSVC `__declspec(thread)` / `dllexport`. Other attributes are parsed
+  and discarded as advisory hints.
 - GCC named-rest variadic macro (`#define foo(args...)`)
 
 ### MSVC-compatible

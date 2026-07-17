@@ -12,22 +12,15 @@ Disassembly of section .text:
 
 <inc>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <dbl>:
                	movq	%rdi, %rax
                	shlq	$0x1, %rax
-               	movslq	%eax, %rax
-               	retq
-
-<store_through>:
-               	movq	%rsi, (%rdi)
-               	xorq	%rax, %rax
-               	retq
-
-<load_through>:
-               	movq	(%rdi), %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
@@ -37,10 +30,9 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	xorq	%rax, %rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	-0x8(%rbp), %rax
                	leaq	-<rip>, %rbx       # <addr>
-               	movq	%rbx, %rsi
-               	callq	<addr>
+               	movq	%rbx, (%rax)
                	movq	-0x8(%rbp), %rax
                	leaq	-<rip>, %rcx       # <addr>
                	cmpq	%rcx, %rax
@@ -112,3 +104,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)

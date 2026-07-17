@@ -94,14 +94,15 @@ pub use c5::StdHost;
 
 #[cfg(feature = "full")]
 pub use c5::{
-    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, embedded_runtime, read_archive,
-    write_archive,
+    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, embedded_compiler_rt, embedded_runtime,
+    read_archive, write_archive,
 };
 
 #[cfg(all(feature = "full", feature = "std"))]
 pub use c5::{
     MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt, emit_x86_64_plt,
-    is_elf_object, link_native_objects, link_native_objects_with_options, parse_native_elf,
+    NativeSymbol, PendingImportReloc, PltTrampoline, SharedLibrary, emit_aarch64_plt,
+    emit_x86_64_plt, is_elf_object, link_native_objects, link_native_objects_with_options,
+    link_native_objects_with_shared_libs, parse_native_elf, parse_shared_library, read_archive_at,
     write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
 };

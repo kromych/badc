@@ -10,24 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<make_double>:
-               	movslq	%edi, %rdi
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rdi, %xmm0
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm0
-               	retq
-
-<make_float>:
-               	movslq	%edi, %rdi
-               	xorps	%xmm0, %xmm0
-               	cvtsi2ss	%rdi, %xmm0
-               	movl	$0x40800000, %eax       # imm = 0x40800000
-               	movq	%rax, %xmm15
-               	divss	%xmm15, %xmm0
-               	retq
-
 <main>:
                	movl	$0x7, %eax
                	xorps	%xmm0, %xmm0
@@ -111,4 +93,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

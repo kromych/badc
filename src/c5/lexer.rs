@@ -8,15 +8,15 @@ use super::symbol::Symbol;
 use super::token::{Tok, Token, Ty};
 
 /// Default struct-alignment cap when no `#pragma pack(N)` is
-/// active. Mirrors the existing aggregate-layout cap at 8 bytes
-/// (c5's IR slot width); explicit pack pragmas can lower it.
-const DEFAULT_PACK: usize = 8;
+/// active. Matches the aggregate-layout cap of 16 bytes; no natural
+/// type exceeds 8, so this only lets an explicit
+/// `__attribute__((aligned(16)))` survive, and explicit pack pragmas
+/// can lower it.
+const DEFAULT_PACK: usize = 16;
 
 /// Clamp a user-supplied pack value to `[1, DEFAULT_PACK]`. C99
-/// permits 1, 2, 4, 8, 16; we don't expose 16 because c5's
-/// struct-alignment cap is 8 and a stricter request would just
-/// inflate the alignment with no payoff. `0` is treated as
-/// "default" (matching `#pragma pack()` with no arg).
+/// permits 1, 2, 4, 8, 16. `0` is treated as "default" (matching
+/// `#pragma pack()` with no arg).
 fn clamp_pack(n: usize) -> usize {
     if n == 0 || n > DEFAULT_PACK {
         DEFAULT_PACK
@@ -208,8 +208,21 @@ pub(crate) struct LexerSnapshot {
     curr_id_idx: usize,
 }
 
+/// Marker-aware map from (file, line) to the line's byte span in
+/// `Lexer::src`. First occurrence wins, matching the sequential-scan
+/// semantics it replaces. Built once, on the first diagnostic that
+/// echoes a source line; the source buffer never changes after
+/// construction.
+struct LineIndex {
+    files: Vec<String>,
+    spans: alloc::collections::BTreeMap<(u32, u32), (u32, u32)>,
+}
+
 pub(crate) struct Lexer {
     src: Vec<u8>,
+    /// Lazily built (file, line) -> byte-span index for diagnostics.
+    /// See [`LineIndex`].
+    line_index: core::cell::OnceCell<LineIndex>,
     pos: usize,
     pub line: usize,
     /// Name of the file `self.line` is counting within. Updated
@@ -248,10 +261,15 @@ pub(crate) struct Lexer {
     pub float_suffix_f32: bool,
 
     /// `true` when the most recent `'"'` string-literal token came from
-    /// a wide (`L"..."`) literal. The element width follows
-    /// `wchar_bytes`; the initializer and expression parsers read this
-    /// to size the element stride (C99 6.4.5).
+    /// a wide (`L"..."`, `u"..."`, `U"..."`) literal. The element width is
+    /// in `str_elem_bytes`; the initializer and expression parsers read
+    /// this to size the element stride (C99 6.4.5 / C11 6.4.5).
     pub str_is_wide: bool,
+
+    /// Byte width of one element of the most recent wide string literal:
+    /// `wchar_bytes` for `L"..."`, 2 for `u"..."` (char16_t), 4 for
+    /// `U"..."` (char32_t). Only meaningful when `str_is_wide` is set.
+    pub str_elem_bytes: usize,
 
     /// `true` when the most recent `Token::Num` came from a wide
     /// character constant (`L'x'`). C99 6.4.4.4p11 gives such a constant
@@ -391,6 +409,7 @@ impl Lexer {
     pub fn new(source: String) -> Self {
         Self {
             src: source.into_bytes(),
+            line_index: core::cell::OnceCell::new(),
             pos: 0,
             line: 1,
             file: String::from("<source>"),
@@ -402,6 +421,7 @@ impl Lexer {
             int_is_decimal: true,
             float_suffix_f32: false,
             str_is_wide: false,
+            str_elem_bytes: 4,
             char_is_wide: false,
             wchar_bytes: 4,
             char_signed: true,
@@ -526,7 +546,12 @@ impl Lexer {
         Ok(mant)
     }
 
-    fn lex_wide_literal(&mut self, data: &mut Vec<u8>) -> Result<(), C5Error> {
+    fn lex_wide_literal(
+        &mut self,
+        data: &mut Vec<u8>,
+        elem_bytes: usize,
+        prefix_byte: u8,
+    ) -> Result<(), C5Error> {
         let quote = self.src[self.pos];
         self.pos += 1;
         // A `wchar_t` array requires `wchar_t` alignment (4 bytes on the
@@ -534,7 +559,7 @@ impl Lexer {
         // routines (glibc's `wcschr` / `wcslen`) read elements with
         // aligned loads and return wrong results on a misaligned literal,
         // so pad `.data` to a `wchar_t` boundary before interning.
-        while !data.len().is_multiple_of(self.wchar_bytes) {
+        while !data.len().is_multiple_of(elem_bytes) {
             data.push(0);
         }
         let start_data = data.len() as i64;
@@ -651,7 +676,7 @@ impl Lexer {
                     // Windows / UTF-16). A UTF-16 element cannot hold a
                     // code point above U+FFFF; C99 6.4.5 requires the
                     // surrogate-pair encoding (Unicode 3.9 D91).
-                    if self.wchar_bytes == 2 && (0x10000..=0x10FFFF).contains(&val) {
+                    if elem_bytes == 2 && (0x10000..=0x10FFFF).contains(&val) {
                         let v = val - 0x10000;
                         let hi = 0xD800 + (v >> 10);
                         let lo = 0xDC00 + (v & 0x3FF);
@@ -660,7 +685,7 @@ impl Lexer {
                         data.push(lo as u8);
                         data.push((lo >> 8) as u8);
                     } else {
-                        for k in 0..self.wchar_bytes {
+                        for k in 0..elem_bytes {
                             data.push((val >> (k * 8)) as u8);
                         }
                     }
@@ -697,7 +722,7 @@ impl Lexer {
                 }
             }
             if self.pos + 1 < self.src.len()
-                && self.src[self.pos] == b'L'
+                && self.src[self.pos] == prefix_byte
                 && self.src[self.pos + 1] == b'"'
             {
                 self.pos += 2;
@@ -706,12 +731,13 @@ impl Lexer {
             self.pos = saved_pos;
             self.line = saved_line;
             // `wchar_t`-width NUL terminator.
-            for _ in 0..self.wchar_bytes {
+            for _ in 0..elem_bytes {
                 data.push(0);
             }
             self.ival = start_data;
             self.tk = Tok('"' as i64);
             self.str_is_wide = true;
+            self.str_elem_bytes = elem_bytes;
             return Ok(());
         }
     }
@@ -1011,6 +1037,65 @@ impl Lexer {
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.
+    /// The text of source line `target` in the current file (`self.file`),
+    /// recovered by walking the `#line` markers the preprocessor embedded
+    /// in the buffer so the original (file, line) numbering is honoured.
+    /// Trailing whitespace is trimmed. `None` when no such line is found.
+    /// Used to echo the line a diagnostic points at, even when the parser
+    /// has read ahead of it (an unused-parameter warning fires at the
+    /// closing brace but names the parameter's declaration line).
+    pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
+        // Build the (file, line) -> byte-span index on first use. A
+        // diagnostic may be constructed speculatively on a trial-parse
+        // path that its caller discards, so this lookup must not
+        // re-scan the buffer per call.
+        let index = self.line_index.get_or_init(|| {
+            let src = &self.src;
+            let n = src.len();
+            let mut files: Vec<String> = alloc::vec![String::from("<source>")];
+            let mut spans: alloc::collections::BTreeMap<(u32, u32), (u32, u32)> =
+                alloc::collections::BTreeMap::new();
+            let mut file_id: u32 = 0;
+            let mut line = 1usize;
+            let mut i = 0usize;
+            while i < n {
+                let start = i;
+                let mut j = i;
+                while j < n && src[j] != b'\n' {
+                    j += 1;
+                }
+                let bytes = &src[start..j];
+                if bytes.first() == Some(&b'#')
+                    && let Some(marker) = parse_line_marker(&bytes[1..])
+                {
+                    line = marker.line;
+                    if let Some(f) = marker.file {
+                        file_id = match files.iter().position(|x| *x == f) {
+                            Some(id) => id as u32,
+                            None => {
+                                files.push(f);
+                                (files.len() - 1) as u32
+                            }
+                        };
+                    }
+                    i = j + 1;
+                    continue;
+                }
+                spans
+                    .entry((file_id, line as u32))
+                    .or_insert((start as u32, j as u32));
+                line += 1;
+                i = j + 1;
+            }
+            LineIndex { files, spans }
+        });
+        let file_id = index.files.iter().position(|f| *f == self.file)? as u32;
+        let (start, end) = *index.spans.get(&(file_id, target as u32))?;
+        core::str::from_utf8(&self.src[start as usize..end as usize])
+            .ok()
+            .map(|s| s.trim_end())
+    }
+
     pub fn next(
         &mut self,
         symbols: &mut Vec<Symbol>,
@@ -1083,17 +1168,26 @@ impl Lexer {
                     hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
                     self.pos += 1;
                 }
-                // C99 wide-literal prefix: a lone `L` directly
-                // followed by `"` or `'` is the start of a wide
-                // string / wide char literal rather than an
-                // identifier. `u` / `U` / `u8` follow the same
-                // pattern but aren't yet wired up.
+                // C11 6.4.5 wide / UTF literal prefix: a lone `L`, `u`, or
+                // `U` directly before `"` or `'` starts a wide literal
+                // rather than an identifier. `L` uses the target's
+                // `wchar_t` width, `u` is char16_t (2 bytes), `U` is
+                // char32_t (4 bytes). `u8"..."` (narrow UTF-8) is not yet
+                // wired up and falls through to an identifier.
                 if self.pos - start == 1
-                    && self.src[start] == b'L'
                     && self.pos < self.src.len()
                     && (self.src[self.pos] == b'"' || self.src[self.pos] == b'\'')
                 {
-                    return self.lex_wide_literal(data);
+                    let prefix = self.src[start];
+                    let elem_bytes = match prefix {
+                        b'L' => self.wchar_bytes,
+                        b'u' => 2,
+                        b'U' => 4,
+                        _ => 0,
+                    };
+                    if elem_bytes != 0 {
+                        return self.lex_wide_literal(data, elem_bytes, prefix);
+                    }
                 }
                 let name_slice = &self.src[start..self.pos];
                 self.curr_id_idx = resolve_symbol(symbols, index, name_slice, hash);
@@ -1199,8 +1293,14 @@ impl Lexer {
                     // hex digits are followed by a `.` and/or the
                     // mandatory binary-exponent part `p`/`P`. Detect
                     // either marker here; a plain `0x...` with neither
-                    // stays an integer constant.
-                    let next_is_dot = self.pos < self.src.len() && self.src[self.pos] == b'.';
+                    // stays an integer constant. A `.` that begins `..`
+                    // is the ellipsis token, not a fractional part
+                    // (`case 0x10...0x20:` after macro expansion), so a
+                    // hex integer immediately followed by `...` stays an
+                    // integer -- a hex float's `.` never precedes a `.`.
+                    let next_is_dot = self.pos < self.src.len()
+                        && self.src[self.pos] == b'.'
+                        && !(self.pos + 1 < self.src.len() && self.src[self.pos + 1] == b'.');
                     let next_is_bexp = self.pos < self.src.len()
                         && (self.src[self.pos] == b'p' || self.src[self.pos] == b'P');
                     if next_is_dot || next_is_bexp {
@@ -1801,9 +1901,10 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__attribute__", Token::Attribute),
     ("__attribute", Token::Attribute),
     ("__declspec", Token::Attribute),
-    // MSVC inline spellings. `inline` semantics (a hint); badc inlines on its
-    // own heuristics, so these collapse to the C99 keyword.
-    ("__forceinline", Token::Inline),
+    // MSVC inline spellings. `__inline` / `_inline` are hints (the C99
+    // keyword); `__forceinline` is a mandatory request tracked distinctly so
+    // the inliner can diagnose a request it cannot honour.
+    ("__forceinline", Token::ForceInline),
     ("__inline", Token::Inline),
     ("_inline", Token::Inline),
     // C11 6.7.5 alignment specifier. badc caps aggregate alignment at 8
@@ -1838,6 +1939,12 @@ const KEYWORDS: &[(&str, Token)] = &[
     // the expression is zero.
     ("_Static_assert", Token::StaticAssert),
     ("static_assert", Token::StaticAssert),
+    ("_Generic", Token::Generic),
+    (
+        "__builtin_types_compatible_p",
+        Token::BuiltinTypesCompatible,
+    ),
+    ("__builtin_offsetof", Token::BuiltinOffsetof),
     // Type qualifiers -- consumed everywhere a type qualifier
     // may appear; no semantic effect.
     ("const", Token::TypeQual),
@@ -2016,6 +2123,9 @@ pub(crate) fn init_symbols(
                     class: Token::Sys as i64,
                     type_: Ty::Int as i64,
                     val: binding_idx,
+                    // Return type defaults to `int` until a prototype
+                    // declares it; a call before then warns.
+                    implicit_return_int: true,
                     ..Default::default()
                 });
                 index.record(hash);

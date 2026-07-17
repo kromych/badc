@@ -27,7 +27,8 @@ Disassembly of section .text:
 
 <clobber>:
                	leaq	0x121589(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <sum_pair_pair>:
@@ -234,3 +235,4 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

@@ -1,6 +1,6 @@
 [package]
 name = "badc"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 description = "A quick, slim cross-platform C compiler (also a compiler-as-library) (C99, C11, and more) with a JIT and native ELF / PE / Mach-O backends."
@@ -12,8 +12,7 @@ categories = ["compilers", "development-tools"]
 # library at build time, so they must ship in the published package.
 include = [
     "src/**/*.rs",
-    "lib/**",
-    "headers/**",
+    "libc/**",
     "build.rs",
     "Cargo.toml",
     "README.md",

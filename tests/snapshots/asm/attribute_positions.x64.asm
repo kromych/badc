@@ -10,14 +10,8 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<inl>:
-               	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
-               	retq
-
 <use>:
-               	movq	%rsi, %rax
-               	movslq	%eax, %rax
+               	movslq	%esi, %rax
                	retq
 
 <probe>:
@@ -69,4 +63,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

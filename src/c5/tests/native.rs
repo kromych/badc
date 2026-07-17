@@ -102,6 +102,65 @@ fn return_42() {
     assert_eq!(build_and_run("int main() { return 42; }", "ret42"), 42);
 }
 
+/// Link + run a source through the startup runtime (`__c5_entry`),
+/// signing before exec. Mirrors `build_and_run` but takes the full
+/// link path so `__attribute__((constructor))` functions run: dyld
+/// enters `__c5_entry` via `LC_MAIN`, which walks the linker's
+/// `.init_array`. Returns (exit code, stdout).
+fn link_run_capture(src: &str, stem: &str) -> (i32, String) {
+    use crate::{Compiler, NativeOptions, Target};
+    let program = Compiler::new(super::with_prelude(src))
+        .compile()
+        .expect("compile");
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::MacOSAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link with runtime");
+    let path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+    }
+    set_executable(&path);
+    codesign(&path);
+    let output = Command::new(&path).output().expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    let code = output.status.code().unwrap_or(-1);
+    (code, String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+#[test]
+fn constructor_runs_before_main() {
+    // A `static` constructor sets a global `main` returns; a non-zero
+    // exit proves it ran first, through `LC_MAIN` -> `__c5_entry` ->
+    // `.init_array`.
+    let (code, _) = link_run_capture(
+        "static int g;\n\
+         __attribute__((constructor)) static void ctor(void) { g = 42; }\n\
+         int main(void) { return g; }\n",
+        "mac-ctor",
+    );
+    assert_eq!(code, 42, "constructor must run before main");
+}
+
+#[test]
+fn constructor_priority_and_destructor_order() {
+    // Prioritized constructors run ascending, unprioritized last, then
+    // main, then the destructor via the atexit chain at exit.
+    let (_, stdout) = link_run_capture(
+        "#include <stdio.h>\n\
+         __attribute__((constructor(102))) static void c2(void) { printf(\"c2\\n\"); }\n\
+         __attribute__((constructor(101))) static void c1(void) { printf(\"c1\\n\"); }\n\
+         __attribute__((constructor)) static void c3(void) { printf(\"c3\\n\"); }\n\
+         __attribute__((destructor)) static void d1(void) { printf(\"d1\\n\"); }\n\
+         int main(void) { printf(\"main\\n\"); return 0; }\n",
+        "mac-ctor-order",
+    );
+    assert_eq!(stdout, "c1\nc2\nc3\nmain\nd1\n");
+}
+
 #[test]
 fn return_zero() {
     assert_eq!(build_and_run("int main() { return 0; }", "ret0"), 0);
@@ -375,11 +434,13 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("phi_class_nested_loops.c", 49),
     ("phi_class_diamond_join.c", 30),
     ("arithmetic.c", 60),
+    ("compound_literal_struct_field.c", 0),
     ("goto.c", 5),
     ("switch_statement.c", 25),
     ("switch_binary_search.c", 0),
     ("switch_jump_table_dense.c", 0),
     ("switch_jump_table_sparse_kept.c", 0),
+    ("switch_jumptable_dead_branch_prune.c", 12),
     ("switch_jump_table_phi_join.c", 0),
     ("switch_case_label_promoted.c", 0),
     ("int_literal_boundary_types.c", 0),
@@ -491,6 +552,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("dead_local_load_frame_elide.c", 0),
     ("narrow_param_entry_extend.c", 0),
     ("qsort_scan_extend_dedup.c", 0),
+    ("tailcall_return_extension.c", 0),
+    ("fnptr_array_call.c", 0),
     ("call_arg_extend_drop.c", 0),
     ("indirect_call_narrow_scalar_args.c", 0),
     ("indirect_call_ten_scalar_args.c", 0),
@@ -538,6 +601,11 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("add_three_operand_lea.c", 0),
     ("add_sub_negative_imm.c", 0),
     ("fp_param_ternary.c", 0),
+    ("inline_multiblock_phi_callee.c", 0),
+    ("constfold_branch_through_phi.c", 0),
+    ("constfold_or_dispatch_inline.c", 0),
+    ("inline_pointer_write_helper.c", 0),
+    ("inline_local_array_callee.c", 0),
     ("hex_float_literal.c", 0),
     ("bool_normalize_c99.c", 0),
     ("compound_literal_block.c", 0),
@@ -546,6 +614,10 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("wide_char_utf8.c", 0),
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
+    ("gcc_vector_size_attribute.c", 0),
+    ("gcc_vector_bitwise_ops.c", 0),
+    ("gcc_vector_subscript.c", 0),
+    ("ioctl_request_encoding.c", 0),
     ("computed_goto.c", 0),
     ("label_addr_array_init.c", 0),
     ("static_init_once_guard.c", 0),
@@ -582,6 +654,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("flex_array_member_static_init.c", 0),
+    ("attribute_cleanup.c", 0),
     ("array_compound_literal_static_init.c", 0),
     ("const_address_cast_and_arith.c", 0),
     ("const_conditional_address_init.c", 0),
@@ -702,6 +775,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("fn_type_typedef_cast.c", 0),
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
+    ("packed_anon_union_layout.c", 0),
+    ("packed_member_alignment.c", 0),
     ("builtin_trap.c", 0),
     ("struct_multi_byval.c", 0),
     ("struct_arg_two_eightbyte.c", 0),
@@ -710,6 +785,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("cast_fn_ptr_call.c", 0),
     ("paren_comma_side_effect.c", 0),
     ("for_init_decl_in_loop.c", 0),
+    ("for_init_stmt_expr_nested_stmt.c", 6),
     ("int_times_double_into_local.c", 0),
     ("ptr_diff_plus_ptr.c", 0),
     ("anonymous_aggregates.c", 0),
@@ -743,6 +819,34 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // expansions in the codegen replace the missing CRT
     // surface.
     ("setjmp_longjmp_roundtrip.c", 0),
+    // POSIX sigsetjmp / siglongjmp (savemask 0) mapped onto the same
+    // per-target setjmp / longjmp machinery.
+    ("sigsetjmp_roundtrip.c", 0),
+    // A struct-based 128-bit integer fallback: 16-byte struct-by-value
+    // returns / params and carry arithmetic across the two halves.
+    ("int128_struct_fallback.c", 0),
+    // C11 6.7.2.1: a designated initializer for a named aggregate member
+    // inside an anonymous union/struct fills the member's own type.
+    ("anon_member_designated_init.c", 0),
+    // The runtime (non-constant) initializer path shares the constant
+    // path's anonymous-struct / union / nested-aggregate handling.
+    ("runtime_anon_struct_init.c", 0),
+    // C99 6.7.8p6 `[N] =` designators in a runtime array initializer.
+    ("runtime_array_designator.c", 0),
+    // C99 6.7.8p7 `.member` designators inside a flattened anonymous-struct
+    // region, constant and runtime store paths.
+    ("anon_struct_designated_init.c", 0),
+    // C99 6.7.8p15 wide string literal initializing a wchar_t-width array
+    // member, constant and runtime store paths.
+    ("wide_string_struct_member.c", 0),
+    // C99 6.5.2.5 pointer field = array-of-struct compound literal in a
+    // static initializer (a real-world descriptor-table shape).
+    ("compound_literal_pointer_field.c", 0),
+    // GCC zero-length array `T x[0]` as a local (compile-time-assert idiom).
+    ("zero_length_local_array.c", 0),
+    // GCC 128-bit integer as a 16-byte type: sizeof, struct/array layout
+    // (asm/sigcontext.h shape), by-value copy.
+    ("int128_type_layout.c", 0),
     // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
     // their post-longjmp value, are re-read through aliases, and
     // unused volatile reads still execute.
@@ -979,6 +1083,11 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("nested_designator_string_member.c", 0),
     ("union_member_unbraced_init.c", 0),
     ("inline_multi_block_result_forward.c", 10),
+    ("inline_multi_block_only_caller.c", 42),
+    ("inline_nonleaf_const_switch.c", 0),
+    ("inline_multi_block_phi_caller.c", 16),
+    ("inline_const_array_field_nonnull.c", 43),
+    ("inline_noreturn_branch_single_return.c", 42),
     ("sxtw_fold_source_liveness.c", 18),
     ("data_reloc_one_past_end.c", 10),
     ("variadic_libc_fnptr_static_init.c", 0),

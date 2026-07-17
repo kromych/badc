@@ -11,22 +11,35 @@ Disassembly of section .text:
                	ud2
 
 <fact>:
-               	movslq	%edi, %rdi
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	leaq	-0x1(%rdi), %rcx
-               	movslq	%ecx, %rcx
-               	imulq	%rdi, %rax
-               	movq	%rcx, %rdi
-               	cmpq	$0x2, %rdi
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	movq	%rdi, %rbx
+               	movslq	%ebx, %rbx
+               	cmpq	$0x2, %rbx
                	jge	<addr>
-               	shlq	$0x0, %rax
-               	movslq	%eax, %rax
+               	movl	$0x1, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x1(%rbx), %rdi
+               	callq	<addr>
+               	imulq	%rbx, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x5, %edi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
+               	retq
+               	addb	%al, 0x41(%rdx)

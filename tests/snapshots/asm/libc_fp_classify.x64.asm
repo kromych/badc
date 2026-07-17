@@ -29,6 +29,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x2, %eax
+               	movslq	%eax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
@@ -39,6 +40,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x1, %eax
+               	movslq	%eax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
@@ -58,7 +60,8 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movq	(%rax), %rax
                	shrq	$0x3f, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -85,16 +88,6 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movsd	(%rax,%riz), %xmm0
                	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
-<copysignf>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	cvtss2sd	%xmm0, %xmm0
-               	cvtss2sd	%xmm1, %xmm1
-               	callq	<addr>
-               	cvtsd2ss	%xmm0, %xmm0
                	popq	%rbp
                	retq
 
@@ -157,9 +150,14 @@ Disassembly of section .text:
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
+               	movq	%rbx, %xmm14
+               	cvtss2sd	%xmm14, %xmm1
+               	cvtss2sd	%xmm0, %xmm0
+               	movapd	%xmm1, %xmm15
                	movapd	%xmm0, %xmm1
-               	movq	%rbx, %xmm0
+               	movapd	%xmm15, %xmm0
                	callq	<addr>
+               	cvtsd2ss	%xmm0, %xmm0
                	movq	%rbx, %xmm1
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
@@ -273,4 +271,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

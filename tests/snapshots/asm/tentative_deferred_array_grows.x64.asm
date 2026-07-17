@@ -10,11 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<via_table>:
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	retq
-
 <main>:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
@@ -56,4 +51,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

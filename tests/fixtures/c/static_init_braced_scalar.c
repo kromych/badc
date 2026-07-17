@@ -1,6 +1,6 @@
 // C99 6.7.9p11: a scalar member's initializer may be enclosed in braces.
-// Nested aggregates carry this through, the shape produced by macros such
-// as Python's PyVarObject_HEAD_INIT (`{ { { refcnt }, type }, size }`).
+// Nested aggregates carry this through, a real-world shape produced by
+// object-header macros (`{ { { refcnt }, type }, size }`).
 
 struct inner { long rc; void *type; };
 struct outer { struct inner base; long size; };

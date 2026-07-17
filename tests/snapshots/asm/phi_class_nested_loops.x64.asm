@@ -35,16 +35,33 @@ Disassembly of section .text:
                	cmpq	%rdi, %rbx
                	jl	<addr>
                	movslq	%r8d, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x7, %edi
-               	popq	%rbp
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %r8
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	jmp	<addr>
+               	incq	%rax
+               	movslq	%eax, %rax
+               	leaq	0x1(%rdx), %rcx
+               	movslq	%ecx, %rdx
+               	cmpq	$0x7, %rdx
+               	jl	<addr>
+               	addq	%rdi, %rax
+               	movslq	%eax, %rdi
+               	leaq	0x1(%r9), %r8
+               	movslq	%r8d, %r9
+               	cmpq	$0x7, %r9
+               	jl	<addr>
+               	movslq	%edi, %rax
+               	movslq	%eax, %rax
+               	movslq	%eax, %rax
+               	retq
                	addb	%al, 0x41(%rdx)

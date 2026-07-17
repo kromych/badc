@@ -6,39 +6,10 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x220              // =544
+               	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	fmul	d2, d2, d3
-               	fmadd	d0, d0, d1, d2
-               	fmadd	d0, d4, d5, d0
-               	ret
-
-<make>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x40
-               	fmul	d2, d2, d3
-               	fmadd	d1, d0, d1, d2
-               	fmadd	d1, d4, d5, d1
-               	sub	x0, x29, #0x8
-               	fcvtzs	x1, d1
-               	str	w1, [x0]
-               	sub	x0, x29, #0x8
-               	mov	x1, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x1
-               	fmadd	d0, d1, d17, d0
-               	fcvtzs	x1, d0
-               	str	w1, [x0, #0x4]
-               	sub	x0, x29, #0x8
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60

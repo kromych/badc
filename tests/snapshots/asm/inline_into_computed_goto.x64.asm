@@ -10,28 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sr_val>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
-               	andq	$-0x4, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
-               	retq
-
-<dbl>:
-               	leaq	(%rdi,%rdi), %rax
-               	retq
-
 <interp>:
                	popq	%r10
                	subq	$0x20, %rsp
@@ -131,8 +109,10 @@ Disassembly of section .text:
                	cmpq	$0x384, %rax            # imm = 0x384
                	jne	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
+               	addb	%al, (%rax)

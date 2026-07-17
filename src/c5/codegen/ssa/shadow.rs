@@ -51,6 +51,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
         })?;
         func.name = f.name.clone();
         func.is_inline = f.is_inline;
+        func.is_always_inline = f.is_always_inline;
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);
@@ -85,6 +86,16 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
         }
     }
     out.sort_by_key(|f| f.ent_pc);
+    // Correctness cleanup at every optimization level, before the
+    // static DCE below reads the call graph: fold constant-condition
+    // branches the walker could not drop (constant loop conditions)
+    // and delete the unreachable blocks they orphan -- including the
+    // tails sealed off behind `noreturn` calls -- so a dead arm's
+    // calls neither pin a static function here nor lower into calls
+    // and relocations against symbols the program never references.
+    // The fixed point also resolves a merge phi that a pruned branch
+    // collapses to one incoming. The -O pipeline reruns this post-inline.
+    crate::c5::codegen::passes::simplify_branches::run(&mut out);
     drop_unreachable_statics(&mut out, program);
     Ok(out)
 }
@@ -100,7 +111,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
 /// is handled conservatively: any function whose address appears
 /// in `Inst::ImmCode` is already marked reachable, so an indirect
 /// dispatch cannot reach a function the marker hasn't seen.
-fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
+pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
     use crate::c5::ir::Inst;
     use crate::c5::symbol::Linkage;
     use crate::c5::token::Token;
@@ -146,19 +157,23 @@ fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
     for e in &program.exports {
         queue.push(e.ent_pc);
     }
+    // Constructors / destructors are referenced only through
+    // `.init_array` / `.fini_array`; keep them as roots even when
+    // `static` and never called in-image.
+    for f in &program.init_funcs {
+        queue.push(f.ent_pc);
+    }
 
     while let Some(pc) = queue.pop() {
         if !reachable.insert(pc) {
             continue;
         }
         let Some(&idx) = by_pc.get(&pc) else { continue };
-        for inst in &funcs[idx].insts {
-            match inst {
-                Inst::Call { target_pc, .. } => queue.push(*target_pc),
-                Inst::ImmCode(target_pc) => queue.push(*target_pc),
-                _ => {}
-            }
-        }
+        for_each_block_inst(&funcs[idx], |inst| match inst {
+            Inst::Call { target_pc, .. } => queue.push(*target_pc),
+            Inst::ImmCode(target_pc) => queue.push(*target_pc),
+            _ => {}
+        });
     }
 
     funcs.retain(|f| {
@@ -263,9 +278,18 @@ pub(crate) fn compute_live_functions(
             work.push(ent);
         }
     }
+    // A `__attribute__((constructor))` / `((destructor))` function is
+    // referenced only through `.init_array` / `.fini_array` (or the
+    // startup runtime), never by an in-image call, yet must survive DCE
+    // -- these are frequently `static` (the `type_init`-style idiom).
+    for f in &program.init_funcs {
+        if by_ent.contains_key(&f.ent_pc) && live.insert(f.ent_pc) {
+            work.push(f.ent_pc);
+        }
+    }
     while let Some(ent) = work.pop() {
         let Some(f) = by_ent.get(&ent) else { continue };
-        for inst in &f.insts {
+        for_each_block_inst(f, |inst| {
             let target = match inst {
                 Inst::Call { target_pc, .. } => Some(*target_pc),
                 Inst::ImmCode(t) => Some(*t),
@@ -277,9 +301,22 @@ pub(crate) fn compute_live_functions(
             {
                 work.push(t);
             }
-        }
+        });
     }
     live
+}
+
+/// Visit the instructions belonging to a function's blocks. The
+/// unreachable-block prune drops a dead block from `blocks` but leaves
+/// its instructions in the flat `insts` array, so a liveness scan over
+/// `insts` would resurrect call targets only dead code names; the block
+/// ranges are the live view.
+fn for_each_block_inst(f: &FunctionSsa, mut visit: impl FnMut(&crate::c5::ir::Inst)) {
+    for blk in &f.blocks {
+        for v in blk.inst_range.clone() {
+            visit(&f.insts[v as usize]);
+        }
+    }
 }
 
 /// Sorted data-object start offsets and a per-object live flag, shared by
@@ -313,7 +350,15 @@ fn live_data_intervals(
         }
     }
     for sym in &program.symbols {
-        if sym.class == Token::Glo as i64 && sym.defined_here && (0..data_len).contains(&sym.val) {
+        // A `_Thread_local` symbol's `val` is an offset into the separate
+        // TLS image, not `.data`; conflating it here would plant a spurious
+        // `.data` object boundary at a coinciding low offset and split a
+        // real object. The symbol remap below skips them for the same reason.
+        if sym.class == Token::Glo as i64
+            && sym.defined_here
+            && !sym.is_thread_local
+            && (0..data_len).contains(&sym.val)
+        {
             start_set.insert(sym.val);
         }
     }
@@ -344,6 +389,7 @@ fn live_data_intervals(
     for sym in &program.symbols {
         if sym.class == Token::Glo as i64
             && sym.defined_here
+            && !sym.is_thread_local
             && matches!(sym.linkage, Linkage::External)
             && (0..data_len).contains(&sym.val)
         {
@@ -724,5 +770,62 @@ mod tests {
                 .any(|r| r.target_offset >= data_len),
             "the &g[3] initializer must target a byte in the bss region"
         );
+    }
+
+    // A `_Thread_local` global's `val` is an offset into the TLS image, not
+    // `.data`. When such an offset coincides with an interior byte of a real
+    // `.data` object, the data-DCE interval model must not treat it as an
+    // object boundary: doing so splits the object and lets the prune drop the
+    // unreferenced tail, so a following literal is packed over it.
+    #[test]
+    fn thread_local_offset_does_not_split_data_object() {
+        let target = Target::LinuxX64;
+        // `tb` takes TLS offset 16, which lands inside `arr`'s 24-byte `.data`
+        // span (`arr` is the first object past the 8-byte NULL guard).
+        let src = "static _Thread_local char ta[16]; \
+                   static _Thread_local long tb; \
+                   long arr[3] = {1, 0, 0}; \
+                   char *msg = \"abcdefgh\"; \
+                   int main(void){ ta[0]=1; tb=2; \
+                       return (int)arr[2] + msg[0] + (int)tb + ta[0]; }";
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let (compacted, _) = compact_program_data(&program, target, true).expect("compact");
+
+        // `arr` has external linkage, so its symbol survives with its remapped
+        // `.data` offset. It must keep all 24 bytes, disjoint from the literal.
+        let arr = compacted
+            .symbols
+            .iter()
+            .find(|s| s.name == "arr")
+            .expect("arr symbol");
+        let arr_lo = arr.val as usize;
+        let arr_hi = arr_lo + 24;
+        let msg = compacted
+            .data
+            .windows(9)
+            .position(|w| w == b"abcdefgh\0")
+            .expect("string literal kept intact");
+        assert!(
+            msg + 9 <= arr_lo || msg >= arr_hi,
+            "literal at {msg:#x} overlaps arr [{arr_lo:#x}, {arr_hi:#x})"
+        );
+
+        // A thread-local offset must never pass through the `.data` remap.
+        for s in &compacted.symbols {
+            if s.is_thread_local && s.defined_here {
+                let orig = program
+                    .symbols
+                    .iter()
+                    .find(|p| p.name == s.name && p.is_thread_local)
+                    .expect("original TLS symbol");
+                assert_eq!(
+                    s.val, orig.val,
+                    "thread-local `{}` val was remapped as .data",
+                    s.name
+                );
+            }
+        }
     }
 }

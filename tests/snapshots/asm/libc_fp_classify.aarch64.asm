@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x230              // =560
+               	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
@@ -32,6 +32,7 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
+               	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -42,6 +43,7 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
+               	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -61,7 +63,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	ldr	x0, [x0]
                	lsr	x0, x0, #63
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -91,16 +94,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	ldr	d0, [x0]
                	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<copysignf>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	fcvt	d0, s0
-               	fcvt	d1, s1
-               	bl	<addr>
-               	fcvt	s0, d0
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -142,9 +135,14 @@ Disassembly of section .text:
                	mov	x0, #0x40a00000         // =1084227584
                	fmov	s16, w0
                	fneg	s0, s16
+               	fmov	s16, w20
+               	fcvt	d1, s16
+               	fcvt	d0, s0
+               	fmov	d17, d1
                	fmov	d1, d0
-               	fmov	d0, x20
+               	fmov	d0, d17
                	bl	<addr>
+               	fcvt	s0, d0
                	fmov	s16, w20
                	fneg	s1, s16
                	fcmp	s0, s1

@@ -1,14 +1,14 @@
 // C99 6.8.4.2p4: case labels are scoped to the nearest enclosing
 // switch regardless of nesting depth. A `case` label sitting
 // inside a sub-block whose enclosing switch is the outer one is
-// reachable from the outer dispatch. sqlite3VdbeExec uses this
-// shape to share a tail between two opcode handlers:
+// reachable from the outer dispatch. A real-world shape uses this
+// to share a tail between two handlers:
 //
-//   case OP_ReopenIdx: {
-//       int nField; ...
+//   case A: {
+//       int n; ...
 //       if (cond) goto target;
-//   case OP_OpenRead:           // <-- label INSIDE the outer
-//   case OP_OpenWrite:          //     `case OP_ReopenIdx`'s block
+//   case B:                     // <-- label INSIDE the outer
+//   case C:                     //     `case A`'s block
 //       body...
 //       break;
 //   }
@@ -17,9 +17,9 @@
 // handles this naturally. Walker's switch dispatcher used to look
 // only at the top-level items of the switch body Compound; any
 // case sitting inside a sub-Compound was invisible, so the
-// dispatch fell through to the next visible partition. sqlite's
-// SELECT 1 -> OP_OpenRead handler was therefore skipped and the
-// following OP_Rewind crashed dereferencing a NULL cursor slot.
+// dispatch fell through to the next visible partition. The inner
+// handler was therefore skipped and later code crashed
+// dereferencing a NULL slot.
 //
 // The pin: a `case 1: { ...; case 2: body; }` shape where
 // `sel == 2` dispatches directly to the inner case body. The

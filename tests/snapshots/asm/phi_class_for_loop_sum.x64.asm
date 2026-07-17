@@ -21,12 +21,21 @@ Disassembly of section .text:
                	movslq	%ecx, %rdx
                	cmpq	%rdi, %rdx
                	jl	<addr>
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0xa, %edi
-               	popq	%rbp
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
+               	leaq	0x1(%rdx), %rcx
+               	movslq	%ecx, %rdx
+               	cmpq	$0xa, %rdx
+               	jl	<addr>
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
+               	retq

@@ -53,23 +53,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<isblank>:
-               	movslq	%edi, %rdi
-               	cmpq	$0x20, %rdi
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	movl	$0x1, %eax
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	cmpq	$0x9, %rdi
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	retq
-               	jmp	<addr>
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -95,34 +78,13 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movl	$0x20, %edi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x9, %edi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x41, %edi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0xa, %edi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	popq	%rbp
-               	retq
+               	movl	$0x1, %eax
+               	movl	$0x1, %eax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	jmp	<addr>
+               	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

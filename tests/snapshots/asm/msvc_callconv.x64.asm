@@ -12,17 +12,8 @@ Disassembly of section .text:
 
 <add_std>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
-               	retq
-
-<add_cdecl>:
-               	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
-               	retq
-
-<add_fast>:
-               	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <record>:
@@ -63,6 +54,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
@@ -71,4 +63,3 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

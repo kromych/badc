@@ -152,14 +152,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xa, %eax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	addq	$0x50, %rsp
-               	popq	%rbp
-               	retq
+               	addb	%al, 0x41(%rdx)

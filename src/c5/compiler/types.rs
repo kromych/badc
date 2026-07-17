@@ -225,6 +225,16 @@ pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }
 
+/// `true` when `ty` is a GCC vector type: an aggregate *value* (not a
+/// pointer to one) whose synthesized `StructDef` carries `is_vector`.
+pub(crate) fn is_vector_ty(structs: &[super::StructDef], ty: i64) -> bool {
+    if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
+        return false;
+    }
+    let id = struct_id_of(ty);
+    id < structs.len() && structs[id].is_vector
+}
+
 /// True when `ty` (unsigned bit stripped) lands in the 100-wide band
 /// starting at `base`. Each non-integer scalar family (`_Bool`, float,
 /// double, long, long long, short) reserves its own band; the +2-per-`*`
@@ -456,6 +466,14 @@ pub(super) fn is_floating_scalar(ty: i64) -> bool {
     ty == Ty::Float as i64 || ty == Ty::Double as i64
 }
 
+/// True for a scalar integer type (`char` / `short` / `int` / `long` /
+/// `long long` / `_Bool`, signed or unsigned) with no pointer level --
+/// i.e. a value that folds to an `i64`. Excludes pointers, structs, and
+/// floating types. Used to gate `const`-object value folding.
+pub(crate) fn is_integer_scalar_ty(ty: i64) -> bool {
+    !is_pointer_ty(ty) && !is_struct_ty(ty) && !is_floating_scalar(ty)
+}
+
 pub(super) fn fp_ptr_depth(ty: i64) -> i64 {
     let ty = strip_unsigned(ty);
     if is_float_ty(ty) {
@@ -562,6 +580,7 @@ pub(super) fn is_decl_modifier(tk: Tok) -> bool {
         || tk == Token::Short
         || tk == Token::FuncSpec
         || tk == Token::Inline
+        || tk == Token::ForceInline
         || tk == Token::Noreturn
         || tk == Token::Atomic
         || tk == Token::Attribute

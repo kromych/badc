@@ -15,10 +15,12 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jge	<addr>
                	imulq	$-0x1, %rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <classify>:
@@ -30,6 +32,7 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jle	<addr>
                	movl	$0x1, %eax
+               	movslq	%eax, %rax
                	retq
                	movabsq	$-0x1, %rax
                	jmp	<addr>
@@ -76,4 +79,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

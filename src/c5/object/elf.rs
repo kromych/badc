@@ -31,8 +31,9 @@
 //!
 //! ## Dynamic linking
 //!
-//! ET_EXEC + PT_INTERP. The loader (ld-linux-aarch64.so.1) maps both
-//! PT_LOAD segments at their fixed vmaddrs (no slide -- ET_EXEC), then
+//! ET_DYN (PIE) + PT_INTERP. The loader (ld-linux-aarch64.so.1) maps both
+//! PT_LOAD segments at a random slide, applies the .rela.dyn R_*_RELATIVE
+//! entries to fix up internal absolute pointers by the load bias, then
 //! walks .dynamic, finds DT_NEEDED `libc.so.6`, loads it, and uses
 //! .rela.dyn to populate each .got slot with the resolved libc symbol
 //! address (R_AARCH64_GLOB_DAT). DT_BIND_NOW forces eager binding so
@@ -100,6 +101,10 @@ const DT_RELASZ: u64 = 8;
 const DT_RELAENT: u64 = 9;
 const DT_STRSZ: u64 = 10;
 const DT_SYMENT: u64 = 11;
+const DT_INIT_ARRAY: u64 = 25;
+const DT_FINI_ARRAY: u64 = 26;
+const DT_INIT_ARRAYSZ: u64 = 27;
+const DT_FINI_ARRAYSZ: u64 = 28;
 const DT_BIND_NOW: u64 = 24;
 const DT_FLAGS: u64 = 30;
 const DT_VERSYM: u64 = 0x6fff_fff0;
@@ -146,20 +151,27 @@ const R_X86_64_RELATIVE: u64 = 8;
 const R_AARCH64_COPY: u64 = 1024;
 const R_X86_64_COPY: u64 = 5;
 
-/// `PT_LOAD` segment alignment. The kernel enforces segment
-/// permissions at page granularity, so the R+E and RW segments must
-/// land on separate pages; the alignment also drives `p_vaddr ==
-/// p_offset (mod align)`, the gap the ET_EXEC file pays once between
-/// the two segments. x86_64 is always 4K. AArch64 Linux kernels run
-/// 4K or 16K pages, and a 16K-aligned segment is also 4K-aligned, so
-/// 16K covers both; 64K-page AArch64 kernels are out of scope (they
-/// would cost a 64K hole per binary).
+/// `PT_LOAD` segment alignment. The loader mmaps each segment at
+/// `p_vaddr` rounded down to the runtime page size, so `p_align` must
+/// be at least that page size or the load bias it aligns the image to
+/// is too coarse and the file offset no longer maps to the right
+/// address. AArch64 Linux kernels run 4K, 16K, or 64K pages, so the
+/// psABI fixes max-page-size at 64K (0x10000) -- the value gcc and lld
+/// emit -- making one image loadable under any of them. A smaller
+/// value (e.g. 16K) loads on 4K/16K kernels but faults on 64K ones.
+/// x86_64 pages are always 4K.
 fn seg_align(machine: Machine) -> u64 {
     match machine {
-        Machine::Aarch64 => 0x4000,
+        Machine::Aarch64 => 0x1_0000,
         Machine::X86_64 => 0x1000,
     }
 }
+
+/// File alignment for the trailing, non-loaded region (DWARF debug
+/// sections + the section header table). These carry no PT_LOAD, so a
+/// page is ample; using [`seg_align`] here would cost a 64K hole per
+/// aarch64 binary for nothing.
+const FILE_TAIL_ALIGN: u64 = 0x1000;
 
 /// Default load address for non-PIE ET_EXEC binaries on Linux/aarch64.
 /// The kernel maps the binary at exactly this vmaddr (no slide); all
@@ -1001,6 +1013,17 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
         (DT_BIND_NOW, 0),
         (DT_FLAGS, DF_BIND_NOW),
     ];
+    // Constructor / destructor arrays the loader runs around the program.
+    // Emitted only when present so a program with no constructors keeps the
+    // same dynamic section it had before.
+    if let Some((vmaddr, size)) = info.init_array {
+        entries.push((DT_INIT_ARRAY, vmaddr));
+        entries.push((DT_INIT_ARRAYSZ, size));
+    }
+    if let Some((vmaddr, size)) = info.fini_array {
+        entries.push((DT_FINI_ARRAY, vmaddr));
+        entries.push((DT_FINI_ARRAYSZ, size));
+    }
     // Version tags precede DT_NULL. The dynamic linker reads DT_VERSYM /
     // DT_VERNEED to bind each import to its required symbol version.
     if let Some(v) = info.versions {
@@ -1027,6 +1050,11 @@ struct DynamicInfo {
     rela_size: u64,
     strtab_size: u64,
     versions: Option<VersionInfo>,
+    /// `.init_array` / `.fini_array` runtime address and byte length, each
+    /// `None` when the program has no constructors / destructors. The
+    /// dynamic loader runs the pointer arrays before / after the program.
+    init_array: Option<(u64, u64)>,
+    fini_array: Option<(u64, u64)>,
 }
 
 /// A defined dynamic-symbol export for the ELF writer. `offset` is a
@@ -1093,8 +1121,20 @@ fn patch_adrp_ldr(
         )));
     }
 
-    let adrp_word = aarch64::enc_adrp(aarch64::Reg::X16, imm21);
-    let ldr_word = aarch64::enc_ldr_imm(aarch64::Reg::X16, aarch64::Reg::X16, in_page);
+    // Preserve the destination register the codegen chose: a GOT call
+    // loads into x16 (matched by its `blr x16`), but an inline GOT data
+    // load (`adrp x0; ldr x0, [x0]` for the address of an imported data
+    // object) loads into the register the following code reads. Read the
+    // original `Rd` from the adrp being patched rather than forcing x16,
+    // which would strand the loaded address in a register the code never
+    // reads. `adrp` Rd is bits 0..4; `ldr` (unsigned offset) has Rt in
+    // 0..4 and Rn in 5..9, both the same register for this pair.
+    let orig_adrp = u32::from_le_bytes(out[adrp_file_off..adrp_file_off + 4].try_into().unwrap());
+    let rd = orig_adrp & 0x1f;
+    let adrp_word = (aarch64::enc_adrp(aarch64::Reg::X16, imm21) & !0x1f) | rd;
+    let ldr_word = (aarch64::enc_ldr_imm(aarch64::Reg::X16, aarch64::Reg::X16, in_page) & !0x3ff)
+        | rd
+        | (rd << 5);
     out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
     out[ldr_file_off..ldr_file_off + 4].copy_from_slice(&ldr_word.to_le_bytes());
     Ok(())
@@ -1224,6 +1264,41 @@ fn patch_lea_rip32(
     Ok(())
 }
 
+/// Patch a data-import GOT reference so it loads the import's address from
+/// its GOT slot at `slot_vmaddr`. The reference reads the slot's value
+/// (an imported data object's address), not a call thunk. GOT relaxation
+/// (see `link.rs`) left a `lea r64, [rip+disp32]` (opcode 0x8D); flip it
+/// back to `mov r64, [rip+disp32]` (0x8B) against the slot. `mov` and
+/// `lea` share the 7-byte REX-prefixed encoding and disp32 position, so
+/// the disp is patched with the same `patch_lea_rip32` math.
+fn patch_got_data_load(
+    out: &mut [u8],
+    code_base_in_file: u64,
+    code_vmaddr_base: u64,
+    instr_offset_in_code: u64,
+    slot_vmaddr: u64,
+    label: &str,
+) -> Result<(), C5Error> {
+    let opcode_off = (code_base_in_file + instr_offset_in_code + 1) as usize;
+    if out[opcode_off] != 0x8D {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "ELF: {label} expected lea opcode 0x8D at file+{opcode_off:#x}, found {:#04x}",
+                out[opcode_off],
+            ),
+        )));
+    }
+    out[opcode_off] = 0x8B;
+    patch_lea_rip32(
+        out,
+        code_base_in_file,
+        code_vmaddr_base,
+        instr_offset_in_code,
+        slot_vmaddr,
+        label,
+    )
+}
+
 /// Patch an `adrp Xd, page; add Xd, Xd, #imm12` pair so the result
 /// equals `target_vmaddr`. Used for data-segment references and
 /// function-pointer literals; both are absolute-address materializations.
@@ -1250,10 +1325,10 @@ fn patch_adrp_add(
     let imm21 = (page_diff >> 12) as i32;
     let in_page = (target_vmaddr & 0xFFF) as u32;
 
-    // Recover the destination register encoded by the codegen at the
-    // placeholder site. adrp/add carry the rd in the low 5 bits; the
-    // add additionally carries rn in bits 5..10. Both registers match
-    // by construction (`adrp rd; add rd, rd, #imm`).
+    // Recover the registers the codegen (or another toolchain) encoded at the
+    // placeholder site. The adrp carries rd in the low 5 bits; the second
+    // instruction is either `add rd, rn, #lo12` or an unsigned-offset
+    // load/store (`ldr/str [rn, #:lo12:sym]`), patched in place below.
     let prev_adrp = u32::from_le_bytes([
         out[adrp_file_off],
         out[adrp_file_off + 1],
@@ -1267,12 +1342,33 @@ fn patch_adrp_add(
         out[add_file_off + 3],
     ]);
     let rd = (prev_adrp & 0x1F) as u8;
-    let add_rd = (prev_add & 0x1F) as u8;
-    let add_rn = ((prev_add >> 5) & 0x1F) as u8;
     let adrp_word = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    let add_word = aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page);
     out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-    out[add_file_off..add_file_off + 4].copy_from_slice(&add_word.to_le_bytes());
+
+    // ADD (immediate) takes the low 12 bits unscaled. An unsigned-offset
+    // load/store scales the immediate by the access size (2^size, size in bits
+    // 31..30), so its opcode is preserved and only imm12 (bits 21..10) is
+    // rewritten.
+    let second = if (prev_add & 0x7F80_0000) == 0x1100_0000 {
+        let add_rd = (prev_add & 0x1F) as u8;
+        let add_rn = ((prev_add >> 5) & 0x1F) as u8;
+        aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page)
+    } else if (prev_add & 0x3B00_0000) == 0x3900_0000 {
+        let scale = 1u32 << (prev_add >> 30);
+        if !in_page.is_multiple_of(scale) {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: {label} low-12 offset {in_page:#x} not aligned to load/store size {scale}"
+                ),
+            )));
+        }
+        (prev_add & !(0xFFF << 10)) | (((in_page / scale) & 0xFFF) << 10)
+    } else {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} adrp paired with an unrecognized instruction {prev_add:#010x}"),
+        )));
+    };
+    out[add_file_off..add_file_off + 4].copy_from_slice(&second.to_le_bytes());
     Ok(())
 }
 
@@ -1324,6 +1420,13 @@ pub(super) fn write(
     machine: Machine,
 ) -> Result<Vec<u8>, C5Error> {
     let is_shared = build.output_kind == super::OutputKind::SharedLibrary;
+    // ELF executables are position-independent (ET_DYN / PIE), matching the
+    // Mach-O output and the modern default: the loader slides the image at a
+    // random base and the `.rela.dyn` R_*_RELATIVE entries fix up every
+    // internal absolute pointer in static data. Shared libraries are already
+    // ET_DYN. `emit_dyn` therefore holds for every ELF image the writer emits;
+    // the entry stub and `e_entry` stay gated on `!is_shared`.
+    let emit_dyn = true;
     // Both backends lower `_Thread_local` access with the local-exec
     // model, whose TP-relative offsets are valid only in the
     // executable's static TLS block; baked into ET_DYN they address
@@ -1606,7 +1709,7 @@ pub(super) fn write(
     // (a function / data pointer initializer) into an R_*_RELATIVE
     // relocation so it tracks the runtime load base; an executable maps at
     // its link-time vmaddr, so the baked bytes are final and need none.
-    let n_relative = if is_shared {
+    let n_relative = if emit_dyn {
         build.data_relocs.len() + build.code_relocs.len()
     } else {
         0
@@ -1655,7 +1758,14 @@ pub(super) fn write(
     // `build_dynamic` emits one DT_NEEDED per resolved dylib plus
     // 11 fixed tags (DT_HASH, DT_STRTAB, ..., DT_NULL terminator).
     let version_dyn_tags: u64 = if has_versions { 3 } else { 0 };
-    let dynamic_size = (build.imports.dylibs.len() as u64 + 11 + version_dyn_tags) * ELF64_DYN_SIZE;
+    // DT_INIT_ARRAY + DT_INIT_ARRAYSZ (and the fini pair) are emitted only
+    // when the program declares constructors / destructors: two tags each.
+    let init_fini_dyn_tags: u64 = 2
+        * (build.init_fini_arrays.init.is_some() as u64
+            + build.init_fini_arrays.fini.is_some() as u64);
+    let dynamic_size =
+        (build.imports.dylibs.len() as u64 + 11 + version_dyn_tags + init_fini_dyn_tags)
+            * ELF64_DYN_SIZE;
     let got_off = dynamic_off + dynamic_size;
     let got_size = (n_imports as u64) * 8;
     // `.data`'s base alignment: p_vaddr == p_offset within the RW
@@ -1687,7 +1797,13 @@ pub(super) fn write(
     // The PT_LOAD's p_memsz must cover `.tbss` and `.bss` even though
     // neither has file backing -- the loader zero-fills the difference.
     let segment2_memsize = segment2_filesize + tbss_size + build.bss_size as u64;
-    let segment2_end = round_up(segment2_off + segment2_filesize, seg);
+    // The DWARF / section-header tail past here carries no PT_LOAD and no
+    // SHF_ALLOC, so it needs only a modest file alignment, not the 64K
+    // load-segment alignment -- rounding it to `seg` would pad every
+    // aarch64 binary with a spurious second 64K hole (the first, at the
+    // R+E / RW boundary, is unavoidable: the two permissions must fall on
+    // different max-page-size pages).
+    let segment2_end = round_up(segment2_off + segment2_filesize, FILE_TAIL_ALIGN);
 
     // ---- VM addresses (ET_EXEC, no slide). ----
     let interp_vmaddr = TEXT_VMADDR_BASE + interp_off;
@@ -1719,7 +1835,7 @@ pub(super) fn write(
     // them, no SHF_ALLOC) -- they're metadata that lldb / gdb
     // pick up by walking the section header table. We append:
     //
-    //   <segment2_end aligned to seg>
+    //   <segment2_end aligned to FILE_TAIL_ALIGN>
     //   .debug_info | .debug_abbrev | .debug_line | .debug_str
     //   .shstrtab (the section name string table)
     //   <pad to 8>
@@ -1966,7 +2082,7 @@ pub(super) fn write(
         &mut out,
         &Elf64Ehdr {
             e_ident,
-            e_type: if is_shared { ET_DYN } else { ET_EXEC },
+            e_type: if emit_dyn { ET_DYN } else { ET_EXEC },
             e_machine: e_machine(machine),
             e_version: EV_CURRENT as u32,
             // For executables: start of `_start`. For shared
@@ -2155,7 +2271,7 @@ pub(super) fn write(
     // value; a RELA loader overwrites it with `load_bias + r_addend`,
     // where the addend is that same link-time target address.
     let mut rela = build_rela_dyn(got_vmaddr, n_imports, machine);
-    if is_shared {
+    if emit_dyn {
         let r_type = r_relative(machine);
         for r in &build.data_relocs {
             let addend = data_off_to_vaddr(r.target_offset);
@@ -2242,6 +2358,14 @@ pub(super) fn write(
             } else {
                 None
             },
+            init_array: build
+                .init_fini_arrays
+                .init
+                .map(|(off, len)| (data_vmaddr + off, len)),
+            fini_array: build
+                .init_fini_arrays
+                .fini
+                .map(|(off, len)| (data_vmaddr + off, len)),
         },
     );
     debug_assert_eq!(dynamic.len() as u64, dynamic_size);
@@ -2257,10 +2381,11 @@ pub(super) fn write(
     debug_assert_eq!(out.len() as u64, data_off);
 
     // build.data -- the program's static data segment, with
-    // pointer-to-global initializers resolved to absolute VAs.
-    // ET_EXEC means the loader maps at the link-time vmaddr
-    // (no slide), so the bytes can hold the final VA verbatim
-    // -- no `.rela.dyn` relocations needed.
+    // pointer-to-global initializers resolved to their link-time absolute
+    // VAs. The image is ET_DYN (PIE), so each such slot also gets a
+    // `.rela.dyn` R_*_RELATIVE entry (built above) whose addend is this same
+    // VA; the RELA loader overwrites the slot with `load_bias + addend`. The
+    // baked value is the pre-slide initializer.
     let mut data_with_relocs = build.data.clone();
     for r in &build.data_relocs {
         let absolute = data_off_to_vaddr(r.target_offset);
@@ -2278,9 +2403,9 @@ pub(super) fn write(
     // Function-pointer initializers in the data segment: translate
     // each ent_pc to a native code-segment offset (skipping
     // the prologue stub at the start of the code blob), add the
-    // text vmaddr, and write the absolute code address. ET_EXEC
-    // means no slide so the bytes hold the final VA -- no
-    // .rela.dyn entries needed.
+    // text vmaddr, and write the link-time absolute code address. As with
+    // data pointers, a matching `.rela.dyn` R_*_RELATIVE entry slides it at
+    // load time.
     for r in &build.code_relocs {
         let ent_pc = r.target_ent_pc as usize;
         let native_off = build
@@ -2818,18 +2943,34 @@ pub(super) fn write(
     // `movz x8, #94; svc #0` (aarch64) bytes are absolute and
     // self-contained.
 
-    // GOT fixups for libc calls inside build.text. Same per-arch
-    // dispatch as the _start exit call.
+    // GOT fixups for imports referenced inside build.text. A call thunk
+    // reaches its target through `call [rip+slot]`; a data import reads
+    // the slot's value, a distinct x86_64 instruction form (mov vs the
+    // call the lookup helper emits), so it routes to a data-load patch.
+    // aarch64's adrp + ldr already loads the slot for both.
     for fx in &build.got_fixups {
-        patch_got_call(
-            machine,
-            &mut out,
-            code_file_offset,
-            code_vmaddr,
-            stub_len + fx.adrp_offset as u64,
-            got_vmaddr + (fx.import_index as u64) * 8,
-            "GOT fixup",
-        )?;
+        let instr_off = stub_len + fx.adrp_offset as u64;
+        let slot_vmaddr = got_vmaddr + (fx.import_index as u64) * 8;
+        if fx.is_data_load && machine == Machine::X86_64 {
+            patch_got_data_load(
+                &mut out,
+                code_file_offset,
+                code_vmaddr,
+                instr_off,
+                slot_vmaddr,
+                "GOT data-load fixup",
+            )?;
+        } else {
+            patch_got_call(
+                machine,
+                &mut out,
+                code_file_offset,
+                code_vmaddr,
+                instr_off,
+                slot_vmaddr,
+                "GOT fixup",
+            )?;
+        }
     }
 
     // Data-segment references (string literals / globals). Per-arch
@@ -2896,6 +3037,32 @@ fn write_phdr(
 mod tests {
     use super::*;
 
+    #[test]
+    fn patch_adrp_add_scales_load_store_imm12() {
+        // `adrp x0, page ; ldrh w0, [x0, #:lo12:sym]`: the ldrh keeps its
+        // opcode and gets imm12 = low-12 offset scaled by the 2-byte access.
+        // An `add` in the same slot takes the low 12 unscaled.
+        let ldrh: u32 = 0x7940_0000; // ldrh w0, [x0]
+        let mut out = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
+        out.extend_from_slice(&ldrh.to_le_bytes());
+        // code at file offset 0, vmaddr 0x1000; target 0x2008 (in-page 8).
+        patch_adrp_add(&mut out, 0, 0x1000, 0, 0x2008, "test").unwrap();
+        let ldst = u32::from_le_bytes([out[4], out[5], out[6], out[7]]);
+        assert_eq!(
+            ldst & !(0xFFF << 10),
+            ldrh & !(0xFFF << 10),
+            "load/store opcode and registers preserved"
+        );
+        assert_eq!((ldst >> 10) & 0xFFF, 4, "imm12 = 8 / 2");
+
+        let addi = aarch64::enc_add_imm(aarch64::Reg(0), aarch64::Reg(0), 0);
+        let mut out2 = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
+        out2.extend_from_slice(&addi.to_le_bytes());
+        patch_adrp_add(&mut out2, 0, 0x1000, 0, 0x2008, "test").unwrap();
+        let add = u32::from_le_bytes([out2[4], out2[5], out2[6], out2[7]]);
+        assert_eq!((add >> 10) & 0xFFF, 8, "add imm12 unscaled");
+    }
+
     /// Smallest plausible Build that exercises the writer end to end.
     /// 8 bytes of code (movz x0, #42; ret), no fixups.
     ///
@@ -2938,6 +3105,7 @@ mod tests {
             synthetic_ssa_funcs: alloc::vec::Vec::new(),
             user_ssa_funcs: alloc::vec::Vec::new(),
             extern_function_imports: alloc::vec::Vec::new(),
+            init_funcs: alloc::vec::Vec::new(),
         }
     }
 
@@ -2950,6 +3118,7 @@ mod tests {
             data: Vec::new(),
             data_align: 8,
             bss_size: 0,
+            init_fini_arrays: Default::default(),
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
@@ -3151,6 +3320,82 @@ mod tests {
         assert_eq!(read_u64(&bytes, last), DT_NULL);
     }
 
+    // Collect every (d_tag, d_val) pair from PT_DYNAMIC.
+    fn dynamic_entries(bytes: &[u8]) -> Vec<(u64, u64)> {
+        let phoff = read_u64(bytes, 32);
+        let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
+        let (mut off, mut sz) = (0u64, 0u64);
+        for i in 0..phnum {
+            let p = (phoff + i * PROGRAM_HEADER_SIZE) as usize;
+            if read_u32(bytes, p) == PT_DYNAMIC {
+                off = read_u64(bytes, p + 8);
+                sz = read_u64(bytes, p + 32);
+                break;
+            }
+        }
+        let mut out = Vec::new();
+        let mut e = off as usize;
+        while (e as u64) < off + sz {
+            out.push((read_u64(bytes, e), read_u64(bytes, e + 8)));
+            e += ELF64_DYN_SIZE as usize;
+        }
+        out
+    }
+
+    #[test]
+    fn dynamic_section_emits_init_fini_array_when_present() {
+        // A program with constructors / destructors must carry
+        // DT_INIT_ARRAY / DT_FINI_ARRAY (plus the size tags) so the
+        // dynamic loader runs the pointer arrays; without them the
+        // constructors never fire on the self-linked path.
+        let mut build = tiny_build();
+        build.data = alloc::vec![0u8; 16];
+        build.init_fini_arrays = crate::c5::codegen::InitFiniArrays {
+            init: Some((0, 8)),
+            fini: Some((8, 8)),
+        };
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64).unwrap();
+        let dyn_ = dynamic_entries(&bytes);
+        let val = |tag| dyn_.iter().find(|(t, _)| *t == tag).map(|(_, v)| *v);
+        assert_eq!(val(DT_INIT_ARRAYSZ), Some(8), "DT_INIT_ARRAYSZ");
+        assert_eq!(val(DT_FINI_ARRAYSZ), Some(8), "DT_FINI_ARRAYSZ");
+        // The array vmaddrs point inside the rw data segment.
+        assert!(val(DT_INIT_ARRAY).is_some(), "DT_INIT_ARRAY present");
+        assert!(val(DT_FINI_ARRAY).is_some(), "DT_FINI_ARRAY present");
+
+        // A program with no constructors emits neither, keeping its
+        // dynamic section unchanged.
+        let plain = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let pd = dynamic_entries(&plain);
+        assert!(!pd.iter().any(|(t, _)| *t == DT_INIT_ARRAY));
+        assert!(!pd.iter().any(|(t, _)| *t == DT_FINI_ARRAY));
+    }
+
+    #[test]
+    fn patch_adrp_ldr_preserves_destination_register() {
+        // A GOT load `adrp xD; ldr xD, [xD, #off]` must keep xD after
+        // patching. A GOT call uses x16 (matched by its `blr x16`), but
+        // an inline GOT data load uses whatever register the following
+        // code reads; forcing x16 would strand the address. Check a
+        // data register (x0), an arbitrary one (x5), and x16 all survive.
+        for rd in [0u8, 5, 16] {
+            let mut out = Vec::new();
+            out.extend_from_slice(&aarch64::enc_adrp(aarch64::Reg(rd), 0).to_le_bytes());
+            out.extend_from_slice(
+                &aarch64::enc_ldr_imm(aarch64::Reg(rd), aarch64::Reg(rd), 0).to_le_bytes(),
+            );
+            // Code at vmaddr 0x1000, GOT slot at 0x5008: page diff 0x4000
+            // (4 KiB aligned), in-page offset 8 (8-aligned).
+            patch_adrp_ldr(&mut out, 0, 0x1000, 0, 0x5008, "test").unwrap();
+            let adrp = u32::from_le_bytes(out[0..4].try_into().unwrap());
+            let ldr = u32::from_le_bytes(out[4..8].try_into().unwrap());
+            assert_eq!(adrp & 0x1f, rd as u32, "adrp Rd preserved (rd={rd})");
+            assert_eq!(ldr & 0x1f, rd as u32, "ldr Rt preserved (rd={rd})");
+            assert_eq!((ldr >> 5) & 0x1f, rd as u32, "ldr Rn preserved (rd={rd})");
+            assert_eq!(adrp & 0x9f00_0000, 0x9000_0000, "still an ADRP (rd={rd})");
+        }
+    }
+
     #[test]
     fn elf_hash_matches_known_values() {
         // Cross-check with the canonical SysV ELF hash function.
@@ -3161,6 +3406,28 @@ mod tests {
         assert_eq!(elf_hash(b"printf"), 0x077905a6);
         assert_eq!(elf_hash(b"malloc"), 0x07383353);
         assert_eq!(elf_hash(b"exit"), 0x0006cf04);
+    }
+
+    #[test]
+    fn got_data_load_rewrites_lea_to_mov_against_slot() {
+        // A data import (a shared-library data object, STT_OBJECT) is referenced as a
+        // load of its address from the GOT slot. GOT relaxation leaves a
+        // `lea rax, [rip+disp32]` (48 8D 05 ..); the writer must flip it to
+        // `mov rax, [rip+disp32]` (48 8B 05 ..) loading the slot, preserving
+        // the ModRM. The prior code applied the call-thunk patcher, which
+        // writes the disp at the 6-byte-call offset and clobbers the ModRM
+        // (05 -> 8A), turning the load into `lea rcx, [rdx+..]` that faults.
+        let mut out = vec![0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00, 0xC3];
+        // code at file offset 0, code vmaddr base 0x1000, instr at code
+        // offset 0, GOT slot at vmaddr 0x2000.
+        patch_got_data_load(&mut out, 0, 0x1000, 0, 0x2000, "test").unwrap();
+        assert_eq!(out[0], 0x48, "REX.W preserved");
+        assert_eq!(out[1], 0x8B, "lea (0x8D) flipped to mov (0x8B)");
+        assert_eq!(out[2], 0x05, "ModRM preserved (rax, RIP-relative)");
+        assert_ne!(out[2], 0x8A, "ModRM not clobbered by the call-form patcher");
+        // disp32 = slot - (instr_vmaddr + 7-byte instr length).
+        let disp = i32::from_le_bytes(out[3..7].try_into().unwrap());
+        assert_eq!(disp, 0x2000 - (0x1000 + 7), "RIP-relative disp to GOT slot");
     }
 
     #[test]
@@ -3383,11 +3650,14 @@ mod tests {
         assert_eq!(p_memsz, 8, "single int TLS var => 8 bytes per thread");
     }
 
-    /// The R+E and RW `PT_LOAD` segments are packed at the per-arch page
-    /// size (4K x86_64, 16K aarch64), so an executable's file size tracks
-    /// its loaded content. A blanket 64K segment alignment forced a ~64K
-    /// inter-segment hole, ballooning a trivial program to ~130K of mostly
-    /// zero padding.
+    /// The R+E and RW `PT_LOAD` segments must fall on separate
+    /// max-page-size pages (4K x86_64, 64K aarch64) so the loader can set
+    /// their permissions independently -- one unavoidable page at that
+    /// boundary. The non-loaded DWARF tail past the RW segment then packs
+    /// at [`FILE_TAIL_ALIGN`], not the segment alignment. Rounding the
+    /// file to the segment alignment at *both* boundaries doubled the
+    /// aarch64 cost, ballooning a trivial program to ~130K of zero
+    /// padding; one page keeps it near gcc's ~70K.
     #[test]
     fn executable_file_size_tracks_content_not_max_page() {
         use crate::Compiler;
@@ -3402,7 +3672,7 @@ mod tests {
             (
                 Machine::Aarch64,
                 super::super::Target::LinuxAarch64,
-                64 * 1024usize,
+                96 * 1024usize,
             ),
         ] {
             let program =
@@ -3415,9 +3685,63 @@ mod tests {
             let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
             assert!(
                 bytes.len() < max_bytes,
-                "{machine:?} executable is {} bytes; per-arch page packing must keep it under {max_bytes} \
-                 (a 64K-aligned layout would push it past ~130K)",
+                "{machine:?} executable is {} bytes; a single page at the R+E/RW boundary plus a compact \
+                 tail must keep it under {max_bytes} (rounding the file to the segment alignment twice \
+                 would push it past ~130K)",
                 bytes.len(),
+            );
+        }
+    }
+
+    /// Every `PT_LOAD` must advertise `p_align` equal to the arch
+    /// max-page-size: 64K on aarch64, 4K on x86_64. The dynamic loader
+    /// aligns the image's load bias to this, so a value below the runtime
+    /// page size (a 64K-page aarch64 kernel is common in CI and on
+    /// server distros) leaves segments unmappable and faults the process
+    /// before `main`. gcc and lld emit the same values.
+    #[test]
+    fn pt_load_alignment_matches_max_page_size() {
+        use crate::Compiler;
+        let src = "int main() { return 0; }";
+        let le16 = |b: &[u8], o: usize| u16::from_le_bytes([b[o], b[o + 1]]);
+        let le32 = |b: &[u8], o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+        let le64 = |b: &[u8], o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+        for (machine, target, want_align) in [
+            (
+                Machine::Aarch64,
+                super::super::Target::LinuxAarch64,
+                0x1_0000u64,
+            ),
+            (Machine::X86_64, super::super::Target::LinuxX64, 0x1000u64),
+        ] {
+            let program =
+                Compiler::with_target(super::super::super::tests::with_prelude(src), target)
+                    .compile()
+                    .expect("compile");
+            let build =
+                super::super::lower_for(&program, target, super::super::NativeOptions::default())
+                    .expect("lower");
+            let b = write(&tiny_program(), &build, machine).expect("write ELF");
+            let (phoff, phentsize, phnum) = (
+                le64(&b, 0x20) as usize,
+                le16(&b, 0x36) as usize,
+                le16(&b, 0x38) as usize,
+            );
+            let mut loads = 0;
+            for i in 0..phnum {
+                let ph = phoff + i * phentsize;
+                if le32(&b, ph) == PT_LOAD {
+                    loads += 1;
+                    assert_eq!(
+                        le64(&b, ph + 48),
+                        want_align,
+                        "{machine:?} PT_LOAD p_align must be the {want_align:#x} max-page-size",
+                    );
+                }
+            }
+            assert!(
+                loads >= 2,
+                "{machine:?}: expected R+E and RW PT_LOADs, saw {loads}"
             );
         }
     }

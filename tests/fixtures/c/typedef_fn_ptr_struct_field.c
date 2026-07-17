@@ -5,7 +5,7 @@
 // `(*s.cb)(args)` is recognised as the C99 6.3.2.1p4 decay
 // no-op.
 //
-// Lua's `lua_Alloc` + `global_State::frealloc` is exactly this
+// A function-pointer typedef used as a struct field is exactly this
 // shape -- without the propagation the field looked like a
 // regular pointer and the deref-call jumped to garbage.
 

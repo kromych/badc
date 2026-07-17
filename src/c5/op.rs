@@ -196,6 +196,106 @@ pub enum Intrinsic {
     /// prior `AllocaSave` captured. One argument (the saved top);
     /// returns nothing. Reclaims a VLA block's storage on exit.
     AllocaRestore = 47,
+    /// `__builtin_clrsb(x)` / `__builtin_clrsbll(x)` -- count leading
+    /// redundant sign bits of a 32-bit / 64-bit signed value: the number
+    /// of bits after the sign bit that equal it. The result is `int`.
+    /// Lowered in the walker as `clz(x ^ (x >> (w-1))) - 1`.
+    Clrsb = 48,
+    Clrsbll = 49,
+    /// `__builtin_parity(x)` / `__builtin_parityll(x)` -- 1 when the value
+    /// has an odd number of set bits, else 0. Lowered as `popcount(x) & 1`.
+    Parity = 50,
+    Parityll = 51,
+    /// `asm("divq %4" : "=a"(q), "=d"(*r) : "0"(n0), "1"(n1), "rm"(d))` --
+    /// x86-64 unsigned 128/64 division (the `udiv_qrnnd` assembly-macro
+    /// shape). Five args: the quotient output address, the remainder
+    /// output address, the dividend low (`n0`), the dividend high (`n1`),
+    /// and the divisor (`d`). Computes `(n1:n0) / d` -> quotient and
+    /// `(n1:n0) % d` -> remainder. x86_64 only (the source gates it on
+    /// `__x86_64__`); the interpreter uses 128-bit host arithmetic.
+    Divq128 = 52,
+    /// `asm volatile("rdtsc" : "=a"(low), "=d"(high))` -- x86-64 read the
+    /// timestamp counter. Two args: the
+    /// low (eax) and high (edx) 32-bit output addresses. x86_64 only; the
+    /// interpreter zeroes the outputs (no host clock).
+    Rdtsc = 53,
+    /// AArch64 cache maintenance and barriers, each a fixed-encoding
+    /// instruction. `ReadCacheType` = `mrs %0,
+    /// ctr_el0` (one output address); `DcCvau` = `dc cvau, %0` and
+    /// `IcIvau` = `ic ivau, %0` (one pointer input each); `DsbIsh` =
+    /// `dsb ish` and `Isb` = `isb` (no operands). AArch64 only; the
+    /// interpreter treats the barriers and cache ops as no-ops and
+    /// returns a fixed CTR_EL0 for the read.
+    AArch64ReadCacheType = 54,
+    AArch64DcCvau = 55,
+    AArch64IcIvau = 56,
+    AArch64DsbIsh = 57,
+    AArch64Isb = 58,
+    /// `__builtin_ffs(x)` / `__builtin_ffsll(x)` -- one plus the index of
+    /// the least-significant set bit, or 0 when `x` is 0 (POSIX `ffs`, GCC
+    /// builtin). The result is `int`. Lowered in the walker as
+    /// `(ctz(x) + 1) * (x != 0)`, reusing the portable ctz sequence; the
+    /// `(x != 0)` factor forces the zero case (ctz(0) is the bit width).
+    Ffs = 59,
+    Ffsll = 60,
+    /// 128-bit atomic read-modify-write via the AArch64 `ldaxp`/`stlxp`
+    /// exclusive-pair retry loop (the shape GCC/clang inline asm emits for
+    /// `Int128` atomics, since aarch64 has no native 128-bit CAS through
+    /// gcc 10). Each takes a pointer to the 128-bit object, the addresses
+    /// of the two 64-bit halves of the prior value (written back), and the
+    /// operand halves as inputs: `CmpXchg` compares against `cmp{l,h}` and
+    /// stores `new{l,h}` on a match; `Xchg` stores unconditionally;
+    /// `FetchAnd`/`FetchOr` store `old & new` / `old | new`. AArch64 only.
+    Atomic128CmpXchg = 61,
+    Atomic128Xchg = 62,
+    Atomic128FetchAnd = 63,
+    Atomic128FetchOr = 64,
+    /// 128-bit atomic load / store, the AArch64 inline-asm idiom for a
+    /// 16-byte access with no native LSE2 support. `Load`/`Store` are the
+    /// plain `LDP`/`STP` forms; `LoadEx`/`StoreEx` are the pre-LSE2 forms
+    /// built from an `LDXP`/`STXP` exclusive-pair retry loop. Loads take a
+    /// pointer to the object and the addresses of the two 64-bit result
+    /// halves (written back); stores take the pointer and the two halves as
+    /// inputs. AArch64 only.
+    Atomic128Load = 65,
+    Atomic128Store = 66,
+    Atomic128LoadEx = 67,
+    Atomic128StoreEx = 68,
+    /// `__builtin_return_address(0)` -- the current function's return
+    /// address, read from the saved slot just above the frame pointer
+    /// (`[fp + 8]` under both the AAPCS64 and SysV prologues). Only level
+    /// 0 is supported. The interpreter returns a stable per-frame proxy.
+    ReturnAddress = 69,
+    /// 128-bit masked store-insert: `*mem = (*mem & ~msk) | val`, built from
+    /// an `LDXP` / `BIC` / `ORR` / `STXP` exclusive retry loop. Takes the
+    /// pointer and the value and mask halves (`vl`, `vh`, `ml`, `mh`) as
+    /// inputs; there is no result. AArch64 only.
+    Atomic128StoreInsert = 70,
+    /// `asm("fxsave %0" : "=m"(buf))` -- save the x87/SSE state to the
+    /// 512-byte memory operand. The op takes the operand's address;
+    /// codegen emits `fxsave m` (0F AE /0, x86_64 only). A no-op in the
+    /// interpreter (no modelled FPU/SSE state).
+    X86FxSave = 71,
+    /// `asm("fxrstor %0" : : "m"(buf))` -- restore the x87/SSE state from
+    /// the 512-byte memory operand. Codegen emits `fxrstor m` (0F AE /1,
+    /// x86_64 only). A no-op in the interpreter.
+    X86FxRestore = 72,
+    /// x86 descriptor-table / clflush forms, each with a single memory
+    /// operand (the op takes its address, like the x87 control-word forms).
+    /// `sgdt`/`sidt`/`sldt`/`str` store the GDTR/IDTR/LDTR/TR; `lgdt`/`lidt`
+    /// load the GDTR/IDTR; `clflush` flushes a cache line. All x86_64 only;
+    /// the interpreter stores zero (loads / flushes are no-ops).
+    X86Sgdt = 73,
+    X86Sidt = 74,
+    X86Sldt = 75,
+    X86Str = 76,
+    X86Lgdt = 77,
+    X86Lidt = 78,
+    X86Clflush = 79,
+    /// `asm("lldtw %0" : : "g"(Ldtr))` -- load the LDTR from the 16-bit
+    /// operand (0F 00 /2). The op takes the operand's address; the
+    /// interpreter treats it as a no-op (no modelled LDTR).
+    X86Lldt = 80,
 }
 
 impl Intrinsic {
@@ -248,6 +348,39 @@ impl Intrinsic {
             45 => Some(Intrinsic::Xgetbv),
             46 => Some(Intrinsic::AllocaSave),
             47 => Some(Intrinsic::AllocaRestore),
+            48 => Some(Intrinsic::Clrsb),
+            49 => Some(Intrinsic::Clrsbll),
+            50 => Some(Intrinsic::Parity),
+            51 => Some(Intrinsic::Parityll),
+            52 => Some(Intrinsic::Divq128),
+            53 => Some(Intrinsic::Rdtsc),
+            54 => Some(Intrinsic::AArch64ReadCacheType),
+            55 => Some(Intrinsic::AArch64DcCvau),
+            56 => Some(Intrinsic::AArch64IcIvau),
+            57 => Some(Intrinsic::AArch64DsbIsh),
+            58 => Some(Intrinsic::AArch64Isb),
+            59 => Some(Intrinsic::Ffs),
+            60 => Some(Intrinsic::Ffsll),
+            61 => Some(Intrinsic::Atomic128CmpXchg),
+            62 => Some(Intrinsic::Atomic128Xchg),
+            63 => Some(Intrinsic::Atomic128FetchAnd),
+            64 => Some(Intrinsic::Atomic128FetchOr),
+            65 => Some(Intrinsic::Atomic128Load),
+            66 => Some(Intrinsic::Atomic128Store),
+            67 => Some(Intrinsic::Atomic128LoadEx),
+            68 => Some(Intrinsic::Atomic128StoreEx),
+            69 => Some(Intrinsic::ReturnAddress),
+            70 => Some(Intrinsic::Atomic128StoreInsert),
+            71 => Some(Intrinsic::X86FxSave),
+            72 => Some(Intrinsic::X86FxRestore),
+            73 => Some(Intrinsic::X86Sgdt),
+            74 => Some(Intrinsic::X86Sidt),
+            75 => Some(Intrinsic::X86Sldt),
+            76 => Some(Intrinsic::X86Str),
+            77 => Some(Intrinsic::X86Lgdt),
+            78 => Some(Intrinsic::X86Lidt),
+            79 => Some(Intrinsic::X86Clflush),
+            80 => Some(Intrinsic::X86Lldt),
             _ => None,
         }
     }
@@ -273,6 +406,12 @@ impl Intrinsic {
                 | Intrinsic::Clzll
                 | Intrinsic::Ctzll
                 | Intrinsic::Popcountll
+                | Intrinsic::Clrsb
+                | Intrinsic::Clrsbll
+                | Intrinsic::Parity
+                | Intrinsic::Parityll
+                | Intrinsic::Ffs
+                | Intrinsic::Ffsll
         )
     }
 
@@ -281,8 +420,21 @@ impl Intrinsic {
     pub fn is_bit_unary_64(self) -> bool {
         matches!(
             self,
-            Intrinsic::Clzll | Intrinsic::Ctzll | Intrinsic::Popcountll
+            Intrinsic::Clzll
+                | Intrinsic::Ctzll
+                | Intrinsic::Popcountll
+                | Intrinsic::Clrsbll
+                | Intrinsic::Parityll
+                | Intrinsic::Ffsll
         )
+    }
+
+    /// Count-leading-redundant-sign-bits forms. Unlike the other
+    /// bit-count builtins these take a signed operand (the sign bit
+    /// drives the count), so the argument is sign-extended, not zero-
+    /// extended.
+    pub fn is_clrsb(self) -> bool {
+        matches!(self, Intrinsic::Clrsb | Intrinsic::Clrsbll)
     }
 
     /// Unary FP math intrinsics: one floating argument, a floating

@@ -51,17 +51,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<bump>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	0x8(%rdi), %rax
-               	incq	%rax
-               	movq	%rax, 0x8(%rdi)
-               	callq	<addr>
-               	xorq	%rax, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -76,14 +65,23 @@ Disassembly of section .text:
                	popq	%rdx
                	leaq	-0x10(%rbp), %rdi
                	movabsq	$0x3ff8000000000000, %rsi # imm = 0x3FF8000000000000
+               	movq	0x8(%rdi), %rax
+               	incq	%rax
+               	movq	%rax, 0x8(%rdi)
                	movq	%rsi, %xmm0
                	callq	<addr>
                	leaq	-0x10(%rbp), %rdi
                	movabsq	$0x4004000000000000, %rsi # imm = 0x4004000000000000
+               	movq	0x8(%rdi), %rax
+               	incq	%rax
+               	movq	%rax, 0x8(%rdi)
                	movq	%rsi, %xmm0
                	callq	<addr>
                	leaq	-0x10(%rbp), %rdi
                	movabsq	$0x400c000000000000, %rsi # imm = 0x400C000000000000
+               	movq	0x8(%rdi), %rax
+               	incq	%rax
+               	movq	%rax, 0x8(%rdi)
                	movq	%rsi, %xmm0
                	callq	<addr>
                	leaq	-0x10(%rbp), %rax

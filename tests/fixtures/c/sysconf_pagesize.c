@@ -1,15 +1,14 @@
 // sysconf(_SC_PAGESIZE) must return the system page size. The numeric
 // _SC_PAGESIZE selector differs between Darwin (29) and Linux (30); a
 // wrong value makes glibc/Darwin return a garbage result, which breaks
-// callers that align to the page size (sqlite's memory-mapped I/O). The
+// callers that align to the page size (e.g. memory-mapped I/O). The
 // page size is a positive power of two -- 4096 on Linux, 16384 on macOS
 // arm64.
 //
 // The full sysconf(3) selector table must be present, not just the few
-// selectors a given demo happened to need: CPython builds os.sysconf_names
-// from a table whose entries are each gated on `#ifdef _SC_*`, so a
-// missing selector silently drops the name and os.sysconf('SC_IOV_MAX')
-// raises ValueError. asyncio probes _SC_IOV_MAX at import time.
+// selectors a given program happened to need: code that builds a name
+// table whose entries are each gated on `#ifdef _SC_*` silently drops a
+// name when a selector is missing, so a later lookup of that name fails.
 #include <unistd.h>
 
 #if !defined(_SC_ARG_MAX) || !defined(_SC_CHILD_MAX) || \
@@ -21,8 +20,8 @@
 #error "sysconf selector table incomplete"
 #endif
 
-// confstr(3) and pathconf(3) selectors share the same table machinery in
-// CPython (os.confstr_names / os.pathconf_names) and the same header gap.
+// confstr(3) and pathconf(3) selectors share the same table machinery and
+// the same header gap.
 #if !defined(_CS_PATH) || !defined(_PC_LINK_MAX) || \
     !defined(_PC_NAME_MAX) || !defined(_PC_PATH_MAX)
 #error "confstr/pathconf selector table incomplete"

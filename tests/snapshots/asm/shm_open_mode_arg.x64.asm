@@ -67,6 +67,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movslq	%ebx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -81,3 +82,4 @@ Disassembly of section .text:
                	movl	$0x3, %ebx
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

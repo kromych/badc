@@ -10,13 +10,11 @@
 // AST went missing and the walker emitted no code for the
 // declaration's initializer.
 //
-// The shape sits behind lua's `correctstack`:
-// `L->top.p = L->top.p - oldstack + newstack;` lowers to
-// `(L->top.p - oldstack) + newstack`. Without the fix the
+// The shape arises in stack-relocation code:
+// `top = top - oldstack + newstack;` lowers to
+// `(top - oldstack) + newstack`. Without the fix the
 // reallocated-stack adjustment was a no-op and every
-// downstream lua C API call read its stack indices against
-// the unrelocated stack -- the `idx <= ci->top.p -
-// (ci->func.p + 1)` assertion fired on the first push.
+// downstream index read against the unrelocated stack.
 
 #include <stdio.h>
 

@@ -291,6 +291,81 @@ fn environ_populated_through_runtime() {
     );
 }
 
+/// A `static` constructor runs before `main`: it sets a global `main`
+/// returns, so the exit code is non-zero only if the constructor ran
+/// first. Exercises the full link path (runtime.c walks the linker's
+/// `.init_array`), not the self-contained `emit_native` stub.
+#[test]
+fn constructor_runs_before_main() {
+    use crate::{Compiler, NativeOptions, Target};
+    let program = Compiler::new(super::with_prelude(
+        "static int g;\n\
+         __attribute__((constructor)) static void ctor(void) { g = 42; }\n\
+         int main(void) { return g; }\n",
+    ))
+    .compile()
+    .expect("compile constructor program");
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link with runtime");
+    let path = unique_temp_path("badc-ctor", "run");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec constructor binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(42),
+        "the constructor must run before main and set the global",
+    );
+}
+
+/// Constructor priority ordering plus a destructor firing at exit.
+/// Prioritized constructors run in ascending priority, unprioritized
+/// last; the destructor runs on the atexit chain after main. The
+/// stdout sequence pins the whole order.
+#[test]
+fn constructor_priority_and_destructor_order() {
+    use crate::{Compiler, NativeOptions, Target};
+    let program = Compiler::new(super::with_prelude(
+        "#include <stdio.h>\n\
+         __attribute__((constructor(102))) static void c2(void) { printf(\"c2\\n\"); }\n\
+         __attribute__((constructor(101))) static void c1(void) { printf(\"c1\\n\"); }\n\
+         __attribute__((constructor)) static void c3(void) { printf(\"c3\\n\"); }\n\
+         __attribute__((destructor)) static void d1(void) { printf(\"d1\\n\"); }\n\
+         int main(void) { printf(\"main\\n\"); return 0; }\n",
+    ))
+    .compile()
+    .expect("compile ctor/dtor program");
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link with runtime");
+    let path = unique_temp_path("badc-ctor-order", "run");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec ctor/dtor binary");
+    let _ = std::fs::remove_file(&path);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        stdout, "c1\nc2\nc3\nmain\nd1\n",
+        "constructors run priority-ascending then unprioritized, main, then the destructor at exit",
+    );
+}
+
 // ---- Fixture parity. Mirror of the `fixture_parity` test in
 //      `super::native`, against the same fixture set so a drift in
 //      either backend shows up as a Linux-specific failure. ----
@@ -321,11 +396,13 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("vla_scope_reclaim_loop.c", 0),
     ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
+    ("compound_literal_struct_field.c", 0),
     ("goto.c", 5),
     ("switch_statement.c", 25),
     ("switch_binary_search.c", 0),
     ("switch_jump_table_dense.c", 0),
     ("switch_jump_table_sparse_kept.c", 0),
+    ("switch_jumptable_dead_branch_prune.c", 12),
     ("switch_jump_table_phi_join.c", 0),
     ("branch_relaxation.c", 21),
     ("float_register_resident.c", 45),
@@ -355,6 +432,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("do_while.c", 5),
     ("break_continue.c", 4),
     ("for_loop.c", 10),
+    ("for_init_stmt_expr_nested_stmt.c", 6),
     ("layout_bottom_test_loop.c", 45),
     ("layout_nested_loops.c", 27),
     ("layout_goto_block_addr.c", 16),
@@ -419,6 +497,8 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("dead_local_load_frame_elide.c", 0),
     ("narrow_param_entry_extend.c", 0),
     ("qsort_scan_extend_dedup.c", 0),
+    ("tailcall_return_extension.c", 0),
+    ("fnptr_array_call.c", 0),
     ("call_arg_extend_drop.c", 0),
     ("indirect_call_narrow_scalar_args.c", 0),
     ("indirect_call_ten_scalar_args.c", 0),
@@ -589,6 +669,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("flex_array_member_static_init.c", 0),
+    ("attribute_cleanup.c", 0),
     ("array_compound_literal_static_init.c", 0),
     ("const_address_cast_and_arith.c", 0),
     ("const_conditional_address_init.c", 0),
@@ -684,6 +765,8 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("fn_type_typedef_cast.c", 0),
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
+    ("packed_anon_union_layout.c", 0),
+    ("packed_member_alignment.c", 0),
     ("builtin_trap.c", 0),
     ("struct_multi_byval.c", 0),
     ("struct_arg_two_eightbyte.c", 0),
@@ -749,6 +832,11 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("nested_designator_string_member.c", 0),
     ("union_member_unbraced_init.c", 0),
     ("inline_multi_block_result_forward.c", 10),
+    ("inline_multi_block_only_caller.c", 42),
+    ("inline_nonleaf_const_switch.c", 0),
+    ("inline_multi_block_phi_caller.c", 16),
+    ("inline_const_array_field_nonnull.c", 43),
+    ("inline_noreturn_branch_single_return.c", 42),
     ("sxtw_fold_source_liveness.c", 18),
     ("data_reloc_one_past_end.c", 10),
     ("variadic_libc_fnptr_static_init.c", 0),

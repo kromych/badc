@@ -48,6 +48,11 @@ const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
 const SHT_NOTE: u32 = 7;
 const SHT_NOBITS: u32 = 8;
+// SHT_INIT_ARRAY / SHT_FINI_ARRAY (ELF gABI): arrays of function
+// pointers a C library runs before / after `main`. Entries are
+// resolved by a paired `.rela.init_array` / `.rela.fini_array`.
+const SHT_INIT_ARRAY: u32 = 14;
+const SHT_FINI_ARRAY: u32 = 15;
 
 // Vendor note types under namesz="badc\0". Standard ELF note
 // shape (ELF gABI, section 5): each entry is (namesz, descsz,
@@ -122,7 +127,11 @@ const SHF_INFO_LINK: u64 = 0x40;
 const R_X86_64_64: u32 = 1;
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
+const R_X86_64_GOTPCREL: u32 = 9;
 const R_X86_64_32: u32 = 10;
+// Local-exec TLS: the linker writes the (negative, variant-2) TP-relative
+// offset of the symbol into the `add r64, imm32` immediate.
+const R_X86_64_TPOFF32: u32 = 23;
 
 // AArch64 reloc types (ELF for the ARM 64-bit architecture, table 5-1).
 const R_AARCH64_ABS64: u32 = 257;
@@ -130,6 +139,17 @@ const R_AARCH64_ABS32: u32 = 258;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
+// GOT-indirect page + offset: address-taking an undefined external symbol
+// goes through the GOT so the object links into a PIE / shared object where
+// the symbol binds at run time (a direct ADR_PREL page relocation is only
+// valid for a symbol resolved within the same image).
+const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
+const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
+// Local-exec TLS pair over the two-`add` sequence: the linker splits the
+// TP-relative offset (variant-1, 16-byte TCB bias included) into the
+// shifted high and low 12-bit immediates.
+const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
+const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;
@@ -138,6 +158,7 @@ const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
 const STT_FILE: u8 = 4;
 const STT_SECTION: u8 = 3;
+const STT_TLS: u8 = 6;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
 
@@ -248,6 +269,90 @@ fn e_machine_for(machine: Machine) -> u16 {
     }
 }
 
+/// One `.init_array` / `.fini_array` section plus its companion
+/// `.rela.*`: a group of constructor / destructor pointers sharing a
+/// priority. The writer appends the pair after the fixed sections.
+struct InitArraySection {
+    name: String,
+    rela_name: String,
+    sh_type: u32,
+    /// Entry count -- each is an 8-byte function pointer, so the
+    /// section's byte size is `count * 8`.
+    count: usize,
+    rela: Vec<u8>,
+}
+
+/// Group `init_funcs` by (destructor?, priority) into `.init_array` /
+/// `.fini_array` sections, building each group's `.rela` payload that
+/// binds slot `i` to its function symbol. Prioritized groups get the
+/// GNU `.init_array.NNNNN` name; the bare form carries the rest.
+fn build_init_array_sections(
+    init_funcs: &[crate::c5::program::InitFunc],
+    func_symidx_by_name: &alloc::collections::BTreeMap<String, u32>,
+    rtype_abs64: u32,
+) -> Result<Vec<InitArraySection>, C5Error> {
+    if init_funcs.is_empty() {
+        return Ok(Vec::new());
+    }
+    // Deterministic group order: constructors before destructors,
+    // prioritized (ascending) before unprioritized. Section names
+    // carry the ordering a linker actually sorts on; this is only for
+    // reproducible output. Within a group, source order is preserved.
+    let mut groups: alloc::collections::BTreeMap<(bool, bool, u32), Vec<u32>> =
+        alloc::collections::BTreeMap::new();
+    for f in init_funcs {
+        let sym_idx = *func_symidx_by_name.get(&f.name).ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "elf_reloc: init/fini function `{}` has no .symtab entry",
+                f.name
+            )))
+        })?;
+        let key = (
+            f.is_destructor,
+            f.priority.is_none(),
+            f.priority.unwrap_or(0),
+        );
+        groups.entry(key).or_default().push(sym_idx);
+    }
+    let mut out = Vec::with_capacity(groups.len());
+    for ((is_dtor, no_prio, prio), sym_idxs) in groups {
+        let base = if is_dtor {
+            ".fini_array"
+        } else {
+            ".init_array"
+        };
+        let name = if no_prio {
+            base.to_string()
+        } else {
+            format!("{base}.{prio:05}")
+        };
+        let rela_name = format!(".rela{name}");
+        let mut rela = Vec::with_capacity(sym_idxs.len() * ELF64_RELA_SIZE);
+        for (i, sym_idx) in sym_idxs.iter().enumerate() {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: (i * 8) as u64,
+                    r_info: ((*sym_idx as u64) << 32) | rtype_abs64 as u64,
+                    r_addend: 0,
+                },
+            );
+        }
+        out.push(InitArraySection {
+            name,
+            rela_name,
+            sh_type: if is_dtor {
+                SHT_FINI_ARRAY
+            } else {
+                SHT_INIT_ARRAY
+            },
+            count: sym_idxs.len(),
+            rela,
+        });
+    }
+    Ok(out)
+}
+
 /// Byte size of a defined data global, for the symbol table's
 /// `st_size`. Pointers and scalars resolve by width (ELF targets are
 /// LP64, so `long` is 8); an array multiplies by its element count. A
@@ -354,7 +459,11 @@ pub(super) fn write_relocatable(
     let has_tls = !program.tls_data.is_empty();
     const SHIDX_TDATA: u16 = 15;
     const SHIDX_TBSS: u16 = 16;
-    let num_sections: usize = if has_tls { 17 } else { 15 };
+    // Base section count (null + the fixed sections, plus the two TLS
+    // sections when present). Each `.init_array` / `.fini_array` group
+    // adds two more (the array + its `.rela`), counted once the groups
+    // are known below.
+    let base_sections: usize = if has_tls { 17 } else { 15 };
 
     // Strtab + symtab construction. The file symbol leads
     // (binding LOCAL, type FILE); per-function symbols follow
@@ -402,6 +511,28 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
+    // Local STT_TLS anchors at each TLS section's start carry the
+    // local-exec relocations of `static _Thread_local` accesses
+    // (anchor + addend). STT_SECTION anchors would work for the
+    // arithmetic but linkers require a TLS-typed symbol on TLS
+    // relocations; named globals get their own entries below.
+    let (tdata_sec_sym, tbss_sec_sym) = if has_tls {
+        let td = symbols.len() as u64;
+        symbols.push(Elf64Sym {
+            st_info: pack_sym_info(STB_LOCAL, STT_TLS),
+            st_shndx: SHIDX_TDATA,
+            ..Default::default()
+        });
+        let tb = symbols.len() as u64;
+        symbols.push(Elf64Sym {
+            st_info: pack_sym_info(STB_LOCAL, STT_TLS),
+            st_shndx: SHIDX_TBSS,
+            ..Default::default()
+        });
+        (td, tb)
+    } else {
+        (0, 0)
+    };
     // `first_global` is set after the static-linkage function
     // symbols are pushed below; ELF requires every LOCAL symbol
     // to precede every GLOBAL one and `.symtab`'s `sh_info`
@@ -623,6 +754,38 @@ pub(super) fn write_relocatable(
     for name in &user_extern_data_names {
         all_names.push(*name);
     }
+    // Standard TLS symbols + local-exec relocations are the ELF interop
+    // surface for an external linker; they describe the variant-1/2
+    // `tp`-relative access models, which only the Linux targets use. A
+    // Windows-target unit reuses this container but its TLS surface is
+    // the PE model (TEB + `_tls_index`), carried by the note channel.
+    let elf_tls_interop = matches!(
+        target,
+        super::Target::LinuxX64 | super::Target::LinuxAarch64
+    );
+    // Cross-unit `extern _Thread_local` names referenced by TLS access
+    // fixups, deduplicated; each surfaces as an undefined STT_TLS symbol
+    // the local-exec relocations bind against.
+    let mut extern_tls_names: Vec<&str> = Vec::new();
+    if elf_tls_interop {
+        for f in &build.elf_tpoff_fixups {
+            if let super::ElfTpoffTarget::Extern(name) = &f.target
+                && !extern_tls_names.contains(&name.as_str())
+            {
+                extern_tls_names.push(name.as_str());
+            }
+        }
+    }
+    let defined_tls_globals_start = all_names.len();
+    if elf_tls_interop {
+        for (name, _, _) in &defined_tls_globals {
+            all_names.push(*name);
+        }
+    }
+    let extern_tls_names_start = all_names.len();
+    for name in &extern_tls_names {
+        all_names.push(*name);
+    }
     let prologue_end_names_start = all_names.len();
     for s in &prologue_end_names {
         all_names.push(s.as_str());
@@ -653,10 +816,17 @@ pub(super) fn write_relocatable(
             .unwrap_or(build.text.len());
         Ok((lo, hi))
     };
+    // Function name -> `.symtab` index, for the `.init_array` /
+    // `.fini_array` relocations to reference each constructor /
+    // destructor function symbol. Covers both static (STB_LOCAL) and
+    // external (STB_GLOBAL) functions.
+    let mut func_symidx_by_name: alloc::collections::BTreeMap<String, u32> =
+        alloc::collections::BTreeMap::new();
     // STB_LOCAL function symbols. Emitted before `first_global`
     // so the LOCAL block is contiguous as ELF requires.
     for &i in &local_func_idxs {
         let (lo, hi) = func_extent(i)?;
+        func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[1 + i],
             st_info: pack_sym_info(STB_LOCAL, STT_FUNC),
@@ -684,6 +854,7 @@ pub(super) fn write_relocatable(
     // STB_GLOBAL function symbols.
     for &i in &global_func_idxs {
         let (lo, hi) = func_extent(i)?;
+        func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[1 + i],
             st_info: pack_sym_info(STB_GLOBAL, STT_FUNC),
@@ -783,6 +954,45 @@ pub(super) fn write_relocatable(
         });
     }
 
+    // Defined `_Thread_local` globals: STB_GLOBAL + STT_TLS against
+    // `.tdata` / `.tbss` with a section-relative value, so sibling
+    // units' local-exec relocations resolve through the merged TLS
+    // block. The unit's block is `.tdata` bytes then `.tbss` zero
+    // fill; an offset past the initialized bytes is `.tbss`-relative.
+    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
+    for (i, (_, off, size)) in defined_tls_globals
+        .iter()
+        .enumerate()
+        .take_while(|_| elf_tls_interop)
+    {
+        let (shndx, value) = if *off >= tls_init_len {
+            (SHIDX_TBSS, off - tls_init_len)
+        } else {
+            (SHIDX_TDATA, *off)
+        };
+        symbols.push(Elf64Sym {
+            st_name: name_offs[defined_tls_globals_start + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_TLS),
+            st_shndx: shndx,
+            st_value: value as u64,
+            st_size: *size,
+            ..Default::default()
+        });
+    }
+
+    // Cross-unit `extern _Thread_local` imports: STB_GLOBAL + STT_TLS +
+    // SHN_UNDEF.
+    let mut extern_tls_sym_idx: Vec<usize> = Vec::with_capacity(extern_tls_names.len());
+    for (i, _name) in extern_tls_names.iter().enumerate() {
+        extern_tls_sym_idx.push(symbols.len());
+        symbols.push(Elf64Sym {
+            st_name: name_offs[extern_tls_names_start + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_TLS),
+            st_shndx: SHN_UNDEF,
+            ..Default::default()
+        });
+    }
+
     // Build the `.rela.text` payload now that import symbols
     // have their final indices.
     let machine_for_rela = machine;
@@ -826,16 +1036,16 @@ pub(super) fn write_relocatable(
         // An address-of site (`&strcmp`, `Inst::ImmExtCode`) is a
         // page-relative address materialization, not a control
         // transfer: `lea reg, [rip+disp32]` on x86_64, `adrp + add`
-        // on aarch64. It uses the same relocation shape as a data
-        // reference but against the import's external symbol; the
-        // linker's PLT pass resolves the symbol to its shared stub.
+        // on aarch64. The import binds externally, so take its address
+        // through the GOT (`adrp :got: + ldr`); an external linker resolves
+        // it against the shared library and badc's own linker relaxes it to
+        // the import's PLT stub. The `add` half is rewritten to `ldr` below.
         if site.is_addr {
-            emit_addr_fixup_relocs(
+            emit_got_ref_relocs(
                 machine_for_rela,
                 &mut rela_bytes,
                 site.instr_offset as u64,
                 sym_idx,
-                0,
             );
             continue;
         }
@@ -860,6 +1070,67 @@ pub(super) fn write_relocatable(
             r_addend,
         };
         write_struct(&mut rela_bytes, &rela);
+    }
+
+    // TLS access sites. Local-exec relocations let an external linker
+    // rebase each unit's baked single-unit offset against the merged
+    // TLS block: `static _Thread_local` accesses anchor on the TLS
+    // section symbol plus the section-relative addend, named externs on
+    // their undefined STT_TLS symbol. aarch64 patches the two-`add`
+    // pair (`tprel_hi12` at the fixup, `tprel_lo12_nc` on the following
+    // word); x86_64 patches the `add` imm32 with the negative TPOFF.
+    for f in build
+        .elf_tpoff_fixups
+        .iter()
+        .take_while(|_| elf_tls_interop)
+    {
+        let (sym_idx, r_addend) = match &f.target {
+            super::ElfTpoffTarget::Extern(name) => {
+                let pos = extern_tls_names
+                    .iter()
+                    .position(|n| *n == name.as_str())
+                    .expect("extern_tls_names contains every fixup's symbol name");
+                (extern_tls_sym_idx[pos] as u64, 0i64)
+            }
+            super::ElfTpoffTarget::Local(off) => {
+                let off = *off as i64;
+                if off >= tls_init_len {
+                    (tbss_sec_sym, off - tls_init_len)
+                } else {
+                    (tdata_sec_sym, off)
+                }
+            }
+        };
+        match machine_for_rela {
+            Machine::X86_64 => {
+                write_struct(
+                    &mut rela_bytes,
+                    &Elf64Rela {
+                        r_offset: f.imm_offset as u64,
+                        r_info: (sym_idx << 32) | (R_X86_64_TPOFF32 as u64),
+                        r_addend,
+                    },
+                );
+            }
+            Machine::Aarch64 => {
+                write_struct(
+                    &mut rela_bytes,
+                    &Elf64Rela {
+                        r_offset: f.imm_offset as u64,
+                        r_info: (sym_idx << 32) | (R_AARCH64_TLSLE_ADD_TPREL_HI12 as u64),
+                        r_addend,
+                    },
+                );
+                write_struct(
+                    &mut rela_bytes,
+                    &Elf64Rela {
+                        r_offset: f.imm_offset as u64 + 4,
+                        r_info: (sym_idx << 32) | (R_AARCH64_TLSLE_ADD_TPREL_LO12_NC as u64),
+                        r_addend,
+                    },
+                );
+            }
+        }
     }
 
     // Data-segment references (string literals / globals). The
@@ -889,12 +1160,14 @@ pub(super) fn write_relocatable(
             .position(|n| *n == r.symbol_name.as_str())
             .expect("user_extern_data_names contains every ref's name");
         let sym_idx = user_extern_data_sym_idx[pos] as u64;
-        emit_addr_fixup_relocs(
+        // Address-of an undefined external symbol goes through the GOT (the
+        // symbol binds at run time in a PIE / shared object). The paired `add`
+        // in `.text` is rewritten to an `ldr` below.
+        emit_got_ref_relocs(
             machine_for_rela,
             &mut rela_bytes,
             r.instr_offset as u64,
             sym_idx,
-            0,
         );
     }
 
@@ -921,6 +1194,23 @@ pub(super) fn write_relocatable(
         })
         .collect();
 
+    // `.init_array` / `.fini_array` groups. C99 has no such attribute;
+    // GNU practice (matched by every mainstream toolchain) lowers each
+    // `__attribute__((constructor))` into an `SHT_INIT_ARRAY` pointer
+    // and each `((destructor))` into `SHT_FINI_ARRAY`. An explicit
+    // priority rides in the section name (`.init_array.NNNNN`, 5-digit
+    // per GNU) so a system linker's `SORT_BY_INIT_PRIORITY` orders
+    // across units; unprioritized entries land in the bare
+    // `.init_array` the script places last. Entries sharing a group
+    // keep source order.
+    let rtype_abs64_init = match machine_for_rela {
+        Machine::X86_64 => R_X86_64_64,
+        Machine::Aarch64 => R_AARCH64_ABS64,
+    };
+    let init_sections =
+        build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64_init)?;
+    let num_sections: usize = base_sections + 2 * init_sections.len();
+
     // Section name table. Index map below mirrors the SHIDX_*
     // constants above (one entry per non-null section).
     let mut shstrtab_names: Vec<&str> = alloc::vec![
@@ -945,6 +1235,13 @@ pub(super) fn write_relocatable(
     if has_tls {
         shstrtab_names.push(".tdata");
         shstrtab_names.push(".tbss");
+    }
+    // `.init_array*` / `.fini_array*` names and their `.rela.*`
+    // companions, appended last so the fixed and TLS indices stay put.
+    let init_names_start = shstrtab_names.len();
+    for s in &init_sections {
+        shstrtab_names.push(s.name.as_str());
+        shstrtab_names.push(s.rela_name.as_str());
     }
     let (shstrtab_bytes, shstrtab_offs) = build_strtab(&shstrtab_names);
 
@@ -998,10 +1295,28 @@ pub(super) fn write_relocatable(
     let mut sh: Vec<Elf64Shdr> = Vec::with_capacity(num_sections);
     sh.push(Elf64Shdr::default()); // SHN_UNDEF
 
-    // .text
+    // .text -- extern-address materializations become GOT loads (see
+    // `rewrite_extern_addr_loads_to_got`). Both cross-TU data/function
+    // references (`user_extern_data_refs`) and import address-of sites
+    // (`reloc_call_sites` with `is_addr`) go through the GOT. Same length as
+    // `build.text`.
+    let mut got_site_offsets: alloc::vec::Vec<usize> = build
+        .user_extern_data_refs
+        .iter()
+        .map(|r| r.instr_offset)
+        .collect();
+    got_site_offsets.extend(
+        build
+            .reloc_call_sites
+            .iter()
+            .filter(|s| s.is_addr)
+            .map(|s| s.instr_offset),
+    );
+    let text_body =
+        rewrite_extern_addr_loads_to_got(machine_for_rela, &build.text, &got_site_offsets);
     let text_off = round_up(out.len() as u64, 16);
     out.resize(text_off as usize, 0);
-    out.extend_from_slice(&build.text);
+    out.extend_from_slice(&text_body);
     sh.push(Elf64Shdr {
         sh_name: shstrtab_offs[0],
         sh_type: SHT_PROGBITS,
@@ -1352,6 +1667,43 @@ pub(super) fn write_relocatable(
     let _ = SHIDX_DEBUG_ABBREV;
     let _ = SHIDX_DEBUG_LINE;
     let _ = SHIDX_RELA_DEBUG_LINE;
+
+    // `.init_array` / `.fini_array` groups. Each is a zero-filled array
+    // of 8-byte pointers (the paired `.rela.*` binds each slot to its
+    // function) followed immediately by that `.rela.*` section, whose
+    // `sh_info` names the array it patches. Appended last so every
+    // fixed and TLS section index is unchanged.
+    for (k, s) in init_sections.iter().enumerate() {
+        let array_shndx = sh.len() as u32;
+        let arr_off = round_up(out.len() as u64, 8);
+        out.resize(arr_off as usize, 0);
+        out.resize(arr_off as usize + s.count * 8, 0);
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[init_names_start + 2 * k],
+            sh_type: s.sh_type,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_offset: arr_off,
+            sh_size: (s.count * 8) as u64,
+            sh_addralign: 8,
+            sh_entsize: 8,
+            ..Default::default()
+        });
+        let rela_off = round_up(out.len() as u64, 8);
+        out.resize(rela_off as usize, 0);
+        out.extend_from_slice(&s.rela);
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[init_names_start + 2 * k + 1],
+            sh_type: SHT_RELA,
+            sh_flags: SHF_INFO_LINK,
+            sh_offset: rela_off,
+            sh_size: s.rela.len() as u64,
+            sh_link: SHIDX_SYMTAB as u32,
+            sh_info: array_shndx,
+            sh_addralign: 8,
+            sh_entsize: ELF64_RELA_SIZE as u64,
+            ..Default::default()
+        });
+    }
 
     debug_assert_eq!(sh.len(), num_sections);
 
@@ -1715,6 +2067,84 @@ fn emit_addr_fixup_relocs(
     }
 }
 
+/// Emit the GOT-indirect relocs for address-taking an undefined external
+/// symbol: `R_AARCH64_ADR_GOT_PAGE` at the `adrp` and
+/// `R_AARCH64_LD64_GOT_LO12_NC` at the paired `ldr` on aarch64;
+/// `R_X86_64_GOTPCREL` at the disp32 of the rewritten `mov` on x86_64.
+/// The direct-address instruction the codegen left is rewritten to the
+/// GOT load by [`rewrite_extern_addr_loads_to_got`].
+fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, sym_idx: u64) {
+    match machine {
+        Machine::Aarch64 => {
+            let page = Elf64Rela {
+                r_offset: instr_offset,
+                r_info: (sym_idx << 32) | R_AARCH64_ADR_GOT_PAGE as u64,
+                r_addend: 0,
+            };
+            let lo12 = Elf64Rela {
+                r_offset: instr_offset + 4,
+                r_info: (sym_idx << 32) | R_AARCH64_LD64_GOT_LO12_NC as u64,
+                r_addend: 0,
+            };
+            write_struct(out, &page);
+            write_struct(out, &lo12);
+        }
+        Machine::X86_64 => {
+            // `mov reg, [rip + disp32]` (rewritten from the codegen's
+            // `lea`): the disp32 sits after REX + opcode + modrm, and
+            // resolves as `G + GOT + A - P` with the end-of-field `-4`.
+            let rela = Elf64Rela {
+                r_offset: instr_offset + 3,
+                r_info: (sym_idx << 32) | R_X86_64_GOTPCREL as u64,
+                r_addend: -4,
+            };
+            write_struct(out, &rela);
+        }
+    }
+}
+
+/// Rewrite each external-address materialization into the GOT-load form
+/// (paired with the relocs from [`emit_got_ref_relocs`]): the `add` half
+/// of an aarch64 `adrp + add` becomes `ldr`, and an x86_64 rip-relative
+/// `lea` becomes `mov` (opcode 0x8d -> 0x8b, same REX/modrm/disp32).
+/// Returns a copy of `.text` with the rewrites applied; the shared
+/// `build.text` is untouched so the JIT / direct-image paths keep the
+/// direct form.
+fn rewrite_extern_addr_loads_to_got(
+    machine: Machine,
+    text: &[u8],
+    instr_offsets: &[usize],
+) -> alloc::vec::Vec<u8> {
+    let mut body = text.to_vec();
+    match machine {
+        Machine::Aarch64 => {
+            for &adrp_offset in instr_offsets {
+                let off = adrp_offset + 4; // the `add` following the `adrp`
+                if off + 4 > body.len() {
+                    continue;
+                }
+                let add =
+                    u32::from_le_bytes([body[off], body[off + 1], body[off + 2], body[off + 3]]);
+                let rd = add & 0x1f;
+                let rn = (add >> 5) & 0x1f;
+                // `ldr Xrd, [Xrn, #0]` (0xF9400000 | Rn<<5 | Rt); the
+                // :got_lo12: reloc fills the scaled imm12.
+                let ldr = 0xF940_0000u32 | (rn << 5) | rd;
+                body[off..off + 4].copy_from_slice(&ldr.to_le_bytes());
+            }
+        }
+        Machine::X86_64 => {
+            for &lea_offset in instr_offsets {
+                let op = lea_offset + 1; // REX prefix, then the opcode byte
+                if op < body.len() && body[op] == 0x8d {
+                    body[op] = 0x8b;
+                }
+            }
+        }
+    }
+    body
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1771,6 +2201,7 @@ mod tests {
             synthetic_ssa_funcs: Vec::new(),
             user_ssa_funcs: Vec::new(),
             extern_function_imports: Vec::new(),
+            init_funcs: Vec::new(),
         }
     }
 
@@ -1782,6 +2213,7 @@ mod tests {
             data: Vec::new(),
             data_align: 8,
             bss_size: 0,
+            init_fini_arrays: Default::default(),
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),

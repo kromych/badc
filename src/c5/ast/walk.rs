@@ -13,7 +13,7 @@ use alloc::string::String;
 use super::super::codegen::Target;
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
-    is_volatile_ty, load_kind, strip_unsigned, struct_ptr_depth,
+    is_vector_ty, is_volatile_ty, load_kind, strip_unsigned, struct_ptr_depth,
 };
 use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind};
 use super::super::symbol::Symbol;
@@ -121,6 +121,7 @@ pub(crate) fn walk_function(
         b.set_ret_agg(idx);
     }
     b.set_ret_is_fp(is_floating_scalar(return_ty));
+    b.set_ret_type_tag(return_ty);
     // A function returning > 16 bytes saves the incoming x8 result
     // pointer into a dedicated local for the codegen prologue; the
     // `return` lowering writes the value through it.
@@ -490,6 +491,7 @@ struct Walker<'a> {
     #[allow(clippy::type_complexity)]
     switch_dispatch: alloc::vec::Vec<(
         alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
+        alloc::vec::Vec<(i64, i64, super::super::ir::BlockId)>,
         Option<super::super::ir::BlockId>,
     )>,
     /// True when the function's declared return type is a struct
@@ -717,10 +719,81 @@ impl<'a> Walker<'a> {
             0
         }
     }
+    /// True when `ty` is the GCC 128-bit `__int128` as a value (not a
+    /// pointer to one). It shares the struct machinery but a cast to or
+    /// from a scalar converts the 128-bit value, unlike a plain struct
+    /// whose value in a scalar context is just its address.
+    fn is_int128_value_ty(&self, ty: i64) -> bool {
+        let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        if stripped < STRUCT_BASE || struct_ptr_depth(ty) != 0 {
+            return false;
+        }
+        let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+        self.structs.get(id).is_some_and(|s| s.name == "__int128")
+    }
     /// True when the expression's type tag carries the volatile
     /// qualifier (C99 6.7.3); `false` for node shapes without a type.
     fn expr_is_volatile(&self, id: ExprId) -> bool {
         expr_ty(self.ast.expr(id)).is_some_and(is_volatile_ty)
+    }
+
+    /// Lower a bitwise operator (`^`/`&`/`|`) on two same-width GCC vector
+    /// values into a result temporary. Bitwise ops carry no value between
+    /// lanes, so the byte block is combined in the widest chunks that fit
+    /// (8/4/2/1) regardless of the element width. Both operands are aggregate
+    /// rvalues (their address lands on the accumulator); the result is a fresh
+    /// synthetic aggregate whose address is returned, matching how a struct
+    /// rvalue is produced.
+    fn walk_vector_bitwise(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        let lhs_addr = self.walk_expr_rvalue(b, lhs)?;
+        let rhs_addr = self.walk_expr_rvalue(b, rhs)?;
+        let size = self.struct_size(ty);
+        let slot = b.alloc_synthetic_struct(size);
+        let dst = b.local_addr(slot);
+        // Widest-chunk cover: (width, load kind, store kind).
+        const CHUNKS: [(i64, LoadKind, StoreKind); 4] = [
+            (8, LoadKind::I64, StoreKind::I64),
+            (4, LoadKind::U32, StoreKind::I32),
+            (2, LoadKind::U16, StoreKind::I16),
+            (1, LoadKind::U8, StoreKind::I8),
+        ];
+        let mut off = 0;
+        while off < size {
+            let remaining = size - off;
+            let (w, lk, sk) = CHUNKS
+                .iter()
+                .find(|(w, ..)| *w <= remaining)
+                .copied()
+                .unwrap();
+            let la = if off == 0 {
+                lhs_addr
+            } else {
+                b.binop_imm(BinOp::Add, lhs_addr, off)
+            };
+            let ra = if off == 0 {
+                rhs_addr
+            } else {
+                b.binop_imm(BinOp::Add, rhs_addr, off)
+            };
+            let da = if off == 0 {
+                dst
+            } else {
+                b.binop_imm(BinOp::Add, dst, off)
+            };
+            let a = b.load(la, lk);
+            let c = b.load(ra, lk);
+            let r = b.binop(op, a, c);
+            b.store(da, r, sk);
+            off += w;
+        }
+        Ok(dst)
     }
 
     /// Walk a statement. Returns `true` when the statement
@@ -764,28 +837,43 @@ impl<'a> Walker<'a> {
                     return Ok(true);
                 }
                 let mut v = self.walk_expr_rvalue(b, *e)?;
-                // C99 6.8.6.4 / 6.3.1.1: the returned value is converted to
-                // the function's return type. For a `char` / `short` return
-                // the ABI carries an `int`-promoted value, so a body result
-                // wider than the declared type (e.g. `(x << 8) | (x >> 8)`
-                // in a `uint16_t`-returning byte-swap) must be narrowed to
-                // the type's width here; without it the caller reads the
-                // un-narrowed bits. Integer-and-wider returns already ride
-                // the result register at full width. `_Bool` is excluded: its
-                // conversion is a boolean `!= 0` (6.3.1.2), not a width mask,
-                // and the rvalue walk already normalizes it to 0/1.
+                // C99 6.8.6.4 / 6.3.1.1: the return value is converted to the
+                // function's return type. A body evaluated in 64-bit registers
+                // can leave bits above the type width set -- a signed constant
+                // or arithmetic sign-extends past bit 31, an unsigned source
+                // zero-extends -- so a char/short/int (and LLP64 long) return
+                // is narrowed to its declared width: zero-extend when unsigned,
+                // sign-extend when signed. Same-unit callers read the result
+                // register directly and do not re-narrow. `_Bool` is excluded:
+                // 6.3.1.2 already normalized it to 0/1.
                 let stripped = self.scalar_return_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
                 let rs = type_size_bytes(self.scalar_return_ty, self.target);
                 if !is_floating_scalar(self.scalar_return_ty)
                     && !is_pointer_ty(self.scalar_return_ty)
                     && stripped != Ty::Bool as i64
-                    && (rs == 1 || rs == 2)
+                    && (rs == 1 || rs == 2 || rs == 4)
                 {
-                    if (self.scalar_return_ty & UNSIGNED_BIT) != 0 {
-                        let mask: i64 = if rs == 1 { 0xff } else { 0xffff };
+                    let unsigned = (self.scalar_return_ty & UNSIGNED_BIT) != 0;
+                    let bits = 64i64 - (rs as i64) * 8;
+                    let mask: i64 = match rs {
+                        1 => 0xff,
+                        2 => 0xffff,
+                        _ => 0xffff_ffff,
+                    };
+                    if let Some(k) = b.peek_imm(v) {
+                        // A constant is its own narrowing: fold it, and leave
+                        // the value untouched when it already fits the type.
+                        let narrowed = if unsigned {
+                            k & mask
+                        } else {
+                            (k << bits) >> bits
+                        };
+                        if narrowed != k {
+                            v = b.imm(narrowed);
+                        }
+                    } else if unsigned {
                         v = b.binop_imm(BinOp::And, v, mask);
                     } else {
-                        let bits = 64i64 - (rs as i64) * 8;
                         let shifted = b.binop_imm(BinOp::Shl, v, bits);
                         v = b.binop_imm(BinOp::Shr, shifted, bits);
                     }
@@ -804,7 +892,26 @@ impl<'a> Walker<'a> {
                 // value. The walker emits the side-effecting
                 // chain; the SSA DCE pass drops the dead final
                 // value if it has no other uses.
-                let _ = self.walk_expr_rvalue(b, *e)?;
+                let e = *e;
+                let _ = self.walk_expr_rvalue(b, e)?;
+                // A direct call to a `noreturn` function ends the
+                // block: the statements after it are unreachable
+                // (C11 6.7.4p8) and the unreachable-block prune
+                // drops them, so a dead tail's calls never reach
+                // the object. Seal with `Unreachable` (not a return),
+                // so the block is not counted as a return path -- a
+                // guard like `if (x) noreturn_fn(); return v;` stays a
+                // single-return, inlinable function.
+                if let Expr::Call { callee, .. } = self.ast.expr(e)
+                    && let Expr::Ident { sym, .. } = self.ast.expr(*callee)
+                    && self
+                        .symbols
+                        .get(*sym as usize)
+                        .is_some_and(|s| s.is_noreturn)
+                {
+                    b.unreachable();
+                    return Ok(true);
+                }
                 Ok(false)
             }
             Stmt::Compound(items) => {
@@ -860,6 +967,26 @@ impl<'a> Walker<'a> {
                 then_s,
                 else_s,
             } => {
+                // A constant controlling expression selects one branch
+                // at translation time (C99 6.8.4.1); emit only that
+                // branch so the dead branch's side effects and
+                // undefined-symbol references are never emitted. Skip
+                // the fold when the dead branch defines a label a goto
+                // or switch could target -- dropping its block would
+                // leave the jump unresolved. Matches gcc's front-end
+                // fold at -O0.
+                if let Some(c) = self.const_fold_int(*cond) {
+                    let dead = if c != 0 { *else_s } else { Some(*then_s) };
+                    if !dead.is_some_and(|s| self.stmt_defines_label(s)) {
+                        if c != 0 {
+                            return self.walk_stmt(b, *then_s);
+                        }
+                        return match *else_s {
+                            Some(else_id) => self.walk_stmt(b, else_id),
+                            None => Ok(false),
+                        };
+                    }
+                }
                 let cond_v = self.walk_cond_value(b, *cond)?;
                 let then_blk = b.new_block();
                 let after_blk = b.new_block();
@@ -1042,8 +1169,10 @@ impl<'a> Walker<'a> {
                 // loop is still reachable from the dispatcher.
                 let mut cases: alloc::vec::Vec<(i64, super::super::ir::BlockId)> =
                     alloc::vec::Vec::new();
+                let mut ranges: alloc::vec::Vec<(i64, i64, super::super::ir::BlockId)> =
+                    alloc::vec::Vec::new();
                 let mut default_blk: Option<super::super::ir::BlockId> = None;
-                self.collect_switch_cases(b, body_id, &mut cases, &mut default_blk);
+                self.collect_switch_cases(b, body_id, &mut cases, &mut ranges, &mut default_blk);
 
                 // Dispatcher: a balanced binary search over the sorted
                 // case values. Each internal node branches on `<` (one
@@ -1090,6 +1219,36 @@ impl<'a> Walker<'a> {
                     }
                     sorted.sort_by_key(|p| p.0);
                 }
+                // Range cases (`case lo ... hi`): each is dispatched by an
+                // explicit `lo <= disc <= hi` test before the single-value
+                // search, so a wide range needs no per-value expansion. The
+                // bounds convert to the promoted type exactly like the
+                // single-value labels above.
+                let (ge_op, le_op) = if disc_unsigned {
+                    (BinOp::Uge, BinOp::Ule)
+                } else {
+                    (BinOp::Ge, BinOp::Le)
+                };
+                let disc_bytes = type_size_bytes(disc_ty, self.target);
+                for &(mut lo, mut hi, blk) in &ranges {
+                    if disc_unsigned {
+                        if disc_bytes == 4 {
+                            lo = (lo as u32) as i64;
+                            hi = (hi as u32) as i64;
+                        }
+                    } else if disc_bytes <= 4 {
+                        lo = (lo as i32) as i64;
+                        hi = (hi as i32) as i64;
+                    }
+                    let ge_lo = b.binop_imm(ge_op, disc_val, lo);
+                    let hi_chk = b.new_block();
+                    let next = b.new_block();
+                    b.branch_nonzero(ge_lo, hi_chk, next);
+                    b.switch_to(hi_chk);
+                    let le_hi = b.binop_imm(le_op, disc_val, hi);
+                    b.branch_nonzero(le_hi, blk, next);
+                    b.switch_to(next);
+                }
                 let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
                 if !self.emit_switch_table(b, disc_val, &sorted, deflt) {
                     self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
@@ -1105,7 +1264,7 @@ impl<'a> Walker<'a> {
                 // bare switch, so propagate the enclosing loop's target.
                 let prev_continue = self.loop_ctx.last().map(|&(_, c)| c).unwrap_or(after_blk);
                 self.loop_ctx.push((after_blk, prev_continue));
-                self.switch_dispatch.push((cases, default_blk));
+                self.switch_dispatch.push((cases, ranges, default_blk));
                 let terminated = self.walk_stmt(b, body_id)?;
                 self.switch_dispatch.pop();
                 self.loop_ctx.pop();
@@ -1120,13 +1279,15 @@ impl<'a> Walker<'a> {
             // dispatcher can target it and a preceding statement falls
             // through into it. Outside any switch (a parser bug) it is a
             // transparent wrapper around its body.
-            Stmt::Case { val, body } => {
+            Stmt::Case { val, body, .. } => {
                 let val = *val;
                 let body_id = *body;
-                let blk = self
-                    .switch_dispatch
-                    .last()
-                    .and_then(|d| d.0.iter().find(|(v, _)| *v == val).map(|&(_, b)| b));
+                let blk = self.switch_dispatch.last().and_then(|d| {
+                    d.0.iter()
+                        .find(|(v, _)| *v == val)
+                        .map(|&(_, b)| b)
+                        .or_else(|| d.1.iter().find(|(lo, _, _)| *lo == val).map(|&(_, _, b)| b))
+                });
                 if let Some(blk) = blk {
                     if b.is_block_open() {
                         b.jmp(blk);
@@ -1137,7 +1298,7 @@ impl<'a> Walker<'a> {
             }
             Stmt::Default { body } => {
                 let body_id = *body;
-                let blk = self.switch_dispatch.last().and_then(|d| d.1);
+                let blk = self.switch_dispatch.last().and_then(|d| d.2);
                 if let Some(blk) = blk {
                     if b.is_block_open() {
                         b.jmp(blk);
@@ -1246,6 +1407,33 @@ impl<'a> Walker<'a> {
     /// block-scope compound literals (`Expr::CompoundLiteral`), both
     /// of which lower the same C99 6.7.8 / 6.5.2.5 initializer
     /// shapes into the same slot.
+    /// Store a scalar `v` of type `src_ty` into the 16-byte `__int128`
+    /// object at `dst_addr`: the source, converted to 64 bits, fills the
+    /// low half and its sign fills the high half (C99 6.3.1.3/6.3.1.8
+    /// widening). Shared by the cast, initializer, and assignment paths,
+    /// which otherwise treat the scalar as a struct-rvalue address and
+    /// copy 16 bytes from it.
+    fn store_scalar_as_int128(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        dst_addr: super::super::ir::ValueId,
+        v: super::super::ir::ValueId,
+        src_ty: i64,
+    ) {
+        let low_ty = Ty::LongLong as i64 | (src_ty & UNSIGNED_BIT);
+        let low = self.convert_scalar_value(b, v, src_ty, low_ty);
+        let store_kind = store_kind_for(low_ty, self.target);
+        b.store(dst_addr, low, store_kind);
+        let zero_extend = (src_ty & UNSIGNED_BIT) != 0 || is_pointer_ty(src_ty);
+        let high = if zero_extend {
+            b.imm(0)
+        } else {
+            b.binop_imm(BinOp::Shr, low, 63)
+        };
+        let hi_addr = b.binop_imm(BinOp::Add, dst_addr, 8);
+        b.store(hi_addr, high, store_kind);
+    }
+
     fn emit_local_init(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
@@ -1257,12 +1445,19 @@ impl<'a> Walker<'a> {
             super::super::ast::LocalInit::None => Ok(()),
             super::super::ast::LocalInit::Scalar(init_id) => {
                 let v = self.walk_expr_rvalue(b, *init_id)?;
-                // C99 6.7.8p13 struct-value initializer: copy the
-                // source's bytes into the slot via Mcpy. `v` is the
-                // source address (the walker's address-as-value
-                // routing for struct rvalues).
+                // C99 6.7.8p13 struct-value initializer: copy the source's
+                // bytes into the slot via Mcpy. `v` is the source address
+                // (the walker's address-as-value routing for struct
+                // rvalues). A scalar source of a 128-bit `__int128` slot is
+                // widened into it instead -- `v` is then a value, not an
+                // address, so an Mcpy from it would fault.
                 if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                     let dst = b.local_addr(slot);
+                    let src_ty = expr_ty(self.ast.expr(*init_id)).unwrap_or(ty);
+                    if self.is_int128_value_ty(ty) && !is_struct_ty(src_ty) {
+                        self.store_scalar_as_int128(b, dst, v, src_ty);
+                        return Ok(());
+                    }
                     let size = self.struct_size(ty);
                     b.mcpy(dst, v, size);
                     return Ok(());
@@ -1303,6 +1498,14 @@ impl<'a> Walker<'a> {
                     } else {
                         b.binop_imm(BinOp::Add, base, elem.offset)
                     };
+                    // A bitfield member: read-modify-write the storage unit
+                    // rather than a full-width store, so adjacent bitfields
+                    // in the same unit are preserved (the slot was
+                    // zero-seeded, so the field's own bits start clear).
+                    if let Some(bf) = elem.bitfield {
+                        self.store_into_bitfield(b, addr, bf, v, is_volatile_ty(elem.ty));
+                        continue;
+                    }
                     // C99 6.7.8p13: a struct/union member initialized by a
                     // single expression of compatible type copies the
                     // source's bytes. `v` is the source address (the
@@ -1319,6 +1522,53 @@ impl<'a> Walker<'a> {
                 Ok(())
             }
         }
+    }
+
+    /// Store `value`'s low `bf.bit_width` bits into the bitfield at
+    /// `addr` (C99 6.7.2.1): load the storage unit, clear the field's
+    /// slice, shift + mask the value into place, OR, and store back.
+    fn store_into_bitfield(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        addr: super::super::ir::ValueId,
+        bf: super::super::ast::BitfieldDesc,
+        value: super::super::ir::ValueId,
+        vol: bool,
+    ) {
+        let (load_kind, store_kind) = match bf.unit_size {
+            1 => (
+                super::super::ir::LoadKind::U8,
+                super::super::ir::StoreKind::I8,
+            ),
+            2 => (
+                super::super::ir::LoadKind::U16,
+                super::super::ir::StoreKind::I16,
+            ),
+            4 => (
+                super::super::ir::LoadKind::U32,
+                super::super::ir::StoreKind::I32,
+            ),
+            _ => (
+                super::super::ir::LoadKind::I64,
+                super::super::ir::StoreKind::I64,
+            ),
+        };
+        let mask: i64 = if bf.bit_width >= 64 {
+            -1
+        } else {
+            (1i64 << bf.bit_width) - 1
+        };
+        let clear_mask: i64 = !(mask << bf.bit_offset);
+        let masked = b.binop_imm(BinOp::And, value, mask);
+        let old = b.load_vol(addr, load_kind, vol);
+        let cleared = b.binop_imm(BinOp::And, old, clear_mask);
+        let shifted = if bf.bit_offset > 0 {
+            b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
+        } else {
+            masked
+        };
+        let combined = b.binop(BinOp::Or, cleared, shifted);
+        b.store_vol(addr, combined, store_kind, vol);
     }
 
     /// Allocate or reuse the SSA block reserved for the given AST
@@ -1432,44 +1682,57 @@ impl<'a> Walker<'a> {
     /// nested switch (whose labels belong to it, C99 6.8.4.2). A
     /// duplicate case value keeps the first block; the parser already
     /// rejects duplicates.
+    #[allow(clippy::type_complexity)]
     fn collect_switch_cases(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         stmt_id: super::super::ast::StmtId,
         cases: &mut alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
+        ranges: &mut alloc::vec::Vec<(i64, i64, super::super::ir::BlockId)>,
         default_blk: &mut Option<super::super::ir::BlockId>,
     ) {
         match self.ast.stmt(stmt_id) {
-            Stmt::Case { val, body } => {
+            Stmt::Case { val, hi, body } => {
                 let val = *val;
+                let hi = *hi;
                 let body = *body;
-                if !cases.iter().any(|(v, _)| *v == val) {
-                    let blk = b.new_block();
-                    cases.push((val, blk));
+                // Both a single `case v` and a range `case lo ... hi` reserve
+                // one block; the body walker looks it up by `lo`. A single
+                // value joins the sorted-dispatch list; a range is dispatched
+                // by an explicit `lo <= disc <= hi` comparison so a wide range
+                // (register-decode switches span millions of values) needs no
+                // per-value expansion.
+                let blk = b.new_block();
+                if val == hi {
+                    if !cases.iter().any(|(cv, _)| *cv == val) {
+                        cases.push((val, blk));
+                    }
+                } else {
+                    ranges.push((val, hi, blk));
                 }
-                self.collect_switch_cases(b, body, cases, default_blk);
+                self.collect_switch_cases(b, body, cases, ranges, default_blk);
             }
             Stmt::Default { body } => {
                 let body = *body;
                 if default_blk.is_none() {
                     *default_blk = Some(b.new_block());
                 }
-                self.collect_switch_cases(b, body, cases, default_blk);
+                self.collect_switch_cases(b, body, cases, ranges, default_blk);
             }
             Stmt::Compound(items) => {
                 let items = items.clone();
                 for item in items {
                     if let super::BlockItem::Stmt(s) = item {
-                        self.collect_switch_cases(b, s, cases, default_blk);
+                        self.collect_switch_cases(b, s, cases, ranges, default_blk);
                     }
                 }
             }
             Stmt::If { then_s, else_s, .. } => {
                 let then_s = *then_s;
                 let else_s = *else_s;
-                self.collect_switch_cases(b, then_s, cases, default_blk);
+                self.collect_switch_cases(b, then_s, cases, ranges, default_blk);
                 if let Some(e) = else_s {
-                    self.collect_switch_cases(b, e, cases, default_blk);
+                    self.collect_switch_cases(b, e, cases, ranges, default_blk);
                 }
             }
             Stmt::While { body, .. }
@@ -1477,11 +1740,160 @@ impl<'a> Walker<'a> {
             | Stmt::For { body, .. }
             | Stmt::Labeled { body, .. } => {
                 let body = *body;
-                self.collect_switch_cases(b, body, cases, default_blk);
+                self.collect_switch_cases(b, body, cases, ranges, default_blk);
             }
             // A nested switch owns its own case labels; every other
             // statement carries none.
             _ => {}
+        }
+    }
+
+    /// Lower a GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`. Stores
+    /// the wrapped `a op b` through `dst` (pointee `elem_ty`) and yields
+    /// the overflow flag (0 / 1). For widths under 8 bytes the operands
+    /// are already extended in the 64-bit register, so `a op b` is exact
+    /// and overflow is exactly the case where truncation changes it; the
+    /// 64-bit case uses the carry / sign-overflow formulas, with a
+    /// guarded division for the multiply.
+    fn walk_checked_arith(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        op: i64,
+        a_expr: ExprId,
+        b_expr: ExprId,
+        dst_expr: ExprId,
+        elem_ty: i64,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        let store_kind = store_kind_for(elem_ty, self.target);
+        let w = type_size_bytes(elem_ty, self.target);
+        // The wrapped-value and overflow-flag formulas below operate on a
+        // 1/2/4/8-byte scalar in a 64-bit register; a wider or aggregate
+        // operand (a 128-bit `__int128`, sized 0 here) has no such form and
+        // would yield a wrong flag / value. Reject it. TODO: 128-bit.
+        if !matches!(w, 1 | 2 | 4 | 8) {
+            return Err(WalkError::UnsupportedExpr {
+                id: dst_expr,
+                kind: "__builtin_*_overflow requires a 1/2/4/8-byte scalar type",
+            });
+        }
+        let unsigned = (elem_ty & UNSIGNED_BIT) != 0;
+        let bin = match op {
+            0 => BinOp::Add,
+            1 => BinOp::Sub,
+            _ => BinOp::Mul,
+        };
+        let va = self.walk_expr_rvalue(b, a_expr)?;
+        let vb = self.walk_expr_rvalue(b, b_expr)?;
+        let addr = self.walk_expr_rvalue(b, dst_expr)?;
+
+        if w < 8 {
+            let raw = b.binop(bin, va, vb);
+            let wrapped = self.extend_atomic_result(b, raw, elem_ty);
+            b.store(addr, wrapped, store_kind);
+            return Ok(b.binop(BinOp::Ne, raw, wrapped));
+        }
+
+        let wrapped = b.binop(bin, va, vb);
+        b.store(addr, wrapped, store_kind);
+        let flag = match (op, unsigned) {
+            // Unsigned add carries out iff the sum is below an addend.
+            (0, true) => b.binop(BinOp::Ult, wrapped, va),
+            // Signed add overflows iff both addends share a sign that the
+            // sum does not: `(a ^ s) & (b ^ s)` has its sign bit set.
+            (0, false) => {
+                let ax = b.binop(BinOp::Xor, va, wrapped);
+                let bx = b.binop(BinOp::Xor, vb, wrapped);
+                let m = b.binop(BinOp::And, ax, bx);
+                let zero = b.imm(0);
+                b.binop(BinOp::Lt, m, zero)
+            }
+            // Unsigned subtract borrows iff the minuend is the smaller.
+            (1, true) => b.binop(BinOp::Ult, va, vb),
+            // Signed subtract overflows iff the operands differ in sign
+            // and the result's sign differs from the minuend's.
+            (1, false) => {
+                let ab = b.binop(BinOp::Xor, va, vb);
+                let aw = b.binop(BinOp::Xor, va, wrapped);
+                let m = b.binop(BinOp::And, ab, aw);
+                let zero = b.imm(0);
+                b.binop(BinOp::Lt, m, zero)
+            }
+            // Unsigned multiply overflows iff `a != 0 && product/a != b`.
+            // The divisor is forced non-zero so the unused `a == 0` lane
+            // does not divide by zero.
+            (_, true) => {
+                let zero = b.imm(0);
+                let iszero = b.binop(BinOp::Eq, va, zero);
+                let safe = b.binop(BinOp::Or, va, iszero);
+                let q = b.binop(BinOp::Divu, wrapped, safe);
+                let a_nz = b.binop(BinOp::Ne, va, zero);
+                let mism = b.binop(BinOp::Ne, q, vb);
+                b.binop(BinOp::And, a_nz, mism)
+            }
+            // Signed multiply: same division test, but the divisor is
+            // forced to 1 for `a == 0` and `a == -1` so the `INT_MIN / -1`
+            // trap is avoided; the `a == -1` overflow is `product == INT_MIN`.
+            (_, false) => {
+                let zero = b.imm(0);
+                let neg1 = b.imm(-1);
+                let one = b.imm(1);
+                let iszero = b.binop(BinOp::Eq, va, zero);
+                let isneg1 = b.binop(BinOp::Eq, va, neg1);
+                let special = b.binop(BinOp::Or, iszero, isneg1);
+                let not_special = b.binop(BinOp::Xor, special, one);
+                let scaled = b.binop(BinOp::Mul, va, not_special);
+                let safe = b.binop(BinOp::Add, scaled, special);
+                let q = b.binop(BinOp::Div, wrapped, safe);
+                let mism = b.binop(BinOp::Ne, q, vb);
+                let normal = b.binop(BinOp::And, not_special, mism);
+                let intmin = b.imm(i64::MIN);
+                let is_intmin = b.binop(BinOp::Eq, wrapped, intmin);
+                let neg1_ovf = b.binop(BinOp::And, isneg1, is_intmin);
+                b.binop(BinOp::Or, normal, neg1_ovf)
+            }
+        };
+        Ok(flag)
+    }
+
+    /// Lower a GCC statement expression `({ ... })`. Walks the
+    /// block items exactly as `Stmt::Compound` does -- new-block on
+    /// a closed predecessor, decls through `walk_decl` -- but keeps
+    /// the value of the last expression-statement (GCC: the value
+    /// of the whole construct). `block` is the enclosed compound,
+    /// or the bare statement for a single-item block. Falls back to
+    /// an immediate 0 when no expression-statement is present.
+    fn walk_stmt_expr(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        block: StmtId,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        let items: alloc::vec::Vec<super::BlockItem> = match self.ast.stmt(block) {
+            Stmt::Compound(items) => items.clone(),
+            _ => alloc::vec![super::BlockItem::Stmt(block)],
+        };
+        let mut result: Option<super::super::ir::ValueId> = None;
+        for item in items {
+            if !b.is_block_open() {
+                let dead = b.new_block();
+                b.switch_to(dead);
+            }
+            match item {
+                super::BlockItem::Stmt(s) => {
+                    if let Stmt::Expr(e) = self.ast.stmt(s) {
+                        let e = *e;
+                        result = Some(self.walk_expr_rvalue(b, e)?);
+                    } else {
+                        let _ = self.walk_stmt(b, s)?;
+                    }
+                }
+                super::BlockItem::Decl(d) => {
+                    self.walk_decl(b, d)?;
+                }
+            }
+        }
+        match result {
+            Some(v) => Ok(v),
+            None => Ok(b.imm(0)),
         }
     }
 
@@ -1529,6 +1941,13 @@ impl<'a> Walker<'a> {
             ),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
+                // GCC vector extension: a bitwise operator on same-width vector
+                // values is element-wise. The parser only tags a Binary node
+                // with a vector type for `^`/`&`/`|`; lower it as wide chunks
+                // into a result temporary (no inter-lane carry for bitwise ops).
+                if is_vector_ty(self.structs, *ty) {
+                    return self.walk_vector_bitwise(b, *op, *lhs, *rhs, *ty);
+                }
                 // A comparison whose operand is a floating-point value must
                 // use the FP comparison. The parser tags the op from the
                 // operand types; when that tracking is clouded by the
@@ -1616,28 +2035,7 @@ impl<'a> Walker<'a> {
                 // bails (Mod / Modu / Div / Divu / every FP op)
                 // stay on the register-rhs path so the SSA emit
                 // doesn't fall back to the pool path.
-                let imm_safe_op = matches!(
-                    *op,
-                    BinOp::Add
-                        | BinOp::Sub
-                        | BinOp::Mul
-                        | BinOp::And
-                        | BinOp::Or
-                        | BinOp::Xor
-                        | BinOp::Shl
-                        | BinOp::Shr
-                        | BinOp::Shru
-                        | BinOp::Eq
-                        | BinOp::Ne
-                        | BinOp::Lt
-                        | BinOp::Gt
-                        | BinOp::Le
-                        | BinOp::Ge
-                        | BinOp::Ult
-                        | BinOp::Ugt
-                        | BinOp::Ule
-                        | BinOp::Uge
-                );
+                let imm_safe_op = imm_safe_binop(*op);
                 // Operands that need masking take the register path so the
                 // mask below applies; the immediate fast paths skip it.
                 let imm_safe_op = imm_safe_op && cmp_mask == 0;
@@ -1942,7 +2340,21 @@ impl<'a> Walker<'a> {
                 then_e,
                 else_e,
                 ty,
+                elvis,
             } => {
+                // A constant controlling expression selects one arm at
+                // translation time (C99 6.5.15); evaluate only that arm
+                // so the dead arm's side effects and undefined-symbol
+                // references are never emitted. Ternary arms are
+                // expressions, so no label/goto concern applies. The
+                // GNU `a ?: b` form keeps its runtime path. Matches
+                // gcc's front-end fold at -O0.
+                if !*elvis && let Some(c) = self.const_fold_int(*cond) {
+                    let live = if c != 0 { *then_e } else { *else_e };
+                    let v = self.walk_expr_rvalue(b, live)?;
+                    let arm_ty = expr_ty(self.ast.expr(live)).unwrap_or(*ty);
+                    return Ok(self.convert_scalar_value(b, v, arm_ty, *ty));
+                }
                 // C99 6.5.15: evaluate cond; depending on the
                 // value, evaluate exactly one of then_e / else_e
                 // and the conditional expression's value is that
@@ -1955,7 +2367,17 @@ impl<'a> Walker<'a> {
                 // through the FP register class; everything else
                 // stays on the I64 `StoreLocal` / `LoadLocal` fast
                 // path the emit lowers in a single `stur` / `ldur`.
-                let cond_v = self.walk_cond_value(b, *cond)?;
+                //
+                // The GNU `a ?: b` form evaluates the condition once and
+                // reuses its value as the then-arm (converted to the result
+                // type). The plain form evaluates the condition for its
+                // truthiness only and evaluates a separate then-arm.
+                let (cond_v, elvis_val) = if *elvis {
+                    let v = self.walk_expr_rvalue(b, *cond)?;
+                    (self.cond_truthy(b, v, *cond), Some(v))
+                } else {
+                    (self.walk_cond_value(b, *cond)?, None)
+                };
                 let then_blk = b.new_block();
                 let else_blk = b.new_block();
                 let after_blk = b.new_block();
@@ -1983,7 +2405,14 @@ impl<'a> Walker<'a> {
                     b.store_local(slot, v, kind);
                 };
                 b.switch_to(then_blk);
-                let then_v = self.walk_expr_rvalue(b, *then_e)?;
+                let then_v = if let Some(v) = elvis_val {
+                    // Reuse the condition's value, converted from its own
+                    // type to the conditional's result type.
+                    let cond_ty = expr_ty(self.ast.expr(*cond)).unwrap_or(*ty);
+                    self.convert_scalar_value(b, v, cond_ty, *ty)
+                } else {
+                    self.walk_expr_rvalue(b, *then_e)?
+                };
                 arm_store(b, then_v);
                 b.jmp(after_blk);
                 b.switch_to(else_blk);
@@ -2298,7 +2727,16 @@ impl<'a> Walker<'a> {
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));
                             }
-                            return Ok(call);
+                            // An external (`target_pc == 0`) callee may per
+                            // AAPCS leave a narrow return's high bits
+                            // undefined; extend to keep the walker's
+                            // sign/zero-extended-to-64-bits invariant. An
+                            // intra-TU callee already returns full width.
+                            return Ok(if !self.symbols[*sym as usize].defined_here {
+                                extend_scalar_call_result(b, call, *ty, self.target)
+                            } else {
+                                call
+                            });
                         }
                         // Register-save host variadic ABI (System V AMD64
                         // on Linux x86_64, AAPCS64 on Linux aarch64): a
@@ -2356,7 +2794,16 @@ impl<'a> Walker<'a> {
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));
                             }
-                            return Ok(call);
+                            // An external (`target_pc == 0`) callee may per
+                            // AAPCS leave a narrow return's high bits
+                            // undefined; extend to keep the walker's
+                            // sign/zero-extended-to-64-bits invariant. An
+                            // intra-TU callee already returns full width.
+                            return Ok(if !self.symbols[*sym as usize].defined_here {
+                                extend_scalar_call_result(b, call, *ty, self.target)
+                            } else {
+                                call
+                            });
                         }
                         // A variadic callee reaching here is a
                         // `variadic_int_only` host (Win64 / Windows arm64,
@@ -2445,7 +2892,16 @@ impl<'a> Walker<'a> {
                         if is_float_ty(*ty) {
                             return Ok(b.mark_f32(call));
                         }
-                        return Ok(call);
+                        // An external (`target_pc == 0`) callee may per
+                        // AAPCS leave a narrow return's high bits undefined;
+                        // extend to keep the walker's sign/zero-extended-to-
+                        // 64-bits invariant. An intra-TU callee already
+                        // returns full width.
+                        return Ok(if !self.symbols[*sym as usize].defined_here {
+                            extend_scalar_call_result(b, call, *ty, self.target)
+                        } else {
+                            call
+                        });
                     }
                     if *class == Token::Sys as i64 {
                         // A returns-twice callee (setjmp family /
@@ -2564,6 +3020,12 @@ impl<'a> Walker<'a> {
                         if is_float_ty(*ty) {
                             return Ok(b.mark_f32(call));
                         }
+                        // A libc / bound (`Sys`) callee's narrow return is
+                        // extended by `return_extension` at the CallExt
+                        // lowering, keyed on the binding's declared return
+                        // type -- which correctly leaves an unprototyped
+                        // binding (return_type_tag == 0) unextended rather
+                        // than truncating a value that is really a pointer.
                         return Ok(call);
                     }
                 }
@@ -2968,100 +3430,40 @@ impl<'a> Walker<'a> {
                     Expr::Atomic { ty, .. } => *ty,
                     Expr::VlaBase { ty, .. } => *ty,
                     Expr::VlaSizeof { .. } => Ty::Int as i64,
+                    Expr::StmtExpr { ty, .. } => *ty,
+                    Expr::CheckedArith { ty, .. } => *ty,
                     // `&&label` is a `void *` (char-pointer encoding).
                     Expr::LabelAddr(_) => {
                         crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64
                     }
+                    // An asm statement yields no value; it is never a
+                    // cast operand.
+                    Expr::InlineAsm(_) => Ty::Int as i64,
                 };
-                let target_is_fp = is_floating_scalar(*to_ty);
-                let source_is_fp = is_floating_scalar(src_ty);
-                // C99 6.3.1.2: a conversion to `_Bool` yields 0 when
-                // the source compares equal to 0, else 1. This holds
-                // for every scalar source, so it precedes the
-                // width/fp-ness conversions below.
-                if is_bool_scalar(*to_ty) {
-                    if source_is_fp {
-                        let d = b.fp_widen_to_f64(v);
-                        let zero = b.imm(0);
-                        return Ok(b.binop(BinOp::Fne, d, zero));
-                    }
-                    return Ok(b.binop_imm(BinOp::Ne, v, 0));
+                // A 128-bit `__int128` rvalue is carried as its address
+                // (the struct-rvalue address-as-value rule). A cast to an
+                // integer or pointer loads the object's low 8 bytes (its
+                // value mod 2^64); the convert then narrows to `to_ty`.
+                // Without the load the address is used as the value.
+                if self.is_int128_value_ty(src_ty)
+                    && !is_struct_ty(*to_ty)
+                    && !is_floating_scalar(*to_ty)
+                {
+                    let low_ty = Ty::LongLong as i64 | UNSIGNED_BIT;
+                    let low = b.load(v, load_kind_for(low_ty, self.target));
+                    return Ok(self.convert_scalar_value(b, low, low_ty, *to_ty));
                 }
-                if target_is_fp && !source_is_fp {
-                    // Integer -> FP (C99 6.3.1.4), one rounding to the
-                    // target type. An unsigned 64-bit source (`unsigned
-                    // long` / `unsigned long long`) can exceed the signed
-                    // range, where the signed convert yields a negative
-                    // result, so it takes the unsigned converter. Narrower
-                    // unsigned types fit the signed range zero-extended.
-                    let stripped = src_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
-                    let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
-                        && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
-                    let to_float = is_float_ty(*to_ty);
-                    // Fold a constant operand to the converted FP constant
-                    // (the conversion of a constant is itself a constant).
-                    if let Some(k) = b.peek_imm(v) {
-                        if to_float {
-                            let f = if unsigned_64 {
-                                k as u64 as f32
-                            } else {
-                                k as f32
-                            };
-                            return Ok(b.imm_f32(f.to_bits()));
-                        }
-                        let d = if unsigned_64 {
-                            k as u64 as f64
-                        } else {
-                            k as f64
-                        };
-                        return Ok(b.imm(d.to_bits() as i64));
-                    }
-                    let kind = if unsigned_64 {
-                        super::super::ir::FpCastKind::UIntToFp
-                    } else {
-                        super::super::ir::FpCastKind::IntToFp
-                    };
-                    // A `float` target converts directly to single
-                    // precision; a `double` target stays f64.
-                    if to_float {
-                        return Ok(b.fp_cast_to_f32(kind, v));
-                    }
-                    return Ok(b.fp_cast(kind, v));
-                } else if !target_is_fp && source_is_fp {
-                    // FP -> integer (C99 6.3.1.4) truncates toward zero.
-                    // An unsigned 64-bit target can hold a value in
-                    // [2^63, 2^64), which the signed truncate would
-                    // saturate, so it takes the unsigned converter whose
-                    // lowering compares against 2^63 in double precision --
-                    // a `float` source widens to f64 for it. The signed
-                    // converter truncates a `float` source directly.
-                    let stripped_to = *to_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
-                    let target_unsigned_64 = (*to_ty & UNSIGNED_BIT) != 0
-                        && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
-                    if target_unsigned_64 {
-                        let d = b.fp_widen_to_f64(v);
-                        return Ok(b.fp_cast(super::super::ir::FpCastKind::UFpToInt, d));
-                    }
-                    return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, v));
+                // The reverse: a scalar cast to a 128-bit `__int128`
+                // materialises a 16-byte object and yields its address per
+                // the same address-as-value rule. Without this the scalar
+                // value stands where an address is expected.
+                if !is_struct_ty(src_ty) && self.is_int128_value_ty(*to_ty) {
+                    let slot = b.alloc_synthetic_struct(16);
+                    let addr = b.local_addr(slot);
+                    self.store_scalar_as_int128(b, addr, v, src_ty);
+                    return Ok(addr);
                 }
-                // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens,
-                // `(float)d` narrows. The conversion is a no-op only when
-                // the source already has the target precision.
-                if target_is_fp && source_is_fp {
-                    if is_float_ty(*to_ty) {
-                        return Ok(b.fp_narrow_to_f32(v));
-                    }
-                    return Ok(b.fp_widen_to_f64(v));
-                }
-                // Integer-to-integer cast. C99 6.3.1.3:
-                //   * narrowing -> unsigned target: mask to the
-                //     target storage width.
-                //   * narrowing -> signed target (or same-width
-                //     signed conversion of an unsigned source):
-                //     shift-pair Shl K; Shr K to sign-extend the
-                //     truncated value (clang / gcc-compatible UB
-                //     handling).
-                Ok(self.narrow_int_to_ty(b, v, src_ty, *to_ty))
+                Ok(self.convert_scalar_value(b, v, src_ty, *to_ty))
             }
             Expr::CompoundAssign { op, lhs, rhs, ty } => {
                 // C99 6.5.16.2p3: `E1 op= E2` is `E1 = E1 op E2`
@@ -3266,6 +3668,25 @@ impl<'a> Walker<'a> {
                 let _ = self.walk_expr_rvalue(b, *lhs)?;
                 self.walk_expr_rvalue(b, *rhs)
             }
+            // GCC statement expression `({ ... })`: emit the block for
+            // its side effects; the value is that of the last
+            // expression-statement.
+            Expr::StmtExpr { block, .. } => {
+                let block = *block;
+                self.walk_stmt_expr(b, block)
+            }
+            // GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`.
+            Expr::CheckedArith {
+                op,
+                a,
+                b: rhs,
+                dst,
+                elem_ty,
+                ..
+            } => {
+                let (op, a, rhs, dst, elem_ty) = (*op, *a, *rhs, *dst, *elem_ty);
+                self.walk_checked_arith(b, op, a, rhs, dst, elem_ty)
+            }
             // A short-circuit in value position: the result is used, so
             // normalize it to 0/1.
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
@@ -3330,6 +3751,12 @@ impl<'a> Walker<'a> {
                     return Ok(match i {
                         I::Clz | I::Clzll => lower_clz(b, x, w64),
                         I::Ctz | I::Ctzll => lower_ctz(b, x, w64),
+                        I::Clrsb | I::Clrsbll => lower_clrsb(b, x, w64),
+                        I::Ffs | I::Ffsll => lower_ffs(b, x, w64),
+                        I::Parity | I::Parityll => {
+                            let pc = lower_popcount(b, x, w64);
+                            b.binop_imm(BinOp::And, pc, 1)
+                        }
                         _ => lower_popcount(b, x, w64),
                     });
                 }
@@ -3354,6 +3781,19 @@ impl<'a> Walker<'a> {
                     return Ok(b.mark_f32(v));
                 }
                 Ok(v)
+            }
+            Expr::InlineAsm(idx) => {
+                // GCC extended asm. Each operand expression is an output
+                // destination address (the parser applied `&`) or an
+                // input value; the block descriptor carries the template
+                // and per-operand constraints for the per-arch lowering.
+                let asm = self.ast.asm_blocks[*idx as usize].clone();
+                let mut args: alloc::vec::Vec<super::super::ir::ValueId> =
+                    alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
+                for &e in &asm.operand_exprs {
+                    args.push(self.walk_expr_rvalue(b, e)?);
+                }
+                Ok(b.inline_asm(alloc::boxed::Box::new(asm.block), args))
             }
             Expr::LabelAddr(label) => {
                 // GCC `&&label`: materialize the address of the label's
@@ -3394,6 +3834,17 @@ impl<'a> Walker<'a> {
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
         let width = type_size_bytes(elem_ty, self.target) as u8;
+        // Every atomic form here acts on a 1/2/4/8-byte scalar object; a
+        // wider or aggregate one (a 128-bit `__int128`, sized 0 by
+        // `type_size_bytes`) has no atomic form in the current emit and
+        // would lower to a faulting / high-half-dropping access. Reject it.
+        // TODO: 16-byte objects via cmpxchg16b / ldxp-stxp.
+        if !matches!(width, 1 | 2 | 4 | 8) {
+            return Err(WalkError::UnsupportedExpr {
+                id: args[0],
+                kind: "atomic operation requires a 1/2/4/8-byte scalar object",
+            });
+        }
         let addr = self.walk_expr_rvalue(b, args[0])?;
         match kind {
             AtomicKind::Load => Ok(b.load(addr, load_kind)),
@@ -3401,6 +3852,21 @@ impl<'a> Walker<'a> {
                 let value = self.walk_expr_rvalue(b, args[1])?;
                 b.store(addr, value, store_kind);
                 // Used in statement position; the value is discarded.
+                Ok(b.imm(0))
+            }
+            // Generic `__atomic_load(p, ret, mo)`: load `*p`, write it
+            // through `ret`. `__atomic_store(p, val, mo)`: load `*val`,
+            // write it to `*p`. Both move the value through a pointer.
+            AtomicKind::LoadInto => {
+                let value = b.load(addr, load_kind);
+                let ret = self.walk_expr_rvalue(b, args[1])?;
+                b.store(ret, value, store_kind);
+                Ok(b.imm(0))
+            }
+            AtomicKind::StoreFrom => {
+                let val_addr = self.walk_expr_rvalue(b, args[1])?;
+                let value = b.load(val_addr, load_kind);
+                b.store(addr, value, store_kind);
                 Ok(b.imm(0))
             }
             AtomicKind::Exchange
@@ -3677,6 +4143,18 @@ impl<'a> Walker<'a> {
                     Ok(base)
                 }
             }
+            // C99 6.5.2.5p4: a compound literal is an lvalue naming an
+            // unnamed object. In lvalue position (`&(T){...}`) emit the
+            // initializer into the reserved slot and yield the slot's
+            // address. The rvalue path handles the value-position case,
+            // where a scalar literal loads the slot instead.
+            Expr::CompoundLiteral {
+                slot_off, ty, init, ..
+            } => {
+                let (slot, ty, init) = (*slot_off, *ty, init.clone());
+                self.emit_local_init(b, slot, ty, &init)?;
+                Ok(b.local_addr(slot))
+            }
             other => Err(WalkError::UnsupportedExpr {
                 id,
                 kind: lvalue_shape_label(other),
@@ -3710,6 +4188,214 @@ impl<'a> Walker<'a> {
             return false;
         }
         expr_ty(e).is_some_and(is_floating_scalar)
+    }
+
+    /// Fold `id` to a compile-time integer constant when it is an
+    /// integer constant expression the walker can evaluate without
+    /// runtime state (C99 6.6). Returns None for any operand that
+    /// needs a load, a call, or an operator outside the handled set.
+    /// Used to select the live arm of a constant-condition `?:` /
+    /// `if` so the dead arm's side effects -- including references to
+    /// undefined symbols -- are never emitted, matching the front-end
+    /// fold gcc performs even at -O0. Identifiers are not resolved, so
+    /// only literal-rooted expressions fold.
+    fn const_fold_int(&self, id: ExprId) -> Option<i64> {
+        match self.ast.expr(id) {
+            Expr::IntLit { val, .. } => Some(*val),
+            Expr::Unary { op, child, .. } => {
+                let v = self.const_fold_int(*child)?;
+                match op {
+                    UnOp::Neg => Some(v.wrapping_neg()),
+                    UnOp::BitNot => Some(!v),
+                    UnOp::LogNot => Some((v == 0) as i64),
+                    UnOp::AddrOf | UnOp::Deref => None,
+                }
+            }
+            Expr::Binary { op, lhs, rhs, .. } => {
+                // Integer `/` and `%` are integer constant expressions
+                // (C99 6.6) but are not immediate-foldable operators, so
+                // the imm-safe predicate (shared with the BinopI rvalue
+                // fold) excludes them; accept them here for the pure
+                // compile-time evaluation. A zero divisor is undefined
+                // and thus not a constant, so the fold declines it.
+                let divmod = matches!(*op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu);
+                if !imm_safe_binop(*op) && !divmod {
+                    return None;
+                }
+                let l = self.const_fold_int(*lhs)?;
+                let r = self.const_fold_int(*rhs)?;
+                if divmod && r == 0 {
+                    return None;
+                }
+                Some(fold_int_binop(*op, l, r))
+            }
+            Expr::ShortCircuit { op, lhs, rhs, .. } => {
+                let l = self.const_fold_int(*lhs)?;
+                match op {
+                    super::ShortCircuitOp::Lan if l == 0 => Some(0),
+                    super::ShortCircuitOp::Lan => Some((self.const_fold_int(*rhs)? != 0) as i64),
+                    super::ShortCircuitOp::Lor if l != 0 => Some(1),
+                    super::ShortCircuitOp::Lor => Some((self.const_fold_int(*rhs)? != 0) as i64),
+                }
+            }
+            Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+                elvis,
+                ..
+            } => {
+                let c = self.const_fold_int(*cond)?;
+                if *elvis {
+                    if c != 0 {
+                        Some(c)
+                    } else {
+                        self.const_fold_int(*else_e)
+                    }
+                } else if c != 0 {
+                    self.const_fold_int(*then_e)
+                } else {
+                    self.const_fold_int(*else_e)
+                }
+            }
+            Expr::Cast { child, to_ty } => {
+                let v = self.const_fold_int(*child)?;
+                let to = *to_ty;
+                if is_floating_scalar(to) {
+                    return None;
+                }
+                if is_bool_scalar(to) {
+                    return Some((v != 0) as i64);
+                }
+                if type_size_bytes(to, self.target) == 0 {
+                    return None;
+                }
+                Some(narrow_const_to_ty(v, to, self.target))
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether the statement subtree defines a label reachable from
+    /// outside it: a `goto` target (`Labeled`) anywhere within, or a
+    /// `case` / `default` belonging to a `switch` that encloses the
+    /// subtree. A constant-condition `if` may drop its dead branch
+    /// only when that branch defines none, since the branch's block
+    /// would otherwise never be emitted for the jump to reach. A
+    /// `switch` wholly inside the branch owns its case labels -- its
+    /// dispatch drops with the branch -- so those don't pin it.
+    fn stmt_defines_label(&self, id: StmtId) -> bool {
+        self.stmt_defines_external_label(id, false)
+    }
+
+    fn stmt_defines_external_label(&self, id: StmtId, cases_owned: bool) -> bool {
+        match self.ast.stmt(id) {
+            Stmt::Labeled { .. } => true,
+            Stmt::Case { body, .. } | Stmt::Default { body } => {
+                !cases_owned || self.stmt_defines_external_label(*body, cases_owned)
+            }
+            Stmt::Compound(items) => items.iter().any(|it| match it {
+                super::BlockItem::Stmt(s) => self.stmt_defines_external_label(*s, cases_owned),
+                super::BlockItem::Decl(_) => false,
+            }),
+            Stmt::If { then_s, else_s, .. } => {
+                self.stmt_defines_external_label(*then_s, cases_owned)
+                    || else_s.is_some_and(|e| self.stmt_defines_external_label(e, cases_owned))
+            }
+            Stmt::While { body, .. } | Stmt::DoWhile { body, .. } | Stmt::For { body, .. } => {
+                self.stmt_defines_external_label(*body, cases_owned)
+            }
+            Stmt::Switch { body, .. } => self.stmt_defines_external_label(*body, true),
+            _ => false,
+        }
+    }
+
+    /// Convert an already-evaluated scalar value from `src_ty` to
+    /// `to_ty` (C99 6.3.1). Shared by the `Cast` lowering and the GNU
+    /// `?:` then-arm, which reuses the condition's value.
+    fn convert_scalar_value(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        v: super::super::ir::ValueId,
+        src_ty: i64,
+        to_ty: i64,
+    ) -> super::super::ir::ValueId {
+        let target_is_fp = is_floating_scalar(to_ty);
+        let source_is_fp = is_floating_scalar(src_ty);
+        // C99 6.3.1.2: a conversion to `_Bool` yields 0 when the source
+        // compares equal to 0, else 1. This holds for every scalar
+        // source, so it precedes the width/fp-ness conversions below.
+        if is_bool_scalar(to_ty) {
+            if source_is_fp {
+                let d = b.fp_widen_to_f64(v);
+                let zero = b.imm(0);
+                return b.binop(BinOp::Fne, d, zero);
+            }
+            return b.binop_imm(BinOp::Ne, v, 0);
+        }
+        if target_is_fp && !source_is_fp {
+            // Integer -> FP (C99 6.3.1.4), one rounding to the target
+            // type. An unsigned 64-bit source can exceed the signed
+            // range, where the signed convert yields a negative result,
+            // so it takes the unsigned converter. Narrower unsigned
+            // types fit the signed range zero-extended.
+            let stripped = src_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+            let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
+                && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
+            let to_float = is_float_ty(to_ty);
+            // Fold a constant operand to the converted FP constant.
+            if let Some(k) = b.peek_imm(v) {
+                if to_float {
+                    let f = if unsigned_64 {
+                        k as u64 as f32
+                    } else {
+                        k as f32
+                    };
+                    return b.imm_f32(f.to_bits());
+                }
+                let d = if unsigned_64 {
+                    k as u64 as f64
+                } else {
+                    k as f64
+                };
+                return b.imm(d.to_bits() as i64);
+            }
+            let kind = if unsigned_64 {
+                super::super::ir::FpCastKind::UIntToFp
+            } else {
+                super::super::ir::FpCastKind::IntToFp
+            };
+            // A `float` target converts directly to single precision; a
+            // `double` target stays f64.
+            if to_float {
+                return b.fp_cast_to_f32(kind, v);
+            }
+            return b.fp_cast(kind, v);
+        } else if !target_is_fp && source_is_fp {
+            // FP -> integer (C99 6.3.1.4) truncates toward zero. An
+            // unsigned 64-bit target can hold a value in [2^63, 2^64),
+            // which the signed truncate would saturate, so it takes the
+            // unsigned converter (a `float` source widens to f64 for it).
+            let stripped_to = to_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+            let target_unsigned_64 = (to_ty & UNSIGNED_BIT) != 0
+                && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
+            if target_unsigned_64 {
+                let d = b.fp_widen_to_f64(v);
+                return b.fp_cast(super::super::ir::FpCastKind::UFpToInt, d);
+            }
+            return b.fp_cast(super::super::ir::FpCastKind::FpToInt, v);
+        }
+        // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens, `(float)d`
+        // narrows; a no-op when the source already has the target width.
+        if target_is_fp && source_is_fp {
+            if is_float_ty(to_ty) {
+                return b.fp_narrow_to_f32(v);
+            }
+            return b.fp_widen_to_f64(v);
+        }
+        // Integer-to-integer cast (C99 6.3.1.3): narrow to the target
+        // storage width, sign- or zero-extending per the target's sign.
+        self.narrow_int_to_ty(b, v, src_ty, to_ty)
     }
 
     /// Value to test against zero for `cond`'s truthiness. A floating
@@ -4241,14 +4927,14 @@ fn extend_scalar_call_result(
     use super::super::ir::BinOp;
     let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
     let rs = type_size_bytes(ty, target);
-    if is_floating_scalar(ty)
-        || is_pointer_ty(ty)
-        || stripped == Ty::Bool as i64
-        || !(rs == 1 || rs == 2 || rs == 4)
-    {
+    if is_floating_scalar(ty) || is_pointer_ty(ty) || !(rs == 1 || rs == 2 || rs == 4) {
         return v;
     }
-    if (ty & UNSIGNED_BIT) != 0 {
+    // A `_Bool` return is defined only in the low byte per the psABI
+    // (a callee compiled by another toolchain may leave garbage in the
+    // high bits, e.g. `sete %al` with no zero-extend). Zero-extend it
+    // like an unsigned char so a full-width test / `!` reads 0 or 1.
+    if (ty & UNSIGNED_BIT) != 0 || stripped == Ty::Bool as i64 {
         let mask: i64 = match rs {
             1 => 0xff,
             2 => 0xffff,
@@ -4321,6 +5007,19 @@ fn lower_popcount(b: &mut Bld, x: Val, w64: bool) -> Val {
 /// Count leading zeros: smear the highest set bit down to fill the low
 /// bits, then `width - popcount`. At zero the smear stays zero and the
 /// result is the bit width.
+/// Count leading redundant sign bits: `clz(x ^ (x >> (w-1))) - 1`, with
+/// an arithmetic shift forming the all-sign mask. XORing it clears the
+/// leading run of sign bits to zeros (and always the sign bit itself),
+/// so `clz` of the result is that run length plus one. `x` is sign-
+/// extended into the register, so its high half mirrors the sign in the
+/// 32-bit case and the XOR leaves the upper bits zero.
+fn lower_clrsb(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let sign = b.binop_imm(BinOp::Shr, x, if w64 { 63 } else { 31 });
+    let folded = b.binop(BinOp::Xor, x, sign);
+    let clz = lower_clz(b, folded, w64);
+    b.binop_imm(BinOp::Sub, clz, 1)
+}
+
 fn lower_clz(b: &mut Bld, x: Val, w64: bool) -> Val {
     let su = BinOp::Shru;
     let or = BinOp::Or;
@@ -4348,6 +5047,16 @@ fn lower_ctz(b: &mut Bld, x: Val, w64: bool) -> Val {
     let notx = b.binop_imm(BinOp::Xor, x, -1);
     let m = b.binop(BinOp::And, xm1, notx);
     lower_popcount(b, m, w64)
+}
+
+// POSIX / GCC `ffs`: one plus the index of the least-significant set bit,
+// 0 for a zero input. `lower_ctz` returns the bit width at zero, so the
+// `(x != 0)` factor forces the zero case to 0.
+fn lower_ffs(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let ctz = lower_ctz(b, x, w64);
+    let cp1 = b.binop_imm(BinOp::Add, ctz, 1);
+    let nz = b.binop_imm(BinOp::Ne, x, 0);
+    b.binop(BinOp::Mul, cp1, nz)
 }
 
 /// Reverse the low `n` bytes of `x`: extract each byte with a logical
@@ -4381,7 +5090,7 @@ fn lower_bswap(b: &mut Bld, x: Val, n: i64) -> Val {
 /// shapes that don't carry one (`Sizeof` is constant-evaluated
 /// and the walker doesn't peek into the result; intrinsics carry
 /// their own `ty`).
-fn expr_ty(e: &Expr) -> Option<i64> {
+pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
     match e {
         Expr::IntLit { ty, .. }
         | Expr::FloatLit { ty, .. }
@@ -4402,7 +5111,9 @@ fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::ShortCircuit { ty, .. }
         | Expr::Intrinsic { ty, .. }
         | Expr::Atomic { ty, .. }
-        | Expr::VlaBase { ty, .. } => Some(*ty),
+        | Expr::VlaBase { ty, .. }
+        | Expr::StmtExpr { ty, .. }
+        | Expr::CheckedArith { ty, .. } => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
         // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
@@ -4412,6 +5123,8 @@ fn expr_ty(e: &Expr) -> Option<i64> {
         Expr::LabelAddr(_) => {
             Some(crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64)
         }
+        // An asm statement carries no value type.
+        Expr::InlineAsm(_) => None,
     }
 }
 
@@ -4464,13 +5177,75 @@ fn unsigned_narrow_mask(ty: i64) -> i64 {
     }
 }
 
+/// Ops whose two-constant fold and per-arch `BinopI` immediate
+/// lowering are both defined: arithmetic, bitwise, shift, and
+/// integer comparison. Excludes Div / Divu / Mod / Modu (which
+/// `fold_int_binop` evaluates but the immediate path does not
+/// cover) and every FP op.
+fn imm_safe_binop(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Add
+            | BinOp::Sub
+            | BinOp::Mul
+            | BinOp::And
+            | BinOp::Or
+            | BinOp::Xor
+            | BinOp::Shl
+            | BinOp::Shr
+            | BinOp::Shru
+            | BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::Le
+            | BinOp::Ge
+            | BinOp::Ult
+            | BinOp::Ugt
+            | BinOp::Ule
+            | BinOp::Uge
+    )
+}
+
+/// Narrow a folded integer constant to the storage width and
+/// signedness of `ty` (C99 6.3.1.3). Widths above 4 bytes and
+/// types `type_size_bytes` can't size keep the full 64-bit value.
+fn narrow_const_to_ty(v: i64, ty: i64, target: Target) -> i64 {
+    let unsigned = (ty & UNSIGNED_BIT) != 0;
+    match type_size_bytes(ty, target) {
+        1 => {
+            if unsigned {
+                v as u8 as i64
+            } else {
+                v as i8 as i64
+            }
+        }
+        2 => {
+            if unsigned {
+                v as u16 as i64
+            } else {
+                v as i16 as i64
+            }
+        }
+        4 => {
+            if unsigned {
+                v as u32 as i64
+            } else {
+                v as i32 as i64
+            }
+        }
+        _ => v,
+    }
+}
+
 /// Fold an integer binop on two constant operands. C99 6.6
-/// permits this at translation time. Caller restricts `op` to
-/// the set the per-arch BinopI lowering covers (no Div / Divu /
-/// Mod / Modu, no FP), so the only well-defined surfaces are
-/// arithmetic, bitwise, shift, and integer comparison. Shifts
-/// at out-of-range amounts produce 0 (matches what `lsl xd, xn,
-/// xm` with `xm >= 64` would land on; signed `asr` on a
+/// permits this at translation time. Covers arithmetic, bitwise,
+/// shift, integer comparison, and integer divide / modulo; FP
+/// and the non-integer opcodes are rejected. A zero divisor is
+/// the caller's responsibility (`const_fold_int` declines it);
+/// signed `INT_MIN / -1` wraps to `INT_MIN` rather than trapping.
+/// Shifts at out-of-range amounts produce 0 (matches what `lsl
+/// xd, xn, xm` with `xm >= 64` would land on; signed `asr` on a
 /// non-negative operand likewise saturates to 0, and on a
 /// negative operand to -1, so the model picks the closer of the
 /// two for the rhs's sign).
@@ -4504,7 +5279,11 @@ fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
         BinOp::Ugt => ((lhs as u64) > (rhs as u64)) as i64,
         BinOp::Ule => ((lhs as u64) <= (rhs as u64)) as i64,
         BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
-        _ => unreachable!("fold_int_binop reached on non-imm-safe op"),
+        BinOp::Div => lhs.wrapping_div(rhs),
+        BinOp::Mod => lhs.wrapping_rem(rhs),
+        BinOp::Divu => ((lhs as u64) / (rhs as u64)) as i64,
+        BinOp::Modu => ((lhs as u64) % (rhs as u64)) as i64,
+        _ => unreachable!("fold_int_binop reached on a non-integer op"),
     }
 }
 
@@ -4535,6 +5314,9 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::LabelAddr(_) => "LabelAddr",
         Expr::VlaBase { .. } => "VlaBase",
         Expr::VlaSizeof { .. } => "VlaSizeof",
+        Expr::StmtExpr { .. } => "StmtExpr",
+        Expr::CheckedArith { .. } => "CheckedArith",
+        Expr::InlineAsm(_) => "InlineAsm",
     }
 }
 

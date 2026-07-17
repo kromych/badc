@@ -5,9 +5,9 @@
    callee's prologue spills only the int_arg_regs into its
    cdecl slots, so the SSA emit's caller-side marshalling at
    `Op::Jsr` must not route an FP value through xmm registers
-   (which the System V C ABI would). The exposed bug: lua's
-   LTfloatint(double f, long long i) computed `f < (double)i`
-   off the spill of an uninitialised xmm0 -> rdi byte pattern. */
+   (which the System V C ABI would). The exposed bug: a float-vs-int
+   compare `(double f, long long i)` computing `f < (double)i` off
+   the spill of an uninitialised xmm0 -> rdi byte pattern. */
 
 #include <stdio.h>
 

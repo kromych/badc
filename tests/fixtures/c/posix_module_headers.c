@@ -1,8 +1,7 @@
-// POSIX/C99 surface added for the CPython builtin modules: the signal
-// mask family (POSIX), resource limits (POSIX), wide classification
-// (C99 7.25), and the single-byte/wide conversion in <wchar.h>. The
-// portable subset is exercised at runtime; the Unix-only calls are
-// guarded so the fixture also builds on Windows.
+// POSIX/C99 surface: the signal mask family (POSIX), resource limits
+// (POSIX), wide classification (C99 7.25), and the single-byte/wide
+// conversion in <wchar.h>. The portable subset is exercised at runtime;
+// the Unix-only calls are guarded so the fixture also builds on Windows.
 
 #include <wchar.h>
 #include <wctype.h>

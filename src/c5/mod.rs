@@ -42,6 +42,9 @@ pub use {
 #[cfg(feature = "std")]
 pub use host::StdHost;
 
+#[cfg(all(feature = "full", feature = "std"))]
+#[allow(unused_imports)]
+pub use linker::read_archive_at;
 #[cfg(feature = "full")]
 #[allow(unused_imports)]
 pub use linker::{ArchiveMember, read_archive, write_archive};
@@ -49,14 +52,15 @@ pub use linker::{ArchiveMember, read_archive, write_archive};
 #[allow(unused_imports)]
 pub use linker::{
     MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt, emit_x86_64_plt,
-    is_elf_object, link_native_objects, link_native_objects_with_options, parse_native_elf,
+    NativeSymbol, PendingImportReloc, PltTrampoline, SharedLibrary, emit_aarch64_plt,
+    emit_x86_64_plt, is_elf_object, link_native_objects, link_native_objects_with_options,
+    link_native_objects_with_shared_libs, parse_native_elf, parse_shared_library,
     write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]
-pub use runtime::embedded_runtime;
+pub use runtime::{embedded_compiler_rt, embedded_runtime};
 #[cfg(feature = "full")]
 pub use symbol::Linkage;
 

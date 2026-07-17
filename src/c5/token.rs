@@ -286,6 +286,12 @@ pub(crate) enum Token {
     /// flag the function symbol for the SSA inliner, which
     /// bypasses the body-size cap for inline-marked callees.
     Inline,
+    /// `__forceinline` (MSVC) -- a mandatory inline request, the
+    /// keyword equivalent of `__attribute__((always_inline))`. Parses
+    /// as an inline specifier (bypasses the body-size cap) but is
+    /// tracked distinctly so the inliner can warn when it cannot honour
+    /// the request, matching the MSVC / gcc diagnostic.
+    ForceInline,
     /// `_Noreturn` / `noreturn` (C11 6.7.4). Tracked distinctly so
     /// the parser can flag the function symbol; the reachability
     /// analysis treats a call to a `_Noreturn` function as not
@@ -371,6 +377,20 @@ pub(crate) enum Token {
     /// The lexer skips it, so it never reaches the parser. Added at the
     /// end so the operator ordinals are unchanged.
     Extension,
+    /// `_Generic` (C11 6.5.1.1): a primary expression selecting one of
+    /// several generic associations by the type of a controlling
+    /// expression. Added at the end so the operator ordinals are
+    /// unchanged.
+    Generic,
+    /// GCC `__builtin_types_compatible_p ( type-name , type-name )`: a
+    /// primary expression yielding the integer constant 1 when the two
+    /// type names are compatible (top-level qualifiers ignored), else 0.
+    /// Added at the end so the operator ordinals are unchanged.
+    BuiltinTypesCompatible,
+    /// GCC `__builtin_offsetof ( type-name , member-designator )`: a primary
+    /// expression yielding the byte offset of the member as an integer
+    /// constant. The standard `offsetof` macro may expand to it.
+    BuiltinOffsetof,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a
@@ -464,6 +484,9 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::Double as i64 => "`double`",
         x if x == Token::FloatNum as i64 => "floating-point literal",
         x if x == Token::StaticAssert as i64 => "`static_assert` / `_Static_assert`",
+        x if x == Token::Generic as i64 => "`_Generic`",
+        x if x == Token::BuiltinTypesCompatible as i64 => "`__builtin_types_compatible_p`",
+        x if x == Token::BuiltinOffsetof as i64 => "`__builtin_offsetof`",
         x if x == Token::Void as i64 => "`void`",
         _ => return format!("token id {tk}"),
     };

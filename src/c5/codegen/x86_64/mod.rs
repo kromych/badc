@@ -2,6 +2,7 @@
 //! lowering (`emit`). The encoder's public surface is re-exported so callers
 //! reference it as `x86_64::<item>` regardless of the internal split.
 
+pub(crate) mod asm;
 pub(crate) mod emit;
 pub(crate) mod encode;
 

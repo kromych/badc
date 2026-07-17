@@ -331,6 +331,72 @@ impl Compiler {
         }
     }
 
+    /// Skip a balanced token run up to (not consuming) the next `,` at
+    /// paren/bracket depth 0. The unchosen `__builtin_choose_expr`
+    /// operand in a constant expression is skipped this way -- it need
+    /// not itself be constant.
+    fn skip_balanced_to_comma(&mut self) -> Result<(), C5Error> {
+        let mut depth: i64 = 0;
+        loop {
+            if (self.lex.tk == ',' || self.lex.tk == ')') && depth == 0 {
+                return Ok(());
+            }
+            if self.lex.tk == '(' || self.lex.tk == Token::Brak {
+                depth += 1;
+            } else if self.lex.tk == ')' || self.lex.tk == ']' {
+                depth -= 1;
+            } else if self.lex.tk == 0 {
+                return Err(self.compile_err("unterminated `__builtin_choose_expr` operand"));
+            }
+            self.next()?;
+        }
+    }
+
+    /// Skip a balanced token run through the closing `)` at depth 0
+    /// (the `)` is consumed).
+    fn skip_balanced_to_close_paren(&mut self) -> Result<(), C5Error> {
+        let mut depth: i64 = 0;
+        loop {
+            if self.lex.tk == '(' || self.lex.tk == Token::Brak {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                if depth == 0 {
+                    self.next()?;
+                    return Ok(());
+                }
+                depth -= 1;
+            } else if self.lex.tk == ']' {
+                depth -= 1;
+            } else if self.lex.tk == 0 {
+                return Err(self.compile_err("unterminated `__builtin_choose_expr` operand"));
+            }
+            self.next()?;
+        }
+    }
+
+    /// Evaluate a `__builtin_constant_p(x)` operand: 1 when `x` folds to
+    /// a constant expression, else 0. On entry the opening `(` is
+    /// consumed and the current token is the operand's first; on return
+    /// the closing `)` is consumed. The operand is unevaluated (GCC does
+    /// not emit it), so the fold attempt is discarded and the lexer is
+    /// repositioned past the operand regardless of the outcome; a
+    /// non-constant operand -- including one that would error as a
+    /// constant expression -- reports 0 rather than propagating.
+    pub(super) fn eval_constant_p_operand(&mut self) -> Result<i64, C5Error> {
+        let snap = self.lex.snapshot();
+        let saved_nonconst = self.pending.const_expr_nonconst;
+        self.pending.const_expr_nonconst = false;
+        let is_const = self.parse_const_expr_cond_val().is_ok();
+        self.pending.const_expr_nonconst = saved_nonconst;
+        self.lex.restore(snap);
+        self.skip_balanced_to_comma()?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected to close `__builtin_constant_p`"));
+        }
+        self.next()?;
+        Ok(if is_const { 1 } else { 0 })
+    }
+
     /// Parse a C11 6.7.10 `_Static_assert(<const-int-expr>,
     /// "<string-literal>");` (or its C23 `static_assert` alias).
     /// On entry the current token is `Token::StaticAssert`. The
@@ -416,7 +482,13 @@ impl Compiler {
             // but the not-taken arm is unevaluated per C99 6.5.15,
             // so a zero divisor there must not diagnose.
             let taken = cond.is_truthy();
-            let then_val = self.parse_const_unevaluated(!taken, Self::parse_const_expr_or_val)?;
+            // GNU `a ?: b`: the middle operand may be omitted, and the
+            // condition's own value is the result when truthy.
+            let then_val = if self.lex.tk == ':' {
+                cond
+            } else {
+                self.parse_const_unevaluated(!taken, Self::parse_const_expr_or_val)?
+            };
             if self.lex.tk != ':' {
                 return Err(self.compile_err("`:` expected in conditional constant expression"));
             }
@@ -746,12 +818,93 @@ impl Compiler {
                 ty: self.size_t_ty(),
             });
         }
+        if self.lex.tk == Token::Generic {
+            // C11 6.5.1.1: a generic selection is a constant expression
+            // when its selected association is one. Select, then fold the
+            // winning expression as a constant.
+            let after = self.generic_select_to_winner()?;
+            let v = self.parse_const_expr_cond_val()?;
+            self.lex.restore(after);
+            return Ok(v);
+        }
+        if self.lex.tk == Token::BuiltinTypesCompatible {
+            // GCC `__builtin_types_compatible_p(T1, T2)` is an integer
+            // constant expression (0 or 1).
+            self.next()?;
+            let v = self.parse_types_compatible_p()?;
+            return Ok(ConstVal::int(v));
+        }
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].name == "__builtin_choose_expr"
+        {
+            // GCC `__builtin_choose_expr(const, e1, e2)`: a constant
+            // expression when the chosen operand is one; the unchosen
+            // operand is skipped and need not be constant.
+            self.next()?;
+            if self.lex.tk != '(' {
+                return Err(self.compile_err("`(` expected after `__builtin_choose_expr`"));
+            }
+            self.next()?;
+            let c = self.parse_const_expr_cond_val()?.as_int();
+            if self.lex.tk != ',' {
+                return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+            }
+            self.next()?;
+            let v;
+            if c != 0 {
+                v = self.parse_const_expr_cond_val()?;
+                if self.lex.tk != ',' {
+                    return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+                }
+                self.next()?;
+                self.skip_balanced_to_close_paren()?;
+            } else {
+                self.skip_balanced_to_comma()?;
+                self.next()?; // `,`
+                v = self.parse_const_expr_cond_val()?;
+                if self.lex.tk != ')' {
+                    return Err(self.compile_err("`)` expected to close `__builtin_choose_expr`"));
+                }
+                self.next()?;
+            }
+            return Ok(v);
+        }
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].name == "__builtin_constant_p"
+        {
+            // GCC `__builtin_constant_p(x)` is an integer constant
+            // expression (0 or 1): 1 when the unevaluated operand folds
+            // to a constant. Usable here so a compile-time min/max idiom
+            // -- `__builtin_choose_expr(__builtin_constant_p(a) &&
+            // __builtin_constant_p(b), ...)` -- selects its constant arm.
+            self.next()?;
+            if self.lex.tk != '(' {
+                return Err(self.compile_err("`(` expected after `__builtin_constant_p`"));
+            }
+            self.next()?;
+            let v = self.eval_constant_p_operand()?;
+            return Ok(ConstVal::int(v));
+        }
+        if self.lex.tk == Token::BuiltinOffsetof {
+            // GCC `__builtin_offsetof(T, member)` is an integer constant
+            // expression (the member's byte offset).
+            self.next()?;
+            // A constant context: a runtime array subscript is rejected
+            // (allow_runtime = false), so the result is always `Some`.
+            let v = self
+                .parse_builtin_offsetof(false)?
+                .expect("offsetof without a runtime subscript folds to a constant");
+            return Ok(ConstVal::Int {
+                val: v,
+                ty: self.size_t_ty(),
+            });
+        }
         self.parse_const_expr_primary_val()
     }
 
     /// The `size_t` type tag: `unsigned long` on LP64,
     /// `unsigned long long` on LLP64.
-    fn size_t_ty(&self) -> i64 {
+    pub(super) fn size_t_ty(&self) -> i64 {
         if self.target.is_windows() {
             Ty::LongLong as i64 | UNSIGNED_BIT
         } else {
@@ -1130,6 +1283,34 @@ impl Compiler {
                 Ty::LongLong as i64
             };
             return Ok(ConstVal::Int { val: v, ty });
+        }
+        // C99 6.6 leaves it implementation-defined, but GCC and common
+        // practice fold a `const`-qualified integer object with static
+        // storage: its initializer has already written the value into the
+        // object's `.data` slot, so read it back and treat it as a
+        // constant (`static const int N = 8; char buf[N * 2 + 1];`).
+        if self.lex.tk == Token::Id {
+            let idx = self.lex.curr_id_idx;
+            let sym = &self.symbols[idx];
+            if sym.is_const_qualified && sym.class == Token::Glo as i64 && !sym.is_extern_decl {
+                let ty = sym.type_;
+                let off = sym.val as usize;
+                let size = self.size_of_type(ty);
+                if (1..=8).contains(&size) && off + size <= self.data.len() {
+                    let mut v: i64 = 0;
+                    for k in 0..size {
+                        v |= (self.data[off + k] as i64) << (k * 8);
+                    }
+                    // Sign-extend a signed type narrower than 8 bytes.
+                    if !is_unsigned_ty(ty) && size < 8 {
+                        let sign = 1i64 << (size * 8 - 1);
+                        v = (v ^ sign).wrapping_sub(sign);
+                    }
+                    self.symbols[idx].was_referenced = true;
+                    self.next()?;
+                    return Ok(ConstVal::Int { val: v, ty });
+                }
+            }
         }
         let id_suffix = if self.lex.tk == Token::Id {
             format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)

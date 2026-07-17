@@ -4,7 +4,7 @@
 // to its prior class on block exit, so the next function with the
 // same-named static gets its own fresh slot.
 //
-// SQLite uses static locals for cached state (one-time
+// Static locals are commonly used for cached state (one-time
 // initialisations, hash tables, etc.).
 
 #include <stdlib.h>

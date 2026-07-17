@@ -6,25 +6,10 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x220              // =544
+               	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, eq
-               	ret
-
-<notf>:
-               	mov	x0, #0x0                // =0
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, eq
-               	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -34,6 +19,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -46,6 +32,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -59,6 +46,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -74,6 +62,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d16, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -87,6 +76,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d0, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -100,6 +90,7 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d0, d17
                	cset	x0, eq
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

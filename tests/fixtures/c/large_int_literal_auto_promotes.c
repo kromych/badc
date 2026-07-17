@@ -6,9 +6,9 @@
 // down to `-2` (low 32 bits of INT64_MAX = -1, then -1 - 1 = -2)
 // and `-LLONG_MAX - 1` to 0.
 //
-// Lua's `LUA_MININTEGER` is `(-9223372036854775807 - 1)`, the
-// canonical INT64_MIN expansion. Without the auto-promote
-// `math.mininteger` was 0 and every test using it failed.
+// The minimum 64-bit signed value written as
+// `(-9223372036854775807 - 1)`, the canonical INT64_MIN expansion.
+// Without the auto-promote it was 0.
 
 int main(void) {
     long long maxv = 9223372036854775807;        // INT64_MAX

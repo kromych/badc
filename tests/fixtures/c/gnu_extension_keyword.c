@@ -11,8 +11,8 @@ typedef void (*voidf)(void);
 
 int main(void) {
     void *p = (void *) 0;
-    // Expression position, including the pointer-to-function cast lua's
-    // cast_func uses under __GNUC__.
+    // Expression position, including a pointer-to-function cast
+    // as used under __GNUC__.
     voidf f = (__extension__ (voidf)(p));
     ext_ll x = __extension__ 5;
     int y = __extension__ (3 + 4);

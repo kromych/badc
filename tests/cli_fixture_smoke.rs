@@ -56,6 +56,20 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "vla_initializer_rejected.c",
 ];
 
+/// Fixtures whose body carries inline asm specific to one ISA. The
+/// paired target lacks the instruction and rejects the compile by
+/// design; the native target still compiles and is checked. (TODO:
+/// lower these recognized asm intrinsics on the foreign target so the
+/// fixtures compile everywhere.)
+const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
+    ("cacheflush_asm.c", "linux-x64"), // aarch64 cache-ops / barriers
+    ("atomic128_ldaxp_stlxp.c", "linux-x64"), // aarch64 128-bit ldaxp/stlxp
+    ("atomic128_ldst.c", "linux-x64"), // aarch64 128-bit ldp/stp, ldxp/stxp
+    ("divq_udiv_qrnnd.c", "linux-aarch64"), // x86-64 128/64 divq
+    ("rdtsc_host_ticks.c", "linux-aarch64"), // x86-64 rdtsc
+    ("inline_asm_memory_operand.c", "linux-aarch64"), // x86-64 lock cmpxchg/xadd
+];
+
 #[test]
 fn every_fixture_compiles_standalone_for_linux() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -80,6 +94,7 @@ fn every_fixture_compiles_standalone_for_linux() {
     let _ = std::fs::create_dir_all(&tmp_root);
 
     let mut failures: Vec<String> = Vec::new();
+    let mut attempts = 0usize;
     let targets = ["linux-aarch64", "linux-x64"];
     for fixture in &entries {
         let name = fixture.file_name().unwrap().to_str().unwrap();
@@ -87,6 +102,10 @@ fn every_fixture_compiles_standalone_for_linux() {
             continue;
         }
         for target in targets {
+            if TARGET_SPECIFIC_ASM.contains(&(name, target)) {
+                continue;
+            }
+            attempts += 1;
             let stem = name.trim_end_matches(".c");
             let out = tmp_root.join(format!("{stem}-{target}"));
             let status = Command::new(badc)
@@ -114,7 +133,7 @@ fn every_fixture_compiles_standalone_for_linux() {
         panic!(
             "{} of {} fixture-compilation attempts failed:\n  {}",
             failures.len(),
-            (entries.len() - COMPILE_SKIPLIST.len()) * targets.len(),
+            attempts,
             failures.join("\n  ")
         );
     }
@@ -158,6 +177,78 @@ fn quoted_include_resolves_relative_to_including_file() {
         Some(42),
         "quoted-include program returned wrong value"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// A callee marked `always_inline` / `__forceinline` that the inliner
+// cannot substitute (here: a variadic body) draws a diagnostic naming
+// the function and the reason, so a silently-unhonored mandatory inline
+// request is visible. A body the inliner can substitute stays silent.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn always_inline_not_honored_warns() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-ai-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    let compile = |src: &std::path::Path, obj: &str| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-O")
+            .arg("-c")
+            .arg(src)
+            .arg("-o")
+            .arg(dir.join(obj))
+            .output()
+            .expect("run badc")
+    };
+
+    // Variadic always_inline: the inliner rejects it, so the request is
+    // unhonored and must warn.
+    let va = dir.join("va.c");
+    std::fs::write(
+        &va,
+        "#include <stdarg.h>\n\
+         static inline __attribute__((always_inline)) int s(int n, ...) {\n\
+         \tva_list ap; va_start(ap, n); int t = 0;\n\
+         \tfor (int i = 0; i < n; i++) t += va_arg(ap, int);\n\
+         \tva_end(ap); return t; }\n\
+         int main(void) { return s(2, 3, 4); }\n",
+    )
+    .expect("write va.c");
+    let out = compile(&va, "va.o");
+    assert!(
+        out.status.success(),
+        "compile failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("always_inline") && stderr.contains("`s`"),
+        "expected an always_inline diagnostic naming `s`, got: {stderr}"
+    );
+
+    // A body the inliner can substitute draws no warning.
+    let ok = dir.join("ok.c");
+    std::fs::write(
+        &ok,
+        "static inline __attribute__((always_inline)) int a(int x, int y) { return x + y; }\n\
+         int main(void) { return a(2, 3); }\n",
+    )
+    .expect("write ok.c");
+    let out2 = compile(&ok, "ok.o");
+    assert!(
+        out2.status.success(),
+        "compile failed: {}",
+        String::from_utf8_lossy(&out2.stderr)
+    );
+    assert!(
+        !String::from_utf8_lossy(&out2.stderr).contains("always_inline"),
+        "inlinable always_inline should be silent, got: {}",
+        String::from_utf8_lossy(&out2.stderr)
+    );
+
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -344,7 +435,7 @@ fn installed_overlay_overrides_embedded() {
 
     // With BADC_HOME set the overlay header is used, so the marker is
     // defined and the program builds and exits 0. The temp cwd has no
-    // ./include or ./headers/include, so the overlay is the only one.
+    // ./include or ./libc/include, so the overlay is the only one.
     let exe = dir.join("m");
     let built = Command::new(badc)
         .env("BADC_HOME", &home)
@@ -490,4 +581,84 @@ fn unrecognized_input_extension_is_rejected() {
         "valid multi-input native link must succeed"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// `--jobs` must not change emitted bytes. A source compiled alone (one
+// TU, sequential) and the same source compiled inside a parallel `-c`
+// batch produce identical objects, and a parallel batch is stable
+// across runs. The reloc byte-stability gate pins per-TU determinism;
+// this drives it through the CLI's worker pool.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn jobs_object_bytes_match_sequential_and_are_stable() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-jobs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let srcs: [(&str, &str); 6] = [
+        ("a.c", "int a(int x){ return x*x + 1; }"),
+        (
+            "b.c",
+            "long b(long x,long y){ long s=0; for(long i=0;i<y;i++) s+=x; return s; }",
+        ),
+        ("c.c", "double c(double p,double q){ return p*q - p/q; }"),
+        (
+            "d.c",
+            "int d(int*p,int n){ int s=0; for(int i=0;i<n;i++) s+=p[i]; return s; }",
+        ),
+        (
+            "e.c",
+            "struct S{int a;int b;}; int e(struct S s){ return s.a - s.b; }",
+        ),
+        ("f.c", "float f(float a,float b){ return a<b ? a : b; }"),
+    ];
+    let seq = root.join("seq");
+    let par1 = root.join("par1");
+    let par2 = root.join("par2");
+    for d in [&seq, &par1, &par2] {
+        std::fs::create_dir_all(d).expect("mkdir");
+        for (name, body) in &srcs {
+            std::fs::write(d.join(name), body).expect("write src");
+        }
+    }
+    let target = "linux-x64";
+    // Sequential baseline: each source in its own single-input
+    // invocation (one TU -> one worker -> inline, no threads).
+    for (name, _) in &srcs {
+        let ok = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .arg("-c")
+            .arg(name)
+            .current_dir(&seq)
+            .status()
+            .expect("run badc")
+            .success();
+        assert!(ok, "sequential compile of {name} failed");
+    }
+    // Parallel batch: every source in one `-j8 -c` invocation. The same
+    // relative labels keep the (debug-info-off) bytes path-independent.
+    let run_batch = |dir: &std::path::Path| {
+        let mut cmd = Command::new(badc);
+        cmd.arg(format!("--target={target}"))
+            .arg("-j8")
+            .arg("-c")
+            .current_dir(dir);
+        for (name, _) in &srcs {
+            cmd.arg(name);
+        }
+        assert!(
+            cmd.status().expect("run badc").success(),
+            "parallel `-j8 -c` batch failed"
+        );
+    };
+    run_batch(&par1);
+    run_batch(&par2);
+    for (name, _) in &srcs {
+        let o = name.replace(".c", ".o");
+        let s = std::fs::read(seq.join(&o)).expect("read seq .o");
+        let p1 = std::fs::read(par1.join(&o)).expect("read par1 .o");
+        let p2 = std::fs::read(par2.join(&o)).expect("read par2 .o");
+        assert_eq!(s, p1, "`-j8` object for {name} differs from sequential");
+        assert_eq!(p1, p2, "`-j8` object for {name} not stable across runs");
+    }
+    let _ = std::fs::remove_dir_all(&root);
 }

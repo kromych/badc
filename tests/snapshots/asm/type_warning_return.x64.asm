@@ -13,6 +13,7 @@ Disassembly of section .text:
 <ret_ptr_as_int>:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
+               	movslq	%eax, %rax
                	retq
 
 <ret_int_as_ptr>:
@@ -43,8 +44,7 @@ Disassembly of section .text:
                	retq
 
 <ret_ok>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%edi, %rax
                	retq
 
 <main>:

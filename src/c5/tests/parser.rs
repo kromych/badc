@@ -890,3 +890,53 @@ fn c99_minimum_expression_nesting_compiles() {
     );
     on_big_stack(move || assert_eq!(super::run_str(&src), 0));
 }
+
+#[test]
+fn constructor_attribute_is_recorded() {
+    // GNU `__attribute__((constructor))` in leading and trailing
+    // position, with and without a priority, plus a destructor. Each
+    // defined function lands in `Program::init_funcs`; a plain function
+    // does not.
+    let src = "
+        __attribute__((constructor)) void a(void) {}
+        void b(void) __attribute__((constructor(101))) {}
+        __attribute__((destructor)) void c(void) {}
+        void plain(void) {}
+        int main(void) { return 0; }
+    ";
+    let prog = super::compile_str_bare(src);
+    let by_name = |n: &str| prog.init_funcs.iter().find(|f| f.name == n);
+    let a = by_name("a").expect("a is a constructor");
+    assert!(!a.is_destructor && a.priority.is_none());
+    let b = by_name("b").expect("b is a constructor");
+    assert!(!b.is_destructor && b.priority == Some(101));
+    let c = by_name("c").expect("c is a destructor");
+    assert!(c.is_destructor && c.priority.is_none());
+    assert!(
+        by_name("plain").is_none(),
+        "plain function is not an init func"
+    );
+    assert!(by_name("main").is_none(), "main is not an init func");
+}
+
+#[test]
+fn constructor_is_not_reported_unused() {
+    // A `static` constructor / destructor has no in-source call site but
+    // runs at startup / exit, so it must not draw the unused-function
+    // diagnostic (gcc / clang never warn on it).
+    let prog = super::compile_str_bare(
+        "__attribute__((constructor)) static void a(void) {}\n\
+         __attribute__((destructor)) static void b(void) {}\n\
+         static void really_unused(void) {}\n\
+         int main(void) { return 0; }\n",
+    );
+    let warns = prog.warnings.join("\n");
+    assert!(
+        !warns.contains("unused function `a`") && !warns.contains("unused function `b`"),
+        "constructor/destructor must not be flagged unused; got:\n{warns}"
+    );
+    assert!(
+        warns.contains("unused function `really_unused`"),
+        "a genuinely unused static function should still be flagged; got:\n{warns}"
+    );
+}

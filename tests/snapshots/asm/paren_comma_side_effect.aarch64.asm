@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x2b0              // =688
+               	mov	x1, #0x2f0              // =752
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
@@ -53,32 +53,27 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x60
                	ret
 
-<bump_to>:
-               	sxtw	x0, w0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	w0, [x1]
-               	ret
-
 <main>:
                	stp	x20, x21, [sp, #-0x30]!
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
-               	mov	x0, #0x0                // =0
-               	str	w0, [x20]
-               	mov	x0, #0x7                // =7
-               	bl	<addr>
-               	ldrsw	x21, [x20]
-               	cmp	x21, #0x7
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x0                // =0
+               	str	w1, [x0]
+               	mov	x1, #0x7                // =7
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2]
+               	ldrsw	x20, [x0]
+               	cmp	x20, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x2, x21
+               	mov	x2, x20
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x1                // =1
@@ -86,13 +81,13 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x0, #0x1                // =1
-               	str	w0, [x20]
-               	mov	x0, #0xb                // =11
-               	bl	<addr>
-               	mov	x0, #0xd                // =13
-               	bl	<addr>
-               	ldrsw	x20, [x20]
+               	mov	x1, #0x1                // =1
+               	str	w1, [x0]
+               	mov	x1, #0xb                // =11
+               	str	w1, [x0]
+               	mov	x1, #0xd                // =13
+               	str	w1, [x0]
+               	sxtw	x20, w1
                	cmp	x20, #0xd
                	b.eq	<addr>
                	mov	x21, #0x2               // =2

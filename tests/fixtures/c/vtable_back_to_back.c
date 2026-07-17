@@ -4,8 +4,8 @@
    call site's argument expression as the dispatch base for the
    second, so `ctx.vtable->generate(...)` lowered as if `ctx.vtable`
    were one of the arguments passed to `G_VT.init(...)`. The crash
-   surfaced under the produce_ssa_funcs flip on bearssl test_crypto
-   (HMAC_DRBG KAT). Pins the contract end-to-end: 42 + 8 = 50. */
+   surfaced under the produce_ssa_funcs flip. Pins the contract
+   end-to-end: 42 + 8 = 50. */
 #include <stdio.h>
 
 typedef struct vt vt;

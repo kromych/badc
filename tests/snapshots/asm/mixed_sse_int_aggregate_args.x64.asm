@@ -157,6 +157,7 @@ Disassembly of section .text:
                	movsd	0x8(%rdx,%riz), %xmm1
                	movq	(%rdx), %rdx
                	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -193,7 +194,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff4000000000000, %r8 # imm = 0x3FF4000000000000
                	movq	%r8, %xmm0
                	callq	<addr>
+               	movslq	%eax, %rax
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

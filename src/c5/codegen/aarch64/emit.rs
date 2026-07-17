@@ -1194,6 +1194,10 @@ pub(crate) fn emit_function(
                 };
                 super::encode::emit_got_tail_jump(code, plt_call_fixups, import_index);
             }
+            // Sealed after a noreturn call (C11 6.7.4p8): control cannot
+            // reach here. Emit a trap so a mis-marked returning call
+            // faults rather than falling into the next block.
+            Terminator::Unreachable => emit(code, 0xD420_0020), // brk #1
         }
     }
     // Patch each `&&label` ADR against its block's final offset.
@@ -2674,7 +2678,7 @@ fn emit_tls_addr(
     // offset) rather than by the placeholder `offset`.
     tls_extern_sym: Option<&str>,
 ) -> bool {
-    use super::encode::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
+    use super::encode::{enc_add_imm_lsl12, enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
     let Some(rd) = int_reg(dst) else {
         bail_msg("TlsAddr: dst not int reg");
         return false;
@@ -2683,26 +2687,27 @@ fn emit_tls_addr(
         Target::LinuxAarch64 => {
             // AAPCS64 variant-1: the static TLS block sits above the thread
             // pointer after a 16-byte TCB reserve, so a variable at
-            // `offset` in its unit's block reads `tp + 16 + offset`. A
-            // unit-local access bakes that immediate; a cross-unit extern
-            // emits the 16-byte reserve as a placeholder. Both record an
-            // `elf_tpoff_fixups` entry so the linker rebases the immediate
-            // when more than one unit contributes TLS storage (Local) or
-            // resolves it by symbol (Extern). The 12-bit add immediate caps
-            // a single unit's TLS at 4080 bytes; a wider block would need
-            // the two-add tprel_hi12 / lo12 sequence (TODO).
-            let imm = if tls_extern_sym.is_some() {
+            // `offset` in its unit's block reads `tp + 16 + offset`. The
+            // local-exec form is the standard two-add sequence
+            // (`tprel_hi12` + `tprel_lo12`), which covers a 24-bit TPOFF
+            // and gives the linker two patchable immediates. A unit-local
+            // access bakes the single-unit TPOFF; a cross-unit extern
+            // bakes the 16-byte reserve as a placeholder. Both record an
+            // `elf_tpoff_fixups` entry (at the first add) so the linker
+            // rebases the pair against the merged TLS layout.
+            let tpoff = if tls_extern_sym.is_some() {
                 16u32
             } else {
                 (offset + 16) as u32
             };
-            if imm >= 4096 {
-                bail_msg("TlsAddr: tpoff exceeds 12-bit add immediate");
+            if tpoff >= (1 << 24) {
+                bail_msg("TlsAddr: tpoff exceeds the hi12/lo12 range");
                 return false;
             }
             emit(code, enc_mrs_tpidr_el0(rd));
             let add_off = code.len();
-            emit(code, enc_add_imm(rd, rd, imm));
+            emit(code, enc_add_imm_lsl12(rd, rd, tpoff >> 12));
+            emit(code, enc_add_imm(rd, rd, tpoff & 0xFFF));
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset: add_off,
                 target: match tls_extern_sym {
@@ -3552,12 +3557,112 @@ fn emit_intrinsic(
             bail_msg("x87 control word intrinsic is x86-only");
             false
         }
+        I::X86FxSave | I::X86FxRestore => {
+            // fxsave / fxrstor are x86-only; the AArch64 firmware path uses
+            // its own FP state save and never reaches these.
+            bail_msg("fxsave / fxrstor intrinsic is x86-only");
+            false
+        }
+        I::X86Sgdt
+        | I::X86Sidt
+        | I::X86Sldt
+        | I::X86Str
+        | I::X86Lgdt
+        | I::X86Lidt
+        | I::X86Lldt
+        | I::X86Clflush => {
+            // x86 descriptor-table / clflush forms; AArch64 has no equivalent
+            // and the source gates them on the target.
+            bail_msg("descriptor-table intrinsic is x86-only");
+            false
+        }
         I::Cpuid | I::Xgetbv => {
             // cpuid / xgetbv are x86-only; the source gates them on
             // MA_X86 / MA_X64, so AArch64 never reaches them.
             bail_msg("cpuid / xgetbv intrinsic is x86-only");
             false
         }
+        I::Divq128 => {
+            // The `divq` 128/64 divide is x86-only; the source gates it on
+            // `__x86_64__`, so AArch64 never reaches it.
+            bail_msg("divq intrinsic is x86-64 only");
+            false
+        }
+        I::Rdtsc => {
+            // `rdtsc` is x86-only; the source gates it on `__x86_64__`, so
+            // AArch64 never reaches it.
+            bail_msg("rdtsc intrinsic is x86-64 only");
+            false
+        }
+        I::AArch64DsbIsh => {
+            // `dsb ish` (0xD5033B9F): data synchronisation barrier over the
+            // inner shareable domain. No operand, no result.
+            emit(code, 0xD503_3B9Fu32);
+            true
+        }
+        I::AArch64Isb => {
+            // `isb` (0xD5033FDF): instruction synchronisation barrier. No
+            // operand, no result.
+            emit(code, 0xD503_3FDFu32);
+            true
+        }
+        I::AArch64DcCvau | I::AArch64IcIvau => {
+            // `dc cvau, Xt` (0xD50B7B20|Rt) / `ic ivau, Xt` (0xD50B7520|Rt):
+            // clean the data cache / invalidate the instruction cache to the
+            // point of unification for the address in Xt. One pointer input.
+            if args.len() != 1 {
+                bail_msg("dc/ic cache op: expected 1 arg");
+                return false;
+            }
+            let place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let rt = match materialize_int(code, place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            let base = if matches!(intrinsic, I::AArch64DcCvau) {
+                0xD50B_7B20u32
+            } else {
+                0xD50B_7520u32
+            };
+            emit(code, base | (rt.0 as u32));
+            true
+        }
+        I::AArch64ReadCacheType => {
+            // `mrs Xt, ctr_el0` (0xD53B0020|Rt) reads the cache type
+            // register; store it to the output operand's address (arg 0).
+            if args.len() != 1 {
+                bail_msg("mrs ctr_el0: expected 1 arg");
+                return false;
+            }
+            let place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let addr = match materialize_int(code, place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            let tmp = if addr.0 == scratch.secondary.0 {
+                scratch.primary
+            } else {
+                scratch.secondary
+            };
+            emit(code, 0xD53B_0020u32 | (tmp.0 as u32));
+            emit(code, enc_str_imm(tmp, addr, 0));
+            true
+        }
+        I::Atomic128CmpXchg | I::Atomic128Xchg | I::Atomic128FetchAnd | I::Atomic128FetchOr => {
+            emit_atomic128(code, intrinsic, args, alloc, frame, scratch)
+        }
+        I::Atomic128Load | I::Atomic128Store | I::Atomic128LoadEx | I::Atomic128StoreEx => {
+            emit_atomic128_ldst(code, intrinsic, args, alloc, frame, scratch)
+        }
+        I::Atomic128StoreInsert => emit_atomic128_store_insert(code, args, alloc, frame, scratch),
         I::Sqrt
         | I::Sqrtf
         | I::Fabs
@@ -3626,12 +3731,34 @@ fn emit_intrinsic(
             spill_local_addr_to_dst(code, dst, rd, frame);
             true
         }
+        I::ReturnAddress => {
+            // __builtin_return_address(0): the saved return address the
+            // AAPCS64 prologue stored at [x29 + 8]. Only level 0 (args[0]
+            // ignored) is supported.
+            let rd = match dst {
+                Place::IntReg(r) => Reg(r),
+                Place::Spill(_) => Reg(16),
+                _ => {
+                    bail_msg("ReturnAddress: dst not int reg / spill");
+                    return false;
+                }
+            };
+            emit(code, enc_ldr_imm(rd, Reg(29), 8));
+            spill_local_addr_to_dst(code, dst, rd, frame);
+            true
+        }
         I::Clz
         | I::Ctz
         | I::Popcount
         | I::Clzll
         | I::Ctzll
         | I::Popcountll
+        | I::Clrsb
+        | I::Clrsbll
+        | I::Parity
+        | I::Parityll
+        | I::Ffs
+        | I::Ffsll
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64 => {
@@ -4296,17 +4423,57 @@ fn emit_mcpy(
     };
     let bytes = size as u32;
     emit(code, enc_str_pre(temp, Reg(31), -16));
-    let words = bytes / 8;
-    for w in 0..words {
-        let off = w * 8;
-        emit(code, enc_ldr_imm(temp, src_r, off));
-        emit(code, enc_str_imm(temp, dst_r, off));
-    }
-    let tail_start = words * 8;
-    for i in 0..(bytes - tail_start) {
-        let off = tail_start + i;
-        emit(code, enc_ldrb_imm(temp, src_r, off));
-        emit(code, enc_strb_imm(temp, dst_r, off));
+    // The scaled load/store immediate reaches 32760 for 8-byte accesses
+    // but only 4095 for the byte tail, so a copy whose byte offset would
+    // exceed that must advance the base pointers. `WINDOW` is 8-aligned and
+    // below 4096, keeping every word and tail offset in range and letting a
+    // single `add` (12-bit immediate) step both bases between windows.
+    const WINDOW: u32 = 4088;
+    let copy_run = |code: &mut Vec<u8>, sbase: Reg, dbase: Reg, run: u32| {
+        let words = run / 8;
+        for w in 0..words {
+            let off = w * 8;
+            emit(code, enc_ldr_imm(temp, sbase, off));
+            emit(code, enc_str_imm(temp, dbase, off));
+        }
+        let tail_start = words * 8;
+        for i in 0..(run - tail_start) {
+            let off = tail_start + i;
+            emit(code, enc_ldrb_imm(temp, sbase, off));
+            emit(code, enc_strb_imm(temp, dbase, off));
+        }
+    };
+    if bytes <= WINDOW {
+        copy_run(code, src_r, dst_r, bytes);
+    } else {
+        // Advance working copies so `dst_r` (the memcpy return value) and
+        // `src_r` are left unchanged. Pick two scratch registers distinct
+        // from the bases and the data temp; save and restore them.
+        let mut picks = [Reg(9), Reg(9)];
+        let mut n = 0;
+        for cand in [9u8, 13, 14, 15, 12, 11] {
+            if cand != dst_r.0 && cand != src_r.0 && cand != temp.0 && n < 2 {
+                picks[n] = Reg(cand);
+                n += 1;
+            }
+        }
+        let (wsrc, wdst) = (picks[0], picks[1]);
+        emit(code, enc_str_pre(wsrc, Reg(31), -16));
+        emit(code, enc_str_pre(wdst, Reg(31), -16));
+        emit_mov_reg(code, wsrc, src_r);
+        emit_mov_reg(code, wdst, dst_r);
+        let mut pos = 0u32;
+        while pos < bytes {
+            let run = (bytes - pos).min(WINDOW);
+            copy_run(code, wsrc, wdst, run);
+            pos += run;
+            if pos < bytes {
+                emit(code, super::encode::enc_add_imm(wsrc, wsrc, run));
+                emit(code, super::encode::enc_add_imm(wdst, wdst, run));
+            }
+        }
+        emit(code, enc_ldr_post(wdst, Reg(31), 16));
+        emit(code, enc_ldr_post(wsrc, Reg(31), 16));
     }
     emit(code, enc_ldr_post(temp, Reg(31), 16));
     // memcpy returns dst -- propagate into the Inst's `dst_place`.
@@ -4551,6 +4718,309 @@ fn emit_atomic_cas(
     code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
     atomic_restore_working(code);
     write_atomic_result(code, dst, cur, frame);
+    true
+}
+
+/// x9..x15 save area for the 128-bit atomic sequence (7 borrowed working
+/// registers, padded to a 16-byte multiple).
+const ATOMIC128_SAVE_BYTES: u32 = 64;
+
+/// Save x9..x15 so any value the allocator parked there survives the
+/// sequence. Layout: `[sp+0]=x9 .. [sp+48]=x15`. sp moves down by
+/// [`ATOMIC128_SAVE_BYTES`].
+fn atomic128_save_working(code: &mut Vec<u8>) {
+    use super::encode::{enc_stp_off, enc_stp_pre};
+    emit(
+        code,
+        enc_stp_pre(Reg(9), Reg(10), Reg(31), -(ATOMIC128_SAVE_BYTES as i32)),
+    );
+    emit(code, enc_stp_off(Reg(11), Reg(12), Reg(31), 16));
+    emit(code, enc_stp_off(Reg(13), Reg(14), Reg(31), 32));
+    emit(code, enc_str_imm(Reg(15), Reg(31), 48));
+}
+
+/// Restore x9..x15 saved by [`atomic128_save_working`]. Run after the
+/// prior value has been written back through its output addresses.
+fn atomic128_restore_working(code: &mut Vec<u8>) {
+    use super::encode::{enc_ldp_off, enc_ldp_post};
+    emit(code, enc_ldr_imm(Reg(15), Reg(31), 48));
+    emit(code, enc_ldp_off(Reg(13), Reg(14), Reg(31), 32));
+    emit(code, enc_ldp_off(Reg(11), Reg(12), Reg(31), 16));
+    emit(
+        code,
+        enc_ldp_post(Reg(9), Reg(10), Reg(31), ATOMIC128_SAVE_BYTES as i32),
+    );
+}
+
+/// Materialise an operand into `target`, reading the saved copy when the
+/// allocator placed it in a borrowed working register (x9..x15) that an
+/// earlier operand move may already have clobbered.
+fn atomic128_operand_into(
+    code: &mut Vec<u8>,
+    value: super::super::ir::ValueId,
+    target: Reg,
+    frame: Frame,
+    alloc: &Allocation,
+) -> bool {
+    let place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    if let Place::IntReg(r) = place
+        && (9..=15).contains(&r)
+    {
+        emit_sp_ldr_x(code, target, (r as u32 - 9) * 8);
+        return true;
+    }
+    match materialize_int_shifted(code, place, target, frame, ATOMIC128_SAVE_BYTES) {
+        Some(r) => {
+            if r.0 != target.0 {
+                emit_mov_reg(code, target, r);
+            }
+            true
+        }
+        None => false,
+    }
+}
+
+/// C11-style 128-bit atomic read-modify-write via an LDAXP / STLXP
+/// exclusive-pair retry loop (ARM ARM B2.9), recognised from the GCC
+/// inline-asm shape aarch64 code uses for `Int128` atomics. `args` is
+/// `[ptr, &oldl, &oldh, in...]`: the inputs are `(cmpl, cmph, newl, newh)`
+/// for `CmpXchg` and `(newl, newh)` otherwise. The prior 128-bit value is
+/// written back through `&oldl` / `&oldh` (the caller reads it); there is
+/// no register result.
+fn emit_atomic128(
+    code: &mut Vec<u8>,
+    kind: super::super::op::Intrinsic,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use super::super::op::Intrinsic as I;
+    use super::encode::{Cond, enc_ccmp, enc_ldaxp, enc_orr_reg, enc_stlxp};
+    let n_in = if matches!(kind, I::Atomic128CmpXchg) {
+        4
+    } else {
+        2
+    };
+    if args.len() != 3 + n_in {
+        bail_msg("atomic128: wrong operand count");
+        return false;
+    }
+    let ptr = Reg(9);
+    let oldl = Reg(10);
+    let oldh = Reg(11);
+    let status = scratch.secondary; // x17
+    atomic128_save_working(code);
+    if !atomic128_operand_into(code, args[0], ptr, frame, alloc) {
+        bail_msg("atomic128: ptr operand not int reg / spill");
+        return false;
+    }
+    // Inputs land in x12.. in declaration order: (cmpl,cmph,newl,newh) or
+    // (newl,newh). Reads route through the save area if the allocator had
+    // parked an input in a register a prior move already overwrote.
+    for (k, &a) in args[3..].iter().enumerate() {
+        if !atomic128_operand_into(code, a, Reg(12 + k as u8), frame, alloc) {
+            bail_msg("atomic128: input operand not int reg / spill");
+            return false;
+        }
+    }
+    let loop_start = code.len();
+    emit(code, enc_ldaxp(oldl, oldh, ptr));
+    let (src_l, src_h, to_done) = match kind {
+        I::Atomic128CmpXchg => {
+            // Two-word equality: compare low, then high only when low matched.
+            emit(code, enc_cmp_reg(oldl, Reg(12)));
+            emit(code, enc_ccmp(oldh, Reg(13), 0, Cond::Eq));
+            emit(code, enc_b_cond(Cond::Ne, 0));
+            (Reg(14), Reg(15), Some(code.len() - 4))
+        }
+        I::Atomic128Xchg => (Reg(12), Reg(13), None),
+        I::Atomic128FetchAnd => {
+            emit(code, enc_and_reg(Reg(14), oldl, Reg(12)));
+            emit(code, enc_and_reg(Reg(15), oldh, Reg(13)));
+            (Reg(14), Reg(15), None)
+        }
+        I::Atomic128FetchOr => {
+            emit(code, enc_orr_reg(Reg(14), oldl, Reg(12)));
+            emit(code, enc_orr_reg(Reg(15), oldh, Reg(13)));
+            (Reg(14), Reg(15), None)
+        }
+        _ => {
+            bail_msg("atomic128: unexpected kind");
+            return false;
+        }
+    };
+    emit(code, enc_stlxp(status, src_l, src_h, ptr));
+    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(code, enc_cbnz(status, back as i32));
+    // CmpXchg's mismatch branch lands here, past the store/retry.
+    if let Some(to_done) = to_done {
+        let delta = ((code.len() - to_done) / 4) as i32;
+        code[to_done..to_done + 4].copy_from_slice(&enc_b_cond(Cond::Ne, delta).to_le_bytes());
+    }
+    // Write the prior value back through &oldl / &oldh.
+    if !atomic128_writeback(code, args[1], oldl, frame, alloc, scratch.primary)
+        || !atomic128_writeback(code, args[2], oldh, frame, alloc, scratch.primary)
+    {
+        return false;
+    }
+    atomic128_restore_working(code);
+    true
+}
+
+/// Store `src` (a loaded old half) through the output address operand
+/// `addr_val`, materialised into `addr_tmp`.
+fn atomic128_writeback(
+    code: &mut Vec<u8>,
+    addr_val: super::super::ir::ValueId,
+    src: Reg,
+    frame: Frame,
+    alloc: &Allocation,
+    addr_tmp: Reg,
+) -> bool {
+    if !atomic128_operand_into(code, addr_val, addr_tmp, frame, alloc) {
+        bail_msg("atomic128: output address not int reg / spill");
+        return false;
+    }
+    emit(code, enc_str_imm(src, addr_tmp, 0));
+    true
+}
+
+/// AArch64 128-bit atomic load / store, recognised from the inline-asm
+/// idiom used for a 16-byte access without native LSE2. `Load`/`Store` are
+/// the plain `LDP`/`STP` forms; `LoadEx`/`StoreEx` are the pre-LSE2 forms
+/// built from an `LDXP`/`STXP` exclusive-pair retry loop (ARM ARM B2.9).
+/// `args` is `[ptr, &l, &h]` for the loads (the value read from `ptr` is
+/// written back through `&l` / `&h`) and `[ptr, l, h]` for the stores.
+/// There is no register result. Borrowed working registers x9..x15 are
+/// saved / restored so spilled operands can route through the save area.
+fn emit_atomic128_ldst(
+    code: &mut Vec<u8>,
+    kind: super::super::op::Intrinsic,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use super::super::op::Intrinsic as I;
+    use super::encode::{enc_ldxp, enc_stxp};
+    if args.len() != 3 {
+        bail_msg("atomic128 ldst: wrong operand count");
+        return false;
+    }
+    let ptr = Reg(9);
+    let lo = Reg(10);
+    let hi = Reg(11);
+    let status = scratch.secondary; // x17
+    atomic128_save_working(code);
+    if !atomic128_operand_into(code, args[0], ptr, frame, alloc) {
+        bail_msg("atomic128 ldst: ptr operand not int reg / spill");
+        return false;
+    }
+    let is_load = matches!(kind, I::Atomic128Load | I::Atomic128LoadEx);
+    match kind {
+        // Plain LDP: a single non-exclusive 128-bit load. No store, so it
+        // never faults on a read-only mapping.
+        I::Atomic128Load => emit(code, enc_ldp_off(lo, hi, ptr, 0)),
+        // Pre-LSE2 load: an LDXP/STXP loop storing the value it read back
+        // unchanged, retried until the monitor holds. Leaves it in lo / hi.
+        I::Atomic128LoadEx => {
+            let loop_start = code.len();
+            emit(code, enc_ldxp(lo, hi, ptr));
+            emit(code, enc_stxp(status, lo, hi, ptr));
+            let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+            emit(code, enc_cbnz(status, back as i32));
+        }
+        // Plain STP: materialise the two halves and store the pair.
+        I::Atomic128Store => {
+            if !atomic128_operand_into(code, args[1], Reg(12), frame, alloc)
+                || !atomic128_operand_into(code, args[2], Reg(13), frame, alloc)
+            {
+                bail_msg("atomic128 ldst: store value not int reg / spill");
+                return false;
+            }
+            emit(code, enc_stp_off(Reg(12), Reg(13), ptr, 0));
+        }
+        // Pre-LSE2 store: an LDXP (result discarded) / STXP loop. The new
+        // value sits in x12 / x13, clear of the LDXP scratch lo / hi.
+        I::Atomic128StoreEx => {
+            if !atomic128_operand_into(code, args[1], Reg(12), frame, alloc)
+                || !atomic128_operand_into(code, args[2], Reg(13), frame, alloc)
+            {
+                bail_msg("atomic128 ldst: store value not int reg / spill");
+                return false;
+            }
+            let loop_start = code.len();
+            emit(code, enc_ldxp(lo, hi, ptr));
+            emit(code, enc_stxp(status, Reg(12), Reg(13), ptr));
+            let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+            emit(code, enc_cbnz(status, back as i32));
+        }
+        _ => {
+            bail_msg("atomic128 ldst: unexpected kind");
+            return false;
+        }
+    }
+    // Loads publish the read value through &l / &h.
+    if is_load
+        && (!atomic128_writeback(code, args[1], lo, frame, alloc, scratch.primary)
+            || !atomic128_writeback(code, args[2], hi, frame, alloc, scratch.primary))
+    {
+        return false;
+    }
+    atomic128_restore_working(code);
+    true
+}
+
+/// AArch64 128-bit masked store-insert: `*mem = (*mem & ~msk) | val`, from an
+/// `LDXP` / `BIC` / `ORR` / `STXP` exclusive retry loop (no LSE2). `args` is
+/// `[ptr, vl, vh, ml, mh]`; there is no register result. Borrowed working
+/// registers x9..x15 are saved / restored so spilled operands can route
+/// through the save area.
+fn emit_atomic128_store_insert(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use super::encode::{enc_bic_reg, enc_ldxp, enc_orr_reg, enc_stxp};
+    if args.len() != 5 {
+        bail_msg("atomic128 store-insert: wrong operand count");
+        return false;
+    }
+    let ptr = Reg(9);
+    let lo = Reg(10);
+    let hi = Reg(11);
+    let status = scratch.secondary; // x17
+    let (vl, vh, ml, mh) = (Reg(12), Reg(13), Reg(14), Reg(15));
+    atomic128_save_working(code);
+    if !atomic128_operand_into(code, args[0], ptr, frame, alloc) {
+        bail_msg("atomic128 store-insert: ptr operand not int reg / spill");
+        return false;
+    }
+    // Inputs land in x12..x15 as (vl, vh, ml, mh); reads route through the
+    // save area if the allocator parked one in a working register.
+    for (r, &a) in [vl, vh, ml, mh].iter().zip(&args[1..]) {
+        if !atomic128_operand_into(code, a, *r, frame, alloc) {
+            bail_msg("atomic128 store-insert: input operand not int reg / spill");
+            return false;
+        }
+    }
+    let loop_start = code.len();
+    emit(code, enc_ldxp(lo, hi, ptr));
+    emit(code, enc_bic_reg(lo, lo, ml)); // lo &= ~ml
+    emit(code, enc_bic_reg(hi, hi, mh)); // hi &= ~mh
+    emit(code, enc_orr_reg(lo, lo, vl)); // lo |= vl
+    emit(code, enc_orr_reg(hi, hi, vh)); // hi |= vh
+    emit(code, enc_stxp(status, lo, hi, ptr));
+    let back = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(code, enc_cbnz(status, back as i32));
+    atomic128_restore_working(code);
     true
 }
 
@@ -6283,6 +6753,16 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
             if place_same_loc(m.0, cyc) {
                 m.0 = Place::IntReg(hold);
             }
+        }
+    }
+    fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
+        super::encode::load_imm64(code, Reg(dst), bits as u64);
+    }
+    fn fp_reg_from_int_reg(&self, code: &mut Vec<u8>, dst: u8, src: u8, is_f64: bool) {
+        if is_f64 {
+            emit(code, super::encode::enc_fmov_x_to_d(dst, Reg(src)));
+        } else {
+            emit(code, super::encode::enc_fmov_w_to_s(dst, Reg(src)));
         }
     }
 }

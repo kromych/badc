@@ -182,9 +182,14 @@ impl Compiler {
     /// so jump-to-error in editors works out of the box, and the CLI
     /// can color the `warning:` word when stderr is a TTY.
     pub(super) fn warn_at(&mut self, line: usize, message: alloc::string::String) {
-        let file = &self.lex.file;
-        self.warnings
-            .push(alloc::format!("{file}:{line}: warning: {message}"));
+        let mut s = alloc::format!("{}:{line}: warning: {message}", self.lex.file);
+        if let Some(src) = self.lex.line_text_by_number(line)
+            && !src.is_empty()
+        {
+            s.push('\n');
+            s.push_str(src);
+        }
+        self.warnings.push(s);
     }
 
     /// Whether the lexer's current file matches the primary
@@ -299,14 +304,16 @@ impl Compiler {
     /// initializer lists, statements) passes through an entry wrapped
     /// in this helper, so one counter bounds them all and
     /// pathological nesting gets a diagnostic instead of exhausting
-    /// the native stack. C99 5.2.4.1 requires 63 nesting levels; the
-    /// bound stays well above any real source.
+    /// the native stack. C99 5.2.4.1 requires 63 nesting levels for
+    /// expressions / declarators and 127 for blocks; 512 stays well
+    /// above any real source (and above Clang's default of 256) while
+    /// capping the worst-case native stack the driver must reserve.
     pub(super) fn with_nesting<T>(
         &mut self,
         construct: &'static str,
         f: impl FnOnce(&mut Self) -> Result<T, C5Error>,
     ) -> Result<T, C5Error> {
-        const MAX_NEST_DEPTH: usize = 1024;
+        const MAX_NEST_DEPTH: usize = 512;
         if self.nest_depth >= MAX_NEST_DEPTH {
             return Err(self.compile_err(alloc::format!("{construct} nesting too deep")));
         }
@@ -323,11 +330,21 @@ impl Compiler {
     /// Pulls `<file>` / `<line>` out of `self.lex` so call sites
     /// don't have to thread them through every `format!`.
     pub(super) fn compile_err(&self, message: impl AsRef<str>) -> C5Error {
-        C5Error::Compile(super::super::error::fmt_compile_err(
-            &self.lex.file,
-            self.lex.line,
-            message.as_ref(),
-        ))
+        self.compile_err_line(self.lex.line, message.as_ref())
+    }
+
+    /// Shared builder: a `<file>:<line>: error: <message>` diagnostic with
+    /// the source text of `line` echoed beneath it (the line the number
+    /// points at, recovered even when the parser has read past it).
+    fn compile_err_line(&self, line: usize, message: &str) -> C5Error {
+        let mut s = super::super::error::fmt_compile_err(&self.lex.file, line, message);
+        if let Some(src) = self.lex.line_text_by_number(line)
+            && !src.is_empty()
+        {
+            s.push('\n');
+            s.push_str(src);
+        }
+        C5Error::Compile(s)
     }
 
     /// Same shape as [`Self::compile_err`] but lets the caller pin
@@ -336,11 +353,7 @@ impl Compiler {
     /// function / argument *started*, not where the parser noticed
     /// the problem.
     pub(super) fn compile_err_at(&self, line: usize, message: impl AsRef<str>) -> C5Error {
-        C5Error::Compile(super::super::error::fmt_compile_err(
-            &self.lex.file,
-            line,
-            message.as_ref(),
-        ))
+        self.compile_err_line(line, message.as_ref())
     }
 
     pub(super) fn type_warning(

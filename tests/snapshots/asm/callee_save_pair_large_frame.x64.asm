@@ -11,17 +11,27 @@ Disassembly of section .text:
                	ud2
 
 <sink>:
-               	movslq	%edi, %rdi
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	leaq	-0x1(%rdi), %rcx
-               	movslq	%ecx, %rcx
-               	addq	%rdi, %rax
-               	movq	%rcx, %rdi
-               	testq	%rdi, %rdi
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	movq	%rdi, %rbx
+               	movslq	%ebx, %rbx
+               	testq	%rbx, %rbx
                	jg	<addr>
-               	incq	%rax
-               	movslq	%eax, %rax
+               	movl	$0x1, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x1(%rbx), %rdi
+               	callq	<addr>
+               	addq	%rbx, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
 
 <bigframe>:
@@ -44,7 +54,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	%rbx, %rax
                	addq	%r12, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	addq	$0x340, %rsp            # imm = 0x340
@@ -56,7 +67,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x3, %edi
                	movl	$0x4, %esi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
+               	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -6,11 +6,10 @@
 // `(double)x == 505.0` compare the bit pattern of 505 against
 // 505.0 (different bit patterns) and lose.
 //
-// Lua's `lua_version` returns `LUA_VERSION_NUM` (an int) from a
-// `lua_Number`-returning prototype; without the conversion the
-// version check in the standalone interpreter rejects the
-// freshly built core with "version mismatch: app. needs 505.0,
-// Lua core provides 2.4950e-321".
+// A function returns an int from a prototype declared to return a
+// floating type; without the conversion a version check that reads
+// the value as a double sees garbage (2.4950e-321) instead of the
+// intended 505.0.
 
 #include <stdio.h>
 #include <string.h>

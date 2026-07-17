@@ -163,6 +163,7 @@ fn synth_program_and_build(
         synthetic_ssa_funcs: Vec::new(),
         user_ssa_funcs: Vec::new(),
         extern_function_imports: Vec::new(),
+        init_funcs: Vec::new(),
     };
 
     // Surface every Text-section defined symbol as a "function"
@@ -346,6 +347,7 @@ fn synth_program_and_build(
         data: merged.data.clone(),
         data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
+        init_fini_arrays: merged.init_fini_arrays,
         entry_offset,
         got_fixups,
         data_fixups,
@@ -679,6 +681,10 @@ const R_X86_64_PLT32: u32 = 4;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
+const R_AARCH64_LDST8_ABS_LO12_NC: u32 = 284;
+const R_AARCH64_LDST16_ABS_LO12_NC: u32 = 285;
+const R_AARCH64_LDST32_ABS_LO12_NC: u32 = 286;
+const R_AARCH64_LDST64_ABS_LO12_NC: u32 = 287;
 
 fn project_aarch64_pending(
     reloc: &super::link::PendingImportReloc,
@@ -687,10 +693,14 @@ fn project_aarch64_pending(
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
     match reloc.rtype {
-        R_AARCH64_ADD_ABS_LO12_NC => {
-            // The matching ADRP entry owns the fixup; patch_adrp_add
-            // writes both halves from one DataFixup / FuncFixup /
-            // GotFixup record.
+        R_AARCH64_ADD_ABS_LO12_NC
+        | R_AARCH64_LDST8_ABS_LO12_NC
+        | R_AARCH64_LDST16_ABS_LO12_NC
+        | R_AARCH64_LDST32_ABS_LO12_NC
+        | R_AARCH64_LDST64_ABS_LO12_NC => {
+            // The matching ADRP entry owns the fixup; patch_adrp_add writes
+            // both halves -- the `add` or the scaled load/store low-12 -- from
+            // one DataFixup / FuncFixup / GotFixup record.
             Ok(())
         }
         R_AARCH64_CALL26 => Err(synth_err(
@@ -989,6 +999,7 @@ mod tests {
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            data_import_refs: alloc::vec![],
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             flat_imports: alloc::collections::BTreeSet::new(),
@@ -1017,6 +1028,7 @@ mod tests {
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
+            init_fini_arrays: Default::default(),
         }
     }
 
@@ -1078,14 +1090,14 @@ mod tests {
         // on Mach-O, gains the leading underscore the loader matches
         // against the host's exported name. ELF keeps the name verbatim.
         let mut merged = tiny_aarch64_main();
-        merged.imports = alloc::vec!["JS_ToIndex".to_string()];
-        merged.flat_imports.insert("JS_ToIndex".to_string());
+        merged.imports = alloc::vec!["ext_to_index".to_string()];
+        merged.flat_imports.insert("ext_to_index".to_string());
         let mac = synth_imports(&merged, Target::MacOSAarch64).expect("synth");
         assert!(mac.imports[0].flat_lookup, "must be flat-lookup on macOS");
-        assert_eq!(mac.imports[0].real_symbol, "_JS_ToIndex");
+        assert_eq!(mac.imports[0].real_symbol, "_ext_to_index");
         let elf = synth_imports(&merged, Target::LinuxAarch64).expect("synth");
         assert!(elf.imports[0].flat_lookup, "must be flat-lookup on ELF");
-        assert_eq!(elf.imports[0].real_symbol, "JS_ToIndex");
+        assert_eq!(elf.imports[0].real_symbol, "ext_to_index");
     }
 
     /// A non-flat import missing from the routing map is defaulted to

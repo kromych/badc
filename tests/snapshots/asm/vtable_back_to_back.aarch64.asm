@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x270              // =624
+               	mov	x1, #0x2e0              // =736
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
@@ -19,10 +19,9 @@ Disassembly of section .text:
                	ret
 
 <my_generate>:
-               	sxtw	x2, w2
                	ldrsw	x0, [x0, #0x8]
                	str	w0, [x1]
-               	mov	x0, x2
+               	sxtw	x0, w2
                	ret
 
 <main>:

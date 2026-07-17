@@ -25,7 +25,8 @@ Disassembly of section .text:
                	movq	(%rdi), %rax
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	callq	*%rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
 
@@ -64,6 +65,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x60, %rsp
                	popq	%rbp
@@ -71,3 +73,4 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

@@ -11,7 +11,7 @@
 // (`parse_block_local_decl`, used for any nested `{ ... }`
 // including `else { ... }`, `for (T x = 0; ...; ...)`,
 // and any other block-scoped decl) used to skip the write.
-// A `lua_KFunction kf = ci->u.c.k;` declaration inside an
+// A function-pointer-typedef declaration (`fn_t kf = obj->field;`) inside an
 // `else` branch therefore left `kf.fn_ptr_indirection = 0`,
 // the deref handler took the through-pointer-load branch, and
 // `(*kf)(...)` lowered as `Load { kind = I32 }` -- 4 bytes
@@ -32,8 +32,8 @@ int main(void) {
     int sum = 0;
     int branch = 1;
 
-    // `else { kfn_t kf = ...; (*kf)(...); }` -- the lua
-    // finishCcall shape.
+    // `else { kfn_t kf = ...; (*kf)(...); }` -- fn-ptr
+    // local in an else branch, called through.
     if (branch == 0) {
         return 1;
     } else {

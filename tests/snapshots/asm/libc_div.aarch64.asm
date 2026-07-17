@@ -6,68 +6,10 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x230              // =560
+               	mov	x1, #0x280              // =640
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sub	x2, x29, #0x8
-               	sdiv	x3, x0, x1
-               	str	w3, [x2]
-               	sub	x2, x29, #0x8
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
-               	str	w0, [x2, #0x4]
-               	sub	x0, x29, #0x8
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<ldiv>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
-               	sdiv	x3, x0, x1
-               	str	x3, [x2]
-               	sub	x2, x29, #0x10
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
-               	str	x0, [x2, #0x8]
-               	sub	x0, x29, #0x10
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<lldiv>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
-               	sdiv	x3, x0, x1
-               	str	x3, [x2]
-               	sub	x2, x29, #0x10
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
-               	str	x0, [x2, #0x8]
-               	sub	x0, x29, #0x10
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0xc0

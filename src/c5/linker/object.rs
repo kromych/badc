@@ -110,6 +110,15 @@ struct Elf64Rela {
     r_addend: i64,
 }
 
+/// On-disk ELF64 `.dynamic` entry: a `(tag, value)` directive read by
+/// the dynamic loader (DT_NEEDED, DT_SONAME, ...).
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Elf64Dyn {
+    d_tag: i64,
+    d_val: u64,
+}
+
 /// ELF note header: the fixed prefix before a note's name and
 /// descriptor payloads.
 #[repr(C)]
@@ -126,6 +135,7 @@ const _: () = {
     assert!(core::mem::size_of::<Elf64Sym>() == 24);
     assert!(core::mem::size_of::<Elf64Rela>() == 24);
     assert!(core::mem::size_of::<Elf64Nhdr>() == 12);
+    assert!(core::mem::size_of::<Elf64Dyn>() == 16);
 };
 
 /// Read a `#[repr(C)]` ELF record at byte offset `off`. Bounds-
@@ -151,8 +161,11 @@ fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
 }
 
 /// `SHT_DYNSYM` -- the loader-visible dynamic symbol table.
-#[cfg(test)]
 const SHT_DYNSYM: u32 = 11;
+/// `SHT_DYNAMIC` -- the dynamic-linking directive array.
+const SHT_DYNAMIC: u32 = 6;
+/// `DT_SONAME` -- `.dynstr` offset of a shared object's canonical name.
+const DT_SONAME: i64 = 14;
 
 /// Count the dynamic relocations of a given type (`r_info & 0xffffffff`)
 /// across every `SHT_RELA` section of a linked ELF64 image. Used to
@@ -225,6 +238,98 @@ pub(crate) fn read_dynamic_symbol_names(bytes: &[u8]) -> Result<Vec<String>, C5E
         }
     }
     Ok(names)
+}
+
+/// A shared library resolved from a `-l<name>` input: its canonical
+/// name (the SONAME a dependent records as `DT_NEEDED`) and the set of
+/// symbols it defines and exports through `.dynsym`. The linker turns
+/// an otherwise-undefined reference whose name is in `exports` into a
+/// runtime import bound to `soname`, exactly as a system linker
+/// resolves undefined references against a `.so` on the `-l` path.
+#[derive(Debug, Clone)]
+pub struct SharedLibrary {
+    pub soname: String,
+    pub exports: alloc::collections::BTreeSet<String>,
+    /// The subset of `exports` that are data objects (`STT_OBJECT`)
+    /// rather than functions. A reference to one must resolve to the
+    /// object's address through the GOT, not to a PLT stub -- a stub's
+    /// bytes are code, so reading the "object" through it returns
+    /// instructions.
+    pub data_exports: alloc::collections::BTreeSet<String>,
+}
+
+/// Read a shared object's SONAME and exported dynamic symbols from its
+/// ELF image. The SONAME comes from the `.dynamic` `DT_SONAME` entry
+/// (empty when absent -- the caller substitutes the file's base name);
+/// the exports are every `.dynsym` entry that is defined (not
+/// `SHN_UNDEF`) and externally bound (`STB_GLOBAL` / `STB_WEAK`).
+pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
+    let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
+    let read_cstr = |off: usize| -> String {
+        let start = off.min(bytes.len());
+        let mut end = start;
+        while end < bytes.len() && bytes[end] != 0 {
+            end += 1;
+        }
+        String::from_utf8_lossy(&bytes[start..end]).into_owned()
+    };
+    let shdr = |i: usize| -> Result<Elf64Shdr, C5Error> {
+        read_struct(bytes, ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize)
+    };
+    let mut soname = String::new();
+    let mut exports = alloc::collections::BTreeSet::new();
+    let mut data_exports = alloc::collections::BTreeSet::new();
+    for i in 0..ehdr.e_shnum as usize {
+        let sh = shdr(i)?;
+        if sh.sh_type == SHT_DYNSYM {
+            let strtab = shdr(sh.sh_link as usize)?;
+            let entsize = sh.sh_entsize as usize;
+            if entsize == 0 {
+                continue;
+            }
+            for j in 0..(sh.sh_size as usize / entsize) {
+                let sym: Elf64Sym = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
+                // SHN_UNDEF (0) is an import, not an export; STB_LOCAL (0)
+                // has no external linkage. Keep STB_GLOBAL (1) / STB_WEAK (2)
+                // definitions.
+                let bind = sym.st_info >> 4;
+                if sym.st_shndx == 0 || (bind != 1 && bind != 2) {
+                    continue;
+                }
+                let name = read_cstr(strtab.sh_offset as usize + sym.st_name as usize);
+                if name.is_empty() {
+                    continue;
+                }
+                // STT_OBJECT (1) is a data object; a reference to it must
+                // reach the object's address, not a PLT stub.
+                if (sym.st_info & 0xf) == 1 {
+                    data_exports.insert(name.clone());
+                }
+                exports.insert(name);
+            }
+        } else if sh.sh_type == SHT_DYNAMIC {
+            let strtab = shdr(sh.sh_link as usize)?;
+            let entsize = if sh.sh_entsize == 0 {
+                core::mem::size_of::<Elf64Dyn>()
+            } else {
+                sh.sh_entsize as usize
+            };
+            for j in 0..(sh.sh_size as usize / entsize) {
+                let ent: Elf64Dyn = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
+                if ent.d_tag == 0 {
+                    break; // DT_NULL terminates the array
+                }
+                if ent.d_tag == DT_SONAME {
+                    soname = read_cstr(strtab.sh_offset as usize + ent.d_val as usize);
+                }
+            }
+        }
+    }
+    Ok(SharedLibrary {
+        soname,
+        exports,
+        data_exports,
+    })
 }
 
 /// Which architecture's relocations the object uses. Drives the
@@ -321,6 +426,22 @@ pub struct NativeReloc {
     pub addend: i64,
 }
 
+/// One `.init_array` / `.fini_array` entry parsed from an ET_REL
+/// object: a constructor / destructor pointer resolved to a `.text`
+/// offset within this unit. The linker adds the unit's text base to
+/// place it in the merged image and orders entries by priority.
+#[derive(Debug, Clone, Copy)]
+pub struct NativeInitFunc {
+    /// `true` for a `.fini_array` (destructor) entry.
+    pub is_destructor: bool,
+    /// Priority from the `.init_array.NNNNN` section-name suffix;
+    /// `None` for the bare `.init_array`. Lower runs earlier.
+    pub priority: Option<u32>,
+    /// Byte offset of the target function within this unit's merged
+    /// `.text`.
+    pub unit_text_offset: u64,
+}
+
 /// Target of a TLS access fixup (`NT_BADC_ELF_TPOFF`). The linker
 /// resolves it to a byte offset in the merged TLS block (Linux x86_64 /
 /// aarch64 and the Windows/aarch64 TEB path; see `link_native_objects`).
@@ -362,6 +483,12 @@ pub struct NativeObject {
     /// patching the 8-byte slot at `offset` in the merged
     /// `.data`.
     pub data_relocs: Vec<NativeReloc>,
+    /// `.init_array` / `.fini_array` entries, each a constructor /
+    /// destructor pointer resolved to this unit's `.text` offset. The
+    /// linker collects these across units, orders them by priority, and
+    /// materialises the merged init/fini arrays the startup runtime
+    /// walks. Empty for objects declaring no such functions.
+    pub init_funcs: Vec<NativeInitFunc>,
     /// Dylib load paths the writer copied out of the unit's
     /// `#pragma dylib` declarations (`.note.badc` /
     /// `NT_BADC_DYLIBS`). Each entry is the verbatim path the
@@ -552,10 +679,16 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut debug_str_idx: Option<usize> = None;
     let mut rela_debug_info_idx: Option<usize> = None;
     let mut rela_debug_line_idx: Option<usize> = None;
+    // `.init_array*` / `.fini_array*` sections: (shndx, is_dtor, priority).
+    let mut init_array_sections: Vec<(usize, bool, Option<u32>)> = Vec::new();
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.sh_name as usize)?;
         if name == ".symtab" {
             symtab_idx = Some(i);
+            continue;
+        }
+        if let Some((is_dtor, priority)) = parse_init_array_section_name(name) {
+            init_array_sections.push((i, is_dtor, priority));
             continue;
         }
         if name == ".note.badc" {
@@ -815,6 +948,53 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
     }
 
+    // `.init_array` / `.fini_array` entries. Each array's paired
+    // `.rela.*` (found by `sh_info` == the array's index) binds every
+    // 8-byte slot to a constructor / destructor function. Resolve each
+    // to its `.text` offset within this unit; the linker rebases and
+    // orders them. Slot order (by `r_offset`) is preserved so
+    // same-priority entries keep source order.
+    let mut init_funcs: Vec<NativeInitFunc> = Vec::new();
+    for &(shndx, is_destructor, priority) in &init_array_sections {
+        let mut entries: Vec<(u64, u64)> = Vec::new(); // (slot_offset, text_offset)
+        for rela_sh in shdrs
+            .iter()
+            .filter(|s| s.sh_type == SHT_RELA && s.sh_info as usize == shndx)
+        {
+            if rela_sh.sh_entsize != ELF64_RELA_SIZE as u64 {
+                return Err(err(&format!(
+                    ".rela for init/fini section {shndx} has entry size {}; expected {ELF64_RELA_SIZE}",
+                    rela_sh.sh_entsize,
+                )));
+            }
+            let rela_bytes = section_slice(bytes, rela_sh)?;
+            let n = rela_bytes.len() / ELF64_RELA_SIZE;
+            for j in 0..n {
+                let rela: Elf64Rela = read_struct(rela_bytes, j * ELF64_RELA_SIZE)?;
+                let sym_idx = (rela.r_info >> 32) as usize;
+                let sym = symbols.get(sym_idx).ok_or_else(|| {
+                    err(&format!(
+                        "init/fini reloc references symbol {sym_idx} past the symbol table",
+                    ))
+                })?;
+                if !matches!(sym.section, NativeSymSection::Text) {
+                    return Err(err(
+                        "init/fini array entry must reference a defined function (.text symbol)",
+                    ));
+                }
+                entries.push((rela.r_offset, (sym.value as i64 + rela.r_addend) as u64));
+            }
+        }
+        entries.sort_by_key(|&(slot, _)| slot);
+        for (_, text_off) in entries {
+            init_funcs.push(NativeInitFunc {
+                is_destructor,
+                priority,
+                unit_text_offset: text_off,
+            });
+        }
+    }
+
     // `.note.badc` -- vendor note section. Record types:
     //   type=1 NT_BADC_DYLIBS       -- NUL-separated dylib paths.
     //   type=2 NT_BADC_BINDING_MAP  -- per-import dylib routing,
@@ -1048,6 +1228,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         symbols,
         text_relocs,
         data_relocs,
+        init_funcs,
         dylibs,
         import_dylib_map,
         exports,
@@ -1219,6 +1400,30 @@ enum SectionFamily {
     Tdata,
     Tbss,
     Other,
+}
+
+/// Recognise `.init_array` / `.fini_array` (and their
+/// `.<name>.NNNNN` priority variants) section names, returning
+/// `(is_destructor, priority)`. Returns `None` for any other name,
+/// including the `.rela.*` companions. A non-numeric or out-of-range
+/// suffix is treated as the bare (unprioritized) form.
+fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
+    let (is_dtor, rest) = if let Some(r) = name.strip_prefix(".init_array") {
+        (false, r)
+    } else {
+        let r = name.strip_prefix(".fini_array")?;
+        (true, r)
+    };
+    if rest.is_empty() {
+        return Some((is_dtor, None));
+    }
+    // A `.NNNNN` priority suffix; anything else (e.g. `.init_arrayX`
+    // would already have failed the prefix, but guard the dotted form).
+    let digits = rest.strip_prefix('.')?;
+    match digits.parse::<u32>() {
+        Ok(p) if p <= 65535 => Some((is_dtor, Some(p))),
+        _ => Some((is_dtor, None)),
+    }
 }
 
 fn classify_section_family(name: &str) -> SectionFamily {
@@ -1932,5 +2137,70 @@ mod tests {
             s.value, 4,
             "rodata STT_SECTION value should land at .data size"
         );
+    }
+
+    #[test]
+    fn parse_shared_library_reads_soname_and_exports() {
+        // Section layout (build_test_elf adds NULL@0, .shstrtab@1):
+        //   2: .dynstr, 3: .dynsym (sh_link=2), 4: .dynamic (sh_link=2)
+        let mut dynstr: Vec<u8> = vec![0];
+        let foo = dynstr.len() as u32;
+        dynstr.extend_from_slice(b"foo\0");
+        let bar = dynstr.len() as u32;
+        dynstr.extend_from_slice(b"bar\0");
+        let ext = dynstr.len() as u32;
+        dynstr.extend_from_slice(b"ext\0");
+        let soname_off = dynstr.len() as u64;
+        dynstr.extend_from_slice(b"libtest.so.1\0");
+
+        let mut dynsym = Vec::new();
+        push_test_sym(&mut dynsym, 0, 0, 0, 0, 0); // null
+        push_test_sym(&mut dynsym, foo, 0x12, 1, 0, 0); // GLOBAL FUNC, defined -> export
+        push_test_sym(&mut dynsym, bar, 0x21, 1, 0, 0); // WEAK OBJECT, defined -> export
+        push_test_sym(&mut dynsym, ext, 0x12, 0, 0, 0); // GLOBAL FUNC, SHN_UNDEF -> import, excluded
+
+        let mut dynamic = Vec::new();
+        write_struct(
+            &mut dynamic,
+            &Elf64Dyn {
+                d_tag: DT_SONAME,
+                d_val: soname_off,
+            },
+        );
+        write_struct(&mut dynamic, &Elf64Dyn { d_tag: 0, d_val: 0 }); // DT_NULL
+
+        let plans = [
+            SecPlan::strtab(".dynstr", dynstr),
+            SecPlan {
+                name: ".dynsym",
+                sh_type: SHT_DYNSYM,
+                body: dynsym,
+                sh_link: 2,
+                sh_info: 0,
+                sh_entsize: ELF64_SYM_SIZE as u64,
+                sh_size_override: None,
+            },
+            SecPlan {
+                name: ".dynamic",
+                sh_type: SHT_DYNAMIC,
+                body: dynamic,
+                sh_link: 2,
+                sh_info: 0,
+                sh_entsize: core::mem::size_of::<Elf64Dyn>() as u64,
+                sh_size_override: None,
+            },
+        ];
+        let bytes = build_test_elf(EM_X86_64, &plans);
+        let lib = parse_shared_library(&bytes).expect("parse .so");
+        assert_eq!(lib.soname, "libtest.so.1");
+        assert!(lib.exports.contains("foo"));
+        assert!(lib.exports.contains("bar"));
+        assert!(!lib.exports.contains("ext")); // SHN_UNDEF is an import, not an export
+        assert_eq!(lib.exports.len(), 2);
+        // `foo` is STT_FUNC, `bar` is STT_OBJECT: only the object is a
+        // data export.
+        assert!(lib.data_exports.contains("bar"));
+        assert!(!lib.data_exports.contains("foo"));
+        assert_eq!(lib.data_exports.len(), 1);
     }
 }

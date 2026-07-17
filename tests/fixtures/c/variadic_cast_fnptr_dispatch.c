@@ -1,7 +1,7 @@
 /* A call through a cast fn-pointer type uses the cast's prototype
    (C99 6.5.2.2p7): the variadic tail must marshal per the host
    variadic convention even when the pointer's declared type says
-   nothing (the sqlite-style syscall dispatch table shape). */
+   nothing (a real-world syscall dispatch table shape). */
 #include <stdio.h>
 #include <string.h>
 

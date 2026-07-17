@@ -29,7 +29,7 @@ font), so no image or audio file loaders are compiled.
 | `loderunner.h` / `loderunner_logic.c` | Game state + the pure `level_step` logic (references no raylib symbol). |
 | `loderunner.c` | The renderer (`level_draw`) and frame loop; the only raylib caller. |
 | `test_loderunner.c` | Headless logic self-test; links the pure logic, runs on any host. |
-| `include/` | Hand-authored macOS platform headers (objc, CoreGraphics, CoreFoundation, CoreVideo, OpenGL CGL) + the framework-binding header. |
+| `../include/` | Hand-authored platform / windowing / GL headers (objc, CoreGraphics, CoreFoundation, CoreVideo, OpenGL CGL, Win32, X11) live in the shared `demos/include` tree. |
 | `smoke.py` | Build + run harness. |
 
 ## Workflow

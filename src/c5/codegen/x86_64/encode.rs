@@ -291,6 +291,16 @@ pub(crate) fn emit_mov_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32)
     emit_modrm_mem(code, dst, base, disp);
 }
 
+/// `MOV r32, [base + disp]` -- 32-bit load (zero-extends to 64).
+/// Encoding: `8B /r` (no REX.W).
+pub(crate) fn emit_mov_r_mem32(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    if dst.high() || base.high() {
+        emit_byte(code, rex(false, dst.high(), false, base.high()));
+    }
+    emit_byte(code, 0x8B);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
 /// `MOV [base + disp], r64` -- 64-bit memory store.
 /// Encoding: `REX.W + 89 /r`.
 pub(crate) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
@@ -1817,8 +1827,8 @@ pub(crate) fn emit_start_stub(
     //                              Using `pop` instead would shift
     //                              rsp by 8 and misalign every
     //                              SSE-aligned spill in glibc on
-    //                              real Intel hardware (QEMU
-    //                              tolerates the misalignment).
+    //                              real Intel hardware (some
+    //                              emulators tolerate the misalignment).
     emit_mov_r_mem(code, argc_reg, Reg::RSP, 0);
     // lea <argv>, [rsp + 8]     -- argv array starts one slot up.
     emit_lea_r_mem(code, argv_reg, Reg::RSP, 8);
@@ -2071,14 +2081,34 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::fma::run (x86_64)", || {
             crate::c5::codegen::passes::fma::run(&mut ssa_funcs);
         });
-        super::ssa::emit_common::time_pass("passes::constfold_branch::run (x86_64)", || {
-            crate::c5::codegen::passes::constfold_branch::run(&mut ssa_funcs);
+        // Prove a null comparison of a const array's relocated pointer
+        // member false. Runs after constfold has folded the constant
+        // member offset (`ARRAY_SIZE(a) - 1` -> a fixed index), so the
+        // branch fold below deletes the unreachable arm (e.g. an inlined
+        // build-time-unreachable guard).
+        super::ssa::emit_common::time_pass("passes::const_global_fold::run (x86_64)", || {
+            crate::c5::codegen::passes::const_global_fold::run(&mut ssa_funcs, program);
         });
-        // Delete blocks the branch fold left unreachable so their calls
-        // and extern references are neither lowered nor relocated.
-        super::ssa::emit_common::time_pass("passes::prune_unreachable::run (x86_64)", || {
-            crate::c5::codegen::passes::prune_unreachable::run(&mut ssa_funcs);
+        // Fold constant-condition branches and delete the blocks that
+        // leaves unreachable (so their calls and extern references are
+        // neither lowered nor relocated), to a fixed point: pruning a
+        // folded branch's dead predecessor can collapse a merge phi and
+        // expose a fresh constant condition one level down.
+        super::ssa::emit_common::time_pass("passes::simplify_branches::run (x86_64)", || {
+            crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
         });
+        // Re-run static DCE: inlining a static callee into its last caller,
+        // and the branch fold dropping calls in unreachable arms, can leave
+        // a static function with no remaining references. Dropping it now
+        // keeps its body -- and any undefined symbol it alone referenced
+        // (e.g. an unreachable build-time-assert canary the fold removed
+        // from the caller) -- out of the object.
+        super::ssa::emit_common::time_pass(
+            "ssa::shadow::drop_unreachable_statics (x86_64)",
+            || {
+                crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program);
+            },
+        );
         super::ssa::emit_common::time_pass("passes::split_crit_edges::run (x86_64)", || {
             crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });
@@ -2124,6 +2154,12 @@ pub(crate) fn lower(
         .iter()
         .filter(|f| f.is_variadic)
         .map(|f| f.ent_pc)
+        .collect();
+    // Per-callee declared return type, read by the tail-call
+    // conversion to compare extension contracts.
+    let ret_tags: alloc::collections::BTreeMap<usize, i64> = ssa_funcs
+        .iter()
+        .map(|f| (f.ent_pc, f.ret_type_tag))
         .collect();
     // Cross-TU extern variadic callees too: see the matching
     // comment on the aarch64 lowering's `variadic_targets`.
@@ -2197,6 +2233,7 @@ pub(crate) fn lower(
                 &extern_tls_names,
                 imports,
                 &variadic_targets,
+                &ret_tags,
                 program.tls_data.len(),
                 &mut fn_unwind,
             )
@@ -2392,6 +2429,7 @@ pub(crate) fn lower(
         data: program.data.clone(),
         data_align: program.data_align,
         bss_size: 0,
+        init_fini_arrays: Default::default(),
         entry_offset,
         got_fixups,
         data_fixups,

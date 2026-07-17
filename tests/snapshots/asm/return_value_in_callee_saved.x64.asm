@@ -11,21 +11,26 @@ Disassembly of section .text:
                	ud2
 
 <hop_return_n>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x2, %rax
+               	movslq	%edi, %rdi
+               	cmpq	$0x2, %rdi
                	jge	<addr>
+               	movslq	%edi, %rax
                	retq
+               	movslq	%edi, %rax
                	retq
 
 <hop>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x7, %edi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
+               	retq
+               	addb	%al, (%rax)

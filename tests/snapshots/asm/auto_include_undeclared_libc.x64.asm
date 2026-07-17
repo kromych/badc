@@ -20,8 +20,10 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jle	<addr>
                	xorq	%rax, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

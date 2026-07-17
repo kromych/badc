@@ -5,9 +5,9 @@
 // `ast_acc` snapshot, leaving the AST holding only the final
 // rhs. The walker then emitted no code for the prior arms and
 // any side-effect-only step in front of the value-producing
-// arm went missing -- in the stb stretchy-buffer macro this
-// dropped the `sbmaybegrow` call that allocated the buffer, so
-// every subsequent `arr[sbn++] = v` dereferenced the still-NULL
+// arm went missing -- in a real-world stretchy-buffer macro this
+// dropped the grow call that allocated the buffer, so every
+// subsequent element store dereferenced the still-NULL
 // pointer.
 //
 // The fixture pins the shape by leaning entirely on the side

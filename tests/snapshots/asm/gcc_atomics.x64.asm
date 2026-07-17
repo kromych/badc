@@ -1033,12 +1033,6 @@ Disassembly of section .text:
                	mfence
                	mfence
                	mfence
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	leaq	<rip>, %rax
-               	movl	$0x1b, %ecx
-               	movl	%ecx, (%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x1b0, %rsp            # imm = 0x1B0
@@ -1130,4 +1124,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

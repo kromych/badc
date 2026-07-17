@@ -10,22 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<make_small>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movl	%edi, (%rax)
-               	leaq	-0x8(%rbp), %rcx
-               	leaq	0x1(%rdi), %rax
-               	movl	%eax, 0x4(%rcx)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
 <make_big>:
                	popq	%r10
                	subq	$0x20, %rsp
@@ -59,27 +43,6 @@ Disassembly of section .text:
                	popq	%rbp
                	popq	%r11
                	addq	$0x20, %rsp
-               	pushq	%r11
-               	retq
-
-<sum_small>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rcx
-               	leaq	-0x8(%rbp), %rax
-               	movslq	0x4(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
                	pushq	%r11
                	retq
 
@@ -124,7 +87,9 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq

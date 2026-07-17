@@ -3,8 +3,8 @@
 // parameters follow the standard register convention (the struct rides
 // two integer registers) and the variadic tail follows the platform
 // variadic ABI. The callee must read the struct from its registers, not
-// as a caller-supplied address. Surfaced by CPython's `_PyCompile_Warn`
-// (a `_Py_SourceLocation` struct before the `printf`-style format).
+// as a caller-supplied address. A real-world shape is a small struct
+// argument before a `printf`-style format and its variadic tail.
 
 #include <stdio.h>
 #include <stdarg.h>

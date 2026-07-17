@@ -3,7 +3,7 @@
 // value whose top bit (within the field width) is set must
 // zero-extend, not sign-extend. Exercised through a typedef'd enum
 // (the common form), a direct `enum { ... }` field, and a switch on
-// the field (the shape that surfaced in quickjs's closure handling).
+// the field (a real-world shape).
 
 typedef enum {
     K0, K1, K2, K3, K4, K5, K6 // 0..6; values 4..6 set the field's top bit

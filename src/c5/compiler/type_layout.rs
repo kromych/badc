@@ -15,11 +15,11 @@ use super::super::codegen::abi_classify::{FlatField, ScalarKind};
 use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::StructDef;
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, is_type_start_token,
-    pointee_size_no_struct, struct_id_of, struct_ptr_depth,
+    pointee_size_no_struct, struct_id_of, struct_ptr_depth, struct_ty_for,
 };
+use super::{StructDef, StructField};
 
 impl Compiler {
     /// Element size in bytes for a pointer type. Pointer-to-struct
@@ -123,12 +123,112 @@ impl Compiler {
             align: 1,
             fields: Vec::new(),
             is_union: false,
+            is_vector: false,
         });
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
             scope.push((name.to_string(), id));
         }
         id
+    }
+
+    /// True when the current identifier is a spelling of the GCC 128-bit
+    /// integer type: `__int128`, `__int128_t`, or `__uint128_t`.
+    pub(super) fn is_lex_int128_spelling(&self) -> bool {
+        self.lex.tk == Token::Id
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "__int128" | "__int128_t" | "__uint128_t"
+            )
+    }
+
+    /// Type tag for the GCC 128-bit integer (`__int128` / `__uint128_t`).
+    /// badc models it as a 16-byte aggregate `{ long long; long long; }`:
+    /// declarations, struct / array layout, `sizeof`, and by-value copies
+    /// go through the struct machinery, while 128-bit arithmetic is an
+    /// aggregate-operand error (see `reject_aggregate_binop`) rather than
+    /// a silent truncation. Two `long long` fields make it exactly 16
+    /// bytes on every target (LLP64 `long` would be 8). Registered once,
+    /// on first use. Needed to parse Linux kernel-UAPI headers
+    /// (`asm/sigcontext.h`'s `__uint128_t vregs[32]`).
+    pub(super) fn builtin_int128_tag(&mut self) -> i64 {
+        if let Some(id) = self.structs.iter().position(|s| s.name == "__int128") {
+            return struct_ty_for(id);
+        }
+        let half = |name: &str, offset: usize| StructField {
+            name: name.to_string(),
+            offset,
+            ty: Ty::LongLong as i64,
+            array_size: 0,
+            inner_array_size: 0,
+            array_dims: alloc::vec::Vec::new(),
+            bit_offset: 0,
+            bit_width: 0,
+            bit_unit_size: 0,
+            fn_ptr_indirection: 0,
+            params: alloc::vec::Vec::new(),
+            is_variadic: false,
+            anon_union_group: 0,
+            anon_struct_group: 0,
+        };
+        self.structs.push(StructDef {
+            name: "__int128".to_string(),
+            size: 16,
+            align: 8,
+            fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
+            is_union: false,
+            is_vector: false,
+        });
+        struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// True when `t` is the GCC 128-bit `__int128` as a value (not a
+    /// pointer to one). Mirrors the walker's `is_int128_value_ty`; used to
+    /// widen a scalar assigned to an `__int128` lvalue.
+    pub(super) fn is_int128_ty(&self, t: i64) -> bool {
+        if !is_struct_ty(t) || struct_ptr_depth(t) != 0 {
+            return false;
+        }
+        let id = struct_id_of(t);
+        self.structs.get(id).is_some_and(|s| s.name == "__int128")
+    }
+
+    /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
+    /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
+    /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the
+    /// struct machinery; the cast and binary-operator paths read the flag.
+    pub(super) fn make_vector_type(&mut self, elem_ty: i64, n_bytes: i64) -> i64 {
+        let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
+        let lanes = (n_bytes / elem_size).max(1);
+        let name = alloc::format!("__vector_{}_{}", n_bytes, elem_ty);
+        if let Some(id) = self.structs.iter().position(|s| s.name == name) {
+            return struct_ty_for(id);
+        }
+        let field = StructField {
+            name: alloc::string::String::new(),
+            offset: 0,
+            ty: elem_ty,
+            array_size: lanes,
+            inner_array_size: 0,
+            array_dims: alloc::vec::Vec::new(),
+            bit_offset: 0,
+            bit_width: 0,
+            bit_unit_size: 0,
+            fn_ptr_indirection: 0,
+            params: alloc::vec::Vec::new(),
+            is_variadic: false,
+            anon_union_group: 0,
+            anon_struct_group: 0,
+        };
+        self.structs.push(StructDef {
+            name,
+            size: n_bytes as usize,
+            align: (n_bytes as usize).min(8),
+            fields: alloc::vec![field],
+            is_union: false,
+            is_vector: true,
+        });
+        struct_ty_for(self.structs.len() - 1)
     }
 
     /// True when the current lexer position starts a type. The free
@@ -141,6 +241,7 @@ impl Compiler {
     pub(super) fn lex_is_type_start(&self) -> bool {
         is_type_start_token(self.lex.tk)
             || self.is_lex_typedef_name()
+            || self.is_lex_int128_spelling()
             // A leading C23 `[[ ... ]]` attribute introduces a
             // declaration (`[[noreturn]] void f(void);`).
             || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))

@@ -6,22 +6,10 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x270              // =624
+               	mov	x1, #0x2b0              // =688
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	scvtf	d1, x0
-               	fcmp	d0, d1
-               	cset	x0, mi
-               	ret
-
-<le_float_int>:
-               	scvtf	d1, x0
-               	fcmp	d0, d1
-               	cset	x0, ls
-               	ret
-
-<main>:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
@@ -39,6 +27,7 @@ Disassembly of section .text:
                	scvtf	d1, x0
                	fcmp	d0, d1
                	cset	x1, mi
+               	sxtw	x1, w1
                	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -51,6 +40,7 @@ Disassembly of section .text:
                	fmov	d16, x1
                	fcmp	d16, d0
                	cset	x1, mi
+               	sxtw	x1, w1
                	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -61,6 +51,7 @@ Disassembly of section .text:
                	scvtf	d1, x0
                	fcmp	d0, d1
                	cset	x1, ls
+               	sxtw	x1, w1
                	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -74,6 +65,7 @@ Disassembly of section .text:
                	scvtf	d1, x0
                	fcmp	d0, d1
                	cset	x0, ls
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

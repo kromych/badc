@@ -2,6 +2,7 @@
 //! `FunctionSsa` in place and is target-neutral; the per-target lowering
 //! drivers run a selection of them before instruction selection.
 
+pub(crate) mod const_global_fold;
 pub(crate) mod constfold;
 pub(crate) mod constfold_branch;
 pub(crate) mod dedup_imm;
@@ -13,6 +14,7 @@ pub(crate) mod layout;
 pub(crate) mod prune_unreachable;
 pub(crate) mod remap_blocks;
 pub(crate) mod rotate;
+pub(crate) mod simplify_branches;
 pub(crate) mod split_crit_edges;
 pub(crate) mod sroa;
 pub(crate) mod store_forward;

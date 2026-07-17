@@ -18,15 +18,11 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	subq	$0x10000, %rax          # imm = 0x10000
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
-               	movslq	%eax, %rax
-               	retq
-
-<as_ushort>:
-               	movslq	%edi, %rdi
-               	movq	%rdi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:

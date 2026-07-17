@@ -182,23 +182,21 @@ def build_nasm(badc: Path, target: str, optimize: bool, workdir: Path) -> Path:
     (archive the library objects, link the main against them)."""
     workdir.mkdir(parents=True, exist_ok=True)
     inc = [f"-I{SRC / d}" for d in INC_DIRS] + ["-DHAVE_CONFIG_H"]
-    objs = []
-    for rel in SOURCES + [MAIN]:
-        out = workdir / (rel.replace("/", "_")[:-2] + ".o")
-        cmd = [str(badc), f"--target={target}", "-c", *inc] + \
-            (["-O"] if optimize else []) + [str(SRC / rel), "-o", str(out)]
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode != 0 or not out.is_file():
-            fail(f"badc failed to compile {rel}:\n{r.stderr.strip()[-800:]}")
-        objs.append(out)
-    main_o = str(workdir / (MAIN.replace("/", "_")[:-2] + ".o"))
+    opt = ["-O"] if optimize else []
+    # The library TUs share one flag set, so archive them in a single
+    # invocation: badc compiles them concurrently (see `--jobs`) and
+    # bundles the objects into libnasm.a.
     lib = workdir / "libnasm.a"
-    subprocess.run([str(badc), "--ar", "-o", str(lib),
-                    *[str(o) for o in objs if str(o) != main_o]],
-                   check=True, capture_output=True)
+    r = subprocess.run([str(badc), f"--target={target}", "--ar", "-o", str(lib),
+                        *inc, *opt, *[str(SRC / rel) for rel in SOURCES]],
+                       capture_output=True, text=True)
+    if r.returncode != 0 or not lib.is_file():
+        fail(f"badc failed to archive libnasm:\n{r.stderr.strip()[-800:]}")
+    # Compile MAIN in the link invocation and resolve it against the archive.
     binp = workdir / ("nasm" + EXE)
-    r = subprocess.run([str(badc), f"--target={target}", main_o, str(lib),
-                        "-o", str(binp)], capture_output=True, text=True)
+    r = subprocess.run([str(badc), f"--target={target}", *inc, *opt,
+                        str(SRC / MAIN), str(lib), "-o", str(binp)],
+                       capture_output=True, text=True)
     if r.returncode != 0 or not binp.is_file():
         fail(f"badc failed to link nasm:\n{r.stderr.strip()[-800:]}")
     if not IS_WIN:

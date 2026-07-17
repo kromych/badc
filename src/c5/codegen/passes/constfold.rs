@@ -47,7 +47,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 /// two.
 const MAX_ROUNDS: usize = 4;
 
-fn run_one(func: &mut FunctionSsa) {
+pub(crate) fn run_one(func: &mut FunctionSsa) {
     for _ in 0..MAX_ROUNDS {
         if !fold_round(func) {
             return;
@@ -138,11 +138,22 @@ fn mirror(op: BinOp) -> Option<BinOp> {
 /// `Inst::Imm` not flagged f32. Out-of-range ids (`NO_VALUE`) and
 /// address-bearing immediates resolve to `None`.
 fn imm_of(func: &FunctionSsa, v: ValueId) -> Option<i64> {
-    let i = v as usize;
-    match func.insts.get(i)? {
-        Inst::Imm(k) if !matches!(func.f32_values.get(i), Some(true)) => Some(*k),
-        _ => None,
+    let mut i = v as usize;
+    // Chase single-incoming (degenerate) phis to the constant they
+    // collapse to: such a phi always takes its one predecessor's value.
+    // prune_unreachable produces them when it drops a folded branch's
+    // dead predecessor, so folding through them lets a chain built on the
+    // survivor (an `Extend`, a `BinopI`) resolve on the next round.
+    for _ in 0..func.insts.len() {
+        match func.insts.get(i)? {
+            Inst::Imm(k) if !matches!(func.f32_values.get(i), Some(true)) => return Some(*k),
+            Inst::Phi { incoming, .. } if incoming.len() == 1 => {
+                i = incoming[0].1 as usize;
+            }
+            _ => return None,
+        }
     }
+    None
 }
 
 /// Operand-reference counts, including terminator conditions and the
@@ -245,6 +256,7 @@ mod tests {
             n_params: 0,
             is_variadic: false,
             is_inline: false,
+            is_always_inline: false,
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
             param_fp_mask: 0,
@@ -253,6 +265,7 @@ mod tests {
             param_local_slots: Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
+            ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             jump_tables: Vec::new(),

@@ -97,7 +97,7 @@ pub(crate) fn successors(
             }
             out
         }
-        Terminator::Return(_) | Terminator::TailExt(_) => Vec::new(),
+        Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => Vec::new(),
     }
 }
 
@@ -453,7 +453,10 @@ pub(crate) fn insert_phis(
                     remap(v);
                 }
             }
-            Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
+            Terminator::Jmp(_)
+            | Terminator::FallThrough(_)
+            | Terminator::TailExt(_)
+            | Terminator::Unreachable => {}
         }
     }
     // The per-site cross-TU relocation tables key on the value-id of
@@ -523,7 +526,10 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
         Inst::Extend { value, .. } => f(value),
         Inst::FpCast { value, .. } => f(value),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Call { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. }
+        | Inst::InlineAsm { args, .. } => {
             for a in args {
                 f(a);
             }
@@ -1249,7 +1255,10 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                     *v = resolve(&redirect, *v);
                 }
             }
-            Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
+            Terminator::Jmp(_)
+            | Terminator::FallThrough(_)
+            | Terminator::TailExt(_)
+            | Terminator::Unreachable => {}
         }
     }
     // Neutralize promoted stores: their id has been redirected to the
@@ -1294,6 +1303,7 @@ mod tests {
             n_params: 0,
             is_variadic: false,
             is_inline: false,
+            is_always_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
@@ -1302,6 +1312,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
+            ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             jump_tables: Vec::new(),

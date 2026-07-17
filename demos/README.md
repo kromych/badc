@@ -183,6 +183,22 @@ including the x86 instruction tables whose Python generator runs under the
 badc-built CPython: a badc-built interpreter emits the tables a badc-built
 assembler is then compiled from. See [`yasm/README.md`](./yasm/README.md).
 
+## qemu/
+
+Builds the [QEMU](https://www.qemu.org/) 11.0.2 system emulator with badc --
+well over a thousand translation units per target (device models, the TCG code
+generator, the block layer, the QAPI-generated marshallers, the character /
+network back ends), the widest single exercise of the C front end and object
+emitter in the demo set. badc compiles every unit, archives the utility
+library with `--ar`, and self-links the emulator with its own linker -- no
+system linker in the chain. Both self-compiled, self-linked `qemu-system-aarch64`
+and `qemu-system-x86_64` boot a Linux kernel plus a busybox initramfs to an
+interactive userspace shell and power off cleanly under TCG (aarch64 loads a raw
+`Image` on -M virt; x86_64 boots an EFI-stub `bzImage` through OVMF). The
+vendored build config (no meson / make / configure) is per target; both the
+aarch64 and x86_64 Linux configs are captured in-repo.
+See [`qemu/README.md`](./qemu/README.md).
+
 ## efi_hello/
 
 UEFI application that prints "Hello, EFI!" through

@@ -69,11 +69,15 @@ Disassembly of section .text:
                	cmpq	%rax, %rsi
                	jge	<addr>
                	movq	0x8(%rdi), %rdi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
+               	retq
                	movq	0x10(%rdi), %rdi
+               	callq	<addr>
+               	movslq	%eax, %rax
                	popq	%rbp
-               	jmp	<addr>
+               	retq
 
 <main>:
                	pushq	%rbp

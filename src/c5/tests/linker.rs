@@ -868,8 +868,8 @@ fn export_all_executable_exposes_dynamic_symbols() {
     let exported = build_exe(true);
     assert_eq!(
         read_elf_header(&exported).expect("read header").e_type,
-        2,
-        "executable must be ET_EXEC"
+        3,
+        "executable must be ET_DYN (PIE)"
     );
     assert!(
         read_dynamic_symbol_names(&exported)
@@ -892,7 +892,7 @@ fn export_data_exposes_data_globals_in_dynsym() {
     // `--export-data` adds an executable's defined data globals to
     // `.dynsym` (as STT_OBJECT) so a `dlopen`'d module resolves them --
     // the data half of `-rdynamic`, which `--export-all` (functions
-    // only) cannot reach. A `PyTypeObject`-style global is the motivating
+    // only) cannot reach. An exported data-object global is the motivating
     // case. An executable without the flag exports no data symbol.
     use crate::c5::linker::object::read_dynamic_symbol_names;
     use crate::c5::linker::{
@@ -1200,9 +1200,10 @@ fn shared_object_relocates_internal_data_pointers() {
     )
     .expect("write executable");
     let exe_rel = count_dynamic_relocs_of_type(&exe, R_X86_64_RELATIVE).expect("count exe relocs");
-    assert_eq!(
-        exe_rel, 0,
-        "executable maps at a fixed base and must emit no RELATIVE relocs, got {exe_rel}"
+    assert!(
+        exe_rel >= 2,
+        "a PIE executable relocates its internal function pointers like the shared \
+         object, got {exe_rel}"
     );
 }
 
@@ -1713,7 +1714,7 @@ fn inline_linkage_follows_c99_6_7_4p7() {
 
 #[test]
 fn cpuid_xgetbv_asm_emit_for_x86_64() {
-    // The GCC `cpuid` / `xgetbv` inline-asm forms (miniaudio's CPU feature
+    // The GCC `cpuid` / `xgetbv` inline-asm forms (a common CPU feature
     // probe) lower to dedicated intrinsics on x86_64: the `cpuid` (0F A2)
     // and `xgetbv` (0F 01 D0) opcodes appear, bracketed by a save of the
     // fixed registers they clobber (push rbx = 0x53, ebx being callee-saved).
@@ -1749,6 +1750,39 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
     assert!(
         bytes.contains(&0x53),
         "push rbx (callee-saved, clobbered by cpuid) must be saved"
+    );
+}
+
+#[test]
+fn cpuid_matching_constraint_x86_64() {
+    // A common `host_cpuid` shape ties the eax input to output operand 0
+    // with the matching constraint `"0"(function)` rather than `"a"(function)`.
+    // The digit constraint resolves to that output's register (eax) and
+    // lowers to the same `cpuid` (0F A2) intrinsic.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(
+        "void host_cpuid(unsigned function, unsigned count,\n\
+         unsigned *eax, unsigned *ebx, unsigned *ecx, unsigned *edx) {\n\
+         unsigned vec[4];\n\
+         __asm__ __volatile__(\"cpuid\"\n\
+         : \"=a\"(vec[0]),\"=b\"(vec[1]),\"=c\"(vec[2]),\"=d\"(vec[3])\n\
+         : \"0\"(function),\"c\"(count) : \"cc\");\n\
+         if (eax) *eax = vec[0]; if (ebx) *ebx = vec[1];\n\
+         if (ecx) *ecx = vec[2]; if (edx) *edx = vec[3];\n\
+         }\n\
+         int main(void){ unsigned a,b,c,d; host_cpuid(0,0,&a,&b,&c,&d); return (int)a; }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(2).any(|w| w == [0x0F, 0xA2]),
+        "cpuid opcode (0F A2) must be emitted for the `\"0\"` matching constraint"
     );
 }
 
@@ -1846,6 +1880,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
             symbols: alloc::vec![null_sym(), weak_undef()],
             text_relocs,
             data_relocs,
+            init_funcs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
@@ -2066,12 +2101,12 @@ fn extern_redeclaration_keeps_the_tentative_definition() {
 }
 
 #[test]
-fn alignas_sixteen_places_objects_and_raises_data_align() {
-    // C11 6.7.5: a 16-byte alignment request on a file-scope object
-    // is honored -- the object's section offset is 16-aligned through
-    // compaction and the unit records `data_align = 16` so the linker
-    // and the image writers keep the base congruent. Larger requests
-    // and unsupported positions are diagnostics, never silent drops.
+fn alignas_places_objects_at_requested_alignment() {
+    // C11 6.7.5: an alignment request on a file-scope object is honored --
+    // the object's section offset is aligned through compaction and the
+    // unit records `data_align` so the linker and image writers keep the
+    // base congruent. Static objects honor power-of-two requests up to a
+    // page; automatic objects and non-power-of-two requests are diagnostics.
     use crate::c5::linker::{NativeSymSection, link_native_objects, parse_native_elf};
     use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
     let compile = |src: &str| {
@@ -2126,17 +2161,49 @@ fn alignas_sixteen_places_objects_and_raises_data_align() {
             sym.value
         );
     }
-    // Diagnostics: above 16, automatic objects above 8, members above 8.
+    // A static object over-aligns past 16: `aligned(64)` places it at 64
+    // and raises the unit's data alignment to match.
+    let over = compile(
+        "__attribute__((aligned(64))) unsigned char big[64] = { 1 };\n\
+         int use_big(void) { return big[0]; }\n",
+    );
+    assert_eq!(
+        over.data_align, 64,
+        "aligned(64) must raise unit data alignment to 64"
+    );
+    let big = over
+        .symbols
+        .iter()
+        .find(|s| s.name == "big")
+        .expect("big missing");
+    assert!(
+        big.section != NativeSymSection::Undef && big.value.is_multiple_of(64),
+        "big at {:?}+0x{:x} must be 64-aligned",
+        big.section,
+        big.value
+    );
+    // Diagnostics: automatic objects above 8, and non-power-of-two requests.
     for src in [
-        "_Alignas(64) static char big[8];\nint main(void) { return 0; }\n",
         "int main(void) { _Alignas(16) char buf[8]; return buf[0]; }\n",
-        "struct S { _Alignas(16) int f; };\nint main(void) { struct S s; s.f = 0; return s.f; }\n",
+        "__attribute__((aligned(24))) static char weird[8];\nint main(void) { return 0; }\n",
     ] {
         assert!(
             Compiler::new(src.to_string()).compile().is_err(),
             "must be diagnosed: {src}"
         );
     }
+    // A struct member's 16-byte alignment is honored, not diagnosed (the
+    // member and the aggregate both align to 16; the aligned_member fixture
+    // checks the resulting layout against gcc/clang).
+    assert!(
+        Compiler::new(
+            "struct S { _Alignas(16) int f; };\nint main(void) { struct S s; s.f = 0; return s.f; }\n"
+                .to_string()
+        )
+        .compile()
+        .is_ok(),
+        "a struct member's aligned(16) request must be honored"
+    );
 }
 
 #[test]
@@ -2321,5 +2388,230 @@ fn macho_data_import_gets_no_bogus_local_text_symbol() {
             .iter()
             .any(|(n, t)| n == "_strlen" && t & 0x0e == 0x0e && t & 0x01 == 0),
         "a trampolined import must keep its local text symbol: {names:?}"
+    );
+}
+
+#[test]
+fn init_array_round_trips_through_object() {
+    // A constructor and a prioritized destructor emit `.init_array` /
+    // `.fini_array.NNNNN` sections in the ET_REL object; `parse_native_elf`
+    // recovers them as `NativeObject::init_funcs`, each resolved to the
+    // target function's `.text` offset. Static (internal-linkage) init
+    // functions -- what `type_init`-style macros generate -- must resolve
+    // too, so use `static`.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(
+            "static int g;\n\
+             __attribute__((constructor)) static void ctor(void) { g = 1; }\n\
+             __attribute__((destructor(101))) static void dtor(void) { g = 0; }\n\
+             int main(void) { return g; }\n"
+                .to_string(),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let ctors: alloc::vec::Vec<_> =
+            obj.init_funcs.iter().filter(|f| !f.is_destructor).collect();
+        let dtors: alloc::vec::Vec<_> = obj.init_funcs.iter().filter(|f| f.is_destructor).collect();
+        assert_eq!(ctors.len(), 1, "{target:?}: one constructor");
+        assert_eq!(dtors.len(), 1, "{target:?}: one destructor");
+        assert!(ctors[0].priority.is_none(), "{target:?}: bare ctor");
+        assert_eq!(dtors[0].priority, Some(101), "{target:?}: dtor priority");
+        // Each entry resolves to a real function body inside `.text`.
+        assert!((ctors[0].unit_text_offset as usize) < obj.text.len());
+        assert!((dtors[0].unit_text_offset as usize) < obj.text.len());
+    }
+}
+
+#[test]
+fn constructor_links_into_executable_with_runtime() {
+    // The full CLI link path: a program with a `static` constructor plus
+    // the startup runtime. runtime.c references the linker-defined
+    // `__init_array_*` boundary symbols; before they were provided this
+    // link failed with "undefined reference to __init_array_start".
+    // Producing a well-formed image proves the boundary symbols resolve
+    // and the init array is laid out. Execution is covered by the
+    // native_elf / native_elf_x64 suites on Linux.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, Target};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            "static int g;\n\
+             __attribute__((constructor)) static void ctor(void) { g = 7; }\n\
+             __attribute__((destructor)) static void dtor(void) { g = 0; }\n\
+             int main(void) { return g; }\n"
+                .to_string(),
+            target,
+            CompileOptions::default(),
+        )
+        .compile()
+        .expect("compile");
+        let bytes = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: link with runtime: {e}"));
+        assert!(
+            bytes.len() > 64 && &bytes[0..4] == b"\x7fELF",
+            "{target:?}: produced a valid ELF image"
+        );
+    }
+}
+
+#[test]
+fn dead_arm_switch_and_noreturn_tail_drop_their_callees() {
+    // Two shapes the constant-branch elimination must cover so an
+    // undefined fallback symbol is never referenced from the object:
+    //   * an `if (0)` arm containing a whole `switch` (its case labels
+    //     are owned by the dropped dispatch, so they don't pin it);
+    //   * the tail behind a statement-level call to a `noreturn`
+    //     function (C11 6.7.4p8), in each accepted spelling.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         __attribute__((noreturn)) extern void die_attr(void);\n\
+         _Noreturn void die_kw(void);\n\
+         static int sw_helper(int x) {{ return x * 2; }}\n\
+         static int nr_helper_a(int x) {{ return x + 1; }}\n\
+         static int nr_helper_k(int x) {{ return x + 2; }}\n\
+         int probe(int v, int s) {{\n\
+             if (0) {{\n\
+                 int x;\n\
+                 switch (s) {{\n\
+                 case 1 ... 7: x = sw_helper(s); break;\n\
+                 default: x = 0;\n\
+                 }}\n\
+                 return x;\n\
+             }}\n\
+             if (v == 1) {{ die_attr(); return nr_helper_a(v); }}\n\
+             if (v == 2) {{ die_kw(); return nr_helper_k(v); }}\n\
+             return 9;\n\
+         }}\n\
+         int main(void) {{ return probe(0, 0) - 9; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    assert!(has(b"probe"), "the reachable function must survive");
+    assert!(
+        !has(b"sw_helper"),
+        "a helper only the dead switch arm names must not be emitted"
+    );
+    assert!(
+        !has(b"nr_helper_a"),
+        "a helper behind an attribute-noreturn call must not be emitted"
+    );
+    assert!(
+        !has(b"nr_helper_k"),
+        "a helper behind a _Noreturn call must not be emitted"
+    );
+}
+
+#[test]
+fn init_array_stays_strictly_inside_data_at_bss_boundary() {
+    // The startup runtime walks `[__init_array_start, __init_array_end)`; the
+    // end symbol is a one-past-the-array `.data` address. If an array ends
+    // exactly at the `.data` length, the offset->vaddr map resolves that
+    // offset as the first `.bss` byte -- and a `.tbss` gap between `.data`
+    // and `.bss` then makes the end symbol overshoot, so the walk runs off
+    // the array into zero padding and calls a null pointer. `g` is a lone
+    // 8-byte `.data` datum, so the single init_array slot ends 16-aligned at
+    // the `.data` length, and `t` forces the `.tbss` gap: exactly that
+    // boundary. The linker must keep the array strictly inside `.data`.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // Sweep the `.data` size a byte at a time so one size lands the sole
+    // init_array slot 16-aligned exactly at the `.data` length -- the case the
+    // fix guards. Every size must keep the array strictly inside `.data`.
+    for pad in 1..=24usize {
+        let program = Compiler::new(alloc::format!(
+            "{TEST_PRELUDE}\
+             long pad[{pad}] = {{1}};\n\
+             __thread int t;\n\
+             static int b;\n\
+             __attribute__((constructor)) static void ctor(void) {{ b = (int)pad[0]; }}\n\
+             int main(void) {{ return b + t; }}\n"
+        ))
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let merged = link_native_objects(&[obj]).expect("link");
+        let (start, size) = merged
+            .init_fini_arrays
+            .init
+            .expect("the constructor must produce an init_array");
+        assert!(
+            start + size < merged.data.len() as u64,
+            "pad={pad}: init_array end offset {:#x} must stay strictly below the .data length \
+             {:#x}; at the boundary the end symbol resolves into .bss past the .tbss gap and \
+             the startup walk overruns the array",
+            start + size,
+            merged.data.len(),
+        );
+    }
+}
+
+#[test]
+fn divmod_constant_branch_drops_its_dead_callee() {
+    // Integer `/` and `%` are integer constant expressions (C99 6.6), so a
+    // `?:` / `if` controlled by one selects its arm at translation time and
+    // the dead arm's call to an extern-declared-but-undefined function must
+    // not reach the object -- otherwise a link with no definition of it
+    // fails. `nested` reproduces the compile-time-dispatch idiom
+    // `__builtin_constant_p(K) ? <chain keyed on K> : <runtime fallback>`
+    // where the chain's conditions divide, and the final chain arm is a
+    // diagnostic stub; `guarded` is a bare `%`-controlled `if`.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         extern long build_bug_never_defined(void);\n\
+         extern unsigned long long rt_fallback(unsigned v, unsigned long long c);\n\
+         unsigned long long nested(unsigned long long c) {{\n\
+             return __builtin_constant_p(4 / 2)\n\
+                 ? ( (4 / 2) == 0 ? c\n\
+                   : (4 / 2) == 1 ? c + 1\n\
+                   : (4 / 2) == 2 ? c + 2\n\
+                   : (build_bug_never_defined(), 0) )\n\
+                 : rt_fallback(4 / 2, c);\n\
+         }}\n\
+         int guarded(void) {{\n\
+             if ((5 % 3) == 1) {{ return (int)build_bug_never_defined(); }}\n\
+             return 7;\n\
+         }}\n\
+         int main(void) {{ return (int)nested(5) + guarded() - 14; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    assert!(
+        has(b"nested") && has(b"guarded"),
+        "the live functions must survive"
+    );
+    assert!(
+        !has(b"build_bug_never_defined"),
+        "a `/`- or `%`-guarded dead branch's call to an undefined extern must be eliminated"
+    );
+    assert!(
+        !has(b"rt_fallback"),
+        "the __builtin_constant_p-false runtime fallback arm is dead and must be eliminated"
     );
 }

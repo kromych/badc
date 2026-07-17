@@ -1,10 +1,9 @@
 // Conditional directives may appear inside the argument list of a
 // function-like macro call that spans several lines. C99 6.10.3p11
 // leaves the result undefined, but the common toolchains evaluate the
-// directives and include only the active branch, and real code (e.g.
-// CPython's perf trampoline) depends on it. The inactive branches below
-// reference undefined identifiers, so selecting the wrong branch fails
-// to compile.
+// directives and include only the active branch, and real code depends
+// on it. The inactive branches below reference undefined identifiers, so
+// selecting the wrong branch fails to compile.
 
 #include <stdio.h>
 

@@ -1,12 +1,14 @@
 //! Drop a redundant `Inst::Extend { value, kind }` by redirecting its
 //! consumers to `value`. An extend is redundant in two cases:
 //!
-//!   1. `value` is a sign-extending load of the same `kind`
-//!      (`Load` / `LoadLocal` / `LoadIndexed` with `I8` / `I16` / `I32`).
-//!      Those lower to `ldrsb` / `ldrsh` / `ldrsw` (AArch64) or the
-//!      `movsx` family (x86_64), already depositing a 64-bit
-//!      sign-extended value, so the extend re-applies the same
-//!      extension and is a no-op.
+//!   1. `value` is a narrow integer load whose own extension already
+//!      covers the extend: a signed load (`I8`/`I16`/`I32`) no wider than
+//!      the extend, or an unsigned load (`U8`/`U16`/`U32`) strictly
+//!      narrower than it. A signed load (`ldrs*` / `movsx`) fills the bits
+//!      above its width with the sign; an unsigned load (`ldr*` / `movzx`)
+//!      fills them with zero, into which a strictly-wider sign-extend
+//!      deposits its (zero) sign bit -- either way the extend reproduces
+//!      the bits already present and is a no-op.
 //!
 //!   2. The extend is an `I32` sign-extend whose upper 32 bits no
 //!      consumer reads (`compute_high_observed`). Every consumer sees
@@ -141,7 +143,10 @@ pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
             }
-            Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+            Inst::Call { args, .. }
+            | Inst::CallExt { args, .. }
+            | Inst::Intrinsic { args, .. }
+            | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     observe(&mut hi, &mut work, *a);
                 }
@@ -284,7 +289,10 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
     };
     for inst in &func.insts {
         match inst {
-            Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+            Inst::Call { args, .. }
+            | Inst::CallExt { args, .. }
+            | Inst::Intrinsic { args, .. }
+            | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     mark(&mut placed, *a);
                 }
@@ -594,24 +602,28 @@ fn drop_call_arg_reextends(funcs: &mut [FunctionSsa]) {
     }
 }
 
-fn is_signed_load(insts: &[Inst], v: ValueId) -> Option<LoadKind> {
+/// If `v` is a narrow integer load, its width in bits and whether it
+/// sign-extends. A signed load fills the bits above its width with the sign
+/// bit; an unsigned load fills them with zero.
+fn narrow_int_load(insts: &[Inst], v: ValueId) -> Option<(u32, bool)> {
     if v == NO_VALUE {
         return None;
     }
-    let idx = v as usize;
-    if idx >= insts.len() {
-        return None;
-    }
-    let kind = match &insts[idx] {
+    let kind = match insts.get(v as usize)? {
         Inst::Load { kind, .. } => *kind,
         Inst::LoadLocal { kind, .. } => *kind,
         Inst::LoadIndexed { kind, .. } => *kind,
         _ => return None,
     };
-    match kind {
-        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Some(kind),
-        _ => None,
-    }
+    Some(match kind {
+        LoadKind::I8 => (8, true),
+        LoadKind::U8 => (8, false),
+        LoadKind::I16 => (16, true),
+        LoadKind::U16 => (16, false),
+        LoadKind::I32 => (32, true),
+        LoadKind::U32 => (32, false),
+        _ => return None,
+    })
 }
 
 fn run_one(func: &mut FunctionSsa) {
@@ -619,20 +631,32 @@ fn run_one(func: &mut FunctionSsa) {
     if !func.insts.iter().any(|i| matches!(i, Inst::Extend { .. })) {
         return;
     }
-    // An Extend is redundant when (1) its operand is a sign-extending load of
-    // the same kind, so the extend re-applies the load's own sign extension; or
-    // (2) it is an i32 sign-extend whose upper bits no consumer reads, so every
-    // consumer sees the same low 32 bits in the operand. Both redirect the
-    // extend's consumers to the operand; `resolve` walks redirect chains.
+    // An Extend is redundant when (1) its operand is a narrow integer load
+    // whose extension it re-applies: a signed load already sign-extends to 64
+    // bits, so an equal-or-wider sign-extend reproduces the same bits; an
+    // unsigned load zero-extends, so a strictly-wider sign-extend lands its
+    // sign bit in the zero region and is likewise a no-op. This covers the
+    // `int`-return sign-extend of a char/short load left by the callee-
+    // narrowing convention. Or (2) it is an i32 sign-extend whose upper bits no
+    // consumer reads, so every consumer sees the same low 32 bits in the
+    // operand. Both redirect the extend's consumers to the operand; `resolve`
+    // walks redirect chains.
     let high = compute_high_observed(func);
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     for (idx, inst) in func.insts.iter().enumerate() {
         let Inst::Extend { value, kind } = inst else {
             continue;
         };
-        if is_signed_load(&func.insts, *value) == Some(*kind)
-            || (*kind == LoadKind::I32 && !high[idx])
-        {
+        let load_covers = narrow_int_load(&func.insts, *value)
+            .zip(narrow_kind_bits(*kind))
+            .is_some_and(|((lbits, signed), ebits)| {
+                if signed {
+                    lbits <= ebits
+                } else {
+                    lbits < ebits
+                }
+            });
+        if load_covers || (*kind == LoadKind::I32 && !high[idx]) {
             redirect[idx] = Some(*value);
         }
     }
@@ -711,7 +735,10 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
         Inst::Extend { value, .. } => f(value),
         Inst::FpCast { value, .. } => f(value),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Call { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. }
+        | Inst::InlineAsm { args, .. } => {
             for a in args {
                 f(a);
             }
@@ -763,6 +790,7 @@ mod tests {
             n_params: 0,
             is_variadic: false,
             is_inline: false,
+            is_always_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
@@ -771,6 +799,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
+            ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             jump_tables: Vec::new(),
@@ -820,6 +849,105 @@ mod tests {
             "Return should redirect from v2 (Extend) to v1 (Load); got {:?}",
             f.blocks[0].terminator
         );
+    }
+
+    #[test]
+    fn extend_i32_of_narrower_sign_load_redirects() {
+        // v1: Load(kind=I8) already sign-extends to 64 bits; v2: Extend(v1, I32)
+        // re-extends from a wider width -- a no-op, since the I8 sign already
+        // fills every bit the i32 extend would set. Return(v2) -> Return(v1).
+        // (This is the int-return sign-extend of a char load.)
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I8,
+                    volatile: false,
+                },
+                Inst::Extend {
+                    value: 1,
+                    kind: LoadKind::I32,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            }],
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(1)),
+            "Return should redirect from v2 (Extend i32) to v1 (I8 Load); got {:?}",
+            f.blocks[0].terminator
+        );
+    }
+
+    #[test]
+    fn extend_i32_of_narrower_unsigned_load_redirects() {
+        // v1: Load(kind=U8) zero-extends; v2: Extend(v1, I32) sign-extends from
+        // a strictly wider width, so its sign bit lands in the zero region -- a
+        // no-op (the aarch64 unsigned-char int-return case). Return(v2) ->
+        // Return(v1).
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::U8,
+                    volatile: false,
+                },
+                Inst::Extend {
+                    value: 1,
+                    kind: LoadKind::I32,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            }],
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(1)),
+            "Return should redirect from v2 (Extend i32) to v1 (U8 Load); got {:?}",
+            f.blocks[0].terminator
+        );
+    }
+
+    #[test]
+    fn extend_of_wider_sign_load_is_not_redirected() {
+        // v1: Load(kind=I32); v2: Extend(v1, I8) truncates to 8 bits and
+        // changes the value, so it must stay.
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I32,
+                    volatile: false,
+                },
+                Inst::Extend {
+                    value: 1,
+                    kind: LoadKind::I8,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            }],
+        );
+        run_one(&mut f);
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
     }
 
     #[test]

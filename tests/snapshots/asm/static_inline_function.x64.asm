@@ -10,41 +10,32 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<triple_plus_one>:
-               	leaq	(%rdi,%rdi,2), %rax
-               	incq	%rax
-               	movslq	%eax, %rax
-               	retq
-
-<bit_count>:
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	movq	%rdi, %rcx
-               	andq	$0x1, %rcx
-               	addq	%rcx, %rax
-               	shrq	$0x1, %rdi
-               	testq	%rdi, %rdi
-               	jne	<addr>
-               	retq
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0xdeadbeef, %edi       # imm = 0xDEADBEEF
-               	callq	<addr>
-               	cmpq	$0x18, %rax
+               	movl	$0xdeadbeef, %eax       # imm = 0xDEADBEEF
+               	xorq	%rcx, %rcx
+               	jmp	<addr>
+               	movq	%rax, %rdx
+               	andq	$0x1, %rdx
+               	addq	%rdx, %rcx
+               	shrq	$0x1, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	cmpq	$0x18, %rcx
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	xorq	%rdi, %rdi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	popq	%rbp
+               	xorq	%rcx, %rcx
+               	jmp	<addr>
+               	movq	%rax, %rdx
+               	andq	$0x1, %rdx
+               	addq	%rdx, %rcx
+               	shrq	$0x1, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	testq	%rcx, %rcx
+               	je	<addr>
+               	movl	$0x4, %eax
                	retq
-               	addb	%al, (%rax)
+               	xorq	%rax, %rax
+               	retq

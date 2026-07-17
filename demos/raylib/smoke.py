@@ -13,8 +13,8 @@ Two layers:
 * The full standalone build compiles every raylib module + the renderer
   + game through badc and links against the platform's windowing / GL
   libraries. It runs on macOS (Cocoa via objc_msgSend), Linux (X11 / GLX)
-  and Windows (win32 / WGL); the platform headers ship as demo-local
-  embedded headers under `include/`. The windowed run needs a display
+  and Windows (win32 / WGL); the platform headers ship as hand-authored
+  headers under the shared `demos/include/`. The windowed run needs a display
   server: macOS uses the login session, Linux uses `Xvfb` when present;
   the Windows runners are headless, so there the build + link is the
   coverage. A run is skipped, not failed, when no display is available.
@@ -133,7 +133,8 @@ def platform_build(badc: Path, work: Path) -> bool:
     the game's audio is compiled out -- sprites and textures still load."""
     subprocess.run([sys.executable, str(RAYLIB_DIR / "setup.py")], check=True)
     src = RAYLIB_DIR / "src"
-    inc = RAYLIB_DIR / "include"
+    # Platform / windowing / GL headers live in the shared demos/include tree.
+    inc = RAYLIB_DIR.parent / "include"
     # `--gnu` so raylib's GCC-gated correct paths compile (sinfl_bsr's
     # __builtin_clz, miniaudio's atomics). The decoders' SIMD is off (no
     # vector intrinsics in badc); empty-template asm barriers and GCC

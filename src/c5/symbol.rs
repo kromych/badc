@@ -27,6 +27,24 @@ pub(crate) struct Symbol {
     /// Type-checking only verifies the fixed parameters.
     pub is_variadic: bool,
 
+    /// Shadow slots for `params` / `is_variadic`. See `h_array_size`:
+    /// a function-pointer parameter, block-scope local, or block-scope
+    /// typedef that reuses an outer function name writes its own
+    /// prototype onto the shared symbol slot; without the save the
+    /// outer signature is permanently replaced (C99 6.2.1p4), which
+    /// breaks later call type-checks and can flip a variadic call's
+    /// ABI.
+    pub h_params: Vec<i64>,
+    pub h_is_variadic: bool,
+
+    /// True while the function's return type is the implicit `int`
+    /// default rather than a declared type: a `#pragma binding` seen
+    /// without a following prototype, or a C89 implicit declaration.
+    /// A call site warns once (the result is truncated to 32 bits if
+    /// the function really returns a pointer or wider type). Cleared
+    /// when a declaration supplies an explicit return type.
+    pub implicit_return_int: bool,
+
     /// True for a function declared `_Noreturn` / `noreturn` (C11
     /// 6.7.4) or one of the built-in non-returning library functions
     /// (`exit`, `abort`, ...). The reachability analysis treats a call
@@ -111,6 +129,33 @@ pub(crate) struct Symbol {
     pub h_is_vla: bool,
     pub h_vla_ptr_slot: i64,
     pub h_vla_size_slot: i64,
+
+    /// True for a deferred-size array whose initializer resolved to zero
+    /// elements (`T x[] = {}`, e.g. an element list left empty after all
+    /// members are `#if`'d out). The element type is in `type_` but the
+    /// count is 0, which collides with the `array_size == 0` scalar
+    /// encoding. This flag keeps the array-ness so the symbol still decays
+    /// to a pointer, `sizeof` reports 0, and `typeof(x)` stays distinct
+    /// from `typeof(&x[0])` (C99 6.7.6.2 array vs pointer).
+    pub is_zero_len_array: bool,
+    /// Shadow slot for `is_zero_len_array`. See `h_array_size`.
+    pub h_is_zero_len_array: bool,
+
+    /// True for a `const`-qualified plain integer object with static
+    /// storage (`static const int N = ...`, a file-scope `const`). C99 6.6
+    /// does not make it a constant expression, but GCC and common practice
+    /// fold its value; the constant-expression evaluator reads the value
+    /// back from the object's `.data` storage when this is set, so
+    /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
+    pub is_const_qualified: bool,
+
+    /// True for a file-scope array whose element type is `const`-qualified
+    /// (`static const T x[]`). Its elements -- and their members -- cannot
+    /// be written (C99 6.7.3), so a relocation the initializer planted in
+    /// the storage (a member holding another object's address) holds for
+    /// the object's lifetime. The const-global fold reads this to prove a
+    /// null comparison of such a member false.
+    pub storage_is_const: bool,
 
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition

@@ -3,8 +3,8 @@
 // place the variadic arguments per the host variadic ABI, not as fixed
 // register arguments. The declarator captures the prototype before the
 // initializer's cast runs a base-type parse that would otherwise clear it.
-// quickjs's std.sprintf reaches this via `int (*f)(DynBuf*, const char*,
-// ...) = (void*)dbuf_printf;`.
+// A real-world shape reaches this via `int (*f)(Buf*, const char*,
+// ...) = (void*)printf_impl;`.
 
 #include <stdarg.h>
 

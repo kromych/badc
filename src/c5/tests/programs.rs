@@ -2,10 +2,107 @@
 //! check the exit code. These exercise the whole pipeline.
 
 use super::run_fixture;
+use super::run_str;
+
+#[test]
+fn constructors_run_before_main_in_priority_order() {
+    // `__attribute__((constructor))` functions run before `main` under
+    // the interpreter, ordered as the native `.init_array` runs them:
+    // prioritized ascending, then unprioritized. `main` observes their
+    // writes; the encoded return pins the order (portable, no native
+    // toolchain needed).
+    let src = "
+        static int order[8];
+        static int n;
+        __attribute__((constructor(102))) static void c2(void) { order[n++] = 2; }
+        __attribute__((constructor(101))) static void c1(void) { order[n++] = 1; }
+        __attribute__((constructor)) static void c3(void) { order[n++] = 3; }
+        int main(void) {
+            if (n != 3) return 100;
+            return order[0] * 100 + order[1] * 10 + order[2];
+        }
+    ";
+    assert_eq!(run_str(src), 123);
+}
+
+#[test]
+fn destructor_runs_after_main_without_disturbing_return() {
+    // A destructor runs after `main` returns (the VM has no way for
+    // `main` to observe it), so `main` still returns the constructor's
+    // value and the destructor path executes without error. Destructor
+    // ordering is pinned by the native Linux suites' stdout sequence.
+    let src = "
+        static int n;
+        __attribute__((constructor)) static void ctor(void) { n = 5; }
+        __attribute__((destructor)) static void dtor(void) { n = 0; }
+        int main(void) { return n; }
+    ";
+    assert_eq!(run_str(src), 5);
+}
+
+// C23 6.7.13 `[[...]]` attribute-specifier-sequences in the declarator
+// positions GNU headers place them: after a pointer `*`, leading a
+// declaration, after the type before the identifier, before a
+// parenthesized function-pointer declarator, and on a struct member. All
+// are parsed and ignored; the program's value pins that they were skipped,
+// not miscompiled.
+#[test]
+fn c23_attribute_specifier_positions() {
+    let src = "
+        int gv = 5;
+        int * [[deprecated]] gp = &gv;
+        [[maybe_unused]] static int leading(void) { return 1; }
+        void [[cold]] noop(void) { }
+        int [[deprecated]] doubler(int x) { return x + x; }
+        struct ops { int [[deprecated]] (*fn)(int); };
+        int main(void) {
+            struct ops o;
+            o.fn = doubler;
+            noop();
+            if (*gp != 5) return 99;
+            return o.fn(21) + leading();
+        }
+    ";
+    assert_eq!(run_str(src), 43);
+}
+
+// The bundled <sched.h> gained the glibc CPU_COUNT_S / CPU_COUNT set-bit
+// counters (popcount over the mask words). Build a mask and check the
+// counts, including a byte-limited count over just the first word.
+// cpu_set_t and the CPU_* macros are `__linux__`-only, so gate on a
+// Linux host where the host-target preprocess defines it.
+#[cfg(target_os = "linux")]
+#[test]
+fn cpu_set_count_macros() {
+    let src = "
+        #include <sched.h>
+        int main(void) {
+            cpu_set_t s;
+            CPU_ZERO(&s);
+            CPU_SET(0, &s);
+            CPU_SET(3, &s);
+            CPU_SET(64, &s);
+            if (CPU_COUNT(&s) != 3) return 1;
+            if (CPU_COUNT_S(sizeof(unsigned long), &s) != 2) return 2;
+            CPU_CLR(3, &s);
+            if (CPU_COUNT(&s) != 2 || !CPU_ISSET(64, &s)) return 3;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
 
 #[test]
 fn arithmetic() {
     assert_eq!(run_fixture("arithmetic.c"), 60);
+}
+
+#[test]
+fn compound_literal_struct_field() {
+    // C99 6.5.2.5: a compound literal used as a struct field value must
+    // not drop the fields written before it. Returns 0 only when every
+    // field survived.
+    assert_eq!(run_fixture("compound_literal_struct_field.c"), 0);
 }
 
 #[test]
@@ -24,6 +121,530 @@ fn bool_normalize_c99() {
 fn compound_literal_block() {
     // C99 6.5.2.5 block-scope compound literals.
     assert_eq!(run_fixture("compound_literal_block.c"), 0);
+}
+
+#[test]
+fn anon_member_designated_init() {
+    // C11 6.7.2.1: `.member = { ... }` designating a named aggregate member
+    // inside an anonymous union/struct initializes that member's own type,
+    // distinct from a positional brace selecting a group member.
+    assert_eq!(run_fixture("anon_member_designated_init.c"), 0);
+}
+
+#[test]
+fn runtime_anon_struct_init() {
+    // The unified initializer engine gives the runtime (non-constant) store
+    // path the same anonymous-struct / anonymous-union / nested-aggregate
+    // handling the constant-staging path has.
+    assert_eq!(run_fixture("runtime_anon_struct_init.c"), 0);
+}
+
+#[test]
+fn runtime_array_designator() {
+    // C99 6.7.8p6 `[N] =` array designators interleaved with positional
+    // entries in a runtime (non-constant) array initializer, at parity with
+    // the constant-staging path.
+    assert_eq!(run_fixture("runtime_array_designator.c"), 0);
+}
+
+#[test]
+fn anon_struct_designated_init() {
+    // C99 6.7.8p7: `.member` designators inside a brace on a flattened
+    // anonymous-struct region, out of order, in both the constant and the
+    // runtime store paths.
+    assert_eq!(run_fixture("anon_struct_designated_init.c"), 0);
+}
+
+#[test]
+fn wide_string_struct_member() {
+    // C99 6.7.8p15: a wide string literal initializes a wchar_t-width array
+    // member; constant (file-scope + local) and runtime store paths, with
+    // tail zero-fill and exact-fit NUL drop.
+    assert_eq!(run_fixture("wide_string_struct_member.c"), 0);
+}
+
+#[test]
+fn inline_asm_memory_operand() {
+    // An inline-asm `"m"` / `"+m"` operand is a memory reference: the
+    // interlocked `lock cmpxchg` / `lock xadd` (edk2 BaseSynchronizationLib)
+    // read and write the memory object, not a register (a `lock` on a
+    // register destination is an invalid encoding that faults at runtime).
+    assert_eq!(run_fixture("inline_asm_memory_operand.c"), 0);
+}
+
+#[test]
+fn init_2d_struct_array() {
+    // A 2D array of structs with an inferred outer dimension
+    // (`struct T xs[][M] = { { {...}, ... }, ... }`, OpenSSL's OSSL_PARAM
+    // tables) descends the rows instead of misreading a row as one struct.
+    // Covers file-scope and static-local; 1D and fixed-size regress.
+    assert_eq!(run_fixture("init_2d_struct_array.c"), 0);
+}
+
+#[test]
+fn init_paren_conditional_arith() {
+    // A parenthesized constant conditional followed by arithmetic
+    // (`(cond ? a : b) * N`) in an aggregate initializer folds correctly
+    // instead of misreading the trailing operators as extra elements
+    // (OpenSSL cipher tables use this form).
+    assert_eq!(run_fixture("init_paren_conditional_arith.c"), 0);
+}
+
+#[test]
+fn offsetof_runtime_subscript() {
+    // GCC extension: `__builtin_offsetof(T, m[i])` with a non-constant `i`
+    // yields the runtime offset `offsetof(T, m) + i * stride` (edk2 firmware
+    // uses it). A constant subscript still folds.
+    assert_eq!(run_fixture("offsetof_runtime_subscript.c"), 0);
+}
+
+#[test]
+fn decl_specifier_order() {
+    // C99 6.7.1: declaration specifiers may appear in any order. A
+    // storage-class specifier after the type (`INTN STATIC f()`, the edk2
+    // firmware form) is accepted at file and block scope; internal linkage
+    // still applies.
+    assert_eq!(run_fixture("decl_specifier_order.c"), 0);
+}
+
+#[test]
+fn wide_string_pointer_array() {
+    // C99 6.7.8: `wchar_t *names[] = { L"a", L"b" }` is a brace list of
+    // pointer initializers, not a brace-wrapped string. The wide brace-wrap
+    // now requires a wchar_t-width scalar element, so a pointer array stays a
+    // brace list (the edk2 `CHAR16 *mDeviceTypeStr[]` form).
+    assert_eq!(run_fixture("wide_string_pointer_array.c"), 0);
+}
+
+#[test]
+fn compound_literal_pointer_field() {
+    // C99 6.5.2.5: a pointer struct field taking the address of an
+    // array-of-struct compound literal in a static initializer (a
+    // real-world descriptor-table shape), including a trailing
+    // empty `{ }` element in a deferred-size literal.
+    assert_eq!(run_fixture("compound_literal_pointer_field.c"), 0);
+}
+
+#[test]
+fn zero_length_local_array() {
+    // GCC zero-length array `T x[0]` as a local (including inside a
+    // statement expression) -- valid and empty, as compile-time-assert
+    // idioms rely on; previously rejected as an incomplete array.
+    assert_eq!(run_fixture("zero_length_local_array.c"), 0);
+}
+
+#[test]
+fn int128_type_layout() {
+    // GCC `__int128` / `__int128_t` / `__uint128_t` / `unsigned __int128`
+    // as a 16-byte type: sizeof, struct / array layout (the aarch64
+    // asm/sigcontext.h shape), and by-value copy. 128-bit arithmetic is
+    // rejected separately (struct_value_arithmetic_is_rejected).
+    assert_eq!(run_fixture("int128_type_layout.c"), 0);
+}
+
+#[test]
+fn divq_udiv_qrnnd() {
+    // The x86-64 `divq` inline-asm shape (a common `udiv_qrnnd` 128/64
+    // divide) as Intrinsic::Divq128: unsigned 128/64 division. Run under
+    // the VM, which computes it in 128-bit host arithmetic (the native
+    // x86-64 backend emits `div r/m64`; other native targets gate it out).
+    assert_eq!(run_fixture("divq_udiv_qrnnd.c"), 0);
+}
+
+#[test]
+fn rdtsc_host_ticks() {
+    // The x86-64 `rdtsc` inline-asm shape (a common host-tick counter)
+    // as Intrinsic::Rdtsc: two register-tied outputs, no inputs. The VM
+    // zeroes the counter (no host clock); native x86-64 emits `rdtsc`.
+    assert_eq!(run_fixture("rdtsc_host_ticks.c"), 0);
+}
+
+#[test]
+fn cacheflush_asm() {
+    // AArch64 `mrs ctr_el0` / `dc cvau` / `ic ivau` / `dsb ish` / `isb`
+    // (a common cache-flush sequence) as fixed-encoding intrinsics. Run
+    // under the VM (native aarch64 emits the real instructions, which
+    // need EL0 cache-op permission; x86-64 gates them out).
+    assert_eq!(run_fixture("cacheflush_asm.c"), 0);
+}
+
+#[test]
+fn atomic128_ldaxp_stlxp() {
+    // AArch64 128-bit atomic RMW via the ldaxp/stlxp exclusive pair: the
+    // compare-exchange (match + mismatch), exchange, fetch-and and fetch-or
+    // shapes. Under the VM the sequence runs as an ordinary load / modify /
+    // store; native aarch64 emits the exclusive-pair loop (x86-64 gates the
+    // shape out). The fixture returns 0 only when every prior value and
+    // stored result is correct.
+    assert_eq!(run_fixture("atomic128_ldaxp_stlxp.c"), 0);
+}
+
+#[test]
+fn atomic128_ldst() {
+    // AArch64 128-bit atomic load / store via the ldp/stp and ldxp/stxp
+    // idioms: the plain and exclusive forms, cross-checked so a value stored
+    // by one form reads back through the other, plus a plain load from a
+    // read-only object. Under the VM each runs as an ordinary load / store;
+    // native aarch64 emits the real sequence (x86-64 gates the shape out).
+    // The fixture returns 0 only when every round-trip is correct.
+    assert_eq!(run_fixture("atomic128_ldst.c"), 0);
+}
+
+#[test]
+fn builtin_inf() {
+    // __builtin_inf / __builtin_inff / __builtin_huge_val are positive
+    // infinity; the Linux SYNC_FILE_RANGE_* flags ride along under guard.
+    assert_eq!(run_fixture("builtin_inf.c"), 0);
+}
+
+#[test]
+fn alignof_expression() {
+    // GCC `__alignof__` accepts an expression operand (C11 `_Alignof` is
+    // type-only); the alignment is that of the operand's unevaluated type,
+    // and the type-name form still works.
+    assert_eq!(run_fixture("alignof_expression.c"), 0);
+}
+
+#[test]
+fn builtin_return_address() {
+    // __builtin_return_address(0) is the caller's return address; native
+    // reads the saved slot at [fp+8], the VM returns a non-zero per-frame
+    // proxy. The fixture returns 0 only when it is non-null.
+    assert_eq!(run_fixture("builtin_return_address.c"), 0);
+}
+
+#[test]
+fn atomic_op_fetch() {
+    // C11 __atomic_*_fetch builtins (add/sub/and/or/xor) return the updated
+    // value, unlike the __atomic_fetch_* family; the older __sync_*_and_fetch
+    // spelling does too. The fixture checks the return value and the store.
+    assert_eq!(run_fixture("atomic_op_fetch.c"), 0);
+}
+
+#[test]
+fn case_range() {
+    // GNU case ranges `case lo ... hi:` -- boundaries, interior, stacked
+    // ranges sharing a body, mixed with single labels, and fall-through
+    // out of a range into the next label.
+    assert_eq!(run_fixture("case_range.c"), 0);
+}
+
+#[test]
+fn case_range_wide() {
+    // A wide `case lo ... hi` is dispatched by a bounds comparison, so a
+    // range spanning millions of values (a real-world register-decode /
+    // page-table switch) needs no per-value expansion; signed and unsigned.
+    assert_eq!(run_fixture("case_range_wide.c"), 0);
+}
+
+#[test]
+fn deferred_array_designator() {
+    // A deferred-size array's size is max designated index + 1 (C99 6.7.8p22),
+    // via array designators with gaps (a real-world sparse memory-map table).
+    assert_eq!(run_fixture("deferred_array_designator.c"), 0);
+}
+
+#[test]
+fn outer_range_designator_replicates_subarray() {
+    // A GCC range designator on the outer dimension of an array of
+    // aggregates (`[a ... b] = { ... }`) replicates the brace-enclosed
+    // sub-array across every covered index, so the deferred outer size
+    // resolves to `max index + 1` -- not the ragged element count that
+    // dropped the last row and under-sized the array (state-transition
+    // table shape: rows selected by an enum, one range covering the two
+    // start states, then a two-level designator patching the last row).
+    let src = "
+        enum { S_A = 1, S_START = 4, S_INTERP = 5 };
+        static const unsigned char tbl[][8] = {
+            [S_A] = { [0 ... 7] = 9 },
+            [S_START ... S_INTERP] = { [1] = 3, [2 ... 4] = 7 },
+            [S_INTERP][6] = 5,
+        };
+        int main(void) {
+            if (sizeof(tbl) / sizeof(tbl[0]) != 6) return 1;
+            if (tbl[4][1] != 3 || tbl[4][2] != 7 || tbl[4][4] != 7 || tbl[4][0] != 0) return 2;
+            if (tbl[5][1] != 3 || tbl[5][2] != 7 || tbl[5][4] != 7) return 3;
+            if (tbl[5][6] != 5) return 4;
+            if (tbl[4][6] != 0) return 5;
+            if (tbl[1][0] != 9 || tbl[1][7] != 9) return 6;
+            if (tbl[0][0] != 0 || tbl[2][3] != 0 || tbl[3][7] != 0) return 7;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn outer_range_designator_replicates_string_rows() {
+    // A GCC range designator whose value is a string literal
+    // (`[a ... b] = "..."`) replicates the row across every covered
+    // index of a 2-D character array, zero-padding each to the row
+    // width -- the string-row counterpart of the brace-list case above.
+    let src = "
+        static const char m[][6] = { [0 ... 2] = \"abc\", [4] = \"XY\" };
+        int main(void) {
+            if (sizeof(m) / sizeof(m[0]) != 5) return 1;
+            for (int r = 0; r <= 2; r++)
+                if (m[r][0] != 'a' || m[r][1] != 'b' || m[r][2] != 'c'
+                    || m[r][3] != 0 || m[r][5] != 0) return 2 + r;
+            if (m[3][0] != 0 || m[3][5] != 0) return 6;
+            if (m[4][0] != 'X' || m[4][1] != 'Y' || m[4][2] != 0) return 7;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn member_array_designator() {
+    // C99 6.7.8p7 `.member[i] = value` designator chain into an array-typed
+    // struct member (a real-world device-register table shape).
+    assert_eq!(run_fixture("member_array_designator.c"), 0);
+}
+
+#[test]
+fn designator_array_field_compound() {
+    // C99 6.7.8p7 compound designator `[N].field = value` on a deferred-size
+    // struct-array element in a file-scope initializer (a dispatch-table
+    // shape). The size is set by the highest designated index.
+    assert_eq!(run_fixture("designator_array_field_compound.c"), 0);
+}
+
+#[test]
+fn typedef_pointer_array() {
+    // A `typedef T *Name[N]` array-of-pointer typedef folds its dimension onto
+    // an object like any array typedef (a real-world string-table shape), while
+    // a declarator that adds a pointer stays pointer-to-array.
+    assert_eq!(run_fixture("typedef_pointer_array.c"), 0);
+}
+
+#[test]
+fn anon_union_nested_init() {
+    // A struct with an anonymous union whose selected member is an aggregate
+    // may be brace-initialized with an explicit union sub-brace
+    // (`{ { { bytes } } }`, a real-world UUID table shape).
+    assert_eq!(run_fixture("anon_union_nested_init.c"), 0);
+}
+
+#[test]
+fn compound_literal_addr_init() {
+    // The address of a compound literal `&(T){...}` as an aggregate element /
+    // member value, including nested (a real-world config-struct table).
+    assert_eq!(run_fixture("compound_literal_addr_init.c"), 0);
+}
+
+#[test]
+fn scalar_compound_literal_lvalue() {
+    // C99 6.5.2.5p4: a compound literal is an lvalue. Taking the address of a
+    // scalar literal `&(int){5}` must work, not only the struct / array forms.
+    assert_eq!(run_fixture("scalar_compound_literal_lvalue.c"), 0);
+}
+
+#[test]
+fn compound_literal_array_element() {
+    // An array-of-struct element written as a compound literal `(T){...}`
+    // naming the element type (C99 6.5.2.5).
+    assert_eq!(run_fixture("compound_literal_array_element.c"), 0);
+}
+
+#[test]
+fn deferred_array_typedef() {
+    // A deferred-size array typedef (`typedef T X[]`) binds an object as a
+    // deferred array sized by its initializer (a real-world init-array shape).
+    assert_eq!(run_fixture("deferred_array_typedef.c"), 0);
+}
+
+#[test]
+fn local_array_designator() {
+    // A block-scope struct array (static or automatic) may use `[N] =`
+    // designators and take its deferred size from the largest index.
+    assert_eq!(run_fixture("local_array_designator.c"), 0);
+}
+
+#[test]
+fn math_compare_macros() {
+    // C99 7.12.14 relational macros (isgreater/isless/isunordered/...);
+    // NaN operands compare false and are unordered.
+    assert_eq!(run_fixture("math_compare_macros.c"), 0);
+}
+
+#[test]
+fn function_type_param() {
+    // C99 6.7.5.3p8: an abstract function-type parameter `RET(types)` decays
+    // to a function pointer (a real-world test-driver shape), without
+    // breaking parenthesized declarators or `(*fp)` parameters.
+    assert_eq!(run_fixture("function_type_param.c"), 0);
+}
+
+#[test]
+fn bitfield_runtime_init() {
+    // A bitfield struct member initialized at block scope by a non-constant
+    // value: the walker read-modify-writes the storage unit. Signedness,
+    // packing across units, and interleaving with regular fields.
+    assert_eq!(run_fixture("bitfield_runtime_init.c"), 0);
+}
+
+#[test]
+fn aligned_member() {
+    // `__attribute__((aligned(16)))` on a struct member / its type raises the
+    // member and aggregate alignment to 16 (a real-world aligned-struct
+    // shape). Layout, size, alignment, and value round-trip.
+    assert_eq!(run_fixture("aligned_member.c"), 0);
+}
+
+#[test]
+fn packed_enum() {
+    // `enum __attribute__((packed))` uses the smallest integer type holding
+    // its values, changing the layout of an embedding struct (a real-world
+    // status-field shape). Sizes, interleaved-field offsets, and sign-extension.
+    assert_eq!(run_fixture("packed_enum.c"), 0);
+}
+
+#[test]
+fn hex_case_range() {
+    // `case 0x10...0x20:` (no spaces around `...`, common after macro
+    // expansion) must lex the hex integer + ellipsis, not a hex float; a
+    // real hex float `0x1.8p3` must still lex as a float.
+    assert_eq!(run_fixture("hex_case_range.c"), 0);
+}
+
+#[test]
+fn elvis_operator() {
+    // GNU conditional with omitted middle operand `a ?: b`: single
+    // evaluation of the condition, truthy/falsy selection, pointer and
+    // nested forms, int->long result widening, and constant contexts.
+    assert_eq!(run_fixture("elvis_operator.c"), 0);
+}
+
+#[test]
+fn runtime_array_member() {
+    // C99 6.7.8p13: an array member of a local struct initialized by a
+    // brace list with non-constant elements -- full, partial (zero-filled
+    // tail), 2D, brace-elided, and designated forms. Previously rejected.
+    assert_eq!(run_fixture("runtime_array_member.c"), 0);
+}
+
+#[test]
+fn builtin_type_macros() {
+    // GCC/Clang predefined `__SIZE_TYPE__` / `__PTRDIFF_TYPE__` /
+    // `__INTPTR_TYPE__` / `__UINTPTR_TYPE__`: width tracks the pointer
+    // size and signedness is correct, as headers rely on for typedefs.
+    assert_eq!(run_fixture("builtin_type_macros.c"), 0);
+}
+
+#[test]
+fn stmt_expr() {
+    // GCC statement expressions `({ ... })`: value from the last
+    // expression-statement, single-evaluation side effects, own block
+    // scope, comma declarators, and nesting.
+    assert_eq!(run_fixture("stmt_expr.c"), 0);
+}
+
+#[test]
+fn generic_selection() {
+    // C11 6.5.1.1 `_Generic`: type dispatch, `default`, the
+    // unevaluated-non-selected rule, pointer-to-struct dispatch, and use
+    // in integer and address static initializers.
+    assert_eq!(run_fixture("generic_selection.c"), 0);
+}
+
+#[test]
+fn builtin_types_compatible() {
+    // GCC `__builtin_types_compatible_p`: constant and runtime contexts,
+    // qualifier/signedness rules, and composition with `typeof` as in a
+    // common qualifier-stripping macro.
+    assert_eq!(run_fixture("builtin_types_compatible.c"), 0);
+}
+
+#[test]
+fn has_builtin_clrsb() {
+    // `__has_builtin(NAME)` preprocessor operator routes supported vs
+    // unsupported builtins, and `__builtin_clrsb` / `__builtin_clrsbll`
+    // count leading redundant sign bits.
+    assert_eq!(run_fixture("has_builtin_clrsb.c"), 0);
+}
+
+#[test]
+fn builtin_overflow() {
+    // GCC `__builtin_{add,sub,mul}_overflow`: signed / unsigned at 32 and
+    // 64 bits, wrapped result and overflow flag, at the type boundaries.
+    assert_eq!(run_fixture("builtin_overflow.c"), 0);
+}
+
+#[test]
+fn builtin_parity() {
+    // GCC `__builtin_parity` / `__builtin_parityll`: odd-set-bit predicate
+    // (`popcount(x) & 1`), constant and runtime.
+    assert_eq!(run_fixture("builtin_parity.c"), 0);
+}
+
+#[test]
+fn has_attribute() {
+    // `__has_attribute` operator: recognized-attribute predicate, the
+    // `#ifdef` guard, `__`-wrapped names, and resolution through a macro
+    // alias (a common `__has_attribute` wrapper).
+    assert_eq!(run_fixture("has_attribute.c"), 0);
+}
+
+#[test]
+fn typeof_array_compatible() {
+    // C99 6.7.6.2: `typeof(arr)` and `typeof(&arr[0])` are an array and a
+    // pointer, never compatible. Drives the common array-length / is-array
+    // macros built on `typeof`.
+    assert_eq!(run_fixture("typeof_array_compatible.c"), 0);
+}
+
+#[test]
+fn typeof_array_row() {
+    // A subscripted row of a multi-dim array, a `*p` pointer-to-array deref,
+    // and a string literal all have array type. Drives a common
+    // array-length macro over a row of a 2-D table.
+    assert_eq!(run_fixture("typeof_array_row.c"), 0);
+}
+
+#[test]
+fn typeof_expression() {
+    // `typeof(expr)` over a full expression: binary, shift, conditional
+    // (the common MIN/MAX `typeof(1 ? (a) : (b))` shape), and comma operators.
+    assert_eq!(run_fixture("typeof_expression.c"), 0);
+}
+
+#[test]
+fn file_scope_typeof() {
+    // `typeof` / `__typeof__` as a file-scope declaration specifier, over a
+    // type-name or an expression operand. The block-scope path already
+    // handled it; the file-scope declaration loop lacked the branch.
+    assert_eq!(run_fixture("file_scope_typeof.c"), 0);
+}
+
+#[test]
+fn atomic_generic() {
+    // GCC generic `__atomic_load(p, ret, mo)` / `__atomic_store(p, val, mo)`
+    // move the value through a pointer; 32/64-bit and pointer widths.
+    assert_eq!(run_fixture("atomic_generic.c"), 0);
+}
+
+#[test]
+fn cpu_relax_hint() {
+    // The CPU spin-loop hint spelled `rep; nop` (x86 PAUSE), `pause`, and
+    // `yield` (arm) all normalize to the relax hint.
+    assert_eq!(run_fixture("cpu_relax_hint.c"), 0);
+}
+
+#[test]
+fn empty_struct_member() {
+    // A complete empty `struct {}` member contributes zero storage (GCC),
+    // so the common flexible-array-in-union idiom lays a flexible array
+    // over a union's first member. Forward-declared members stay rejected.
+    assert_eq!(run_fixture("empty_struct_member.c"), 0);
+}
+
+#[test]
+fn int128_struct_fallback() {
+    // A struct-based 128-bit integer (used when the compiler lacks
+    // __int128): 16-byte struct-by-value returns / params, designated
+    // compound literals, and carry / borrow arithmetic across the halves.
+    assert_eq!(run_fixture("int128_struct_fallback.c"), 0);
 }
 
 #[test]
@@ -127,6 +748,16 @@ fn variadic_fn_ptr_init() {
     // (or via a typedef) keeps its variadic prototype, so an indirect call
     // places the variadic arguments per the host variadic ABI.
     assert_eq!(run_fixture("variadic_fn_ptr_init.c"), 0);
+}
+
+#[test]
+fn static_function_pointer_identity() {
+    // C99 6.5.9p6: a function pointer held in static storage and initialized
+    // with a function name compares equal to that function's address, and is
+    // callable. Regression for the SSA interpreter, which patched a
+    // static-initializer code slot with a different tag than a symbol
+    // reference, so the two compared unequal.
+    assert_eq!(run_fixture("static_function_pointer_identity.c"), 0);
 }
 
 #[test]
@@ -441,6 +1072,14 @@ fn flex_array_member_static_init() {
 }
 
 #[test]
+fn attribute_cleanup() {
+    // __attribute__((cleanup(fn))) runs fn(&var) at every scope exit
+    // (fall-through, return, break, continue), reverse order, innermost
+    // scope first; a returned value is evaluated before the cleanups.
+    assert_eq!(run_fixture("attribute_cleanup.c"), 0);
+}
+
+#[test]
 fn sizeof_array_type_and_binding() {
     // `sizeof(T [N])` sizes the array type; `sizeof(arr)[i]` binds to
     // the full unary-expression.
@@ -537,6 +1176,35 @@ fn compound_literal_tagged_address() {
 }
 
 #[test]
+fn compound_literal_in_call_arg_survives_next_call() {
+    // C99 6.5.2.5p5: a block-scope compound literal has automatic storage
+    // lasting to the end of the enclosing block. When `&(T){...}` is a call
+    // argument, its cells sit above the call's argument-staging frame; the
+    // staging recycle must not reclaim them for a later full-expression, or
+    // the second literal aliases the first (the polymorphic-lock idiom
+    // `f(&(struct L){.object=x, .lock=..., .unlock=...})` twice in a block).
+    let src = "
+        typedef void Fn(void *);
+        struct L { void *object; Fn *lock; Fn *unlock; };
+        static void lk(void *x) { (void)x; }
+        static void ul(void *x) { (void)x; }
+        static struct L *mk(void *x, struct L *l) { return x ? l : 0; }
+        static int a, b;
+        int main(void) {
+            struct L *p = mk(&a, &(struct L){ .object = &a, .lock = lk, .unlock = ul });
+            struct L *q = mk(&b, &(struct L){ .object = &b, .lock = lk, .unlock = ul });
+            int bad = 0;
+            if (p->object != (void *)&a) bad |= 1;
+            if (p->lock   != lk)         bad |= 2;
+            if (p->unlock != ul)         bad |= 4;
+            if (q->object != (void *)&b) bad |= 8;
+            return bad;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn function_typed_parameter() {
     // A function-typed parameter `RET name(args)` / `RET (name)(args)`
     // decays to a pointer to function (C99 6.7.5.3p8).
@@ -546,15 +1214,15 @@ fn function_typed_parameter() {
 #[test]
 fn static_init_braced_scalar() {
     // A scalar member's initializer may be brace-enclosed (C99 6.7.9p11),
-    // including nested aggregates (the PyVarObject_HEAD_INIT shape).
+    // including nested aggregates (a real-world object-header init shape).
     assert_eq!(run_fixture("static_init_braced_scalar.c"), 0);
 }
 
 #[test]
 fn paren_string_char_array_init() {
     // C99 6.7.9p14 + 6.5.1: a parenthesized string literal initializes a
-    // char array by copying its bytes (the `_PyASCIIObject_INIT` macro
-    // shape `._data = (LITERAL)`), not by storing the literal's pointer.
+    // char array by copying its bytes (a common `._data = (LITERAL)` macro
+    // shape), not by storing the literal's pointer.
     assert_eq!(run_fixture("paren_string_char_array_init.c"), 0);
 }
 
@@ -569,7 +1237,7 @@ fn static_init_paren_relocation() {
 fn const_conditional_address_init() {
     // C99 6.6: a constant-condition conditional whose arms are address
     // constants selects one arm; its relocation must reach the static
-    // initializer (the `_Py_LATIN1_CHR` clinic-table idiom).
+    // initializer (a real-world character-table idiom).
     assert_eq!(run_fixture("const_conditional_address_init.c"), 0);
 }
 
@@ -584,7 +1252,7 @@ fn do_while_zero_returns() {
 fn self_referential_macro() {
     // A self-referential function-like macro expands once and the
     // recurring name becomes the function, while an argument macro still
-    // expands (C99 6.10.3.4) -- the Py_TYPE / Py_SIZE idiom.
+    // expands (C99 6.10.3.4) -- a common accessor-macro idiom.
     assert_eq!(run_fixture("self_referential_macro.c"), 0);
 }
 
@@ -976,6 +1644,299 @@ fn zero_length_array() {
 }
 
 #[test]
+fn setbuffer_is_a_unix_stdio_binding() {
+    use crate::{CompileOptions, Compiler, Target};
+    // The BSD `setbuffer` is bound on the Unix targets (glibc / macOS) and
+    // absent on Windows (msvcrt has no such symbol); a successful compile
+    // is the presence check.
+    let compiles = |target: Target| -> bool {
+        let src = "#include <stdio.h>\nvoid f(char *b) { setbuffer(0, b, 512); }\n";
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    assert!(compiles(Target::LinuxAarch64), "setbuffer on linux-aarch64");
+    assert!(compiles(Target::LinuxX64), "setbuffer on linux-x64");
+    assert!(compiles(Target::MacOSAarch64), "setbuffer on macos");
+    assert!(
+        !compiles(Target::WindowsX64),
+        "setbuffer must be absent on Windows"
+    );
+}
+
+#[test]
+fn struct_mmsghdr_batched_socket_io() {
+    use crate::{CompileOptions, Compiler, Target};
+    // struct mmsghdr + recvmmsg/sendmmsg -- the GNU/Linux batched-socket
+    // extension. A successful compile is the presence check for the
+    // struct's msg_len field and the two prototypes.
+    let src = "#define _GNU_SOURCE\n\
+               #include <sys/socket.h>\n\
+               struct timespec;\n\
+               unsigned len_of(struct mmsghdr *m) { return m->msg_len; }\n\
+               int io(int f, struct mmsghdr *m, unsigned n, struct timespec *t) {\n\
+                   return recvmmsg(f, m, n, 0, t) + sendmmsg(f, m, n, 0);\n\
+               }";
+    let compiles = |target: Target| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    assert!(compiles(Target::LinuxX64), "mmsghdr on linux-x64");
+    assert!(compiles(Target::LinuxAarch64), "mmsghdr on linux-aarch64");
+}
+
+#[test]
+fn fcntl_stat_constants_match_the_target_libc() {
+    use crate::{CompileOptions, Compiler, Target};
+    // A negative-size array declaration is a compile error unless every
+    // constant matches, so a successful compile IS the assertion.
+    let compiles = |src: &str, target: Target| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    // aarch64 and x86-64 rearrange O_DIRECT / O_DIRECTORY / O_NOFOLLOW;
+    // O_LARGEFILE is 0 on both 64-bit targets. S_ISVTX and the UTIME_*
+    // values are arch-independent. Values verified against gcc.
+    let common = "&& O_ASYNC==020000 && FASYNC==020000 && O_LARGEFILE==0 \
+                  && S_ISVTX==01000 && UTIME_NOW==((1L<<30)-1L) \
+                  && UTIME_OMIT==((1L<<30)-2L)";
+    let aarch64 = format!(
+        "#include <fcntl.h>\n#include <sys/stat.h>\nint ck[(O_DIRECT==0200000 \
+         && O_DIRECTORY==040000 && O_NOFOLLOW==0100000 {common})?1:-1];\n"
+    );
+    let x86_64 = format!(
+        "#include <fcntl.h>\n#include <sys/stat.h>\nint ck[(O_DIRECT==040000 \
+         && O_DIRECTORY==0200000 && O_NOFOLLOW==0400000 {common})?1:-1];\n"
+    );
+    assert!(compiles(&aarch64, Target::LinuxAarch64), "aarch64 values");
+    assert!(compiles(&x86_64, Target::LinuxX64), "x86-64 values");
+    // A wrong value must fail, proving the assertion actually bites.
+    let wrong = "#include <fcntl.h>\nint ck[(O_DIRECT==0)?1:-1];\n";
+    assert!(
+        !compiles(wrong, Target::LinuxAarch64),
+        "a wrong constant should fail to compile"
+    );
+}
+
+#[test]
+fn linux_falloc_parport_uapi_headers() {
+    use crate::{CompileOptions, Compiler, Target};
+    // The bundled linux/falloc.h, linux/ppdev.h and linux/parport.h uapi
+    // headers plus the fcntl.h `fallocate` binding: a successful compile of
+    // the negative-size-array assertion IS the check (values are arch
+    // independent). The ppdev ioctls and the fallocate call must also parse.
+    let compiles = |src: &str| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .is_ok()
+    };
+    let src = "#include <fcntl.h>\n#include <linux/falloc.h>\n\
+               #include <linux/ppdev.h>\n#include <linux/parport.h>\n\
+               int ck[(FALLOC_FL_KEEP_SIZE==0x01 && FALLOC_FL_PUNCH_HOLE==0x02 \
+               && FALLOC_FL_ZERO_RANGE==0x10 && FALLOC_FL_INSERT_RANGE==0x20 \
+               && PARPORT_CONTROL_STROBE==0x1 && PARPORT_STATUS_BUSY==0x80 \
+               && IEEE1284_MODE_ECP==0x10 && PARPORT_CLASS_PRINTER==1 \
+               && PPCLAIM!=0 && PPRELEASE!=0)?1:-1];\n\
+               int use_fallocate(int fd){ return fallocate(fd, FALLOC_FL_PUNCH_HOLE, 0, 4096); }\n";
+    assert!(
+        compiles(src),
+        "bundled uapi headers + fallocate must compile"
+    );
+    let wrong = "#include <linux/falloc.h>\nint ck[(FALLOC_FL_PUNCH_HOLE==0)?1:-1];\n";
+    assert!(!compiles(wrong), "a wrong constant should fail to compile");
+}
+
+#[test]
+fn linux_vsock_errqueue_socket_constants() {
+    use crate::{CompileOptions, Compiler, Target};
+    // AF_VSOCK / SO_PEERCRED / IPPROTO_MPTCP and the bundled linux/
+    // vm_sockets.h + errqueue.h (with linux/time_types.h): the socket
+    // credential struct and the vsock address struct must define, and the
+    // constants match (arch independent). A successful compile is the check.
+    let compiles = |src: &str| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .is_ok()
+    };
+    let src = "#include <sys/socket.h>\n#include <netinet/in.h>\n\
+               #include <linux/vm_sockets.h>\n#include <linux/errqueue.h>\n\
+               int ck[(AF_VSOCK==40 && PF_VSOCK==40 && SO_PEERCRED==17 \
+               && SO_PASSCRED==16 && IPPROTO_MPTCP==262 && VMADDR_CID_HOST==2 \
+               && SO_EE_ORIGIN_ICMP==2 && SCM_TSTAMP_ACK==2)?1:-1];\n\
+               int cred_size(void){ struct ucred u; return sizeof(u.pid)+sizeof(u.uid)+sizeof(u.gid); }\n\
+               int vm_size(void){ struct sockaddr_vm v; return sizeof(v)==sizeof(struct sockaddr); }\n";
+    assert!(
+        compiles(src),
+        "vsock/errqueue headers + constants must compile"
+    );
+    let wrong = "#include <sys/socket.h>\nint ck[(AF_VSOCK==0)?1:-1];\n";
+    assert!(!compiles(wrong), "a wrong constant should fail to compile");
+}
+
+#[test]
+fn linux_can_socket_and_block_headers() {
+    use crate::{CompileOptions, Compiler, Target};
+    // AF_CAN / SOCK_RAW / SIOCGIFINDEX and the bundled linux/can.h,
+    // linux/can/raw.h and linux/blkzoned.h uapi headers: constants match
+    // (arch independent) and the CAN frame / address structs define.
+    let compiles = |src: &str| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .is_ok()
+    };
+    let src = "#include <sys/socket.h>\n#include <net/if.h>\n\
+               #include <linux/can.h>\n#include <linux/can/raw.h>\n\
+               #include <linux/blkzoned.h>\n\
+               int ck[(AF_CAN==29 && PF_CAN==29 && SOCK_RAW==3 && SOCK_SEQPACKET==5 \
+               && SIOCGIFINDEX==0x8933 && CAN_RAW==1 && CAN_MAX_DLEN==8 \
+               && CANFD_MAX_DLEN==64 && SOL_CAN_RAW==101 && CAN_RAW_FD_FRAMES==5 \
+               && BLK_ZONE_COND_FULL==0xE)?1:-1];\n\
+               int sz(void){ struct can_frame f; struct sockaddr_can a; struct blk_zone_range r; \
+               return sizeof(f)+sizeof(a)+sizeof(r); }\n";
+    assert!(
+        compiles(src),
+        "can/block uapi headers + constants must compile"
+    );
+    let wrong = "#include <sys/socket.h>\nint ck[(SOCK_RAW==0)?1:-1];\n";
+    assert!(!compiles(wrong), "a wrong constant should fail to compile");
+}
+
+#[test]
+fn linux_block_device_and_file_headers() {
+    use crate::{CompileOptions, Compiler, Target};
+    // The bundled linux/cdrom.h, dm-ioctl.h, hdreg.h, fd.h, the FS_IOC_* /
+    // FS_*_FL additions to linux/fs.h, the POSIX_FADV_* advice, and the
+    // mincore binding -- everything block/file drivers pull in. Constant
+    // values are arch independent; a successful compile is the check.
+    let compiles = |src: &str| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .is_ok()
+    };
+    let src = "#include <fcntl.h>\n#include <sys/mman.h>\n#include <linux/cdrom.h>\n\
+               #include <linux/dm-ioctl.h>\n#include <linux/hdreg.h>\n\
+               #include <linux/fd.h>\n#include <linux/fs.h>\n\
+               int ck[(CDROMEJECT==0x5309 && CDS_DISC_OK==4 && HDIO_GETGEO==0x0301 \
+               && POSIX_FADV_DONTNEED==4 && FS_APPEND_FL==0x20 && FS_NOCOW_FL==0x00800000 \
+               && DM_IOCTL==0xfd && DM_MPATH_PROBE_PATHS_CMD==18)?1:-1];\n\
+               int use_fs(int fd){ return FS_IOC_GETFLAGS != 0 ? fd : 0; }\n\
+               int use_mincore(char *a){ unsigned char v; return mincore(a, 4096, &v); }\n\
+               int use_geo(void){ struct hd_geometry g; return sizeof(g); }\n";
+    assert!(compiles(src), "block/file uapi headers must compile");
+    let wrong = "#include <linux/cdrom.h>\nint ck[(CDROMEJECT==0)?1:-1];\n";
+    assert!(!compiles(wrong), "a wrong constant should fail to compile");
+}
+
+#[test]
+fn utf16_utf32_string_literals() {
+    // C11 `u"..."` (char16_t, 2-byte) and `U"..."` (char32_t, 4-byte)
+    // string literals initialize a matching-width array; `L"..."` is
+    // unaffected.
+    assert_eq!(run_fixture("utf16_utf32_string_literals.c"), 0);
+}
+
+#[test]
+fn const_object_array_bound() {
+    // A static `const` integer object folds its value in a later constant
+    // expression, so it works as an array bound (a fixed array, not a VLA)
+    // and may carry an initializer.
+    assert_eq!(run_fixture("const_object_array_bound.c"), 0);
+}
+
+#[test]
+fn block_scope_thread_local() {
+    // C11 6.7.1: a block-scope `static _Thread_local` / `static __thread`
+    // object has thread storage duration -- placed in the TLS block, one per
+    // thread, persisting across calls (single-threaded: accumulates).
+    assert_eq!(run_fixture("block_scope_thread_local.c"), 0);
+}
+
+#[test]
+fn builtin_offsetof() {
+    // GCC / C11 `__builtin_offsetof(type, member)` folds to the member's byte
+    // offset -- struct tag / typedef, `.field` chains, `[index]` subscripts
+    // (incl. multi-dim and array-of-struct), and constant contexts.
+    assert_eq!(run_fixture("builtin_offsetof.c"), 0);
+}
+
+#[test]
+fn large_aggregate_copy() {
+    // A large aggregate init / struct copy (> 4 KB) keeps load/store offsets
+    // in the scaled-immediate range by advancing the base pointer.
+    assert_eq!(run_fixture("large_aggregate_copy.c"), 0);
+}
+
+#[test]
+fn conditional_constant_initializer() {
+    // `cond ? A : B` with a constant condition is a constant initializer:
+    // a file-scope scalar, and an aggregate element whose arms may be
+    // address constants (function pointer, `&global`, null).
+    assert_eq!(run_fixture("conditional_constant_initializer.c"), 0);
+}
+
+#[test]
+fn conditional_pointer_null_constant_type() {
+    // C99 6.5.15p6: `c ? (T*)p : (void*)0` (or `: 0`) has type `T*`, so the
+    // conditional and `typeof` of it keep the struct pointer for a `->`.
+    assert_eq!(run_fixture("conditional_pointer_null_constant_type.c"), 0);
+}
+
+#[test]
+fn empty_array_init() {
+    // A file-scope `T x[] = {}` has zero elements but keeps its element
+    // type: it decays to a pointer, `sizeof` is 0, and `typeof(x)` differs
+    // from `typeof(&x[0])`, so an `ARRAY_SIZE` macro reports 0 (and N for a
+    // sized array).
+    assert_eq!(run_fixture("empty_array_init.c"), 0);
+}
+
+#[test]
+fn multidim_array_designator() {
+    // A chained `[i][j] = v` designator selects one scalar of a
+    // multi-dimensional array; single `[i] = { row }` designators and the
+    // zero seed for untouched positions still hold.
+    assert_eq!(run_fixture("multidim_array_designator.c"), 0);
+}
+
+#[test]
+fn struct_member_array_range_designator() {
+    // A struct's array member accepts a GNU range designator
+    // `[a ... b] = v` (the top-level array path already did); mixed with
+    // single `[i] = v` designators and a following scalar member.
+    assert_eq!(run_fixture("struct_member_array_range_designator.c"), 0);
+}
+
+#[test]
+fn runtime_struct_array_member_init() {
+    // A struct's array-of-struct member brace-initialized with a
+    // non-constant element value (`&g[i]`) takes the runtime store path;
+    // each element must recurse into the struct initializer instead of
+    // being parsed as a scalar leaf.
+    assert_eq!(run_fixture("runtime_struct_array_member_init.c"), 0);
+}
+
+#[test]
+fn aggregate_init_statement_expression_element() {
+    // A local aggregate element that is a GNU statement expression (C99 6.6,
+    // not constant) initializes at runtime; when it declares its own local,
+    // the inner declaration must not drain the enclosing aggregate's
+    // accumulated runtime elements, so an earlier field/element survives.
+    assert_eq!(
+        run_fixture("aggregate_init_statement_expression_element.c"),
+        0
+    );
+}
+
+#[test]
 fn builtin_frame_address() {
     // __builtin_frame_address(0): non-null, stable within a frame,
     // distinct between a function and its callee.
@@ -997,6 +1958,14 @@ fn builtin_bit_count() {
 }
 
 #[test]
+fn builtin_ffs() {
+    // GCC / POSIX __builtin_ffs / ffsl / ffsll: one plus the index of the
+    // least-significant set bit, 0 for a zero argument (the zero case is
+    // defined, unlike ctz). Lowered as `(ctz(x) + 1) * (x != 0)`.
+    assert_eq!(run_fixture("builtin_ffs.c"), 0);
+}
+
+#[test]
 fn scanf_fscanf_binding() {
     // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared and bound
     // from <stdio.h>; the calls are guarded so the interp lane never
@@ -1009,6 +1978,15 @@ fn anon_union_init() {
     // C11 6.7.2.1p13: an anonymous union is one positional slot in a
     // brace initializer; an anonymous struct contributes one per member.
     assert_eq!(run_fixture("anon_union_init.c"), 0);
+}
+
+#[test]
+fn packed_anon_union_layout() {
+    // A trailing `__attribute__((packed))` repacks the fields; the promoted
+    // members of an anonymous union must keep overlapping (and a nested
+    // anonymous struct keeps its in-arm offsets) instead of being laid out
+    // sequentially. Mirrors the ACPI bios-linker-loader command entry.
+    assert_eq!(run_fixture("packed_anon_union_layout.c"), 0);
 }
 
 #[test]
@@ -1864,6 +2842,60 @@ fn typedef_name_as_declarator() {
 }
 
 #[test]
+fn pointer_to_array_typedef_deref_decays() {
+    // C99 6.3.2.1p3: `*(A *)p` where `A` is an array typedef yields the
+    // array, which decays to `p` (its address) with no load. The cast
+    // to a pointer-to-array typedef previously dropped the array shape,
+    // so the deref loaded the first element and passed that as the
+    // pointer -- the failure a `siglongjmp(*(sigjmp_buf *)slot, 1)`
+    // reaches when the jmp_buf is stashed through a `void *`.
+    assert_eq!(run_fixture("pointer_to_array_typedef_deref_decays.c"), 0);
+}
+
+#[test]
+fn flexible_array_member_after_tentative_decl() {
+    // A struct with a flexible array member, forward-declared before it is
+    // defined with FAM elements, must allocate storage for the elements
+    // rather than reuse the tentative slot (which reserved only the fixed
+    // part). Reusing it overflows the FAM data into the following global.
+    assert_eq!(
+        run_fixture("flexible_array_member_after_tentative_decl.c"),
+        0
+    );
+}
+
+#[test]
+fn pointer_to_array_typedef_param_subscript() {
+    // A `Node *nodes` parameter, where `Node` is an array typedef, is a
+    // pointer to the array (not an array parameter -- 6.7.5.3p7 does not
+    // apply), so `nodes[k]` strides by `sizeof(Node)` and decays to the
+    // row address. The parameter path used to add a second pointer level,
+    // striding by a pointer width and loading a word as the row.
+    assert_eq!(run_fixture("pointer_to_array_typedef_param_subscript.c"), 0);
+}
+
+#[test]
+fn pointer_to_array_typedef_member_subscript() {
+    // A struct member of pointer-to-array-typedef type is a pointer to
+    // the row array: `s->nodes[k]` strides by the row width and decays
+    // to the element pointer. The member path used to stride by the
+    // element width and load through the row.
+    assert_eq!(
+        run_fixture("pointer_to_array_typedef_member_subscript.c"),
+        0
+    );
+}
+
+#[test]
+fn shadowed_fn_signature_restored() {
+    // C99 6.2.1p4: a fn-ptr parameter or block-scope local that reuses
+    // a function name hides it only for its scope; the function's
+    // params / variadic flag must be intact afterward, or a later
+    // variadic call misroutes its tail on stack-packing ABIs.
+    assert_eq!(run_fixture("shadowed_fn_signature_restored.c"), 0);
+}
+
+#[test]
 fn fnptr_param_indirection() {
     // A parameter of type "pointer to function-pointer typedef"
     // (`fn_t *p`) carries two levels of fn-pointer indirection, so
@@ -2128,6 +3160,56 @@ fn macro_paste_result_is_rescanned() {
 }
 
 #[test]
+fn macro_paste_empty_arg_placemarker() {
+    // C99 6.10.3.3: an empty macro argument is a placemarker, so
+    // `sign##name` with an empty `sign` yields `name` and keeps the
+    // preceding token (`return`) separate rather than gluing `returnname`.
+    assert_eq!(run_fixture("macro_paste_empty_arg_placemarker.c"), 0);
+}
+
+#[test]
+fn static_over_alignment() {
+    // C11 6.7.5 / GCC `aligned`: static objects (file-scope and block-scope
+    // static) are placed at the requested power-of-two alignment, up to a
+    // page -- verified at runtime via the object address modulo alignment.
+    assert_eq!(run_fixture("static_over_alignment.c"), 0);
+}
+
+#[test]
+fn pointer_local_ignores_type_alignment() {
+    // A type-position `aligned` attribute appertains to the pointee type, so
+    // an automatic pointer object is not rejected for it (the pointer keeps
+    // pointer alignment) -- `struct {...} aligned(16) *p`.
+    assert_eq!(run_fixture("pointer_local_ignores_type_alignment.c"), 0);
+}
+
+#[test]
+fn flexible_array_member_typeof_is_array() {
+    // C99 6.7.2.1p16: a flexible array member has an incomplete array type,
+    // distinct from its decayed element pointer, so
+    // `__builtin_types_compatible_p(typeof(m), typeof(&m[0]))` is false --
+    // the array-detection idiom must see it as an array.
+    assert_eq!(run_fixture("flexible_array_member_typeof_is_array.c"), 0);
+}
+
+#[test]
+fn multidim_struct_array_designator() {
+    // C99 6.7.8p6: `arr[i][j] = { ... }` indexes every dimension of a
+    // multi-dimensional array of structs to a single element (row-major flat
+    // offset), with `[i][j].field` overrides and whole-row designators.
+    assert_eq!(run_fixture("multidim_struct_array_designator.c"), 0);
+}
+
+#[test]
+fn local_multidim_struct_array_designator() {
+    // C99 6.7.8p6 at block scope: `arr[i][j] = { ... }` indexes every
+    // dimension of a multi-dimensional array of structs to one element, for
+    // automatic and `static` locals and past two dimensions -- parity with a
+    // file-scope initializer.
+    assert_eq!(run_fixture("local_multidim_struct_array_designator.c"), 0);
+}
+
+#[test]
 fn func_name_predeclared_identifier() {
     // C99 6.4.2.2 makes `__func__` an implicitly declared string
     // literal carrying the enclosing function's name. c5 mirrors
@@ -2302,6 +3384,19 @@ fn qsort_scan_extend_dedup() {
 }
 
 #[test]
+fn tailcall_return_extension() {
+    // int-returning tail callee under an unsigned-returning caller:
+    // the widened value must zero-extend (bit 31 set).
+    assert_eq!(run_fixture("tailcall_return_extension.c"), 0);
+}
+
+#[test]
+fn fnptr_array_call() {
+    // `(*arr[i])()` and struct-returning K&R fn-pointer array elements.
+    assert_eq!(run_fixture("fnptr_array_call.c"), 0);
+}
+
+#[test]
 fn call_arg_extend_drop() {
     // The caller-side re-extension of a direct-call argument drops
     // only when the callee re-derives the parameter from the low bits.
@@ -2445,6 +3540,126 @@ fn compound_literal_paren_init_resolve() {
     // A parenthesized compound literal `((T){...})` must be accepted as
     // an aggregate-initializer element (C99 6.5.1/6.5.2.5).
     assert_eq!(run_fixture("compound_literal_paren_init.c"), 0);
+}
+
+#[test]
+fn struct_value_arithmetic_is_rejected() {
+    // C99 6.5: a struct / union value is not a valid operand of an
+    // arithmetic / bitwise / shift / relational / equality / logical
+    // operator. Each must be a compile error rather than silently
+    // operating on the operand's address. A pointer to a struct is a
+    // scalar and stays valid.
+    use crate::c5::Compiler;
+    let cases = [
+        (
+            "struct P{int x,y;}; int f(struct P a,struct P b){return (int)(a+b);}",
+            "+ (lhs)",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return (int)(a+b);}",
+            "+ (rhs)",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return (int)(a*b);}",
+            "*",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return a<b;}",
+            "<",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return a==b;}",
+            "==",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return (int)(a&b);}",
+            "&",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return (int)(a<<b);}",
+            "<<",
+        ),
+        (
+            "struct P{int x,y;}; int f(int a,struct P b){return a&&b;}",
+            "&&",
+        ),
+    ];
+    for (src, label) in cases {
+        let err = Compiler::new(src.to_string()).compile().expect_err(label);
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("invalid operands"),
+            "struct-value arithmetic ({label}) expected an invalid-operands diagnostic, got {msg:?}"
+        );
+    }
+    // Valid uses still compile: pointer arithmetic, member arithmetic.
+    for ok in [
+        "struct P{int x;}; struct P a[4]; int main(void){struct P*p=a; return (p+2)-a;}",
+        "struct P{int x,y;}; int main(void){struct P a={2,3}; return a.x*a.y-6;}",
+    ] {
+        Compiler::new(ok.to_string())
+            .compile()
+            .expect("valid struct pointer / member arithmetic must compile");
+    }
+}
+
+#[test]
+fn diagnostic_echoes_the_source_line() {
+    use crate::c5::Compiler;
+    // A compile error echoes the offending source line beneath the
+    // `<file>:<line>: error: ...` message (plain line, no caret).
+    let src = "int main(void) {\n    int x = 5;\n    x = y + 1;\n    return x;\n}\n";
+    let err = Compiler::new(src.to_string())
+        .compile()
+        .expect_err("undeclared y is an error");
+    let msg = format!("{err}");
+    assert!(msg.contains("undefined variable y"), "message: {msg:?}");
+    assert!(
+        msg.contains("x = y + 1;"),
+        "expected the source line echoed under the error, got {msg:?}"
+    );
+
+    // A warning does the same via `Program.warnings`.
+    let wsrc = "int add(int a, int b);\nint main(void) {\n    return add(1);\n}\n";
+    let prog = Compiler::new(wsrc.to_string())
+        .compile()
+        .expect("too-few-arguments is a warning, not an error");
+    let warns = prog.warnings.join("\n");
+    assert!(warns.contains("too few arguments"), "warnings: {warns:?}");
+    assert!(
+        warns.contains("return add(1);"),
+        "expected the source line echoed under the warning, got {warns:?}"
+    );
+
+    // A diagnostic whose line the parser already read past echoes THAT
+    // line, not the current one: an unused-parameter warning fires at the
+    // closing brace but names the signature line.
+    let usrc = "int cmd(int f, int n)\n{\n    return n;\n}\nint main(void) { return cmd(1, 2); }\n";
+    let prog2 = Compiler::new(usrc.to_string())
+        .compile()
+        .expect("unused parameter is a warning");
+    let w2 = prog2.warnings.join("\n");
+    assert!(w2.contains("unused parameter `f`"), "warnings: {w2:?}");
+    assert!(
+        w2.contains("int cmd(int f, int n)"),
+        "expected the signature line, not the brace, got {w2:?}"
+    );
+
+    // Giving a body to a predefined library function is an error anchored
+    // to the signature line, not the body's opening brace parsed after it.
+    let asrc = "#include <stdlib.h>\nint abs(int n)\n{\n    return n < 0 ? -n : n;\n}\nint main(void) { return abs(-1); }\n";
+    let err3 = Compiler::new(asrc.to_string())
+        .compile()
+        .expect_err("a body for a predefined library function is an error");
+    let m3 = format!("{err3}");
+    assert!(
+        m3.contains("predefined library function `abs`"),
+        "message: {m3:?}"
+    );
+    assert!(
+        m3.contains("int abs(int n)"),
+        "expected the signature line echoed, not the brace, got {m3:?}"
+    );
 }
 
 #[test]
@@ -2665,4 +3880,230 @@ fn constfold_post_inline_matches_interpreter() {
 #[test]
 fn rotate_inline_const_count_matches_interpreter() {
     assert_eq!(run_fixture("rotate_inline_const_count.c"), 0);
+}
+
+#[test]
+fn generic_selection_subscript_arm() {
+    // A `_Generic` arm containing a subscript (`&x[0]`) must not break the
+    // balanced-bracket association scan.
+    assert_eq!(run_fixture("generic_selection_subscript_arm.c"), 0);
+}
+
+#[test]
+fn stmt_expr_local_aggregate_assign() {
+    // A statement-expression block must leave the enclosing expression
+    // parse's operand stack net-unchanged: an aggregate (array or
+    // bitfield-struct) local initializer inside the block previously
+    // left a residual entry that made the enclosing assignment pop the
+    // wrong operand and drop itself.
+    assert_eq!(run_fixture("stmt_expr_local_aggregate_assign.c"), 0);
+}
+
+#[test]
+fn stmt_expr_zero_length_array() {
+    // `T a[] = { }` keeps its array-ness (decay, subscript typing,
+    // sizeof 0) when declared in a nested block or statement expression.
+    assert_eq!(run_fixture("stmt_expr_zero_length_array.c"), 0);
+}
+
+#[test]
+fn pp_number_macro_token() {
+    // C99 6.4.8: a pp-number is one token; an identifier-shaped tail
+    // (`2op`, `1.f`) is not a macro or parameter candidate.
+    assert_eq!(run_fixture("pp_number_macro_token.c"), 0);
+}
+
+#[test]
+fn pp_expansion_token_seam() {
+    // Expansion output must not paste adjacent tokens into new ones
+    // (`- -22` stays two tokens); `##` still glues.
+    assert_eq!(run_fixture("pp_expansion_token_seam.c"), 0);
+}
+
+#[test]
+fn array_field_designator_local() {
+    // C99 6.7.8p7 designator lists continuing into the element
+    // (`[N].field = v`, `[i][j].field = v`) in block-scope static and
+    // automatic struct arrays.
+    assert_eq!(run_fixture("array_field_designator_local.c"), 0);
+}
+
+#[test]
+fn volatile_struct_assign() {
+    // C99 6.5.16.1p1: struct assignment compares unqualified types;
+    // qualified sources and destinations interoperate with plain ones.
+    assert_eq!(run_fixture("volatile_struct_assign.c"), 0);
+}
+
+#[test]
+fn builtin_object_size() {
+    // GCC `__builtin_object_size`: folds for a known declared array,
+    // (size_t)-1 / 0 per type class otherwise, operand unevaluated.
+    assert_eq!(run_fixture("builtin_object_size.c"), 0);
+}
+
+#[test]
+fn bool_bitfield_zero_extends() {
+    // C99 6.2.5p2: a `_Bool` bitfield is unsigned even at width 1, so
+    // a set bit reads back as 1, not the -1 a signed 1-bit field
+    // yields. The wrong sign made an expression like `64 - 8 * flag`
+    // overshoot when a `_Bool` bitfield feeds integer arithmetic.
+    assert_eq!(run_fixture("bool_bitfield_zero_extends.c"), 0);
+}
+
+#[test]
+fn return_narrows_to_type_width() {
+    // C99 6.8.6.4 / 6.3.1.1: a sub-64-bit integer return is narrowed to
+    // its declared type in the result register -- zero-extend when
+    // unsigned, sign-extend when signed. A same-unit caller reads the
+    // register directly. A `uint32_t` syndrome built from `0x24 << 26`
+    // (bit 31 set) reached a 64-bit read sign-extended before the fix.
+    assert_eq!(run_fixture("return_narrows_to_type_width.c"), 0);
+}
+
+#[test]
+fn ipproto_case_labels() {
+    // <netinet/in.h> IPPROTO_* constants are usable as case labels.
+    assert_eq!(run_fixture("ipproto_case_labels.c"), 0);
+}
+
+#[test]
+fn elf_header_types() {
+    // <elf.h> specification-fixed type and struct layouts.
+    assert_eq!(run_fixture("elf_header_types.c"), 0);
+}
+
+#[test]
+fn syscall_numbers_x86_64() {
+    // <sys/syscall.h> per-architecture numbers: SYS_/__NR_ pairs, with
+    // arch_prctl present on x86-64 only.
+    assert_eq!(run_fixture("syscall_numbers_x86_64.c"), 0);
+}
+
+#[test]
+fn noreturn_dead_tail() {
+    // The noreturn-call block seal must not disturb control flow
+    // around an untaken guard.
+    assert_eq!(run_fixture("noreturn_dead_tail.c"), 0);
+}
+
+#[test]
+fn builtin_choose_expr() {
+    // `__builtin_choose_expr` keeps the chosen operand's exact type
+    // (no `?:` conversions) and never evaluates the other operand.
+    assert_eq!(run_fixture("builtin_choose_expr.c"), 0);
+}
+
+#[test]
+fn builtin_constant_p() {
+    // `__builtin_constant_p(x)` folds to 1 for a constant operand and 0
+    // for a runtime one, in both constant-expression and runtime
+    // contexts. Locks the `__builtin_constant_p`-guarded min/max macro
+    // idiom so a stubbed always-0 form can't silently collapse it to
+    // the fallback arm.
+    assert_eq!(run_fixture("builtin_constant_p.c"), 0);
+}
+
+// GCC extended inline asm with operand lists (x86_64 register-operand
+// forms). The interpreter evaluates the template semantics, so these
+// round-trip on any host; the native x86_64 encoding is checked by the
+// snapshot suite and the box validation.
+#[test]
+fn inline_asm_shld_double_shift() {
+    // `shld count, src, dst` (AT&T) shifts `dst` left by `count`, feeding
+    // in the high bits of `src`. Constraints: `+r` read-write output, `r`
+    // input, `ci` (immediate-or-CL) count with a `%b` byte-size operand.
+    let src = "
+        unsigned long long shl_double(unsigned long long l, unsigned long long r, int c) {
+            asm(\"shld %b2, %1, %0\" : \"+r\"(l) : \"r\"(r), \"ci\"(c));
+            return l;
+        }
+        int main(void) {
+            unsigned long long l = 0x0123456789ABCDEFULL, r = 0xFEDCBA9876543210ULL;
+            int c = 12;
+            unsigned long long got = shl_double(l, r, c);
+            unsigned long long want = (l << c) | (r >> (64 - c));
+            return got == want ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_shrd_double_shift() {
+    let src = "
+        unsigned long long shr_double(unsigned long long l, unsigned long long r, int c) {
+            asm(\"shrd %b2, %1, %0\" : \"+r\"(r) : \"r\"(l), \"ci\"(c));
+            return r;
+        }
+        int main(void) {
+            unsigned long long l = 0x0123456789ABCDEFULL, r = 0xFEDCBA9876543210ULL;
+            int c = 20;
+            unsigned long long got = shr_double(l, r, c);
+            unsigned long long want = (r >> c) | (l << (64 - c));
+            return got == want ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_bswap_matching_constraint() {
+    // `bswapl %0` with `"=r"(val)` output and `"0"(val)` matching input:
+    // the input shares operand 0's register (a byte-reverse in place).
+    let src = "
+        unsigned bswap32(unsigned val) {
+            __asm__(\"bswapl %0\" : \"=r\"(val) : \"0\"(val));
+            return val;
+        }
+        int main(void) {
+            unsigned x = 0x11223344u;
+            return bswap32(x) == 0x44332211u ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_bswap_size_modifier() {
+    // A size-modifier register name: `bswapq` on a 64-bit operand.
+    let src = "
+        unsigned long long bswap64(unsigned long long val) {
+            __asm__(\"bswapq %0\" : \"=r\"(val) : \"0\"(val));
+            return val;
+        }
+        int main(void) {
+            unsigned long long x = 0x0102030405060708ULL;
+            return bswap64(x) == 0x0807060504030201ULL ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_rdtscp_sequence_fixed_regs() {
+    // `rdtscp; shl $32,%%rdx; or %%rdx,%%rax` assembles a 64-bit value in
+    // rax from the timestamp halves: fixed-register output `=a`, explicit
+    // `%%reg` operands, an immediate `$32`, and `%rcx`/`%rdx` clobbers.
+    // The interpreter has no clock, so the read is zero; the point is
+    // that the multi-instruction template compiles and runs.
+    let src = "
+        unsigned long long rdtscp_read(void) {
+            unsigned long long tsc;
+            __asm__ __volatile__(\"rdtscp; shl $32,%%rdx; or %%rdx,%%rax\"
+                                 : \"=a\"(tsc) : : \"%rcx\", \"%rdx\");
+            return tsc;
+        }
+        int main(void) {
+            return rdtscp_read() == 0 ? 42 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inline_asm_extended_operands_fixture() {
+    // Full fixture (also snapshotted): x86_64 asm forms with a portable
+    // fallback. Returns 0 when every form round-trips.
+    assert_eq!(run_fixture("inline_asm_extended_operands.c"), 0);
 }

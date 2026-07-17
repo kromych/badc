@@ -9,21 +9,19 @@
 //! block 0, drops their external-reference table entries and the phi
 //! predecessors that named them, and renumbers the survivors.
 //!
-//! Runs after `constfold_branch`. Functions with a jump table or
-//! computed goto are skipped: those carry block-id references
-//! (`jump_tables`, `Inst::BlockAddr`) outside the terminator successor
-//! graph, and `constfold_branch` leaves computed goto untouched anyway.
+//! Runs after `constfold_branch`. A jump table's target blocks are
+//! reachable through the indirect dispatch, not a terminator edge, so
+//! reachability seeds them from `func.jump_tables`; `remap_block_ids`
+//! renumbers those target lists after compaction. Computed-goto
+//! functions are still skipped: their reachable set is every
+//! address-taken label (`Inst::BlockAddr`), which is not tracked as a
+//! successor graph, and `constfold_branch` leaves computed goto
+//! untouched anyway.
 
 use alloc::vec::Vec;
 
 use super::remap_blocks::remap_block_ids;
 use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
-
-pub(crate) fn run(funcs: &mut [FunctionSsa]) {
-    for func in funcs {
-        run_one(func);
-    }
-}
 
 fn push_successors(t: &Terminator, out: &mut Vec<BlockId>) {
     match *t {
@@ -43,20 +41,25 @@ fn push_successors(t: &Terminator, out: &mut Vec<BlockId>) {
         }
         Terminator::Return(_)
         | Terminator::TailExt(_)
+        | Terminator::Unreachable
         | Terminator::GotoIndirect { .. }
         | Terminator::JumpTable { .. } => {}
     }
 }
 
-fn run_one(func: &mut FunctionSsa) {
-    if !func.jump_tables.is_empty() || !func.computed_goto_targets.is_empty() {
-        return;
+/// Delete blocks unreachable from the entry. Returns whether any block
+/// was removed, so a driver can iterate with the branch fold.
+pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
+    if !func.computed_goto_targets.is_empty() {
+        return false;
     }
     let n = func.blocks.len();
     if n == 0 {
-        return;
+        return false;
     }
-    // Reachability from block 0 through terminator successors.
+    // Reachability from block 0 through terminator successors, plus a
+    // jump table's target blocks (reached via its indirect dispatch,
+    // recorded in `func.jump_tables` rather than the terminator).
     let mut reachable = alloc::vec![false; n];
     reachable[0] = true;
     let mut stack = alloc::vec![0 as BlockId];
@@ -64,6 +67,9 @@ fn run_one(func: &mut FunctionSsa) {
     while let Some(b) = stack.pop() {
         succ.clear();
         push_successors(&func.blocks[b as usize].terminator, &mut succ);
+        if let Terminator::JumpTable { table, .. } = &func.blocks[b as usize].terminator {
+            succ.extend_from_slice(&func.jump_tables[*table as usize]);
+        }
         for &s in &succ {
             if !reachable[s as usize] {
                 reachable[s as usize] = true;
@@ -72,7 +78,7 @@ fn run_one(func: &mut FunctionSsa) {
         }
     }
     if reachable.iter().all(|&r| r) {
-        return;
+        return false;
     }
 
     // Values defined in doomed blocks: drop their external-reference
@@ -122,6 +128,7 @@ fn run_one(func: &mut FunctionSsa) {
         .map(|&o| func.blocks[o as usize].clone())
         .collect();
     remap_block_ids(func, &new_id);
+    true
 }
 
 #[cfg(test)]
@@ -227,17 +234,42 @@ mod tests {
     }
 
     #[test]
-    fn skips_functions_with_a_jump_table() {
+    fn prunes_orphan_in_a_jump_table_function_keeping_table_targets() {
+        // b0 dispatches to [b1, b3]; b2 is orphaned (a folded-away
+        // canary body carrying the only extern ref) and must be pruned
+        // while the jump-table targets survive and are remapped.
         let mut f = fresh(
-            vec![Inst::Imm(0)],
+            vec![
+                Inst::Imm(0), // v0 (b0)
+                Inst::Imm(0), // v1 (b1)
+                Inst::Call {
+                    target_pc: 9,
+                    args: Vec::new(),
+                    fixed_args: 0,
+                    fp_return: false,
+                    fp_arg_mask: 0,
+                    arg_aggs: Vec::new(),
+                    ret_agg: None,
+                    ret_slot_local: 0,
+                }, // v2 (b2, dead)
+                Inst::Imm(0), // v3 (b3)
+            ],
             vec![
                 block(0..1, Terminator::JumpTable { idx: 0, table: 0 }),
-                block(1..1, Terminator::Return(NO_VALUE)),
-                block(1..1, Terminator::Return(NO_VALUE)),
+                block(1..2, Terminator::Return(1)),
+                block(2..3, Terminator::Unreachable),
+                block(3..4, Terminator::Return(3)),
             ],
         );
-        f.jump_tables = vec![vec![1]];
+        f.jump_tables = vec![vec![1, 3]];
+        f.extern_call_refs = vec![(2, 7)];
         run_one(&mut f);
-        assert_eq!(f.blocks.len(), 3, "jump-table functions are left alone");
+        assert_eq!(f.blocks.len(), 3, "the orphaned block is removed");
+        assert!(
+            f.extern_call_refs.is_empty(),
+            "the dead call's extern ref is dropped"
+        );
+        // b3 was renumbered to 2; the table now names [b1, b2].
+        assert_eq!(f.jump_tables[0], vec![1, 2]);
     }
 }

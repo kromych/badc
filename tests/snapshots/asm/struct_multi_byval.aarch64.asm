@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x220              // =544
+               	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
@@ -104,45 +104,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x80
-               	ret
-
-<make2>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x1, x29, #0x8
-               	str	w0, [x1]
-               	sub	x1, x29, #0x8
-               	add	x0, x0, #0x1
-               	str	w0, [x1, #0x4]
-               	sub	x0, x29, #0x8
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<make4>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x1, x29, #0x10
-               	str	w0, [x1]
-               	sub	x2, x29, #0x10
-               	add	x1, x0, #0x1
-               	str	w1, [x2, #0x4]
-               	sub	x2, x29, #0x10
-               	add	x1, x0, #0x2
-               	str	w1, [x2, #0x8]
-               	sub	x1, x29, #0x10
-               	add	x0, x0, #0x3
-               	str	w0, [x1, #0xc]
-               	sub	x0, x29, #0x10
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <make6>:

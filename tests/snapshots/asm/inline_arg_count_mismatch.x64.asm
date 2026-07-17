@@ -12,7 +12,8 @@ Disassembly of section .text:
 
 <add>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	retq
 
 <main>:
@@ -21,6 +22,8 @@ Disassembly of section .text:
                	movl	$0x7, %edi
                	callq	<addr>
                	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

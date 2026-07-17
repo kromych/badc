@@ -41,6 +41,8 @@ pub(crate) mod object;
 #[cfg(feature = "std")]
 mod synth_build;
 
+#[cfg(feature = "std")]
+pub use archive::read_archive_at;
 pub use archive::{ArchiveMember, read_archive, write_archive};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
@@ -50,12 +52,13 @@ pub use image::write_executable_elf64;
 pub use link::{
     MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt,
     emit_x86_64_plt, link_native_objects, link_native_objects_with_options,
+    link_native_objects_with_shared_libs,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use object::{
-    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, is_elf_object,
-    parse_native_elf,
+    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, SharedLibrary,
+    is_elf_object, parse_native_elf, parse_shared_library,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

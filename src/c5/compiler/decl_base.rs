@@ -247,14 +247,18 @@ impl Compiler {
         self.next()?; // (
         let ty = if self.lex_is_type_start() {
             let mut inner = self.parse_decl_base_type()?;
-            core::mem::take(&mut self.pending.typedef_base_array_size);
+            let base_arr = core::mem::take(&mut self.pending.typedef_base_array_size);
+            let mut had_ptr = false;
             while self.lex.tk == Token::MulOp {
                 self.next()?;
                 inner += Ty::Ptr as i64;
+                had_ptr = true;
                 while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
             }
+            // `typeof(T[N])` is an array type; `typeof(T *)` is not.
+            self.pending.typeof_operand_was_array = base_arr != 0 && !had_ptr;
             inner
         } else {
             // Unevaluated expression operand: parse it to learn the
@@ -264,8 +268,39 @@ impl Compiler {
             let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
             let saved_ast_acc = self.ast_acc;
             let saved_vstack = self.ast_vstack.len();
-            self.expr(Token::Inc as i64)?;
+            // Array-decay hints record that the operand's value came
+            // from an array: `last_array_decay_size` (element count) for
+            // a 1D bare array, `last_array_decay_bytes` (byte width) for
+            // a multi-dim subscript row, a `*p` pointer-to-array row
+            // deref, or a string literal. Capture both so an array
+            // operand types distinctly from a pointer, then restore them
+            // so they do not leak into a surrounding `sizeof`.
+            let saved_decay = self.pending.last_array_decay_size;
+            let saved_decay_bytes = self.pending.last_array_decay_bytes;
+            self.pending.last_array_decay_size = 0;
+            self.pending.last_array_decay_bytes = 0;
+            // The operand is a full expression (C99 6.7.6.2 / the GCC
+            // extension): parse at assignment precedence so binary,
+            // conditional, and assignment operators are consumed, then a
+            // trailing comma operator whose last term gives the type.
+            self.expr(Token::Assign as i64)?;
+            while self.lex.tk == ',' {
+                self.next()?;
+                self.pending.last_array_decay_size = 0;
+                self.pending.last_array_decay_bytes = 0;
+                self.expr(Token::Assign as i64)?;
+            }
             let expr_ty = self.ty;
+            // Either marker firing means the operand decayed from an
+            // array, so `typeof(x)` is an array type and
+            // `__builtin_types_compatible_p(typeof(x), typeof(&(x)[0]))`
+            // must report it as distinct from a pointer -- including a
+            // subscripted row of a multi-dim array (`arr2d[i]`), which
+            // sets only the byte marker.
+            self.pending.typeof_operand_was_array =
+                self.pending.last_array_decay_size != 0 || self.pending.last_array_decay_bytes > 0;
+            self.pending.last_array_decay_size = saved_decay;
+            self.pending.last_array_decay_bytes = saved_decay_bytes;
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
@@ -284,6 +319,7 @@ impl Compiler {
     /// corresponding attribute name (`packed` / `__packed__`,
     /// `unused` / `maybe_unused` / `__unused__`). Other names are
     /// ignored.
+    #[allow(clippy::too_many_arguments)]
     fn note_attribute_name(
         &self,
         packed: &mut bool,
@@ -292,7 +328,16 @@ impl Compiler {
         noreturn: &mut bool,
         dllexport: &mut bool,
         aligned: &mut bool,
+        constructor: &mut bool,
+        destructor: &mut bool,
+        always_inline: &mut bool,
     ) {
+        // The bare `noreturn` spelling lexes as the <stdnoreturn.h>
+        // keyword token, not an identifier; both name this attribute.
+        if self.lex.tk == Token::Noreturn {
+            *noreturn = true;
+            return;
+        }
         if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.as_str();
             if n == "packed" || n == "__packed__" {
@@ -313,6 +358,16 @@ impl Compiler {
             } else if n == "aligned" || n == "__aligned__" || n == "align" {
                 // GNU `aligned(N)` / MSVC `__declspec(align(N))`.
                 *aligned = true;
+            } else if n == "constructor" || n == "__constructor__" {
+                // GNU `constructor` / `constructor(N)`: run before `main`.
+                *constructor = true;
+            } else if n == "destructor" || n == "__destructor__" {
+                // GNU `destructor` / `destructor(N)`: run after `main` returns.
+                *destructor = true;
+            } else if n == "always_inline" || n == "__always_inline__" {
+                // GNU `always_inline`: a mandatory inline request. Recorded so
+                // the inliner can warn when it cannot honor it.
+                *always_inline = true;
             }
         }
     }
@@ -326,6 +381,16 @@ impl Compiler {
     /// on and is discarded. The payload is matched by balance, so any
     /// parenthesis depth and content -- nested calls, string literals,
     /// comma lists -- is consumed.
+    /// True when the cursor is at an attribute-specifier: a GNU/MSVC
+    /// keyword (`__attribute__`, `__declspec`, `_Alignas`) or a C23
+    /// `[[` sequence (6.7.13). `[[` is unambiguous -- no C99 declarator
+    /// or expression begins with two adjacent `[` -- so peeking one byte
+    /// past the current `[` suffices.
+    pub(super) fn at_attribute_specifier(&self) -> bool {
+        self.lex.tk == Token::Attribute
+            || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
+    }
+
     pub(super) fn skip_attribute_specifiers(&mut self) -> Result<bool, C5Error> {
         let mut packed = false;
         let mut maybe_unused = false;
@@ -333,6 +398,11 @@ impl Compiler {
         let mut noreturn = false;
         let mut dllexport = false;
         let mut align: i64 = 0;
+        let mut vector_size: i64 = 0;
+        let mut constructor = false;
+        let mut destructor = false;
+        let mut always_inline = false;
+        let mut init_priority: Option<u32> = None;
         loop {
             if self.lex.tk == Token::Attribute {
                 // `__attribute__((...))`, `__declspec(...)`,
@@ -384,7 +454,21 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err("unterminated attribute specifier"));
                     } else {
+                        // Capture whether this is `vector_size` before the
+                        // `&mut self` calls below release the symbol borrow.
+                        let is_vector_size = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "vector_size" | "__vector_size__"
+                            );
+                        let is_cleanup = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "cleanup" | "__cleanup__"
+                            );
                         let mut saw_aligned = false;
+                        let mut saw_constructor = false;
+                        let mut saw_destructor = false;
                         self.note_attribute_name(
                             &mut packed,
                             &mut maybe_unused,
@@ -392,6 +476,9 @@ impl Compiler {
                             &mut noreturn,
                             &mut dllexport,
                             &mut saw_aligned,
+                            &mut saw_constructor,
+                            &mut saw_destructor,
+                            &mut always_inline,
                         );
                         self.next()?;
                         if saw_aligned {
@@ -411,6 +498,40 @@ impl Compiler {
                                 // supported targets).
                                 align = align.max(16);
                             }
+                        } else if saw_constructor || saw_destructor {
+                            constructor |= saw_constructor;
+                            destructor |= saw_destructor;
+                            init_priority = self.parse_init_priority(init_priority)?;
+                        } else if is_vector_size && self.lex.tk == '(' {
+                            // GCC `vector_size(N)`: the declared type becomes a
+                            // vector N bytes wide. Captured here; the base-type
+                            // parse rebuilds the element type into the vector.
+                            self.next()?;
+                            vector_size = self.parse_constant_int()?;
+                            if self.lex.tk != ')' {
+                                return Err(
+                                    self.compile_err("`)` expected after `vector_size` operand")
+                                );
+                            }
+                            self.next()?;
+                        } else if is_cleanup && self.lex.tk == '(' {
+                            // GCC `cleanup(fn)`: name the function to call with
+                            // the variable's address at scope exit. The operand
+                            // is an identifier already in scope.
+                            self.next()?; // `(`
+                            if self.lex.tk != Token::Id {
+                                return Err(
+                                    self.compile_err("`cleanup` operand must be a function name")
+                                );
+                            }
+                            self.pending.attr_cleanup = Some(self.lex.curr_id_idx);
+                            self.next()?; // function name
+                            if self.lex.tk != ')' {
+                                return Err(
+                                    self.compile_err("`)` expected after `cleanup` operand")
+                                );
+                            }
+                            self.next()?;
                         }
                     }
                 }
@@ -443,6 +564,8 @@ impl Compiler {
                         return Err(self.compile_err("unterminated `[[` attribute"));
                     } else {
                         let mut saw_aligned = false;
+                        let mut saw_constructor = false;
+                        let mut saw_destructor = false;
                         self.note_attribute_name(
                             &mut packed,
                             &mut maybe_unused,
@@ -450,6 +573,9 @@ impl Compiler {
                             &mut noreturn,
                             &mut dllexport,
                             &mut saw_aligned,
+                            &mut saw_constructor,
+                            &mut saw_destructor,
+                            &mut always_inline,
                         );
                         self.next()?;
                         if saw_aligned && self.lex.tk == '(' {
@@ -462,6 +588,10 @@ impl Compiler {
                                 );
                             }
                             self.next()?;
+                        } else if saw_constructor || saw_destructor {
+                            constructor |= saw_constructor;
+                            destructor |= saw_destructor;
+                            init_priority = self.parse_init_priority(init_priority)?;
                         }
                     }
                 }
@@ -484,7 +614,49 @@ impl Compiler {
         if align > 0 {
             self.pending.attr_align = self.pending.attr_align.max(align);
         }
+        if packed {
+            self.pending.attr_packed = true;
+        }
+        if vector_size > 0 {
+            self.pending.attr_vector_size = vector_size;
+        }
+        if constructor {
+            self.pending.attr_constructor = true;
+        }
+        if destructor {
+            self.pending.attr_destructor = true;
+        }
+        if always_inline {
+            // A mandatory inline request implies `inline`.
+            self.pending_is_inline = true;
+            self.pending_is_always_inline = true;
+        }
+        if let Some(p) = init_priority {
+            self.pending.attr_init_priority = Some(p);
+        }
         Ok(packed)
+    }
+
+    /// Parse the optional `(N)` priority argument of a
+    /// `constructor` / `destructor` attribute. The current token is
+    /// the attribute name's successor; `(` opens the priority, absent
+    /// leaves `prev` unchanged (the bare form). GNU reserves 0-100 for
+    /// the implementation but does not reject them; the value rides
+    /// into the `.init_array.NNNNN` section ordering.
+    fn parse_init_priority(&mut self, prev: Option<u32>) -> Result<Option<u32>, C5Error> {
+        if self.lex.tk != '(' {
+            return Ok(prev);
+        }
+        self.next()?; // (
+        let n = self.parse_constant_int()?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected after constructor/destructor priority"));
+        }
+        self.next()?;
+        if !(0..=65535).contains(&n) {
+            return Err(self.compile_err("constructor/destructor priority out of range 0..65535"));
+        }
+        Ok(Some(n as u32))
     }
 
     /// Parse a scalar base-type keyword (`int` / `char` / `void` /
@@ -545,6 +717,15 @@ impl Compiler {
         }
     }
 
+    /// True when the current token is the `const` type qualifier.
+    pub(super) fn lex_is_const_qual(&self) -> bool {
+        self.lex.tk == Token::TypeQual
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "const" | "__const" | "__const__"
+            )
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -592,16 +773,21 @@ impl Compiler {
             if let Some(inner) = self.try_parse_atomic_type_specifier()? {
                 return Ok(inner);
             }
-            if self.lex.tk == Token::Inline {
+            if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                 self.pending_is_inline = true;
+                if self.lex.tk == Token::ForceInline {
+                    self.pending_is_always_inline = true;
+                }
             }
             if self.lex.tk == Token::Noreturn {
                 self.pending_noreturn = true;
             }
             if !self.try_consume_int_modifier(&mut m)? {
                 // `volatile` sets the tag's qualifier bit (C99 6.7.3);
-                // const / restrict / _Atomic / etc. are no-ops.
+                // `const` is recorded out-of-band for value folding;
+                // restrict / _Atomic / etc. are no-ops.
                 qual_bits |= self.lex_volatile_bit();
+                self.pending.base_is_const |= self.lex_is_const_qual();
                 self.next()?;
             }
         }
@@ -618,12 +804,18 @@ impl Compiler {
         let mut bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
             scalar
         } else if self.lex.tk == Token::Enum {
-            // `enum [Tag] [{ ... }]` collapses to `int`; the shared
+            // `enum [Tag] [{ ... }]` is `int`, or the packed underlying
+            // type for `enum __attribute__((packed))`; the shared
             // parse_enum_decl captures the tag + body for DWARF.
-            self.parse_enum_decl()?;
-            Ty::Int as i64
+            self.parse_enum_decl()?
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?
+        } else if self.is_lex_int128_spelling() {
+            // GCC `__int128` / `__int128_t` / `__uint128_t` (and, via the
+            // modifier soup, `unsigned __int128`): a 16-byte integer type,
+            // modeled as a 16-byte aggregate for layout / sizeof / copy.
+            self.next()?;
+            self.builtin_int128_tag()
         } else if !m.saw_int_mod && self.is_lex_typedef_name() {
             // Typedef-name as base type. Resolve to the aliased
             // type and consume the identifier. Guarded by
@@ -663,7 +855,10 @@ impl Compiler {
             // paragraph 3). `typedef long jmp_buf[64]; jmp_buf b;`
             // must bind `b` as `long b[64]`, not as a scalar.
             let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
-            if typedef_array > 0 {
+            // Non-zero covers a fixed dimension and the `-1` deferred-array
+            // marker (`typedef T X[]`); a parameter of the latter still decays
+            // to a pointer to the element (C99 6.7.5.3p7).
+            if typedef_array != 0 {
                 self.pending.typedef_base_array_size = typedef_array;
             }
             self.next()?;
@@ -696,6 +891,14 @@ impl Compiler {
             }
         }
 
+        // `__attribute__((vector_size(N)))` rebuilds the base type into a GCC
+        // vector of N bytes before qualifiers apply, matching the file-scope
+        // path in `run_compile.rs`.
+        if self.pending.attr_vector_size > 0 {
+            let n = core::mem::take(&mut self.pending.attr_vector_size);
+            bt = self.make_vector_type(bt, n);
+        }
+
         Ok(bt | qual_bits)
     }
 
@@ -715,8 +918,11 @@ impl Compiler {
                 self.skip_attribute_specifiers()?;
                 continue;
             }
-            if self.lex.tk == Token::Inline {
+            if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                 self.pending_is_inline = true;
+                if self.lex.tk == Token::ForceInline {
+                    self.pending_is_always_inline = true;
+                }
             }
             if self.lex.tk == Token::Noreturn {
                 self.pending_noreturn = true;

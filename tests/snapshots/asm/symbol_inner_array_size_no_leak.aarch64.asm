@@ -6,13 +6,14 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x220              // =544
+               	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	mov	x3, x0
-               	mov	x5, x1
-               	sxtw	x5, w5
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x40
+               	sub	x3, x29, #0x10
                	mov	x0, #0x0                // =0
                	b	<addr>
                	mov	x17, #0x3               // =3
@@ -21,25 +22,15 @@ Disassembly of section .text:
                	strh	w4, [x3, x1, lsl #1]
                	add	x0, x0, #0x1
                	sxtw	x1, w0
-               	cmp	x1, x5
+               	cmp	x1, #0x8
                	b.lt	<addr>
-               	sub	x0, x5, #0x1
-               	sxtw	x0, w0
-               	ldrsh	x0, [x3, x0, lsl #1]
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x8                // =8
-               	bl	<addr>
-               	sxtw	x0, w0
+               	ldrsh	x0, [x3, #0xe]
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	cmp	x0, #0x15
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x10
@@ -53,7 +44,7 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x28
@@ -64,11 +55,11 @@ Disassembly of section .text:
                	cmp	x0, #0x63
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

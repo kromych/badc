@@ -10,7 +10,27 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<count_named>:
+<sum_first_four>:
+               	leaq	<rip>, %rax
+               	addq	$0x0, %rax
+               	movslq	(%rax), %rax
+               	addq	$0x0, %rax
+               	leaq	<rip>, %rcx
+               	movslq	0x4(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	0x8(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	0xc(%rcx), %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
+               	retq
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
@@ -26,29 +46,7 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	jne	<addr>
                	movslq	%ecx, %rax
-               	retq
-
-<sum_first_four>:
-               	leaq	<rip>, %rax
-               	addq	$0x0, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x0, %rax
-               	leaq	<rip>, %rcx
-               	movslq	0x4(%rcx), %rcx
-               	addq	%rcx, %rax
-               	leaq	<rip>, %rcx
-               	movslq	0x8(%rcx), %rcx
-               	addq	%rcx, %rax
-               	leaq	<rip>, %rcx
-               	movslq	0xc(%rcx), %rcx
-               	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x1, %eax

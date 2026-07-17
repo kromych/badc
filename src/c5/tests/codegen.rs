@@ -1495,6 +1495,83 @@ fn atomic_compare_exchange_emits_cmpxchg_x86_64() {
     );
 }
 
+/// A 128-bit `__int128` atomic compare-exchange has no single-instruction
+/// lock form in the current emit. The SSA walk must reject it, not lower
+/// the zero-width access `type_size_bytes` yields for the struct-backed
+/// __int128 (which faults / miscompiles at run time; clang gets it right).
+/// TODO: lower 16-byte objects via cmpxchg16b / ldxp-stxp.
+#[test]
+fn atomic128_compare_exchange_is_rejected_not_miscompiled() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "int f(unsigned __int128 *p, unsigned __int128 *e, unsigned __int128 n){ \
+             return __atomic_compare_exchange_n(p, e, n, 0, 5, 5); } \
+         int main(){ return 0; }",
+    );
+    let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect_err("128-bit atomic compare-exchange must be rejected, not miscompiled");
+    assert!(
+        err.to_string().contains("1/2/4/8-byte scalar object"),
+        "expected the wide-atomic rejection, got: {err}",
+    );
+}
+
+/// A 128-bit `__int128` `__builtin_*_overflow` has no wrapped-value /
+/// overflow-flag form in the current emit -- the formulas assume a
+/// 1/2/4/8-byte scalar in a 64-bit register. The SSA walk must reject it,
+/// not lower the narrow-path formulas that yield a wrong flag / value for
+/// the struct-backed __int128 (which `type_size_bytes` sizes 0; clang
+/// compiles it correctly). TODO: 128-bit overflow.
+#[test]
+fn builtin_overflow_on_128bit_operand_is_rejected() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "int f(unsigned __int128 a, unsigned __int128 b, unsigned __int128 *r){ \
+             return __builtin_add_overflow(a, b, r); } \
+         int main(){ return 0; }",
+    );
+    let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect_err("128-bit __builtin_add_overflow must be rejected, not miscompiled");
+    assert!(
+        err.to_string().contains("1/2/4/8-byte scalar type"),
+        "expected the wide-overflow rejection, got: {err}",
+    );
+}
+
+/// `__int128` <-> scalar conversions run correctly. An integer initializer,
+/// cast, or assignment to `__int128` widens into the 16-byte object (low
+/// half = value, high half = sign); a cast to a narrower integer loads the
+/// low bytes. Before, the initializer copied 16 bytes from the scalar
+/// treated as an address (fault), the narrowing cast returned the object's
+/// address instead of its value, and the assignment was rejected at parse.
+#[test]
+fn int128_scalar_conversions_run_correctly() {
+    use crate::jit_run;
+    let program = super::compile_str_bare(
+        "typedef unsigned __int128 u128; typedef signed __int128 s128;\n\
+         typedef union { u128 v; unsigned long long h[2]; } U;\n\
+         typedef union { s128 v; unsigned long long h[2]; } S;\n\
+         static int uok(u128 x, unsigned long long hi, unsigned long long lo){ U u; u.v=x; return u.h[0]==lo&&u.h[1]==hi; }\n\
+         static int sok(s128 x, unsigned long long hi, unsigned long long lo){ S u; u.v=x; return u.h[0]==lo&&u.h[1]==hi; }\n\
+         int main(void){\n\
+           int n=-5; s128 a=n; if(!sok(a,0xFFFFFFFFFFFFFFFFull,0xFFFFFFFFFFFFFFFBull))return 1;\n\
+           unsigned un=5u; u128 b=un; if(!uok(b,0,5))return 2;\n\
+           u128 c=(u128)0xABCDu; if(!uok(c,0,0xABCD))return 3;\n\
+           U g; g.h[0]=0xDEADBEEFull; g.h[1]=0x1111ull;\n\
+           if((unsigned long long)g.v!=0xDEADBEEFull)return 4;\n\
+           if((unsigned)g.v!=0xDEADBEEFu)return 5;\n\
+           u128 d; unsigned e=9u; d=e; if(!uok(d,0,9))return 6;\n\
+           s128 h; int m=-3; h=m; if(!sok(h,0xFFFFFFFFFFFFFFFFull,0xFFFFFFFFFFFFFFFDull))return 7;\n\
+           return 0; }",
+    );
+    let exit = jit_run(&program, &["int128_conv".to_string()])
+        .expect("int128 conversion fixture runs under JIT");
+    assert_eq!(
+        exit, 0,
+        "int128 scalar conversion produced a wrong value or fault: exit {exit}",
+    );
+}
+
 /// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering uses an
 /// LDAXR / STLXR exclusive-monitor retry loop. Confirm both opcodes are
 /// present by their fixed bit patterns, independent of register fields:
@@ -1528,6 +1605,178 @@ fn atomic_rmw_emits_ldaxr_stlxr_aarch64() {
         any_stlxr,
         "expected an STLXR opcode word in the aarch64 image",
     );
+}
+
+/// The 128-bit atomic asm shape lowers to an LDAXP / STLXP exclusive-pair
+/// loop. Match the opcode words by the fixed bits independent of the
+/// register fields: LDAXP is `11001000_0111_1111_1_Rt2_Rn_Rt` and STLXP is
+/// `11001000_001_Rs_1_Rt2_Rn_Rt`.
+#[test]
+fn atomic128_emits_ldaxp_stlxp_aarch64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned long long lo, hi; } u128;\n\
+         void x(u128 *p, unsigned long long nl, unsigned long long nh,\n\
+                unsigned long long *ol, unsigned long long *oh){\n\
+           unsigned long long rl, rh; unsigned t;\n\
+           __asm__(\"0: ldaxp %[oldl], %[oldh], %[mem]\\n\\t\"\n\
+                   \"stlxp %w[tmp], %[newl], %[newh], %[mem]\\n\\t\"\n\
+                   \"cbnz %w[tmp], 0b\"\n\
+                   : [mem] \"+m\"(*p), [tmp] \"=&r\"(t), [oldl] \"=&r\"(rl), [oldh] \"=&r\"(rh)\n\
+                   : [newl] \"r\"(nl), [newh] \"r\"(nh) : \"memory\");\n\
+           *ol = rl; *oh = rh; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    let any_ldaxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_8000);
+    let any_stlxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_8000);
+    assert!(
+        any_ldaxp,
+        "expected an LDAXP opcode word in the aarch64 image"
+    );
+    assert!(
+        any_stlxp,
+        "expected an STLXP opcode word in the aarch64 image"
+    );
+}
+
+/// The 128-bit atomic load / store shapes lower to plain LDP / STP and
+/// exclusive-pair LDXP / STXP. LDXP / STXP are matched by their fixed bits
+/// (bit 15, the acquire/release `o0`, is 0, distinguishing them from
+/// LDAXP / STLXP); the plain LDP / STP are matched by the exact
+/// register-specific words the lowering emits (x10/x11 or x12/x13 over
+/// base x9), which the frame-save LDP/STP pairs (base x31/sp) never alias.
+#[test]
+fn atomic128_emits_ldp_stp_ldxp_stxp_aarch64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned long long lo, hi; } u128;\n\
+         void ld(const u128 *p, unsigned long long *ol, unsigned long long *oh){\n\
+           unsigned long long l, h;\n\
+           __asm__(\"ldp %[l], %[h], %[mem]\"\n\
+                   : [l] \"=r\"(l), [h] \"=r\"(h) : [mem] \"m\"(*p));\n\
+           *ol = l; *oh = h; }\n\
+         void st(u128 *p, unsigned long long l, unsigned long long h){\n\
+           __asm__(\"stp %[l], %[h], %[mem]\"\n\
+                   : [mem] \"=m\"(*p) : [l] \"r\"(l), [h] \"r\"(h)); }\n\
+         void ldx(u128 *p, unsigned long long *ol, unsigned long long *oh){\n\
+           unsigned long long l, h; unsigned t;\n\
+           __asm__(\"0: ldxp %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"stxp %w[tmp], %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"cbnz %w[tmp], 0b\"\n\
+                   : [mem] \"+m\"(*p), [tmp] \"=&r\"(t), [l] \"=&r\"(l), [h] \"=&r\"(h)\n\
+                   :: \"memory\");\n\
+           *ol = l; *oh = h; }\n\
+         void stx(u128 *p, unsigned long long l, unsigned long long h){\n\
+           unsigned long long a, b;\n\
+           __asm__(\"0: ldxp %[t1], %[t2], %[mem]\\n\\t\"\n\
+                   \"stxp %w[t1], %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"cbnz %w[t1], 0b\"\n\
+                   : [mem] \"+m\"(*p), [t1] \"=&r\"(a), [t2] \"=&r\"(b)\n\
+                   : [l] \"r\"(l), [h] \"r\"(h) : \"memory\"); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    let any_ldxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_0000);
+    let any_stxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_0000);
+    // enc_ldp_off(x10,x11,x9,0) and enc_stp_off(x12,x13,x9,0).
+    let any_ldp = words().any(|w| w == 0xA940_2D2A);
+    let any_stp = words().any(|w| w == 0xA900_352C);
+    assert!(
+        any_ldxp,
+        "expected an LDXP opcode word in the aarch64 image"
+    );
+    assert!(
+        any_stxp,
+        "expected an STXP opcode word in the aarch64 image"
+    );
+    assert!(
+        any_ldp,
+        "expected the plain 128-bit-load LDP opcode word in the aarch64 image"
+    );
+    assert!(
+        any_stp,
+        "expected the plain 128-bit-store STP opcode word in the aarch64 image"
+    );
+}
+
+#[test]
+fn atomic128_positional_ldp_load_pair_aarch64() {
+    // The aligned 128-bit load-extract idiom writes its `ldp` with positional
+    // operands (`%0, %1, %2`) and an unnamed `"m"` memory input, unlike the
+    // named-operand `ldp %[l], %[h], %[mem]` shape. Both lower to the same
+    // plain LDP register pair.
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned long long lo, hi; } u128;\n\
+         void ld(const u128 *p, unsigned long long *ol, unsigned long long *oh){\n\
+           unsigned long long l, h;\n\
+           __asm__(\"ldp %0, %1, %2\" : \"=r\"(l), \"=r\"(h) : \"m\"(*p));\n\
+           *ol = l; *oh = h; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    // enc_ldp_off(x10, x11, x9, 0).
+    let any_ldp = bytes
+        .windows(4)
+        .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+        .any(|w| w == 0xA940_2D2A);
+    assert!(
+        any_ldp,
+        "positional ldp load-extract must lower to the plain LDP register pair"
+    );
+}
+
+#[test]
+fn atomic128_store_insert_aarch64() {
+    // The masked 128-bit store-insert `*mem = (*mem & ~msk) | val` lowers to
+    // an LDXP / BIC / BIC / ORR / ORR / STXP exclusive retry loop. The `[l]`,
+    // `[h]`, `[f]` operands are asm scratch (no C output), and the value /
+    // mask halves are inputs.
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned long long lo, hi; } u128;\n\
+         void si(u128 *ps, unsigned long long vl, unsigned long long vh,\n\
+                 unsigned long long ml, unsigned long long mh){\n\
+           unsigned long long tl, th; unsigned f;\n\
+           __asm__(\"0: ldxp %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"bic %[l], %[l], %[ml]\\n\\t\"\n\
+                   \"bic %[h], %[h], %[mh]\\n\\t\"\n\
+                   \"orr %[l], %[l], %[vl]\\n\\t\"\n\
+                   \"orr %[h], %[h], %[vh]\\n\\t\"\n\
+                   \"stxp %w[f], %[l], %[h], %[mem]\\n\\t\"\n\
+                   \"cbnz %w[f], 0b\\n\"\n\
+                   : [mem]\"+Q\"(*ps), [f]\"=&r\"(f), [l]\"=&r\"(tl), [h]\"=&r\"(th)\n\
+                   : [vl]\"r\"(vl), [vh]\"r\"(vh), [ml]\"r\"(ml), [mh]\"r\"(mh)); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    let any_ldxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_0000);
+    let any_stxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_0000);
+    // BIC (logical shifted-register AND with N=1): base 0x8A20_0000.
+    let any_bic = words().any(|w| (w & 0xFFE0_0000) == 0x8A20_0000);
+    assert!(any_ldxp, "store-insert must emit an LDXP");
+    assert!(any_stxp, "store-insert must emit an STXP");
+    assert!(any_bic, "store-insert must emit a BIC (mask clear)");
 }
 
 /// Bytes of the section named `name` in an ELF64 little-endian
@@ -1954,6 +2203,66 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
     );
 }
 
+/// A constant controlling expression in a `?:` or `if` selects one
+/// arm at translation time (C99 6.5.15 / 6.8.4.1); the walker emits
+/// only that arm, so a dead arm's call -- and the undefined-symbol
+/// reference it would carry into the object -- never reaches the SSA.
+/// gcc performs this front-end fold even at -O0. A non-constant
+/// condition must still emit both arms.
+#[test]
+fn constant_condition_drops_dead_branch_call() {
+    use crate::c5::ir::Inst;
+    use crate::{Compiler, Target};
+    let target = Target::LinuxAarch64;
+    let program = Compiler::with_target(
+        "extern int dead_sink(int); \
+         int t_false(int x){ return 0 ? dead_sink(x) : x + 1; } \
+         int t_true(int x){ return 1 ? x + 2 : dead_sink(x); } \
+         int if_zero(int x){ if (0) { dead_sink(x); } return x + 3; } \
+         int if_else(int x){ if (0) return dead_sink(x); else return x + 4; } \
+         int short_circuit(int x){ return (1 && 0) ? dead_sink(x) : x + 5; } \
+         int cast_zero(int x){ return (char)256 ? dead_sink(x) : x + 6; } \
+         int runtime_cond(int c, int x){ return c ? dead_sink(x) : x + 7; } \
+         int main(void){ return 0; }"
+            .to_string(),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+    let has_call = |name: &str| -> bool {
+        let f = funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("function `{name}` not produced"));
+        f.insts.iter().any(|i| {
+            matches!(
+                i,
+                Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }
+            )
+        })
+    };
+    for name in [
+        "t_false",
+        "t_true",
+        "if_zero",
+        "if_else",
+        "short_circuit",
+        "cast_zero",
+    ] {
+        assert!(
+            !has_call(name),
+            "{name}: constant-condition fold must not emit the dead-branch call"
+        );
+    }
+    // The fold fires only on compile-time constants: a runtime
+    // condition still evaluates and calls into its selected arm.
+    assert!(
+        has_call("runtime_cond"),
+        "runtime_cond: a non-constant condition must still emit the call"
+    );
+}
+
 /// A constant struct-field offset folds into the displacement of a
 /// floating-point load and store, and the AArch64 emit carries that
 /// displacement into the immediate-offset encoding. The load side used
@@ -2261,4 +2570,342 @@ fn x64_int_to_float_breaks_dep_and_avoids_double_hop() {
         !has_hop,
         "unexpected float<->double convert (double hop): {body:02x?}"
     );
+}
+
+/// A relocatable Linux unit surfaces its `_Thread_local` layout to an
+/// external linker: STT_TLS symbols for the defined globals (UNDEF for
+/// the externs) and standard local-exec relocations at each access
+/// site, so several units' TLS blocks merge with per-symbol offsets.
+/// Without them every unit's baked single-unit offsets alias onto the
+/// merged block's first slots and the units clobber each other.
+#[test]
+fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    for (target, want_types) in [
+        (Target::LinuxAarch64, &[549u32, 551][..]),
+        (Target::LinuxX64, &[23u32][..]),
+    ] {
+        let src = "_Thread_local long counter = 7;\n\
+                   extern _Thread_local long other;\n\
+                   long bump(void) { counter += other; return counter; }\n\
+                   int main(void) { return (int)bump(); }\n";
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap();
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .expect("emit relocatable");
+        let rela = elf64_section(&obj, ".rela.text").expect(".rela.text");
+        let mut types = std::collections::BTreeSet::new();
+        for e in rela.chunks_exact(24) {
+            let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            types.insert((r_info & 0xffff_ffff) as u32);
+        }
+        for want in want_types {
+            assert!(
+                types.contains(want),
+                "{target:?}: expected TLS reloc type {want} in .rela.text, got {types:?}"
+            );
+        }
+        let symtab = elf64_section(&obj, ".symtab").expect(".symtab");
+        let strtab = elf64_section(&obj, ".strtab").expect(".strtab");
+        let name_at = |off: usize| {
+            let end = strtab[off..].iter().position(|b| *b == 0).unwrap() + off;
+            core::str::from_utf8(&strtab[off..end]).unwrap()
+        };
+        let (mut saw_counter, mut saw_other_undef) = (false, false);
+        for e in symtab.chunks_exact(24) {
+            let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
+            let st_info = e[4];
+            let st_shndx = u16::from_le_bytes(e[6..8].try_into().unwrap());
+            if st_info & 0xf != 6 {
+                continue;
+            }
+            match name_at(st_name) {
+                "counter" => {
+                    assert_ne!(st_shndx, 0, "{target:?}: `counter` must be defined STT_TLS");
+                    saw_counter = true;
+                }
+                "other" => {
+                    assert_eq!(st_shndx, 0, "{target:?}: `other` must be UNDEF STT_TLS");
+                    saw_other_undef = true;
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            saw_counter && saw_other_undef,
+            "{target:?}: missing STT_TLS symtab entries (counter={saw_counter}, other={saw_other_undef})"
+        );
+    }
+}
+
+/// A `_Bool` returned by a callee defined in another unit is only
+/// defined in the low byte per the psABI; a caller that tests the full
+/// return register (`!f()` / `if (f())`) must mask to the low byte
+/// first, or garbage high bits (e.g. a gcc `sete %al` with no
+/// zero-extend) make the branch go the wrong way. Regression for a
+/// cross-unit `_Bool`-returning call whose `!f()` test took the wrong
+/// branch on garbage high bits.
+#[test]
+fn external_bool_return_is_masked_before_branch() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "int _Bool_ext(void);\n\
+               extern _Bool other(void);\n\
+               int main(void) { return other() ? 7 : 3; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    let obj = emit_native_with_options(
+        &program,
+        Target::LinuxX64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        },
+    )
+    .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    // `and $0xff, %rax` == 48 81 e0 ff 00 00 00. The bool return must be
+    // reduced to its low byte before the conditional branch.
+    let masks = text
+        .windows(7)
+        .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00]);
+    assert!(
+        masks,
+        "expected the external _Bool return to be masked to its low byte before use"
+    );
+}
+
+#[test]
+fn fxsave_fxrstor_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reaches x87/SSE state save/restore through
+    // `asm("fxsave %0")` / `asm("fxrstor %0")`; the x86_64 emit lowers
+    // them to `fxsave m` (0F AE /0) and `fxrstor m` (0F AE /1).
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned char b[512]; } FXBUF;\n\
+         void save(FXBUF *p){ __asm__ __volatile__(\"fxsave %0\":\"=m\"(*p)); }\n\
+         void restore(FXBUF *p){ __asm__ __volatile__(\"fxrstor %0\"::\"m\"(*p)); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    // fxsave m: 0F AE with ModRM reg field 0 (mod=00); fxrstor: reg field 1.
+    let has = |reg: u8| {
+        bytes
+            .windows(3)
+            .any(|w| w[0] == 0x0F && w[1] == 0xAE && (w[2] >> 3) & 7 == reg && w[2] >> 6 == 0)
+    };
+    assert!(has(0), "expected an `fxsave m` (0F AE /0) encoding");
+    assert!(has(1), "expected an `fxrstor m` (0F AE /1) encoding");
+}
+
+#[test]
+fn movd_mmx_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reads/writes the MMX registers through
+    // `asm("movd %%mm0, %0")` / `asm("movd %0, %%mm3")`; the x86_64 emit
+    // lowers them to `movd r/m32, mm` (0F 7E /r) and `movd mm, r/m32`
+    // (0F 6E /r) with the mm index in ModRM.reg and no 0x66 prefix.
+    let program = super::compile_str_bare(
+        "typedef unsigned long long U64;\n\
+         U64 rd(void){ U64 d; __asm__ __volatile__(\"movd %%mm0, %0\":\"=r\"(d)); return d; }\n\
+         void wr(U64 v){ __asm__ __volatile__(\"movd %0, %%mm3\"::\"r\"(v)); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has = |op: u8| bytes.windows(2).any(|w| w[0] == 0x0F && w[1] == op);
+    assert!(has(0x7E), "expected a `movd r/m32, mm` (0F 7E) encoding");
+    assert!(has(0x6E), "expected a `movd mm, r/m32` (0F 6E) encoding");
+    // The XMM form (0x66 0F 6E/7E) must NOT be emitted for MMX movd.
+    let has_66 = bytes
+        .windows(3)
+        .any(|w| w[0] == 0x66 && w[1] == 0x0F && (w[2] == 0x6E || w[2] == 0x7E));
+    assert!(!has_66, "MMX movd must not carry the 0x66 (XMM) prefix");
+}
+
+#[test]
+fn operandless_privileged_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reaches the operandless privileged instructions through
+    // bare `asm("sti")` / `asm("cli")` / etc. The general x86_64 asm path
+    // encodes each from its mnemonic with no operands.
+    let program = super::compile_str_bare(
+        "void e_sti(void){ __asm__ __volatile__(\"sti\":::\"memory\"); }\n\
+         void e_cli(void){ __asm__ __volatile__(\"cli\":::\"memory\"); }\n\
+         void e_wbinvd(void){ __asm__ __volatile__(\"wbinvd\":::\"memory\"); }\n\
+         void e_invd(void){ __asm__ __volatile__(\"invd\":::\"memory\"); }\n\
+         unsigned long long e_rdmsr(unsigned int i){ unsigned int lo,hi;\
+           __asm__ __volatile__(\"rdmsr\":\"=a\"(lo),\"=d\"(hi):\"c\"(i));\
+           return ((unsigned long long)hi<<32)|lo; }\n\
+         void e_wrmsr(unsigned int i,unsigned int lo,unsigned int hi){\
+           __asm__ __volatile__(\"wrmsr\"::\"c\"(i),\"a\"(lo),\"d\"(hi)); }\n\
+         void e_monitor(void*p,unsigned int e,unsigned int h){\
+           __asm__ __volatile__(\"monitor\"::\"a\"(p),\"c\"(e),\"d\"(h)); }\n\
+         void e_mwait(unsigned int e,unsigned int h){\
+           __asm__ __volatile__(\"mwait\"::\"a\"(e),\"c\"(h)); }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has1 = |op: u8| bytes.contains(&op);
+    let has2 = |a: u8, b: u8| bytes.windows(2).any(|w| w[0] == a && w[1] == b);
+    let has3 = |a: u8, b: u8, c: u8| {
+        bytes
+            .windows(3)
+            .any(|w| w[0] == a && w[1] == b && w[2] == c)
+    };
+    assert!(has1(0xFB), "expected `sti` (FB)");
+    assert!(has1(0xFA), "expected `cli` (FA)");
+    assert!(has2(0x0F, 0x09), "expected `wbinvd` (0F 09)");
+    assert!(has2(0x0F, 0x08), "expected `invd` (0F 08)");
+    assert!(has2(0x0F, 0x32), "expected `rdmsr` (0F 32)");
+    assert!(has2(0x0F, 0x30), "expected `wrmsr` (0F 30)");
+    assert!(has3(0x0F, 0x01, 0xC8), "expected `monitor` (0F 01 C8)");
+    assert!(has3(0x0F, 0x01, 0xC9), "expected `mwait` (0F 01 C9)");
+}
+
+#[test]
+fn descriptor_table_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reads/writes the descriptor-table registers and flushes
+    // cache lines through single-memory-operand asm. The x86_64 emit forces
+    // the operand address into r10 and selects the form by opcode + ModRM.reg:
+    //   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
+    //   sldt/str  = 0F 00 /0,/1 ; clflush   = 0F AE /7.
+    let program = super::compile_str_bare(
+        "typedef struct { unsigned short limit; unsigned long base; } DESC;\n\
+         void sgdt(DESC*g){ __asm__ __volatile__(\"sgdt %0\":\"=m\"(*g)); }\n\
+         void lgdt(DESC*g){ __asm__ __volatile__(\"lgdt %0\"::\"m\"(*g)); }\n\
+         void sidt(DESC*g){ __asm__ __volatile__(\"sidt  %0\":\"=m\"(*g)); }\n\
+         void lidt(DESC*g){ __asm__ __volatile__(\"lidt %0\"::\"m\"(*g)); }\n\
+         unsigned short str_(void){ unsigned short d;\
+           __asm__ __volatile__(\"str  %0\":\"=r\"(d)); return d; }\n\
+         unsigned short sldt(void){ unsigned short d;\
+           __asm__ __volatile__(\"sldt  %0\":\"=g\"(d)); return d; }\n\
+         void lldt(unsigned short v){ __asm__ __volatile__(\"lldtw  %0\"::\"g\"(v)); }\n\
+         void* clflush(void*p){ __asm__ __volatile__(\"clflush (%0)\"::\"r\"(p):\"memory\");\
+           return p; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    // REX.B(0x41) 0F <op2> ModRM(reg=field, rm=010): a memory operand in r10.
+    let modrm = |field: u8| (field << 3) | 0x02;
+    let has = |op2: u8, field: u8| {
+        bytes
+            .windows(4)
+            .any(|w| w[0] == 0x41 && w[1] == 0x0F && w[2] == op2 && w[3] == modrm(field))
+    };
+    assert!(has(0x01, 0), "expected `sgdt m` (0F 01 /0)");
+    assert!(has(0x01, 2), "expected `lgdt m` (0F 01 /2)");
+    assert!(has(0x01, 1), "expected `sidt m` (0F 01 /1)");
+    assert!(has(0x01, 3), "expected `lidt m` (0F 01 /3)");
+    assert!(has(0x00, 1), "expected `str m` (0F 00 /1)");
+    assert!(has(0x00, 0), "expected `sldt m` (0F 00 /0)");
+    assert!(has(0x00, 2), "expected `lldt m` (0F 00 /2)");
+    assert!(has(0xAE, 7), "expected `clflush m` (0F AE /7)");
+}
+
+#[test]
+fn control_debug_segment_mov_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseLib reads/writes the control (cr0..cr4) and debug (dr0..dr7)
+    // registers and reads the segment registers through `mov` with a special
+    // register named in the template. The x86_64 emit selects:
+    //   read  cr/dr -> gpr : 0F 20 / 0F 21 ; write gpr -> cr/dr : 0F 22 / 0F 23
+    //   read  seg   -> gpr : 8C.
+    let program = super::compile_str_bare(
+        "typedef unsigned long UN;\n\
+         UN rcr0(void){ UN d; __asm__ __volatile__(\"mov  %%cr0,%0\":\"=r\"(d)); return d; }\n\
+         UN rcr3(void){ UN d; __asm__ __volatile__(\"mov  %%cr3,  %0\":\"=r\"(d)); return d; }\n\
+         void wcr0(UN v){ __asm__ __volatile__(\"mov  %0, %%cr0\"::\"r\"(v)); }\n\
+         void wcr4(UN v){ __asm__ __volatile__(\"mov  %0, %%cr4\"::\"r\"(v)); }\n\
+         UN rdr0(void){ UN d; __asm__ __volatile__(\"mov  %%dr0, %0\":\"=r\"(d)); return d; }\n\
+         UN rdr7(void){ UN d; __asm__ __volatile__(\"mov  %%dr7, %0\":\"=r\"(d)); return d; }\n\
+         void wdr0(UN v){ __asm__ __volatile__(\"mov  %0, %%dr0\"::\"r\"(v)); }\n\
+         void wdr7(UN v){ __asm__ __volatile__(\"mov  %0, %%dr7\"::\"r\"(v)); }\n\
+         unsigned short rcs(void){ unsigned short d;\
+           __asm__ __volatile__(\"mov   %%cs, %0\":\"=a\"(d)); return d; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    // 0F <op2> ModRM(mod=11, reg=cr/dr index, rm=gpr). Match by opcode + the
+    // ModRM.reg field so a specific register index is asserted.
+    let has_special = |op2: u8, reg: u8| {
+        bytes
+            .windows(3)
+            .any(|w| w[0] == 0x0F && w[1] == op2 && w[2] >> 6 == 3 && (w[2] >> 3) & 7 == reg)
+    };
+    assert!(has_special(0x20, 0), "expected `mov cr0, r` (0F 20 reg=0)");
+    assert!(has_special(0x20, 3), "expected `mov cr3, r` (0F 20 reg=3)");
+    assert!(has_special(0x22, 0), "expected `mov r, cr0` (0F 22 reg=0)");
+    assert!(has_special(0x22, 4), "expected `mov r, cr4` (0F 22 reg=4)");
+    assert!(has_special(0x21, 0), "expected `mov dr0, r` (0F 21 reg=0)");
+    assert!(has_special(0x21, 7), "expected `mov dr7, r` (0F 21 reg=7)");
+    assert!(has_special(0x23, 0), "expected `mov r, dr0` (0F 23 reg=0)");
+    assert!(has_special(0x23, 7), "expected `mov r, dr7` (0F 23 reg=7)");
+    // Segment read: 8C /r with ModRM.reg = the Sreg code (cs = 1).
+    let has_seg = bytes
+        .windows(2)
+        .any(|w| w[0] == 0x8C && w[1] >> 6 == 3 && (w[1] >> 3) & 7 == 1);
+    assert!(has_seg, "expected `mov cs, r` (8C reg=1)");
+}
+
+#[test]
+fn interlocked_and_halt_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // edk2's BaseSynchronizationLib / BaseCpuLib reach the atomic primitives
+    // and the halt through `lock`-prefixed multi-line asm blocks. The general
+    // asm path encodes each line: lock = F0, xadd = 0F C1, cmpxchg = 0F B1,
+    // inc/dec = FF /0,/1, hlt = F4. The `"+m"` destinations are memory
+    // references (`(%reg)`, ModRM mod != 11); a `lock` prefix on a register
+    // destination is an invalid encoding that faults at runtime (#UD).
+    let program = super::compile_str_bare(
+        "typedef unsigned int U32;\n\
+         void sleep(void){ __asm__ __volatile__(\"hlt\":::\"memory\"); }\n\
+         U32 inc(U32 *v){ U32 r; __asm__ __volatile__(\
+           \"movl $1, %%eax \\n\\t\" \"lock \\n\\t\" \"xadd %%eax, %1 \\n\\t\" \"inc %%eax \\n\\t\"\
+           : \"=&a\"(r), \"+m\"(*v) : : \"memory\",\"cc\"); return r; }\n\
+         U32 dec(U32 *v){ U32 r; __asm__ __volatile__(\
+           \"movl $-1, %%eax \\n\\t\" \"lock \\n\\t\" \"xadd %%eax, %1 \\n\\t\" \"dec %%eax \\n\\t\"\
+           : \"=&a\"(r), \"+m\"(*v) : : \"memory\",\"cc\"); return r; }\n\
+         U32 cx(U32 *v,U32 c,U32 x){ U32 r; __asm__ __volatile__(\
+           \"lock \\n\\t\" \"cmpxchgl %2, %1 \\n\\t\"\
+           : \"=a\"(r),\"+m\"(*v) : \"q\"(x),\"0\"(c) : \"memory\",\"cc\"); return r; }\n\
+         int main(){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    assert!(bytes.contains(&0xF4), "expected `hlt` (F4)");
+    assert!(bytes.contains(&0xF0), "expected the `lock` prefix (F0)");
+    // xadd / cmpxchg to a `"+m"` destination: 0F C1 / 0F B1 with ModRM.mod
+    // != 11 (a memory reference), so the preceding `lock` is a valid form.
+    let has_mem = |a: u8, b: u8| {
+        bytes
+            .windows(3)
+            .any(|w| w[0] == a && w[1] == b && w[2] >> 6 != 3)
+    };
+    assert!(has_mem(0x0F, 0xC1), "expected `xadd r, m` (0F C1, memory)");
+    assert!(
+        has_mem(0x0F, 0xB1),
+        "expected `cmpxchg r, m` (0F B1, memory)"
+    );
+    // inc/dec r/m32: FF /0 and FF /1, register form.
+    let has_ff = |field: u8| {
+        bytes
+            .windows(2)
+            .any(|w| w[0] == 0xFF && w[1] >> 6 == 3 && (w[1] >> 3) & 7 == field)
+    };
+    assert!(has_ff(0), "expected `inc r/m` (FF /0)");
+    assert!(has_ff(1), "expected `dec r/m` (FF /1)");
 }

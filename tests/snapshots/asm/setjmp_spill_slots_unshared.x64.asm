@@ -308,13 +308,5 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movzbq	%al, %rax
-               	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	movq	0x20(%rsp), %r15
-               	addq	$0x340, %rsp            # imm = 0x340
-               	popq	%rbp
-               	retq
+               	ud2
                	addb	%al, 0x41(%rdx)

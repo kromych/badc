@@ -1196,6 +1196,7 @@ jobs:
           - { os: windows-11-arm, label: windows-arm64 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    needs: [firmware-x64, firmware-arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -1205,22 +1206,238 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: edk2-${{ matrix.label }}
-      - name: install QEMU + OVMF/AAVMF firmware (Linux only)
-        if: matrix.qemu
+      - name: apt resilience (Linux arm64 runners)
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        # ports.ubuntu.com (the only default arm64 archive) has hour-long
+        # outages that fail the lane before any project code runs. Retry
+        # transient errors, and only when the index refresh itself fails
+        # swap to the Azure-hosted mirror (resolves to a runner-local pool
+        # on most arm64 pools) and refresh again.
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y qemu-system-x86 qemu-system-arm ovmf qemu-efi-aarch64
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
+          if ! sudo apt-get update -y; then
+            sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+              /etc/apt/sources.list /etc/apt/apt-mirrors.txt \
+              $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+            sudo apt-get update -y
+          fi
+      - name: install QEMU (Linux only; firmware comes from the ovmf lane)
+        if: matrix.qemu
+        run: ./scripts/apt_resilient_install.sh qemu-system-x86 qemu-system-arm
+      - name: fetch the ovmf-lane firmware (x86_64 UEFI app boot)
+        if: matrix.label == 'ubuntu-x64'
+        uses: actions/download-artifact@v4
+        with:
+          name: ovmf-x64
+          path: ${{ runner.temp }}/ovmf
+      - name: fetch the ovmf-lane firmware (aarch64 UEFI app boot)
+        if: matrix.label == 'ubuntu-arm64'
+        uses: actions/download-artifact@v4
+        with:
+          name: aavmf-arm64
+          path: ${{ runner.temp }}/aavmf
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
       - name: edk2 setup (fetch the MdePkg subset)
         run: python demos/edk2/setup.py
       - name: edk2 smoke (build the UEFI app for X64 + AArch64; boot where QEMU is present)
+        # The UEFI app boots under the firmware this workflow's ovmf lane built
+        # (OVMF on x64, ArmVirtQemu/AAVMF on aarch64) -- the app writes through
+        # the firmware ConOut, so a correct boot proves the built firmware runs
+        # a real UEFI payload to serial. The build is the hard gate; the boot is
+        # best-effort until observed green, then gated.
         env:
-          OVMF_CODE: /usr/share/OVMF/OVMF_CODE.fd
-          OVMF_VARS: /usr/share/OVMF/OVMF_VARS.fd
-          AAVMF_CODE: /usr/share/AAVMF/AAVMF_CODE.fd
-          AAVMF_VARS: /usr/share/AAVMF/AAVMF_VARS.fd
-          # The build is the hard gate; the OVMF boot is best-effort until the
-          # runner firmware paths + QEMU stability are confirmed.
+          OVMF_CODE: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
+          OVMF_VARS: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
+          AAVMF_CODE: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
+          AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
           BADC_EDK2_BOOT_OPTIONAL: "1"
         run: python demos/edk2/smoke.py
+
+  firmware-x64:
+    # Build x86_64 OVMF with badc (C compiler) and badc-built nasm (assembler),
+    # and publish it as an artifact; the qemu x86_64 kernel lane and the edk2 x64
+    # app lane boot through it. A separate job from the aarch64 firmware so an
+    # aarch64 build issue cannot skip the x86_64 lanes.
+    name: ovmf (x64 firmware build, badc)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: firmware-x64
+      - name: install edk2 build deps
+        run: ./scripts/apt_resilient_install.sh build-essential uuid-dev iasl python3-venv
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: build OVMF X64 with badc + badc-nasm
+        env:
+          BADC: ${{ github.workspace }}/target/release/badc
+        run: python demos/edk2/build_badc_selfhost.py --platform ovmf --work "$RUNNER_TEMP/fw" --out "$RUNNER_TEMP/out" --nasm-with-badc --jobs 4
+      - name: publish OVMF firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovmf-x64
+          path: |
+            ${{ runner.temp }}/out/OVMF_CODE.fd
+            ${{ runner.temp }}/out/OVMF_VARS.fd
+          if-no-files-found: error
+
+  firmware-arm64:
+    # Build AArch64 ArmVirtQemu (AAVMF) with badc; the qemu aarch64 kernel lane
+    # and the edk2 aarch64 app lane boot through it. Independent of the x64
+    # firmware job. aarch64 firmware has no x86 assembly, so nasm is built for
+    # the tool check but never invoked.
+    name: ovmf (aavmf firmware build, badc)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: firmware-arm64
+      - name: install edk2 build deps
+        run: ./scripts/apt_resilient_install.sh build-essential uuid-dev iasl python3-venv
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: build AAVMF with badc
+        env:
+          BADC: ${{ github.workspace }}/target/release/badc
+        run: python demos/edk2/build_badc_selfhost.py --platform aavmf --work "$RUNNER_TEMP/fw" --out "$RUNNER_TEMP/out" --nasm-with-badc --jobs 4
+      - name: publish AAVMF firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: aavmf-arm64
+          path: |
+            ${{ runner.temp }}/out/QEMU_EFI-pflash.raw
+            ${{ runner.temp }}/out/QEMU_VARS-pflash.raw
+          if-no-files-found: error
+
+  qemu:
+    needs: [firmware-x64, firmware-arm64]
+    # Compile every translation unit that feeds qemu-system-<arch> (the emulator
+    # objects + its utility library) with badc, archive the library with badc's
+    # --ar, and link the emulator with badc's OWN linker over the 100%-badc
+    # objects -- no system linker in the chain (a self-link failure fails the
+    # job). The gate is that badc compiles every unit, self-links the emulator,
+    # it reports its version, and it boots the published kernel to a userspace
+    # shell and powers off cleanly.
+    #
+    # Matrix: {aarch64, x86_64} Linux at -O0, plus x86_64 at -O. Both arches boot
+    # the EFI-stub kernel THROUGH the firmware the ovmf lane built (OVMF on
+    # x86_64, ArmVirtQemu/AAVMF on aarch64; aarch64 adds acpi=off so the kernel
+    # probes the PL011 as ttyAMA0). The x86_64 vendored config disables the
+    # features whose host headers
+    # badc lacks (host SIMD intrinsics, native __int128 + its 128-bit CAS,
+    # elfutils; see smoke.py adapt_config), its vhost-user / vduse subproject
+    # libraries are compiled from source, and the q35 option ROMs ship in the
+    # kernel bundle. setup.py fetches the source + captured meson build config
+    # (both arches) and the boot kernel from the vendor-deps release
+    # (GITHUB_TOKEN inherited).
+    #
+    # At -O, QEMU maps each unreachable path (a size-helper switch default, a
+    # const-array bound check, a noreturn-guarded branch, a build assert) to the
+    # declared-not-defined qemu_build_not_reached_always the optimizer must prove
+    # dead. The x86_64 -O lane self-links and boots: non-leaf inlining folds the
+    # size switches, const-global folding drops the array-bound check, the
+    # noreturn-CFG seal and member packing drop their asserts, and dead-block
+    # pruning of jump-table functions drops the rest. The aarch64 -O lane is not
+    # gated yet: two of its target-specific units (crypto_helper SM3TT, mps3r
+    # secondary boot) still reach the canary through a value range the optimizer
+    # does not track.
+    name: qemu (${{ matrix.label }} ${{ matrix.optname }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, optenv: "", optname: O0 }
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, optenv: "1", optname: O }
+          - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "", optname: O0 }
+          - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "1", optname: O }
+    runs-on: ${{ matrix.os }}
+    # badc build (warm cache) + full-unit compile + link. The compile is the
+    # long pole; 30 min is a backstop it must never approach.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: qemu-${{ matrix.label }}
+      - name: apt resilience (Linux arm64 runners)
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        # ports.ubuntu.com (the only default arm64 archive) has hour-long
+        # outages that fail the lane before any project code runs. Retry
+        # transient errors, and only when the index refresh itself fails
+        # swap to the Azure-hosted mirror (resolves to a runner-local pool
+        # on most arm64 pools) and refresh again.
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
+          if ! sudo apt-get update -y; then
+            sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+              /etc/apt/sources.list /etc/apt/apt-mirrors.txt \
+              $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+            sudo apt-get update -y
+          fi
+      - name: install QEMU compile + link deps
+        # glib headers (no badc shim), and the zlib / libfdt shared objects the
+        # emulator links against; their headers come from the demo's shim.
+        run: ./scripts/apt_resilient_install.sh pkg-config libglib2.0-dev zlib1g-dev libfdt-dev gdb
+      - name: fetch the ovmf-lane firmware (x86_64 UEFI boot)
+        if: matrix.label == 'ubuntu-x64'
+        uses: actions/download-artifact@v4
+        with:
+          name: ovmf-x64
+          path: ${{ runner.temp }}/ovmf
+      - name: fetch the ovmf-lane firmware (aarch64 UEFI boot)
+        if: matrix.label == 'ubuntu-arm64'
+        uses: actions/download-artifact@v4
+        with:
+          name: aavmf-arm64
+          path: ${{ runner.temp }}/aavmf
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: qemu setup (fetch source + build config)
+        run: python demos/qemu/setup.py
+      - name: qemu smoke (badc build + self-link + boot)
+        # Two-stage gate. BADC_QEMU_REQUIRE_RUN=1 requires the linked emulator
+        # to start (--version): the runner builds at a long path whose length
+        # lands the init_array on the .data boundary, catching a boundary
+        # regression that faults startup. BADC_QEMU_BOOT=gate then requires it
+        # to boot the published kernel bundle to a userspace shell and power
+        # off cleanly. fetch_kernel pulls the bundle on demand (GITHUB_TOKEN is
+        # inherited from the workflow env); the per-boot timeout fails a hang
+        # fast rather than approaching the job budget. BADC_QEMU_OPT selects the
+        # -O0 / -O compile+link lane.
+        env:
+          BADC_QEMU_REQUIRE_RUN: "1"
+          BADC_QEMU_BOOT: "gate"
+          BADC_QEMU_OPT: ${{ matrix.optenv }}
+          BADC_QEMU_BOOT_LOG: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
+          # Both arches boot the EFI-stub kernel THROUGH the firmware the ovmf
+          # lane built: x86_64 through OVMF, aarch64 through AAVMF (smoke.py adds
+          # acpi=off there so the kernel probes the PL011 as ttyAMA0).
+          BADC_QEMU_OVMF_CODE: ${{ runner.temp }}/ovmf/OVMF_CODE.fd
+          BADC_QEMU_OVMF_VARS: ${{ runner.temp }}/ovmf/OVMF_VARS.fd
+          BADC_QEMU_AAVMF_CODE: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
+          BADC_QEMU_AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
+        run: python demos/qemu/smoke.py
+      - name: publish boot log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-boot-${{ matrix.label }}-${{ matrix.optname }}
+          path: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
+          if-no-files-found: ignore

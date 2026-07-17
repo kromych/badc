@@ -1278,6 +1278,23 @@ fn main_command(entry_file_offset: u64) -> Vec<u8> {
     out
 }
 
+/// Native `.text` offset of `__c5_entry`, the startup-runtime entry that
+/// runs `__attribute__((constructor))` functions (via the linker's
+/// `.init_array`) before the program entry, when the runtime is linked
+/// in. `None` for a bare single-TU image with no runtime, where `LC_MAIN`
+/// stays on the program's own entry. Mirrors the ELF writer's entry
+/// adapter, which likewise routes through `__c5_entry` when present.
+fn c5_entry_native_offset(build: &Build) -> Option<u64> {
+    let idx = build.func_names.iter().position(|n| n == "__c5_entry")?;
+    let ent_pc = *build.func_ent_pcs.get(idx)?;
+    build
+        .pc_to_native
+        .get(ent_pc)
+        .copied()
+        .filter(|&o| o != usize::MAX)
+        .map(|o| o as u64)
+}
+
 /// `LC_DYLD_INFO_ONLY` -- pointers into __LINKEDIT for dyld's
 /// rebase / bind / weak-bind / lazy-bind / export streams. Only
 /// eager bind is used; the rest are zero.
@@ -2514,7 +2531,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let main_lc = if is_dylib {
         Vec::new()
     } else {
-        main_command(entry_file_offset + build.entry_offset as u64)
+        // Route `LC_MAIN` through `__c5_entry` when the startup runtime is
+        // linked, so constructors run before the program entry; otherwise
+        // enter the program's own entry directly.
+        let entry_native = c5_entry_native_offset(build).unwrap_or(build.entry_offset as u64);
+        main_command(entry_file_offset + entry_native)
     };
 
     debug_assert_eq!(text_segment.len() as u64, text_seg_size);
@@ -2818,6 +2839,7 @@ mod tests {
             synthetic_ssa_funcs: alloc::vec::Vec::new(),
             user_ssa_funcs: alloc::vec::Vec::new(),
             extern_function_imports: alloc::vec::Vec::new(),
+            init_funcs: alloc::vec::Vec::new(),
         }
     }
 
@@ -2831,6 +2853,7 @@ mod tests {
             data: Vec::new(),
             data_align: 8,
             bss_size: 0,
+            init_fini_arrays: Default::default(),
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),

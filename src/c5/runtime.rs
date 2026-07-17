@@ -26,4 +26,17 @@ pub fn embedded_runtime() -> &'static [(&'static str, &'static str)] {
 }
 
 pub(super) const EMBEDDED_RUNTIME: &[(&str, &str)] =
-    &[("runtime.c", include_str!("../../lib/runtime.c"))];
+    &[("runtime.c", include_str!("../../libc/lib/runtime.c"))];
+
+/// Compiler-runtime sources joined to the link on demand: each is
+/// compiled and offered like an archive member, pulled in only when
+/// it defines a symbol the link still leaves undefined. A pure-badc
+/// image references none of these and carries none of their code.
+pub fn embedded_compiler_rt() -> &'static [(&'static str, &'static str)] {
+    EMBEDDED_COMPILER_RT
+}
+
+pub(super) const EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[(
+    "compiler_rt.c",
+    include_str!("../../libc/lib/compiler_rt.c"),
+)];

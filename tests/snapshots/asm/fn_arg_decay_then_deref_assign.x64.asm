@@ -10,14 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<cell_addr>:
-               	leaq	<rip>, %rax
-               	retq
-
-<take_action>:
-               	xorq	%rax, %rax
-               	retq
-
 <run>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
@@ -28,19 +20,20 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	<rip>, %rax
                	movl	$0x29, %ecx
                	movl	%ecx, (%rax)
-               	xorq	%rdi, %rdi
-               	callq	<addr>
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rax
+               	leaq	<rip>, %rcx
+               	incq	%rax
+               	movl	%eax, (%rcx)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x2a, %rax
                	jne	<addr>
                	xorq	%rax, %rax
-               	popq	%rbp
+               	movslq	%eax, %rax
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

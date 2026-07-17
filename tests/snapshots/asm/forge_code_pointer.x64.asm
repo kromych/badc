@@ -16,7 +16,8 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	xorq	%rdi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

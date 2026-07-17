@@ -19,8 +19,8 @@
    between Inst::ImmData entries and bytecode Op::Imm operands
    silently mis-paired the callee's ImmData with the first arg's
    ImmData when the walker took Path 2's order for a Path 1
-   callee -- which is the shape sqlite3 shell.c's Windows-only
-   beginTimer / endTimer use. */
+   callee -- a real-world shape where a global holds a function
+   pointer that is called with several arguments. */
 
 typedef int (*adder_fn)(int *out, int x, int y);
 

@@ -21,7 +21,7 @@ use super::super::ir::LoadKind;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_struct_ty, is_unsigned_ty, load_op_for, struct_ptr_depth};
+use super::types::{is_bool_ty, is_struct_ty, is_unsigned_ty, load_op_for, struct_ptr_depth};
 
 impl Compiler {
     // ---- Lexer plumbing ----
@@ -532,7 +532,10 @@ impl Compiler {
             self.ast_psh();
             self.emit_imm(mask);
             self.ast_binop(crate::c5::ir::BinOp::And); // a = (...) & mask
-            if !is_unsigned_ty(field_ty) && bit_width < 64 {
+            // C99 6.2.5p2: `_Bool` holds only 0 or 1, so a `_Bool`
+            // bitfield is unsigned even at width 1, where a signed
+            // 1-bit field would read its set bit back as -1.
+            if !is_unsigned_ty(field_ty) && !is_bool_ty(field_ty) && bit_width < 64 {
                 let shift = 64i64 - (bit_width as i64);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift); // arithmetic Shr
@@ -554,6 +557,8 @@ impl Compiler {
         s.h_type = s.type_;
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
+        s.h_params = s.params.clone();
+        s.h_is_variadic = s.is_variadic;
         s.h_array_size = s.array_size;
         s.h_inner_array_size = s.inner_array_size;
         // Clone rather than `mem::take`: the inner-scope binding
@@ -564,6 +569,7 @@ impl Compiler {
         s.h_is_vla = s.is_vla;
         s.h_vla_ptr_slot = s.vla_ptr_slot;
         s.h_vla_size_slot = s.vla_size_slot;
+        s.h_is_zero_len_array = s.is_zero_len_array;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -576,12 +582,15 @@ impl Compiler {
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
+        sym.params = core::mem::take(&mut sym.h_params);
+        sym.is_variadic = sym.h_is_variadic;
         sym.array_size = sym.h_array_size;
         sym.inner_array_size = sym.h_inner_array_size;
         sym.array_dims = core::mem::take(&mut sym.h_array_dims);
         sym.is_vla = sym.h_is_vla;
         sym.vla_ptr_slot = sym.h_vla_ptr_slot;
         sym.vla_size_slot = sym.h_vla_size_slot;
+        sym.is_zero_len_array = sym.h_is_zero_len_array;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
     }
@@ -638,6 +647,7 @@ impl Compiler {
             n_params,
             is_variadic,
             is_inline: self.pending_is_inline,
+            is_always_inline: self.pending_is_always_inline,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),
             param_tys,
@@ -652,6 +662,7 @@ impl Compiler {
             multi_cell_slots: alloc::vec::Vec::new(),
         };
         self.pending_is_inline = false;
+        self.pending_is_always_inline = false;
         self.finished_functions.push(finished);
     }
 
@@ -1271,11 +1282,12 @@ impl Compiler {
     pub(super) fn ast_emit_case(
         &mut self,
         val: i64,
+        hi: i64,
         body: super::super::ast::StmtId,
     ) -> super::super::ast::StmtId {
         let pos = self.ast_src_pos();
         self.ast
-            .push_stmt(super::super::ast::Stmt::Case { val, body }, pos)
+            .push_stmt(super::super::ast::Stmt::Case { val, hi, body }, pos)
     }
 
     /// Push a `Stmt::Default { body }`.

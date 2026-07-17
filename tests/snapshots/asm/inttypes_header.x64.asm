@@ -16,6 +16,7 @@ Disassembly of section .text:
                	subq	$0x150, %rsp            # imm = 0x150
                	movabsq	$-0x4, %rax
                	movq	%rax, -0x20(%rbp)
+               	movl	$0x1, %edx
                	movl	$0x4, %eax
                	movq	%rax, -0x40(%rbp)
                	leaq	<rip>, %rax
@@ -23,7 +24,6 @@ Disassembly of section .text:
                	cmpq	$0x6c, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	movl	$0x1, %edx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movsbq	0x1(%rax), %rcx

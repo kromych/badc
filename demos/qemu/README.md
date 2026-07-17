@@ -7,8 +7,9 @@ end to end: it compiles every unit, its own linker lays out the emulator, and
 each boots a Linux kernel plus a busybox initramfs to an interactive userspace
 shell that powers off cleanly under TCG. Both boot the EFI-stub kernel *through*
 UEFI firmware -- OVMF on x86_64, ArmVirtQemu/AAVMF on aarch64 (with `acpi=off` so
-the kernel probes the PL011 as `ttyAMA0`); in CI the firmware is badc's own build
-(see Scope).
+the kernel probes the PL011 as `ttyAMA0`); the CI boot uses a stock GCC5 edk2
+build of that firmware (the `edk2` demo's `build_badc_selfhost.py` compiles the
+same firmware with badc, but that image is not yet the one the gated boot runs).
 
 QEMU is a large, portable C program: this demo compiles well over a thousand
 translation units per target with badc -- for aarch64, **1683 units** (1140

@@ -80,7 +80,7 @@ There are various demo's under [`demos`](./demos/):
 * [`gui_hello`](./demos/gui_hello/) - GUI demos for macOS, Linux and Windows,
 * [`wdm_driver`](./demos/wdm_driver/), [`nt_hello`](./demos/nt_hello/), [`nt_loader`](./demos/nt_loader/) - examples of the Windows native (NT) executable, Windows driver,
 * [`efi_hello`](./demos/efi_hello/) - a UEFI binary,
-* [`edk2`](./demos/edk2/) - TianoCore EDK II ([tianocore/edk2](https://github.com/tianocore/edk2)): a UEFI application from MdePkg linked with badc's own linker into a PE32+ EFI image, and -- the self-host rung -- badc compiling the full **UEFI firmware** from edk2 source into a reproducible OVMF (x86_64) / ArmVirtQemu AAVMF (aarch64) image, under which the app and the `qemu` Linux boot both run,
+* [`edk2`](./demos/edk2/) - TianoCore EDK II ([tianocore/edk2](https://github.com/tianocore/edk2)): a UEFI application from MdePkg linked with badc's own linker into a PE32+ EFI image, and -- the self-host rung (`build_badc_selfhost.py`) -- badc compiling the full **UEFI firmware** from edk2 source into a reproducible OVMF (x86_64) / ArmVirtQemu AAVMF (aarch64) image. The standard GCC5 build (`build_ovmf.py`) is the firmware the CI app + `qemu` Linux boots run under today,
 * [`sqlite3`](./demos/sqlite3/) - the most famous embedded database ([sqlite.org](https://sqlite.org)),
 * [`miniz`](./demos/miniz/) - compression, CRC32, integers, bit twiddling ([richgel999/miniz](https://github.com/richgel999/miniz)),
 * [`kissfft`](./demos/kissfft/) - floating points, Fast Fourier Transform ([mborgerding/kissfft](https://github.com/mborgerding/kissfft)),
@@ -98,7 +98,7 @@ There are various demo's under [`demos`](./demos/):
 * [`raylib`](./demos/raylib/) - Library for games, (there is also [`loderunner`](./demos/raylib/loderunner.c) game included) ([raylib.com](https://www.raylib.com/)),
 * [`curl`](./demos/curl/) - The library and the tools that handle HTTP and friends on PCs, smart phones/watches, TVs, ... ([curl.se](https://curl.se/)),
 * [`Python`](./demos/python/) - Python 3.14 ([python.org](https://www.python.org/)),
-* [`qemu`](./demos/qemu/) - the QEMU system emulator ([qemu.org](https://www.qemu.org/)); badc compiles the full source (well over a thousand translation units per target) and self-links the emulator with its own linker. Both `qemu-system-aarch64` and `qemu-system-x86_64`, self-compiled and self-linked, boot a Linux kernel + busybox initramfs **through badc's own build of the UEFI firmware** (OVMF on x86_64, ArmVirtQemu/AAVMF on aarch64 -- see the `edk2` demo) to an interactive userspace shell, and power off cleanly under TCG. The entire stack -- emulator, firmware, and the EFI-stub kernel's boot path -- is badc-compiled.
+* [`qemu`](./demos/qemu/) - the QEMU system emulator ([qemu.org](https://www.qemu.org/)); badc compiles the full source (well over a thousand translation units per target) and self-links the emulator with its own linker. Both `qemu-system-aarch64` and `qemu-system-x86_64`, self-compiled and self-linked, boot a Linux kernel + busybox initramfs **through UEFI firmware** (OVMF on x86_64, ArmVirtQemu/AAVMF on aarch64) to an interactive userspace shell, and power off cleanly under TCG. The CI boot uses a stock GCC5 edk2 build of that firmware; badc *also* self-compiles the same firmware (the self-host rung -- see the `edk2` demo), though that badc-built image is not yet the one the gated boot runs.
 
 Besides these, there are some fun test fixtures implementing Horner scheme, RK4,
 8-Queens and more.

@@ -2061,13 +2061,6 @@ fn emit_inline_asm_aarch64(
             return false;
         }
     };
-    // A read-write (`+`) output needs its current value loaded first; not yet
-    // handled.
-    if asm.operands.iter().any(|o| o.is_rw) {
-        bail_msg("aarch64 inline asm: read-write operands not yet supported");
-        return false;
-    }
-
     // Registers the block overwrites: the operand registers plus the explicit
     // clobber list, restricted to the x0..x15 pool.
     let mut used_mask: u32 = asm.clobber_regs & 0xFFFF;
@@ -2107,11 +2100,33 @@ fn emit_inline_asm_aarch64(
         };
         emit_sp_str_x_auto(code, r, cap_off(i));
     }
-    // Load inputs and memory addresses into their assigned registers.
+    // Load inputs and memory addresses into their assigned registers; a `+`
+    // read-write output loads its current value from the destination address.
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
         if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
             emit_sp_ldr_x(code, Reg(r), cap_off(i));
+        } else if op.is_rw {
+            emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
+            let ok = match op.width {
+                8 => {
+                    emit(code, super::encode::enc_ldr_imm(Reg(r), Reg(16), 0));
+                    true
+                }
+                4 => {
+                    emit(code, super::encode::enc_ldr32_imm(Reg(r), Reg(16), 0));
+                    true
+                }
+                2 => {
+                    emit(code, super::encode::enc_ldrh_imm(Reg(r), Reg(16), 0));
+                    true
+                }
+                _ => false,
+            };
+            if !ok {
+                bail_msg("aarch64 inline asm: unsupported read-write operand width");
+                return false;
+            }
         }
     }
     // Encode each template instruction; raw-byte pieces emit verbatim.

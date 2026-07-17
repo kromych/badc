@@ -3755,6 +3755,17 @@ impl<'a> Walker<'a> {
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
         let width = type_size_bytes(elem_ty, self.target) as u8;
+        // Every atomic form here acts on a 1/2/4/8-byte scalar object; a
+        // wider or aggregate one (a 128-bit `__int128`, sized 0 by
+        // `type_size_bytes`) has no atomic form in the current emit and
+        // would lower to a faulting / high-half-dropping access. Reject it.
+        // TODO: 16-byte objects via cmpxchg16b / ldxp-stxp.
+        if !matches!(width, 1 | 2 | 4 | 8) {
+            return Err(WalkError::UnsupportedExpr {
+                id: args[0],
+                kind: "atomic operation requires a 1/2/4/8-byte scalar object",
+            });
+        }
         let addr = self.walk_expr_rvalue(b, args[0])?;
         match kind {
             AtomicKind::Load => Ok(b.load(addr, load_kind)),

@@ -1495,6 +1495,27 @@ fn atomic_compare_exchange_emits_cmpxchg_x86_64() {
     );
 }
 
+/// A 128-bit `__int128` atomic compare-exchange has no single-instruction
+/// lock form in the current emit. The SSA walk must reject it, not lower
+/// the zero-width access `type_size_bytes` yields for the struct-backed
+/// __int128 (which faults / miscompiles at run time; clang gets it right).
+/// TODO: lower 16-byte objects via cmpxchg16b / ldxp-stxp.
+#[test]
+fn atomic128_compare_exchange_is_rejected_not_miscompiled() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "int f(unsigned __int128 *p, unsigned __int128 *e, unsigned __int128 n){ \
+             return __atomic_compare_exchange_n(p, e, n, 0, 5, 5); } \
+         int main(){ return 0; }",
+    );
+    let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect_err("128-bit atomic compare-exchange must be rejected, not miscompiled");
+    assert!(
+        err.to_string().contains("1/2/4/8-byte scalar object"),
+        "expected the wide-atomic rejection, got: {err}",
+    );
+}
+
 /// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering uses an
 /// LDAXR / STLXR exclusive-monitor retry loop. Confirm both opcodes are
 /// present by their fixed bit patterns, independent of register fields:

@@ -1720,6 +1720,16 @@ impl<'a> Walker<'a> {
     ) -> Result<super::super::ir::ValueId, WalkError> {
         let store_kind = store_kind_for(elem_ty, self.target);
         let w = type_size_bytes(elem_ty, self.target);
+        // The wrapped-value and overflow-flag formulas below operate on a
+        // 1/2/4/8-byte scalar in a 64-bit register; a wider or aggregate
+        // operand (a 128-bit `__int128`, sized 0 here) has no such form and
+        // would yield a wrong flag / value. Reject it. TODO: 128-bit.
+        if !matches!(w, 1 | 2 | 4 | 8) {
+            return Err(WalkError::UnsupportedExpr {
+                id: dst_expr,
+                kind: "__builtin_*_overflow requires a 1/2/4/8-byte scalar type",
+            });
+        }
         let unsigned = (elem_ty & UNSIGNED_BIT) != 0;
         let bin = match op {
             0 => BinOp::Add,

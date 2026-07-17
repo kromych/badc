@@ -1516,6 +1516,28 @@ fn atomic128_compare_exchange_is_rejected_not_miscompiled() {
     );
 }
 
+/// A 128-bit `__int128` `__builtin_*_overflow` has no wrapped-value /
+/// overflow-flag form in the current emit -- the formulas assume a
+/// 1/2/4/8-byte scalar in a 64-bit register. The SSA walk must reject it,
+/// not lower the narrow-path formulas that yield a wrong flag / value for
+/// the struct-backed __int128 (which `type_size_bytes` sizes 0; clang
+/// compiles it correctly). TODO: 128-bit overflow.
+#[test]
+fn builtin_overflow_on_128bit_operand_is_rejected() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "int f(unsigned __int128 a, unsigned __int128 b, unsigned __int128 *r){ \
+             return __builtin_add_overflow(a, b, r); } \
+         int main(){ return 0; }",
+    );
+    let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect_err("128-bit __builtin_add_overflow must be rejected, not miscompiled");
+    assert!(
+        err.to_string().contains("1/2/4/8-byte scalar type"),
+        "expected the wide-overflow rejection, got: {err}",
+    );
+}
+
 /// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering uses an
 /// LDAXR / STLXR exclusive-monitor retry loop. Confirm both opcodes are
 /// present by their fixed bit patterns, independent of register fields:

@@ -533,6 +533,98 @@ fn prefix_rex(code: &mut Vec<u8>, size: AsmRegSize, reg: u8, rm: u8) {
     }
 }
 
+/// Map a template instruction to the table encoder's mnemonic name and its
+/// operands in Intel (`dst, src`) order, or `None` when this mnemonic keeps its
+/// bespoke encoding below. Template operands are AT&T (`src, dst`), so a
+/// two-operand form is transposed; a shift's count operand moves after the
+/// destination, and an omitted count becomes the implicit `1`. Instructions
+/// naming a control / debug / segment / MMX register (marked `reg >= 16`) stay
+/// on the bespoke path.
+fn to_table(
+    mnemonic: Mnemonic,
+    suffix: Option<AsmRegSize>,
+    ops: &[Concrete],
+) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
+    use Mnemonic as M;
+    use super::table::Opnd;
+    let name = match mnemonic {
+        M::Add => "add",
+        M::Sub => "sub",
+        M::And => "and",
+        M::Or => "or",
+        M::Xor => "xor",
+        M::Mov => "mov",
+        M::Shl => "shl",
+        M::Shr => "shr",
+        M::Sar => "sar",
+        M::Bswap => "bswap",
+        M::Xadd => "xadd",
+        M::Cmpxchg => "cmpxchg",
+        M::Inc => "inc",
+        M::Dec => "dec",
+        M::Rdtsc => "rdtsc",
+        M::Rdtscp => "rdtscp",
+        M::Nop => "nop",
+        M::Cli => "cli",
+        M::Sti => "sti",
+        M::Invd => "invd",
+        M::Wbinvd => "wbinvd",
+        M::Rdmsr => "rdmsr",
+        M::Wrmsr => "wrmsr",
+        M::Rdpmc => "rdpmc",
+        M::Monitor => "monitor",
+        M::Mwait => "mwait",
+        M::Hlt => "hlt",
+        _ => return None,
+    };
+    if ops
+        .iter()
+        .any(|o| matches!(o, Concrete::Reg { reg, .. } if *reg >= MMX_BASE))
+    {
+        return None;
+    }
+    let cvt = |c: &Concrete| -> Opnd {
+        match *c {
+            Concrete::Reg { reg, size } => Opnd::Reg {
+                num: reg,
+                width: size.bytes(),
+            },
+            Concrete::Mem { base, size } => Opnd::Mem {
+                base,
+                width: size.bytes(),
+            },
+            Concrete::Imm(v) => Opnd::Imm(v),
+        }
+    };
+    let tops: Vec<Opnd> = match mnemonic {
+        M::Rdtsc | M::Rdtscp | M::Nop | M::Cli | M::Sti | M::Invd | M::Wbinvd | M::Rdmsr
+        | M::Wrmsr | M::Rdpmc | M::Monitor | M::Mwait | M::Hlt => Vec::new(),
+        M::Bswap | M::Inc | M::Dec => match ops {
+            [rm] => alloc::vec![cvt(rm)],
+            _ => return None,
+        },
+        M::Shl | M::Shr | M::Sar => match ops {
+            [dst] => alloc::vec![cvt(dst), Opnd::Imm(1)],
+            [count, dst] => {
+                let c = match *count {
+                    Concrete::Imm(v) => Opnd::Imm(v),
+                    // The shift count is CL regardless of the register's name.
+                    Concrete::Reg { reg: 1, .. } => Opnd::Reg { num: 1, width: 1 },
+                    _ => return None,
+                };
+                alloc::vec![cvt(dst), c]
+            }
+            _ => return None,
+        },
+        // ALU / mov / xadd / cmpxchg: AT&T `op src, dst` -> Intel `op dst, src`.
+        _ => match ops {
+            [src, dst] => alloc::vec![cvt(dst), cvt(src)],
+            _ => return None,
+        },
+    };
+    Some((name, suffix.map(|s| s.bytes()), tops))
+}
+
 /// Encode one resolved instruction into `code`. Operands are in AT&T
 /// order. Returns an error for an unsupported mnemonic / operand form.
 pub(crate) fn encode(
@@ -541,6 +633,12 @@ pub(crate) fn encode(
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],
 ) -> Result<(), String> {
+    // Mnemonics the table encoder covers route through it; the operands are
+    // resolved to Intel order first.
+    if let Some((name, width, tops)) = to_table(mnemonic, suffix, ops) {
+        code.extend_from_slice(&super::table::encode(name, width, &tops)?);
+        return Ok(());
+    }
     match mnemonic {
         // Raw bytes carry their payload on the `AsmInsn`, not in `ops`; the
         // caller emits them directly and never routes them here.

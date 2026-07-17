@@ -67,6 +67,9 @@ def first_existing(paths):
 
 def run(efi, expect, arch="x64", timeout=30, extra_files=None, startup=None):
     fw = FIRMWARE[arch]
+    # A badc-built emulator (demos/qemu) can stand in for the system QEMU:
+    # `$QEMU_SYSTEM_X64` / `$QEMU_SYSTEM_AARCH64` override the binary.
+    qemu = os.environ.get(f"QEMU_SYSTEM_{arch.upper()}", fw["qemu"])
     code = first_existing(fw["code"])
     vars_tmpl = first_existing(fw["vars"])
     if not code:
@@ -88,7 +91,7 @@ def run(efi, expect, arch="x64", timeout=30, extra_files=None, startup=None):
             f.write(b"\xff" * os.path.getsize(code))
 
     cmd = [
-        fw["qemu"], "-machine", fw["machine"], "-m", "256", "-display", "none",
+        qemu, "-machine", fw["machine"], "-m", "256", "-display", "none",
         "-drive", f"if=pflash,format=raw,unit=0,file={code},readonly=on",
         "-drive", f"if=pflash,format=raw,unit=1,file={vars_rw}",
         "-drive", f"format=raw,file=fat:rw:{os.path.join(work, 'esp')}",
